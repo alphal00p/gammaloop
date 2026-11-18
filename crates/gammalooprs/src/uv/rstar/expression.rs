@@ -482,14 +482,20 @@ fn process_rss_bytes() -> Option<u64> {
 /// First id of a kept edge-momentum combination `Q(EDGE_OFFSET + n, ...)`.
 const EDGE_OFFSET: i64 = 1_000_000;
 
-/// `IDENSO_EDGE_OUTPUT=flatten`: the expanded form of `view` when it is a
-/// nested linear combination of momenta (numeric multiples and sums of
-/// vectors `vector` accepts, not all of them at the top level). Routing leaves
+/// With `flatten` (`IDENSO_EDGE_OUTPUT=flatten`, read by the callers): the
+/// expanded form of `view` when it is a nested linear combination of momenta
+/// (numeric multiples and sums of vectors `vector` accepts, not all of them at
+/// the top level). Routing leaves
 /// vertex momenta such as `Q(2,μ) - (Q(2,μ) + Q(3,μ) - Q(6,μ))`; renamed as
 /// they are, only the inner sum becomes one vector and the contraction
 /// distributes the outer one (nf0 32's hottest UV-child remainder: 4.03 GB
 /// instead of 9.0 MB). Expanded, the whole combination becomes one vector.
-fn flat_combination(view: AtomView<'_>, vector: &dyn Fn(AtomView<'_>) -> bool) -> Option<Atom> {
+/// Without `flatten`, `None`.
+fn flat_combination(
+    view: AtomView<'_>,
+    flatten: bool,
+    vector: &dyn Fn(AtomView<'_>) -> bool,
+) -> Option<Atom> {
     fn linear(view: AtomView<'_>, vector: &dyn Fn(AtomView<'_>) -> bool) -> bool {
         match view {
             AtomView::Add(sum) => sum.iter().all(|term| linear(term, vector)),
@@ -504,13 +510,178 @@ fn flat_combination(view: AtomView<'_>, vector: &dyn Fn(AtomView<'_>) -> bool) -
             other => vector(other),
         }
     }
+    if !flatten {
+        return None;
+    }
     let AtomView::Add(sum) = view else {
         return None;
     };
-    (idenso::edge_output::enabled("flatten")
-        && sum.iter().any(|term| !vector(term))
-        && linear(view, vector))
-    .then(|| view.expand())
+    (sum.iter().any(|term| !vector(term)) && linear(view, vector)).then(|| view.expand())
+}
+
+/// First id of a renamed momentum combination `Q(EDGE_BASIS_OFFSET + n, ...)`
+/// of [`RStarIntegrand::simplify_edge_basis`].
+const EDGE_BASIS_OFFSET: i64 = 2_000_000;
+
+/// The rename of [`RStarIntegrand::simplify_edge_basis`]: every linear
+/// combination of momenta in one index slot, `Σ c_e Q(e, slot)` with numeric
+/// `c_e`, becomes one vector `Q(EDGE_BASIS_OFFSET + n, slot)`, `n` its
+/// position in `combinations`. With `flatten`, a nested combination is
+/// expanded first ([`flat_combination`]).
+fn rename_edge_basis(
+    expression: &Atom,
+    flatten: bool,
+    combinations: &mut std::collections::BTreeMap<Vec<(i64, Atom)>, i64>,
+) -> Atom {
+    let head = GS.emr_mom;
+    let term_of = |term: AtomView<'_>| -> Option<(i64, Atom, Vec<Atom>)> {
+        let (coefficient, vector) = match term {
+            AtomView::Mul(product) => {
+                let factors = product.iter().collect::<Vec<_>>();
+                match factors.as_slice() {
+                    [n @ AtomView::Num(_), v] | [v, n @ AtomView::Num(_)] => (n.to_owned(), *v),
+                    _ => return None,
+                }
+            }
+            other => (Atom::num(1), other),
+        };
+        let AtomView::Fun(function) = vector else {
+            return None;
+        };
+        if function.get_symbol() != head || function.get_nargs() < 1 {
+            return None;
+        }
+        let edge = i64::try_from(function.get(0)).ok()?;
+        if edge >= EDGE_BASIS_OFFSET {
+            return None;
+        }
+        Some((
+            edge,
+            coefficient,
+            function.iter().skip(1).map(|a| a.to_owned()).collect(),
+        ))
+    };
+    expression.replace_map(|view, _, out| {
+        let flat = flat_combination(view, flatten, &|leaf| term_of(leaf).is_some());
+        let AtomView::Add(sum) = flat.as_ref().map_or(view, Atom::as_view) else {
+            if let Some(flat) = flat {
+                **out = flat;
+            }
+            return;
+        };
+        let mut tail = None;
+        let mut terms = Vec::new();
+        for term in sum.iter() {
+            let Some((edge, coefficient, this_tail)) = term_of(term) else {
+                return;
+            };
+            match &tail {
+                None => tail = Some(this_tail),
+                Some(t) if *t == this_tail => {}
+                _ => return,
+            }
+            terms.push((edge, coefficient));
+        }
+        terms.sort_by(|a, b| a.0.cmp(&b.0));
+        let next = EDGE_BASIS_OFFSET + combinations.len() as i64;
+        let id = *combinations.entry(terms).or_insert(next);
+        **out = symbolica::atom::FunctionBuilder::new(head)
+            .add_arg(Atom::num(id))
+            .add_args(&tail.unwrap_or_default())
+            .finish();
+    })
+}
+
+/// The rename of [`RStarIntegrand::contract_keeping_edges`]: the part of a
+/// linear combination of momenta in one index slot that lies on `loop_edges`
+/// (at least two of them) becomes one vector `Q(EDGE_OFFSET + n, slot)`, `n`
+/// its position in `combinations`; other momenta stay explicit and
+/// denominators are left as they are. With `flatten`, a nested combination is
+/// expanded first ([`flat_combination`]).
+fn rename_kept_edges(
+    expression: &Atom,
+    loop_edges: &BTreeSet<i64>,
+    flatten: bool,
+    combinations: &mut std::collections::BTreeMap<Vec<(i64, Atom)>, i64>,
+) -> Atom {
+    let head = GS.emr_mom;
+    let term_of = |term: AtomView<'_>| -> Option<(i64, Atom, Vec<Atom>)> {
+        let (coefficient, vector) = match term {
+            AtomView::Mul(product) => {
+                let factors = product.iter().collect::<Vec<_>>();
+                match factors.as_slice() {
+                    [n @ AtomView::Num(_), v] | [v, n @ AtomView::Num(_)] => (n.to_owned(), *v),
+                    _ => return None,
+                }
+            }
+            other => (Atom::num(1), other),
+        };
+        let AtomView::Fun(function) = vector else {
+            return None;
+        };
+        if function.get_symbol() != head || function.get_nargs() < 1 {
+            return None;
+        }
+        let edge = i64::try_from(function.get(0)).ok()?;
+        Some((
+            edge,
+            coefficient,
+            function.iter().skip(1).map(|a| a.to_owned()).collect(),
+        ))
+    };
+    expression.replace_map(|view, _, out| {
+        // Denominators keep their loop-basis momenta: their topology and
+        // Taylor arguments are read from them.
+        if matches!(view, AtomView::Fun(f) if f.get_symbol() == GS.den) {
+            **out = view.to_owned();
+            return;
+        }
+        let flat = flat_combination(view, flatten, &|leaf| term_of(leaf).is_some());
+        let AtomView::Add(sum) = flat.as_ref().map_or(view, Atom::as_view) else {
+            if let Some(flat) = flat {
+                **out = flat;
+            }
+            return;
+        };
+        let mut tail = None;
+        let mut kept = Vec::new();
+        let mut others = Vec::new();
+        for term in sum.iter() {
+            let Some((edge, coefficient, this_tail)) = term_of(term) else {
+                return;
+            };
+            match &tail {
+                None => tail = Some(this_tail),
+                Some(t) if *t == this_tail => {}
+                _ => return,
+            }
+            if loop_edges.contains(&edge) {
+                kept.push((edge, coefficient));
+            } else {
+                others.push(term);
+            }
+        }
+        if kept.len() < 2 || tail.as_ref().is_none_or(|t| t.is_empty()) {
+            return;
+        }
+        kept.sort_by(|a, b| a.0.cmp(&b.0));
+        let next = EDGE_OFFSET + combinations.len() as i64;
+        let id = *combinations.entry(kept).or_insert(next);
+        let vector = symbolica::atom::FunctionBuilder::new(head)
+            .add_arg(Atom::num(id))
+            .add_args(&tail.unwrap_or_default())
+            .finish();
+        **out = if others.is_empty() {
+            vector
+        } else {
+            Atom::add_many(
+                others
+                    .iter()
+                    .copied()
+                    .chain(std::iter::once(vector.as_view())),
+            )
+        };
+    })
 }
 
 /// `GAMMALOOP_EDGE_CONTRACTION`: comma-separated modes. Unset means
@@ -1528,91 +1699,19 @@ impl RStarIntegrand {
     /// and projections in them act as before. The combinations are substituted
     /// at the routing step of `to_vakint_integrand`.
     fn contract_keeping_edges(&self, expression: &Atom) -> Result<Atom> {
-        let head = GS.emr_mom;
         let loop_edges = self
             .basis
             .loop_edges
             .iter()
             .map(|edge| usize::from(*edge) as i64)
             .collect::<BTreeSet<_>>();
-        let term_of = |term: AtomView<'_>| -> Option<(i64, Atom, Vec<Atom>)> {
-            let (coefficient, vector) = match term {
-                AtomView::Mul(product) => {
-                    let factors = product.iter().collect::<Vec<_>>();
-                    match factors.as_slice() {
-                        [n @ AtomView::Num(_), v] | [v, n @ AtomView::Num(_)] => (n.to_owned(), *v),
-                        _ => return None,
-                    }
-                }
-                other => (Atom::num(1), other),
-            };
-            let AtomView::Fun(function) = vector else {
-                return None;
-            };
-            if function.get_symbol() != head || function.get_nargs() < 1 {
-                return None;
-            }
-            let edge = i64::try_from(function.get(0)).ok()?;
-            Some((
-                edge,
-                coefficient,
-                function.iter().skip(1).map(|a| a.to_owned()).collect(),
-            ))
-        };
         let mut combinations = self.combinations.lock().unwrap();
-        let renamed = expression.replace_map(|view, _, out| {
-            // Denominators keep their loop-basis momenta: their topology and
-            // Taylor arguments are read from them.
-            if matches!(view, AtomView::Fun(f) if f.get_symbol() == GS.den) {
-                **out = view.to_owned();
-                return;
-            }
-            let flat = flat_combination(view, &|leaf| term_of(leaf).is_some());
-            let AtomView::Add(sum) = flat.as_ref().map_or(view, Atom::as_view) else {
-                if let Some(flat) = flat {
-                    **out = flat;
-                }
-                return;
-            };
-            let mut tail = None;
-            let mut kept = Vec::new();
-            let mut others = Vec::new();
-            for term in sum.iter() {
-                let Some((edge, coefficient, this_tail)) = term_of(term) else {
-                    return;
-                };
-                match &tail {
-                    None => tail = Some(this_tail),
-                    Some(t) if *t == this_tail => {}
-                    _ => return,
-                }
-                if loop_edges.contains(&edge) {
-                    kept.push((edge, coefficient));
-                } else {
-                    others.push(term);
-                }
-            }
-            if kept.len() < 2 || tail.as_ref().is_none_or(|t| t.is_empty()) {
-                return;
-            }
-            kept.sort_by(|a, b| a.0.cmp(&b.0));
-            let next = EDGE_OFFSET + combinations.len() as i64;
-            let id = *combinations.entry(kept).or_insert(next);
-            let vector = symbolica::atom::FunctionBuilder::new(head)
-                .add_arg(Atom::num(id))
-                .add_args(&tail.unwrap_or_default())
-                .finish();
-            **out = if others.is_empty() {
-                vector
-            } else {
-                Atom::add_many(
-                    others
-                        .iter()
-                        .copied()
-                        .chain(std::iter::once(vector.as_view())),
-                )
-            };
-        });
+        let renamed = rename_kept_edges(
+            expression,
+            &loop_edges,
+            idenso::edge_output::enabled("flatten"),
+            &mut combinations,
+        );
         drop(combinations);
         Self::simplify_view(renamed.as_view()).map_err(|error| {
             if let Ok(dir) = std::env::var("GAMMALOOP_EDGE_DEBUG_DUMP") {
@@ -2227,65 +2326,13 @@ impl RStarIntegrand {
     /// in an index slot) renamed to independent vectors, and the rules that
     /// substitute them back; `None` when there is no combination.
     fn edge_rename(expression: &Atom) -> Option<(Atom, Vec<Replacement>)> {
-        const OFFSET: i64 = 2_000_000;
         let head = GS.emr_mom;
-        let term_of = |term: AtomView<'_>| -> Option<(i64, Atom, Vec<Atom>)> {
-            let (coefficient, vector) = match term {
-                AtomView::Mul(product) => {
-                    let factors = product.iter().collect::<Vec<_>>();
-                    match factors.as_slice() {
-                        [n @ AtomView::Num(_), v] | [v, n @ AtomView::Num(_)] => (n.to_owned(), *v),
-                        _ => return None,
-                    }
-                }
-                other => (Atom::num(1), other),
-            };
-            let AtomView::Fun(function) = vector else {
-                return None;
-            };
-            if function.get_symbol() != head || function.get_nargs() < 1 {
-                return None;
-            }
-            let edge = i64::try_from(function.get(0)).ok()?;
-            if edge >= OFFSET {
-                return None;
-            }
-            Some((
-                edge,
-                coefficient,
-                function.iter().skip(1).map(|a| a.to_owned()).collect(),
-            ))
-        };
-        let mut combinations = std::collections::BTreeMap::<Vec<(i64, Atom)>, i64>::new();
-        let renamed = expression.replace_map(|view, _, out| {
-            let flat = flat_combination(view, &|leaf| term_of(leaf).is_some());
-            let AtomView::Add(sum) = flat.as_ref().map_or(view, Atom::as_view) else {
-                if let Some(flat) = flat {
-                    **out = flat;
-                }
-                return;
-            };
-            let mut tail = None;
-            let mut terms = Vec::new();
-            for term in sum.iter() {
-                let Some((edge, coefficient, this_tail)) = term_of(term) else {
-                    return;
-                };
-                match &tail {
-                    None => tail = Some(this_tail),
-                    Some(t) if *t == this_tail => {}
-                    _ => return,
-                }
-                terms.push((edge, coefficient));
-            }
-            terms.sort_by(|a, b| a.0.cmp(&b.0));
-            let next = OFFSET + combinations.len() as i64;
-            let id = *combinations.entry(terms).or_insert(next);
-            **out = symbolica::atom::FunctionBuilder::new(head)
-                .add_arg(Atom::num(id))
-                .add_args(&tail.unwrap_or_default())
-                .finish();
-        });
+        let mut combinations = std::collections::BTreeMap::new();
+        let renamed = rename_edge_basis(
+            expression,
+            idenso::edge_output::enabled("flatten"),
+            &mut combinations,
+        );
         if combinations.is_empty() {
             return None;
         }
@@ -3095,5 +3142,205 @@ mod tests {
             "the physical tensor projector must retain the external direction: actual={actual_tensor}, expected={expected_tensor}"
         );
         Ok(())
+    }
+}
+
+/// The edge-basis renames ([`rename_edge_basis`], [`rename_kept_edges`]) with
+/// and without `flatten` (`IDENSO_EDGE_OUTPUT=flatten`).
+#[cfg(test)]
+mod edge_rename_tests {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use symbolica::{
+        atom::{Atom, AtomCore, AtomView},
+        function, symbol,
+    };
+
+    use super::{
+        EDGE_BASIS_OFFSET, EDGE_OFFSET, flat_combination, rename_edge_basis, rename_kept_edges,
+    };
+    use crate::utils::GS;
+
+    type Combinations = BTreeMap<Vec<(i64, Atom)>, i64>;
+
+    /// `Q(edge, slot)`.
+    fn q(edge: i64, slot: &str) -> Atom {
+        function!(GS.emr_mom, Atom::num(edge), Atom::var(symbol!(slot)))
+    }
+
+    fn mu() -> &'static str {
+        "edge_rename_test::mu"
+    }
+
+    fn nu() -> &'static str {
+        "edge_rename_test::nu"
+    }
+
+    fn renamed(expression: &Atom, flatten: bool) -> (Atom, Combinations) {
+        let mut combinations = Combinations::new();
+        let renamed = rename_edge_basis(expression, flatten, &mut combinations);
+        (renamed, combinations)
+    }
+
+    fn combination(terms: &[(i64, i64)], id: i64) -> Combinations {
+        let key = terms
+            .iter()
+            .map(|(edge, c)| (*edge, Atom::num(*c)))
+            .collect();
+        BTreeMap::from([(key, id)])
+    }
+
+    /// `x - (y)` with `y` a sum stays nested (no automatic distribution).
+    fn is_nested(expression: &Atom) -> bool {
+        let AtomView::Add(sum) = expression.as_view() else {
+            return false;
+        };
+        sum.iter().any(|term| matches!(term, AtomView::Mul(_)))
+    }
+
+    #[test]
+    fn flatten_renames_a_nested_combination_as_one_vector() {
+        // Q(2,μ) - (Q(2,μ) + Q(3,μ) - Q(6,μ)) = Q(6,μ) - Q(3,μ).
+        let nested = q(2, mu()) - (q(2, mu()) + q(3, mu()) - q(6, mu()));
+        assert!(is_nested(&nested), "{nested}");
+        let (flat, flat_combinations) = renamed(&nested, true);
+        assert_eq!(flat, q(EDGE_BASIS_OFFSET, mu()));
+        assert_eq!(
+            flat_combinations,
+            combination(&[(3, -1), (6, 1)], EDGE_BASIS_OFFSET)
+        );
+        // Unset: only the inner sum is renamed, the outer one stays.
+        let (inner, inner_combinations) = renamed(&nested, false);
+        assert_eq!(inner, q(2, mu()) - q(EDGE_BASIS_OFFSET, mu()));
+        assert_eq!(
+            inner_combinations,
+            combination(&[(2, 1), (3, 1), (6, -1)], EDGE_BASIS_OFFSET)
+        );
+        // Both are the same vector once the combinations are put back.
+        for (renamed, combinations) in [(flat, flat_combinations), (inner, inner_combinations)] {
+            let (terms, id) = combinations.into_iter().next().unwrap();
+            let image = Atom::add_many(
+                terms
+                    .iter()
+                    .map(|(edge, c)| c * q(*edge, mu()))
+                    .collect::<Vec<_>>()
+                    .iter(),
+            );
+            let back = renamed.replace(q(id, mu())).with(image);
+            assert!((&back - &nested).expand().is_zero(), "{back}");
+        }
+    }
+
+    #[test]
+    fn flatten_cancellation_leaves_one_term_or_zero() {
+        // Q(2,μ) - (Q(2,μ) - 2 Q(3,μ)) = 2 Q(3,μ): one term, no combination.
+        let single = q(2, mu()) - (q(2, mu()) - Atom::num(2) * q(3, mu()));
+        assert!(is_nested(&single), "{single}");
+        let (flat, combinations) = renamed(&single, true);
+        assert_eq!(flat, Atom::num(2) * q(3, mu()));
+        assert!(combinations.is_empty());
+        let (inner, combinations) = renamed(&single, false);
+        assert_eq!(inner, q(2, mu()) - q(EDGE_BASIS_OFFSET, mu()));
+        assert_eq!(
+            combinations,
+            combination(&[(2, 1), (3, -2)], EDGE_BASIS_OFFSET)
+        );
+
+        // Q(2,μ) + Q(3,μ) - (Q(2,μ) + Q(3,μ)) = 0.
+        let zero = q(2, mu()) + q(3, mu()) - (q(2, mu()) + q(3, mu()));
+        assert!(is_nested(&zero), "{zero}");
+        let (flat, combinations) = renamed(&zero, true);
+        assert!(flat.is_zero(), "{flat}");
+        assert!(combinations.is_empty());
+        // Inside a product the cancelled slot makes the product zero.
+        let product = function!(symbol!("edge_rename_test::f"), q(4, nu())) * &zero;
+        let (flat, combinations) = renamed(&product, true);
+        assert!(flat.is_zero(), "{flat}");
+        assert!(combinations.is_empty());
+    }
+
+    #[test]
+    fn flatten_with_mixed_tails_falls_back_to_the_inner_rename() {
+        // Q(2,ν) - (Q(3,μ) + Q(4,μ)): the expanded sum has two tails, so the
+        // outer sum is not renamed and the inner one is, as without flatten.
+        let mixed = q(2, nu()) - (q(3, mu()) + q(4, mu()));
+        assert!(is_nested(&mixed), "{mixed}");
+        let with = renamed(&mixed, true);
+        let without = renamed(&mixed, false);
+        assert_eq!(with.0, q(2, nu()) - q(EDGE_BASIS_OFFSET, mu()));
+        assert_eq!(with.1, combination(&[(3, 1), (4, 1)], EDGE_BASIS_OFFSET));
+        assert_eq!(with, without);
+    }
+
+    #[test]
+    fn flatten_rejects_a_non_numeric_coefficient() {
+        let vector =
+            |leaf: AtomView<'_>| matches!(leaf, AtomView::Fun(f) if f.get_symbol() == GS.emr_mom);
+        let x = Atom::var(symbol!("edge_rename_test::x"));
+        // Q(2,μ) + x (Q(2,μ) + Q(3,μ)) is not a numeric combination of vectors.
+        let symbolic = q(2, mu()) + &x * (q(2, mu()) + q(3, mu()));
+        assert!(is_nested(&symbolic), "{symbolic}");
+        assert_eq!(flat_combination(symbolic.as_view(), true, &vector), None);
+        let with = renamed(&symbolic, true);
+        assert_eq!(with.0, q(2, mu()) + &x * q(EDGE_BASIS_OFFSET, mu()));
+        assert_eq!(with.1, combination(&[(2, 1), (3, 1)], EDGE_BASIS_OFFSET));
+        assert_eq!(with, renamed(&symbolic, false));
+        // The numeric multiple is flattened; without the flag nothing is.
+        let numeric = q(2, mu()) + Atom::num(3) * (q(2, mu()) + q(3, mu()));
+        assert_eq!(
+            flat_combination(numeric.as_view(), true, &vector),
+            Some(Atom::num(4) * q(2, mu()) + Atom::num(3) * q(3, mu()))
+        );
+        assert_eq!(flat_combination(numeric.as_view(), false, &vector), None);
+        // A sum of vectors only is not nested: nothing to flatten.
+        let plain = q(2, mu()) + q(3, mu());
+        assert_eq!(flat_combination(plain.as_view(), true, &vector), None);
+    }
+
+    #[test]
+    fn kept_edges_rename_flattens_numerators_and_leaves_denominators() {
+        let loop_edges = BTreeSet::from([2, 3, 6]);
+        let nested = |slot| q(2, slot) - (q(2, slot) + q(3, slot) - q(6, slot));
+        // A denominator holding a renamable (and a nested) combination.
+        let den = function!(
+            GS.den,
+            Atom::num(7),
+            q(3, mu()) + q(6, mu()),
+            nested(mu()),
+            Atom::num(0)
+        );
+        let expression = &den * nested(nu()) * (q(2, nu()) + q(3, nu()) + q(9, nu()));
+        for flatten in [true, false] {
+            let mut combinations = Combinations::new();
+            let renamed = rename_kept_edges(&expression, &loop_edges, flatten, &mut combinations);
+            let key = |terms: &[(i64, i64)]| -> Vec<(i64, Atom)> {
+                terms
+                    .iter()
+                    .map(|(edge, c)| (*edge, Atom::num(*c)))
+                    .collect()
+            };
+            // With flatten -Q(3,ν) + Q(6,ν) is one kept vector; without, only
+            // the inner Q(2) + Q(3) - Q(6) is, and the outer Q(2) stays.
+            let first_key = if flatten {
+                key(&[(3, -1), (6, 1)])
+            } else {
+                key(&[(2, 1), (3, 1), (6, -1)])
+            };
+            let second_key = key(&[(2, 1), (3, 1)]);
+            assert_eq!(
+                combinations.keys().cloned().collect::<BTreeSet<_>>(),
+                BTreeSet::from([first_key.clone(), second_key.clone()]),
+                "flatten={flatten}"
+            );
+            let mut ids = combinations.values().copied().collect::<Vec<_>>();
+            ids.sort();
+            assert_eq!(ids, vec![EDGE_OFFSET, EDGE_OFFSET + 1]);
+            let first = q(combinations[&first_key], nu());
+            let first = if flatten { first } else { q(2, nu()) - first };
+            // Q(9) is not a loop edge of the component: it stays explicit.
+            let second = q(9, nu()) + q(combinations[&second_key], nu());
+            let expected = &den * first * second;
+            assert_eq!(renamed, expected, "flatten={flatten}");
+        }
     }
 }
