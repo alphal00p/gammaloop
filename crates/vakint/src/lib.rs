@@ -3448,19 +3448,28 @@ impl VakintTerm {
         }
 
         // A p-integral numerator is rewritten in scalar-product form, both to
-        // reject tensors before the substitution and to expand its result.
+        // check it before the substitution and to expand its result. A
+        // numerator with loop-momentum tensor rank (open loop indices) keeps
+        // its indices through the substitution; the tensor prepass reduces it
+        // with the external momentum declared ([`Self::tensor_reduce`]).
         let external = replacement_rules
             .propagator
             .as_ref()
             .map(|witness| witness.external.clone());
         if let Some(external) = &external {
-            self.numerator =
-                p_integral::scalar_numerator_with(self.numerator.as_view(), external, expand_p)?;
+            self.numerator = Self::admitted_p_numerator(p_integral::admit_numerator(
+                self.numerator.as_view(),
+                external,
+                expand_p,
+            )?);
         }
         self.apply_numerator_replacement_rules(replacement_rules, settings)?;
         if let Some(external) = &external {
-            self.numerator =
-                p_integral::scalar_numerator_with(self.numerator.as_view(), external, expand_p)?;
+            self.numerator = Self::admitted_p_numerator(p_integral::admit_numerator(
+                self.numerator.as_view(),
+                external,
+                expand_p,
+            )?);
         }
 
         Ok(())
@@ -3517,16 +3526,68 @@ impl VakintTerm {
                 topologies::OUT_OF_DOMAIN_P_INTEGRAL.to_owned(),
             ));
         }
-        // A p-integral numerator is never projected: its loop momenta are
-        // contracted with the external momentum. It only takes scalar form.
+        // A scalar p-integral numerator only takes scalar form; one with open
+        // loop indices is reduced with the external momentum declared.
         if let Some(external) = self.propagator_external()? {
-            self.numerator = p_integral::scalar_numerator(self.numerator.as_view(), &external)?;
-            return Ok(());
+            return self.tensor_reduce_propagator(settings, &external, true);
         }
         settings.with_resource_budget(|| match settings.tensor_reduction_method {
             TensorReductionMethod::AlphaLoop => self.tensor_reduce_alphaloop(vakint, settings),
-            TensorReductionMethod::FeynKit => self.tensor_reduce_feynkit(settings, false),
+            TensorReductionMethod::FeynKit => self.tensor_reduce_feynkit(settings, false, None),
         })
+    }
+
+    /// The numerator of an admitted p-integral term: its scalar form, or the
+    /// dot-notation form of a tensor numerator, kept for the tensor prepass.
+    fn admitted_p_numerator(admitted: p_integral::Admitted) -> Atom {
+        match admitted {
+            p_integral::Admitted::Scalar(scalar) => scalar,
+            p_integral::Admitted::Tensor { numerator, .. } => numerator,
+        }
+    }
+
+    /// The tensor prepass of a p-integral term with external momentum
+    /// `external`. A scalar numerator only takes scalar form, as before. A
+    /// numerator with loop-momentum tensor rank (open loop indices, or a loop
+    /// momentum contracted with another vector) goes through the same FeynKit
+    /// tensor reducer as a vacuum numerator, with `external` declared as an
+    /// external vector: every loop momentum is split into its component along
+    /// `external` (the scalar invariant `dot(k, external)`, left to the p
+    /// lowering) and its transverse part, whose tensors are projected in
+    /// `D - 1` dimensions. The tensors left (metrics and vectors carrying the
+    /// open indices, inverse powers of `dot(external, external)`) are
+    /// loop-free coefficients of the scalar p-integrals. The reducer's basis
+    /// is its own; the caller applies any physics projector to the result.
+    /// `expand` is that of [`p_integral::scalar_numerator_with`].
+    fn tensor_reduce_propagator(
+        &mut self,
+        settings: &VakintSettings,
+        external: &Atom,
+        expand: bool,
+    ) -> Result<(), VakintError> {
+        let numerator =
+            match p_integral::admit_numerator(self.numerator.as_view(), external, expand)? {
+                p_integral::Admitted::Scalar(scalar) => {
+                    self.numerator = scalar;
+                    return Ok(());
+                }
+                p_integral::Admitted::Tensor { numerator, .. } => numerator,
+            };
+        if settings.tensor_reduction_method != TensorReductionMethod::FeynKit {
+            return Err(VakintError::InvalidNumerator(format!(
+                "p-integral: a numerator with loop-momentum tensor rank needs the FeynKit tensor reduction; the {} projector is isotropic (vacuum integrals only)",
+                settings.tensor_reduction_method
+            )));
+        }
+        self.numerator = numerator;
+        let mut scalar_settings = settings.clone();
+        scalar_settings.use_dot_product_notation = true;
+        settings.with_resource_budget(|| {
+            self.tensor_reduce_feynkit(&scalar_settings, false, Some(external))
+        })?;
+        self.numerator =
+            p_integral::scalar_numerator_with(self.numerator.as_view(), external, expand)?;
+        Ok(())
     }
 
     fn tensor_reduce_alphaloop(
@@ -3705,9 +3766,7 @@ impl VakintTerm {
         if !p_integral::PGraph::is_out_of_domain_unknown(self.integral.as_view())
             && let Some(external) = self.propagator_external()?
         {
-            self.numerator =
-                p_integral::scalar_numerator_with(self.numerator.as_view(), &external, false)?;
-            return Ok(());
+            return self.tensor_reduce_propagator(settings, &external, false);
         }
         if compact {
             let mut scalar_settings = settings.clone();
@@ -3799,14 +3858,17 @@ impl VakintTerm {
         };
         // Native external slots belong to the existing tensor owner, including
         // their free interfaces. Integrated tensors still require the prepass.
-        term.tensor_reduce_feynkit(&scalar_settings, true)?;
+        term.tensor_reduce_feynkit(&scalar_settings, true, None)?;
         Ok(term.numerator)
     }
 
+    /// `external`: the external momentum of a p-integral term, declared to the
+    /// reducer as an external vector (`None` for a vacuum term).
     fn tensor_reduce_feynkit(
         &mut self,
         settings: &VakintSettings,
         scalar_only: bool,
+        external: Option<&Atom>,
     ) -> Result<(), VakintError> {
         initialize_spenso_reps();
         let epsilon = vk_parse!(&settings.epsilon_symbol).map_err(VakintError::SymbolicaError)?;
@@ -3866,7 +3928,14 @@ impl VakintTerm {
                         && get_integer_from_atom(vector.get(0)).is_some())
             };
             let loop_invariant = function.get_symbol() == S.dot
-                && arguments.iter().all(|argument| bare_vector(*argument, S.k));
+                && (arguments.iter().all(|argument| bare_vector(*argument, S.k))
+                    // A p-integral's `dot(k, external)` is a scalar invariant
+                    // of its family, not tensor rank.
+                    || external.is_some_and(|external| {
+                        arguments
+                            .iter()
+                            .all(|argument| bare_vector(*argument, S.k) || *argument == external.as_view())
+                    }));
             let representations = arguments
                 .iter()
                 .map(|argument| Self::compact_spenso_minkowski_vector_representation(*argument))
@@ -3906,7 +3975,13 @@ impl VakintTerm {
             **out = alias.clone();
         });
         let indexed_numerator = Vakint::convert_from_dot_notation(tensor_numerator.as_view());
-        let reducer = TensorReducer::new(dimension).with_integrated_head(S.k);
+        let mut reducer = TensorReducer::new(dimension.clone()).with_integrated_head(S.k);
+        if let Some(external) = external {
+            reducer = reducer.with_external_vector(Self::compact_external_vector(
+                external.as_view(),
+                &dimension,
+            )?)?;
+        }
         let mut next_bridge_dummy = Self::next_dot_dummy_index(indexed_numerator.as_view());
         let lorentz = TensorCollectFilter::Reps([Minkowski {}.into()]);
         // The frontend still carries Vakint's raw-index k/p/g leaves here.
@@ -3970,6 +4045,31 @@ impl VakintTerm {
         }
         self.numerator = reduced;
         Ok(())
+    }
+
+    /// The compact Spenso form `p(1, mink(D))` of a p-integral's external
+    /// momentum head `p(1)`, with its dimension cooked as
+    /// [`Self::tensor_reduce_feynkit_term`] cooks the numerator's slots.
+    fn compact_external_vector(external: AtomView<'_>, dimension: &Atom) -> Result<Atom, VakintError> {
+        let AtomView::Fun(head) = external else {
+            return Err(VakintError::InvalidNumerator(format!(
+                "p-integral: the external momentum {external} is not a vector head"
+            )));
+        };
+        let representation = FunctionBuilder::new(Minkowski::selfless_symbol())
+            .add_arg(dimension)
+            .finish();
+        let compact = FunctionBuilder::new(head.get_symbol())
+            .add_args(&head.iter().collect::<Vec<_>>())
+            .add_arg(representation)
+            .finish();
+        idenso::CookSettings::indices()
+            .with_mode(idenso::CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true)
+            .try_cook(compact.as_view())
+            .map_err(|error| {
+                feynkit_tensor::TensorReductionError::TensorAlgebra(error.to_string()).into()
+            })
     }
 
     fn tensor_reduce_feynkit_term(
@@ -9089,7 +9189,7 @@ mod tests {
                         integral: Atom::one(),
                         vectors: Vec::new(),
                     };
-                    term.tensor_reduce_feynkit(&settings, false).unwrap();
+                    term.tensor_reduce_feynkit(&settings, false, None).unwrap();
                     let actual = if use_dot_product_notation {
                         term.numerator
                     } else {
@@ -9105,7 +9205,7 @@ mod tests {
                         integral: Atom::one(),
                         vectors: Vec::new(),
                     };
-                    assert!(scalar_only.tensor_reduce_feynkit(&settings, true).is_err());
+                    assert!(scalar_only.tensor_reduce_feynkit(&settings, true, None).is_err());
                     assert_eq!(scalar_only.numerator, input);
                 }
             }
@@ -9285,7 +9385,7 @@ mod tests {
                 integral: Atom::one(),
                 vectors: Vec::new(),
             };
-            term.tensor_reduce_feynkit(&settings, false).unwrap();
+            term.tensor_reduce_feynkit(&settings, false, None).unwrap();
             let actual = if use_dot_product_notation {
                 term.numerator
             } else {
@@ -9301,7 +9401,7 @@ mod tests {
                 integral: Atom::one(),
                 vectors: Vec::new(),
             };
-            assert!(rejected.tensor_reduce_feynkit(&settings, true).is_err());
+            assert!(rejected.tensor_reduce_feynkit(&settings, true, None).is_err());
             assert_eq!(rejected.numerator, input);
         }
     }
@@ -9331,7 +9431,7 @@ mod tests {
                 integral: Atom::one(),
                 vectors: Vec::new(),
             };
-            term.tensor_reduce_feynkit(&settings, false).unwrap();
+            term.tensor_reduce_feynkit(&settings, false, None).unwrap();
             let actual = if use_dot_product_notation {
                 term.numerator
             } else {
@@ -9343,7 +9443,7 @@ mod tests {
                 integral: Atom::one(),
                 vectors: Vec::new(),
             };
-            assert!(rejected.tensor_reduce_feynkit(&settings, true).is_err());
+            assert!(rejected.tensor_reduce_feynkit(&settings, true, None).is_err());
             assert_eq!(rejected.numerator, input);
         }
     }

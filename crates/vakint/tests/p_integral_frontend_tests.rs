@@ -326,13 +326,12 @@ mod errors {
             "topo(prop(1,edge(1,2),k(1)+k(2),0,1)*prop(2,edge(2,1),k(1)+k(2)-p(1),0,1))",
             "the routing does not match the graph's loop count",
         );
+        // D6: open loop indices and loop momenta contracted with another
+        // vector are tensor p-integrals, reduced in the tensor prepass; a loop
+        // momentum outside every scalar product and without an index is not.
         assert_p_error(
-            &format!("dot(k(1),p(2))*{BUBBLE}"),
-            "tensor p-integrals are not supported yet",
-        );
-        assert_p_error(
-            &format!("k(1,mu)*{BUBBLE}"),
-            "tensor p-integrals are not supported yet",
+            &format!("k(1)*{BUBBLE}"),
+            "loop momentum k(1) outside a scalar product",
         );
     }
 
@@ -580,7 +579,7 @@ mod out_of_domain {
             "is not an integer combination of k(j) and p(i)",
         );
         assert_p_malformed(
-            &format!("dot(k(1),p(2))*{BUBBLE}"),
+            &format!("k(1)*{BUBBLE}"),
             "tensor p-integrals are not supported yet",
         );
         // A short form is no unknown integral: out of domain, it stays an error.
@@ -663,10 +662,28 @@ mod numerators {
             &format!("dot(k(1)+p(1),p(1))*{BUBBLE}"),
             &format!("(dot(k(1),p(1))+dot(p(1),p(1)))*{BUBBLE}"),
         );
-        // Another external vector contracted with a loop momentum is a tensor.
-        assert_p_error(
-            &format!("dot(k(1)+p(2),p(2))*{BUBBLE}"),
-            "a loop momentum is contracted with p(2)",
-        );
+    }
+
+    /// D6: a tensor numerator (open loop indices, or a loop momentum
+    /// contracted with another vector) keeps its indices through the matching:
+    /// two routings of the bubble give the same canonical form.
+    #[test]
+    fn open_loop_indices_are_transported_by_the_matching() {
+        // Distinct powers: no automorphism exchanges the two lines.
+        let rerouted = "topo(prop(7,edge(0,5),-k(2)+p(1),0,2)*prop(3,edge(0,5),k(2),0,1))";
+        let bubble = BUBBLE;
+        for (left, right) in [
+            ("k(1,mu)", "k(2,mu)"),
+            ("k(1,mu)*k(1,nu)*dot(k(1),p(1))", "k(2,mu)*k(2,nu)*dot(k(2),p(1))"),
+            ("dot(k(1),p(2))", "dot(k(2),p(2))"),
+        ] {
+            let left = format!("{left}*{bubble}");
+            let canonical_form = canonical(&parse(&left)).to_string();
+            assert!(
+                canonical_form.contains("mu") || canonical_form.contains("p(2)"),
+                "{left}: the open index or foreign vector was lost: {canonical_form}"
+            );
+            assert_p_same_canonical(&left, &format!("{right}*{rerouted}"));
+        }
     }
 }

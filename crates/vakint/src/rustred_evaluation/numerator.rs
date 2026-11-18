@@ -371,7 +371,7 @@ mod tests {
                 integral: Atom::one(),
                 vectors: Vec::new(),
             };
-            term.tensor_reduce_feynkit(&settings, false).unwrap();
+            term.tensor_reduce_feynkit(&settings, false, None).unwrap();
             assert!((term.numerator - expected).expand().together().is_zero());
         }
         assert!(
