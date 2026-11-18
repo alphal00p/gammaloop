@@ -4,6 +4,7 @@ import contextlib
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -176,6 +177,97 @@ class PublicationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "IFD disabled"):
                 publication.preview(Path.cwd(), [])
             self.assertEqual(run.call_count, 1)
+
+
+class UploadSelectionTests(unittest.TestCase):
+    def test_exact_flake_schedule_drives_selection_and_builds(self):
+        repository = Path(__file__).resolve().parents[2]
+        recipe = (
+            (repository / "just/ci.just")
+            .read_text()
+            .split("ci-checks-and-upload:\n", 1)[1]
+            .split("\n# Check the workspace graph", 1)[0]
+        )
+        script = "\n".join(line.removeprefix("    ") for line in recipe.splitlines())
+        for caller_jobs, selected_jobs in [
+            (["old"], ["old", "new"]),
+            (["old", "unselected"], ["old"]),
+        ]:
+            with self.subTest(caller=caller_jobs, selected=selected_jobs):
+                with tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    caller, selected = root / "caller", root / "selected"
+                    caller.mkdir()
+                    selected.mkdir()
+                    jobs = lambda names: [f"packages.x86_64-linux.{n}" for n in names]
+                    for directory, names in [
+                        (caller, caller_jobs),
+                        (selected, selected_jobs),
+                    ]:
+                        values = " ".join(json.dumps(name) for name in jobs(names))
+                        (directory / "flake.nix").write_text(
+                            "{ outputs = { self }: { lib.x86_64-linux.cachePublication.local = [ "
+                            + values
+                            + " ]; }; }\n"
+                        )
+                    program = root / "upload.sh"
+                    program.write_text(script)
+                    binary = root / "bin"
+                    binary.mkdir()
+                    log = root / "calls.jsonl"
+                    stub = binary / "nix"
+                    stub.write_text(
+                        f"#!{sys.executable}\n"
+                        "import json, os, sys\n"
+                        "from pathlib import Path\n"
+                        "a = sys.argv[1:]\n"
+                        "record = {'args': a}\n"
+                        "if a[0] == 'copy': record['stdin'] = sys.stdin.read()\n"
+                        "with open(os.environ['UPLOAD_TEST_LOG'], 'a') as f: f.write(json.dumps(record) + '\\n')\n"
+                        "if a[0] == 'eval':\n"
+                        "    if '--expr' in a and a[a.index('--expr')+1] == 'builtins.currentSystem': print('x86_64-linux')\n"
+                        "    elif os.environ['UPLOAD_TEST_REF'] + '#lib.x86_64-linux.cachePublication.local' in a: print('\\n'.join(json.loads(os.environ['UPLOAD_TEST_SELECTED'])))\n"
+                        "    elif '--expr' in a: print('\\n'.join(json.loads(os.environ['UPLOAD_TEST_CALLER'])))\n"
+                        "    else: raise AssertionError(a)\n"
+                        "elif a[0] == 'build':\n"
+                        "    for i, target in enumerate(x for x in a if '#' in x): print('/nix/store/upload-fixture-' + str(i))\n"
+                        "elif a[0] != 'copy': raise AssertionError(a)\n"
+                    )
+                    stub.chmod(0o755)
+                    netrc = root / "netrc"
+                    netrc.touch()
+                    reference = f"path:{selected}"
+                    environment = os.environ | {
+                        "PATH": f"{binary}:{os.environ['PATH']}",
+                        "NIXCI_NETRC": str(netrc),
+                        "GAMMALOOP_CI_FLAKE_REF": reference,
+                        "UPLOAD_TEST_REF": reference,
+                        "UPLOAD_TEST_LOG": str(log),
+                        "UPLOAD_TEST_CALLER": json.dumps(jobs(caller_jobs)),
+                        "UPLOAD_TEST_SELECTED": json.dumps(jobs(selected_jobs)),
+                    }
+                    result = subprocess.run(
+                        [shutil.which("bash"), str(program)],
+                        cwd=caller,
+                        env=environment,
+                        text=True,
+                        capture_output=True,
+                        check=False,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    calls = [json.loads(line) for line in log.read_text().splitlines()]
+                    build = next(
+                        row["args"] for row in calls if row["args"][0] == "build"
+                    )
+                    self.assertEqual(
+                        [arg for arg in build if "#" in arg],
+                        [f"{reference}#{name}" for name in jobs(selected_jobs)],
+                    )
+                    copy = next(row for row in calls if row["args"][0] == "copy")
+                    self.assertEqual(
+                        len(copy["stdin"].splitlines()), len(selected_jobs)
+                    )
+                    self.assertIn("CI upload completed", result.stdout)
 
 
 if __name__ == "__main__":

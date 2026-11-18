@@ -33,7 +33,7 @@ use crate::{
         },
     },
     settings::{GlobalSettings, RuntimeSettings, global::GenerationSettings},
-    utils::F,
+    utils::{F, test_utils::ModelFixtureExt},
 };
 use linnet::half_edge::involution::EdgeIndex;
 use spenso::algebra::complex::Complex;

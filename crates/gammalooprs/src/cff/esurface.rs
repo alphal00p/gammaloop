@@ -4618,20 +4618,21 @@ mod tests {
         );
         let mut boundary_count = 0;
         for path in &paths {
-            let graph: Graph = fs::read_to_string(path)
+            let graph = Graph::import_dot(&fs::read_to_string(path).unwrap(), &model)
                 .unwrap()
-                .into_graph(&model)
-                .unwrap();
-            let (source, target) = graph.get_source_and_target();
-            for (left, cut, right) in
-                graph.all_st_cuts_for_cs(source, target, &graph.get_initial_state_tree())
-            {
+                .remove(0);
+            for candidate in &graph.finalized_topology_threshold_candidates {
+                let FinalizedCut { left, cut, right } = FinalizedCut {
+                    left: candidate.left.clone(),
+                    cut: candidate.cut.clone(),
+                    right: candidate.right.clone(),
+                };
                 if cut.nedges(&graph) <= 1 {
                     continue;
                 }
                 let surface = Esurface::new_from_cut_left(
                     &graph.underlying,
-                    &CrossSectionCut { left, cut, right },
+                    &FinalizedCut { left, cut, right },
                     Some(&graph.initial_state_cut),
                 );
                 surface.oriented_boundary(&graph).unwrap_or_else(|error| {
@@ -4650,10 +4651,12 @@ mod tests {
     fn surface_boundary_excludes_both_halves_of_sewn_initial_edges() {
         test_initialise().unwrap();
         let model = utils::load_generic_model("sm");
-        let graph: Graph =
-            include_str!("../../../../tests/resources/graphs/ir_safe_thresholds/GL562.dot")
-                .into_graph(&model)
-                .unwrap();
+        let graph: Graph = Graph::import_dot(
+            include_str!("../../../../tests/resources/graphs/ir_safe_thresholds/GL562.dot"),
+            &model,
+        )
+        .unwrap()
+        .remove(0);
         let initial_edges = graph.initial_state_cut.as_subgraph();
         let mut sewn_initial_count = 0;
         for (pair, _, _) in graph.underlying.iter_edges() {
@@ -4691,22 +4694,23 @@ mod tests {
     #[test]
     fn surface_boundary_rejects_independent_component_orientations() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(digraph disconnected_boundary {
+        let graph: Graph = crate::finalized_runtime_dot!(digraph disconnected_boundary {
+            graph [projector=1]
             incoming_a [style=invis]
             outgoing_a [style=invis]
             incoming_b [style=invis]
             outgoing_b [style=invis]
             node [num=1]
-            edge [num=1 mass=1]
-            incoming_a -> A [id=0 mass=0]
-            B -> outgoing_a [id=1 mass=0]
-            A -> B [id=2 lmb_id=0]
-            A -> B [id=3]
-            incoming_b -> C [id=4 mass=0]
-            D -> outgoing_b [id=5 mass=0]
-            C -> D [id=6 lmb_id=1]
-            C -> D [id=7]
-        })
+            edge [num=1 mass=1 particle=scalar_1]
+            incoming_a -> A [id=0 mass=0 sink="{ufo_order:0}"]
+            B -> outgoing_a [id=1 mass=0 source="{ufo_order:0}"]
+            A -> B [id=2 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            A -> B [id=3 source="{ufo_order:2}" sink="{ufo_order:2}"]
+            incoming_b -> C [id=4 mass=0 sink="{ufo_order:0}"]
+            D -> outgoing_b [id=5 mass=0 source="{ufo_order:0}"]
+            C -> D [id=6 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            C -> D [id=7 source="{ufo_order:2}" sink="{ufo_order:2}"]
+        }, "scalars")
         .unwrap();
         let surface = Esurface {
             energies: [2, 3, 6, 7].map(EdgeIndex).into(),
@@ -4723,10 +4727,12 @@ mod tests {
     fn projected_gl280_threshold_uses_its_own_signed_boundary() {
         test_initialise().unwrap();
         let model = utils::load_generic_model("sm");
-        let graph: Graph =
-            include_str!("../../../../tests/resources/graphs/ir_safe_thresholds/GL280.dot")
-                .into_graph(&model)
-                .unwrap();
+        let graph: Graph = Graph::import_dot(
+            include_str!("../../../../tests/resources/graphs/ir_safe_thresholds/GL280.dot"),
+            &model,
+        )
+        .unwrap()
+        .remove(0);
         let mut cross_section = CrossSectionGraph::new(graph.clone());
         cross_section.build_lmbs().unwrap();
         let production_lmbs = cross_section.derived_data.lmbs.as_ref().unwrap();
@@ -5000,10 +5006,12 @@ mod tests {
     fn projected_gl358_threshold_distinguishes_open_pinched_and_closed_fibres() {
         test_initialise().unwrap();
         let model = utils::load_generic_model("sm");
-        let graph: Graph =
-            include_str!("../../../../tests/resources/graphs/ir_safe_thresholds/GL358.dot")
-                .into_graph(&model)
-                .unwrap();
+        let graph: Graph = Graph::import_dot(
+            include_str!("../../../../tests/resources/graphs/ir_safe_thresholds/GL358.dot"),
+            &model,
+        )
+        .unwrap()
+        .remove(0);
         let mut cross_section = CrossSectionGraph::new(graph.clone());
         cross_section.build_lmbs().unwrap();
         let masses = graph.get_real_mass_vector::<f64>(&model);

@@ -2,9 +2,11 @@ use std::{
     borrow::Cow,
     collections::{BTreeSet, HashMap},
     fmt::Display,
-    ops::{Deref, Range},
+    ops::Deref,
 };
 
+use bincode::enc::Encoder;
+use bincode::error::EncodeError;
 use bincode::{Decode, Encode};
 
 use color_eyre::Result;
@@ -47,54 +49,7 @@ use crate::{
     },
 };
 
-#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
-#[trait_decode(trait = GammaLoopContext)]
-#[derive(Default)]
-pub struct ParamValuePairs {
-    pub value_range: Range<usize>,
-    pub params: Vec<Atom>,
-}
-
-impl ParamValuePairs {
-    pub fn validate(&self) {
-        assert_eq!(
-            self.value_range.len(),
-            self.params.len(),
-            "Number of values and parameters must match"
-        );
-    }
-
-    pub fn default_from_symbol(param: Symbol) -> Self {
-        Self {
-            value_range: 0..1,
-            params: vec![Atom::var(param)],
-        }
-    }
-
-    // pub fn replacement(&self) -> Vec<Replacement> {
-    //     let mut replacements = Vec::new();
-    //     for (p, v) in self.params.iter().zip_eq(self.values.iter()) {
-    //         println!("{p}");
-    //         let replacement = Replacement::new(
-    //             p.clone().to_pattern(),
-    //             Atom::num(v.clone().to_coefficient()),
-    //         );
-    //         replacements.push(replacement);
-    //     }
-    //     replacements
-    // }
-}
-
-impl<'a, A: Into<AtomOrView<'a>>> FromIterator<A> for ParamValuePairs {
-    fn from_iter<T: IntoIterator<Item = A>>(iter: T) -> Self {
-        let params: Vec<Atom> = iter.into_iter().map(|a| a.into().into_owned()).collect();
-        let len = params.len();
-        Self {
-            value_range: 0..len,
-            params,
-        }
-    }
-}
+pub use super::param_value_pairs::ParamValuePairs;
 
 pub trait SplitPolarizations {
     fn polarizations(&self) -> Vec<Atom>;
@@ -715,7 +670,7 @@ impl<C, T: FloatLike + Decode<C>> Decode<C> for ParamCache<T> {
     }
 }
 
-#[derive(Clone, bincode_trait_derive::Encode)]
+#[derive(Clone)]
 pub struct ParamBuilder<T: FloatLike = f64> {
     pub(crate) medium_mode: MediumMode,
     pub values: Vec<Vec<Complex<F<T>>>>,
@@ -725,7 +680,22 @@ pub struct ParamBuilder<T: FloatLike = f64> {
     pub reps: Vec<FnMapEntry>,
     // pub eager_const_map: HashMap<Atom, Complex<F<T>>>,
     // pub eager_fn_map:
+    /// Runtime registration cache rebuilt from `reps`; hash-map iteration order
+    /// must not affect persisted data or the integrand resume fingerprint.
     pub fn_map: FunctionMap,
+}
+
+impl<T: FloatLike + Encode> Encode for ParamBuilder<T> {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        (
+            &self.medium_mode,
+            &self.values,
+            &self.pairs,
+            &self.polarization_cache,
+            &self.reps,
+        )
+            .encode(encoder)
+    }
 }
 
 impl<C: GammaLoopContext, T: FloatLike + Decode<C>> Decode<C> for ParamBuilder<T> {
@@ -737,9 +707,8 @@ impl<C: GammaLoopContext, T: FloatLike + Decode<C>> Decode<C> for ParamBuilder<T
         let pairs = Decode::decode(decoder)?;
         let polarization_cache = Decode::decode(decoder)?;
         let reps: Vec<FnMapEntry> = Decode::decode(decoder)?;
-        // Consume the existing wire field, then rebuild from the recorded entries:
-        // Symbolica's imported map can retain stale inline argument symbol IDs.
-        let _: FunctionMap = Decode::decode(decoder)?;
+        // The authoritative entries recreate formal arguments in the imported
+        // Symbolica state; a serialized FunctionMap could retain stale inline IDs.
         let mut fn_map = FunctionMap::new();
         for entry in &reps {
             entry
@@ -1971,7 +1940,13 @@ impl<T: FloatLike> Display for ParamBuilder<T> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
+    use bincode::config;
+    use symbolica::state::State;
+
     use super::*;
+    use crate::GammaLoopContextContainer;
     use crate::{
         finalized_runtime_dot,
         initialisation::test_initialise,
@@ -2106,10 +2081,6 @@ mod tests {
 
     #[test]
     fn function_entry_roundtrip_preserves_policy_and_alias_scope() {
-        use crate::GammaLoopContextContainer;
-        use std::io::Cursor;
-        use symbolica::prelude::State;
-
         let x = Atom::var(symbol!("entry_roundtrip::x"));
         let global = Atom::var(symbol!("entry_roundtrip::global"));
         let alias = symbol!("entry_roundtrip::alias").call_args([Atom::num(0)]);
@@ -2133,15 +2104,15 @@ mod tests {
                     is_alias: false,
                 },
             ];
-            let encoded = bincode::encode_to_vec(&entries, bincode::config::standard()).unwrap();
+            let encoded = bincode::encode_to_vec(&entries, config::standard()).unwrap();
             let mut state = Vec::new();
             State::export(&mut state).unwrap();
             let state_map = State::import(&mut Cursor::new(state), None).unwrap();
-            let model = crate::utils::load_generic_model("scalars");
+            let model = load_generic_model("scalars");
             let (restored, consumed): (Vec<FnMapEntry>, _) =
                 bincode::decode_from_slice_with_context(
                     &encoded,
-                    bincode::config::standard(),
+                    config::standard(),
                     GammaLoopContextContainer {
                         state_map: &state_map,
                         model: &model,
@@ -2157,6 +2128,30 @@ mod tests {
             assert_eq!(builder.reps, entries);
             assert!(builder.add_function_entry(entries[1].clone()).is_err());
             assert_eq!(builder.reps.len(), 2);
+            let encoded_builder = bincode::encode_to_vec(&builder, config::standard()).unwrap();
+            // Cache contents are not authoritative. Loading must reconstruct
+            // every retained definition from its recorded entries.
+            builder.fn_map = FunctionMap::new();
+            assert_eq!(
+                bincode::encode_to_vec(&builder, config::standard()).unwrap(),
+                encoded_builder,
+            );
+            let (builder, consumed): (ParamBuilder<f64>, _) =
+                bincode::decode_from_slice_with_context(
+                    &encoded_builder,
+                    config::standard(),
+                    GammaLoopContextContainer {
+                        state_map: &state_map,
+                        model: &model,
+                    },
+                )
+                .unwrap();
+            assert_eq!(consumed, encoded_builder.len());
+            assert_eq!(builder.reps, entries);
+            assert_eq!(
+                bincode::encode_to_vec(&builder, config::standard()).unwrap(),
+                encoded_builder,
+            );
             let root = function.call_args([Atom::num(7), Atom::num(2)])
                 + function.call_args([Atom::num(7), Atom::num(3)]);
             let mut evaluator = root

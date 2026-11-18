@@ -54,15 +54,15 @@ fn energy_factor_ownership(ownership: CffEnergyFactorOwnership) -> &'static str 
 }
 
 /// Immutable exact affine energy expression, retaining native term order.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "LinearEnergyExpression", frozen, eq, hash, skip_from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PyLinearEnergyExpression {
     inner: LinearEnergyExpr,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyLinearEnergyExpression {
     /// Ordered ``(internal_edge_id, Fraction)`` terms multiplying on-shell energies.
@@ -101,7 +101,7 @@ impl PyLinearEnergyExpression {
 }
 
 /// Immutable native residue identity, independent of IDs, labels and scalar variants.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "ResidueMapKey", frozen, eq, hash, skip_from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PyResidueMapKey {
@@ -120,8 +120,8 @@ impl From<&OrientationExpression> for PyResidueMapKey {
     }
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyResidueMapKey {
     /// Complete native edge-direction vector: default 1, reversed -1, undirected 0.
@@ -192,7 +192,7 @@ impl PyResidueMapKey {
 }
 
 /// One exact distribution factor attached to a thermal CFF residue.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(
     name = "ThermalDistributionFactor",
     frozen,
@@ -208,7 +208,7 @@ pub struct PyThermalDistributionFactor {
 }
 
 /// Ordered positive and negative energy sets in one thermal numerator factor.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "ThermalNumerator", frozen, get_all, skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyThermalNumerator {
@@ -217,7 +217,7 @@ pub struct PyThermalNumerator {
 }
 
 /// Detached distribution factors, preserving derivatives and repeated occurrences.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "ThermalWeight", frozen, get_all, skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyThermalWeight {
@@ -265,15 +265,15 @@ impl From<&ThermalWeight> for PyThermalWeight {
 }
 
 /// One scalar variant of a native residue, with unexpanded denominator topology.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "ResidueVariant", frozen, skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyResidueVariant {
     inner: CFFVariant,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyResidueVariant {
     /// Native medium weight; vacuum LTD variants have no distribution factors.
@@ -377,7 +377,7 @@ impl PyResidueVariant {
 }
 
 /// One expression-local residue entry; several native IDs can share the same key.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "Residue", frozen, skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyResidue {
@@ -385,7 +385,7 @@ pub struct PyResidue {
     inner: OrientationExpression,
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyResidue {
     /// Native expression-local ID, independent of runtime execution slots.
@@ -417,7 +417,7 @@ impl PyResidue {
 ///
 /// This is the generated graph-level residue map, not the evaluated UV/threshold
 /// catalogue or a partition into independently integrable LTD contributions.
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pyclass)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "ResidueMap", frozen, skip_from_py_object)]
 #[derive(Clone)]
 pub struct PyResidueMap {
@@ -454,8 +454,8 @@ impl PyResidueMap {
     }
 }
 
-#[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python-stubs"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyResidueMap {
     #[getter]

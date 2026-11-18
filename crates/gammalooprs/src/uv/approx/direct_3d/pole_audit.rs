@@ -9,6 +9,7 @@ use std::{
 
 use super::super::branches::DirectResidueKey;
 use super::*;
+use crate::uv::approx::projected_4d::Local4dProjectionContext;
 use crate::{
     cff::expression::OrientationID,
     graph::{FeynmanGraph, Graph},

@@ -88,6 +88,24 @@ impl Integrands {
         self.atoms.iter()
     }
 
+    /// Inspect stored root expressions and shared tensor/scalar bodies without
+    /// expanding their calls or distributing graph numerators.
+    ///
+    /// ```
+    /// use gammalooprs::cff::CutCFFIndex;
+    /// use gammalooprs::uv::Integrands;
+    /// use symbolica::atom::Atom;
+    /// let integrands: Integrands = [(CutCFFIndex::new_all_none(), Atom::num(1))]
+    ///     .into_iter().collect();
+    /// assert_eq!(integrands.expressions().count(), 1);
+    /// ```
+    pub fn expressions(&self) -> impl Iterator<Item = &Atom> {
+        self.atoms
+            .values()
+            .chain(self.numerators.iter().map(|entry| entry.rhs.expression()))
+            .chain(self.scalars.iter().map(|entry| &entry.rhs))
+    }
+
     pub(crate) fn numerators(&self) -> &[Arc<NumeratorDefinition>] {
         &self.numerators
     }

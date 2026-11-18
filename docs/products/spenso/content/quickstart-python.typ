@@ -3,26 +3,27 @@
 #let quickstart-python = [
 = Using Spenso from Python
 
-The shortest path into Spenso is the community module bundled with Symbolica `2.2.0`. This
-example creates a typed two-dimensional tensor and checks its diagonal entries; it needs no
-GammaLoop checkout.
+Spenso is available as `symbolica.community.tensor` in a Symbolica Community assembly.
+This example uses the checkout's combined Symbolica `3.0.1` host, which includes Spenso,
+Linnet and FeynKit, to construct a typed two-dimensional tensor.
 
 == Install and verify the module
 
-Create an isolated environment, install the version used by this manual, and verify the community
-import:
+From the repository root, create an isolated environment and install the locked Community
+host with the native development command:
 
 // docs-example: syntax
 ```sh
 python -m venv .venv
 . .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install "symbolica==2.2.0"
+nix develop -c just python-develop community --python .venv/bin/python
 python -c "import symbolica.community.tensor as spenso; print(spenso.__name__)"
 ```
 
 There is no separate `spenso` Python wheel. The installed `symbolica` distribution owns the
-native `symbolica.community.tensor` module. Symbolica's
+native `symbolica.community.tensor` module; the version number alone does not establish which
+Community extensions an external wheel includes. Keep the generated `.venv/.nix-python/symbolica`
+root while using this Nix-built host: its native libraries remain in the Nix store. Symbolica's
 #link("https://symbolica.io/docs/get_started.html")[installation and license terms] apply; its
 free restricted mode is enough for this single-process example.
 

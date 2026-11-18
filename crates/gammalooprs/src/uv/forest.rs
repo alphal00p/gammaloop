@@ -1,7 +1,6 @@
 use crate::{
     GammaLoopContext, debug_tags,
     graph::{Graph, LMBext, cuts::CutSet, parse::string_utils::dot_attr_value},
-    model::Model,
     utils::{GS, W_},
     uv::{
         ApproximationType, Integrands,

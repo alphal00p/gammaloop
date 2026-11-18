@@ -176,6 +176,13 @@ closures. Finish the upload before pushing so NixCI can reuse that
 work. Keep substitution enabled rather than downloading the whole cache or
 forcing rebuilds.
 
+In a non-colocated JJ workspace, `GAMMALOOP_CI_FLAKE_REF` can select the exact
+Git-backed flake URI for the final commit. Job selection comes from that
+flake's exposed `lib.SYSTEM.cachePublication.local`, and the same command builds
+and uploads those selected jobs from that source, retaining its revision in generated documentation links
+and excluding ignored local build artifacts. Its default remains the local
+flake; the selected revision must match the code being qualified and pushed.
+
 The local selection is `configuration.onlyBuild` in `nix/ci.nix` for the current
 system: static checks, group Nextest producers, test dependency and binary
 producers, runtime launchers and support/barrier outputs. Use the preview below

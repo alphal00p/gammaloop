@@ -60,7 +60,6 @@
       name = "python-api";
       packages = ["gammaloop-integration-tests"];
       runtimePythonModule = true;
-      runtimeTestSourcePackages = [];
       filter = "package(gammaloop-integration-tests) & binary(test_python_api)";
       extraFeatures = testFeatures;
     }

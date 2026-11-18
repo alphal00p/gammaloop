@@ -44,17 +44,15 @@ ci-checks-and-upload:
     netrc="${NIXCI_NETRC:-$HOME/.netrc}"
     test -r "$netrc" || { echo 'Set up ~/.netrc or NIXCI_NETRC before uploading.' >&2; exit 1; }
 
-    selection=$(nix eval --impure --raw --expr '
-      let
-        system = builtins.currentSystem;
-        ci = import ./nix/ci.nix {
-          inherit system;
-          workspaceGraph = builtins.fromJSON (builtins.readFile ./nix/ci-workspace-graph.json);
-        };
-      in builtins.concatStringsSep "\n" ci.configuration.onlyBuild
-    ')
+    # Non-colocated JJ workspaces can select an exact Git-backed source so
+    # documentation retains its revision and ignored build trees stay excluded.
+    flake_ref="${GAMMALOOP_CI_FLAKE_REF:-.}"
+    system=$(nix eval --impure --raw --expr 'builtins.currentSystem')
+    selection=$(nix eval --impure --raw \
+        "$flake_ref#lib.$system.cachePublication.local" \
+        --apply 'builtins.concatStringsSep "\n"')
     targets=()
-    while IFS= read -r target; do targets+=(".#$target"); done <<< "$selection"
+    while IFS= read -r target; do targets+=("$flake_ref#$target"); done <<< "$selection"
     tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' EXIT
 

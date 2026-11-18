@@ -1162,6 +1162,11 @@ cache credentials are available:
 just ci-checks-and-upload
 ```
 
+For a non-colocated JJ workspace, set `GAMMALOOP_CI_FLAKE_REF` to the exact
+Git-backed flake URI of the final commit when invoking this command. This keeps
+documentation source links tied to that revision and excludes ignored build
+artifacts from its source. Leave the variable unset for the normal local flake.
+
 This runs static checks and compiles runtime producers without running Rust or
 Python tests, doctests or the documentation publication suite. Use `just ci-checks`
 explicitly when you also want to run that suite locally.
