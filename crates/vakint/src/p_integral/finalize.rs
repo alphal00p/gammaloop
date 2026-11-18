@@ -298,6 +298,102 @@ pub(crate) fn finalize_with(
         .with(function!(Symbol::LOG, mursq).to_pattern()))
 }
 
+/// RE-FINALISATION of a `Retain` result (helper VH, lane l5-stage1, 2026-11-18):
+/// the `Symbolic` / `Numerical` value of a p-integral sum from its finalized
+/// `Retain` value `retained`, WITHOUT the reduction. `Retain` keeps the exact
+/// `ε` dependence: [`finalize_with`] writes `normalize_gamma(F^L·measure·reduced)`
+/// (masters `PG`, `PMaster`, Gamma tags `PGamma`, terminals `PResidual` kept,
+/// the scale logarithms already resolved into `(-dot(p,p)/μ²)^(-Lε)`). Each
+/// top-level term of `retained` is split into its master-free factors (the
+/// prefactor: scale power, `π` power, ...) and the rest (a polynomial in the
+/// masters with coefficients rational in `ε`), and expanded exactly as
+/// [`finalize_with`] expands `prefactor × reduced` in `mode`: terminals
+/// resolved first, the Laurent expansion through `ε^(terms - L - 1)`, the
+/// unknown-tail guard, the value resolution. Exact Laurent products make the
+/// result the same mathematical object as the full evaluation in `mode`; the
+/// caller proves the bytes equal on its own records. The pole-bounded master
+/// basis is refused (a `Retain` value is already rotated; not needed here).
+pub(crate) fn refinalise_with(
+    retained: &Atom,
+    loops: usize,
+    settings: &VakintSettings,
+    mode: RustRedMasterMode,
+    backend: &str,
+    source: PMasterSource<'_>,
+) -> Result<Atom, VakintError> {
+    if mode == RustRedMasterMode::Retain {
+        return Err(VakintError::EvaluationError(
+            "re-finalisation of a Retain value into Retain: nothing to do".into(),
+        ));
+    }
+    if settings.p_master_basis != super::master_basis::PMasterBasis::Original {
+        return Err(VakintError::EvaluationError(
+            "re-finalisation in the pole-bounded master basis is not supported".into(),
+        ));
+    }
+    if retained.contains_symbol(log_q_mu()) || retained.contains_symbol(log_mu()) {
+        return Err(VakintError::EvaluationError(
+            "re-finalisation: the Retain value still holds the scale-logarithm placeholders".into(),
+        ));
+    }
+    let epsilon = vk_symbol!(&settings.epsilon_symbol);
+    let target = settings.number_of_terms_in_epsilon_expansion - loops as i64 - 1;
+    let masters = [
+        super::pg_symbol(),
+        super::p_master_symbol(),
+        super::p_gamma_symbol(),
+        super::p_residual_symbol(),
+    ];
+    let has_master =
+        |view: symbolica::atom::AtomView| masters.iter().any(|m| view.contains_symbol(*m));
+    let terms: Vec<Atom> = match retained.as_view() {
+        symbolica::atom::AtomView::Add(sum) => sum.iter().map(|t| t.to_owned()).collect(),
+        _ => vec![retained.clone()],
+    };
+    let mut expanded = Atom::Zero;
+    for term in terms {
+        let (mut prefactor, mut reduced) = (Atom::num(1), Atom::num(1));
+        match term.as_view() {
+            symbolica::atom::AtomView::Mul(product) => {
+                for factor in product.iter() {
+                    if has_master(factor) {
+                        reduced *= factor.to_owned();
+                    } else {
+                        prefactor *= factor.to_owned();
+                    }
+                }
+            }
+            view if has_master(view) => reduced = term.clone(),
+            _ => prefactor = term.clone(),
+        }
+        let reduced = source.resolve_terminals(&reduced, mode, epsilon)?;
+        source.require_coefficients(&reduced, mode)?;
+        super::compare::check_symbols_with(&reduced, &source.extra_names())?;
+        let prefactor = Vakint::normalize_gamma_functions(prefactor.as_view());
+        expanded += super::laurent::expand_with(
+            &prefactor,
+            &reduced,
+            epsilon,
+            target,
+            &|name, epsilon| source.expansion(name, epsilon),
+        )?;
+    }
+    let expanded = expanded.expand();
+    crate::truncation_guard::ensure_known_orders(
+        &expanded,
+        epsilon,
+        Some(target),
+        &source.backend(backend),
+        |master| source.describe(master),
+    )?;
+    let expanded = source.resolve_values(expanded, mode, settings.run_time_decimal_precision)?;
+    let mut result = simplify_real(expanded.as_view());
+    if !settings.use_dot_product_notation {
+        result = Vakint::convert_from_dot_notation(result.as_view());
+    }
+    Ok(result)
+}
+
 /// At most this many `PResidual` symbols are named (test helper).
 #[cfg(test)]
 const NAMED_RESIDUALS: usize = 8;

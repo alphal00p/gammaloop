@@ -2383,6 +2383,61 @@ pub(crate) fn finalize_reduced(
     Ok(result)
 }
 
+impl Vakint {
+    /// Helper VH, lane l5-stage1 (2026-11-18): the value in the master mode of
+    /// `settings` (its RustRed option; `Symbolic` without one) of a p-integral
+    /// sum from its finalized `Retain` value `retained` (`loops` loops), with
+    /// this engine's p master catalogue and WITHOUT a reduction: the
+    /// finalisation of [`finalize_reduced`] applied to the retained master-basis
+    /// expression ([`finalize::refinalise_with`]). Use: bring the reductions of
+    /// an earlier binary with the same reduction code under this binary's
+    /// finaliser; the caller proves the result equal to a full evaluation.
+    pub fn refinalise_p_retained(
+        &self,
+        settings: &VakintSettings,
+        retained: symbolica::atom::AtomView,
+        loops: usize,
+    ) -> Result<Atom, VakintError> {
+        let mode = settings
+            .evaluation_order
+            .0
+            .iter()
+            .find_map(|method| match method {
+                EvaluationMethod::RustRed(options) => Some(options.master_mode),
+                _ => None,
+            })
+            .unwrap_or(RustRedMasterMode::Symbolic);
+        let catalogue = p_master_catalogue(self, loops);
+        let masters_directory = (loops >= 5
+            && settings.p_master_basis == crate::p_integral::PMasterBasis::PoleBounded)
+            .then(|| self.p_masters_directory())
+            .flatten();
+        let request = format!("the re-finalisation of a Retain value of {loops}-loop p-integrals");
+        let retained = retained.to_owned();
+        let finalized = phases::time("p.refinalise", || {
+            finalize::refinalise_with(
+                &retained,
+                loops,
+                settings,
+                mode,
+                "RustRed",
+                PMasterSource::new(catalogue.as_deref(), &request)
+                    .with_masters_directory(masters_directory.as_deref()),
+            )
+        })?;
+        Ok(simplify_real(finalized.as_view()))
+    }
+
+    /// The process-wide number of Laurent-expanded terms so far in which a
+    /// tabulated master's unknown tail lies inside the needed orders
+    /// (laurent-depth diagnostic of `p_integral::laurent`; such a term needs
+    /// the exact products of 7c75215ea and is refused unless its unknown
+    /// orders cancel).
+    pub fn p_laurent_tail_in_range_terms() -> u64 {
+        crate::p_integral::laurent::tail_in_range_terms()
+    }
+}
+
 /// Reduce and finalize a batch of matched p contributions in `mode` (module
 /// documentation). The result is final: the caller adds it to the expression
 /// without RustRed's vacuum master substitution.
