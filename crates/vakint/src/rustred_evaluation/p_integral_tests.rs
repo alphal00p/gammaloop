@@ -136,8 +136,10 @@ fn assert_tag_basis_equal(
 /// one thread it is the key of the checkpoints written before the change.
 #[test]
 fn checkpoint_arithmetic_ignores_the_thread_count() {
-    let mut one = VakintSettings::default();
-    one.n_cores = 1;
+    let one = VakintSettings {
+        n_cores: 1,
+        ..VakintSettings::default()
+    };
     let mut sixteen = one.clone();
     sixteen.n_cores = 16;
     let (one, sixteen) = (request_options(&one), request_options(&sixteen));

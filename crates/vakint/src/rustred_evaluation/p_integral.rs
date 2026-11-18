@@ -1635,13 +1635,16 @@ pub(crate) struct FoldedInputs {
 /// built once per distinct list of (basis, value) pairs, with the same
 /// products and sums in the same order as one key at a time. Physical
 /// closures repeat the same small rational values over millions of keys.
+/// A lowered key (presentation, powers) and its coefficient.
+type KeyCoefficients = Vec<((PresentationId, Vec<i64>), Coefficient)>;
+
 fn coefficient_inputs(
     context: &CoefficientContext,
     by_basis: BTreeMap<Atom, BTreeMap<(PresentationId, Vec<i64>), Rational>>,
     epsilon: Symbol,
     epsilon_at_d: &Coefficient,
     exact: ExactAlgebraLimits,
-) -> Result<Vec<((PresentationId, Vec<i64>), Coefficient)>, VakintError> {
+) -> Result<KeyCoefficients, VakintError> {
     let native = RustRedEvaluationError::from_native;
     let mut weights = Vec::with_capacity(by_basis.len());
     let mut parts = ahash::AHashMap::<(PresentationId, Vec<i64>), Vec<(u32, Rational)>>::new();
@@ -1994,7 +1997,7 @@ pub(crate) fn reduce_folded_channels(
                             / 1048576.0
                     );
                     if let (Some(c), Some(key)) = (&checkpoints, &keys[at]) {
-                        let terms = render_terms(&handle, &reduction, epsilon)?;
+                        let terms = render_terms(handle, &reduction, epsilon)?;
                         let reduced = collect_terms(terms);
                         c.store(key, &reduced);
                         resumed[at] = Some(reduced);
@@ -2063,7 +2066,7 @@ pub(crate) fn reduce_folded_channels(
             } else {
                 let Some(reduction) = reduction else { continue };
                 let rendering = std::time::Instant::now();
-                let terms = render_terms(&handle, &reduction, epsilon)?;
+                let terms = render_terms(handle, &reduction, epsilon)?;
                 let reduced = collect_terms(terms);
                 with_stats(|stats| stats.render_seconds += rendering.elapsed().as_secs_f64());
                 if let (Some(c), Some(key)) = (&checkpoints, &keys[at]) {
@@ -2134,7 +2137,7 @@ pub(crate) fn reduce_folded_channels(
                 }
                 let reduction = reduce_inputs(&reducer, &channel, inputs, &integrals)?;
                 let rendering = std::time::Instant::now();
-                let terms = render_terms(&handle, &reduction, epsilon)?;
+                let terms = render_terms(handle, &reduction, epsilon)?;
                 let reduced = collect_terms(terms);
                 with_stats(|stats| stats.render_seconds += rendering.elapsed().as_secs_f64());
                 reduced
@@ -2157,7 +2160,7 @@ pub(crate) fn reduce_folded_channels(
                     }
                     let reduction = reduce_inputs(&reducer, &channel, inputs, &integrals)?;
                     let rendering = std::time::Instant::now();
-                    for (monomial, value) in render_terms(&handle, &reduction, epsilon)? {
+                    for (monomial, value) in render_terms(handle, &reduction, epsilon)? {
                         *combined.entry(monomial).or_default() += value * &basis;
                     }
                     with_stats(|stats| stats.render_seconds += rendering.elapsed().as_secs_f64());
