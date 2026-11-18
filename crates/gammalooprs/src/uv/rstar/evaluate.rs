@@ -27,8 +27,8 @@ use crate::{
 };
 
 use super::{
-    ChildMass, CountertermCall, IrForestTerm, MassiveUvEvaluator, RStarPlan, UvChildrenRoute,
-    UvPreparationTerm,
+    ChildMass, CountertermCall, IrCorrection, IrForestTerm, MassiveUvEvaluator, RStarPlan,
+    UvChildrenRoute, UvPreparationTerm,
     boundary::{self, BoundaryMode, BoundaryRequest, Built, ClosedRootNormalization},
     expression::{IntegrationTimings, RStarIntegrand, RootProjector},
     moments::hard_moments,
@@ -918,7 +918,19 @@ impl<'a> Evaluation<'a> {
             }
             prepared += self.integrate_ordinary(term)?;
         }
-        for (correction_index, correction) in self.plan.ir.iter().enumerate() {
+        let plan = self.plan;
+        for (correction_index, correction) in plan.ir.iter().enumerate() {
+            // GAMMALOOP_IR_HARD=child|child-check: the whole correction from
+            // its integrated hard part H(γ); a decline takes today's terms.
+            let child_mode = super::closed::child_mode();
+            if child_mode != super::closed::ChildMode::Off
+                && self.rstar_terms.keeps(true)
+                && let Some(value) =
+                    self.ir_correction_child(correction_index, correction, child_mode)?
+            {
+                prepared += value;
+                continue;
+            }
             for (term_index, term) in correction.preparation.iter().enumerate() {
                 if term
                     .remainder
@@ -930,204 +942,592 @@ impl<'a> Evaluation<'a> {
                 if !self.keeps_term(true) {
                     continue;
                 }
-                // The hard part feeds quotient counterterms (a `K` each): it
-                // keeps its open root slots, closed after the quotient below.
-                let hard = self.open_remainder(term)?;
-                let order = usize::try_from(correction.taylor_order)?;
-                // GAMMALOOP_IR_HARD=closed|check (prototype, default off).
-                let mode = super::closed::closed_mode();
-                let mut closed_stats = super::closed::ClosedStats::default();
-                let closed_started = Instant::now();
-                let closed = if mode == super::closed::ClosedMode::Off {
-                    None
-                } else {
-                    Some(
-                        hard.closed_moments(order, &mut closed_stats)
-                            .wrap_err("while computing closed hard moments")?,
-                    )
-                };
-                let closed_seconds = closed_started.elapsed().as_secs_f64();
-                let use_closed =
-                    mode == super::closed::ClosedMode::On && matches!(closed, Some(Ok(_)));
-                let (mut taylor_seconds, mut taylor_bytes, mut project_seconds, mut project_bytes) =
-                    (0.0, 0, 0.0, 0);
-                let today = if use_closed {
-                    None
-                } else {
-                    let cost_started = Instant::now();
-                    let polynomial = hard
-                        .taylor(order)
-                        .wrap_err("while Taylor-expanding the prepared hard component")?;
-                    taylor_seconds = cost_started.elapsed().as_secs_f64();
-                    taylor_bytes = polynomial.as_view().get_byte_size();
-                    let project_started = Instant::now();
-                    let covariant = hard.project_hard(&polynomial)?;
-                    drop(polynomial);
-                    project_seconds = project_started.elapsed().as_secs_f64();
-                    project_bytes = covariant.as_view().get_byte_size();
-                    Some(hard_moments(&covariant, hard.soft_edges()).wrap_err_with(|| {
-                        format!(
-                            "while separating hard moments: hard={}, remaining={}, soft={:?}, covariant={covariant}",
-                            correction.hard.string_label(),
-                            term.remainder.remaining.string_label(),
-                            hard.soft_edges(),
-                        )
-                    })?)
-                };
-                if let Some(closed) = &closed {
-                    let (outcome, check) = match (closed, &today) {
-                        (Err(reason), _) => (format!("declined:{reason}"), String::new()),
-                        (Ok(_), None) => ("closed".to_owned(), String::new()),
-                        (Ok(moments), Some(reference)) => {
-                            let point = |rows: &[(Atom, Atom)]| {
-                                rows.iter()
-                                    .fold(Atom::Zero, |sum, (coefficient, insertion)| {
-                                        sum + super::closed::random_point(coefficient)
-                                            * super::closed::random_point(insertion)
-                                    })
-                            };
-                            let mut ours = moments
-                                .iter()
-                                .map(|(_, i)| i.to_canonical_string())
-                                .collect::<Vec<_>>();
-                            let mut theirs = reference
-                                .iter()
-                                .map(|(_, i)| i.to_canonical_string())
-                                .collect::<Vec<_>>();
-                            ours.sort();
-                            theirs.sort();
-                            let equal = (point(moments) - point(reference)).is_zero();
-                            (
-                                "checked".to_owned(),
-                                format!(
-                                    " equal={equal} insertions_same={} ours={} today={}",
-                                    ours == theirs,
-                                    ours.len(),
-                                    theirs.len()
-                                ),
-                            )
-                        }
-                    };
-                    eprintln!(
-                        "IR_CLOSED graph={} corr={correction_index} term={term_index} hard_loops={} rem_loops={} order={order} outcome={outcome}{check} slots={} sectors={} odd={} closures={} seconds={closed_seconds:.3} taylor_s={:.3} polarize_s={:.3} close_s={:.3} taylor_bytes={} closed_bytes={} certified={} uncertified={} dropped_zero={} zero_test_skipped={} today_taylor_s={taylor_seconds:.3} today_project_s={project_seconds:.3} today_taylor_bytes={taylor_bytes} today_project_bytes={project_bytes}",
-                        self.graph.name,
-                        self.graph.n_loops(&correction.hard),
-                        term.remainder.loops,
-                        closed_stats.slots,
-                        closed_stats.sectors,
-                        closed_stats.odd_sectors,
-                        closed_stats.closures,
-                        closed_stats.taylor_seconds,
-                        closed_stats.polarize_seconds,
-                        closed_stats.close_seconds,
-                        closed_stats.taylor_bytes,
-                        closed_stats.closed_bytes,
-                        closed_stats.certified,
-                        closed_stats.uncertified,
-                        closed_stats.dropped_zero,
-                        closed_stats.zero_test_skipped,
-                    );
-                }
-                let moments = match (today, closed) {
-                    (Some(today), _) => today,
-                    (None, Some(Ok(closed))) => closed,
-                    _ => unreachable!("the closed path runs only when it succeeded"),
-                };
-                let downstream_started = Instant::now();
-                let quotient_before = self.quotient_elapsed;
-                let integration_before = self.integration_elapsed;
-                // GAMMALOOP_IR_OUTER (any R* root; closed moments only).
-                let outer = top_mass::ir_outer()?;
-                let analytic =
-                    if outer == top_mass::IrOuter::Analytic || outer == top_mass::IrOuter::Check {
-                        let started = Instant::now();
-                        let outcome = if !use_closed {
-                            Err("not_closed".to_owned())
-                        } else {
-                            self.ir_outer_analytic(&hard, &correction.forest, &moments)?
-                        };
-                        Some((outcome, started.elapsed().as_secs_f64()))
-                    } else {
-                        None
-                    };
-                let generic_started = Instant::now();
-                let analytic_value = match &analytic {
-                    Some((Ok((value, _)), _)) if outer == top_mass::IrOuter::Analytic => {
-                        Some(value.clone())
-                    }
-                    _ => None,
-                };
-                let generic_value = if let Some(value) = analytic_value {
-                    prepared += value;
-                    None
-                } else {
-                    let mut generic = Atom::Zero;
-                    for forest in &correction.forest {
-                        let mut expression = Atom::Zero;
-                        for (coefficient, insertion) in &moments {
-                            expression += coefficient * self.ir_forest(forest, insertion)?;
-                        }
-                        if !expression.is_zero() {
-                            if let Some(closure) = &self.root_closure {
-                                expression *= closure;
-                            }
-                            generic += self.integrate(&hard, &expression)?;
-                        }
-                    }
-                    prepared += &generic;
-                    Some(generic)
-                };
-                let generic_seconds = generic_started.elapsed().as_secs_f64();
-                if outer != top_mass::IrOuter::Unset {
-                    let (outcome, stats, analytic_seconds) = match &analytic {
-                        None => ("generic".to_owned(), String::new(), 0.0),
-                        Some((Ok((_, stats)), seconds)) => {
-                            ("analytic".to_owned(), stats.clone(), *seconds)
-                        }
-                        Some((Err(reason), seconds)) => {
-                            (format!("declined:{reason}"), String::new(), *seconds)
-                        }
-                    };
-                    let check = match (&analytic, &generic_value) {
-                        (Some((Ok((value, _)), _)), Some(generic))
-                            if outer == top_mass::IrOuter::Check =>
-                        {
-                            let difference = self.poles(&(generic - value))?;
-                            let equal = difference.is_zero();
-                            ensure!(
-                                equal,
-                                "GAMMALOOP_IR_OUTER=check: the analytic IR outer Taylor differs for {} corr={correction_index} term={term_index}: poles {difference}",
-                                self.graph.name
-                            );
-                            " check=equal"
-                        }
-                        _ => "",
-                    };
-                    eprintln!(
-                        "IR_OUTER graph={} corr={correction_index} term={term_index} rem_loops={} order={order} moments={} forests={} outcome={outcome}{stats}{check} analytic_s={analytic_seconds:.3} generic_s={generic_seconds:.3}",
-                        self.graph.name,
-                        term.remainder.loops,
-                        moments.len(),
-                        correction.forest.len(),
-                    );
-                }
-                if ir_hard_keys() {
-                    eprintln!(
-                        "IR_HARD_COST graph={} corr={correction_index} term={term_index} rem_loops={} taylor_s={taylor_seconds:.3} taylor_bytes={taylor_bytes} project_s={project_seconds:.3} project_bytes={project_bytes} moments={} quotient_s={:.3} integrate_s={:.3} downstream_s={:.3}",
-                        self.graph.name,
-                        term.remainder.loops,
-                        moments.len(),
-                        (self.quotient_elapsed - quotient_before).as_secs_f64(),
-                        (self.integration_elapsed - integration_before).as_secs_f64(),
-                        downstream_started.elapsed().as_secs_f64(),
-                    );
-                }
+                prepared += self.ir_term_today(correction_index, correction, term_index, term)?;
             }
         }
         let result = -self.poles(&prepared)?;
         self.log_top_level();
         self.log_timing();
         Ok(result)
+    }
+
+    /// One IR correction term on today's path (closed or projected moments,
+    /// then the generic or analytic outer step): its contribution to the
+    /// prepared sum.
+    fn ir_term_today(
+        &mut self,
+        correction_index: usize,
+        correction: &IrCorrection,
+        term_index: usize,
+        term: &UvPreparationTerm,
+    ) -> Result<Atom> {
+        let mut prepared = Atom::Zero;
+        // The hard part feeds quotient counterterms (a `K` each): it
+        // keeps its open root slots, closed after the quotient below.
+        let hard = self.open_remainder(term)?;
+        let order = usize::try_from(correction.taylor_order)?;
+        // GAMMALOOP_IR_HARD=closed|check (prototype, default off).
+        let mode = super::closed::closed_mode();
+        let mut closed_stats = super::closed::ClosedStats::default();
+        let closed_started = Instant::now();
+        let closed = if mode == super::closed::ClosedMode::Off {
+            None
+        } else {
+            Some(
+                hard.closed_moments(order, &mut closed_stats)
+                    .wrap_err("while computing closed hard moments")?,
+            )
+        };
+        let closed_seconds = closed_started.elapsed().as_secs_f64();
+        let use_closed = mode == super::closed::ClosedMode::On && matches!(closed, Some(Ok(_)));
+        let (mut taylor_seconds, mut taylor_bytes, mut project_seconds, mut project_bytes) =
+            (0.0, 0, 0.0, 0);
+        let today = if use_closed {
+            None
+        } else {
+            let cost_started = Instant::now();
+            let polynomial = hard
+                .taylor(order)
+                .wrap_err("while Taylor-expanding the prepared hard component")?;
+            taylor_seconds = cost_started.elapsed().as_secs_f64();
+            taylor_bytes = polynomial.as_view().get_byte_size();
+            let project_started = Instant::now();
+            let covariant = hard.project_hard(&polynomial)?;
+            drop(polynomial);
+            project_seconds = project_started.elapsed().as_secs_f64();
+            project_bytes = covariant.as_view().get_byte_size();
+            Some(hard_moments(&covariant, hard.soft_edges()).wrap_err_with(|| {
+                format!(
+                    "while separating hard moments: hard={}, remaining={}, soft={:?}, covariant={covariant}",
+                    correction.hard.string_label(),
+                    term.remainder.remaining.string_label(),
+                    hard.soft_edges(),
+                )
+            })?)
+        };
+        if let Some(closed) = &closed {
+            let (outcome, check) = match (closed, &today) {
+                (Err(reason), _) => (format!("declined:{reason}"), String::new()),
+                (Ok(_), None) => ("closed".to_owned(), String::new()),
+                (Ok(moments), Some(reference)) => {
+                    let point = |rows: &[(Atom, Atom)]| {
+                        rows.iter()
+                            .fold(Atom::Zero, |sum, (coefficient, insertion)| {
+                                sum + super::closed::random_point(coefficient)
+                                    * super::closed::random_point(insertion)
+                            })
+                    };
+                    let mut ours = moments
+                        .iter()
+                        .map(|(_, i)| i.to_canonical_string())
+                        .collect::<Vec<_>>();
+                    let mut theirs = reference
+                        .iter()
+                        .map(|(_, i)| i.to_canonical_string())
+                        .collect::<Vec<_>>();
+                    ours.sort();
+                    theirs.sort();
+                    let equal = (point(moments) - point(reference)).is_zero();
+                    (
+                        "checked".to_owned(),
+                        format!(
+                            " equal={equal} insertions_same={} ours={} today={}",
+                            ours == theirs,
+                            ours.len(),
+                            theirs.len()
+                        ),
+                    )
+                }
+            };
+            eprintln!(
+                "IR_CLOSED graph={} corr={correction_index} term={term_index} hard_loops={} rem_loops={} order={order} outcome={outcome}{check} slots={} sectors={} odd={} closures={} seconds={closed_seconds:.3} taylor_s={:.3} polarize_s={:.3} close_s={:.3} taylor_bytes={} closed_bytes={} certified={} uncertified={} dropped_zero={} zero_test_skipped={} today_taylor_s={taylor_seconds:.3} today_project_s={project_seconds:.3} today_taylor_bytes={taylor_bytes} today_project_bytes={project_bytes}",
+                self.graph.name,
+                self.graph.n_loops(&correction.hard),
+                term.remainder.loops,
+                closed_stats.slots,
+                closed_stats.sectors,
+                closed_stats.odd_sectors,
+                closed_stats.closures,
+                closed_stats.taylor_seconds,
+                closed_stats.polarize_seconds,
+                closed_stats.close_seconds,
+                closed_stats.taylor_bytes,
+                closed_stats.closed_bytes,
+                closed_stats.certified,
+                closed_stats.uncertified,
+                closed_stats.dropped_zero,
+                closed_stats.zero_test_skipped,
+            );
+        }
+        let moments = match (today, closed) {
+            (Some(today), _) => today,
+            (None, Some(Ok(closed))) => closed,
+            _ => unreachable!("the closed path runs only when it succeeded"),
+        };
+        let downstream_started = Instant::now();
+        let quotient_before = self.quotient_elapsed;
+        let integration_before = self.integration_elapsed;
+        // GAMMALOOP_IR_OUTER (any R* root; closed moments only).
+        let outer = top_mass::ir_outer()?;
+        let analytic = if outer == top_mass::IrOuter::Analytic || outer == top_mass::IrOuter::Check
+        {
+            let started = Instant::now();
+            let outcome = if !use_closed {
+                Err("not_closed".to_owned())
+            } else {
+                self.ir_outer_analytic(&hard, &correction.forest, &moments)?
+            };
+            Some((outcome, started.elapsed().as_secs_f64()))
+        } else {
+            None
+        };
+        let generic_started = Instant::now();
+        let analytic_value = match &analytic {
+            Some((Ok((value, _)), _)) if outer == top_mass::IrOuter::Analytic => {
+                Some(value.clone())
+            }
+            _ => None,
+        };
+        let generic_value = if let Some(value) = analytic_value {
+            prepared += value;
+            None
+        } else {
+            let mut generic = Atom::Zero;
+            for forest in &correction.forest {
+                let mut expression = Atom::Zero;
+                for (coefficient, insertion) in &moments {
+                    expression += coefficient * self.ir_forest(forest, insertion)?;
+                }
+                if !expression.is_zero() {
+                    if let Some(closure) = &self.root_closure {
+                        expression *= closure;
+                    }
+                    generic += self.integrate(&hard, &expression)?;
+                }
+            }
+            prepared += &generic;
+            Some(generic)
+        };
+        let generic_seconds = generic_started.elapsed().as_secs_f64();
+        if outer != top_mass::IrOuter::Unset {
+            let (outcome, stats, analytic_seconds) = match &analytic {
+                None => ("generic".to_owned(), String::new(), 0.0),
+                Some((Ok((_, stats)), seconds)) => ("analytic".to_owned(), stats.clone(), *seconds),
+                Some((Err(reason), seconds)) => {
+                    (format!("declined:{reason}"), String::new(), *seconds)
+                }
+            };
+            let check = match (&analytic, &generic_value) {
+                (Some((Ok((value, _)), _)), Some(generic)) if outer == top_mass::IrOuter::Check => {
+                    let difference = self.poles(&(generic - value))?;
+                    let equal = difference.is_zero();
+                    ensure!(
+                        equal,
+                        "GAMMALOOP_IR_OUTER=check: the analytic IR outer Taylor differs for {} corr={correction_index} term={term_index}: poles {difference}",
+                        self.graph.name
+                    );
+                    " check=equal"
+                }
+                _ => "",
+            };
+            eprintln!(
+                "IR_OUTER graph={} corr={correction_index} term={term_index} rem_loops={} order={order} moments={} forests={} outcome={outcome}{stats}{check} analytic_s={analytic_seconds:.3} generic_s={generic_seconds:.3}",
+                self.graph.name,
+                term.remainder.loops,
+                moments.len(),
+                correction.forest.len(),
+            );
+        }
+        if ir_hard_keys() {
+            eprintln!(
+                "IR_HARD_COST graph={} corr={correction_index} term={term_index} rem_loops={} taylor_s={taylor_seconds:.3} taylor_bytes={taylor_bytes} project_s={project_seconds:.3} project_bytes={project_bytes} moments={} quotient_s={:.3} integrate_s={:.3} downstream_s={:.3}",
+                self.graph.name,
+                term.remainder.loops,
+                moments.len(),
+                (self.quotient_elapsed - quotient_before).as_secs_f64(),
+                (self.integration_elapsed - integration_before).as_secs_f64(),
+                downstream_started.elapsed().as_secs_f64(),
+            );
+        }
+        Ok(prepared)
+    }
+
+    /// `GAMMALOOP_IR_HARD=child|child-check` for one IR correction: its
+    /// contribution `Σ_F Σ_j T_comp[h_j Z̃_F(G/γ; E_j) closure]` from the
+    /// integrated hard part ([`Self::ir_hard_child`]), or `None` when the
+    /// child route declines (today's terms follow). In `child-check` today's
+    /// terms are computed too, their pole parts must equal the child value's
+    /// (an error otherwise), and today's value is used. One `IR_HARD_CHILD`
+    /// line per correction.
+    fn ir_correction_child(
+        &mut self,
+        correction_index: usize,
+        correction: &IrCorrection,
+        mode: super::closed::ChildMode,
+    ) -> Result<Option<Atom>> {
+        let started = Instant::now();
+        let attempt = if mode == super::closed::ChildMode::Check {
+            self.ir_hard_child(correction_index, correction)?
+        } else {
+            // Fail-closed under the closed path's scoped budget
+            // (GAMMALOOP_IR_HARD_BUDGET_GIB over the RSS now): an exhausted
+            // budget, an error or a panic declines the correction.
+            let limit = super::closed::budget_extra_bytes()
+                .and_then(|extra| super::expression::process_rss_now().map(|rss| rss + extra));
+            super::closed::guarded(limit, super::expression::memory_release(), || {
+                self.ir_hard_child(correction_index, correction)
+            })
+        };
+        let seconds = started.elapsed().as_secs_f64();
+        let (value, stats) = match attempt {
+            Ok(outcome) => outcome,
+            Err(reason) => {
+                eprintln!(
+                    "IR_HARD_CHILD graph={} corr={correction_index} hard_loops={} omega={} outcome=declined:{reason} seconds={seconds:.3}",
+                    self.graph.name,
+                    self.graph.n_loops(&correction.hard),
+                    correction.taylor_order,
+                );
+                return Ok(None);
+            }
+        };
+        let (value, check) = if mode == super::closed::ChildMode::Check {
+            let today_started = Instant::now();
+            let mut today = Atom::Zero;
+            for (term_index, term) in correction.preparation.iter().enumerate() {
+                if term
+                    .remainder
+                    .is_scaleless(self.graph, self.plan.marked_edge)
+                {
+                    continue;
+                }
+                today += self.ir_term_today(correction_index, correction, term_index, term)?;
+            }
+            let difference = self.poles(&(&today - &value))?;
+            ensure!(
+                difference.is_zero(),
+                "GAMMALOOP_IR_HARD=child-check: the child IR hard part differs for {} corr={correction_index}: poles {difference}",
+                self.graph.name
+            );
+            let today_zero = self.poles(&today)?.is_zero();
+            (
+                today,
+                format!(
+                    " check=equal today_poles_zero={today_zero} today_s={:.3}",
+                    today_started.elapsed().as_secs_f64()
+                ),
+            )
+        } else {
+            (value, String::new())
+        };
+        eprintln!(
+            "IR_HARD_CHILD graph={} corr={correction_index} hard_loops={} omega={} outcome=child{stats}{check} seconds={seconds:.3}",
+            self.graph.name,
+            self.graph.n_loops(&correction.hard),
+            correction.taylor_order,
+        );
+        Ok(Some(value))
+    }
+
+    /// `GAMMALOOP_IR_HARD=child`: the integrated IR hard part of one
+    /// correction, `H(γ) = Σ_σ ∫ T_ω[γ/σ · Π Δ(σ_i)]` with the overall `Δ(γ)`
+    /// among the σ (`preparation(…, true)`, exactly today's terms), computed as
+    /// its own support root: each remainder keeps its open boundary slots, is
+    /// truncated to grade `ω` in the boundary momenta (the crown of γ: soft
+    /// lines and root legs), contracted in the UV children's edge basis
+    /// (streamed when large), Taylor-expanded at the fixed reference mass and
+    /// integrated by the UV children's single-mass call
+    /// ([`RStarIntegrand::integrate`] → `integrate_polynomial`: `to_vakint` +
+    /// `integrate_single_mass`; no `K`, finite parts kept). The Laurent depth
+    /// is the remainder's loops plus the quotient's loops, the pole bound of
+    /// `Z̃_F(G/γ)`, so that every product with the quotient is exact to
+    /// `ε^-1`. The σ terms are summed per remainder loop count `L` (the
+    /// analytic outer Taylor acts on `(M²)^{a-εL}`), read off as `Σ_j h_j E_j`
+    /// by [`hard_moments`] (the same `(coefficient, insertion)` split as
+    /// today's), and passed to [`Self::ir_outer_integrated`].
+    fn ir_hard_child(
+        &mut self,
+        correction_index: usize,
+        correction: &IrCorrection,
+    ) -> Result<std::result::Result<(Atom, String), String>> {
+        if self.epsilon != GS.dim_epsilon {
+            return Ok(Err("epsilon_symbol".into()));
+        }
+        let omega = correction.taylor_order;
+        let Ok(degree) = usize::try_from(omega) else {
+            return Ok(Err("negative_order".into()));
+        };
+        let hard_loops = self.graph.n_loops(&correction.hard);
+        let quotient_loops = self
+            .graph
+            .n_loops(&self.plan.support)
+            .saturating_sub(hard_loops);
+        let edge_basis = super::expression::ir_hard_child_edge_basis(omega);
+        let (closures_before, integrated_before) = super::integrate::single_mass_counts();
+        let started = Instant::now();
+        let mut groups = BTreeMap::<usize, Atom>::new();
+        let mut representative = None;
+        let mut soft = Vec::new();
+        let mut terms = 0_usize;
+        for (term_index, term) in correction.preparation.iter().enumerate() {
+            if term
+                .remainder
+                .is_scaleless(self.graph, self.plan.marked_edge)
+            {
+                continue;
+            }
+            let term_started = Instant::now();
+            let (closures, _) = super::integrate::single_mass_counts();
+            let remainder = self.open_remainder(term)?;
+            soft = remainder.soft_edges().to_vec();
+            let remainder = remainder.with_ir_hard_truncation(&soft, omega)?;
+            let routed_bytes = remainder.routed_bytes();
+            let value = self
+                .integrate_ir_hard_term(&remainder, &soft, degree, quotient_loops, edge_basis)
+                .wrap_err_with(|| {
+                    format!(
+                        "while integrating the IR hard part corr={correction_index} term={term_index} of {}",
+                        self.graph.name
+                    )
+                })?;
+            drop(remainder);
+            eprintln!(
+                "IR_HARD_CHILD_TERM graph={} corr={correction_index} term={term_index} hard_loops={hard_loops} rem_loops={} children={} omega={omega} edge={edge_basis} routed_bytes={routed_bytes} h_bytes={} closures={} seconds={:.3}",
+                self.graph.name,
+                term.remainder.loops,
+                term.counterterms.len(),
+                value.as_view().get_byte_size(),
+                super::integrate::single_mass_counts().0 - closures,
+                term_started.elapsed().as_secs_f64(),
+            );
+            representative.get_or_insert(term_index);
+            *groups.entry(term.remainder.loops).or_insert(Atom::Zero) += value;
+            terms += 1;
+        }
+        let h_seconds = started.elapsed().as_secs_f64();
+        let (closures_after, integrated_after) = super::integrate::single_mass_counts();
+        let Some(representative) = representative else {
+            return Ok(Ok((Atom::Zero, " terms=0".into())));
+        };
+        let mut rows = Vec::new();
+        let mut h_bytes = 0;
+        for (loops, h) in &groups {
+            h_bytes += h.as_view().get_byte_size();
+            if h.is_zero() {
+                continue;
+            }
+            let moments = match hard_moments(h, &soft) {
+                Ok(moments) => moments,
+                Err(error) => {
+                    let reason = format!("{error}")
+                        .chars()
+                        .map(|c| if c.is_whitespace() { '_' } else { c })
+                        .take(120)
+                        .collect::<String>();
+                    return Ok(Err(format!("moments:{reason}")));
+                }
+            };
+            rows.extend(
+                moments
+                    .into_iter()
+                    .map(|(h, insertion)| (h, insertion, *loops)),
+            );
+        }
+        let hard = self.open_remainder(&correction.preparation[representative])?;
+        let outer_started = Instant::now();
+        let outcome = self.ir_outer_integrated(&hard, &correction.forest, &rows)?;
+        let (value, outer_stats) = match outcome {
+            Ok(outcome) => outcome,
+            Err(reason) => return Ok(Err(reason)),
+        };
+        Ok(Ok((
+            value,
+            format!(
+                " quotient_loops={quotient_loops} terms={terms} groups={} rows={} h_bytes={h_bytes} h_s={h_seconds:.3} closures={} integrated_terms={} edge={edge_basis} forests={} outer_s={:.3}{outer_stats}",
+                groups.len(),
+                rows.len(),
+                closures_after - closures_before,
+                integrated_after - integrated_before,
+                correction.forest.len(),
+                outer_started.elapsed().as_secs_f64(),
+            ),
+        )))
+    }
+
+    /// One remainder of an IR hard part `H(γ)` ([`Self::ir_hard_child`]):
+    /// the UV children's outer integration (stream, else the whole
+    /// contraction) in the IR hard scope, with boundary edges `soft`, degree
+    /// `degree` and `quotient_loops` extra Laurent terms, no root projector.
+    fn integrate_ir_hard_term(
+        &mut self,
+        remainder: &RStarIntegrand,
+        soft: &[EdgeIndex],
+        degree: usize,
+        quotient_loops: usize,
+        edge_basis: bool,
+    ) -> Result<Atom> {
+        self.integration_id += 1;
+        let id = self.integration_id;
+        let mut settings = self.settings.clone();
+        settings.number_of_terms_in_epsilon_expansion =
+            i64::try_from(remainder.region.loops + quotient_loops)?;
+        let started = Instant::now();
+        let (graph, reference, auxiliary, vakint, uv_settings) = (
+            self.graph,
+            self.reference_mass_squared,
+            &self.auxiliary_mass_squared,
+            self.vakint,
+            self.uv_settings,
+        );
+        let result = super::expression::in_ir_hard_scope(edge_basis, || -> Result<Atom> {
+            let integrate = |expression: &Atom| {
+                remainder.integrate(
+                    expression,
+                    graph,
+                    soft,
+                    degree,
+                    reference,
+                    auxiliary,
+                    vakint,
+                    uv_settings,
+                    &settings,
+                    id,
+                    None,
+                )
+            };
+            if super::expression::uv_stream() != super::expression::UvStream::Off {
+                let mut sum = crate::uv::approx::streamed::SumAccumulator::default();
+                let streamed = remainder.stream_contracted(&mut |piece| {
+                    sum.push(integrate(&piece)?);
+                    Ok(())
+                })?;
+                if streamed {
+                    return Ok(sum.finish());
+                }
+            }
+            integrate(remainder.expression()?)
+        });
+        self.integration_elapsed += started.elapsed();
+        result
+    }
+
+    /// The analytic outer step of [`Self::ir_outer_analytic`] for already
+    /// integrated hard moments `rows = (h_j, E_j, L)`: `h_j ∝ (M²)^{a_j-εL}`
+    /// (the auxiliary mass, `log(M²)` inside), `E_j` the insertion. For every
+    /// forest and row: `z = Z̃_F(E_j) · closure` (the generic path's quotient
+    /// call and closure), its outer orders `[λ^b] z`, times
+    /// `Σ_k (-1)^k binom(a_j-εL, k)`; then the generic tail (summand
+    /// simplification, root projection and regulation, tensor finish) with
+    /// the `h_j` substituted last. `Err(reason)` declines the correction.
+    fn ir_outer_integrated(
+        &mut self,
+        hard: &RStarIntegrand,
+        forests: &[IrForestTerm],
+        rows: &[(Atom, Atom, usize)],
+    ) -> Result<std::result::Result<(Atom, String), String>> {
+        use symbolica::{function, id::Replacement};
+        let projector = self.root_projector;
+        let mode = self.top_mass.unwrap_or(TopMassTerms::Keep);
+        let degree = usize::try_from(self.plan.taylor_order)?;
+        let mass = top_mass::auxiliary_mass_squared();
+        let mut powers = Vec::with_capacity(rows.len());
+        for (h, _, _) in rows {
+            let power = if h.is_zero() {
+                None
+            } else {
+                match top_mass::mass_power(h, mass) {
+                    Some(power) => Some(power),
+                    None if h.expand().is_zero() => None,
+                    None => return Ok(Err("mass_power".into())),
+                }
+            };
+            powers.push(power);
+        }
+        let started = Instant::now();
+        let placeholder = symbolica::symbol!("ir_hard_child_integral");
+        let mut assembled = Vec::new();
+        let mut uses = 0_usize;
+        for forest in forests {
+            for (i, (_, insertion, loops)) in rows.iter().enumerate() {
+                let Some(power) = powers[i] else {
+                    continue;
+                };
+                let mut z = self.ir_forest(forest, insertion)?;
+                if z.is_zero() {
+                    continue;
+                }
+                if let Some(closure) = &self.root_closure {
+                    z *= closure;
+                }
+                let orders = match hard.ir_outer_orders(
+                    &z,
+                    &self.root_edges,
+                    degree,
+                    self.reference_mass_squared,
+                )? {
+                    Ok(orders) => orders,
+                    Err(reason) => return Ok(Err(reason)),
+                };
+                let h = function!(placeholder, Atom::num(i as i64));
+                for (order, value) in orders.iter().enumerate() {
+                    if value.is_zero() {
+                        continue;
+                    }
+                    let factor = top_mass::compensation_factor(
+                        mode,
+                        power,
+                        *loops,
+                        order,
+                        degree,
+                        GS.dim_epsilon,
+                    );
+                    if factor.is_zero() {
+                        continue;
+                    }
+                    assembled.push(&h * factor * value);
+                }
+                uses += 1;
+            }
+        }
+        let quotient_seconds = started.elapsed().as_secs_f64();
+        self.integration_id += 1;
+        let id = self.integration_id;
+        let value = if assembled.is_empty() {
+            Atom::Zero
+        } else {
+            let sum = Atom::add_many(assembled.iter());
+            let simplified = RStarIntegrand::simplify_summands(sum.as_view())
+                .wrap_err("while simplifying an IR hard child outer polynomial")?;
+            let regulated = match projector {
+                Some(projector) => Integrated::dimensionally_regularized(
+                    &projector(&simplified)
+                        .wrap_err("while projecting an IR hard child outer polynomial")?,
+                ),
+                None => simplified,
+            };
+            let finished = RStarIntegrand::finish_tensor(regulated, id)?;
+            let replacements = rows
+                .iter()
+                .enumerate()
+                .map(|(i, (h, _, _))| {
+                    Replacement::new(
+                        function!(placeholder, Atom::num(i as i64)).to_pattern(),
+                        h.clone(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            finished.replace_multiple(&replacements)
+        };
+        Ok(Ok((
+            value,
+            format!(
+                " uses={uses} quotient_s={quotient_seconds:.3} powers={:?}",
+                powers
+                    .iter()
+                    .flatten()
+                    .collect::<std::collections::BTreeSet<_>>()
+            ),
+        )))
     }
 
     /// `GAMMALOOP_IR_OUTER=analytic` for one IR correction term of the

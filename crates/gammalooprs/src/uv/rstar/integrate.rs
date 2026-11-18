@@ -86,6 +86,18 @@ fn capture_value(value: &Atom) {
     });
 }
 
+thread_local! {
+    /// Closure calls and integrated terms of this thread's
+    /// [`integrate_single_mass`] calls (counters for `IR_HARD_CHILD`).
+    static SINGLE_MASS_COUNTS: std::cell::Cell<(usize, usize)> = const { std::cell::Cell::new((0, 0)) };
+}
+
+/// This thread's running totals `(closure calls, integrated terms)` of
+/// [`integrate_single_mass`]; differences bracket one caller's integrations.
+pub(crate) fn single_mass_counts() -> (usize, usize) {
+    SINGLE_MASS_COUNTS.with(|cell| cell.get())
+}
+
 /// Integrate explicit vacuum topologies with exactly one massive denominator.
 ///
 /// The mass and power must already be those of the selected surviving line.
@@ -309,6 +321,13 @@ pub fn integrate_single_mass(
     let combine_started = Instant::now();
     let result = result.expand();
     timing.combine += combine_started.elapsed();
+    SINGLE_MASS_COUNTS.with(|cell| {
+        let (closures, terms) = cell.get();
+        cell.set((
+            closures + timing.closure_calls,
+            terms + timing.integrated_terms,
+        ));
+    });
     capture_value(&result);
     if census {
         vakint::census::record(
