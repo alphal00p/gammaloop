@@ -1952,7 +1952,10 @@ end_anchor = "documentationRegistry = builtins.fromTOML"
 # notebook-coverage test that imports it. This repairs the terminal runtime
 # source closure; compiled producers, publication behavior and runtime licensing
 # retain the documented ownership and cache boundaries.
-digest = "b521f5f897fdb141cb7bc4663d23d1d8b68d19dc"
+# Reviewed 2026-11-19: Reusable documentation Cargo and terminal sources exclude crate-owned unit test modules while retaining their compile and documentation inputs.
+# Reviewed against f2e18b57: retain the Idenso FORM source-link targets in
+# the site snapshot. The reusable Cargo producer still excludes those tests.
+digest = "9a0f9688b5bbb0ed7df57257a35c6f3a7816454b"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -2034,7 +2037,8 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # linnet-render-py's iframe.js to production assets and Spynso's evaluator_horner.py
 # plus FeynKit's installed_squared_amplitude_display.py to compile-time test inputs.
 # The documented source ownership and producer/runtime boundaries are unchanged.
-digest = "9245cc5048599ee6857d2ee15f58ff3ca7ba4303"
+# Reviewed 2026-11-19: Parameter binding fixtures are owned by the core test source tier. Test and lint retain them; production and docs Cargo exclude them.
+digest = "fd2cfcd2a8e909dff4187f17b2355a5c105cb0f1"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
