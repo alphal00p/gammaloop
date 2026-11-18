@@ -47,7 +47,10 @@ use symbolica::atom::{Atom, AtomCore, AtomView};
 use symbolica::domains::rational::Rational;
 use symbolica::function;
 
-use self::kernel::{KernelCounters, Kinematics, Poly, SlotForm, Slots, Tensor, contract};
+use self::kernel::{
+    Coef, DPoly, IPoly, KernelCounters, Kinematics, Poly, SlotForm, Slots, Tensor, contract,
+    take_overflow,
+};
 use self::parse::{Parser, split_fermion_factor, trace_word};
 use self::trace::{TraceBackend, TraceEngine};
 use super::p_data::PLibraryHandle;
@@ -156,6 +159,9 @@ pub struct ContractStats {
     pub keys: usize,
     /// Why there is no zero-sector oracle (empty when there is one).
     pub oracle: String,
+    /// The coefficient ring that produced the inputs (`i64`, or `rational`
+    /// after an overflow or a non-integer number; `mixed` over branches).
+    pub ring: String,
     pub steps: Vec<StepStats>,
 }
 
@@ -177,6 +183,12 @@ impl ContractStats {
         if self.oracle.is_empty() {
             self.oracle.clone_from(&other.oracle);
         }
+        if self.ring.is_empty() {
+            self.ring.clone_from(&other.ring);
+        } else if !other.ring.is_empty() && self.ring != other.ring {
+            self.ring = "mixed".into();
+        }
+        self.steps.extend(other.steps.iter().cloned());
     }
 
     /// Seconds of contraction + lowering (everything but the match).
@@ -608,9 +620,9 @@ fn canonical_forms(
 }
 
 /// One factor of the contraction plan.
-struct Factor {
+struct Factor<C: Coef> {
     label: String,
-    tensor: Tensor,
+    tensor: Tensor<C>,
 }
 
 /// Apply the metric renames: every edge factor that is exactly one metric
@@ -750,7 +762,7 @@ pub struct GraphMemo {
     /// Per matched graph: the canonical kinematics (slot forms of the
     /// presentation, interned vectors, pair-form memo) and the vector of every
     /// edge id.
-    setups: HashMap<String, (Kinematics, HashMap<i64, Option<u16>>)>,
+    setups: HashMap<String, (Kinematics<IPoly>, HashMap<i64, Option<u16>>)>,
     /// Matches served from the memo / computed.
     pub hits: usize,
     pub misses: usize,
@@ -803,8 +815,110 @@ pub fn contract_and_lower_with(
         out.stats = stats;
         return Ok(out);
     }
+    // The fast ring first (i64 coefficients, forms scaled to integers); the
+    // exact rational ring when it overflows or meets a non-integer number.
+    let _ = take_overflow();
+    let fast = {
+        if !memo.setups.contains_key(&key) {
+            let setup = setup::<IPoly>(vakint, &matched)?;
+            memo.setups.insert(key.clone(), setup);
+        }
+        let (kinematics, edge_vectors) = memo.setups.get_mut(&key).expect("inserted above");
+        let failed = kinematics.failed;
+        let result = lower::<IPoly>(
+            vakint,
+            settings,
+            value,
+            prefactor,
+            options,
+            &matched,
+            kinematics,
+            edge_vectors.clone(),
+            stats.clone(),
+        );
+        let failed = (kinematics.failed && !failed) || take_overflow();
+        if kinematics.failed {
+            // Do not keep a setup whose pair forms left the ring.
+            memo.setups.remove(&key);
+        }
+        (result, failed)
+    };
+    match fast {
+        (Ok((folded, names, lowered)), false) => {
+            out.folded = folded;
+            out.names = names;
+            out.stats = lowered;
+            out.stats.ring = IPoly::NAME.into();
+            Ok(out)
+        }
+        _ => {
+            let (mut kinematics, edge_vectors) = setup::<DPoly>(vakint, &matched)?;
+            let (folded, names, lowered) = lower::<DPoly>(
+                vakint,
+                settings,
+                value,
+                prefactor,
+                options,
+                &matched,
+                &mut kinematics,
+                edge_vectors,
+                stats,
+            )?;
+            out.folded = folded;
+            out.names = names;
+            out.stats = lowered;
+            out.stats.ring = DPoly::NAME.into();
+            Ok(out)
+        }
+    }
+}
 
-    // Preparation: presentation, forms, zero table, renames, factors.
+type Lowered = (
+    BTreeMap<Channel, FoldedInputs>,
+    BTreeMap<(usize, Atom), BTreeSet<String>>,
+    ContractStats,
+);
+
+/// The kinematics of a matched graph in ring `C`: the presentation's slot
+/// forms (scaled to integers for [`IPoly`]) and the vector of every edge.
+fn setup<C: Coef>(
+    vakint: &Vakint,
+    matched: &DenominatorMatch,
+) -> Result<(Kinematics<C>, HashMap<i64, Option<u16>>)> {
+    let handle: std::sync::Arc<PLibraryHandle> = vakint.p_library().map_err(VakintError::from)?;
+    let top = handle.top(matched.family).map_err(VakintError::from)?;
+    let presentation = handle.library.presentation(top.presentation);
+    let loops = matched.request_family.loops;
+    let forms = canonical_forms(presentation, loops)?;
+    let scale = if C::NAME == IPoly::NAME {
+        kernel::forms_denominator(&forms)
+    } else {
+        Rational::one()
+    };
+    let mut kinematics = Kinematics::<C>::new(loops, matched.sigma, std::rc::Rc::new(forms), scale);
+    let mut edge_vectors = HashMap::default();
+    for (id, vector) in &matched.edge_vectors {
+        let interned = kinematics.intern(vector.clone())?;
+        edge_vectors.insert(*id as i64, interned);
+    }
+    Ok((kinematics, edge_vectors))
+}
+
+/// Contract and lower one value in ring `C` (module documentation, steps 2-5).
+#[allow(clippy::too_many_arguments)]
+fn lower<C: Coef>(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    value: &FactorizedNumerator,
+    prefactor: &Atom,
+    options: &ContractOptions,
+    matched: &DenominatorMatch,
+    kinematics: &mut Kinematics<C>,
+    edge_vectors: HashMap<i64, Option<u16>>,
+    mut stats: ContractStats,
+) -> Result<Lowered> {
+    let mut out = ContractedInputs::default();
+    // Preparation: presentation, zero table, renames, factors.
     let started = Instant::now();
     let handle: std::sync::Arc<PLibraryHandle> = vakint.p_library().map_err(VakintError::from)?;
     let top = handle.top(matched.family).map_err(VakintError::from)?;
@@ -830,21 +944,9 @@ pub fn contract_and_lower_with(
         }
     };
     let slots = Slots::new(top.arity, top.line_count, base, zero, options.prune)?;
-    if !memo.setups.contains_key(&key) {
-        let forms = canonical_forms(presentation, loops)?;
-        let mut kinematics = Kinematics::new(loops, matched.sigma, forms);
-        let mut edge_vectors = HashMap::default();
-        for (id, vector) in &matched.edge_vectors {
-            let interned = kinematics.intern(vector.clone())?;
-            edge_vectors.insert(*id as i64, interned);
-        }
-        memo.setups.insert(key.clone(), (kinematics, edge_vectors));
-    }
-    let (kinematics, edge_vectors) = memo.setups.get_mut(&key).expect("inserted above");
-    let kinematics = &mut *kinematics;
     let mut parser = Parser {
         dimension: value.dimension,
-        edge_vectors: edge_vectors.clone(),
+        edge_vectors,
         indices: HashMap::default(),
     };
     let mut counters = KernelCounters::default();
@@ -868,7 +970,7 @@ pub fn contract_and_lower_with(
         }
     }
     let mut fermion_factors = vec![Vec::new(); loops_of_graph.len()];
-    let mut factors = Vec::<Factor>::new();
+    let mut factors = Vec::<Factor<C>>::new();
     let mut lorentz = Vec::<(String, Atom)>::new();
     for (label, atom) in edges
         .into_iter()
@@ -930,7 +1032,7 @@ pub fn contract_and_lower_with(
     // Contraction.
     let started = Instant::now();
     let order = plan(&factors, &options.order)?;
-    let mut running = Tensor::one();
+    let mut running = Tensor::<C>::one();
     let mut open = BTreeSet::<u32>::new();
     let mut slots_factors = factors.into_iter().map(Some).collect::<Vec<_>>();
     for position in order {
@@ -973,10 +1075,11 @@ pub fn contract_and_lower_with(
     fold(
         settings,
         value,
-        &matched,
+        matched,
         top.presentation,
         &slots,
         &polynomial,
+        &kinematics.scale,
         prefactor,
         projector_power,
         &mut out,
@@ -990,12 +1093,11 @@ pub fn contract_and_lower_with(
         .flat_map(BTreeMap::keys)
         .collect::<BTreeSet<_>>()
         .len();
-    out.stats = stats;
-    Ok(out)
+    Ok((out.folded, out.names, stats))
 }
 
 /// The order of the factors (positions in `factors`).
-fn plan(factors: &[Factor], order: &ContractionOrder) -> Result<Vec<usize>> {
+fn plan<C: Coef>(factors: &[Factor<C>], order: &ContractionOrder) -> Result<Vec<usize>> {
     let n = factors.len();
     match order {
         ContractionOrder::Natural => Ok((0..n).collect()),
@@ -1048,13 +1150,14 @@ fn plan(factors: &[Factor], order: &ContractionOrder) -> Result<Vec<usize>> {
 /// Fold the final slot polynomial into the folded channels exactly as the
 /// reference does (module documentation, step 5).
 #[allow(clippy::too_many_arguments)]
-fn fold(
+fn fold<C: Coef>(
     settings: &VakintSettings,
     value: &FactorizedNumerator,
     matched: &DenominatorMatch,
     presentation: rustred::propagator::PresentationId,
     slots: &Slots,
-    polynomial: &Poly,
+    polynomial: &Poly<C>,
+    scale: &Rational,
     prefactor: &Atom,
     projector_power: i64,
     out: &mut ContractedInputs,
@@ -1079,16 +1182,29 @@ fn fold(
     let mut channels = HashMap::<(usize, u16), Atom>::default();
     let mut bases = HashMap::<(usize, usize), Atom>::default();
     let mut keys = HashMap::<u128, Vec<i64>>::default();
+    // The fast ring carries scale^r (forms scaled to integers): divided out here.
+    let scale = scale.numerator_ref().clone();
+    let mut inverse = HashMap::<u16, Rational>::default();
     for (mono, coefficient) in polynomial {
         let key = keys
             .entry(mono.slots)
             .or_insert_with(|| slots.key(mono.slots))
             .clone();
         let scale_power = 2 * loops as i64 - total_power + i64::from(mono.r);
-        for (power, c) in coefficient.0.iter().enumerate() {
+        let inverse = inverse
+            .entry(mono.r)
+            .or_insert_with(|| {
+                Rational::from((
+                    symbolica::domains::integer::Integer::one(),
+                    scale.pow(u64::from(mono.r)),
+                ))
+            })
+            .clone();
+        for (power, c) in coefficient.coefficients().iter().enumerate() {
             if c.is_zero() {
                 continue;
             }
+            let c = c * &inverse;
             for (term, (monomial, basis, v)) in pre_terms.iter().enumerate() {
                 let channel_coefficient = channels
                     .entry((term, mono.j))
@@ -1119,7 +1235,7 @@ fn fold(
                     .entry(basis_atom)
                     .or_default()
                     .entry((presentation, key.clone()))
-                    .or_insert_with(Rational::zero) += &(v * c);
+                    .or_insert_with(Rational::zero) += &(v * &c);
                 stats.emitted += 1;
             }
         }

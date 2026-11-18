@@ -550,7 +550,7 @@ fn main() -> eyre::Result<()> {
             entry["engine_stats"] = json!({
                 "factors": stats.factors, "renames": stats.renames, "trace_lengths": stats.trace_lengths,
                 "peak_terms": stats.peak_terms, "final_terms": stats.final_terms, "formed": stats.formed,
-                "dropped": stats.dropped, "emitted": stats.emitted, "oracle": stats.oracle,
+                "dropped": stats.dropped, "emitted": stats.emitted, "oracle": stats.oracle, "ring": stats.ring,
                 "values": result.inputs.values, "zero_values": result.inputs.zeros,
                 "seconds": {"match": stats.match_seconds, "prepare": stats.prepare_seconds, "trace": stats.trace_seconds,
                             "contract": stats.contract_seconds, "fold": stats.fold_seconds},

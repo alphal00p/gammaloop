@@ -19,7 +19,7 @@ use symbolica::atom::{Atom, AtomView, Symbol};
 use symbolica::coefficient::CoefficientView;
 use symbolica::domains::rational::Rational;
 
-use super::kernel::{DPoly, End, KernelCounters, Kinematics, Mono, Slots, Tensor, contract, leg};
+use super::kernel::{Coef, End, KernelCounters, Kinematics, Mono, Slots, Tensor, contract, leg};
 use super::trace::Letter;
 use crate::p_integral::factorized::{as_slot, names};
 
@@ -77,22 +77,24 @@ impl Parser {
     }
 
     /// The tensor of a Lorentz factor (no spinor slot).
-    pub(crate) fn parse(
+    pub(crate) fn parse<C: Coef>(
         &mut self,
         view: AtomView<'_>,
-        kinematics: &mut Kinematics,
+        kinematics: &mut Kinematics<C>,
         slots: &Slots,
         counters: &mut KernelCounters,
-    ) -> Result<Tensor, String> {
+    ) -> Result<Tensor<C>, String> {
         match view {
             AtomView::Num(_) => {
                 let value = rational(view)
                     .ok_or_else(|| format!("a non-rational number {view} in a factor"))?;
-                Ok(Tensor::scalar(DPoly::constant(value)))
+                let value = C::constant(&value)
+                    .ok_or_else(|| format!("the number {view} is outside the {} ring", C::NAME))?;
+                Ok(Tensor::scalar(value))
             }
             AtomView::Var(variable) => {
                 if variable.get_symbol() == self.dimension {
-                    Ok(Tensor::scalar(DPoly::d_power(1)))
+                    Ok(Tensor::scalar(C::d_power(1)))
                 } else {
                     Err(format!("an unexpected scalar {view} in a factor"))
                 }
@@ -129,7 +131,7 @@ impl Parser {
                         match (ends[0], ends[1]) {
                             (End::Mom(u), End::Mom(v)) => {
                                 let form = kinematics.pair_form(u, v);
-                                let mut tensor = Tensor::one();
+                                let mut tensor = Tensor::<C>::one();
                                 let poly = tensor.terms.remove(&Vec::new()).unwrap_or_default();
                                 let poly =
                                     super::kernel::poly_mul_form(&poly, &form, slots, counters)?;
@@ -150,7 +152,7 @@ impl Parser {
                         }
                         let (ia, ib) = (self.index(&sa.atom), self.index(&sb.atom));
                         if ia == ib {
-                            return Ok(Tensor::scalar(DPoly::d_power(1)));
+                            return Ok(Tensor::scalar(C::d_power(1)));
                         }
                         Ok(Tensor::structure(vec![leg(End::Idx(ia), End::Idx(ib))]))
                     }
@@ -210,7 +212,10 @@ impl Parser {
 /// A sum whose every term is one momentum leg on the same index with a
 /// rational coefficient becomes one leg with the combined vector (the vertex
 /// rules' `(-Q(2,μ) + Q(3,μ))`); any other sum is kept as it is.
-fn merge_momentum_legs(tensor: Tensor, kinematics: &mut Kinematics) -> Result<Tensor, String> {
+fn merge_momentum_legs<C: Coef>(
+    tensor: Tensor<C>,
+    kinematics: &mut Kinematics<C>,
+) -> Result<Tensor<C>, String> {
     if tensor.terms.len() < 2 {
         return Ok(tensor);
     }
@@ -227,14 +232,14 @@ fn merge_momentum_legs(tensor: Tensor, kinematics: &mut Kinematics) -> Result<Te
         let [(mono, value)] = poly.iter().collect::<Vec<_>>()[..] else {
             return Ok(tensor);
         };
-        if *mono != Mono::default() || value.0.len() != 1 {
+        let Some(value) = value.as_constant().filter(|_| *mono == Mono::default()) else {
             return Ok(tensor);
-        }
+        };
         for (target, entry) in combined
             .iter_mut()
             .zip(&kinematics.vectors[*vector as usize])
         {
-            *target += &(entry * &value.0[0]);
+            *target += &(entry * &value);
         }
     }
     let index = index.expect("at least two terms");

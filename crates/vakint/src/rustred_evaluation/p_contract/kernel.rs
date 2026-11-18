@@ -5,15 +5,21 @@
 //!
 //! Representation (helper VH, numerator assignment, lane engine):
 //!
-//! * [`DPoly`]: a dense polynomial in the dimension `D` with exact rational
-//!   coefficients (index = power of `D`).
+//! * a coefficient ring [`Coef`]: a polynomial in the dimension `D` with
+//!   exact coefficients, either [`IPoly`] (fixed-size `i64` coefficients,
+//!   checked arithmetic, the fast path) or [`DPoly`] (exact rationals, the
+//!   fallback when an `i64` overflows or a number is not an integer). With
+//!   [`IPoly`] the slot forms are scaled by the common denominator `s` of the
+//!   presentation's forms ([`Kinematics::scale`]): a monomial with `r` form
+//!   factors carries `s^r`, divided out at the fold. Overflow is flagged
+//!   ([`take_overflow`]) and the whole value is redone with [`DPoly`].
 //! * [`Mono`]: one monomial of the running polynomial: the slot exponents
 //!   packed six bits per slot in a `u128` (the packing of
-//!   [`super::super::p_lowering`]), `r` = the number of loop-dependent
+//!   `super::super::p_lowering`), `r` = the number of loop-dependent
 //!   canonical scalar products it was built from (fixes the scale power of
 //!   its channel) and `j` = the power of `head·head` (kept symbolic, as the
 //!   reference reader keeps it).
-//! * [`Poly`]: `Mono → DPoly`, sparse.
+//! * [`Poly`]: `Mono → C`, sparse.
 //! * [`Tensor`]: `Structure → Poly`, where a structure is the sorted list of
 //!   the open legs of a term: metrics `g(i, j)` between open Lorentz indices
 //!   and momentum legs `v^i` (a canonical momentum vector carrying an open
@@ -30,10 +36,13 @@
 //! cancelling lines) has only zero-sector descendants: it is dropped the
 //! moment it is formed.
 
+use std::cell::Cell;
+use std::fmt::Debug;
 use std::rc::Rc;
 use std::sync::Arc;
 
 use ahash::AHashMap as HashMap;
+use symbolica::domains::integer::Integer;
 use symbolica::domains::rational::Rational;
 
 use super::super::p_zero::ZeroSectors;
@@ -44,46 +53,92 @@ pub(crate) const BITS: u32 = 6;
 /// field-wise cancellation test has a free top bit.
 pub(crate) const MAX_EXPONENT: u32 = (1 << (BITS - 1)) - 1;
 
+thread_local! {
+    /// Set when an [`IPoly`] operation overflows (or exceeds its degree).
+    static OVERFLOW: Cell<bool> = const { Cell::new(false) };
+}
+
+#[cold]
+fn overflow() {
+    OVERFLOW.with(|flag| flag.set(true));
+}
+
+/// Whether an [`IPoly`] operation overflowed since the last call (and reset).
+pub(crate) fn take_overflow() -> bool {
+    OVERFLOW.with(|flag| flag.replace(false))
+}
+
+/// A coefficient ring: polynomials in `D` with exact coefficients.
+pub(crate) trait Coef: Clone + Debug + PartialEq {
+    /// A number of the ring (the coefficients of slot forms).
+    type Scalar: Clone + Debug;
+    const NAME: &'static str;
+    fn zero() -> Self;
+    fn one() -> Self;
+    /// `D^power`.
+    fn d_power(power: usize) -> Self;
+    fn constant(value: &Rational) -> Option<Self>;
+    fn scalar(value: &Rational) -> Option<Self::Scalar>;
+    fn is_zero(&self) -> bool;
+    fn add_assign(&mut self, other: &Self);
+    fn mul(&self, other: &Self) -> Self;
+    fn scale(&self, factor: &Self::Scalar) -> Self;
+    /// `self · D^power`.
+    fn shift(&self, power: u32) -> Self;
+    /// The value when it is a constant (no `D`).
+    fn as_constant(&self) -> Option<Rational>;
+    /// The coefficients of `D^0, D^1, ...` as rationals.
+    fn coefficients(&self) -> Vec<Rational>;
+}
+
 /// A polynomial in `D` with exact rational coefficients, dense, no trailing
-/// zeros (empty = 0).
+/// zeros (empty = 0): the exact fallback ring.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct DPoly(pub(crate) Vec<Rational>);
 
 impl DPoly {
-    pub(crate) fn zero() -> Self {
-        Self(Vec::new())
-    }
-
-    pub(crate) fn constant(value: Rational) -> Self {
-        if value.is_zero() {
-            Self::zero()
-        } else {
-            Self(vec![value])
-        }
-    }
-
-    pub(crate) fn one() -> Self {
-        Self(vec![Rational::one()])
-    }
-
-    /// `D^power`.
-    pub(crate) fn d_power(power: usize) -> Self {
-        let mut coefficients = vec![Rational::zero(); power + 1];
-        coefficients[power] = Rational::one();
-        Self(coefficients)
-    }
-
-    pub(crate) fn is_zero(&self) -> bool {
-        self.0.is_empty()
-    }
-
     fn trim(&mut self) {
         while self.0.last().is_some_and(Rational::is_zero) {
             self.0.pop();
         }
     }
+}
 
-    pub(crate) fn add_assign(&mut self, other: &DPoly) {
+impl Coef for DPoly {
+    type Scalar = Rational;
+    const NAME: &'static str = "rational";
+
+    fn zero() -> Self {
+        Self(Vec::new())
+    }
+
+    fn one() -> Self {
+        Self(vec![Rational::one()])
+    }
+
+    fn d_power(power: usize) -> Self {
+        let mut coefficients = vec![Rational::zero(); power + 1];
+        coefficients[power] = Rational::one();
+        Self(coefficients)
+    }
+
+    fn constant(value: &Rational) -> Option<Self> {
+        Some(if value.is_zero() {
+            Self::zero()
+        } else {
+            Self(vec![value.clone()])
+        })
+    }
+
+    fn scalar(value: &Rational) -> Option<Rational> {
+        Some(value.clone())
+    }
+
+    fn is_zero(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    fn add_assign(&mut self, other: &DPoly) {
         if self.0.len() < other.0.len() {
             self.0.resize(other.0.len(), Rational::zero());
         }
@@ -93,7 +148,7 @@ impl DPoly {
         self.trim();
     }
 
-    pub(crate) fn mul(&self, other: &DPoly) -> DPoly {
+    fn mul(&self, other: &DPoly) -> DPoly {
         if self.is_zero() || other.is_zero() {
             return DPoly::zero();
         }
@@ -117,21 +172,202 @@ impl DPoly {
         product
     }
 
-    pub(crate) fn scale(&self, factor: &Rational) -> DPoly {
+    fn scale(&self, factor: &Rational) -> DPoly {
         if factor.is_zero() {
             return DPoly::zero();
         }
         DPoly(self.0.iter().map(|value| value * factor).collect())
     }
 
-    /// `self · D^power`.
-    pub(crate) fn shift(&self, power: u32) -> DPoly {
+    fn shift(&self, power: u32) -> DPoly {
         if power == 0 || self.is_zero() {
             return self.clone();
         }
         let mut out = vec![Rational::zero(); power as usize];
         out.extend(self.0.iter().cloned());
         DPoly(out)
+    }
+
+    fn as_constant(&self) -> Option<Rational> {
+        match self.0.as_slice() {
+            [] => Some(Rational::zero()),
+            [value] => Some(value.clone()),
+            _ => None,
+        }
+    }
+
+    fn coefficients(&self) -> Vec<Rational> {
+        self.0.clone()
+    }
+}
+
+/// Degree bound of [`IPoly`] (`D^0 .. D^(IPOLY - 1)`).
+pub(crate) const IPOLY: usize = 8;
+
+/// A polynomial in `D` with `i64` coefficients, fixed size, checked
+/// arithmetic (an overflow or a degree beyond [`IPOLY`] sets the overflow
+/// flag): the fast ring.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct IPoly {
+    c: [i64; IPOLY],
+    len: u8,
+}
+
+impl IPoly {
+    #[inline]
+    fn trim(&mut self) {
+        while self.len > 0 && self.c[self.len as usize - 1] == 0 {
+            self.len -= 1;
+        }
+    }
+}
+
+fn small(value: &Integer) -> Option<i64> {
+    match value {
+        Integer::Single(n) => Some(*n),
+        _ => None,
+    }
+}
+
+impl Coef for IPoly {
+    type Scalar = i64;
+    const NAME: &'static str = "i64";
+
+    fn zero() -> Self {
+        Self::default()
+    }
+
+    fn one() -> Self {
+        let mut out = Self::default();
+        out.c[0] = 1;
+        out.len = 1;
+        out
+    }
+
+    fn d_power(power: usize) -> Self {
+        let mut out = Self::default();
+        if power >= IPOLY {
+            overflow();
+            return out;
+        }
+        out.c[power] = 1;
+        out.len = power as u8 + 1;
+        out
+    }
+
+    fn constant(value: &Rational) -> Option<Self> {
+        let n = Self::scalar(value)?;
+        let mut out = Self::default();
+        if n != 0 {
+            out.c[0] = n;
+            out.len = 1;
+        }
+        Some(out)
+    }
+
+    fn scalar(value: &Rational) -> Option<i64> {
+        if !value.is_integer() {
+            return None;
+        }
+        small(value.numerator_ref())
+    }
+
+    #[inline]
+    fn is_zero(&self) -> bool {
+        self.len == 0
+    }
+
+    #[inline]
+    fn add_assign(&mut self, other: &IPoly) {
+        for i in 0..other.len as usize {
+            match self.c[i].checked_add(other.c[i]) {
+                Some(sum) => self.c[i] = sum,
+                None => overflow(),
+            }
+        }
+        if other.len > self.len {
+            self.len = other.len;
+        }
+        self.trim();
+    }
+
+    #[inline]
+    fn mul(&self, other: &IPoly) -> IPoly {
+        let mut out = IPoly::default();
+        if self.len == 0 || other.len == 0 {
+            return out;
+        }
+        let len = self.len as usize + other.len as usize - 1;
+        if len > IPOLY {
+            overflow();
+            return out;
+        }
+        for i in 0..self.len as usize {
+            let a = self.c[i];
+            if a == 0 {
+                continue;
+            }
+            for j in 0..other.len as usize {
+                match a
+                    .checked_mul(other.c[j])
+                    .and_then(|product| out.c[i + j].checked_add(product))
+                {
+                    Some(sum) => out.c[i + j] = sum,
+                    None => overflow(),
+                }
+            }
+        }
+        out.len = len as u8;
+        out.trim();
+        out
+    }
+
+    #[inline]
+    fn scale(&self, factor: &i64) -> IPoly {
+        let mut out = IPoly::default();
+        if *factor == 0 {
+            return out;
+        }
+        for i in 0..self.len as usize {
+            match self.c[i].checked_mul(*factor) {
+                Some(product) => out.c[i] = product,
+                None => overflow(),
+            }
+        }
+        out.len = self.len;
+        out
+    }
+
+    fn shift(&self, power: u32) -> IPoly {
+        if power == 0 || self.len == 0 {
+            return *self;
+        }
+        let len = self.len as usize + power as usize;
+        let mut out = IPoly::default();
+        if len > IPOLY {
+            overflow();
+            return out;
+        }
+        for i in 0..self.len as usize {
+            out.c[i + power as usize] = self.c[i];
+        }
+        out.len = len as u8;
+        out
+    }
+
+    fn as_constant(&self) -> Option<Rational> {
+        match self.len {
+            0 => Some(Rational::zero()),
+            1 => Some(Rational::from(self.c[0])),
+            _ => None,
+        }
+    }
+
+    fn coefficients(&self) -> Vec<Rational> {
+        self.c[..self.len as usize]
+            .iter()
+            .map(|value| Rational::from(*value))
+            .collect()
     }
 }
 
@@ -143,10 +379,10 @@ pub(crate) struct Mono {
     pub(crate) j: u16,
 }
 
-pub(crate) type Poly = HashMap<Mono, DPoly>;
+pub(crate) type Poly<C> = HashMap<Mono, C>;
 
 /// The scalar polynomial `c` (constant monomial).
-pub(crate) fn poly_constant(value: DPoly) -> Poly {
+pub(crate) fn poly_constant<C: Coef>(value: C) -> Poly<C> {
     let mut poly = Poly::default();
     if !value.is_zero() {
         poly.insert(Mono::default(), value);
@@ -155,7 +391,7 @@ pub(crate) fn poly_constant(value: DPoly) -> Poly {
 }
 
 /// `target += poly`.
-pub(crate) fn poly_add_into(target: &mut Poly, poly: Poly) {
+pub(crate) fn poly_add_into<C: Coef>(target: &mut Poly<C>, poly: Poly<C>) {
     if target.is_empty() {
         *target = poly;
         return;
@@ -165,7 +401,8 @@ pub(crate) fn poly_add_into(target: &mut Poly, poly: Poly) {
     }
 }
 
-fn add_term(target: &mut Poly, mono: Mono, value: DPoly) {
+#[inline]
+fn add_term<C: Coef>(target: &mut Poly<C>, mono: Mono, value: C) {
     use std::collections::hash_map::Entry;
     match target.entry(mono) {
         Entry::Occupied(mut entry) => {
@@ -182,7 +419,6 @@ fn add_term(target: &mut Poly, mono: Mono, value: DPoly) {
     }
 }
 
-/// Counters of the kernel (statistics of one lowering).
 #[derive(Clone, Debug, Default)]
 pub(crate) struct KernelCounters {
     /// Candidate monomials formed by a product (before the zero test).
@@ -301,30 +537,48 @@ pub(crate) struct SlotForm {
     pub(crate) terms: Vec<(u16, Rational)>,
 }
 
+/// The common denominator of the forms (every coefficient and constant).
+pub(crate) fn forms_denominator(forms: &[SlotForm]) -> Rational {
+    let mut scale = Integer::one();
+    for form in forms {
+        for value in std::iter::once(&form.constant).chain(form.terms.iter().map(|(_, c)| c)) {
+            scale = scale.lcm(value.denominator_ref());
+        }
+    }
+    Rational::from((scale, Integer::one()))
+}
+
 /// The canonical momenta of the matched presentation, the slot forms of the
 /// canonical scalar products, and the interned momentum vectors with the
-/// memo of their pair forms.
-pub(crate) struct Kinematics {
+/// memo of their pair forms (coefficients in the ring's scalars).
+pub(crate) struct Kinematics<C: Coef> {
     pub(crate) loops: usize,
     /// `external = sigma · head`: the sign of `k(i)·Q` entries.
     pub(crate) sigma: i64,
     /// Forms of `k_i·k_j` (i <= j, upper triangle by rows) then `k_i·Q`.
-    pub(crate) forms: Vec<SlotForm>,
+    pub(crate) forms: Rc<Vec<SlotForm>>,
+    /// Every loop-dependent (`r = 1`) pair-form term is multiplied by this
+    /// scale (the forms' common denominator for [`IPoly`], 1 for [`DPoly`]).
+    pub(crate) scale: Rational,
     /// Interned canonical vectors over `(k_1..k_L, head)`.
     pub(crate) vectors: Vec<Vec<Rational>>,
     ids: HashMap<Vec<Rational>, u16>,
-    pairs: HashMap<(u16, u16), Rc<Vec<(Mono, Rational)>>>,
+    pairs: HashMap<(u16, u16), Rc<Vec<(Mono, C::Scalar)>>>,
+    /// A pair form with a coefficient outside the ring's scalars was met.
+    pub(crate) failed: bool,
 }
 
-impl Kinematics {
-    pub(crate) fn new(loops: usize, sigma: i64, forms: Vec<SlotForm>) -> Self {
+impl<C: Coef> Kinematics<C> {
+    pub(crate) fn new(loops: usize, sigma: i64, forms: Rc<Vec<SlotForm>>, scale: Rational) -> Self {
         Self {
             loops,
             sigma,
             forms,
+            scale,
             vectors: Vec::new(),
             ids: HashMap::default(),
             pairs: HashMap::default(),
+            failed: false,
         }
     }
 
@@ -348,10 +602,11 @@ impl Kinematics {
     }
 
     /// The slot form of `v_a · v_b`: the loop-dependent part as slot forms of
-    /// the canonical products (`r = 1`) and the `head·head` part as `j = 1`
-    /// (`r = 0`), exactly the split of the reference reader
-    /// (`p_lowering::Reader::dot` followed by the slot substitution).
-    pub(crate) fn pair_form(&mut self, a: u16, b: u16) -> Rc<Vec<(Mono, Rational)>> {
+    /// the canonical products (`r = 1`, times [`Self::scale`]) and the
+    /// `head·head` part as `j = 1` (`r = 0`), exactly the split of the
+    /// reference reader (`p_lowering::Reader::dot` followed by the slot
+    /// substitution).
+    pub(crate) fn pair_form(&mut self, a: u16, b: u16) -> Rc<Vec<(Mono, C::Scalar)>> {
         let key = (a.min(b), a.max(b));
         if let Some(form) = self.pairs.get(&key) {
             return Rc::clone(form);
@@ -390,7 +645,7 @@ impl Kinematics {
         };
         for i in 0..l {
             for j in 0..l {
-                let weight = &va[i] * &vb[j];
+                let weight = &(&va[i] * &vb[j]) * &self.scale;
                 let index = self.pair_index(i, j);
                 add_form(&mut terms, &self.forms[index], &weight);
             }
@@ -398,7 +653,7 @@ impl Kinematics {
         let external = l * (l + 1) / 2;
         let sigma = Rational::from(self.sigma);
         for i in 0..l {
-            let weight = &(&(&va[i] * &vb[l]) + &(&va[l] * &vb[i])) * &sigma;
+            let weight = &(&(&(&va[i] * &vb[l]) + &(&va[l] * &vb[i])) * &sigma) * &self.scale;
             add_form(&mut terms, &self.forms[external + i], &weight);
         }
         let head = &va[l] * &vb[l];
@@ -412,10 +667,16 @@ impl Kinematics {
                 .or_insert_with(Rational::zero);
             *entry += &head;
         }
-        let mut form = terms
-            .into_iter()
-            .filter(|(_, value)| !value.is_zero())
-            .collect::<Vec<_>>();
+        let mut form = Vec::with_capacity(terms.len());
+        for (mono, value) in terms {
+            if value.is_zero() {
+                continue;
+            }
+            match C::scalar(&value) {
+                Some(scalar) => form.push((mono, scalar)),
+                None => self.failed = true,
+            }
+        }
         form.sort_by(|a, b| a.0.cmp(&b.0));
         let form = Rc::new(form);
         self.pairs.insert(key, Rc::clone(&form));
@@ -423,36 +684,34 @@ impl Kinematics {
     }
 }
 
-/// `a · b` of two polynomials, dropping zero-sector monomials.
-pub(crate) fn poly_mul(
-    a: &Poly,
-    b: &Poly,
+/// `target += a · b` of two polynomials, dropping zero-sector monomials.
+pub(crate) fn poly_mul_into<C: Coef>(
+    target: &mut Poly<C>,
+    a: &Poly<C>,
+    b: &Poly<C>,
     slots: &Slots,
     counters: &mut KernelCounters,
-) -> Result<Poly, String> {
-    // A constant side is a scale.
+) -> Result<(), String> {
+    // A constant side is a scale (no new slots: no zero test).
     for (constant_side, other) in [(a, b), (b, a)] {
         if constant_side.len() == 1
             && let Some(value) = constant_side.get(&Mono::default())
         {
-            let mut out = Poly::with_capacity(other.len());
+            target.reserve(other.len());
             for (mono, coefficient) in other {
-                let product = coefficient.mul(value);
-                if !product.is_zero() {
-                    out.insert(*mono, product);
-                }
+                add_term(target, *mono, coefficient.mul(value));
             }
-            return Ok(out);
+            return Ok(());
         }
     }
-    let mut out = Poly::with_capacity(a.len().max(b.len()) * 2);
+    target.reserve(a.len().max(b.len()));
     for (ma, ca) in a {
         for (mb, cb) in b {
             counters.formed += 1;
             let packed = slots
                 .add(ma.slots, mb.slots)
                 .ok_or("a slot exponent beyond the packed range")?;
-            if slots.is_zero_sector(packed) {
+            if mb.slots != 0 && ma.slots != 0 && slots.is_zero_sector(packed) {
                 counters.dropped += 1;
                 continue;
             }
@@ -461,21 +720,34 @@ pub(crate) fn poly_mul(
                 r: ma.r + mb.r,
                 j: ma.j + mb.j,
             };
-            add_term(&mut out, mono, ca.mul(cb));
+            add_term(target, mono, ca.mul(cb));
         }
     }
+    Ok(())
+}
+
+/// `a · b` of two polynomials ([`poly_mul_into`]).
+pub(crate) fn poly_mul<C: Coef>(
+    a: &Poly<C>,
+    b: &Poly<C>,
+    slots: &Slots,
+    counters: &mut KernelCounters,
+) -> Result<Poly<C>, String> {
+    let mut out = Poly::default();
+    poly_mul_into(&mut out, a, b, slots, counters)?;
     Ok(out)
 }
 
-/// `a · form` of a polynomial and a pair form, dropping zero-sector
-/// monomials.
-pub(crate) fn poly_mul_form(
-    a: &Poly,
-    form: &[(Mono, Rational)],
+/// `target += a · form` of a polynomial and a pair form, dropping
+/// zero-sector monomials.
+pub(crate) fn poly_mul_form_into<C: Coef>(
+    target: &mut Poly<C>,
+    a: &Poly<C>,
+    form: &[(Mono, C::Scalar)],
     slots: &Slots,
     counters: &mut KernelCounters,
-) -> Result<Poly, String> {
-    let mut out = Poly::with_capacity(a.len() * form.len().max(1));
+) -> Result<(), String> {
+    target.reserve(a.len() * form.len().max(1));
     for (ma, ca) in a {
         for (mf, cf) in form {
             counters.formed += 1;
@@ -491,9 +763,21 @@ pub(crate) fn poly_mul_form(
                 r: ma.r + mf.r,
                 j: ma.j + mf.j,
             };
-            add_term(&mut out, mono, ca.scale(cf));
+            add_term(target, mono, ca.scale(cf));
         }
     }
+    Ok(())
+}
+
+/// `a · form` ([`poly_mul_form_into`]).
+pub(crate) fn poly_mul_form<C: Coef>(
+    a: &Poly<C>,
+    form: &[(Mono, C::Scalar)],
+    slots: &Slots,
+    counters: &mut KernelCounters,
+) -> Result<Poly<C>, String> {
+    let mut out = Poly::default();
+    poly_mul_form_into(&mut out, a, form, slots, counters)?;
     Ok(out)
 }
 
@@ -517,18 +801,26 @@ pub(crate) fn leg(a: End, b: End) -> Leg {
 pub(crate) type Structure = Vec<Leg>;
 
 /// An open tensor: structures with slot-polynomial coefficients.
-#[derive(Clone, Debug, Default)]
-pub(crate) struct Tensor {
-    pub(crate) terms: HashMap<Structure, Poly>,
+#[derive(Clone, Debug)]
+pub(crate) struct Tensor<C: Coef> {
+    pub(crate) terms: HashMap<Structure, Poly<C>>,
 }
 
-impl Tensor {
+impl<C: Coef> Default for Tensor<C> {
+    fn default() -> Self {
+        Self {
+            terms: HashMap::default(),
+        }
+    }
+}
+
+impl<C: Coef> Tensor<C> {
     /// The scalar 1.
     pub(crate) fn one() -> Self {
-        Self::scalar(DPoly::one())
+        Self::scalar(C::one())
     }
 
-    pub(crate) fn scalar(value: DPoly) -> Self {
+    pub(crate) fn scalar(value: C) -> Self {
         let mut terms = HashMap::default();
         if !value.is_zero() {
             terms.insert(Vec::new(), poly_constant(value));
@@ -539,11 +831,11 @@ impl Tensor {
     /// One structure with coefficient 1.
     pub(crate) fn structure(structure: Structure) -> Self {
         let mut terms = HashMap::default();
-        terms.insert(structure, poly_constant(DPoly::one()));
+        terms.insert(structure, poly_constant(C::one()));
         Self { terms }
     }
 
-    pub(crate) fn add(&mut self, structure: Structure, poly: Poly) {
+    pub(crate) fn add(&mut self, structure: Structure, poly: Poly<C>) {
         if poly.is_empty() {
             return;
         }
@@ -560,7 +852,7 @@ impl Tensor {
         }
     }
 
-    pub(crate) fn add_tensor(&mut self, other: Tensor) {
+    pub(crate) fn add_tensor(&mut self, other: Tensor<C>) {
         for (structure, poly) in other.terms {
             self.add(structure, poly);
         }
@@ -665,40 +957,55 @@ pub(crate) fn resolve(mut legs: Vec<Leg>) -> Result<Resolved, String> {
 
 /// `a · b` of two tensors: every pair of structures is joined and its
 /// repeated indices contracted; the coefficient is `poly_a · poly_b · Π pair
-/// forms · D^loops`, with early zero-sector pruning.
-pub(crate) fn contract(
-    a: &Tensor,
-    b: &Tensor,
-    kinematics: &mut Kinematics,
+/// forms · D^loops`, with early zero-sector pruning; the last product is
+/// accumulated into the result directly.
+pub(crate) fn contract<C: Coef>(
+    a: &Tensor<C>,
+    b: &Tensor<C>,
+    kinematics: &mut Kinematics<C>,
     slots: &Slots,
     counters: &mut KernelCounters,
-) -> Result<Tensor, String> {
-    let mut out = Tensor::default();
+) -> Result<Tensor<C>, String> {
+    let mut out = Tensor::<C>::default();
     for (sa, pa) in &a.terms {
         for (sb, pb) in &b.terms {
             let mut legs = Vec::with_capacity(sa.len() + sb.len());
             legs.extend_from_slice(sa);
             legs.extend_from_slice(sb);
             let resolved = resolve(legs)?;
+            let target = out.terms.entry(resolved.structure).or_default();
+            if resolved.products.is_empty() && resolved.d_power == 0 {
+                poly_mul_into(target, pa, pb, slots, counters)?;
+                continue;
+            }
+            // Sequentially, pruning after every form (measured: multiplying the
+            // forms together first and then into the polynomial forms more
+            // candidates, L4 graph 39: 3.69 M vs 3.63 M, 1.91 G vs 1.66 G
+            // instructions); the last product goes into the result directly.
             let mut poly = poly_mul(pa, pb, slots, counters)?;
-            for (u, v) in &resolved.products {
+            let count = resolved.products.len();
+            for (position, (u, v)) in resolved.products.iter().enumerate() {
                 if poly.is_empty() {
                     break;
                 }
                 let form = kinematics.pair_form(*u, *v);
+                if position + 1 == count && resolved.d_power == 0 {
+                    poly_mul_form_into(target, &poly, &form, slots, counters)?;
+                    poly.clear();
+                    break;
+                }
                 poly = poly_mul_form(&poly, &form, slots, counters)?;
             }
             if resolved.d_power > 0 {
-                for value in poly.values_mut() {
-                    *value = value.shift(resolved.d_power);
+                for (mono, value) in poly {
+                    add_term(target, mono, value.shift(resolved.d_power));
                 }
             }
-            out.add(resolved.structure, poly);
         }
     }
+    out.terms.retain(|_, poly| !poly.is_empty());
     Ok(out)
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -760,5 +1067,24 @@ mod tests {
         assert_eq!(slots.key(pack([1, 1, 0, 2])), vec![0, 1, 0, -2]);
         assert!(slots.add(pack([31, 0, 0, 0]), pack([1, 0, 0, 0])).is_none());
         assert!(slots.add(pack([30, 0, 0, 0]), pack([1, 0, 0, 0])).is_some());
+    }
+
+    #[test]
+    fn integer_polynomials_agree_and_flag_overflow() {
+        let _ = take_overflow();
+        let a = IPoly::constant(&r(-1)).unwrap();
+        let mut d_minus_one = IPoly::d_power(1);
+        d_minus_one.add_assign(&a);
+        let mut d_plus_one = IPoly::d_power(1).mul(&IPoly::one()).shift(0);
+        d_plus_one.add_assign(&IPoly::one());
+        let product = d_minus_one.mul(&d_plus_one);
+        assert_eq!(product.coefficients(), vec![r(-1), r(0), r(1)]);
+        assert!(!take_overflow());
+        let big = IPoly::constant(&r(i64::MAX)).unwrap();
+        let _ = big.scale(&2);
+        assert!(take_overflow());
+        let _ = IPoly::d_power(IPOLY);
+        assert!(take_overflow());
+        assert!(IPoly::scalar(&Rational::from((1, 2))).is_none());
     }
 }
