@@ -108,6 +108,10 @@ name = "direct_bb"
 required-features = ["feynkit-ingress"]
 
 [[example]]
+name = "engine_bb"
+required-features = ["feynkit-ingress"]
+
+[[example]]
 name = "external_data_acceptance"
 required-features = ["feynkit-ingress"]
 

@@ -13,6 +13,8 @@ mod citations;
 #[cfg(feature = "feynkit-ingress")]
 pub mod diagram_integral;
 #[cfg(feature = "feynkit-ingress")]
+pub mod engine_gate;
+#[cfg(feature = "feynkit-ingress")]
 pub mod refpath;
 pub mod display;
 mod execution;

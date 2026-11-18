@@ -337,7 +337,7 @@ fn invariant_symbol(function: AtomView<'_>) -> Option<Atom> {
 /// idenso's invariants → `CA`, `CF`, `TF`, the higher ones → plain symbols
 /// ([`invariant_symbol`]), then `N_R = T_F N_A / C_F` (the beta thread's
 /// colour basis v1).
-fn named_invariants(value: &Atom) -> Atom {
+pub(crate) fn named_invariants(value: &Atom) -> Atom {
     let s = &*SYMBOLS;
     let adjoint = ColorAdjoint {}.to_symbolic([Atom::var(s.na)]);
     let fundamental = ColorFundamental {}.to_symbolic([Atom::var(s.nr)]);
@@ -570,7 +570,7 @@ fn contract_branch(
 /// sum over the colour branches weighted by their coefficients, with the beta
 /// normalisation `1/(i q²)` (metric and transverse also `1/(D-1)`), couplings
 /// expanded and `gs = 1`.
-fn contract(
+pub fn contract(
     diagram: &FeynmanDiagram,
     branches: &[ColourBranch],
     momentum: &Atom,
