@@ -16,8 +16,17 @@
 //! 5. `overall_factor` → [`Prefactor::overall`] (evaluated) and
 //!    [`Prefactor::loop_sign`] (its `InternalFermionLoopSign`); n_f power =
 //!    closed fermion loops; the value is validated.
+//!
+//! The graph weight is REQUIRED and its producer's convention is checked
+//! ([`OverallFactorSource`]): FeynKit reads a DOT without the graph attribute
+//! `overall_factor` as weight `1`, which would silently drop `1/AutG` and the
+//! loop and ordering signs. On DOT input use
+//! [`FactorizedNumerator::from_feynkit_dot`], which also checks that the DOT
+//! text carries the attribute; inputs that legitimately lack it (R* closure
+//! dumps) must supply the weight ([`OverallFactorSource::Supplied`]).
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use feynkit_graph::{DiagramEndpoint, DiagramHalfEdge, EdgeId, FeynmanDiagram, NumeratorInterface};
 use feynkit_model::Model;
@@ -42,6 +51,35 @@ pub enum ProjectorChoice {
     /// `p² g(port₀, port₁) − Q(x, port₀) Q(x, port₁)` with `p2_power = −1`
     /// (the transverse projector; `x` = the first independent external edge).
     Transverse,
+}
+
+/// Where the graph weight (`1/AutG`, the closed fermion / ghost loop sign, the
+/// external fermion ordering sign) comes from, and how it is checked.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum OverallFactorSource {
+    /// The graph attribute `overall_factor` of the beta thread's DOT input:
+    /// REQUIRED. Two producer forms are accepted, each checked:
+    /// * GENERATOR form (FeynGen, e.g. `prepared/L1..L4`, the xi-derivative
+    ///   sets): the unevaluated product `AutG(n)^-1 ×
+    ///   ExternalFermionOrderingSign(±1) [× InternalFermionLoopSign(±1)]`,
+    ///   each factor at most once, `AutG` (n >= 1) and the ordering sign
+    ///   present, nothing else; the loop sign is checked against the closed
+    ///   fermion + ghost loops by `validate`. A missing attribute (read as `1`)
+    ///   fails here.
+    /// * EVALUATED form (the reduced five-loop set
+    ///   `symmetry-generation-20261113/reduced/L5`: orbit weights summed): a
+    ///   non-zero rational that already holds `(-1)^(closed fermion + ghost
+    ///   loops)`; it needs [`FromFeynkitOptions::loop_sign_in_overall`] and is
+    ///   checked: the weight without that sign is positive. An evaluated weight
+    ///   cannot be told from a missing attribute on a parsed diagram, so this
+    ///   form is accepted only through [`FactorizedNumerator::from_feynkit_dot`].
+    #[default]
+    Dot,
+    /// For inputs that legitimately carry no `overall_factor` (R* closure
+    /// dumps): the caller SUPPLIES the evaluated weight, closed-loop sign
+    /// included (checked as the evaluated form); the diagram's own factor must
+    /// be `1` and, through `from_feynkit_dot`, the DOT must not carry one.
+    Supplied(Atom),
 }
 
 /// Options of [`FactorizedNumerator::from_feynkit`].
@@ -72,6 +110,9 @@ pub struct FromFeynkitOptions {
     /// (the product `overall × loop_sign` is unchanged). Default false:
     /// today's reading.
     pub loop_sign_in_overall: bool,
+    /// Where the graph weight comes from (default: the DOT attribute,
+    /// required and checked).
+    pub overall_factor: OverallFactorSource,
 }
 
 impl Default for FromFeynkitOptions {
@@ -83,6 +124,7 @@ impl Default for FromFeynkitOptions {
             pull_scalars: true,
             merge_colour: false,
             loop_sign_in_overall: false,
+            overall_factor: OverallFactorSource::Dot,
         }
     }
 }
@@ -272,6 +314,145 @@ fn merged_terms(
     Some(out)
 }
 
+/// Whether the DOT text `dot` sets the graph attribute `name`: as a key of the
+/// `graph [...]` attribute list or as a top-level `name=value` statement of the
+/// graph body; quoted strings are skipped (FeynKit writes it in `graph [...]`).
+pub fn dot_sets_graph_attribute(dot: &str, name: &str) -> bool {
+    let (b, key) = (dot.as_bytes(), name.as_bytes());
+    let (mut quoted, mut braces, mut brackets) = (false, 0usize, 0usize);
+    // `key_start`: the next token may be a key (statement start at bracket depth
+    // 0, or after `[` / `,` in an attribute list); `graph_list`: inside `graph [`.
+    let (mut key_start, mut graph_list, mut token_start) = (false, false, 0usize);
+    let mut i = 0;
+    while i < b.len() {
+        let c = b[i];
+        if quoted {
+            match c {
+                b'\\' => i += 1,
+                b'"' => quoted = false,
+                _ => {}
+            }
+            i += 1;
+            continue;
+        }
+        match c {
+            b'"' => {
+                quoted = true;
+                key_start = false;
+            }
+            b'{' | b'}' => {
+                braces = if c == b'{' {
+                    braces + 1
+                } else {
+                    braces.saturating_sub(1)
+                };
+                key_start = brackets == 0;
+                token_start = i + 1;
+            }
+            b'[' => {
+                brackets += 1;
+                if brackets == 1 {
+                    // the statement's head: `graph` for the graph attribute list
+                    graph_list =
+                        dot[token_start..i].split_whitespace().collect::<Vec<_>>() == ["graph"];
+                }
+                key_start = true;
+            }
+            b']' => {
+                brackets = brackets.saturating_sub(1);
+                if brackets == 0 {
+                    graph_list = false;
+                }
+                key_start = false;
+            }
+            b';' | b'\n' if brackets == 0 => {
+                key_start = true;
+                token_start = i + 1;
+            }
+            b',' if brackets == 1 => key_start = true,
+            b' ' | b'\t' | b'\r' | b'\n' => {}
+            _ => {
+                if key_start
+                    && braces == 1
+                    && (brackets == 0 || (brackets == 1 && graph_list))
+                    && b[i..].starts_with(key)
+                {
+                    let mut j = i + key.len();
+                    while j < b.len() && matches!(b[j], b' ' | b'\t') {
+                        j += 1;
+                    }
+                    if j < b.len() && b[j] == b'=' {
+                        return true;
+                    }
+                }
+                key_start = false;
+            }
+        }
+        i += 1;
+    }
+    false
+}
+
+/// The generator form of a weight: `AutG(n)^-1 × ExternalFermionOrderingSign(±1)
+/// [× InternalFermionLoopSign(±1)]` (see [`OverallFactorSource::Dot`]).
+/// `Ok(true)` for that form, `Ok(false)` for an evaluated rational, `Err` for
+/// anything else.
+fn generator_form(overall: &Atom) -> std::result::Result<bool, String> {
+    if let AtomView::Num(_) = overall.as_view() {
+        return Ok(false);
+    }
+    let factors = match overall.as_view() {
+        AtomView::Mul(m) => m.iter().collect::<Vec<_>>(),
+        other => vec![other],
+    };
+    let (mut autg, mut ordering, mut loop_sign) = (0, 0, 0);
+    // a function of one argument +-1
+    let unit_sign = |view: AtomView<'_>| match view {
+        AtomView::Fun(f) => {
+            f.get_nargs() == 1 && matches!(i64::try_from(f.iter().next().unwrap()), Ok(1) | Ok(-1))
+        }
+        _ => false,
+    };
+    for factor in factors {
+        match factor {
+            AtomView::Pow(pow) => {
+                let (base, exp) = pow.get_base_exp();
+                match base {
+                    AtomView::Fun(f)
+                        if f.get_symbol().get_stripped_name() == "AutG"
+                            && i64::try_from(exp) == Ok(-1)
+                            && f.get_nargs() == 1
+                            && i64::try_from(f.iter().next().unwrap()).is_ok_and(|n| n >= 1) =>
+                    {
+                        autg += 1
+                    }
+                    _ => return Err(format!("unexpected factor {}", factor.to_owned())),
+                }
+            }
+            AtomView::Fun(f)
+                if f.get_symbol().get_stripped_name() == "ExternalFermionOrderingSign"
+                    && unit_sign(factor) =>
+            {
+                ordering += 1
+            }
+            AtomView::Fun(f)
+                if f.get_symbol().get_stripped_name() == "InternalFermionLoopSign"
+                    && unit_sign(factor) =>
+            {
+                loop_sign += 1
+            }
+            _ => return Err(format!("unexpected factor {}", factor.to_owned())),
+        }
+    }
+    if autg != 1 || ordering != 1 || loop_sign > 1 {
+        return Err(format!(
+            "{overall}: not the generator form AutG(n)^-1 x ExternalFermionOrderingSign(+-1) [x InternalFermionLoopSign(+-1)] \
+             ({autg} AutG, {ordering} ordering signs, {loop_sign} loop signs)"
+        ));
+    }
+    Ok(true)
+}
+
 /// The local factors of the diagram, vertices (by id) then edges (by id).
 enum Local {
     Vertex(usize),
@@ -281,11 +462,39 @@ enum Local {
 impl FactorizedNumerator {
     /// One value per non-zero colour branch of `diagram` (see the module
     /// documentation of `factorized::feynkit` for the steps). `model` must be
-    /// the diagram's model (same fingerprint).
+    /// the diagram's model (same fingerprint). The graph weight is read and
+    /// checked as [`OverallFactorSource`] says; on a parsed diagram the
+    /// presence of the DOT attribute cannot be seen, so an EVALUATED weight
+    /// is refused here: use [`Self::from_feynkit_dot`].
     pub fn from_feynkit(
         diagram: &FeynmanDiagram,
         model: &Model,
         options: &FromFeynkitOptions,
+    ) -> Result<Vec<Self>> {
+        Self::from_feynkit_checked(diagram, model, options, None)
+    }
+
+    /// [`Self::from_feynkit`] on DOT text (`FeynmanDiagram::from_dot`), with
+    /// the check that the DOT carries the graph attribute `overall_factor`
+    /// (required unless [`OverallFactorSource::Supplied`], which requires its
+    /// absence). Returns the parsed diagram too.
+    pub fn from_feynkit_dot(
+        dot: &str,
+        model: &Arc<Model>,
+        options: &FromFeynkitOptions,
+    ) -> Result<(FeynmanDiagram, Vec<Self>)> {
+        let diagram = FeynmanDiagram::from_dot(Arc::clone(model), dot)
+            .map_err(|e| ctor(format!("DOT: {e}")))?;
+        let present = dot_sets_graph_attribute(dot, "overall_factor");
+        let values = Self::from_feynkit_checked(&diagram, model, options, Some(present))?;
+        Ok((diagram, values))
+    }
+
+    fn from_feynkit_checked(
+        diagram: &FeynmanDiagram,
+        model: &Model,
+        options: &FromFeynkitOptions,
+        attribute_present: Option<bool>,
     ) -> Result<Vec<Self>> {
         crate::Vakint::initialize_vakint_symbols();
         if diagram.model().fingerprint() != model.fingerprint() {
@@ -438,7 +647,57 @@ impl FactorizedNumerator {
             }
         }
         // The graph data shared by every branch.
-        let (overall, loop_sign, sign_factor) = split_overall(diagram.overall_factor())?;
+        let bad = |detail: String| FactorizedError::OverallFactor {
+            graph: diagram.name().to_string(),
+            detail,
+        };
+        // (weight, loop sign, InternalFermionLoopSign present, evaluated form)
+        let (overall, loop_sign, sign_factor, evaluated) = match &options.overall_factor {
+            OverallFactorSource::Dot => {
+                if attribute_present == Some(false) {
+                    return Err(bad(
+                        "the DOT graph attribute is missing; it is required on the beta thread's \
+                         DOT input (inputs without it: OverallFactorSource::Supplied)"
+                            .into(),
+                    ));
+                }
+                if generator_form(diagram.overall_factor()).map_err(&bad)? {
+                    let (rest, sign, found) = split_overall(diagram.overall_factor())?;
+                    (rest, sign, found, false)
+                } else if attribute_present != Some(true) {
+                    return Err(bad(format!(
+                        "an evaluated weight {} on a parsed diagram: a missing attribute reads 1, \
+                         so its presence must be checked on the DOT text (from_feynkit_dot)",
+                        diagram.overall_factor()
+                    )));
+                } else if !options.loop_sign_in_overall {
+                    return Err(bad(format!(
+                        "an evaluated weight {} needs loop_sign_in_overall (it holds the closed-loop sign)",
+                        diagram.overall_factor()
+                    )));
+                } else {
+                    let (rest, sign, found) = split_overall(diagram.overall_factor())?;
+                    (rest, sign, found, true)
+                }
+            }
+            OverallFactorSource::Supplied(weight) => {
+                let own = feynkit_graph::expressions::evaluate_overall_factor(
+                    diagram.overall_factor().as_view(),
+                );
+                if attribute_present == Some(true) || !own.is_one() {
+                    return Err(bad(format!(
+                        "a supplied weight, but the input carries its own ({own}): use OverallFactorSource::Dot"
+                    )));
+                }
+                let (rest, sign, found) = split_overall(weight)?;
+                if found || !matches!(rest.as_view(), AtomView::Num(_)) || rest.is_zero() {
+                    return Err(bad(format!(
+                        "the supplied weight {weight} is not a non-zero rational"
+                    )));
+                }
+                (rest, sign, false, true)
+            }
+        };
         let vertex_rules = diagram
             .vertices()
             .map(|(id, vertex)| {
@@ -536,9 +795,22 @@ impl FactorizedNumerator {
                 .iter()
                 .filter(|l| l.line == LineKind::Fermion)
                 .count() as u32;
-            if options.loop_sign_in_overall && !sign_factor && closed.len() % 2 == 1 {
-                value.prefactor.loop_sign = -1;
-                value.prefactor.overall = Atom::num(-1) * &value.prefactor.overall;
+            if evaluated {
+                // the evaluated weight holds (-1)^(closed fermion + ghost loops):
+                // move it to loop_sign, and check what remains is positive.
+                if !sign_factor && closed.len() % 2 == 1 {
+                    value.prefactor.loop_sign = -1;
+                    value.prefactor.overall = Atom::num(-1) * &value.prefactor.overall;
+                }
+                if !(matches!(value.prefactor.overall.as_view(), AtomView::Num(_))
+                    && value.prefactor.overall.is_positive().is_true())
+                {
+                    return Err(bad(format!(
+                        "the evaluated weight's sign is not (-1)^({} closed fermion + ghost loops): {} after taking it out",
+                        closed.len(),
+                        value.prefactor.overall
+                    )));
+                }
             }
             value.validate()?;
             values.push(value);

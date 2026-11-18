@@ -65,7 +65,9 @@ pub use colour::{
 };
 pub use evaluate::{FactorizedValue, contract_to_vakint_dots, evaluate_factorized, vakint_input};
 #[cfg(feature = "feynkit-ingress")]
-pub use feynkit::{FromFeynkitOptions, ProjectorChoice};
+pub use feynkit::{
+    FromFeynkitOptions, OverallFactorSource, ProjectorChoice, dot_sets_graph_attribute,
+};
 #[cfg(feature = "feynkit-ingress")]
 pub use graph::{GraphIntegral, GraphValue, evaluate_graph};
 pub use oracle::contract_with_idenso;
@@ -463,6 +465,8 @@ pub enum FactorizedError {
     TextSyntax { line: usize, detail: String },
     #[error("constructor: {detail}")]
     Constructor { detail: String },
+    #[error("graph {graph}: overall_factor: {detail}")]
+    OverallFactor { graph: String, detail: String },
     #[error("colour: {detail}")]
     Colour { detail: String },
     #[error("contraction oracle: {detail}")]
