@@ -88,6 +88,24 @@ pub(super) struct ClosureChannel {
     pub(super) taylor_order: i64,
     /// The root normalisation, as text.
     pub(super) normalisation: &'static str,
+    /// `GAMMALOOP_UV_CHILD_TRUNCATE` when on (`None` when off, so that the
+    /// off-mode records are byte-identical): `{mode}@{d}` when the remainder
+    /// of this outer integration was truncated to root grade `d`, `{mode}@-`
+    /// when it was not (declined, or not a support root). Written as the
+    /// `uv_child_truncate` key, so that records of different modes are
+    /// never mixed unknowingly.
+    pub(super) uv_child_truncate: Option<String>,
+}
+
+/// The header lines of `channel` (new keys, see [`ClosureChannel`]).
+fn write_channel(out: &mut impl Write, channel: &ClosureChannel) -> std::io::Result<()> {
+    writeln!(out, "channel {}", channel.channel)?;
+    writeln!(out, "taylor_order {}", channel.taylor_order)?;
+    writeln!(out, "normalisation {}", channel.normalisation)?;
+    if let Some(truncate) = &channel.uv_child_truncate {
+        writeln!(out, "uv_child_truncate {truncate}")?;
+    }
+    Ok(())
 }
 
 thread_local! {
@@ -462,9 +480,7 @@ fn write_record(
     )?;
     // Coordinator request: the root projection of this closure (new keys).
     if let Some(channel) = CHANNEL.with(|slot| slot.borrow().clone()) {
-        writeln!(out, "channel {}", channel.channel)?;
-        writeln!(out, "taylor_order {}", channel.taylor_order)?;
-        writeln!(out, "normalisation {}", channel.normalisation)?;
+        write_channel(&mut out, &channel)?;
     }
     // Instrumentation: the counts of the to_vakint call that produced this
     // closure (see uv::approx::counts); a new key, before the input line.
@@ -1209,6 +1225,35 @@ pub(super) fn test_settings(directory: &std::path::Path) -> Result<DumpSettings>
         directory: directory.to_owned(),
         skip_min_p_loops: usize::MAX,
     })
+}
+
+#[cfg(test)]
+mod channel_tests {
+    use super::{ClosureChannel, write_channel};
+
+    fn lines(uv_child_truncate: Option<&str>) -> String {
+        let channel = ClosureChannel {
+            channel: "projection metric",
+            taylor_order: 0,
+            normalisation: "1/(i p^2 d_A (d-1))",
+            uv_child_truncate: uv_child_truncate.map(str::to_owned),
+        };
+        let mut out = Vec::new();
+        write_channel(&mut out, &channel).unwrap();
+        String::from_utf8(out).unwrap()
+    }
+
+    /// Off: exactly the three keys of before; on: one more, last.
+    #[test]
+    fn the_truncation_key_is_written_only_when_on() {
+        let off = "channel projection metric\ntaylor_order 0\nnormalisation 1/(i p^2 d_A (d-1))\n";
+        assert_eq!(lines(None), off);
+        assert_eq!(lines(Some("1@0")), format!("{off}uv_child_truncate 1@0\n"));
+        assert_eq!(
+            lines(Some("graded@-")),
+            format!("{off}uv_child_truncate graded@-\n")
+        );
+    }
 }
 
 /// The sha256 (hex) of a written file, by `sha256sum` (as the block writer

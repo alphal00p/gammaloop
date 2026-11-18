@@ -477,6 +477,24 @@ pub(super) fn uv_child_truncation_key(taylor_order: impl FnOnce() -> i32) -> Opt
     }
 }
 
+/// The `uv_child_truncate` key of the pint6 closure records written by one
+/// outer integration under `mode` ([`super::pint6_dump::ClosureChannel`]):
+/// `None` when the mode is off (the records are then today's), `{mode}@{d}`
+/// for a remainder truncated to root grade `d`, `{mode}@-` for one that was
+/// not truncated.
+fn truncation_dump_label(mode: ChildTruncate, degree: Option<usize>) -> Option<String> {
+    (mode != ChildTruncate::Off).then(|| match degree {
+        Some(degree) => format!("{}@{degree}", mode.name()),
+        None => format!("{}@-", mode.name()),
+    })
+}
+
+/// [`truncation_dump_label`] under the process mode of an outer integration
+/// whose remainder is not truncated (the remainder-boundary path).
+pub(super) fn untruncated_dump_label() -> Option<String> {
+    truncation_dump_label(*UV_CHILD_TRUNCATE, None)
+}
+
 /// The routed remainder of a support root truncated to root grade at most
 /// [`Self::degree`] ([`RStarIntegrand::with_root_truncation`]).
 struct RootTruncation {
@@ -1627,6 +1645,15 @@ impl RStarIntegrand {
         self.routed.is_zero()
     }
 
+    /// The `uv_child_truncate` key of the pint6 closure records of this
+    /// remainder's outer integration ([`truncation_dump_label`]).
+    pub(super) fn truncation_dump_label(&self) -> Option<String> {
+        truncation_dump_label(
+            *UV_CHILD_TRUNCATE,
+            self.truncation.as_ref().map(|truncation| truncation.degree),
+        )
+    }
+
     /// The routed numerator `N` (numerator × insertions × closure) and the
     /// denominator factors `den(e, ..)^-1`, split off the top-level factors
     /// of the routed product on demand (remainder boundary, DESIGN 1): the
@@ -2573,7 +2600,10 @@ impl RStarIntegrand {
     ) -> Result<Atom> {
         self.check_truncation(root_edges, degree)?;
         if self.truncation.is_some() && expression.is_zero() {
-            // A root-truncated remainder that vanishes at grade <= degree.
+            // A root-truncated remainder that vanishes at grade <= degree:
+            // a zero-cost timing line, so that every integration id of an
+            // outer integration still has its `single_mass` line.
+            IntegrationTimings::new().log(root_graph, unique_id, self.region.loops, "single_mass");
             return Ok(Atom::Zero);
         }
         let mut timing = IntegrationTimings::new();

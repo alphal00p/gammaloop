@@ -302,6 +302,7 @@ fn scopes_are_restored_when_an_integration_panics() -> Result<()> {
         channel: "projection metric",
         taylor_order: 2,
         normalisation: "1/(i p^2 d_A (d-1))",
+        uv_child_truncate: None,
     };
     let caught = catch_unwind(AssertUnwindSafe(|| {
         super::integrate::capturing_closures(|| {

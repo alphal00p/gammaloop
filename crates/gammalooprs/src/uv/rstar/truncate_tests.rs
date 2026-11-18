@@ -20,7 +20,8 @@ use vakint::Vakint;
 
 use super::{
     ChildTruncate, IntegrationTimings, RStarIntegrand, TaylorExpansion, UvStream,
-    truncate_routed, truncation_degree, truncation_key_suffix, uv_child_truncation_key,
+    truncate_routed, truncation_degree, truncation_dump_label, truncation_key_suffix,
+    uv_child_truncation_key,
 };
 use crate::{
     feyngen::feynkit::FeynmanDiagramGammaLoopExt,
@@ -164,6 +165,17 @@ fn the_switch_accepts_only_its_modes() {
         Graded.mode_line(7).as_deref(),
         Some("UV_TRUNCATE_MODE mode=graded max_parts=7")
     );
+}
+
+#[test]
+fn closure_dump_label_is_present_only_when_on() {
+    use ChildTruncate::*;
+    assert_eq!(truncation_dump_label(Off, None), None);
+    assert_eq!(truncation_dump_label(Off, Some(0)), None);
+    assert_eq!(truncation_dump_label(DegreeZero, Some(0)).as_deref(), Some("1@0"));
+    assert_eq!(truncation_dump_label(DegreeZero, None).as_deref(), Some("1@-"));
+    assert_eq!(truncation_dump_label(Graded, Some(2)).as_deref(), Some("graded@2"));
+    assert_eq!(truncation_dump_label(Graded, None).as_deref(), Some("graded@-"));
 }
 
 #[test]
