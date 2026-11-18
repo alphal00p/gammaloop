@@ -31,6 +31,9 @@ use crate::p_integral::factorized::names;
 pub enum Letter {
     /// The slashed momentum `Q(e)` of edge `e`.
     Slash(i64),
+    /// A slashed combination `Σ c Q(e)` (e.g. a momentum decomposed on the
+    /// canonical basis, written with pseudo-edges).
+    Combination(Vec<(i64, i64)>),
     /// A gamma with an open Lorentz slot (`mink(D, ..)` atom).
     Index(Atom),
 }
@@ -48,12 +51,16 @@ pub enum TraceBackend {
     Idenso,
     /// The textbook recursion ([`NaiveTrace`]).
     Naive,
+    /// idenso on the word with every slashed momentum decomposed on the
+    /// canonical basis `(k_1..k_L, head)` first (the reference's way of
+    /// feeding idenso: fewer distinct momenta, more terms).
+    IdensoBasis,
 }
 
 impl TraceBackend {
     pub fn engine(self) -> Box<dyn TraceEngine> {
         match self {
-            Self::Idenso => Box::new(IdensoTrace),
+            Self::Idenso | Self::IdensoBasis => Box::new(IdensoTrace),
             Self::Naive => Box::new(NaiveTrace::default()),
         }
     }
@@ -83,6 +90,15 @@ fn word_atom(word: &[Letter], dimension: Symbol) -> Atom {
             Letter::Slash(edge) => {
                 let slot = function!(mink, &d, dummy(8_000_000, i));
                 product *= function!(q, *edge, &slot);
+                slot
+            }
+            Letter::Combination(terms) => {
+                let slot = function!(mink, &d, dummy(8_000_000, i));
+                let mut sum = Atom::Zero;
+                for (coefficient, edge) in terms {
+                    sum += Atom::num(*coefficient) * function!(q, *edge, &slot);
+                }
+                product *= sum;
                 slot
             }
             Letter::Index(slot) => slot.clone(),
@@ -132,6 +148,39 @@ impl NaiveTrace {
             symbol!(names::MINK),
             symbol!(names::MOMENTUM),
         );
+        // Combinations: bilinear in the slashes.
+        let expand = |letter: &Letter| -> Option<Vec<(i64, i64)>> {
+            match letter {
+                Letter::Combination(terms) => Some(terms.clone()),
+                Letter::Slash(edge) => Some(vec![(1, *edge)]),
+                Letter::Index(_) => None,
+            }
+        };
+        if matches!(a, Letter::Combination(_)) || matches!(b, Letter::Combination(_)) {
+            let mut total = Atom::Zero;
+            match (expand(a), expand(b)) {
+                (Some(left), Some(right)) => {
+                    for (c, e) in &left {
+                        for (d, f) in &right {
+                            total += Atom::num(c * d)
+                                * self.pair(&Letter::Slash(*e), &Letter::Slash(*f), dimension);
+                        }
+                    }
+                }
+                (Some(terms), None) => {
+                    for (c, e) in &terms {
+                        total += Atom::num(*c) * self.pair(&Letter::Slash(*e), b, dimension);
+                    }
+                }
+                (None, Some(terms)) => {
+                    for (c, e) in &terms {
+                        total += Atom::num(*c) * self.pair(a, &Letter::Slash(*e), dimension);
+                    }
+                }
+                (None, None) => unreachable!(),
+            }
+            return total;
+        }
         match (a, b) {
             (Letter::Index(x), Letter::Index(y)) => function!(metric, x, y),
             (Letter::Index(x), Letter::Slash(e)) | (Letter::Slash(e), Letter::Index(x)) => {
@@ -142,6 +191,7 @@ impl NaiveTrace {
                 let slot = function!(mink, Atom::var(dimension), dummy(7_000_000, self.dummies));
                 function!(q, *e, &slot) * function!(q, *f, &slot)
             }
+            _ => unreachable!("combinations are expanded above"),
         }
     }
 

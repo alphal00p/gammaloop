@@ -625,6 +625,104 @@ struct Factor<C: Coef> {
     tensor: Tensor<C>,
 }
 
+/// Split a factor into `(scalar, tensor)`: the loop-free, index-free scalar
+/// symbols and functions (couplings, `𝑖`) that every term shares, and the rest
+/// (numbers, `D`, tensors). `None` when the terms of a sum carry different
+/// scalars (not separable into one prefactor).
+fn split_scalar(view: AtomView<'_>, dimension: symbolica::atom::Symbol) -> Option<(Atom, Atom)> {
+    use crate::p_integral::factorized::contains_tensor_content;
+    match view {
+        AtomView::Num(_) => Some((Atom::num(1), view.to_owned())),
+        AtomView::Var(variable) if variable.get_symbol() == dimension => {
+            Some((Atom::num(1), view.to_owned()))
+        }
+        _ if !contains_tensor_content(view) && !view.contains_symbol(dimension) => {
+            // A pure scalar (a coupling, i, a scalar function).
+            if matches!(view, AtomView::Add(_)) {
+                return Some((Atom::num(1), view.to_owned()));
+            }
+            Some((view.to_owned(), Atom::num(1)))
+        }
+        AtomView::Mul(product) => {
+            let (mut scalar, mut tensor) = (Atom::num(1), Atom::num(1));
+            for part in product.iter() {
+                let (s, t) = split_scalar(part, dimension)?;
+                scalar *= s;
+                tensor *= t;
+            }
+            Some((scalar, tensor))
+        }
+        AtomView::Pow(power) => {
+            let (base, exponent) = power.get_base_exp();
+            let (s, t) = split_scalar(base, dimension)?;
+            Some((s.pow(exponent.to_owned()), t.pow(exponent.to_owned())))
+        }
+        AtomView::Add(sum) => {
+            let mut common: Option<Atom> = None;
+            let mut tensor = Atom::Zero;
+            for term in sum.iter() {
+                let (s, t) = split_scalar(term, dimension)?;
+                match &common {
+                    None => common = Some(s),
+                    Some(c) if *c == s => {}
+                    Some(_) => return None,
+                }
+                tensor += t;
+            }
+            Some((common.unwrap_or_else(|| Atom::num(1)), tensor))
+        }
+        _ => Some((Atom::num(1), view.to_owned())),
+    }
+}
+
+/// Move the scalars that the factors of `value` carry (couplings inside a sum,
+/// e.g. a FeynGen vertex whose terms all carry `gs2_i`) into
+/// `prefactor.scalars`; returns the scalar moved (`None`: nothing). Errors
+/// when a factor's terms carry different scalars.
+pub fn pull_factor_scalars(value: &mut FactorizedNumerator) -> Result<Option<Atom>> {
+    let dimension = value.dimension;
+    let mut pulled = Atom::num(1);
+    let mut split = |factor: &mut Atom, label: String| -> Result<()> {
+        let (scalar, tensor) = split_scalar(factor.as_view(), dimension)
+            .ok_or_else(|| format!("{label}: the terms carry different scalar coefficients"))?;
+        if scalar != Atom::num(1) {
+            pulled *= scalar;
+            *factor = tensor;
+        }
+        Ok(())
+    };
+    for edge in &mut value.edges {
+        split(&mut edge.factor, format!("edge {}", edge.id))?;
+    }
+    for vertex in &mut value.vertices {
+        split(&mut vertex.factor, format!("vertex {}", vertex.id))?;
+    }
+    if let Some(projector) = &mut value.projector {
+        split(&mut projector.tensor, "projector".into())?;
+    }
+    if pulled == Atom::num(1) {
+        return Ok(None);
+    }
+    value.prefactor.scalars = &value.prefactor.scalars * &pulled;
+    Ok(Some(pulled))
+}
+
+/// Whether some factor of `value` carries a scalar symbol or function
+/// ([`pull_factor_scalars`] has work to do).
+fn has_factor_scalars(value: &FactorizedNumerator) -> bool {
+    let dimension = value.dimension;
+    value
+        .edges
+        .iter()
+        .map(|edge| &edge.factor)
+        .chain(value.vertices.iter().map(|vertex| &vertex.factor))
+        .chain(value.projector.iter().map(|projector| &projector.tensor))
+        .any(|factor| {
+            split_scalar(factor.as_view(), dimension)
+                .is_none_or(|(scalar, _)| scalar != Atom::num(1))
+        })
+}
+
 /// Apply the metric renames: every edge factor that is exactly one metric
 /// `g(mink(D,a), mink(D,b))` (a Feynman-gauge propagator once its scalars are
 /// pulled) identifies `a` with `b` in all other factors and disappears.
@@ -732,6 +830,57 @@ fn spinor_hedges(atom: &Atom) -> BTreeSet<usize> {
     hedges
 }
 
+/// Pseudo-edge ids of the canonical basis vectors `(k_1..k_L, head)` in
+/// decomposed trace words.
+const BASIS_EDGE: i64 = 1_000_000;
+
+/// Every slash of a word as its combination of the canonical basis vectors
+/// (pseudo-edges `BASIS_EDGE + i`, registered as unit vectors).
+fn decompose_slashes<C: Coef>(
+    word: Vec<trace::Letter>,
+    parser: &mut Parser,
+    kinematics: &mut Kinematics<C>,
+) -> Result<Vec<trace::Letter>> {
+    let width = kinematics.loops + 1;
+    for i in 0..width {
+        let mut unit = vec![Rational::zero(); width];
+        unit[i] = Rational::one();
+        let id = kinematics.intern(unit)?;
+        parser.edge_vectors.insert(BASIS_EDGE + i as i64, id);
+    }
+    word.into_iter()
+        .map(|letter| match letter {
+            trace::Letter::Slash(edge) => {
+                let id = parser
+                    .edge_vectors
+                    .get(&edge)
+                    .copied()
+                    .ok_or("a slash of an unknown edge")?;
+                let Some(id) = id else {
+                    return Ok(trace::Letter::Combination(Vec::new()));
+                };
+                let vector = kinematics.vectors[id as usize].clone();
+                let mut terms = Vec::new();
+                for (i, c) in vector.iter().enumerate() {
+                    if c.is_zero() {
+                        continue;
+                    }
+                    if !c.is_integer() {
+                        return Err("a non-integer canonical momentum in a slash".into());
+                    }
+                    let symbolica::domains::integer::Integer::Single(c) = c.numerator_ref() else {
+                        return Err("a large momentum coefficient in a slash".into());
+                    };
+                    let c = *c;
+                    terms.push((c, BASIS_EDGE + i as i64));
+                }
+                Ok(trace::Letter::Combination(terms))
+            }
+            other => Ok(other),
+        })
+        .collect()
+}
+
 /// Lower one value (one colour branch of one graph) to its folded channel
 /// inputs (module documentation). `prefactor` is the scalar that multiplies
 /// the contracted value (in the value's dimension symbol; e.g.
@@ -802,6 +951,18 @@ pub fn contract_and_lower_with(
         ..Default::default()
     };
     let mut stats = ContractStats::default();
+    // Scalars inside factors (CONTRACT-v1 allows them) join the prefactor.
+    let mut normalised = None;
+    let mut prefactor = prefactor.clone();
+    if has_factor_scalars(value) {
+        let mut copy = value.clone();
+        if let Some(pulled) = pull_factor_scalars(&mut copy)? {
+            prefactor = prefactor * pulled;
+        }
+        normalised = Some(copy);
+    }
+    let value = normalised.as_ref().unwrap_or(value);
+    let prefactor = &prefactor;
     let started = Instant::now();
     let (key, matched) = memo.matched(vakint, settings, value)?;
     stats.match_seconds = started.elapsed().as_secs_f64();
@@ -1007,7 +1168,10 @@ fn lower<C: Coef>(
                 split_fermion_factor(atom.as_view()).map_err(|error| format!("{label}: {error}"))
             })
             .collect::<std::result::Result<Vec<_>, String>>()?;
-        let (word, rest) = trace_word(split)?;
+        let (mut word, rest) = trace_word(split)?;
+        if options.trace == TraceBackend::IdensoBasis {
+            word = decompose_slashes(word, &mut parser, kinematics)?;
+        }
         stats.prepare_seconds += started.elapsed().as_secs_f64();
         let started = Instant::now();
         let traced = engine.trace(&word, value.dimension)?;

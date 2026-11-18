@@ -11,7 +11,7 @@
 //!     [--ref-dir <dir>]      lane refpath's stored run (gate/<NNNNNN>.<projection>.gate, values/)
 //!     [--per-branch]         also gate every colour branch against R2 on that branch
 //!     [--no-reduce]          engine: stop after the folded inputs (no value)
-//!     [--order greedy|natural] [--no-prune] [--trace idenso|naive]
+//!     [--order greedy|natural] [--no-prune] [--trace idenso|idenso-basis|naive]
 //!     [--extra-terms <k>] [--p-library <dir>] [--warmup] [--steps]
 //! ```
 //! Writes `<out>/results.jsonl` (one object per graph) and, for every gate
@@ -245,6 +245,7 @@ fn main() -> eyre::Result<()> {
                 options.contract.trace = match value().as_str() {
                     "idenso" => TraceBackend::Idenso,
                     "naive" => TraceBackend::Naive,
+                    "idenso-basis" => TraceBackend::IdensoBasis,
                     other => eyre::bail!("unknown trace engine {other}"),
                 };
                 index += 1;
@@ -426,6 +427,24 @@ fn main() -> eyre::Result<()> {
             }
             if error.is_some() {
                 break;
+            }
+        }
+        // The reference's instructions up to its contraction (parse, colour,
+        // idenso contraction, normalisation), once: with its whole-run count
+        // and the engine's reduce + finalise count this splits its run.
+        let mut ref_contract_ins = None;
+        if live
+            && error.is_none()
+            && let Some(counter) = &counter
+        {
+            let engine = refpath::fresh_engine(&template)?;
+            let options = RunOptions {
+                contract_only: true,
+                ..ref_options.clone()
+            };
+            let start = counter.read();
+            if refpath::run_graph(&engine, &model, &dot, &options).is_ok() {
+                ref_contract_ins = Some(counter.read() - start);
             }
         }
         if let Some(error) = error {
@@ -641,6 +660,7 @@ fn main() -> eyre::Result<()> {
             "ref_wall_reps": ref_wall, "ref_cpu_reps": ref_cpu,
             "engine_peak_rss": engine_rss.iter().max(), "ref_peak_rss": ref_rss.iter().max(),
             "engine_instructions_reps": engine_ins, "ref_instructions_reps": ref_ins,
+            "ref_contract_only_instructions": ref_contract_ins,
             "host": host.trim(),
         });
         writeln!(results, "{record}")?;

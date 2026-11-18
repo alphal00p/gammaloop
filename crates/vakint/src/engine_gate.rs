@@ -70,6 +70,12 @@ pub fn branch_values(
         ..Default::default()
     };
     let mut values = FactorizedNumerator::from_feynkit(diagram, model, &options)?;
+    // Couplings left inside a factor's sum (e.g. the xi-derivative files'
+    // vertices) go to the prefactor, where the reference's convention
+    // (couplings expanded, gs = 1) applies to them.
+    for value in &mut values {
+        p_contract::pull_factor_scalars(value).map_err(|error| eyre!("{error}"))?;
+    }
     if projection == Projection::Longitudinal {
         for value in &mut values {
             let [a, b] = value.ports.as_slice() else {
