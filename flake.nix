@@ -175,6 +175,7 @@
           ./scripts/python_wheel.py
           ./scripts/cache_publication.py
           ./nix/browser-check.py
+          ./.github/scripts/observe-nix-build.sh
           ./.github/scripts/run-nix-ci-check.sh
           ./.github/scripts/export-test-timings.py
           ./.github/scripts/test_export_test_timings.py
@@ -199,7 +200,7 @@
           python3 ${developmentDispatchSource}/.github/scripts/test_export_test_timings.py
           (
             cd ${developmentDispatchSource}
-            shellcheck scripts/develop.sh scripts/develop_nix.sh scripts/develop_dyndrv.sh .github/scripts/run-nix-ci-check.sh
+            shellcheck scripts/develop.sh scripts/develop_nix.sh scripts/develop_dyndrv.sh .github/scripts/run-nix-ci-check.sh .github/scripts/observe-nix-build.sh
           )
           test -e ${workspace.allChecks.gammaloop-guppy-workspace-graph}
           mkdir -p "$out"
@@ -425,7 +426,7 @@
               python3 .github/scripts/test_cache_publication.py "$@"
               python3 .github/scripts/test_nix_crate_runner.py BrowserSelectionTests "$@"
               python3 .github/scripts/test_export_test_timings.py "$@"
-              shellcheck scripts/develop.sh scripts/develop_nix.sh scripts/develop_dyndrv.sh .github/scripts/run-nix-ci-check.sh
+              shellcheck scripts/develop.sh scripts/develop_nix.sh scripts/develop_dyndrv.sh .github/scripts/run-nix-ci-check.sh .github/scripts/observe-nix-build.sh
             '';
           };
         };
