@@ -11,7 +11,9 @@
 //! - PROPAGATOR (an internal edge carries an independent external momentum):
 //!   [`super::evaluate_factorized`] (the adapter: idenso, vakint's p path);
 //! - VACUUM with a massive line: [`super::evaluate_factorized_vacuum`] (idenso,
-//!   vakint's vacuum path with its tensor reduction; open indices returned);
+//!   vakint's vacuum tensor reduction; every line massive: the single-scale
+//!   families; ONE massive line among massless ones: the massive closure, cut
+//!   and routing derived from the lines; open indices returned);
 //! - VACUUM without a massive line: scaleless, exact 0.
 //!
 //! The internal entries stay the layer under this one. Open indices of a

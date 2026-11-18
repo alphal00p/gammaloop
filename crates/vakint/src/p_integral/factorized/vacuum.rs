@@ -23,14 +23,27 @@
 //!    momentum with open port i becomes the same combination with the raw
 //!    index `PORT + i` (`k(l, PORT + i)`, `p(j, PORT + i)`), a metric between
 //!    ports `g(PORT + i, PORT + j)`; anything else is an error.
-//! 3. EVALUATE with vakint's EXISTING vacuum path (`Vakint::evaluate`): its
-//!    vacuum tensor reduction (method of the settings: FeynKit by default,
-//!    feynkit `TensorReducer`) projects the loop-momentum tensors onto tensors
-//!    of purely external objects, which ride along as constant coefficients;
-//!    matching, the backend of the evaluation order (RustRed first by default:
-//!    one to three loops from its vendored artifacts, four with its external
-//!    data, five with an application package; FORM-based backends only where
-//!    the order names them) and the finaliser.
+//! 3. EVALUATE, by the back end the graph's lines select ([`vacuum_backend`],
+//!    after series merging, [`vacuum_lines`]):
+//!    - EVERY line massive (one mass): vakint's EXISTING vacuum path
+//!      (`Vakint::evaluate`): its vacuum tensor reduction (method of the
+//!      settings: FeynKit by default, feynkit `TensorReducer`) projects the
+//!      loop-momentum tensors onto tensors of purely external objects, which
+//!      ride along as constant coefficients; matching, the backend of the
+//!      evaluation order (RustRed first by default: one to three loops from
+//!      its vendored artifacts, four with its external data, five with an
+//!      application package; FORM-based backends only where the order names
+//!      them) and the finaliser.
+//!    - ONE massive line among massless ones (the R* hard part's shape): the
+//!      same vacuum tensor reduction (`Vakint::tensor_reduce`, which takes
+//!      mixed-mass vacua), then per external tensor its scalar coefficient
+//!      through vakint's MASSIVE CLOSURE ([`MassiveClosure`]): the massive line
+//!      is cut, its momentum becomes the head `p(1)` of the massless
+//!      p-integral that remains ([`VacuumCut`]: routing and cut graph derived
+//!      here from the lines), which the closure reduces (its p backend) and
+//!      closes with the massive line.
+//!    - one massive line that no massless line depends on: a massive tadpole
+//!      times a scaleless massless vacuum, exactly zero.
 //! 4. The value keeps its OPEN indices; it is returned in vakint notation and
 //!    mapped back to the caller's notation (`g(slot, slot)`, `Q(x, slot)`,
 //!    `spenso::dot(Q(x, mink(D)), Q(y, mink(D)))`).
@@ -42,9 +55,10 @@ use symbolica::atom::{Atom, AtomCore, AtomView};
 use symbolica::function;
 
 use super::{Endpoint, FactorizedError, FactorizedKind, FactorizedNumerator, Result, names};
+use crate::p_integral::{DirectClosureInput, MassiveClosure};
 use crate::symbols::S;
 use crate::utils::vakint_macros::vk_symbol;
-use crate::{Vakint, VakintSettings};
+use crate::{Vakint, VakintExpression, VakintSettings};
 
 /// First raw index of the open ports in vakint notation (`PORT + i`).
 pub const PORT: i64 = 9001;
@@ -63,8 +77,11 @@ pub struct VacuumValue {
     pub value: Atom,
     /// The same in vakint notation (raw port indices `PORT + i`, `p(j)`).
     pub vakint_value: Atom,
-    /// The integrand handed to `Vakint::evaluate` (in epsilon).
+    /// The integrand (in epsilon): handed to `Vakint::evaluate` (family) or
+    /// to `Vakint::tensor_reduce` (closure).
     pub input: Atom,
+    /// The back end the lines selected.
+    pub backend: VacuumBackend,
     /// Wall seconds of the idenso contraction and of the vakint evaluation.
     pub contract_seconds: f64,
     pub evaluate_seconds: f64,
@@ -358,6 +375,265 @@ pub fn vacuum_lines(value: &FactorizedNumerator) -> Vec<VacuumLine> {
     lines
 }
 
+/// The massive closure of a vacuum graph with ONE massive line among massless
+/// ones ([`vacuum_backend`]): the massive (closing) line is cut and its
+/// momentum becomes the head `p(1)` of the massless p-integral of the other
+/// lines.
+#[derive(Clone, Debug, PartialEq)]
+pub struct VacuumCut {
+    /// The closing line (merged: its power is the chain's).
+    pub line: VacuumLine,
+    /// Every vacuum loop momentum `k(i)` (i = 1..L) and its image over the cut
+    /// loop momenta `k(1..L-1)` and the head `p(1)`: a unimodular change of
+    /// basis in which the closing line's momentum is `p(1)`.
+    pub routing: Vec<(Atom, Atom)>,
+    /// The cut graph, the massless lines with their cut momenta: when a line
+    /// still carries a cut loop momentum, `topo(PROD prop(id, edge(s,t),
+    /// momentum, 0, power))` of ALL of them, the lines that carry the head
+    /// alone included (the cut stays one connected two-point graph, as
+    /// gammalooprs's `VacuumCut` writes it); when none does (one loop),
+    /// `PROD dot(p(1),p(1))^-power` (the loop-free closure input).
+    pub topology: Atom,
+}
+
+/// How [`evaluate_factorized_vacuum`] integrates a vacuum graph, derived from
+/// its lines (module documentation, step 3).
+#[derive(Clone, Debug, PartialEq)]
+pub enum VacuumBackend {
+    /// Every line massive with the one mass: vakint's single-scale families.
+    Family,
+    /// One massive line among massless ones: the massive closure.
+    Closure(VacuumCut),
+    /// One massive line that no massless line depends on: exactly zero.
+    Scaleless,
+}
+
+/// The back end of the lines of a vacuum graph with `loops` loops (module
+/// documentation, step 3): every line massive -> family; exactly one massive
+/// line -> its cut ([`VacuumCut`]); several massive lines among massless ones
+/// -> an error (neither a single-scale family nor one closure).
+///
+/// The routing: with `m` the closing line's momentum over `k(1..L)` and `j`
+/// its last loop momentum with a nonzero coefficient `s = m_j = +-1`,
+/// `k(j) -> s (p(1) - SUM_{i != j} m_i k(i))` and every other `k(i)` keeps
+/// its order among `k(1..L-1)`; a massless line `SUM_i c_i k(i)` becomes
+/// `SUM_{i != j} (c_i - c_j s m_i) k(i) + c_j s p(1)`. A line on `p(1)` alone
+/// stays a propagator of the cut graph unless the cut has no loop left.
+pub fn vacuum_backend(lines: &[VacuumLine], loops: usize) -> Result<VacuumBackend> {
+    let massive = lines
+        .iter()
+        .filter(|line| !line.mass_squared.is_zero())
+        .collect::<Vec<_>>();
+    if massive.len() == lines.len() {
+        return Ok(VacuumBackend::Family);
+    }
+    let [closing] = massive.as_slice() else {
+        return Err(error(format!(
+            "{} massive lines among {} lines (after series merging): neither a single-scale family (every line massive) nor one closing line",
+            massive.len(),
+            lines.len()
+        )));
+    };
+    let m = &closing.momentum;
+    let Some(j) = m.iter().rposition(|c| *c != 0) else {
+        return Err(error(format!(
+            "line {}: carries no loop momentum",
+            closing.id
+        )));
+    };
+    let sign = m[j];
+    if sign.abs() != 1 {
+        return Err(error(format!(
+            "line {}: momentum {m:?} has no unit coefficient to solve for",
+            closing.id
+        )));
+    }
+    let position = |i: usize| if i < j { i } else { i - 1 };
+    let cut_loop = |i: usize| S.k.call(position(i) as i64 + 1);
+    let head = S.p.call(1);
+    let routing = (0..loops)
+        .map(|i| {
+            let image = if i == j {
+                let mut image = Atom::num(sign) * &head;
+                for (l, c) in m.iter().enumerate() {
+                    if l != j && *c != 0 {
+                        image += Atom::num(-sign * c) * cut_loop(l);
+                    }
+                }
+                image
+            } else {
+                cut_loop(i)
+            };
+            (S.k.call(i as i64 + 1), image)
+        })
+        .collect::<Vec<_>>();
+    let mut propagators = Atom::num(1);
+    let mut loop_lines = 0;
+    let mut tree = Atom::num(1);
+    let propagator = |line: &VacuumLine, momentum: Atom| {
+        S.prop.call((
+            line.id as i64,
+            S.edge.call((line.source as i64, line.target as i64)),
+            momentum,
+            Atom::Zero,
+            Atom::num(line.power),
+        ))
+    };
+    let mut depends = false;
+    for line in lines.iter().filter(|line| line.id != closing.id) {
+        let c = &line.momentum;
+        let mut cut = vec![0i64; loops - 1];
+        for i in (0..loops).filter(|i| *i != j) {
+            cut[position(i)] = c[i] - c[j] * sign * m[i];
+        }
+        let on_head = c[j] * sign;
+        depends |= on_head != 0;
+        if cut.iter().all(|x| *x == 0) {
+            if on_head.abs() != 1 {
+                return Err(error(format!(
+                    "line {}: momentum {c:?} vanishes or is not +-p(1) after the cut",
+                    line.id
+                )));
+            }
+            tree *= S.dot.call((&head, &head)).pow(Atom::num(-line.power));
+            propagators *= propagator(line, Atom::num(on_head) * &head);
+            continue;
+        }
+        let mut momentum = Atom::Zero;
+        for (a, x) in cut.iter().enumerate() {
+            if *x != 0 {
+                momentum += Atom::num(*x) * S.k.call(a as i64 + 1);
+            }
+        }
+        if on_head != 0 {
+            momentum += Atom::num(on_head) * &head;
+        }
+        propagators *= propagator(line, momentum);
+        loop_lines += 1;
+    }
+    if !depends {
+        return Ok(VacuumBackend::Scaleless);
+    }
+    let topology = if loop_lines > 0 {
+        S.topo.call(propagators)
+    } else {
+        tree
+    };
+    Ok(VacuumBackend::Closure(VacuumCut {
+        line: (*closing).clone(),
+        routing,
+        topology,
+    }))
+}
+
+/// `(external tensor, coefficient)` of a reduced vacuum numerator: the
+/// monomials in the purely external objects (`g(i, j)`, `p(j, i)`,
+/// `dot(p(a), p(b))`) and their scalar coefficients in the loop momenta.
+fn external_tensors(numerator: &Atom) -> Vec<(Atom, Atom)> {
+    let mut external = std::collections::BTreeSet::new();
+    numerator.as_view().visitor(&mut |part| {
+        if let AtomView::Fun(function) = part {
+            let symbol = function.get_symbol();
+            let external_dot = symbol == S.dot
+                && function
+                    .iter()
+                    .all(|v| matches!(v, AtomView::Fun(f) if f.get_symbol() == S.p));
+            if symbol == S.g || (symbol == S.p && function.get_nargs() == 2) || external_dot {
+                external.insert(part.to_owned());
+                return false;
+            }
+        }
+        true
+    });
+    let external = external.into_iter().collect::<Vec<_>>();
+    if external.is_empty() {
+        vec![(Atom::num(1), numerator.clone())]
+    } else {
+        numerator.coefficient_list::<i8>(&external)
+    }
+}
+
+/// The closure back end (module documentation, step 3): vakint's vacuum
+/// tensor reduction of `input`, then every external tensor's coefficient
+/// through the massive closure of `cut`, all closures of one value in one
+/// batch.
+fn evaluate_closure(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    input: &Atom,
+    cut: &VacuumCut,
+) -> Result<Atom> {
+    let mut reducing = settings.clone();
+    reducing.use_dot_product_notation = true;
+    let reduced = vakint
+        .tensor_reduce(&reducing, input.as_view())
+        .map_err(|e| error(e.to_string()))?;
+    let expression = VakintExpression::try_from(reduced).map_err(|e| error(e.to_string()))?;
+    let mut tensors = Vec::new();
+    let mut coefficients = Vec::new();
+    for term in &expression.0 {
+        for (tensor, coefficient) in external_tensors(&term.numerator.expand()) {
+            let mut leftover = None;
+            coefficient.as_view().visitor(&mut |part| {
+                if let AtomView::Fun(function) = part {
+                    let symbol = function.get_symbol();
+                    if symbol == S.p
+                        || symbol == S.g
+                        || (symbol == S.k && function.get_nargs() != 1)
+                    {
+                        leftover = Some(part.to_owned());
+                    }
+                }
+                leftover.is_none()
+            });
+            if let Some(part) = leftover {
+                return Err(error(format!(
+                    "the vacuum tensor reduction left {part} in a scalar coefficient"
+                )));
+            }
+            tensors.push(tensor);
+            coefficients.push(coefficient);
+        }
+    }
+    let closure = MassiveClosure {
+        momentum: S.p.call(1),
+        mass_squared: cut.line.mass_squared.clone(),
+        power: cut.line.power,
+    };
+    let inputs = coefficients
+        .into_iter()
+        .map(|numerator| {
+            (
+                closure.clone(),
+                DirectClosureInput {
+                    topology: cut.topology.clone(),
+                    routing: cut.routing.clone(),
+                    numerator,
+                },
+            )
+        })
+        .collect::<Vec<_>>();
+    let direct = matches!(cut.topology.as_view(), AtomView::Fun(f) if f.get_symbol() == S.topo);
+    let values = if direct {
+        MassiveClosure::evaluate_direct_batch(vakint, settings, &inputs)
+            .map_err(|e| error(e.to_string()))?
+    } else {
+        inputs
+            .iter()
+            .map(|(closure, input)| {
+                closure
+                    .evaluate(vakint, settings, input.ordinary().as_view())
+                    .map_err(|e| error(e.to_string()))
+            })
+            .collect::<Result<Vec<_>>>()?
+    };
+    let mut value = Atom::Zero;
+    for (tensor, coefficient) in tensors.iter().zip(values) {
+        value += tensor * coefficient;
+    }
+    Ok(value)
+}
+
 /// The integrand vakint receives (module documentation): `prefactor ×
 /// scalar × topo(PROD prop(id, edge(s,t), momentum, mass², power))`, `D → 4 −
 /// 2ε`; and the contraction's seconds.
@@ -453,7 +729,8 @@ pub fn to_caller_notation(value: &FactorizedNumerator, vakint_value: &Atom) -> A
 }
 
 /// Evaluate a single-scale VACUUM value (module documentation) times
-/// `prefactor` with vakint's existing vacuum evaluation; open ports stay open.
+/// `prefactor` with vakint's existing vacuum evaluation (a family, or the
+/// massive closure when one line is massive); open ports stay open.
 pub fn evaluate_factorized_vacuum(
     vakint: &Vakint,
     settings: &VakintSettings,
@@ -461,15 +738,21 @@ pub fn evaluate_factorized_vacuum(
     prefactor: &Atom,
 ) -> Result<VacuumValue> {
     let (input, contract_seconds) = vakint_vacuum_input(settings, value, prefactor)?;
+    let backend = vacuum_backend(&vacuum_lines(value), value.loops())?;
     let started = Instant::now();
-    let vakint_value = vakint
-        .evaluate(settings, input.as_view())
-        .map_err(|e| error(e.to_string()))?;
+    let vakint_value = match &backend {
+        VacuumBackend::Family => vakint
+            .evaluate(settings, input.as_view())
+            .map_err(|e| error(e.to_string()))?,
+        VacuumBackend::Closure(cut) => evaluate_closure(vakint, settings, &input, cut)?,
+        VacuumBackend::Scaleless => Atom::Zero,
+    };
     let evaluate_seconds = started.elapsed().as_secs_f64();
     Ok(VacuumValue {
         value: to_caller_notation(value, &vakint_value),
         vakint_value,
         input,
+        backend,
         contract_seconds,
         evaluate_seconds,
     })
