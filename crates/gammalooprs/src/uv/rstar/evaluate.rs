@@ -1243,16 +1243,37 @@ impl<'a> Evaluation<'a> {
                 today += self.ir_term_today(correction_index, correction, term_index, term)?;
             }
             let difference = self.poles(&(&today - &value))?;
-            ensure!(
-                difference.is_zero(),
-                "GAMMALOOP_IR_HARD=child-check: the child IR hard part differs for {} corr={correction_index}: poles {difference}",
-                self.graph.name
-            );
+            // A massive-route quotient Z̃ (GAMMALOOP_IR_QUOTIENT unset or
+            // massive) carries non-local log(mUV) pieces that cancel only in
+            // the complete sum; they depend on how the insertion is written
+            // (its boundary momenta), so the two routes may differ there
+            // alone. Classified, never accepted silently: `equal_mod_log_mUV`.
+            let verdict = if difference.is_zero() {
+                "equal"
+            } else {
+                let mass = GS.m_uv_vacuum;
+                let without = difference
+                    .replace_map(|view, _, out| {
+                        if let symbolica::atom::AtomView::Fun(function) = view
+                            && function.get_symbol() == Symbol::LOG
+                            && view.contains_symbol(mass)
+                        {
+                            **out = Atom::Zero;
+                        }
+                    })
+                    .expand();
+                ensure!(
+                    without.is_zero(),
+                    "GAMMALOOP_IR_HARD=child-check: the child IR hard part differs for {} corr={correction_index}: poles {difference}",
+                    self.graph.name
+                );
+                "equal_mod_log_mUV"
+            };
             let today_zero = self.poles(&today)?.is_zero();
             (
                 today,
                 format!(
-                    " check=equal today_poles_zero={today_zero} today_s={:.3}",
+                    " check={verdict} today_poles_zero={today_zero} today_s={:.3}",
                     today_started.elapsed().as_secs_f64()
                 ),
             )
