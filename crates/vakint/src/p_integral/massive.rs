@@ -121,6 +121,26 @@ impl LoweredClosure {
         format!("{:?}|{:?}", self.closing_key(), live)
     }
 
+    /// lane prune (tests): the folded channels.
+    #[cfg(test)]
+    pub(crate) fn folded(
+        &self,
+    ) -> &std::collections::BTreeMap<
+        crate::rustred_evaluation::p_integral::Channel,
+        crate::rustred_evaluation::p_integral::FoldedInputs,
+    > {
+        &self.folded
+    }
+
+    /// lane prune (tests): keep the channels `keep` accepts.
+    #[cfg(test)]
+    pub(crate) fn retain_channels(
+        &mut self,
+        mut keep: impl FnMut(&crate::rustred_evaluation::p_integral::Channel) -> bool,
+    ) {
+        self.folded.retain(|channel, _| keep(channel));
+    }
+
     /// Reduce and finalise once (RustRed master mode of the settings).
     pub fn evaluate(
         self,
@@ -601,31 +621,42 @@ impl MassiveClosure {
                 }
             };
             if crate::census::enabled() {
-                crate::census::record(
-                    "direct_closure",
-                    serde_json::json!({
-                        "declined": declined,
-                        "numerator_summands": crate::census::summands(input.numerator.as_view()),
-                        "numerator_bytes": input.numerator.as_view().get_byte_size(),
-                        "numerator_terms": stats.numerator_terms,
-                        "canonical_terms": stats.canonical_terms,
-                        "merged_terms": stats.merged_terms,
-                        "distinct_monomials": stats.distinct_monomials,
-                        "spectators": stats.spectators,
-                        "lowered": stats.lowered,
-                        "folded": stats.folded,
-                        "read_seconds": stats.read_seconds,
-                        "classify_seconds": stats.classify_seconds,
-                        "monomial_seconds": stats.monomial_seconds,
-                        "scatter_seconds": stats.scatter_seconds,
-                        "finish_seconds": stats.finish_seconds,
-                        "match_seconds": stats.match_seconds,
-                        "reduce_seconds": stats.reduce_seconds,
-                        "finalize_seconds": stats.finalize_seconds,
-                        "seconds": started.elapsed().as_secs_f64(),
-                        "direct_seconds": direct_seconds,
-                    }),
-                );
+                let mut record = serde_json::json!({
+                    "declined": declined,
+                    "numerator_summands": crate::census::summands(input.numerator.as_view()),
+                    "numerator_bytes": input.numerator.as_view().get_byte_size(),
+                    "numerator_terms": stats.numerator_terms,
+                    "canonical_terms": stats.canonical_terms,
+                    "merged_terms": stats.merged_terms,
+                    "distinct_monomials": stats.distinct_monomials,
+                    "spectators": stats.spectators,
+                    "lowered": stats.lowered,
+                    "folded": stats.folded,
+                    "read_seconds": stats.read_seconds,
+                    "classify_seconds": stats.classify_seconds,
+                    "monomial_seconds": stats.monomial_seconds,
+                    "scatter_seconds": stats.scatter_seconds,
+                    "finish_seconds": stats.finish_seconds,
+                    "match_seconds": stats.match_seconds,
+                    "reduce_seconds": stats.reduce_seconds,
+                    "finalize_seconds": stats.finalize_seconds,
+                    "seconds": started.elapsed().as_secs_f64(),
+                    "direct_seconds": direct_seconds,
+                });
+                // lane prune: the pruning counters, only when it is on (the
+                // records of the unpruned lowering are unchanged).
+                let prune = crate::rustred_evaluation::p_zero::zero_prune();
+                if prune != crate::rustred_evaluation::p_zero::ZeroPrune::Off {
+                    record["zero_prune"] = prune.as_str().into();
+                    record["pruned_early"] = stats.pruned_early.into();
+                    record["pruned_end"] = stats.pruned_end.into();
+                    record["slot_products"] = stats.slot_products.into();
+                    record["prune_known"] = stats.prune_known.into();
+                    record["prune_unknown"] = stats.prune_unknown.into();
+                    record["prune_shared_channel"] = stats.prune_shared_channel.into();
+                    record["prune_checked"] = stats.prune_checked.into();
+                }
+                crate::census::record("direct_closure", record);
             }
             if check && declined.is_none() {
                 let checking = std::time::Instant::now();
