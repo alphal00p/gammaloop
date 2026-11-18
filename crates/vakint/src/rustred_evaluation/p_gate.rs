@@ -1,7 +1,7 @@
 //! Gate hooks of the reference path R2 (helper VH, numerator assignment, lane
 //! `refpath`): what RustRed receives from vakint's ordinary p-integral
-//! evaluation, as a comparison view that another engine can be gated against
-//! key by key (`N/notes/DESIGN-0-ANATOMY.md` section 2.4).
+//! evaluation, as a comparison view that two runs of this path can be compared
+//! with key by key (`N/notes/DESIGN-0-ANATOMY.md` section 2.4).
 //!
 //! * [`observe`] runs a closure with an observer on this thread: every batch
 //!   of folded channels that [`super::p_integral::reduce_requests_folded`]

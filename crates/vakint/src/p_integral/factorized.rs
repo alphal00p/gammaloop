@@ -33,6 +33,14 @@
 //!
 //! Nothing here changes an existing entry point: the existing
 //! `DirectClosureInput` / `RemainderBoundary` paths are untouched.
+//!
+//! Numerator algebra (Lorentz and Dirac contraction, traces, colour) is done
+//! by idenso / spenso only, never by vakint itself: a value is contracted with
+//! idenso's production chain ([`contract_with_idenso`],
+//! [`FactorizedNumerator::contract_naively`]) and the contracted numerator is
+//! handed to vakint's existing lowering. An earlier experimental contraction
+//! engine for these values is kept for reference on the branch
+//! `parked/vakint-numerator-engine` and is deprecated.
 
 mod colour;
 #[cfg(feature = "feynkit-ingress")]
@@ -226,7 +234,7 @@ pub struct Projector {
 }
 
 /// The scalar that multiplies the contracted value, kept in named parts so
-/// that the checkable ones can be checked. The engine multiplies
+/// that the checkable ones can be checked. A consumer multiplies
 /// [`Prefactor::total`] exactly once.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Prefactor {
@@ -235,7 +243,7 @@ pub struct Prefactor {
     /// `1/AutG × ExternalFermionOrderingSign`).
     pub overall: Atom,
     /// `(−1)^(closed fermion loops + closed ghost loops)`. Checked by
-    /// `validate` against the loops of the graph: the engine never adds it.
+    /// `validate` against the loops of the graph: a consumer never adds it.
     pub loop_sign: i64,
     /// Power of n_f (= closed fermion loops). Checked by `validate`.
     pub nf_power: u32,

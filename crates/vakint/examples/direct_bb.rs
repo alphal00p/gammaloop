@@ -5,7 +5,7 @@
 //! direct_bb <prepared dir with model.json + diagram-NNNNNN.dot> --out <dir>
 //!     [--graphs 1,2,7-9 | --graph-list <file with one index per line>]
 //!     [--projection metric|transverse|longitudinal|both]   (default metric)
-//!     [--reps <n>]            repetitions per graph, each on a fresh engine (default 1)
+//!     [--reps <n>]            repetitions per graph, each on a fresh Vakint instance (default 1)
 //!     [--extra-terms <k>]     Laurent terms = loops + k (default 1: poles and finite part)
 //!     [--p-library <dir>]     RustRed p package (default $VAKINT_TEST_P_LIBRARY_1_4, else built-in 1L-3L)
 //!     [--no-count]            skip the term count of the expanded numerator

@@ -49,7 +49,6 @@ mod materialize;
 pub(crate) mod monitor;
 mod numerator;
 mod ordered;
-pub mod p_contract;
 pub(crate) mod p_data;
 pub mod p_gate;
 pub(crate) mod p_integral;

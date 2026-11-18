@@ -216,10 +216,10 @@ pub fn vakint_settings(terms: i64) -> VakintSettings {
     }
 }
 
-/// A new engine that shares `template`'s loaded p library (the immutable
+/// A new `Vakint` instance that shares `template`'s loaded p library (the immutable
 /// `PLibrary`, loaded once) through a fresh handle: a cold request memo and
-/// step cache per engine, the package's master catalogue, directory and
-/// relations root kept. Repetitions on fresh engines then measure cold
+/// step cache per instance, the package's master catalogue, directory and
+/// relations root kept. Repetitions on fresh instances then measure cold
 /// reductions without reloading the package.
 pub fn fresh_engine(template: &Vakint) -> Result<Vakint> {
     use crate::rustred_evaluation::p_data::PLibraryHandle;
@@ -292,14 +292,6 @@ fn map_invariants(value: &Atom, adjoint_dimension: &Atom, fundamental_dimension:
         .with(Atom::var(s.na))
         .replace(fundamental_dimension.to_pattern())
         .with(Atom::var(s.tf) * Atom::var(s.na) / Atom::var(s.cf))
-}
-
-/// [`map_invariants`] on a value whose representations already carry this
-/// chain's dimensions (`N_A`, `N_R`): the colour coefficient of the numerator
-/// engine's harness ([`crate::engine_gate::refpath_colour`]).
-pub(crate) fn named_invariants(value: &Atom) -> Atom {
-    let s = &*SYMBOLS;
-    map_invariants(value, &Atom::var(s.na), &Atom::var(s.nr))
 }
 
 /// The colour branches of a diagram by the input type's colour split
@@ -591,7 +583,7 @@ impl Default for RunOptions {
     }
 }
 
-/// Run the reference path on one DOT graph with `vakint` (an engine whose p
+/// Run the reference path on one DOT graph with `vakint` (a `Vakint` instance whose p
 /// library covers the graph's loop count).
 pub fn run_graph(
     vakint: &Vakint,

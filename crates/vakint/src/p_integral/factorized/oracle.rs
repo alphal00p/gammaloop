@@ -4,8 +4,8 @@
 //! representation payloads) → `infer_indexed` → `simplify_algebra` (gamma
 //! `canonical()`, epsilon on, colour off unless asked) → `to_dots` → uncook.
 //!
-//! A REFERENCE ORACLE for tests and for the exact-equality gate of the
-//! engine, not the engine: it multiplies all factors first.
+//! It multiplies all factors first and hands the product to idenso: numerator
+//! algebra is done by idenso / spenso only.
 
 use idenso::{
     CookMode, CookSettings,

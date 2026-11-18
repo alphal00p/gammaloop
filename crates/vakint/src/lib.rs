@@ -13,8 +13,6 @@ mod citations;
 #[cfg(feature = "feynkit-ingress")]
 pub mod diagram_integral;
 pub mod display;
-#[cfg(feature = "feynkit-ingress")]
-pub mod engine_gate;
 mod execution;
 pub mod fmft;
 pub mod fmft_numerics;
