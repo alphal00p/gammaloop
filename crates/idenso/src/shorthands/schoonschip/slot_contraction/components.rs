@@ -79,7 +79,10 @@ struct MonomialKey {
     connections: Vec<(usize, [(usize, usize); 2])>,
 }
 
-type ScalarPolynomial = MultivariatePolynomial<RationalField, u32>;
+/// Exponent type of frontier coefficients (`IDENSO_EXP` prototype): one per shared variable
+/// and monomial, so it dominates the frontier's storage.
+pub(super) type PolyExp = u8;
+type ScalarPolynomial = MultivariatePolynomial<RationalField, PolyExp>;
 
 // Leaves identify borrowed payloads or an opaque subtree of the existing graph.
 // Only explicit expansion admits Atom arithmetic directly.
@@ -298,7 +301,7 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
     #[cfg(feature = "reference-cases")]
     fn coefficient_bytes(polynomial: &ScalarPolynomial) -> usize {
         std::mem::size_of::<ScalarPolynomial>()
-            + polynomial.exponents.capacity() * std::mem::size_of::<u32>()
+            + polynomial.exponents.capacity() * std::mem::size_of::<PolyExp>()
             + polynomial.coefficients.capacity() * std::mem::size_of::<Rational>()
             + polynomial.variables().len() * std::mem::size_of::<PolyVariable>()
     }
@@ -334,11 +337,11 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         }
         let count = variables.len();
         let size = self.coefficients.len().checked_mul(count)?;
-        let mut exponents = vec![0u32; size];
+        let mut exponents = vec![0 as PolyExp; size];
         for (term, factors) in self.monomials.iter().enumerate() {
             for &(factor, exponent) in factors {
                 let entry = &mut exponents[term * count + remap[factor]];
-                *entry = entry.checked_add(exponent)?;
+                *entry = entry.checked_add(PolyExp::try_from(exponent).ok()?)?;
             }
         }
         let polynomial = ScalarPolynomial::from_coefficient_list(
