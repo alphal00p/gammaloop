@@ -1836,16 +1836,25 @@ impl RStarIntegrand {
             );
         }
         if vakint::census::enabled() {
-            vakint::census::record(
-                "remainder_contraction",
-                serde_json::json!({
-                    "loops": self.region.loops,
-                    "seconds": started.elapsed().as_secs_f64(),
-                    "routed_bytes": self.routed.as_view().get_byte_size(),
-                    "contracted_bytes": contracted.0.as_view().get_byte_size(),
-                    "certified_closed_scalar": contracted.1,
-                }),
-            );
+            // The input bytes are those contracted: the truncated parts of a
+            // tagged remainder (with the untruncated routed size and the part
+            // count beside them), the routed product otherwise (unchanged).
+            let mut record = serde_json::json!({
+                "loops": self.region.loops,
+                "seconds": started.elapsed().as_secs_f64(),
+                "routed_bytes": self
+                    .contraction_inputs()
+                    .iter()
+                    .map(|input| input.as_view().get_byte_size())
+                    .sum::<usize>(),
+                "contracted_bytes": contracted.0.as_view().get_byte_size(),
+                "certified_closed_scalar": contracted.1,
+            });
+            if let Some(truncation) = &self.truncation {
+                record["untruncated_bytes"] = self.routed.as_view().get_byte_size().into();
+                record["parts"] = truncation.parts.len().into();
+            }
+            vakint::census::record("remainder_contraction", record);
         }
         Ok(self.contracted.get_or_init(|| contracted))
     }
