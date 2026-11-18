@@ -12,6 +12,8 @@ pub mod alphaloop_numerics;
 mod citations;
 #[cfg(feature = "feynkit-ingress")]
 pub mod diagram_integral;
+#[cfg(feature = "feynkit-ingress")]
+pub mod refpath;
 pub mod display;
 mod execution;
 pub mod fmft;

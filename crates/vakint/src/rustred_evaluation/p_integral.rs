@@ -1285,6 +1285,9 @@ fn reduce_requests_with(
     }?;
     let dispatch = super::p_relations::dispatch_counters().since(&dispatch_before);
     with_stats(|stats| stats.dispatch = dispatch);
+    if super::p_gate::active() {
+        super::p_gate::observe_stats(&last_stats());
+    }
     if phases::enabled() {
         eprintln!("vakint-p-dispatch {dispatch:?}");
         let stats = last_stats();
@@ -1636,15 +1639,35 @@ pub(crate) fn reduce_requests_folded(
     factored: bool,
 ) -> Result<BTreeMap<(usize, Atom), Vec<ReducedPropagatorValue>>, VakintError> {
     with_stats(|stats| *stats = PReduceStats::default());
-    let epsilon = vk_symbol!(&settings.epsilon_symbol);
     let handle = vakint.p_library()?;
+    let folded = fold_requests(&handle, settings, requests)?;
+    // Helper VH lane refpath: the gate observer (a no-op unless a caller on
+    // this thread observes the folded inputs, `super::p_gate::observe`).
+    super::p_gate::observe_folded(&handle, vk_symbol!(&settings.epsilon_symbol), &folded);
+    reduce_folded_channels(vakint, settings, &handle, folded, progress, mode, factored)
+}
+
+/// The folded channel inputs of a batch of plain requests: what
+/// [`reduce_folded_channels`] hands to RustRed (one library reduction per
+/// folded channel). Every request is split, lowered and folded
+/// ([`fold_request`], or taken from the request memo) and the requests'
+/// folded inputs are summed. Split from [`reduce_requests_folded`] as a pure
+/// refactor (helper VH lane refpath, reference path R2 of the numerator gate):
+/// the statistics it records and the map it returns are those of the inline
+/// fold it replaces.
+pub(crate) fn fold_requests(
+    handle: &PLibraryHandle,
+    settings: &VakintSettings,
+    requests: &[PropagatorRequest],
+) -> Result<BTreeMap<Channel, FoldedInputs>, VakintError> {
+    let epsilon = vk_symbol!(&settings.epsilon_symbol);
     let mut forms = BTreeMap::new();
     // Every request split, lowered and folded (or taken from the request
     // memo); the batch's folded inputs are the sums of the requests' (rational
     // sums are exact: the order of the requests does not change them).
     let folded_requests = requests
         .iter()
-        .map(|request| fold_request(&handle, settings, request, &mut forms, epsilon))
+        .map(|request| fold_request(handle, settings, request, &mut forms, epsilon))
         .collect::<Result<Vec<_>, VakintError>>()?;
     with_stats(|stats| {
         stats.channels = folded_requests
@@ -1677,7 +1700,7 @@ pub(crate) fn reduce_requests_folded(
         stats.lower_seconds += summing.elapsed().as_secs_f64();
         stats.folded = folded.len();
     });
-    reduce_folded_channels(vakint, settings, &handle, folded, progress, mode, factored)
+    Ok(folded)
 }
 
 /// The reductions of folded channels ([`reduce_requests_folded`] after the
@@ -2056,7 +2079,10 @@ pub(crate) fn evaluate_ordered_batch(
     phases::end("p.propagator_requests", started);
     let names = request_names(&requests)?;
     let reduced = reduce_requests(vakint, settings, &requests, progress)?;
-    finalize_reduced(vakint, settings, reduced, &names, mode)
+    let finalizing = std::time::Instant::now();
+    let result = finalize_reduced(vakint, settings, reduced, &names, mode);
+    super::p_gate::observe_finalize(finalizing.elapsed());
+    result
 }
 
 #[cfg(test)]

@@ -2338,6 +2338,162 @@ fn engine_one_loop() -> Vakint {
     engine()
 }
 
+/// Helper VH lane refpath (gate hooks of reference path R2): an observed
+/// reduction gives the same values as an unobserved one, the observer's gate
+/// view is the gate view of [`fold_requests`] on the same requests, and its
+/// zero-sector filter is the census filter of the engine's library.
+#[test]
+fn the_gate_observer_sees_the_folded_inputs_and_changes_nothing() {
+    use super::super::p_gate;
+    let engine = library_engine();
+    let settings = settings(RustRedMasterMode::Symbolic, None);
+    let text = include_str!("../../tests/fixtures/p_split_requests.txt");
+    let records = request_records(text)
+        .into_iter()
+        .filter(|(family, ..)| has_p_data(&engine, family.loops))
+        .collect::<Vec<_>>();
+    assert!(!records.is_empty());
+    let requests = records
+        .iter()
+        .map(|(family, powers, external, numerator)| PropagatorRequest {
+            family,
+            powers,
+            canonical_numerator: numerator.as_view(),
+            external: external.clone(),
+        })
+        .collect::<Vec<_>>();
+    let handle = engine.p_library().unwrap();
+    let expected = p_gate::gate_view(
+        &fold_requests(&handle, &settings, &requests).unwrap(),
+        epsilon(&settings),
+    );
+    assert!(!expected.is_empty());
+    let plain = reduce_requests(&engine, &settings, &requests, None).unwrap();
+    let (observed, observation) =
+        p_gate::observe(|| reduce_requests(&engine, &settings, &requests, None));
+    assert_eq!(observed.unwrap(), plain);
+    assert_eq!(observation.view(), expected);
+    assert!(observation.reductions > 0 && observation.pairs > 0);
+    let (kept, count) = observation.view_without_zero_sectors();
+    let (by_census, census_count) = p_gate::drop_zero_sectors(&handle, observation.view());
+    assert_eq!(kept, by_census);
+    assert_eq!(count, census_count);
+    assert_eq!(count.total, expected.len());
+    // No observer outside `observe`.
+    assert!(!p_gate::active());
+}
+
+/// The inline fold of `reduce_requests_folded` before helper VH lane refpath
+/// split it into [`fold_requests`], kept verbatim (statistics aside) as the
+/// reference of [`fold_requests_is_the_inline_fold`].
+fn inline_fold_before_the_split(
+    handle: &PLibraryHandle,
+    settings: &VakintSettings,
+    requests: &[PropagatorRequest],
+) -> BTreeMap<Channel, FoldedInputs> {
+    let epsilon = vk_symbol!(&settings.epsilon_symbol);
+    let mut forms = BTreeMap::new();
+    let folded_requests = requests
+        .iter()
+        .map(|request| fold_request(handle, settings, request, &mut forms, epsilon))
+        .collect::<Result<Vec<_>, VakintError>>()
+        .unwrap();
+    let mut folded = BTreeMap::<Channel, FoldedInputs>::new();
+    for request in &folded_requests {
+        for (channel, by_basis) in &request.targets {
+            let target = folded.entry(channel.clone()).or_default();
+            target.integrals.insert(request.integral.clone());
+            for (basis, inputs) in by_basis {
+                match target.by_basis.get_mut(basis) {
+                    None => {
+                        target.by_basis.insert(basis.clone(), inputs.clone());
+                    }
+                    Some(sum) => {
+                        for (key, value) in inputs {
+                            *sum.entry(key.clone()).or_insert_with(Rational::zero) += value;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    folded
+}
+
+/// Helper VH lane refpath (reference path R2 of the numerator gate): the
+/// split-off [`fold_requests`] returns exactly the folded channels of the
+/// inline fold it replaced ([`inline_fold_before_the_split`]), request by
+/// request and on whole batches (also with every request twice, so that
+/// channels are shared), on the real requests of `p_split_requests.txt`
+/// within the library's scope and on one-loop requests with mixed
+/// spectators; and `reduce_requests_folded`, which now calls it, still gives
+/// the values of the unfolded reduction (`folded_channels_reproduce_the_
+/// unfolded_values` checks the values on the same inputs).
+#[test]
+fn fold_requests_is_the_inline_fold() {
+    let check = |engine: &Vakint, settings: &VakintSettings, requests: &[PropagatorRequest]| {
+        let handle = engine.p_library().unwrap();
+        // Off and on the request memo: the second call of each pair is served
+        // by the memo the first call filled.
+        for _ in 0..2 {
+            let split = fold_requests(&handle, settings, requests).unwrap();
+            let inline = inline_fold_before_the_split(&handle, settings, requests);
+            assert_eq!(split, inline);
+            assert_eq!(format!("{split:?}"), format!("{inline:?}"));
+            assert!(!split.is_empty());
+        }
+    };
+    let settings = settings(RustRedMasterMode::Symbolic, None);
+    let engine = library_engine();
+    let text = include_str!("../../tests/fixtures/p_split_requests.txt");
+    let records = request_records(text)
+        .into_iter()
+        .filter(|(family, ..)| has_p_data(&engine, family.loops))
+        .collect::<Vec<_>>();
+    assert!(records.len() >= 5, "{} records in scope", records.len());
+    let requests = records
+        .iter()
+        .map(|(family, powers, external, numerator)| PropagatorRequest {
+            family,
+            powers,
+            canonical_numerator: numerator.as_view(),
+            external: external.clone(),
+        })
+        .collect::<Vec<_>>();
+    for request in &requests {
+        check(&engine, &settings, std::slice::from_ref(request));
+    }
+    check(&engine, &settings, &requests);
+    let doubled = requests.iter().chain(&requests).cloned().collect::<Vec<_>>();
+    check(&engine, &settings, &doubled);
+
+    let engine = engine_one_loop();
+    let fixture = battery();
+    let external = parse("p(3)");
+    let terms = [
+        ("muvsq+ε", "bubble_12_n1"),
+        ("𝑖*muvsq/(3-2*ε)", "bubble_12_n1"),
+        ("ε/(1-ε)^2", "bubble_22_n1"),
+    ];
+    let numerators = terms.map(|(coefficient, name)| {
+        parse(&format!("({coefficient})*({})", case(&fixture, name).numerator))
+    });
+    let requests = terms
+        .iter()
+        .zip(&numerators)
+        .map(|((_, name), numerator)| {
+            let case = case(&fixture, name);
+            PropagatorRequest {
+                family: registry_family(&case.family).unwrap(),
+                powers: &case.powers,
+                canonical_numerator: numerator.as_view(),
+                external: external.clone(),
+            }
+        })
+        .collect::<Vec<_>>();
+    check(&engine, &settings, &requests);
+}
+
 /// [`spectator_terms`] writes a coefficient as `Σ value · basis(ε) ·
 /// monomial` with `basis` a rational function of `ε` alone and `monomial`
 /// free of it; a factor that is not a rational function of `ε` alone (a Γ
