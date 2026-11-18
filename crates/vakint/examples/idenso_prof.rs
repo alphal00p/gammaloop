@@ -764,6 +764,7 @@ fn main() -> eyre::Result<()> {
             let mut direct_runs = Vec::new();
             let mut direct_gate = serde_json::Value::Null;
             let mut direct_terms = 0usize;
+            let mut direct_counts = serde_json::Value::Null;
             let mut direct_colour = Vec::new();
             for rep in 0..reps {
                 // paired, alternating: R2 then R3 on even repetitions, R3 then R2 on odd ones
@@ -821,6 +822,13 @@ fn main() -> eyre::Result<()> {
                                 for p in projections {
                                     let (view, _) = refpath::direct::gate_view(&engine, &settings, p)?;
                                     views.push((p.projection, view, p.value.clone()));
+                                    let c = p.counts();
+                                    direct_counts = json!({
+                                        "numerator_terms": c.numerator_terms, "distinct_dots": c.distinct_dots,
+                                        "canonical_terms": c.canonical_terms, "merged_terms": c.merged_terms,
+                                        "distinct_monomials": c.distinct_monomials, "lowered": c.lowered,
+                                        "folded": c.folded, "slot_products": c.slot_products, "pruned_early": c.pruned_early,
+                                    });
                                 }
                                 "lowered".into()
                             }
@@ -891,7 +899,7 @@ fn main() -> eyre::Result<()> {
                     "wall": median(direct_runs.iter().map(|r| r.1).collect()),
                     "cpu": median(direct_runs.iter().map(|r| r.2).collect()),
                     "colour": median(direct_colour.clone()), "terms": direct_terms, "merge_colour": merge_colour, "dots": r3_dots, "routed": r3_routed,
-                    "compact": r3_compact, "routing": d(&|s| s.routing),
+                    "compact": r3_compact, "routing": d(&|s| s.routing), "counts": direct_counts,
                     "routing_size": direct_runs.first().map(|r| r.0.routing_size),
                     "stored_routing_size": direct_runs.first().map(|r| r.0.stored_routing_size),
                     "trees": direct_runs.first().map(|r| r.0.trees),

@@ -84,6 +84,44 @@ pub struct DirectProjection {
     pub(crate) folded: BTreeMap<Channel, FoldedInputs>,
     pub value: Option<Atom>,
     pub(crate) stats: DirectStats,
+    distinct_dots: usize,
+}
+
+/// Counters of one projection's lowering (the direct reader's statistics) and
+/// of the handed-over scalar.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct LoweringCounts {
+    /// Terms of the scalar the reader visited.
+    pub numerator_terms: usize,
+    /// Distinct `vakint::dot` atoms in the handed-over scalar.
+    pub distinct_dots: usize,
+    /// Canonical terms after reading, after merging, distinct canonical loop
+    /// monomials, lowered entries, folded entries.
+    pub canonical_terms: usize,
+    pub merged_terms: usize,
+    pub distinct_monomials: usize,
+    pub lowered: usize,
+    pub folded: usize,
+    /// Products formed by the slot substitution (a term times a slot form's
+    /// term: the substitution's work).
+    pub slot_products: usize,
+    pub pruned_early: usize,
+}
+
+impl DirectProjection {
+    pub fn counts(&self) -> LoweringCounts {
+        LoweringCounts {
+            numerator_terms: self.stats.numerator_terms,
+            distinct_dots: self.distinct_dots,
+            canonical_terms: self.stats.canonical_terms,
+            merged_terms: self.stats.merged_terms,
+            distinct_monomials: self.stats.distinct_monomials,
+            lowered: self.stats.lowered,
+            folded: self.stats.folded,
+            slot_products: self.stats.slot_products,
+            pruned_early: self.stats.pruned_early,
+        }
+    }
 }
 
 /// What R3 produced for one graph, or why it declined.
@@ -766,6 +804,16 @@ pub fn lower_graph(
             Err(reason) => return Ok(DirectOutcome::Declined(reason)),
         };
         seconds.handover += started.elapsed().as_secs_f64();
+        let mut dots = std::collections::BTreeSet::new();
+        scalar.as_view().visitor(&mut |node| {
+            if let AtomView::Fun(f) = node
+                && f.get_symbol() == crate::symbols::S.dot
+            {
+                dots.insert(node.to_owned());
+                return false;
+            }
+            true
+        });
         let started = Instant::now();
         let mut stats = DirectStats::default();
         let folded = match matched.lower(settings, &handle, scalar.as_view(), &mut stats)? {
@@ -784,6 +832,7 @@ pub fn lower_graph(
             folded,
             value,
             stats,
+            distinct_dots: dots.len(),
         });
     }
     if out.is_empty() {
