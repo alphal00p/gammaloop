@@ -373,7 +373,7 @@ fn frontier_sum(
         while let Some(&top) = heap.first() {
             // The merge writes the next frontier: budgets must see it grow.
             appended = appended.wrapping_add(1);
-            if appended % 4096 == 0 {
+            if appended.is_multiple_of(4096) {
                 budget_checkpoint();
             }
             let (source, contribution) = streams[top];
@@ -1660,6 +1660,7 @@ impl SlotContraction {
         )
     }
 
+    #[allow(clippy::type_complexity)]
     fn contract_graph(
         &self,
         scope: &ContractionScope<'_>,
@@ -2329,7 +2330,7 @@ impl<'a> ComponentSum<'a, '_> {
                     // checkpoint runs. The frontier cannot decline once
                     // started, so an exhausted budget aborts the operation.
                     budget_checks = budget_checks.wrapping_add(1);
-                    if budget_checks % 4096 == 0 {
+                    if budget_checks.is_multiple_of(4096) {
                         budget_checkpoint();
                     }
                     self.reset_components(coefficient);

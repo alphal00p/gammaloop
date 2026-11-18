@@ -101,7 +101,7 @@ fn arrangements<'a>(labels: &[&'a str]) -> Vec<Vec<&'a str>> {
         }
         heap(k - 1, indices, labels, out);
         for i in 0..k - 1 {
-            if k % 2 == 0 {
+            if k.is_multiple_of(2) {
                 indices.swap(i, k - 1);
             } else {
                 indices.swap(0, k - 1);
@@ -296,7 +296,7 @@ impl Network {
         let mut explicit = self.structure_constants(names);
         let mut projected = from_chains.clone();
         if self.two_ports() {
-            explicit = explicit * &metric;
+            explicit *= &metric;
             // c g(q,p) closed with g(q,p) is c N_A.
             let reversed = parse(&format!(
                 "g(coad(8,{}),coad(8,{}))",
