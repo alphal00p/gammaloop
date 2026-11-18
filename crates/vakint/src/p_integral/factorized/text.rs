@@ -1,0 +1,600 @@
+//! The versioned text form `pint6.factorized-numerator.v1` of a
+//! [`FactorizedNumerator`] (N/notes/TEXTFORM-v2.md documents it).
+//!
+//! Conventions kept from `pint6.remainder-boundary.v1`: a `schema` first
+//! line, `key<TAB>fields` lines (the reader also accepts a space after the
+//! key, as v1's), `name=value` fields, atoms in Symbolica's canonical string
+//! form (`to_canonical_string`), a closing `end` line. Different from v1, by
+//! design: the line order is fixed (sections in a fixed order, entries sorted
+//! by id or canonical string), every section is counted, a `lines` assertion
+//! closes the record, an unknown key is an error (v1 ignores it), and a line
+//! carries at most one atom, always as its last field.
+
+use super::{
+    ColourBranchInfo, Endpoint, FACTORIZED_SCHEMA, FactorizedEdge, FactorizedError, FactorizedKind,
+    FactorizedNumerator, FactorizedVertex, LineKind, Prefactor, Projector, Result,
+};
+use symbolica::atom::{Atom, AtomCore, AtomView};
+
+fn one_atom(atom: &Atom, what: &str) -> Result<String> {
+    let text = atom.to_canonical_string();
+    if text.contains(['\n', '\r', '\t']) {
+        return Err(FactorizedError::TextSyntax {
+            line: 0,
+            detail: format!("{what}: the canonical string contains a newline or a TAB"),
+        });
+    }
+    Ok(text)
+}
+
+fn token(text: &str, what: &str) -> Result<()> {
+    if text.is_empty() || text.contains(['\n', '\r', '\t', '=', ',']) {
+        return Err(FactorizedError::TextSyntax {
+            line: 0,
+            detail: format!("{what} {text:?} is empty or contains TAB, newline, '=' or ','"),
+        });
+    }
+    Ok(())
+}
+
+fn endpoint(end: Endpoint) -> String {
+    match end {
+        Endpoint::Vertex(v) => v.to_string(),
+        Endpoint::External => "ext".into(),
+    }
+}
+
+fn hedge(h: Option<usize>) -> String {
+    h.map_or_else(|| "-".into(), |h| h.to_string())
+}
+
+fn optional_edge(e: Option<usize>) -> String {
+    e.map_or_else(|| "none".into(), |e| e.to_string())
+}
+
+fn list<T: ToString>(values: &[T]) -> String {
+    values
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+/// Write one record. Fails on the reserved R* extensions (closure kind,
+/// insertions), which v1 cannot carry.
+pub(super) fn write_record(value: &FactorizedNumerator) -> Result<String> {
+    if let FactorizedKind::Closure(_) = value.kind {
+        return Err(FactorizedError::Reserved {
+            feature: "the closure kind (R* remainder with a closing line)".into(),
+        });
+    }
+    if !value.insertions.is_empty() {
+        return Err(FactorizedError::Reserved {
+            feature: "insertion vertices (child counterterms)".into(),
+        });
+    }
+    if value.label.contains(['\n', '\r', '\t']) {
+        return Err(FactorizedError::TextSyntax {
+            line: 0,
+            detail: "the label contains a TAB or a newline".into(),
+        });
+    }
+    let mut lines = Vec::<String>::new();
+    lines.push(format!("schema\t{FACTORIZED_SCHEMA}"));
+    lines.push(format!("label\t{}", value.label));
+    lines.push("kind\tdirect".into());
+    lines.push(format!(
+        "dimension\t{}",
+        one_atom(&Atom::var(value.dimension), "dimension")?
+    ));
+    lines.push(format!(
+        "momenta\tloops={}\texternals={}",
+        value.loops(),
+        value.externals()
+    ));
+    for (i, e) in value.loop_edges.iter().enumerate() {
+        lines.push(format!("loop\t{}\tedge={}", i + 1, optional_edge(*e)));
+    }
+    for (j, e) in value.external_edges.iter().enumerate() {
+        lines.push(format!("external\t{}\tedge={}", j + 1, optional_edge(*e)));
+    }
+    let mut edges = value.edges.iter().collect::<Vec<_>>();
+    edges.sort_by_key(|e| e.id);
+    lines.push(format!("edges\t{}", edges.len()));
+    for edge in edges {
+        token(&edge.particle, "particle")?;
+        lines.push(format!(
+            "edge\t{}\tsource={}\ttarget={}\thedges={},{}\tparticle={}\tline={}\tpower={}\tmomentum={}\t{}",
+            edge.id,
+            endpoint(edge.source),
+            endpoint(edge.target),
+            hedge(edge.source_hedge),
+            hedge(edge.target_hedge),
+            edge.particle,
+            edge.line.as_str(),
+            edge.power,
+            list(&edge.momentum),
+            one_atom(&edge.mass_squared, "mass")?
+        ));
+        lines.push(format!(
+            "edge_factor\t{}\t{}",
+            edge.id,
+            one_atom(&edge.factor, "edge factor")?
+        ));
+    }
+    let mut vertices = value.vertices.iter().collect::<Vec<_>>();
+    vertices.sort_by_key(|v| v.id);
+    lines.push(format!("vertices\t{}", vertices.len()));
+    for vertex in vertices {
+        token(&vertex.rule, "rule")?;
+        lines.push(format!(
+            "vertex\t{}\trule={}\t{}",
+            vertex.id,
+            vertex.rule,
+            one_atom(&vertex.factor, "vertex factor")?
+        ));
+    }
+    let mut ports = value
+        .ports
+        .iter()
+        .map(|p| one_atom(p, "port"))
+        .collect::<Result<Vec<_>>>()?;
+    ports.sort();
+    lines.push(format!("ports\t{}", ports.len()));
+    for port in ports {
+        lines.push(format!("port\t{port}"));
+    }
+    match &value.projector {
+        None => lines.push("projector\tnone".into()),
+        Some(projector) => lines.push(format!(
+            "projector\tp2_power={}\t{}",
+            projector.p2_power,
+            one_atom(&projector.tensor, "projector")?
+        )),
+    }
+    let p = &value.prefactor;
+    lines.push(format!(
+        "prefactor\tloop_sign={}\tnf_power={}",
+        p.loop_sign, p.nf_power
+    ));
+    lines.push(format!(
+        "prefactor_overall\t{}",
+        one_atom(&p.overall, "prefactor")?
+    ));
+    lines.push(format!(
+        "prefactor_scalars\t{}",
+        one_atom(&p.scalars, "prefactor")?
+    ));
+    lines.push(format!(
+        "prefactor_colour\t{}",
+        one_atom(&p.colour, "prefactor")?
+    ));
+    match &value.colour_branch {
+        None => lines.push("colour_branch\tnone".into()),
+        Some(info) => lines.push(format!(
+            "colour_branch\t{}\tof={}\trows={}",
+            info.index,
+            info.count,
+            list(&info.rows)
+        )),
+    }
+    lines.push("insertions\t0".into());
+    lines.push(format!("lines\t{}", lines.len() + 1));
+    lines.push("end".into());
+    let mut text = lines.join("\n");
+    text.push('\n');
+    Ok(text)
+}
+
+/// A line split into its key and TAB-separated fields.
+struct Line<'a> {
+    number: usize,
+    key: &'a str,
+    fields: Vec<&'a str>,
+}
+
+struct Reader<'a> {
+    lines: std::iter::Peekable<std::iter::Enumerate<std::str::Lines<'a>>>,
+    first: usize,
+    read: usize,
+    offset: usize,
+}
+
+impl<'a> Reader<'a> {
+    fn syntax(&self, line: usize, detail: impl Into<String>) -> FactorizedError {
+        FactorizedError::TextSyntax {
+            line,
+            detail: detail.into(),
+        }
+    }
+
+    fn raw(&mut self) -> Result<Line<'a>> {
+        let Some((index, text)) = self.lines.next() else {
+            return Err(self.syntax(self.offset + 1, "unexpected end of input"));
+        };
+        self.read += 1;
+        let number = self.offset + index + 1;
+        let (key, rest) = text.split_once(['\t', ' ']).unwrap_or((text, ""));
+        let fields = if rest.is_empty() {
+            Vec::new()
+        } else {
+            rest.split('\t').collect()
+        };
+        Ok(Line {
+            number,
+            key,
+            fields,
+        })
+    }
+
+    fn expect(&mut self, key: &str) -> Result<Line<'a>> {
+        let line = self.raw()?;
+        if line.key != key {
+            return Err(self.syntax(
+                line.number,
+                format!("expected `{key}`, found `{}`", line.key),
+            ));
+        }
+        Ok(line)
+    }
+
+    fn peek_key(&mut self) -> Option<&'a str> {
+        self.lines
+            .peek()
+            .map(|(_, text)| text.split_once(['\t', ' ']).map_or(*text, |(k, _)| k))
+    }
+}
+
+fn field<'a>(line: &Line<'a>, name: &str) -> Result<&'a str> {
+    line.fields
+        .iter()
+        .find_map(|f| f.strip_prefix(name).and_then(|r| r.strip_prefix('=')))
+        .ok_or_else(|| FactorizedError::TextSyntax {
+            line: line.number,
+            detail: format!("`{}` without `{name}=`", line.key),
+        })
+}
+
+fn number<T: std::str::FromStr>(line: usize, text: &str, what: &str) -> Result<T> {
+    text.trim()
+        .parse()
+        .map_err(|_| FactorizedError::TextSyntax {
+            line,
+            detail: format!("bad {what} {text:?}"),
+        })
+}
+
+fn atom(line: usize, text: &str) -> Result<Atom> {
+    crate::utils::vakint_macros::vk_parse!(text).map_err(|error| FactorizedError::TextSyntax {
+        line,
+        detail: format!("cannot parse {:.80}: {error}", text),
+    })
+}
+
+fn last_atom(line: &Line<'_>, position: usize) -> Result<Atom> {
+    if line.fields.len() != position + 1 {
+        return Err(FactorizedError::TextSyntax {
+            line: line.number,
+            detail: format!(
+                "`{}` has {} fields, expected {}",
+                line.key,
+                line.fields.len(),
+                position + 1
+            ),
+        });
+    }
+    atom(line.number, line.fields[position])
+}
+
+fn count_section(reader: &mut Reader<'_>, key: &str) -> Result<(usize, usize)> {
+    let line = reader.expect(key)?;
+    let n = number(line.number, line.fields.first().copied().unwrap_or(""), key)?;
+    Ok((line.number, n))
+}
+
+fn end_point(line: usize, text: &str) -> Result<Endpoint> {
+    if text == "ext" {
+        Ok(Endpoint::External)
+    } else {
+        Ok(Endpoint::Vertex(number(line, text, "endpoint")?))
+    }
+}
+
+fn hedge_of(line: usize, text: &str) -> Result<Option<usize>> {
+    if text == "-" {
+        Ok(None)
+    } else {
+        Ok(Some(number(line, text, "half-edge")?))
+    }
+}
+
+fn edge_ref(line: usize, text: &str) -> Result<Option<usize>> {
+    if text == "none" {
+        Ok(None)
+    } else {
+        Ok(Some(number(line, text, "edge")?))
+    }
+}
+
+fn integers<T: std::str::FromStr>(line: usize, text: &str, what: &str) -> Result<Vec<T>> {
+    if text.is_empty() {
+        return Ok(Vec::new());
+    }
+    text.split(',').map(|c| number(line, c, what)).collect()
+}
+
+fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
+    let schema = reader.raw()?;
+    if schema.key != "schema" {
+        return Err(reader.syntax(schema.number, "a record starts with `schema`"));
+    }
+    let found = schema.fields.join("\t");
+    if found != FACTORIZED_SCHEMA {
+        return Err(FactorizedError::TextSchema {
+            line: schema.number,
+            found,
+        });
+    }
+    let label = reader.expect("label")?.fields.join("\t");
+    let kind = reader.expect("kind")?;
+    match kind.fields.as_slice() {
+        ["direct"] => {}
+        ["closure", ..] => {
+            return Err(FactorizedError::Reserved {
+                feature: "the closure kind (R* remainder with a closing line)".into(),
+            });
+        }
+        _ => return Err(reader.syntax(kind.number, "unknown kind")),
+    }
+    let dimension_line = reader.expect("dimension")?;
+    let dimension = last_atom(&dimension_line, 0)?;
+    let dimension = match dimension.as_view() {
+        AtomView::Var(v) => v.get_symbol(),
+        _ => return Err(reader.syntax(dimension_line.number, "the dimension is not a symbol")),
+    };
+    let momenta = reader.expect("momenta")?;
+    let loops: usize = number(momenta.number, field(&momenta, "loops")?, "loops")?;
+    let externals: usize = number(momenta.number, field(&momenta, "externals")?, "externals")?;
+    let mut loop_edges = Vec::with_capacity(loops);
+    for i in 1..=loops {
+        let line = reader.expect("loop")?;
+        let index: usize = number(
+            line.number,
+            line.fields.first().copied().unwrap_or(""),
+            "loop",
+        )?;
+        if index != i {
+            return Err(reader.syntax(line.number, format!("loop {index}, expected {i}")));
+        }
+        loop_edges.push(edge_ref(line.number, field(&line, "edge")?)?);
+    }
+    let mut external_edges = Vec::with_capacity(externals);
+    for j in 1..=externals {
+        let line = reader.expect("external")?;
+        let index: usize = number(
+            line.number,
+            line.fields.first().copied().unwrap_or(""),
+            "external",
+        )?;
+        if index != j {
+            return Err(reader.syntax(line.number, format!("external {index}, expected {j}")));
+        }
+        external_edges.push(edge_ref(line.number, field(&line, "edge")?)?);
+    }
+    let (edges_line, n_edges) = count_section(reader, "edges")?;
+    let mut edges = Vec::with_capacity(n_edges);
+    while reader.peek_key() == Some("edge") {
+        let line = reader.expect("edge")?;
+        let id: usize = number(
+            line.number,
+            line.fields.first().copied().unwrap_or(""),
+            "edge id",
+        )?;
+        let hedges = field(&line, "hedges")?;
+        let (hs, ht) = hedges
+            .split_once(',')
+            .ok_or_else(|| reader.syntax(line.number, "hedges=<source>,<target>"))?;
+        let line_kind = field(&line, "line")?;
+        let edge = FactorizedEdge {
+            id,
+            source: end_point(line.number, field(&line, "source")?)?,
+            target: end_point(line.number, field(&line, "target")?)?,
+            source_hedge: hedge_of(line.number, hs)?,
+            target_hedge: hedge_of(line.number, ht)?,
+            particle: field(&line, "particle")?.to_string(),
+            line: LineKind::parse(line_kind)
+                .ok_or_else(|| reader.syntax(line.number, format!("unknown line {line_kind}")))?,
+            power: number(line.number, field(&line, "power")?, "power")?,
+            momentum: integers(line.number, field(&line, "momentum")?, "momentum")?,
+            mass_squared: last_atom(&line, 8)?,
+            factor: Atom::num(1),
+        };
+        let factor = reader.expect("edge_factor")?;
+        let fid: usize = number(
+            factor.number,
+            factor.fields.first().copied().unwrap_or(""),
+            "edge id",
+        )?;
+        if fid != id {
+            return Err(reader.syntax(factor.number, format!("edge_factor {fid} after edge {id}")));
+        }
+        let mut edge = edge;
+        edge.factor = last_atom(&factor, 1)?;
+        edges.push(edge);
+    }
+    if edges.len() != n_edges {
+        return Err(FactorizedError::TextSectionCount {
+            line: edges_line,
+            section: "edges".into(),
+            declared: n_edges,
+            found: edges.len(),
+        });
+    }
+    let (vertices_line, n_vertices) = count_section(reader, "vertices")?;
+    let mut vertices = Vec::with_capacity(n_vertices);
+    while reader.peek_key() == Some("vertex") {
+        let line = reader.expect("vertex")?;
+        vertices.push(FactorizedVertex {
+            id: number(
+                line.number,
+                line.fields.first().copied().unwrap_or(""),
+                "vertex id",
+            )?,
+            rule: field(&line, "rule")?.to_string(),
+            factor: last_atom(&line, 2)?,
+        });
+    }
+    if vertices.len() != n_vertices {
+        return Err(FactorizedError::TextSectionCount {
+            line: vertices_line,
+            section: "vertices".into(),
+            declared: n_vertices,
+            found: vertices.len(),
+        });
+    }
+    let (ports_line, n_ports) = count_section(reader, "ports")?;
+    let mut ports = Vec::with_capacity(n_ports);
+    while reader.peek_key() == Some("port") {
+        let line = reader.expect("port")?;
+        ports.push(last_atom(&line, 0)?);
+    }
+    if ports.len() != n_ports {
+        return Err(FactorizedError::TextSectionCount {
+            line: ports_line,
+            section: "ports".into(),
+            declared: n_ports,
+            found: ports.len(),
+        });
+    }
+    let projector_line = reader.expect("projector")?;
+    let projector = match projector_line.fields.as_slice() {
+        ["none"] => None,
+        _ => Some(Projector {
+            p2_power: number(
+                projector_line.number,
+                field(&projector_line, "p2_power")?,
+                "p2_power",
+            )?,
+            tensor: last_atom(&projector_line, 1)?,
+        }),
+    };
+    let signs = reader.expect("prefactor")?;
+    let loop_sign = number(signs.number, field(&signs, "loop_sign")?, "loop_sign")?;
+    let nf_power = number(signs.number, field(&signs, "nf_power")?, "nf_power")?;
+    let overall = last_atom(&reader.expect("prefactor_overall")?, 0)?;
+    let scalars = last_atom(&reader.expect("prefactor_scalars")?, 0)?;
+    let colour = last_atom(&reader.expect("prefactor_colour")?, 0)?;
+    let branch = reader.expect("colour_branch")?;
+    let colour_branch = match branch.fields.as_slice() {
+        ["none"] => None,
+        _ => Some(ColourBranchInfo {
+            index: number(
+                branch.number,
+                branch.fields.first().copied().unwrap_or(""),
+                "colour branch",
+            )?,
+            count: number(branch.number, field(&branch, "of")?, "colour branch count")?,
+            rows: integers(branch.number, field(&branch, "rows")?, "colour rows")?,
+        }),
+    };
+    let insertions = reader.expect("insertions")?;
+    if insertions.fields.as_slice() != ["0"] {
+        return Err(FactorizedError::Reserved {
+            feature: "insertion vertices (child counterterms)".into(),
+        });
+    }
+    if let Some(key) = reader.peek_key()
+        && key != "lines"
+    {
+        let line = reader.raw()?;
+        return Err(reader.syntax(line.number, format!("unknown or misplaced key `{key}`")));
+    }
+    let lines = reader.expect("lines")?;
+    let asserted: usize = number(
+        lines.number,
+        lines.fields.first().copied().unwrap_or(""),
+        "line count",
+    )?;
+    let found = reader.read - reader.first;
+    if asserted != found {
+        return Err(FactorizedError::TextLineCount {
+            line: lines.number,
+            asserted,
+            found,
+        });
+    }
+    let end = reader.raw()?;
+    if end.key != "end" || !end.fields.is_empty() {
+        return Err(reader.syntax(end.number, "a record ends with `end`"));
+    }
+    Ok(FactorizedNumerator {
+        label,
+        kind: FactorizedKind::Direct,
+        dimension,
+        loop_edges,
+        external_edges,
+        edges,
+        vertices,
+        ports,
+        projector,
+        prefactor: Prefactor {
+            overall,
+            loop_sign,
+            nf_power,
+            scalars,
+            colour,
+        },
+        colour_branch,
+        insertions: Vec::new(),
+    })
+}
+
+/// Parse exactly one record (no validation).
+pub(super) fn parse_record(input: &str) -> Result<FactorizedNumerator> {
+    crate::Vakint::initialize_vakint_symbols();
+    let mut reader = Reader {
+        lines: input.lines().enumerate().peekable(),
+        first: 0,
+        read: 0,
+        offset: 0,
+    };
+    let value = read_one(&mut reader)?;
+    if let Some((index, _)) = reader.lines.next() {
+        return Err(FactorizedError::TextSyntax {
+            line: index + 1,
+            detail: "text after `end`".into(),
+        });
+    }
+    Ok(value)
+}
+
+/// Parse a concatenation of records (e.g. all colour branches of a graph in
+/// one file), without validation.
+pub fn parse_factorized_records(input: &str) -> Result<Vec<FactorizedNumerator>> {
+    crate::Vakint::initialize_vakint_symbols();
+    let mut reader = Reader {
+        lines: input.lines().enumerate().peekable(),
+        first: 0,
+        read: 0,
+        offset: 0,
+    };
+    let mut values = Vec::new();
+    while reader.lines.peek().is_some() {
+        reader.first = reader.read;
+        values.push(read_one(&mut reader)?);
+    }
+    Ok(values)
+}
+
+/// [`parse_factorized_records`] of a file, each record validated.
+pub fn read_factorized_records(path: &std::path::Path) -> Result<Vec<FactorizedNumerator>> {
+    let text = std::fs::read_to_string(path).map_err(|e| FactorizedError::TextSyntax {
+        line: 0,
+        detail: format!("{}: {e}", path.display()),
+    })?;
+    let values = parse_factorized_records(&text)?;
+    for value in &values {
+        value.validate()?;
+    }
+    Ok(values)
+}
