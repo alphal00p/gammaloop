@@ -474,11 +474,11 @@ pub(crate) fn match_denominators(
     value: &FactorizedNumerator,
 ) -> Result<Option<DenominatorMatch>> {
     let (topology, orientation) = r2_topology(value)?;
-    // The steps of `p_lowering::match_cut` (normalise, match with numerator 1,
-    // propagator request, head, scaleless split), without its per-call
-    // `validate_settings` (a property of the settings, not of the graph: it
-    // expands the G-scheme normalisation series every call; the caller's
-    // evaluation validates them once).
+    // The steps of R2's front end and of `p_lowering::match_cut` (normalise,
+    // canonicalise, match, propagator request, head, scaleless split), without
+    // the per-call `validate_settings` (a property of the settings, not of the
+    // graph: it expands the G-scheme normalisation series every call; the
+    // caller's evaluation validates them once).
     let mut term = VakintTerm {
         integral: topology,
         numerator: Atom::num(1),
@@ -497,6 +497,45 @@ pub(crate) fn match_denominators(
     let _external = term
         .propagator_external()?
         .ok_or("the normalised graph is not a p-integral")?;
+    // Match exactly as R2 does (`Vakint::evaluate`): its front end first
+    // matches the user's topology and rewrites integral and numerator in the
+    // registry's canonical form (`canonicalize_with`: `to_canonical` and the
+    // numerator rules), then `evaluate_integral_observed` matches that form
+    // again (`prepare_integral_specs`). The embedding of the keys is the
+    // composition of the two matches; a single match of the raw topology can
+    // select another, symmetric embedding: equal values, other keys (L4 graphs
+    // 427, 443, 1551, 1556, 1561, 1562, two one-loop bubbles each).
+    // R2 reaches both matches with a numerator in the loop momenta, so the
+    // scalar-only master rewrite (`transport_four_loop_master`) never fires
+    // there; a placeholder numerator `k(1)·k(1)` keeps it off here too (it is
+    // otherwise only carried through the rules; the engine reads the rules).
+    let k1 = function!(S.k, 1);
+    term.numerator = function!(S.dot, &k1, &k1);
+    let front = vakint
+        .match_topologies_for_settings(settings, term.integral.as_view())?
+        .ok_or("the graph's topology is not recognised")?;
+    term.canonicalize_expanding(settings, &front, false, false)?;
+    if term.numerator.is_zero() {
+        return Ok(None);
+    }
+    // R2 normalises the canonical form again before its second match; that
+    // normalisation must not produce a factor either.
+    let mut again = VakintTerm {
+        integral: term.integral.clone(),
+        numerator: Atom::num(1),
+        vectors: Vec::new(),
+    };
+    if !again.normalize_propagator()? {
+        return Ok(None);
+    }
+    if again.numerator != Atom::num(1) {
+        return Err(format!(
+            "a normalisation factor {} of the canonical form",
+            again.numerator
+        )
+        .into());
+    }
+    term.integral = again.integral;
     let rules = term.prepare_integral_specs(vakint, settings, None)?;
     if !matches!(rules.canonical_topology, crate::Topology::Propagator(_)) {
         return Err("not a p-integral topology".into());
@@ -538,13 +577,15 @@ pub(crate) fn match_denominators(
     if loops != value.loops() {
         return Err("the match changed the loop count".into());
     }
-    // The canonical images of k(i) and p(1) through the matched rules.
+    // The canonical images of k(i) and p(1) through the two matches (front
+    // end, then the canonical form's match).
     let image = |momentum: Atom| -> Result<Vec<Rational>> {
         let mut probe = VakintTerm {
             integral: Atom::num(1),
             numerator: momentum,
             vectors: Vec::new(),
         };
+        probe.apply_numerator_replacement_rules(&front, settings)?;
         probe.apply_numerator_replacement_rules(&cut.rules, settings)?;
         canonical_vector(&probe.numerator, loops, &cut.head)
     };

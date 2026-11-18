@@ -428,3 +428,79 @@ pub fn branch_gate(
     }
     Ok(out)
 }
+
+#[cfg(test)]
+mod tests {
+    //! Data tests of the engine against the reference path (skipped, with
+    //! `SKIP`, without the beta thread's DOT files
+    //! (`$VAKINT_TEST_FACTORIZED_DOT_ROOT/L4`, default
+    //! /common/ben/beta/results/prepared) or without the 1-4 loop p library
+    //! (`VAKINT_TEST_P_LIBRARY_1_4`)).
+    use std::path::PathBuf;
+
+    use super::*;
+
+    /// L4 graphs 427 and 443 (a ghost triangle with a one-loop gluon bubble
+    /// on each of its two symmetric branches). The reference matches twice
+    /// (front-end canonicalisation into the registry's form, then the match of
+    /// that form); one match of the raw topology selected another, symmetric
+    /// embedding: equal values, 346 of ~600 keys different (helper VH lane
+    /// integrate, engine before the two-step match). Every colour branch and
+    /// the whole graph must give the reference's keys exactly.
+    #[test]
+    fn a_symmetric_topology_matches_in_the_reference_embedding() {
+        let root = std::env::var("VAKINT_TEST_FACTORIZED_DOT_ROOT")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("/common/ben/beta/results/prepared"));
+        let directory = root.join("L4");
+        let library = std::env::var_os("VAKINT_TEST_P_LIBRARY_1_4");
+        let (Some(library), true) = (library, directory.join("diagram-000427.dot").exists())
+        else {
+            eprintln!("SKIP: no L4 DOT data under {} or no VAKINT_TEST_P_LIBRARY_1_4", root.display());
+            return;
+        };
+        let model = refpath::load_model(&directory).unwrap();
+        let mut template = Vakint::new().unwrap();
+        template
+            .load_p_library_directory(&PathBuf::from(library), false)
+            .unwrap();
+        for graph in ["000427", "000443"] {
+            let dot =
+                std::fs::read_to_string(directory.join(format!("diagram-{graph}.dot"))).unwrap();
+            let vakint = refpath::fresh_engine(&template).unwrap();
+            let gates = branch_gate(
+                &vakint,
+                &model,
+                &dot,
+                Projection::Metric,
+                &ContractOptions::default(),
+                1,
+            )
+            .unwrap();
+            assert!(!gates.is_empty(), "graph {graph}: no branch");
+            for (projection, branch, difference, keys) in gates {
+                assert!(keys > 0, "graph {graph}: an empty reference view");
+                assert!(
+                    difference.is_empty(),
+                    "graph {graph} {projection} branch {branch}: {difference:?}"
+                );
+            }
+            let options = EngineRunOptions {
+                reduce: false,
+                ..Default::default()
+            };
+            let engine = run_graph(&refpath::fresh_engine(&template).unwrap(), &model, &dot, &options)
+                .unwrap();
+            let reference = refpath::run_graph(
+                &refpath::fresh_engine(&template).unwrap(),
+                &model,
+                &dot,
+                &refpath::RunOptions::default(),
+            )
+            .unwrap();
+            let (view, _) = refpath::gate_view(&reference.results[0]);
+            let difference = p_gate::compare_gate_views(&view, &engine.results[0].view);
+            assert!(difference.is_empty(), "graph {graph}: {difference:?}");
+        }
+    }
+}
