@@ -5365,6 +5365,21 @@ fn boundary_showcase() {
     let wanted: Option<Vec<usize>> = std::env::var("VAKINT_TEST_BOUNDARY_PLANS")
         .ok()
         .map(|v| v.split(',').map(|x| x.trim().parse().unwrap()).collect());
+    // An explicitly selected plan that does not exist is an error, never an
+    // empty sum.
+    if let Some(wanted) = &wanted {
+        let missing: Vec<usize> = wanted
+            .iter()
+            .copied()
+            .filter(|&p| p >= plans.len())
+            .collect();
+        assert!(
+            missing.is_empty() && !wanted.is_empty(),
+            "VAKINT_TEST_BOUNDARY_PLANS selects plans {missing:?} of {} key plans (0..{})",
+            plans.len(),
+            plans.len()
+        );
+    }
     let mut values = vec![Atom::Zero, Atom::Zero];
     let mut plan_records = Vec::new();
     for (index, plan) in plans.into_iter().enumerate() {

@@ -427,12 +427,70 @@ fn parse_atom(text: &str) -> Result<Atom, VakintError> {
         .map_err(|error| super::invalid(format!("cannot parse {:.80}: {error}", text)))
 }
 
+/// What a header declares about one block file; every declared item is
+/// checked against the file ([`read_boundary_block_checked`]).
+#[derive(Clone, Debug, Default)]
+pub struct BlockExpectation {
+    /// The block id the header references at this position: the file's own
+    /// `block` line must name it.
+    pub id: Option<usize>,
+    /// `summands=` of the header's block line.
+    pub summands: Option<usize>,
+    /// `text_bytes=` of the header's block line: the bytes of the decompressed
+    /// file (its three header lines and the summand lines, with newlines).
+    pub text_bytes: Option<u64>,
+    /// sha256 (lower-case hex) of the file as stored, from the record's
+    /// `SHA256SUMS`.
+    pub sha256: Option<String>,
+}
+
 /// Stream one block file (`pint6.boundary-block.v1`, zstd unless the name
 /// does not end in `.zst`): a summand per line, added in chunks of 65,536;
 /// the summand count of the file header must match the lines read.
 pub fn read_boundary_block(path: &std::path::Path) -> Result<Atom, VakintError> {
+    read_boundary_block_checked(path, &BlockExpectation::default())
+}
+
+/// The sha256 of a file, lower-case hex.
+fn file_sha256(path: &std::path::Path) -> Result<String, VakintError> {
+    use sha2::Digest;
+    use std::io::Read;
+    let io = |error: std::io::Error| super::invalid(format!("{}: {error}", path.display()));
+    let mut file = std::fs::File::open(path).map_err(io)?;
+    let mut hasher = sha2::Sha256::new();
+    let mut buffer = vec![0u8; 1 << 20];
+    loop {
+        let n = file.read(&mut buffer).map_err(io)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buffer[..n]);
+    }
+    Ok(hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect())
+}
+
+/// [`read_boundary_block`] with the header's declarations: a block file
+/// whose digest, embedded block id, summand count or text size differs from
+/// what the header declares is an error naming the file and the item.
+pub fn read_boundary_block_checked(
+    path: &std::path::Path,
+    expect: &BlockExpectation,
+) -> Result<Atom, VakintError> {
     use std::io::BufRead;
     let io = |error: std::io::Error| super::invalid(format!("{}: {error}", path.display()));
+    if let Some(digest) = &expect.sha256 {
+        let found = file_sha256(path)?;
+        if &found != digest {
+            return Err(super::invalid(format!(
+                "{}: sha256 {found} differs from SHA256SUMS {digest}",
+                path.display()
+            )));
+        }
+    }
     let mut child = None;
     let reader: Box<dyn BufRead> = if path.to_string_lossy().ends_with(".zst") {
         let mut process = std::process::Command::new("zstd")
@@ -465,16 +523,43 @@ pub fn read_boundary_block(path: &std::path::Path) -> Result<Atom, VakintError> 
             path.display()
         )));
     }
-    header("block")?;
-    let summands: usize = header("summands")?
+    let block_line = header("block")?;
+    let id: usize = block_line
+        .strip_prefix("block ")
+        .and_then(|id| id.trim().parse().ok())
+        .ok_or_else(|| {
+            super::invalid(format!("{}: bad block line {block_line:?}", path.display()))
+        })?;
+    if let Some(expected) = expect.id
+        && id != expected
+    {
+        return Err(super::invalid(format!(
+            "{}: the file holds block {id}, the header references block {expected} here",
+            path.display()
+        )));
+    }
+    let summands_line = header("summands")?;
+    let summands: usize = summands_line
         .strip_prefix("summands ")
         .and_then(|count| count.trim().parse().ok())
         .ok_or_else(|| super::invalid(format!("{}: bad summands line", path.display())))?;
+    if let Some(expected) = expect.summands
+        && summands != expected
+    {
+        return Err(super::invalid(format!(
+            "{}: the file declares {summands} summands, the header {expected}",
+            path.display()
+        )));
+    }
     let mut partial = Vec::new();
     let mut chunk = Vec::with_capacity(BLOCK_CHUNK.min(summands));
     let mut read = 0usize;
+    // text_bytes = the decompressed file: the three header lines and the
+    // summand lines, each with its newline.
+    let mut text_bytes = (schema.len() + block_line.len() + summands_line.len() + 3) as u64;
     for line in lines {
         let line = line.map_err(io)?;
+        text_bytes += line.len() as u64 + 1;
         if line.is_empty() {
             continue;
         }
@@ -501,21 +586,89 @@ pub fn read_boundary_block(path: &std::path::Path) -> Result<Atom, VakintError> 
             path.display()
         )));
     }
+    if let Some(expected) = expect.text_bytes
+        && text_bytes != expected
+    {
+        return Err(super::invalid(format!(
+            "{}: {text_bytes} bytes of decompressed text read, the header declares text_bytes={expected}",
+            path.display()
+        )));
+    }
     Ok(Atom::add_many(partial.iter()))
 }
 
+/// `SHA256SUMS` beside a header (`<hex>  <file name>` lines), if present.
+fn read_sums(
+    directory: &std::path::Path,
+) -> Result<Option<std::collections::BTreeMap<String, String>>, VakintError> {
+    let path = directory.join("SHA256SUMS");
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let text = std::fs::read_to_string(&path)
+        .map_err(|error| super::invalid(format!("{}: {error}", path.display())))?;
+    let mut sums = std::collections::BTreeMap::new();
+    for line in text.lines().filter(|line| !line.trim().is_empty()) {
+        let (digest, name) = line
+            .split_once(char::is_whitespace)
+            .ok_or_else(|| super::invalid(format!("{}: bad line {line:?}", path.display())))?;
+        let name = name.trim_start().trim_start_matches('*').to_string();
+        if sums
+            .insert(name.clone(), digest.to_ascii_lowercase())
+            .is_some()
+        {
+            return Err(super::invalid(format!(
+                "{}: {name} listed twice",
+                path.display()
+            )));
+        }
+    }
+    Ok(Some(sums))
+}
+
 /// Read a `pint6.remainder-boundary.v1` header and its block files (same
-/// directory), streaming every block ([`read_boundary_block`]). Only the keys
-/// vakint needs are interpreted: closure_momentum, closure_mass_squared,
-/// epsilon_terms, p_loops, label, route, block / block_atom, pattern
-/// (closure_power, ref_closure), pattern_topology, pattern_term; the others
-/// are informational.
+/// directory), streaming every block ([`read_boundary_block_checked`]). Only
+/// the keys vakint needs are interpreted: closure_momentum,
+/// closure_mass_squared, epsilon_terms, p_loops, label, route, block /
+/// block_atom, pattern (closure_power, ref_closure), pattern_topology,
+/// pattern_term; the others are informational.
+///
+/// Integrity (a truncated or mixed-up dump must never give a value): the
+/// header must end with its `end` line; every declared cardinality must equal
+/// what is read (`blocks`, `patterns`, `routing`, `classes`, a block's
+/// `summands=` and `text_bytes=`, a pattern's `terms=` and `lines=` against its
+/// `pattern_prop` rows); no block, pattern or pattern_topology is declared
+/// twice; every pattern has one topology and every pattern_term names a
+/// declared pattern and an existing block; the classes, when declared,
+/// partition the patterns; a block file names the block the header references
+/// for it; with a `SHA256SUMS` beside the header, the header and every block
+/// file read must be listed and match.
 pub fn read_boundary_record(path: &std::path::Path) -> Result<BoundaryRecord, VakintError> {
     // Vakint's symbols (with their attributes) before any parse.
     crate::Vakint::initialize_vakint_symbols();
+    let bad = |what: String| super::invalid(format!("{}: {what}", path.display()));
+    let directory = path.parent().unwrap_or(std::path::Path::new("."));
+    let sums = read_sums(directory)?;
+    let name_of = |file: &std::path::Path| {
+        file.file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string()
+    };
+    if let Some(sums) = &sums {
+        let name = name_of(path);
+        let digest = sums
+            .get(&name)
+            .ok_or_else(|| bad(format!("not listed in SHA256SUMS")))?;
+        let found = file_sha256(path)?;
+        if &found != digest {
+            return Err(bad(format!(
+                "sha256 {found} differs from SHA256SUMS {digest}"
+            )));
+        }
+    }
     let text = std::fs::read_to_string(path)
         .map_err(|error| super::invalid(format!("{}: {error}", path.display())))?;
-    let directory = path.parent().unwrap_or(std::path::Path::new("."));
     let mut lines = text.lines();
     if lines.next().map(str::trim) != Some(format!("schema {BOUNDARY_SCHEMA}").as_str()) {
         return Err(super::invalid(format!(
@@ -527,11 +680,17 @@ pub fn read_boundary_record(path: &std::path::Path) -> Result<BoundaryRecord, Va
     let (mut momentum, mut mass) = (None, None);
     let (mut epsilon_terms, mut p_loops) = (None, None);
     let mut routing = Vec::new();
-    let mut block_files = std::collections::BTreeMap::<usize, String>::new();
+    let mut block_files = std::collections::BTreeMap::<usize, (String, BlockExpectation)>::new();
     let mut block_atoms = std::collections::BTreeMap::<usize, Atom>::new();
     let mut powers = std::collections::BTreeMap::<usize, (i64, Option<String>)>::new();
+    let mut declared_terms = std::collections::BTreeMap::<usize, usize>::new();
+    let mut declared_lines = std::collections::BTreeMap::<usize, usize>::new();
+    let mut props = std::collections::BTreeMap::<usize, usize>::new();
     let mut topologies = std::collections::BTreeMap::<usize, Atom>::new();
     let mut terms = std::collections::BTreeMap::<usize, Vec<(usize, Atom)>>::new();
+    let mut class_patterns = Vec::<Vec<usize>>::new();
+    let (mut n_blocks, mut n_patterns, mut n_routing, mut n_classes) = (None, None, None, None);
+    let mut ended = false;
     let field = |fields: &[&str], name: &str| -> Option<String> {
         fields
             .iter()
@@ -543,80 +702,195 @@ pub fn read_boundary_record(path: &std::path::Path) -> Result<BoundaryRecord, Va
             .parse()
             .map_err(|_| super::invalid(format!("{}: bad index {text:?}", path.display())))
     };
+    let count = |name: &str, text: &str| -> Result<usize, VakintError> {
+        text.trim()
+            .parse()
+            .map_err(|_| super::invalid(format!("{}: bad {name} count {text:?}", path.display())))
+    };
     for line in lines {
+        if ended {
+            if line.trim().is_empty() {
+                continue;
+            }
+            return Err(bad(format!("a line after the end line: {:.80}", line)));
+        }
         let (key, rest) = line.split_once([' ', '\t']).unwrap_or((line.trim(), ""));
         let fields = rest.split('\t').collect::<Vec<_>>();
         match key {
+            "end" => ended = true,
             "label" => label = rest.to_string(),
             "closure_momentum" => momentum = Some(parse_atom(rest)?),
             "closure_mass_squared" => mass = Some(parse_atom(rest)?),
             "epsilon_terms" => epsilon_terms = rest.trim().parse().ok(),
             "p_loops" => p_loops = rest.trim().parse().ok(),
+            "blocks" => n_blocks = Some(count("blocks", rest)?),
+            "patterns" => n_patterns = Some(count("patterns", rest)?),
+            "routing" => n_routing = Some(count("routing", rest)?),
+            "classes" => n_classes = Some(count("classes", rest)?),
             "route" if fields.len() == 2 => {
                 routing.push((parse_atom(fields[0])?, parse_atom(fields[1])?))
             }
             "block" => {
                 let g = index(fields[0])?;
                 let file = field(&fields, "file").unwrap_or_else(|| "inline".into());
-                block_files.insert(g, file);
+                let expect = BlockExpectation {
+                    id: Some(g),
+                    summands: field(&fields, "summands")
+                        .map(|n| count("summands", &n))
+                        .transpose()?,
+                    text_bytes: field(&fields, "text_bytes")
+                        .map(|n| count("text_bytes", &n).map(|n| n as u64))
+                        .transpose()?,
+                    sha256: None,
+                };
+                if block_files.insert(g, (file, expect)).is_some() {
+                    return Err(bad(format!("block {g} declared twice")));
+                }
             }
             "block_atom" if fields.len() == 2 => {
-                block_atoms.insert(index(fields[0])?, parse_atom(fields[1])?);
+                let g = index(fields[0])?;
+                if block_atoms.insert(g, parse_atom(fields[1])?).is_some() {
+                    return Err(bad(format!("block_atom {g} declared twice")));
+                }
             }
             "pattern" => {
                 let pi = index(fields[0])?;
                 let power = field(&fields, "closure_power")
                     .and_then(|power| power.parse().ok())
-                    .ok_or_else(|| {
-                        super::invalid(format!(
-                            "{}: pattern {pi} without closure_power",
-                            path.display()
-                        ))
-                    })?;
+                    .ok_or_else(|| bad(format!("pattern {pi} without closure_power")))?;
                 let reference = field(&fields, "ref_closure").filter(|seq| seq != "none");
-                powers.insert(pi, (power, reference));
+                if powers.insert(pi, (power, reference)).is_some() {
+                    return Err(bad(format!("pattern {pi} declared twice")));
+                }
+                if let Some(n) = field(&fields, "terms") {
+                    declared_terms.insert(pi, count("terms", &n)?);
+                }
+                if let Some(n) = field(&fields, "lines") {
+                    declared_lines.insert(pi, count("lines", &n)?);
+                }
             }
             "pattern_topology" if fields.len() == 2 => {
-                topologies.insert(index(fields[0])?, parse_atom(fields[1])?);
+                let pi = index(fields[0])?;
+                if topologies.insert(pi, parse_atom(fields[1])?).is_some() {
+                    return Err(bad(format!("pattern_topology {pi} declared twice")));
+                }
             }
+            "pattern_prop" => *props.entry(index(fields[0])?).or_default() += 1,
             "pattern_term" if fields.len() == 3 => {
                 terms
                     .entry(index(fields[0])?)
                     .or_default()
                     .push((index(fields[1])?, parse_atom(fields[2])?));
             }
+            "class" => {
+                let members = field(&fields, "patterns").unwrap_or_default();
+                let members = members
+                    .split(',')
+                    .filter(|m| !m.trim().is_empty())
+                    .map(index)
+                    .collect::<Result<Vec<_>, _>>()?;
+                class_patterns.push(members);
+            }
             _ => {}
         }
     }
-    let mut blocks = Vec::with_capacity(block_files.len());
-    for (position, (g, file)) in block_files.iter().enumerate() {
-        if *g != position {
-            return Err(super::invalid(format!(
-                "{}: blocks are not numbered 0..",
-                path.display()
+    if !ended {
+        return Err(bad("no end line: the header is truncated".into()));
+    }
+    let check = |name: &str, declared: Option<usize>, read: usize| -> Result<(), VakintError> {
+        match declared {
+            Some(declared) if declared != read => Err(bad(format!(
+                "{read} {name} read, the header declares {declared}"
+            ))),
+            _ => Ok(()),
+        }
+    };
+    check("blocks", n_blocks, block_files.len())?;
+    check("patterns", n_patterns, powers.len())?;
+    check("routes", n_routing, routing.len())?;
+    check("classes", n_classes, class_patterns.len())?;
+    if powers.is_empty() {
+        return Err(bad("no pattern".into()));
+    }
+    if let Some(pi) = topologies.keys().find(|pi| !powers.contains_key(pi)) {
+        return Err(bad(format!(
+            "pattern_topology {pi} of an undeclared pattern"
+        )));
+    }
+    if let Some(pi) = terms.keys().find(|pi| !powers.contains_key(pi)) {
+        return Err(bad(format!("pattern_term of an undeclared pattern {pi}")));
+    }
+    for (pi, declared) in &declared_terms {
+        let read = terms.get(pi).map_or(0, Vec::len);
+        if read != *declared {
+            return Err(bad(format!(
+                "pattern {pi}: {read} pattern_term rows read, the pattern declares terms={declared}"
             )));
         }
+    }
+    if !props.is_empty() {
+        for (pi, declared) in &declared_lines {
+            let read = props.get(pi).copied().unwrap_or(0);
+            if read != *declared {
+                return Err(bad(format!(
+                    "pattern {pi}: {read} pattern_prop rows read, the pattern declares lines={declared}"
+                )));
+            }
+        }
+    }
+    if !class_patterns.is_empty() {
+        let mut seen = std::collections::BTreeSet::new();
+        for pi in class_patterns.iter().flatten() {
+            if !seen.insert(*pi) {
+                return Err(bad(format!("pattern {pi} is in two classes")));
+            }
+        }
+        if seen.iter().ne(powers.keys()) {
+            return Err(bad("the classes do not partition the patterns".into()));
+        }
+    }
+    let mut blocks = Vec::with_capacity(block_files.len());
+    for (position, (g, (file, expect))) in block_files.iter().enumerate() {
+        if *g != position {
+            return Err(bad("blocks are not numbered 0..".into()));
+        }
         let block = if file == "inline" {
-            block_atoms.remove(g).ok_or_else(|| {
-                super::invalid(format!(
-                    "{}: inline block {g} without block_atom",
-                    path.display()
-                ))
-            })?
+            block_atoms
+                .remove(g)
+                .ok_or_else(|| bad(format!("inline block {g} without block_atom")))?
         } else {
-            read_boundary_block(&directory.join(file))?
+            let block_path = directory.join(file);
+            let mut expect = expect.clone();
+            if let Some(sums) = &sums {
+                expect.sha256 = Some(
+                    sums.get(&name_of(&block_path))
+                        .ok_or_else(|| bad(format!("block file {file} not listed in SHA256SUMS")))?
+                        .clone(),
+                );
+            }
+            read_boundary_block_checked(&block_path, &expect)?
         };
         blocks.push(block);
+    }
+    if let Some(g) = block_atoms.keys().next() {
+        return Err(bad(format!("block_atom {g} of no inline block")));
+    }
+    if let Some((pi, g)) = terms
+        .iter()
+        .flat_map(|(pi, rows)| rows.iter().map(move |(g, _)| (pi, g)))
+        .find(|(_, g)| **g >= blocks.len())
+    {
+        return Err(bad(format!(
+            "pattern {pi}: a pattern_term names block {g} of {}",
+            blocks.len()
+        )));
     }
     let mut patterns = Vec::with_capacity(powers.len());
     let mut ref_closures = Vec::with_capacity(powers.len());
     for (pi, (closure_power, reference)) in powers {
-        let topology = topologies.remove(&pi).ok_or_else(|| {
-            super::invalid(format!(
-                "{}: pattern {pi} without pattern_topology",
-                path.display()
-            ))
-        })?;
+        let topology = topologies
+            .remove(&pi)
+            .ok_or_else(|| bad(format!("pattern {pi} without pattern_topology")))?;
         patterns.push(BoundaryPattern {
             topology,
             closure_power,
@@ -918,6 +1192,171 @@ mod tests {
             assert!(read_boundary_record(&header).is_err());
         }
         let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    /// vk5l-physrun (Astra review 2026-11-18): a damaged dump never gives a
+    /// value. Two-block bubble written by the reference writer; every
+    /// damage (a missing pattern_term row, interchanged block files, a
+    /// truncated header or block file, a duplicated or extra row, a count
+    /// that disagrees, a digest that disagrees) is refused with an error
+    /// naming the record; the intact record (with and without SHA256SUMS)
+    /// reads back.
+    #[test]
+    fn damaged_boundary_records_are_refused() {
+        crate::Vakint::initialize_vakint_symbols();
+        let directory =
+            std::env::temp_dir().join(format!("vakint-boundary-integrity-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).unwrap();
+        let boundary = RemainderBoundary::new(
+            "integrity",
+            vk_parse!("p(1)").unwrap(),
+            vk_parse!("1").unwrap(),
+            vec![
+                (vk_parse!("k(1)").unwrap(), vk_parse!("k(1)").unwrap()),
+                (vk_parse!("p(1)").unwrap(), vk_parse!("p(1)").unwrap()),
+            ],
+            vec![vk_parse!("1").unwrap(), vk_parse!("3").unwrap()],
+            vec![pattern(
+                "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))",
+                vec![(0, "ε^2"), (1, "2*ε^2")],
+            )],
+        )
+        .unwrap();
+        let header = directory.join("boundary-1-000000.txt");
+        let block = |g: usize| directory.join(format!("boundary-1-000000.block-{g:03}.txt"));
+        let write = || {
+            for entry in std::fs::read_dir(&directory).unwrap() {
+                std::fs::remove_file(entry.unwrap().path()).unwrap();
+            }
+            write_boundary_record(&boundary, &header, 3, false, |_| false).unwrap();
+        };
+        let text = || std::fs::read_to_string(&header).unwrap();
+        let error = |case: &str| {
+            let error = read_boundary_record(&header)
+                .err()
+                .unwrap_or_else(|| panic!("{case}: a damaged record was read"));
+            let message = format!("{error:?}");
+            assert!(message.contains("boundary-1-000000"), "{case}: {message}");
+            message
+        };
+        write();
+        let intact = read_boundary_record(&header).unwrap();
+        assert_eq!(intact.boundary.patterns[0].terms.len(), 2);
+        // (a) the last pattern_term row deleted, terms=2 kept.
+        write();
+        let full = text();
+        let rows: Vec<&str> = full.lines().collect();
+        let last = rows
+            .iter()
+            .rposition(|l| l.starts_with("pattern_term"))
+            .unwrap();
+        let kept: Vec<&str> = rows
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| *i != last)
+            .map(|(_, l)| *l)
+            .collect();
+        std::fs::write(&header, kept.join("\n") + "\n").unwrap();
+        assert!(error("missing term").contains("pattern_term rows"));
+        // (b) the two block files interchanged (each keeps its embedded id).
+        write();
+        let (b0, b1) = (
+            std::fs::read(block(0)).unwrap(),
+            std::fs::read(block(1)).unwrap(),
+        );
+        std::fs::write(block(0), &b1).unwrap();
+        std::fs::write(block(1), &b0).unwrap();
+        assert!(error("swapped blocks").contains("references block"));
+        // (c) a truncated header: cut before its end line, and inside the rows.
+        write();
+        let full = text();
+        std::fs::write(&header, full.trim_end().trim_end_matches("end")).unwrap();
+        assert!(error("no end line").contains("truncated"));
+        std::fs::write(&header, &full[..full.find("pattern_term").unwrap()]).unwrap();
+        error("truncated in the rows");
+        // (d) a truncated block file.
+        write();
+        let body = std::fs::read_to_string(block(1)).unwrap();
+        std::fs::write(
+            block(1),
+            body.lines().take(3).collect::<Vec<_>>().join("\n"),
+        )
+        .unwrap();
+        error("truncated block");
+        // (e) counts that disagree and duplicated rows.
+        for (case, from, to) in [
+            ("blocks count", "blocks 2", "blocks 3"),
+            ("patterns count", "patterns 1", "patterns 2"),
+            ("routing count", "routing 2", "routing 1"),
+            (
+                "block summands",
+                "summands=1\tfile=boundary-1-000000.block-001",
+                "summands=2\tfile=boundary-1-000000.block-001",
+            ),
+        ] {
+            write();
+            let damaged = text().replacen(from, to, 1);
+            assert_ne!(damaged, text(), "{case}: fixture");
+            std::fs::write(&header, damaged).unwrap();
+            error(case);
+        }
+        write();
+        let full = text();
+        let topology = full
+            .lines()
+            .find(|l| l.starts_with("pattern_topology"))
+            .unwrap()
+            .to_string();
+        std::fs::write(
+            &header,
+            full.replacen(&topology, &format!("{topology}\n{topology}"), 1),
+        )
+        .unwrap();
+        assert!(error("duplicate topology").contains("twice"));
+        // (f) SHA256SUMS: the intact record reads; a changed block is refused.
+        write();
+        let sums = [header.clone(), block(0), block(1)]
+            .iter()
+            .map(|path| {
+                format!(
+                    "{}  {}",
+                    file_sha256(path).unwrap(),
+                    path.file_name().unwrap().to_string_lossy()
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(directory.join("SHA256SUMS"), sums + "\n").unwrap();
+        read_boundary_record(&header).unwrap();
+        let body = std::fs::read_to_string(block(1)).unwrap();
+        std::fs::write(block(1), body.replace("\n3\n", "\n5\n")).unwrap();
+        assert!(error("digest").contains("SHA256SUMS"));
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    /// vk5l-physrun: read (and so check) the boundary records listed in
+    /// VAKINT_TEST_BOUNDARY_CHECK (colon-separated header paths) and print
+    /// what was read; skipped when unset.
+    #[test]
+    fn check_boundary_records_from_env() {
+        let Some(list) = std::env::var_os("VAKINT_TEST_BOUNDARY_CHECK") else {
+            return;
+        };
+        for header in std::env::split_paths(&list) {
+            let started = std::time::Instant::now();
+            let record = read_boundary_record(&header)
+                .unwrap_or_else(|error| panic!("{}: REFUSED {error:?}", header.display()));
+            let terms: usize = record.boundary.patterns.iter().map(|p| p.terms.len()).sum();
+            eprintln!(
+                "BOUNDARY_CHECK OK {}: blocks {}, patterns {}, pattern_term rows {terms}, routes {}, {:.1} s",
+                header.display(),
+                record.boundary.blocks.len(),
+                record.boundary.patterns.len(),
+                record.boundary.routing.len(),
+                started.elapsed().as_secs_f64()
+            );
+        }
     }
 
     #[test]

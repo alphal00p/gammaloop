@@ -47,9 +47,9 @@ use crate::{
 };
 
 pub use boundary::{
-    BOUNDARY_BLOCK_SCHEMA, BOUNDARY_SCHEMA, BoundaryOptions, BoundaryPattern, BoundaryRecord,
-    BoundaryStats, RemainderBoundary, read_boundary_block, read_boundary_record,
-    write_boundary_record,
+    BOUNDARY_BLOCK_SCHEMA, BOUNDARY_SCHEMA, BlockExpectation, BoundaryOptions, BoundaryPattern,
+    BoundaryRecord, BoundaryStats, RemainderBoundary, read_boundary_block,
+    read_boundary_block_checked, read_boundary_record, write_boundary_record,
 };
 pub(crate) use catalogue::{PMatch, match_graph_preferring};
 pub use dot::to_dot;
