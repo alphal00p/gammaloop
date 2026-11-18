@@ -4,8 +4,10 @@ use std::collections::{BTreeMap, HashSet};
 
 use feynkit_graph::{FeynmanDiagram, IntegralFamily};
 use feynkit_kinematics::Kinematics;
+use spenso::network::library::symbolic::ETS;
+use spenso::structure::representation::{BaseRepName, Minkowski};
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder},
     domains::integer::Integer,
     id::Replacement,
 };
@@ -619,6 +621,14 @@ impl VakintExpression {
             }
         }
         scalar = scalar.replace_multiple(&products);
+        // Open external indices (D6): an indexed momentum of the stored
+        // routing, `m(.., mink(D, i))`, becomes vakint's indexed vector of its
+        // image (`k(j, i)`, `±p(1, i)`), and a metric `g(mink(D, a), mink(D, b))`
+        // vakint's `g(a, b)`; the tensor prepass reduces them after the match.
+        // A numerator without Minkowski slots takes the path unchanged.
+        if scalar.contains_symbol(Minkowski::selfless_symbol()) {
+            scalar = open_index_images(&scalar, &momenta, &targets);
+        }
         if !parameter(&scalar) {
             return Err(invalid(
                 "numerator contains unconverted momentum/tensor notation; use declared scalar products",
@@ -626,6 +636,82 @@ impl VakintExpression {
         }
         Self::try_from(scalar * S.topo.call(topology))
     }
+}
+
+/// The index of a Spenso Minkowski slot `mink(D, index)`.
+fn minkowski_index(slot: AtomView<'_>) -> Option<AtomView<'_>> {
+    match slot {
+        AtomView::Fun(function)
+            if function.get_symbol() == Minkowski::selfless_symbol() && function.get_nargs() == 2 =>
+        {
+            function.iter().nth(1)
+        }
+        _ => None,
+    }
+}
+
+/// [`VakintExpression::from_propagator_diagram`]'s map of open indices:
+/// `momenta[i](.., mink(D, index))` -> `targets[i]` with `index` attached to
+/// each of its vectors, `g(mink(D, a), mink(D, b))` -> `g(a, b)`. Anything
+/// else is left for the final notation check.
+fn open_index_images(numerator: &Atom, momenta: &[Atom], targets: &[Atom]) -> Atom {
+    let indexed = |target: &Atom, index: AtomView<'_>| {
+        target.replace_map(|term, _context, out| {
+            if let AtomView::Fun(vector) = term
+                && (vector.get_symbol() == S.k || vector.get_symbol() == S.p)
+                && vector.get_nargs() == 1
+            {
+                **out = FunctionBuilder::new(vector.get_symbol())
+                    .add_arg(vector.iter().next().unwrap())
+                    .add_arg(index)
+                    .finish();
+            }
+        })
+    };
+    numerator.replace_map(|term, _context, out| {
+        let AtomView::Fun(function) = term else {
+            return;
+        };
+        let arguments = function.iter().collect::<Vec<_>>();
+        if function.get_symbol() == ETS.metric
+            && let [left, right] = arguments.as_slice()
+            && let (Some(left), Some(right)) = (minkowski_index(*left), minkowski_index(*right))
+        {
+            **out = FunctionBuilder::new(S.g).add_arg(left).add_arg(right).finish();
+            return;
+        }
+        let Some((last, head)) = arguments.split_last() else {
+            return;
+        };
+        let Some(index) = minkowski_index(*last) else {
+            return;
+        };
+        let compact = if head.is_empty() {
+            Atom::var(function.get_symbol())
+        } else {
+            FunctionBuilder::new(function.get_symbol())
+                .add_args(head)
+                .finish()
+        };
+        // The routing's momenta may also carry their compact slot `mink(D)`.
+        let AtomView::Fun(slot) = *last else {
+            return;
+        };
+        let compact_slotted = FunctionBuilder::new(function.get_symbol())
+            .add_args(head)
+            .add_arg(
+                FunctionBuilder::new(Minkowski::selfless_symbol())
+                    .add_arg(slot.iter().next().unwrap())
+                    .finish(),
+            )
+            .finish();
+        if let Some(position) = momenta
+            .iter()
+            .position(|momentum| *momentum == compact || *momentum == compact_slotted)
+        {
+            **out = indexed(&targets[position], index);
+        }
+    })
 }
 
 #[cfg(test)]
