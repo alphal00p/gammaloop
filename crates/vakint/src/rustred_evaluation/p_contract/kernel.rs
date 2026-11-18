@@ -548,6 +548,9 @@ pub(crate) fn forms_denominator(forms: &[SlotForm]) -> Rational {
     Rational::from((scale, Integer::one()))
 }
 
+/// A pair form: slot monomials with coefficients in the ring's scalars.
+pub(crate) type PairForm<C> = Rc<Vec<(Mono, <C as Coef>::Scalar)>>;
+
 /// The canonical momenta of the matched presentation, the slot forms of the
 /// canonical scalar products, and the interned momentum vectors with the
 /// memo of their pair forms (coefficients in the ring's scalars).
@@ -563,7 +566,7 @@ pub(crate) struct Kinematics<C: Coef> {
     /// Interned canonical vectors over `(k_1..k_L, head)`.
     pub(crate) vectors: Vec<Vec<Rational>>,
     ids: HashMap<Vec<Rational>, u16>,
-    pairs: HashMap<(u16, u16), Rc<Vec<(Mono, C::Scalar)>>>,
+    pairs: HashMap<(u16, u16), PairForm<C>>,
     /// A pair form with a coefficient outside the ring's scalars was met.
     pub(crate) failed: bool,
 }
@@ -606,7 +609,7 @@ impl<C: Coef> Kinematics<C> {
     /// `head·head` part as `j = 1` (`r = 0`), exactly the split of the
     /// reference reader (`p_lowering::Reader::dot` followed by the slot
     /// substitution).
-    pub(crate) fn pair_form(&mut self, a: u16, b: u16) -> Rc<Vec<(Mono, C::Scalar)>> {
+    pub(crate) fn pair_form(&mut self, a: u16, b: u16) -> PairForm<C> {
         let key = (a.min(b), a.max(b));
         if let Some(form) = self.pairs.get(&key) {
             return Rc::clone(form);
@@ -643,9 +646,9 @@ impl<C: Coef> Kinematics<C> {
                 );
             }
         };
-        for i in 0..l {
-            for j in 0..l {
-                let weight = &(&va[i] * &vb[j]) * &self.scale;
+        for (i, vi) in va[..l].iter().enumerate() {
+            for (j, wj) in vb[..l].iter().enumerate() {
+                let weight = &(vi * wj) * &self.scale;
                 let index = self.pair_index(i, j);
                 add_form(&mut terms, &self.forms[index], &weight);
             }
@@ -677,7 +680,7 @@ impl<C: Coef> Kinematics<C> {
                 None => self.failed = true,
             }
         }
-        form.sort_by(|a, b| a.0.cmp(&b.0));
+        form.sort_by_key(|term| term.0);
         let form = Rc::new(form);
         self.pairs.insert(key, Rc::clone(&form));
         form
@@ -906,12 +909,12 @@ pub(crate) fn resolve(mut legs: Vec<Leg>) -> Result<Resolved, String> {
                     found = Some((p, 0, p, 1));
                     break 'search;
                 }
-                for q in p + 1..legs.len() {
+                for (q, other_leg) in legs.iter().enumerate().skip(p + 1) {
                     for other_side in 0..2 {
                         let other = if other_side == 0 {
-                            legs[q].0
+                            other_leg.0
                         } else {
-                            legs[q].1
+                            other_leg.1
                         };
                         if other == End::Idx(index) {
                             found = Some((p, side, q, other_side));

@@ -726,7 +726,10 @@ fn has_factor_scalars(value: &FactorizedNumerator) -> bool {
 /// Apply the metric renames: every edge factor that is exactly one metric
 /// `g(mink(D,a), mink(D,b))` (a Feynman-gauge propagator once its scalars are
 /// pulled) identifies `a` with `b` in all other factors and disappears.
-fn metric_renames(value: &FactorizedNumerator) -> (Vec<(usize, Atom)>, Vec<(String, Atom)>, usize) {
+/// Edge factors kept (by edge id), the other factors (labelled), renames applied.
+type Renamed = (Vec<(usize, Atom)>, Vec<(String, Atom)>, usize);
+
+fn metric_renames(value: &FactorizedNumerator) -> Renamed {
     let is_metric = |factor: &Atom| -> Option<(Atom, Atom)> {
         let AtomView::Fun(function) = factor.as_view() else {
             return None;
@@ -739,7 +742,7 @@ fn metric_renames(value: &FactorizedNumerator) -> (Vec<(usize, Atom)>, Vec<(Stri
             crate::p_integral::factorized::as_slot(args[0])?,
             crate::p_integral::factorized::as_slot(args[1])?,
         );
-        (a.rep == names::MINK && b.rep == names::MINK).then(|| (a.atom, b.atom))
+        (a.rep == names::MINK && b.rep == names::MINK).then_some((a.atom, b.atom))
     };
     // Union-find over slot atoms.
     let mut parent = HashMap::<Atom, Atom>::default();
@@ -911,7 +914,7 @@ pub struct GraphMemo {
     /// Per matched graph: the canonical kinematics (slot forms of the
     /// presentation, interned vectors, pair-form memo) and the vector of every
     /// edge id.
-    setups: HashMap<String, (Kinematics<IPoly>, HashMap<i64, Option<u16>>)>,
+    setups: HashMap<String, Setup<IPoly>>,
     /// Matches served from the memo / computed.
     pub hits: usize,
     pub misses: usize,
@@ -957,7 +960,7 @@ pub fn contract_and_lower_with(
     if has_factor_scalars(value) {
         let mut copy = value.clone();
         if let Some(pulled) = pull_factor_scalars(&mut copy)? {
-            prefactor = prefactor * pulled;
+            prefactor *= pulled;
         }
         normalised = Some(copy);
     }
@@ -1034,6 +1037,9 @@ pub fn contract_and_lower_with(
     }
 }
 
+/// The kinematics of a matched graph and the vector of every edge id.
+type Setup<C> = (Kinematics<C>, HashMap<i64, Option<u16>>);
+
 type Lowered = (
     BTreeMap<Channel, FoldedInputs>,
     BTreeMap<(usize, Atom), BTreeSet<String>>,
@@ -1042,10 +1048,7 @@ type Lowered = (
 
 /// The kinematics of a matched graph in ring `C`: the presentation's slot
 /// forms (scaled to integers for [`IPoly`]) and the vector of every edge.
-fn setup<C: Coef>(
-    vakint: &Vakint,
-    matched: &DenominatorMatch,
-) -> Result<(Kinematics<C>, HashMap<i64, Option<u16>>)> {
+fn setup<C: Coef>(vakint: &Vakint, matched: &DenominatorMatch) -> Result<Setup<C>> {
     let handle: std::sync::Arc<PLibraryHandle> = vakint.p_library().map_err(VakintError::from)?;
     let top = handle.top(matched.family).map_err(VakintError::from)?;
     let presentation = handle.library.presentation(top.presentation);
