@@ -379,3 +379,93 @@ fn from_parts_checks_what_it_is_given() {
         Err(FactorizedError::Ports { .. })
     ));
 }
+
+/// The refpath convention of a value's prefactor (lane refpath, REFPATH.md
+/// section 5): couplings at `gs = 1` (`gs_minus = -1`, `gs_i = i`, `gs2_i = i`,
+/// `gs2_minus_i = -i`), colour invariants in refpath's symbols, `refpath::nf`.
+fn refpath_prefactor(value: &FactorizedNumerator) -> Atom {
+    use idenso::color::CS;
+    let i = Atom::i();
+    let mut total = value.prefactor.total();
+    for (name, image) in [
+        ("UFO::gs_minus", Atom::num(-1)),
+        ("UFO::gs_i", i.clone()),
+        ("UFO::gs2_i", i.clone()),
+        ("UFO::gs2_minus_i", -i.clone()),
+    ] {
+        total = total
+            .replace(Atom::var(symbolica::symbol!(name)))
+            .with(image);
+    }
+    let total = total
+        .replace(Atom::var(symbolica::symbol!(names::NF)))
+        .with(Atom::var(crate::refpath::SYMBOLS.nf));
+    crate::refpath::map_invariants(
+        &total,
+        &Atom::var(symbolica::symbol!("spenso::dA")),
+        &Atom::var(CS.nc),
+    )
+    .expand()
+    .together()
+}
+
+/// The adapter (`evaluate_factorized`: idenso contraction, vakint's existing
+/// p evaluation) on the two fixtures with lane refpath's metric normalisation
+/// `1/(i q² (D-1))` gives exactly lane refpath's archived L1 values of the same
+/// graphs (B/num-refpath/reference/L1-metric, graphs 000000 and 000002, two
+/// Laurent terms, G-scheme).
+#[test]
+fn the_adapter_reproduces_lane_refpaths_archived_l1_values() {
+    let vakint = crate::Vakint::new().unwrap();
+    let settings = crate::refpath::vakint_settings(2);
+    let gluon = "(-10𝑖/3)*refpath::{}::CA*vakint::{}::ε^(-1)+(10𝑖/3)*log(-1*vakint::{symmetric,linear}::dot(vakint::{spenso::tensor,spenso::rank1}::p(1),vakint::{spenso::tensor,spenso::rank1}::p(1))*vakint::{}::mursq^(-1))*refpath::{}::CA+(𝑖/9)*refpath::{}::CA";
+    let quark = "(-4𝑖/3)*log(-1*vakint::{symmetric,linear}::dot(vakint::{spenso::tensor,spenso::rank1}::p(1),vakint::{spenso::tensor,spenso::rank1}::p(1))*vakint::{}::mursq^(-1))*refpath::{}::TF*refpath::{}::nf+(-4𝑖/9)*refpath::{}::TF*refpath::{}::nf+(4𝑖/3)*refpath::{}::TF*refpath::{}::nf*vakint::{}::ε^(-1)";
+    for (text, expected) in [(GLUON, gluon), (QUARK, quark)] {
+        let mut value = read(text);
+        value.projector.as_mut().unwrap().p2_power = -1;
+        let d = Atom::var(value.dimension);
+        let prefactor = refpath_prefactor(&value) / (Atom::i() * (&d - Atom::num(1)));
+        let got = evaluate_factorized(&vakint, &settings, &value, &prefactor).unwrap();
+        let expected = crate::utils::vakint_macros::vk_parse!(expected).unwrap();
+        assert!(
+            (&got.value - &expected).expand().is_zero(),
+            "{}: {} vs {}",
+            value.label,
+            got.value,
+            expected
+        );
+    }
+    // The closure kind stays reserved for the adapter too.
+    let mut value = read(GLUON);
+    value.kind = FactorizedKind::Closure(ClosureSpec {
+        edge: 2,
+        mass_squared: Atom::num(1),
+        power: 1,
+        taylor: None,
+    });
+    assert!(matches!(
+        evaluate_factorized(&vakint, &settings, &value, &Atom::num(1)),
+        Err(FactorizedError::Reserved { .. })
+    ));
+}
+
+/// The flavour symbol is the caller's: in the beta thread's namespace the
+/// quark bubble's weight has coefficient -1 on `beta::nf` (loop sign -1,
+/// n_f^1) and nothing is left on `vakint::nf`; with the default total the
+/// opposite (review O3/interface.md section 2).
+#[test]
+fn the_flavour_symbol_is_the_callers() {
+    let quark = read(QUARK);
+    let beta_nf = Atom::var(symbolica::symbol!("beta::nf"));
+    let vakint_nf = Atom::var(symbolica::symbol!(names::NF));
+    let weight = |total: Atom| {
+        (&total / &quark.prefactor.scalars / &quark.prefactor.colour / &quark.prefactor.overall)
+            .expand()
+    };
+    let in_beta = weight(quark.prefactor.total_with_flavour(&beta_nf));
+    assert_eq!(in_beta.coefficient(beta_nf.as_view()), Atom::num(-1));
+    assert_eq!(in_beta.coefficient(vakint_nf.as_view()), Atom::num(0));
+    let in_vakint = weight(quark.prefactor.total());
+    assert_eq!(in_vakint.coefficient(vakint_nf.as_view()), Atom::num(-1));
+    assert_eq!(in_vakint.coefficient(beta_nf.as_view()), Atom::num(0));
+}

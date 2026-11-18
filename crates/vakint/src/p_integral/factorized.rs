@@ -38,11 +38,14 @@
 //! by idenso / spenso only, never by vakint itself: a value is contracted with
 //! idenso's production chain ([`contract_with_idenso`],
 //! [`FactorizedNumerator::contract_naively`]) and the contracted numerator is
-//! handed to vakint's existing lowering. An earlier experimental contraction
+//! handed to vakint's existing lowering: [`evaluate_factorized`] does both
+//! (value -> idenso contraction x prefactor -> `Vakint::evaluate`, the folded
+//! inputs behind the gate observers). An earlier experimental contraction
 //! engine for these values is kept for reference on the branch
 //! `parked/vakint-numerator-engine` and is deprecated.
 
 mod colour;
+mod evaluate;
 #[cfg(feature = "feynkit-ingress")]
 mod feynkit;
 mod oracle;
@@ -54,6 +57,7 @@ use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use symbolica::coefficient::CoefficientView;
 
 pub use colour::{ColourMode, ColourRow, colour_coefficient, split_local_colour};
+pub use evaluate::{FactorizedValue, contract_to_vakint_dots, evaluate_factorized, vakint_input};
 #[cfg(feature = "feynkit-ingress")]
 pub use feynkit::{FromFeynkitOptions, ProjectorChoice};
 pub use oracle::contract_with_idenso;
@@ -268,6 +272,17 @@ impl Default for Prefactor {
 }
 
 impl Prefactor {
+    /// [`Self::total`] with the caller's flavour symbol in place of
+    /// `vakint::nf` (e.g. the beta thread's `beta::nf`): the flavour factor is
+    /// written once, in the symbol of whoever extracts its coefficient.
+    pub fn total_with_flavour(&self, nf: &Atom) -> Atom {
+        &self.overall
+            * Atom::num(self.loop_sign)
+            * nf.pow(Atom::num(self.nf_power as i64))
+            * &self.scalars
+            * &self.colour
+    }
+
     /// `overall × loop_sign × nf^nf_power × scalars × colour`.
     pub fn total(&self) -> Atom {
         let nf = Atom::var(symbolica::symbol!(names::NF));
@@ -443,6 +458,8 @@ pub enum FactorizedError {
     Colour { detail: String },
     #[error("contraction oracle: {detail}")]
     Oracle { detail: String },
+    #[error("evaluation: {detail}")]
+    Evaluation { detail: String },
 }
 
 type Result<T> = std::result::Result<T, FactorizedError>;

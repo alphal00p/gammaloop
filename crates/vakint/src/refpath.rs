@@ -268,7 +268,11 @@ fn invariant_symbol(function: AtomView<'_>) -> Option<Atom> {
 /// colour basis v1). `adjoint` and `fundamental` are the dimension atoms of the
 /// reduced network's representations (`N_A`, `N_R` here; `spenso::dA`,
 /// `spenso::Nc` in the input type's reduction).
-fn map_invariants(value: &Atom, adjoint_dimension: &Atom, fundamental_dimension: &Atom) -> Atom {
+pub fn map_invariants(
+    value: &Atom,
+    adjoint_dimension: &Atom,
+    fundamental_dimension: &Atom,
+) -> Atom {
     let s = &*SYMBOLS;
     let adjoint = ColorAdjoint {}.to_symbolic([adjoint_dimension.clone()]);
     let fundamental = ColorFundamental {}.to_symbolic([fundamental_dimension.clone()]);
