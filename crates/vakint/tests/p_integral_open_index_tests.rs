@@ -364,3 +364,45 @@ fn the_rank_one_symmetric_kite_follows_from_its_reflection() {
     let second = evaluate(&engine, &settings, &format!("k(2,1)*{KITE}"));
     assert!(second.expand().is_zero(), "kite k2: {second}");
 }
+
+/// Pre-existing bug (fixed with D6's follow-up): vakint's dot-notation pass
+/// read an integer-labelled metric as a vector (`g(1,3)` as `g(1)` with index
+/// 3), so a metric contracted with a metric gave `dot(g(1), k(1))`. Metrics
+/// with integer indices now contract like metrics with symbolic ones, for a
+/// p-integral and for a vacuum integral; inputs that worked are unchanged.
+#[test]
+fn integer_labelled_metrics_are_metrics() {
+    let engine = engine();
+    let settings = settings(3);
+    let vacuum = "topo(prop(1,edge(1,1),k(1),muvsq,3))";
+    for topology in [BUBBLE_12, vacuum] {
+        let chained = evaluate(
+            &engine,
+            &settings,
+            &format!("g(1,2)*g(1,3)*k(1,2)*k(1,3)*{topology}"),
+        );
+        let dotted = evaluate(&engine, &settings, &format!("dot(k(1),k(1))*{topology}"));
+        assert!(
+            (&chained - &dotted).expand().is_zero(),
+            "{topology}: chained metrics {chained} vs {dotted}"
+        );
+        let symbolic = evaluate(
+            &engine,
+            &settings,
+            &format!("g(mu1,mu2)*g(mu1,mu3)*k(1,mu2)*k(1,mu3)*{topology}"),
+        );
+        assert!((&symbolic - &dotted).expand().is_zero(), "{topology}: symbolic indices");
+    }
+    // One metric with an integer-labelled open index: `g(1,2) k(1,2) k(1,3)`
+    // is `k(1,1) k(1,3)`.
+    let metric = evaluate(&engine, &settings, &format!("g(1,2)*k(1,2)*k(1,3)*{BUBBLE_12}"));
+    let plain = evaluate(&engine, &settings, &format!("k(1,1)*k(1,3)*{BUBBLE_12}"));
+    assert!(
+        (&metric - &plain).expand().is_zero(),
+        "open metric: {metric} vs {plain}"
+    );
+    // The case that already worked before the fix (metric between two loop
+    // vectors) keeps its value.
+    let worked = evaluate(&engine, &settings, &format!("g(1,2)*k(1,1)*k(1,2)*{BUBBLE_12}"));
+    assert!((&worked - &evaluate(&engine, &settings, &format!("dot(k(1),k(1))*{BUBBLE_12}"))).expand().is_zero());
+}

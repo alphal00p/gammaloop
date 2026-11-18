@@ -7619,9 +7619,14 @@ Evaluated (n_loops=1, mu_r=1) :
     /// Whether `symbol` may head an indexed vector `v(id, index)` of
     /// [`Self::convert_to_dot_notation`]. Declared scalar functions retain
     /// their arguments even when they resemble (vector id, index), as do
-    /// native CAS scalar functions.
+    /// native CAS scalar functions. Vakint's metric `g(i, j)` is never a
+    /// vector: with integer indices it resembles one (`g(1, 3)` would read as
+    /// the vector `g(1)` with index 3, or `g(3)` with index 1: `g` is
+    /// symmetric), and a metric contracted with another metric was then
+    /// turned into a meaningless `dot(g(..), ..)`.
     fn is_dot_notation_vector_head(symbol: Symbol) -> bool {
-        !symbol.is_scalar()
+        symbol != S.g
+            && !symbol.is_scalar()
             && !crate::hpl::is_projection_symbol(symbol)
             && (symbol.get_namespace() != "symbolica"
                 || !symbolica::state::State::is_builtin(symbol.get_stripped_name()))
