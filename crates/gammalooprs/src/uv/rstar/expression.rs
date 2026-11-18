@@ -142,6 +142,21 @@ impl IntegrationTimings {
     }
 
     pub(super) fn log(&self, graph: &Graph, integration_id: usize, loops: usize, kind: &str) {
+        if super::routing::log_level() >= 1 {
+            eprintln!(
+                "RR_OUTER graph={} id={integration_id} loops={loops} kind={kind} total={:.3} routing={:.3} taylor={:.3} materialization={:.3} projection={:.3} algebra={:.3} conversion={:.3} backend={:.3} finish={:.3}",
+                graph.name,
+                self.started.elapsed().as_secs_f64(),
+                self.routing,
+                self.taylor,
+                self.materialization,
+                self.tensor_projection,
+                self.algebra,
+                self.conversion,
+                self.backend,
+                self.finish,
+            );
+        }
         tracing::info!(
             uv = true,
             rstar = true,
@@ -1308,9 +1323,14 @@ impl RStarIntegrand {
         let basis = if region.loops == 0 {
             graph.empty_lmb()
         } else {
-            graph
-                .shrunken_sub_lmb(&region.support, &contracted, region.boundary.clone())
-                .wrap_err("could not route an R* prepared component")?
+            super::routing::remainder_basis(
+                graph,
+                &region.support,
+                &contracted,
+                region.boundary.clone(),
+                Some(marked),
+            )
+            .wrap_err("could not route an R* prepared component")?
         };
         let soft_edges = graph
             .iter_edges_of(&region.boundary)
@@ -1360,6 +1380,17 @@ impl RStarIntegrand {
                 hard,
                 mass_squared.sqrt(),
                 function!(SPENSO_TAG.dot, &momentum, &momentum) - &mass_squared
+            );
+        }
+        if region.loops != 0 && super::routing::log_level() >= 1 {
+            super::routing::log_basis(
+                graph,
+                region,
+                &contracted,
+                &basis,
+                marked,
+                &reference_mass_squared,
+                &expression,
             );
         }
         let mut converter_graph = graph.clone();
@@ -1635,6 +1666,16 @@ impl RStarIntegrand {
             Self::simplify_view_certified(routed.as_view())
                 .wrap_err("while contracting the routed R* numerator")?
         };
+        if super::routing::log_level() >= 1 {
+            eprintln!(
+                "RR_CONTRACT graph={} path=boundary loops={} seconds={:.3} routed_bytes={} contracted_bytes={}",
+                self.graph.name,
+                self.region.loops,
+                started.elapsed().as_secs_f64(),
+                routed.as_view().get_byte_size(),
+                contracted.0.as_view().get_byte_size(),
+            );
+        }
         if vakint::census::enabled() {
             vakint::census::record(
                 "remainder_contraction",
@@ -1727,6 +1768,16 @@ impl RStarIntegrand {
                 (sum.finish(), certified)
             }
         };
+        if super::routing::log_level() >= 1 {
+            eprintln!(
+                "RR_CONTRACT graph={} path=whole loops={} seconds={:.3} routed_bytes={} contracted_bytes={}",
+                self.graph.name,
+                self.region.loops,
+                started.elapsed().as_secs_f64(),
+                self.routed.as_view().get_byte_size(),
+                contracted.0.as_view().get_byte_size(),
+            );
+        }
         if vakint::census::enabled() {
             vakint::census::record(
                 "remainder_contraction",
@@ -2657,6 +2708,16 @@ impl RStarIntegrand {
         streamed::guard_checkpoint("the outer-Taylor expansion")?;
         // Instrumentation (opt-in, no value depends on it): the P_i x D_j
         // shape of this product, reported by the next to_vakint call.
+        if self.region.loops != 0 && super::routing::log_level() >= 2 {
+            super::routing::log_taylor(
+                &self.graph,
+                &self.region,
+                &self.basis,
+                root_edges,
+                degree,
+                &counts::taylor_shape(compensated.as_view(), parameter, degree),
+            );
+        }
         if self.region.loops != 0 && counts::enabled() {
             counts::set_taylor_shape(counts::taylor_shape(
                 compensated.as_view(),
