@@ -157,12 +157,27 @@ impl<'a> MassiveUvEvaluator<'a> {
             .ok_or_else(|| eyre!("an R* contracted support contains an unpaired half-edge"))?;
         // Route before identifying nodes, using the original boundary rather
         // than treating the retained, consumed edges as new external carriers.
+        // The numerator-aware keys read the remainder numerator x insertions.
+        let numerator = if super::routing::needs_numerator() {
+            let mut numerator = self
+                .graph
+                .numerator(&region.remaining, &contracted.filter)
+                .to_d_dim(crate::utils::GS.dim)
+                .get_single_atom()?;
+            for insertion in insertions {
+                numerator *= insertion;
+            }
+            Some(numerator)
+        } else {
+            None
+        };
         graph.loop_momentum_basis = super::routing::remainder_basis(
             &self.graph,
             &region.support,
             &contracted,
             region.boundary.clone(),
             self.reference_mass.as_ref().map(|(edge, _)| *edge),
+            numerator.as_ref().map(|n| n.as_view()),
         )
         .wrap_err("could not route the decorated UV quotient")?;
 
