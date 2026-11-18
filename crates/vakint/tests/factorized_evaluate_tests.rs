@@ -15,6 +15,7 @@
 //! the archive (`VAKINT_TEST_P_LIBRARY_1_4`, else the built-in one). Without
 //! the DOT data the test prints SKIP and passes; without an archive it checks
 //! the live comparison only.
+#![cfg(feature = "feynkit-ingress")]
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

@@ -383,6 +383,7 @@ fn from_parts_checks_what_it_is_given() {
 /// The refpath convention of a value's prefactor (lane refpath, REFPATH.md
 /// section 5): couplings at `gs = 1` (`gs_minus = -1`, `gs_i = i`, `gs2_i = i`,
 /// `gs2_minus_i = -i`), colour invariants in refpath's symbols, `refpath::nf`.
+#[cfg(feature = "feynkit-ingress")]
 fn refpath_prefactor(value: &FactorizedNumerator) -> Atom {
     use idenso::color::CS;
     let i = Atom::i();
@@ -414,6 +415,7 @@ fn refpath_prefactor(value: &FactorizedNumerator) -> Atom {
 /// `1/(i q² (D-1))` gives exactly lane refpath's archived L1 values of the same
 /// graphs (B/num-refpath/reference/L1-metric, graphs 000000 and 000002, two
 /// Laurent terms, G-scheme).
+#[cfg(feature = "feynkit-ingress")]
 #[test]
 fn the_adapter_reproduces_lane_refpaths_archived_l1_values() {
     let vakint = crate::Vakint::new().unwrap();
