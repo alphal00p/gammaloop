@@ -48,6 +48,10 @@ pub struct DirectOptions {
     /// the hand-over then reads `dot(K(i), ..)` through the loop momenta's
     /// images instead of the edges'.
     pub routed: bool,
+    /// Route with the spanning tree of the fewest loop + root momentum terms
+    /// over the lines (exact enumeration; the beta thread's `compact-free`
+    /// key) instead of FeynKit's stored basis. Implies routing before idenso.
+    pub compact: bool,
 }
 
 /// Pseudo-edge id of FeynKit's loop momentum `K(i)` in the hand-over tables.
@@ -66,6 +70,12 @@ pub struct DirectSeconds {
     pub lower: f64,
     pub reduce: f64,
     pub finalise: f64,
+    /// Choosing the compact basis (option `compact`), and its routing size
+    /// against FeynKit's stored basis, with the number of spanning trees.
+    pub routing: f64,
+    pub routing_size: usize,
+    pub stored_routing_size: usize,
+    pub trees: usize,
 }
 
 /// One projection of R3.
@@ -270,6 +280,7 @@ pub fn contract_edges(
     q_squared: &Atom,
     projection: Projection,
     options: DirectOptions,
+    compact: Option<(&Lines, &CompactBasis)>,
 ) -> Result<Vec<(&'static str, Atom)>> {
     let s = &*SYMBOLS;
     let basis = diagram.loop_momentum_basis();
@@ -292,10 +303,10 @@ pub fn contract_edges(
             .residuals
             .iter()
             .fold(Atom::num(1), |product, residual| product * couplings(residual));
-        let product = if options.routed {
-            basis.route_expression(&product)
-        } else {
-            product
+        let product = match compact {
+            Some((lines, chosen)) => lines.route_compact(&product, chosen).map_err(|e| eyre::eyre!(e))?,
+            None if options.routed => basis.route_expression(&product),
+            None => product,
         };
         let continued = product
             .replace(Minkowski {}.to_symbolic([Atom::var(W_.d_), Atom::var(W_.a___)]))
@@ -332,6 +343,247 @@ pub struct Lines {
     pub edges: Vec<PEdge>,
     orientation: i64,
     independent: (symbolica::atom::Symbol, Atom),
+    /// With a compact basis: the edge whose momentum is `K(i)`.
+    loop_edges: Option<Vec<i64>>,
+}
+
+/// A loop-momentum basis chosen by [`Lines::compact_basis`]: the cotree edges
+/// (their momenta are the new `K(0..L)`) and every edge's momentum in it.
+pub struct CompactBasis {
+    pub cotree: Vec<i64>,
+    /// edge id -> (coefficients over the new `K(i)`, coefficient of FeynKit's
+    /// independent external momentum).
+    pub routes: std::collections::BTreeMap<i64, (Vec<i64>, i64)>,
+    /// Sum over the lines of the loop + root momentum terms (the key), and the
+    /// same for FeynKit's stored basis.
+    pub size: usize,
+    pub stored_size: usize,
+    pub trees: usize,
+}
+
+/// `A x = b` over the rationals for a small integer `A` (columns given),
+/// `None` if singular or the solution is not integral.
+fn solve_integral(columns: &[Vec<i64>], b: &[i64]) -> Option<Vec<i64>> {
+    let n = b.len();
+    if columns.len() != n {
+        return None;
+    }
+    // augmented matrix of rationals (num, den) as i128
+    let mut m: Vec<Vec<(i128, i128)>> = (0..n)
+        .map(|r| {
+            let mut row: Vec<(i128, i128)> =
+                columns.iter().map(|c| (c[r] as i128, 1i128)).collect();
+            row.push((b[r] as i128, 1));
+            row
+        })
+        .collect();
+    fn norm((a, b): (i128, i128)) -> (i128, i128) {
+        fn gcd(mut a: i128, mut b: i128) -> i128 {
+            while b != 0 {
+                (a, b) = (b, a % b);
+            }
+            a.abs()
+        }
+        let g = gcd(a, b).max(1);
+        let (a, b) = (a / g, b / g);
+        if b < 0 { (-a, -b) } else { (a, b) }
+    }
+    for col in 0..n {
+        let pivot = (col..n).find(|&r| m[r][col].0 != 0)?;
+        m.swap(col, pivot);
+        let (pn, pd) = m[col][col];
+        for k in col..=n {
+            let (a, b) = m[col][k];
+            m[col][k] = norm((a * pd, b * pn));
+        }
+        for r in 0..n {
+            if r == col || m[r][col].0 == 0 {
+                continue;
+            }
+            let (fn_, fd) = m[r][col];
+            for k in col..=n {
+                let (a, b) = m[r][k];
+                let (c, d) = m[col][k];
+                // a/b - (fn/fd)(c/d)
+                m[r][k] = norm((a * fd * d - fn_ * c * b, b * fd * d));
+            }
+        }
+    }
+    (0..n)
+        .map(|r| {
+            let (a, b) = m[r][n];
+            (b == 1 || a % b == 0).then_some((a / b) as i64)
+        })
+        .collect()
+}
+
+impl Lines {
+    /// The spanning tree of the lines with the fewest loop + root momentum
+    /// terms (by enumeration; ties: the smallest sorted cotree), and every
+    /// edge's momentum in its basis. Exact: momenta are re-expressed, the
+    /// images through the match are unchanged.
+    pub fn compact_basis(&self) -> std::result::Result<CompactBasis, String> {
+        let vertices = self
+            .lines
+            .iter()
+            .flat_map(|l| [l.source, l.target])
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        let index = |v: i64| vertices.binary_search(&v).unwrap();
+        let n = vertices.len();
+        if self.lines.len() + 1 < n || self.lines.len() + 1 - n != self.loops {
+            return Err("the lines do not form a connected graph with the loop count".into());
+        }
+        let vector = |loops: &[i64], head: i64| -> (Vec<i64>, i64) {
+            (loops.to_vec(), head * self.orientation)
+        };
+        let all_edges = self
+            .edges
+            .iter()
+            .filter(|e| e.id < LOOP_EDGE_BASE)
+            .map(|e| (e.id, vector(&e.loops, e.head)))
+            .collect::<Vec<_>>();
+        let lines = self.lines.iter().map(|l| (l.id, vector(&l.loops, l.head))).collect::<Vec<_>>();
+        let size_of = |routes: &[(Vec<i64>, i64)]| {
+            routes
+                .iter()
+                .map(|(s, x)| s.iter().filter(|c| **c != 0).count() + usize::from(*x != 0))
+                .sum::<usize>()
+        };
+        let stored_size = size_of(&lines.iter().map(|(_, v)| v.clone()).collect::<Vec<_>>());
+        let mut best: Option<(usize, Vec<i64>, Vec<usize>)> = None;
+        let mut trees = 0;
+        let e = self.lines.len();
+        let mut choose = (0..n - 1).collect::<Vec<usize>>();
+        loop {
+            // union-find on the chosen tree lines
+            let mut parent = (0..n).collect::<Vec<usize>>();
+            fn find(p: &mut [usize], mut x: usize) -> usize {
+                while p[x] != x {
+                    p[x] = p[p[x]];
+                    x = p[x];
+                }
+                x
+            }
+            let mut ok = true;
+            for &k in &choose {
+                let (a, b) = (find(&mut parent, index(self.lines[k].source)), find(&mut parent, index(self.lines[k].target)));
+                if a == b {
+                    ok = false;
+                    break;
+                }
+                parent[a] = b;
+            }
+            if ok {
+                trees += 1;
+                let cotree = (0..e).filter(|k| !choose.contains(k)).collect::<Vec<_>>();
+                let columns = cotree.iter().map(|&k| lines[k].1 .0.clone()).collect::<Vec<_>>();
+                let mut routes = Vec::with_capacity(e);
+                let mut fine = true;
+                for (_, (l, x)) in &lines {
+                    match solve_integral(&columns, l) {
+                        Some(sigma) => {
+                            let xs = x - sigma.iter().zip(&cotree).map(|(s, &k)| s * lines[k].1 .1).sum::<i64>();
+                            routes.push((sigma, xs));
+                        }
+                        None => {
+                            fine = false;
+                            break;
+                        }
+                    }
+                }
+                if fine {
+                    let size = size_of(&routes);
+                    let ids = cotree.iter().map(|&k| lines[k].0).collect::<Vec<_>>();
+                    let better = match &best {
+                        None => true,
+                        Some((bs, bids, _)) => size < *bs || (size == *bs && ids < *bids),
+                    };
+                    if better {
+                        best = Some((size, ids, cotree));
+                    }
+                }
+            }
+            // next combination of n-1 out of e
+            let k = n - 1;
+            let mut i = k;
+            while i > 0 && choose[i - 1] == e - k + i - 1 {
+                i -= 1;
+            }
+            if i == 0 {
+                break;
+            }
+            choose[i - 1] += 1;
+            for j in i..k {
+                choose[j] = choose[j - 1] + 1;
+            }
+        }
+        let (size, cotree_ids, cotree) = best.ok_or("no spanning tree")?;
+        let columns = cotree.iter().map(|&k| lines[k].1 .0.clone()).collect::<Vec<_>>();
+        let mut routes = std::collections::BTreeMap::new();
+        for (id, (l, x)) in &all_edges {
+            let sigma = solve_integral(&columns, l).ok_or("an edge outside the cotree span")?;
+            let xs = x - sigma.iter().zip(&cotree).map(|(s, &k)| s * lines[k].1 .1).sum::<i64>();
+            routes.insert(*id, (sigma, xs));
+        }
+        Ok(CompactBasis {
+            cotree: cotree_ids,
+            routes,
+            size,
+            stored_size,
+            trees,
+        })
+    }
+
+    /// Route `product` in a compact basis: `Q(e, args..)` -> `Σ σ_i K(i, args..)
+    /// + x P(args..)` (FeynKit's symbols; numerical multiples collected as
+    /// `route_expression` does).
+    pub fn route_compact(&self, product: &Atom, basis: &CompactBasis) -> std::result::Result<Atom, String> {
+        let q = feynkit_graph::symbols::momentum();
+        let k = feynkit_graph::symbols::loop_momentum();
+        let mut failure = None;
+        let routed = product.replace_map(|view, _, out| {
+            let AtomView::Fun(f) = view else {
+                return;
+            };
+            if f.get_symbol() != q || f.get_nargs() < 1 {
+                return;
+            }
+            let mut arguments = f.iter();
+            let Some(edge) = arguments.next().and_then(|a| i64::try_from(a).ok()) else {
+                failure = Some("a symbolic edge id".to_string());
+                return;
+            };
+            let rest = arguments.collect::<Vec<_>>();
+            let Some((sigma, x)) = basis.routes.get(&edge) else {
+                failure = Some(format!("an edge {edge} without a route"));
+                return;
+            };
+            let mut sum = Atom::Zero;
+            for (i, c) in sigma.iter().enumerate() {
+                if *c != 0 {
+                    sum += Atom::num(*c)
+                        * symbolica::atom::FunctionBuilder::new(k)
+                            .add_arg(Atom::num(i as i64))
+                            .add_args(&rest)
+                            .finish();
+                }
+            }
+            if *x != 0 {
+                sum += Atom::num(*x)
+                    * symbolica::atom::FunctionBuilder::new(self.independent.0)
+                        .add_arg(&self.independent.1)
+                        .add_args(&rest)
+                        .finish();
+            }
+            **out = sum;
+        });
+        match failure {
+            Some(error) => Err(error),
+            None => Ok(routed.expand_num()),
+        }
+    }
 }
 
 pub fn lines_of(
@@ -412,6 +664,7 @@ pub fn lines_of(
         edges: out_edges,
         orientation,
         independent,
+        loop_edges: None,
     })
 }
 
@@ -426,10 +679,13 @@ impl Lines {
             return i64::try_from(first).ok().map(VectorRef::Edge);
         }
         if f.get_symbol() == feynkit_graph::symbols::loop_momentum() {
-            return i64::try_from(first)
-                .ok()
-                .filter(|i| (0..LOOP_EDGE_BASE).contains(i))
-                .map(|i| VectorRef::Edge(LOOP_EDGE_BASE + i));
+            let i = i64::try_from(first).ok()?;
+            return match &self.loop_edges {
+                Some(cotree) => usize::try_from(i).ok().and_then(|i| cotree.get(i)).map(|&e| VectorRef::Edge(e)),
+                None => (0..LOOP_EDGE_BASE)
+                    .contains(&i)
+                    .then_some(VectorRef::Edge(LOOP_EDGE_BASE + i)),
+            };
         }
         (f.get_symbol() == self.independent.0 && first == self.independent.1.as_view())
             .then_some(VectorRef::Head(self.orientation))
@@ -453,14 +709,37 @@ pub fn lower_graph(
     options: DirectOptions,
     seconds: &mut DirectSeconds,
 ) -> Result<DirectOutcome> {
-    let started = Instant::now();
-    let numerators = contract_edges(diagram, branches, momentum, q_squared, projection, options)?;
-    seconds.contract += started.elapsed().as_secs_f64();
-    let started = Instant::now();
-    let lines = match lines_of(diagram, momentum) {
+    let mut lines = match lines_of(diagram, momentum) {
         Ok(lines) => lines,
         Err(reason) => return Ok(DirectOutcome::Declined(reason)),
     };
+    let chosen = if options.compact {
+        let started = Instant::now();
+        let chosen = match lines.compact_basis() {
+            Ok(chosen) => chosen,
+            Err(reason) => return Ok(DirectOutcome::Declined(reason)),
+        };
+        lines.loop_edges = Some(chosen.cotree.clone());
+        seconds.routing += started.elapsed().as_secs_f64();
+        seconds.routing_size += chosen.size;
+        seconds.stored_routing_size += chosen.stored_size;
+        seconds.trees += chosen.trees;
+        Some(chosen)
+    } else {
+        None
+    };
+    let started = Instant::now();
+    let numerators = contract_edges(
+        diagram,
+        branches,
+        momentum,
+        q_squared,
+        projection,
+        options,
+        chosen.as_ref().map(|chosen| (&lines, chosen)),
+    )?;
+    seconds.contract += started.elapsed().as_secs_f64();
+    let started = Instant::now();
     let matched = match match_lines(vakint, settings, lines.loops, &lines.lines, &lines.edges)? {
         Matched::Ready(matched) => matched,
         Matched::Scaleless => return Ok(DirectOutcome::Zero("scaleless after the match")),

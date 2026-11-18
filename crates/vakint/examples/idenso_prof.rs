@@ -20,6 +20,7 @@
 //!     [--direct]           with --evaluate: also R3 (`refpath::direct`: edge-basis contraction, denominator-first
 //!                          match, direct read without expansion), paired with R2, gated against it
 //!     [--r3-routed]        R3 contracts the ROUTED product exactly as R2 (loop basis); only the hand-over differs
+//!     [--r3-compact]       R3 routes with the spanning tree of the fewest loop + root terms (exact enumeration)
 //!     [--r3-dots]          R3 asks idenso for dot notation directly (AlgebraContraction::Dots, no to_dots)
 //!     [--edge-contract]    idenso alone: R3's edge-basis contraction timed next to R2's (no vakint; L5)
 //!     [--ref-dir <dir>]    with --direct: also gate R3 against lane refpath's stored dumps (gate/<NNNNNN>.<projection>.gate)
@@ -475,6 +476,7 @@ fn main() -> eyre::Result<()> {
     let mut merge_colour = false;
     let mut r3_dots = false;
     let mut r3_routed = false;
+    let mut r3_compact = false;
     let mut edge_contract = false;
     let mut ref_dir: Option<PathBuf> = None;
     let mut no_staged = false;
@@ -515,6 +517,7 @@ fn main() -> eyre::Result<()> {
             "--merge-colour" => merge_colour = true,
             "--r3-dots" => r3_dots = true,
             "--r3-routed" => r3_routed = true,
+            "--r3-compact" => r3_compact = true,
             "--edge-contract" => edge_contract = true,
             "--no-staged" => no_staged = true,
             "--stem-list" => {
@@ -697,7 +700,8 @@ fn main() -> eyre::Result<()> {
                 let cpu = cpu_seconds();
                 let value = refpath::direct::contract_edges(
                     &diagram, &terms, &momentum, &q_squared, projection,
-                    refpath::direct::DirectOptions { dots: r3_dots, routed: r3_routed },
+                    refpath::direct::DirectOptions { dots: r3_dots, routed: r3_routed, compact: false },
+                    None,
                 )?;
                 edge_runs.push((wall.elapsed().as_secs_f64(), cpu_seconds() - cpu));
                 edge_terms = value.iter().map(|(_, v)| terms_of(&v.expand())).sum();
@@ -803,7 +807,7 @@ fn main() -> eyre::Result<()> {
                         let outcome = refpath::direct::lower_graph(
                             &engine, &settings, &diagram, &terms, &momentum, &q_squared,
                             &weight, projection, true,
-                            refpath::direct::DirectOptions { dots: r3_dots, routed: r3_routed },
+                            refpath::direct::DirectOptions { dots: r3_dots, routed: r3_routed, compact: r3_compact },
                             &mut seconds,
                         )?;
                         direct_terms = terms.len();
@@ -887,6 +891,10 @@ fn main() -> eyre::Result<()> {
                     "wall": median(direct_runs.iter().map(|r| r.1).collect()),
                     "cpu": median(direct_runs.iter().map(|r| r.2).collect()),
                     "colour": median(direct_colour.clone()), "terms": direct_terms, "merge_colour": merge_colour, "dots": r3_dots, "routed": r3_routed,
+                    "compact": r3_compact, "routing": d(&|s| s.routing),
+                    "routing_size": direct_runs.first().map(|r| r.0.routing_size),
+                    "stored_routing_size": direct_runs.first().map(|r| r.0.stored_routing_size),
+                    "trees": direct_runs.first().map(|r| r.0.trees),
                 });
             }
             let m = |f: &dyn Fn(&refpath::StageSeconds) -> f64| {
