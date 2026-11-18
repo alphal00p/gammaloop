@@ -48,6 +48,13 @@ feature, ABI or interpreter differences. The contributor guide owns the
 #link("../../CONTRIBUTING.typ#development-commands")[development commands] and
 #link("../../CONTRIBUTING.typ#native-python")[wheel installation and GC-root rules].
 
+== Current source boundaries
+
+Crate-owned unit test modules such as the parameter binding fixtures belong
+to owner test and workspace lint inputs. Production CLI, Python and reusable
+documentation Cargo sources exclude these modules. The documentation source
+still stages its Cargo manifests, build scripts and required assets.
+
 == Sources checked
 <sources-checked>
 - Crane FAQ: #link("https://crane.dev/faq/constant-rebuilds.html")

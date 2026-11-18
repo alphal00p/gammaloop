@@ -4,7 +4,8 @@
   docsPkgs,
   craneLib,
   workspaceRoot,
-  cargoSources,
+  productionCargoSources,
+  ownTestSources,
   localCargoPatchSources,
   nonCargoBuildSources,
   symbolicaRenderData,
@@ -332,7 +333,7 @@ let
     fileset = lib.fileset.unions (
       documentationDeveloperScopeSources
       ++ [
-        cargoSources
+        productionCargoSources
         nonCargoBuildSources
         repositoryDocumentationSources
         (workspaceRoot + "/docs")
@@ -342,6 +343,10 @@ let
         (workspaceRoot + "/crates/kurvst/typst/examples/knot-logo.typ")
         (workspaceRoot + "/scripts/update-docs-pages.sh")
         (workspaceRoot + "/scripts/prepare-documentation-cells.py")
+        # Published Idenso documentation validates links to these test sources.
+        (workspaceRoot + "/crates/idenso/src/color/test/form_reference.rs")
+        (workspaceRoot + "/crates/idenso/src/dirac/test/form_reference.rs")
+        (workspaceRoot + "/crates/idenso/src/dirac/test/mod.rs")
         (workspaceRoot + "/examples/api/python")
         (workspaceRoot + "/examples/notebooks")
         (workspaceRoot + "/examples/cli/aa_aa/2L/graphs/GL00.dot")
@@ -395,7 +400,7 @@ let
     root = workspaceRoot;
     fileset = lib.fileset.unions [
       (craneLib.fileset.cargoTomlAndLock workspaceRoot)
-      (craneLib.fileset.rust workspaceRoot)
+      (lib.fileset.difference (craneLib.fileset.rust workspaceRoot) ownTestSources)
       localCargoPatchSources
       (workspaceRoot + "/.cargo/config.toml")
       (lib.fileset.difference nonCargoBuildSources (

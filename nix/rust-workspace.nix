@@ -17,7 +17,7 @@
   mkCargoRuntime = import ./cargo-runtime.nix {inherit pkgs craneLib;};
 
   documentation = import ./documentation.nix {
-    inherit self pkgs docsPkgs craneLib workspaceRoot cargoSources localCargoPatchSources nonCargoBuildSources symbolicaRenderData
+    inherit self pkgs docsPkgs craneLib workspaceRoot productionCargoSources ownTestSources localCargoPatchSources nonCargoBuildSources symbolicaRenderData
       ciArgs ciCargoProfile
       dummyCargoTarget normalizeWorkspaceHackBuildScriptTimestampScript
       workspacePackageSrcFor workspaceMissingCargoTargetsScript
@@ -61,6 +61,11 @@
     (craneLib.fileset.commonCargoSources workspaceRoot)
     localCargoPatchSources
   ];
+
+  ownTestSources = lib.fileset.unions (
+    workspacePackageExtraFilesetsForSourcePackages "ownTest" workspaceMemberPackages
+  );
+  productionCargoSources = lib.fileset.difference cargoSources ownTestSources;
 
   cargoVendorDir = craneLib.vendorCargoDeps {
     cargoLock = (workspaceRoot + "/Cargo.lock");
@@ -151,7 +156,7 @@
   workspaceBuildSrc = lib.fileset.toSource {
     root = workspaceRoot;
     fileset = lib.fileset.unions [
-      cargoSources
+      productionCargoSources
       nonCargoBuildSources
     ];
   };
@@ -191,7 +196,7 @@
     root = workspaceRoot;
     fileset = lib.fileset.unions [
       # Benchmark cards are TOML but do not affect the drawings embedded in the CLI.
-      (lib.fileset.difference cargoSources (lib.fileset.maybeMissing (workspaceRoot + "/benchmarks/performance")))
+      (lib.fileset.difference productionCargoSources (lib.fileset.maybeMissing (workspaceRoot + "/benchmarks/performance")))
       (workspaceRoot + "/crates/clinnet/templates/figure.typ")
       (workspaceRoot + "/crates/clinnet/templates/grid.typ")
       (workspaceRoot + "/crates/clinnet/templates/layout.typ")
@@ -657,6 +662,7 @@
   workspacePackageExtraSourceRoots.ownTest = {
     gammalooprs = [
       "crates/gammalooprs/src/graph/parse/tests.rs"
+      "crates/gammalooprs/src/integrands/process/param_value_pairs/tests.rs"
       "crates/gammalooprs/src/numerator/spensotests.rs"
       "crates/gammalooprs/src/numerator/tests.rs"
       "crates/gammalooprs/src/utils/test_utils.rs"
