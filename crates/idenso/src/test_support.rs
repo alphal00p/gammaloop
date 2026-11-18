@@ -179,6 +179,16 @@ impl TestReps {
 
         let _ = TS.A;
         let _ = SPENSO_TS.G;
+
+        // Captured gammaloop fixtures declare these heads with Spenso's index
+        // tags. Register them with those tags before any test names them without
+        // attributes: an untagged first definition turns the fixture's tagged
+        // declaration into a redefinition error in whichever test parses it.
+        let _ = symbol!("gammalooprs::hedge", tags = ["spenso::index"]);
+        let _ = symbol!(
+            "gammalooprs::dummy",
+            tags = ["spenso::index", "spenso::index-label:d"]
+        );
     }
 }
 

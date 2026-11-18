@@ -2,6 +2,41 @@ use super::*;
 use insta::assert_snapshot;
 use symbolica::atom::AtomView;
 
+/// Number fresh dummies `d_<n>` by first occurrence. They come from a
+/// process-wide counter, so their names depend on which tests ran before.
+fn relabel_fresh_dummies(printed: String) -> String {
+    let chars: Vec<char> = printed.chars().collect();
+    let identifier = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    let mut seen: Vec<String> = Vec::new();
+    let mut relabeled = String::with_capacity(printed.len());
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == 'd' && chars.get(i + 1) == Some(&'_') && (i == 0 || !identifier(chars[i - 1]))
+        {
+            let mut end = i + 2;
+            while end < chars.len() && chars[end].is_ascii_digit() {
+                end += 1;
+            }
+            if end > i + 2 && (end == chars.len() || !identifier(chars[end])) {
+                let name: String = chars[i..end].iter().collect();
+                let label = match seen.iter().position(|known| *known == name) {
+                    Some(label) => label,
+                    None => {
+                        seen.push(name);
+                        seen.len() - 1
+                    }
+                };
+                relabeled.push_str(&format!("d_{label}"));
+                i = end;
+                continue;
+            }
+        }
+        relabeled.push(chars[i]);
+        i += 1;
+    }
+    relabeled
+}
+
 #[test]
 fn two_gamma_trace() {
     test_initialize();
@@ -105,7 +140,7 @@ fn gamma_five_epsilon_trick() {
         gamma!(slot!(r.mink4, rho)),
     );
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(GammaSimplifySettings::repeated_pairs().with_gamma5_epsilon_expansion()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"-1*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,nu)))*g(mink(4,mu),mink(4,rho))+chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,d_0)),gamma5(in,out))*epsilon(mink(4,d_0),mink(4,mu),mink(4,nu),mink(4,rho))+chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)))*g(mink(4,nu),mink(4,rho))+chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,rho)))*g(mink(4,mu),mink(4,nu))");
+    assert_snapshot!(relabel_fresh_dummies(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { gamma: Some(GammaSimplifySettings::repeated_pairs().with_gamma5_epsilon_expansion()), epsilon: true, ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string()), @"-1*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,nu)))*g(mink(4,mu),mink(4,rho))+chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,d_0)),gamma5(in,out))*epsilon(mink(4,d_0),mink(4,mu),mink(4,nu),mink(4,rho))+chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)))*g(mink(4,nu),mink(4,rho))+chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,rho)))*g(mink(4,mu),mink(4,nu))");
 }
 
 #[test]

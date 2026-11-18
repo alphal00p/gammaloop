@@ -367,7 +367,9 @@ fn compare_two_slot_boundary_shapes() {
     initialize();
     let _mink = Minkowski {}.new_rep(4);
 
-    let (mu1, mu9) = symbol!("mu1", "mu9"; tags=["spenso::index"]);
+    // `TS` registers these names without tags, and the tests running in
+    // parallel in this binary may reach them first: a tagged redefinition panics.
+    let (mu1, mu9) = (TS.mu1, TS.mu9);
     symbol!("k"; tags=["spenso::tensor","spenso::rank1"]);
 
     let mu1: Atom = mu1.into();
@@ -440,7 +442,9 @@ fn metric_sum_boundary_contracts_without_expanding_inputs() {
     initialize();
     let _mink = Minkowski {}.new_rep(4);
 
-    let (mu1, mu9) = symbol!("mu1", "mu9"; tags=["spenso::index"]);
+    // `TS` registers these names without tags, and the tests running in
+    // parallel in this binary may reach them first: a tagged redefinition panics.
+    let (mu1, mu9) = (TS.mu1, TS.mu9);
     symbol!("k"; tags=["spenso::tensor","spenso::rank1"]);
 
     let mu1: Atom = mu1.into();
@@ -487,7 +491,9 @@ fn non_linear_metric_simplifies_summed_momentum_boundary_without_expansion() {
     initialize();
     let _mink = Minkowski {}.new_rep(4);
 
-    let (mu1, mu9) = symbol!("mu1", "mu9"; tags=["spenso::index"]);
+    // `TS` registers these names without tags, and the tests running in
+    // parallel in this binary may reach them first: a tagged redefinition panics.
+    let (mu1, mu9) = (TS.mu1, TS.mu9);
     symbol!("k"; tags=["spenso::tensor","spenso::rank1"]);
 
     let mu1: Atom = mu1.into();
