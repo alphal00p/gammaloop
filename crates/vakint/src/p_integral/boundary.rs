@@ -860,8 +860,11 @@ pub fn read_boundary_record(path: &std::path::Path) -> Result<BoundaryRecord, Va
                 *props.entry(index(fields[0])?).or_default() += 1;
             }
             "pattern_term" => {
+                // No uniqueness: a pattern_term row has no row index; several
+                // terms of one pattern on the same block are additive (the
+                // writer emits them); the pattern's terms= count guards the
+                // row set.
                 arity(3)?;
-                row(Some(index(fields[1])?))?;
                 terms
                     .entry(index(fields[0])?)
                     .or_default()
@@ -1459,6 +1462,26 @@ mod tests {
             .to_string();
         std::fs::write(&header, full.replacen(&term, &format!("{term}\textra"), 1)).unwrap();
         assert!(error("row arity").contains("fields, 3 expected"));
+        // Additive rows (Astra acceptance): a second row of the same pattern on
+        // the same block (here the identical row: the terms add), terms=
+        // updated: accepted.
+        write();
+        let full = text();
+        let term = full
+            .lines()
+            .find(|l| l.starts_with("pattern_term 0\t1"))
+            .unwrap()
+            .to_string();
+        let split = format!("{term}\n{term}");
+        std::fs::write(
+            &header,
+            full.replacen(&term, &split, 1)
+                .replacen("terms=2", "terms=3", 1),
+        )
+        .unwrap();
+        let record =
+            read_boundary_record(&header).expect("additive rows on one block are legitimate");
+        assert_eq!(record.boundary.patterns[0].terms.len(), 3);
         // (f) SHA256SUMS: the intact record reads; a changed block is refused.
         write();
         let sums = [header.clone(), block(0), block(1)]
@@ -1502,6 +1525,103 @@ mod tests {
                 started.elapsed().as_secs_f64()
             );
         }
+    }
+
+    /// vk5l-physrun (Astra acceptance 2026-11-18): everything the writer can
+    /// write, the reader accepts and reproduces. Pseudo-random boundaries
+    /// (fixed seeds): 1-4 blocks, inline or in files, 1-4 patterns, terms on
+    /// repeated blocks with their own coefficients (additive), identical
+    /// repeated rows, compressed and plain block files.
+    #[test]
+    fn everything_written_reads_back() {
+        crate::Vakint::initialize_vakint_symbols();
+        let directory =
+            std::env::temp_dir().join(format!("vakint-boundary-roundtrip-{}", std::process::id()));
+        let mut state = 0x9e37_79b9_7f4a_7c15_u64;
+        let mut next = |bound: u64| {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (state >> 33) % bound
+        };
+        let block_pool = [
+            "1",
+            "3",
+            "dot(k(1),k(1))",
+            "dot(k(1),p(1))+2",
+            "5/7*dot(p(1),p(1))",
+        ];
+        let coefficient_pool = ["1", "ε", "2*ε^2", "-1/3", "(4-2*ε)^(-1)"];
+        let topology_pool = [
+            "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))",
+            "topo(prop(1,edge(1,2),k(1),0,2)*prop(2,edge(2,1),k(1)-p(1),0,1))",
+            "topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,2))",
+        ];
+        for case in 0..24 {
+            let _ = std::fs::remove_dir_all(&directory);
+            std::fs::create_dir_all(&directory).unwrap();
+            let blocks: Vec<Atom> = (0..1 + next(4))
+                .map(|_| vk_parse!(block_pool[next(5) as usize]).unwrap())
+                .collect();
+            let patterns: Vec<BoundaryPattern> = (0..1 + next(4))
+                .map(|_| {
+                    let mut terms: Vec<(usize, Atom)> = (0..1 + next(5))
+                        .map(|_| {
+                            (
+                                next(blocks.len() as u64) as usize,
+                                vk_parse!(coefficient_pool[next(5) as usize]).unwrap(),
+                            )
+                        })
+                        .collect();
+                    if next(3) == 0 {
+                        // an identical repeated row (additive)
+                        terms.push(terms[0].clone());
+                    }
+                    BoundaryPattern {
+                        topology: vk_parse!(topology_pool[next(3) as usize]).unwrap(),
+                        closure_power: 1 + next(2) as i64,
+                        terms,
+                    }
+                })
+                .collect();
+            let boundary = RemainderBoundary::new(
+                format!("roundtrip {case}"),
+                vk_parse!("p(1)").unwrap(),
+                vk_parse!("mUV^2").unwrap(),
+                vec![
+                    (vk_parse!("k(1)").unwrap(), vk_parse!("k(1)").unwrap()),
+                    (vk_parse!("p(1)").unwrap(), vk_parse!("p(1)").unwrap()),
+                ],
+                blocks,
+                patterns,
+            )
+            .unwrap();
+            let header = directory.join("boundary-7-000000.txt");
+            let inline_mode = next(3);
+            let compress = case % 4 == 3;
+            write_boundary_record(&boundary, &header, 4, compress, |block| match inline_mode {
+                0 => true,
+                1 => false,
+                _ => block.as_view().get_byte_size() < 40,
+            })
+            .unwrap();
+            let record = read_boundary_record(&header).unwrap_or_else(|error| {
+                panic!("case {case}: the reader refused the writer's record: {error:?}")
+            });
+            let back = &record.boundary;
+            assert_eq!(record.epsilon_terms, Some(4), "case {case}");
+            assert_eq!(back.label, boundary.label, "case {case}");
+            assert_eq!(back.mass_squared, boundary.mass_squared, "case {case}");
+            assert_eq!(back.routing, boundary.routing, "case {case}");
+            assert_eq!(back.blocks, boundary.blocks, "case {case}");
+            assert_eq!(back.patterns.len(), boundary.patterns.len(), "case {case}");
+            for (left, right) in back.patterns.iter().zip(&boundary.patterns) {
+                assert_eq!(left.topology, right.topology, "case {case}");
+                assert_eq!(left.closure_power, right.closure_power, "case {case}");
+                assert_eq!(left.terms, right.terms, "case {case}");
+            }
+        }
+        let _ = std::fs::remove_dir_all(&directory);
     }
 
     #[test]
