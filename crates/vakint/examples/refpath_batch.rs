@@ -813,7 +813,7 @@ fn evaluate(
                 "request_memo_hits": observation.memo_hits, "direct_lowered": observation.direct_lowered,
                 "direct_declined": observation.direct_declined, "rustred": rustred,
                 "laurent_tail_in_range_terms": Vakint::p_laurent_tail_in_range_terms() - tails,
-                "step_memo": "not exposed by rustred 002ef41d (12d; only its opt-in fwd-profile build reports step_memo_at_end)",
+                "step_memo": "not exposed by rustred fcaa350cd (12d2; only its opt-in fwd-profile build reports step_memo_at_end)",
             });
             if *mode == RustRedMasterMode::Retain {
                 entry["window"] = json!("exact in eps: the reduced master-basis expression");
