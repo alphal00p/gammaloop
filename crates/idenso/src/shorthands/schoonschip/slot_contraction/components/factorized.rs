@@ -259,7 +259,7 @@ fn trace_rss_mib() -> u64 {
 
 /// Exponent and inline coefficient storage of one frontier coefficient.
 fn trace_poly_bytes(polynomial: &ScalarPolynomial) -> usize {
-    polynomial.exponents.len() * std::mem::size_of::<PolyExp>()
+    polynomial.exponents.len() * std::mem::size_of::<u32>()
         + polynomial.coefficients.len() * std::mem::size_of::<Rational>()
 }
 
@@ -268,7 +268,7 @@ fn trace_poly_bytes(polynomial: &ScalarPolynomial) -> usize {
 struct Contribution {
     source: usize,
     coefficient: Rational,
-    shift: Vec<PolyExp>,
+    shift: Vec<u32>,
 }
 
 /// A cooperative resource-budget checkpoint of the frontier (see the per-term
@@ -281,9 +281,9 @@ fn budget_checkpoint() {
 }
 
 /// Largest exponent of every variable of `weight`.
-fn max_degrees(weight: &ScalarPolynomial) -> Vec<PolyExp> {
+fn max_degrees(weight: &ScalarPolynomial) -> Vec<u32> {
     let nvars = weight.nvars();
-    let mut degrees = vec![0 as PolyExp; nvars];
+    let mut degrees = vec![0u32; nvars];
     if nvars > 0 {
         for exponents in weight.exponents.chunks_exact(nvars) {
             for (degree, &exponent) in degrees.iter_mut().zip(exponents) {
@@ -342,8 +342,8 @@ fn frontier_sum(
             .sum::<usize>();
         let mut sum = ScalarPolynomial::new(&Q, Some(capacity), map.clone());
         let mut cursors = vec![0usize; streams.len()];
-        let mut current = vec![0 as PolyExp; streams.len() * nvars];
-        let load = |stream: usize, cursor: usize, current: &mut [PolyExp]| {
+        let mut current = vec![0u32; streams.len() * nvars];
+        let load = |stream: usize, cursor: usize, current: &mut [u32]| {
             let (source, contribution) = streams[stream];
             let width = source.nvars();
             let exponents = &source.exponents[cursor * width..(cursor + 1) * width];
@@ -397,7 +397,7 @@ fn frontier_sum(
 }
 
 /// Restore the min-heap order of stream `heap[index]` by its current monomial.
-fn sift_down(heap: &mut [usize], mut index: usize, current: &[PolyExp], nvars: usize) {
+fn sift_down(heap: &mut [usize], mut index: usize, current: &[u32], nvars: usize) {
     let key = |stream: usize| &current[stream * nvars..(stream + 1) * nvars];
     loop {
         let left = 2 * index + 1;
@@ -556,7 +556,7 @@ impl SharedScalars {
             && composite(atom.as_view())
             && bound(atom.as_view()).is_some_and(|terms| terms <= EXPANSION_WORK_LIMIT)
             && index_free(atom)
-            && let Ok(polynomial) = atom.try_to_polynomial::<_, PolyExp>(&Q, None)
+            && let Ok(polynomial) = atom.try_to_polynomial::<_, u32>(&Q, None)
             && polynomial.nterms() <= EXPANSION_TERM_LIMIT
         {
             let positions = polynomial
@@ -566,7 +566,7 @@ impl SharedScalars {
                 .collect::<Vec<_>>();
             let mut expanded =
                 ScalarPolynomial::new(&Q, Some(polynomial.nterms()), self.map.clone());
-            let mut exponents = vec![0 as PolyExp; self.map.len()];
+            let mut exponents = vec![0u32; self.map.len()];
             let mut overflow = false;
             for term in polynomial.into_iter() {
                 exponents.fill(0);
@@ -2442,10 +2442,9 @@ impl<'a> ComponentSum<'a, '_> {
                     // Distinct frontier variables can share one position (a
                     // nested `dot(p,q)` and this frontier's `g(p,q)`), so
                     // their exponents add.
-                    let mut full = vec![0 as PolyExp; shared.map.len()];
+                    let mut full = vec![0u32; shared.map.len()];
                     for (position, exponent) in shared_exponents {
-                        full[position] =
-                            full[position].checked_add(PolyExp::try_from(exponent).ok()?)?;
+                        full[position] = full[position].checked_add(exponent)?;
                     }
                     for (position, &exponent) in full.iter().enumerate().take(weight.nvars()) {
                         // Machine exponent capacity is not a work budget.
