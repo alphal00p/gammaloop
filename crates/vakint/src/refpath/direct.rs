@@ -38,6 +38,21 @@ use crate::rustred_evaluation::p_lowering::DirectStats;
 use crate::utils::vakint_macros::vk_symbol;
 use crate::{Vakint, VakintSettings};
 
+/// Choices of R3's idenso call (defaults: edge basis, `Fully` + `to_dots`).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DirectOptions {
+    /// `AlgebraContraction::Dots` instead of `Fully` followed by `to_dots`.
+    pub dots: bool,
+    /// Route the edge momenta into FeynKit's loop momenta BEFORE the
+    /// contraction, exactly as R2 (idenso's input and output are then R2's);
+    /// the hand-over then reads `dot(K(i), ..)` through the loop momenta's
+    /// images instead of the edges'.
+    pub routed: bool,
+}
+
+/// Pseudo-edge id of FeynKit's loop momentum `K(i)` in the hand-over tables.
+const LOOP_EDGE_BASE: i64 = 900_000;
+
 /// Seconds of R3's own stages (one graph, all projections).
 #[derive(Clone, Debug, Default)]
 pub struct DirectSeconds {
@@ -244,9 +259,10 @@ pub fn contract_edges(
     momentum: &Atom,
     q_squared: &Atom,
     projection: Projection,
-    dots: bool,
+    options: DirectOptions,
 ) -> Result<Vec<(&'static str, Atom)>> {
     let s = &*SYMBOLS;
+    let basis = diagram.loop_momentum_basis();
     let d = Atom::var(s.d);
     let metric_only = projection == Projection::Metric;
     let mut g_sum = Atom::Zero;
@@ -256,10 +272,15 @@ pub fn contract_edges(
             .residuals
             .iter()
             .fold(Atom::num(1), |product, residual| product * residual);
+        let product = if options.routed {
+            basis.route_expression(&product)
+        } else {
+            product
+        };
         let continued = product
             .replace(Minkowski {}.to_symbolic([Atom::var(W_.d_), Atom::var(W_.a___)]))
             .with(Minkowski {}.to_symbolic([d.clone(), Atom::var(W_.a___)]));
-        let (g, qq) = contract_branch_edges(&continued, momentum, metric_only, dots)?;
+        let (g, qq) = contract_branch_edges(&continued, momentum, metric_only, options.dots)?;
         g_sum += &branch.coefficient * g;
         qq_sum += &branch.coefficient * qq;
     }
@@ -350,7 +371,13 @@ pub fn lines_of(
             power: edge.propagator_power as i64,
         });
     }
-    let mut out_edges = Vec::new();
+    let mut out_edges = (0..loops)
+        .map(|i| PEdge {
+            id: LOOP_EDGE_BASE + i as i64,
+            loops: (0..loops).map(|j| i64::from(i == j)).collect(),
+            head: 0,
+        })
+        .collect::<Vec<_>>();
     for (id, _, _) in legs.iter().chain(&lines) {
         let (l, c) = coefficients(id).ok_or("an edge without routing")?;
         out_edges.push(PEdge {
@@ -384,6 +411,12 @@ impl Lines {
         if f.get_symbol() == feynkit_graph::symbols::momentum() {
             return i64::try_from(first).ok().map(VectorRef::Edge);
         }
+        if f.get_symbol() == feynkit_graph::symbols::loop_momentum() {
+            return i64::try_from(first)
+                .ok()
+                .filter(|i| (0..LOOP_EDGE_BASE).contains(i))
+                .map(|i| VectorRef::Edge(LOOP_EDGE_BASE + i));
+        }
         (f.get_symbol() == self.independent.0 && first == self.independent.1.as_view())
             .then_some(VectorRef::Head(self.orientation))
     }
@@ -403,11 +436,11 @@ pub fn lower_graph(
     weight: &Atom,
     projection: Projection,
     reduce: bool,
-    dots: bool,
+    options: DirectOptions,
     seconds: &mut DirectSeconds,
 ) -> Result<DirectOutcome> {
     let started = Instant::now();
-    let numerators = contract_edges(diagram, branches, momentum, q_squared, projection, dots)?;
+    let numerators = contract_edges(diagram, branches, momentum, q_squared, projection, options)?;
     seconds.contract += started.elapsed().as_secs_f64();
     let started = Instant::now();
     let lines = match lines_of(diagram, momentum) {
