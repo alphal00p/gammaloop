@@ -3891,3 +3891,7 @@ mod edge_rename_tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "truncate_tests.rs"]
+mod truncate_tests;
