@@ -2619,6 +2619,28 @@ impl RStarIntegrand {
             return Ok(Atom::Zero);
         }
         let mut timing = IntegrationTimings::new();
+        // GAMMALOOP_TOP_MASS_SPLIT (instrumentation): the root polynomial by
+        // origin, each kept piece integrated on its own.
+        if let Some(mode) = super::top_mass::root_mode()
+            && super::top_mass::split_enabled()
+            && degree <= 3
+        {
+            return self.integrate_split(
+                expression,
+                root_graph,
+                root_edges,
+                degree,
+                reference_mass_squared,
+                auxiliary_mass_squared,
+                vakint,
+                uv_settings,
+                vakint_settings,
+                unique_id,
+                root_projector,
+                mode,
+                timing,
+            );
+        }
         let polynomial = self.outer_taylor(
             expression,
             root_edges,
@@ -2627,6 +2649,42 @@ impl RStarIntegrand {
             auxiliary_mass_squared,
             &mut timing,
         )?;
+        if polynomial.is_zero()
+            && super::top_mass::root_mode()
+                .is_some_and(|mode| mode != super::top_mass::TopMassTerms::Keep)
+        {
+            // Only the dropped orders were nonzero (GAMMALOOP_RSTAR_TOP_MASS_TERMS).
+            return Ok(Atom::Zero);
+        }
+        self.integrate_outer(
+            expression,
+            polynomial,
+            root_graph,
+            vakint,
+            uv_settings,
+            vakint_settings,
+            unique_id,
+            root_projector,
+            &mut timing,
+        )
+    }
+
+    /// [`Self::integrate`] after the outer Taylor step: the summand
+    /// simplification (or its closed skip), root projection, conversion and
+    /// integration of `polynomial`.
+    #[allow(clippy::too_many_arguments)]
+    fn integrate_outer(
+        &self,
+        expression: &Atom,
+        polynomial: Atom,
+        root_graph: &Graph,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        vakint_settings: &VakintSettings,
+        unique_id: usize,
+        root_projector: Option<&RootProjector<'_>>,
+        timing: &mut IntegrationTimings,
+    ) -> Result<Atom> {
         // GAMMALOOP_CLOSED_SKIP_SUMMAND_SIMPLIFY (default off): on the closed
         // root path idenso contracted the remainder (with the root closure
         // metric) to a closed scalar before the Taylor step and certified it
@@ -2704,6 +2762,157 @@ impl RStarIntegrand {
         )
     }
 
+    /// `GAMMALOOP_TOP_MASS_SPLIT=1` at the top-level root: the outer Taylor
+    /// polynomial of [`Self::outer_taylor`] split by origin
+    /// ([`super::top_mass::Origin`]): `[λ^n]` of the edge scaling at fixed
+    /// reference mass, and the `λ^{≥2}` mass compensation in `den` and outside
+    /// it (child insertions). Degree at most three, so the two compensations
+    /// never multiply each other. Every piece the mode keeps is simplified,
+    /// converted and integrated on its own (one `TOP_MASS_PIECE` line each);
+    /// the result is their sum, which equals [`Self::integrate`]'s by
+    /// linearity.
+    #[allow(clippy::too_many_arguments)]
+    fn integrate_split(
+        &self,
+        expression: &Atom,
+        root_graph: &Graph,
+        root_edges: &[EdgeIndex],
+        degree: usize,
+        reference_mass_squared: Symbol,
+        auxiliary_mass_squared: &Atom,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        vakint_settings: &VakintSettings,
+        unique_id: usize,
+        root_projector: Option<&RootProjector<'_>>,
+        mode: super::top_mass::TopMassTerms,
+        mut timing: IntegrationTimings,
+    ) -> Result<Atom> {
+        use super::top_mass::{Origin, compensate_where};
+        let parameter = symbol!("rstar_outer_taylor"; Scalar);
+        self.check_truncation(root_edges, degree)?;
+        let scaled = self.outer_scaled(expression, root_edges, parameter, &mut timing)?;
+        let started = Instant::now();
+        let taylor = TaylorExpansion::new(parameter, degree);
+        // The orders of the edge scaling, still in the reference mass.
+        let momentum = taylor.orders(&scaled)?;
+        drop(scaled);
+        let momentum_seconds = started.elapsed().as_secs_f64();
+        let fixed = |order: &Atom| {
+            order
+                .replace(reference_mass_squared)
+                .with(auxiliary_mass_squared.clone())
+        };
+        let mut pieces = momentum
+            .iter()
+            .enumerate()
+            .map(|(order, coefficient)| {
+                (
+                    Origin::Momentum(order),
+                    coefficient.clone(),
+                    momentum_seconds,
+                )
+            })
+            .collect::<Vec<_>>();
+        let compensated = (Atom::one() - Atom::var(parameter).pow(2)) * auxiliary_mass_squared;
+        for (origin, in_den) in [
+            (Origin::CompensationDen, true),
+            (Origin::CompensationInsertion, false),
+        ] {
+            let started = Instant::now();
+            let mut parts = Vec::new();
+            for (order, coefficient) in momentum.iter().enumerate() {
+                if degree < order + 2 || coefficient.is_zero() {
+                    continue;
+                }
+                let (den, outside) = if in_den {
+                    (&compensated, auxiliary_mass_squared)
+                } else {
+                    (auxiliary_mass_squared, &compensated)
+                };
+                let shifted = compensate_where(coefficient, reference_mass_squared, den, outside);
+                let orders = TaylorExpansion::new(parameter, degree - order).orders(&shifted)?;
+                parts.extend(orders.into_iter().skip(1));
+            }
+            pieces.push((
+                origin,
+                Atom::add_many(parts.iter()),
+                started.elapsed().as_secs_f64(),
+            ));
+        }
+        for (origin, coefficient, _) in pieces.iter_mut() {
+            if matches!(origin, Origin::Momentum(_)) {
+                *coefficient = fixed(coefficient);
+            }
+        }
+        timing.taylor = timing.lap();
+        let mut sum = Atom::Zero;
+        for (origin, piece, taylor_seconds) in pieces {
+            let kept = origin.kept(mode);
+            let summands = vakint::census::summands(piece.as_view());
+            let bytes = piece.as_view().get_byte_size();
+            if !kept || piece.is_zero() {
+                eprintln!(
+                    "TOP_MASS_PIECE graph={} id={unique_id} loops={} degree={degree} mode={} piece={} kept={kept} zero={} taylor_s={taylor_seconds:.3} taylor_summands={summands} taylor_bytes={bytes}",
+                    root_graph.name,
+                    self.region.loops,
+                    mode.as_str(),
+                    origin.label(),
+                    piece.is_zero(),
+                );
+                continue;
+            }
+            crate::uv::approx::counts::clear_last_counts();
+            let mut piece_timing = IntegrationTimings::new();
+            let value = self.integrate_outer(
+                expression,
+                piece,
+                root_graph,
+                vakint,
+                uv_settings,
+                vakint_settings,
+                unique_id,
+                root_projector,
+                &mut piece_timing,
+            )?;
+            let counts = crate::uv::approx::counts::last_counts()
+                .and_then(|line| serde_json::from_str::<serde_json::Value>(&line).ok());
+            let field = |name: &str| {
+                counts
+                    .as_ref()
+                    .and_then(|counts| counts.get(name))
+                    .map_or("na".to_owned(), |value| value.to_string())
+            };
+            eprintln!(
+                "TOP_MASS_PIECE graph={} id={unique_id} loops={} degree={degree} mode={} piece={} kept=true zero=false taylor_s={taylor_seconds:.3} taylor_summands={summands} taylor_bytes={bytes} simplify_s={:.3} projection_s={:.3} conversion_s={:.3} backend_s={:.3} finish_s={:.3} total_s={:.3} vakint_input_summands={} vakint_input_bytes={} vakint_monomials={} vakint_numerator_bytes={} vakint_topologies={} value_zero={}",
+                root_graph.name,
+                self.region.loops,
+                mode.as_str(),
+                origin.label(),
+                piece_timing.algebra,
+                piece_timing.tensor_projection,
+                piece_timing.conversion,
+                piece_timing.backend,
+                piece_timing.finish,
+                piece_timing.started.elapsed().as_secs_f64(),
+                field("input_summands"),
+                field("input_bytes"),
+                field("output_summands"),
+                field("output_bytes"),
+                field("terms"),
+                value.is_zero(),
+            );
+            sum += value;
+        }
+        timing.log(
+            root_graph,
+            unique_id,
+            self.region.loops,
+            "single_mass_split",
+        );
+        Ok(sum)
+    }
+
     /// The outer Taylor polynomial of `expression` as [`Self::integrate`]
     /// takes it: routed in this component's basis, the root edges scaled by
     /// the Taylor parameter, the reference mass compensated, truncated at total
@@ -2720,6 +2929,78 @@ impl RStarIntegrand {
         timing: &mut IntegrationTimings,
     ) -> Result<Atom> {
         self.check_truncation(root_edges, degree)?;
+        let parameter = symbol!("rstar_outer_taylor"; Scalar);
+        let taylor = TaylorExpansion::new(parameter, degree);
+        let scaled = self.outer_scaled(expression, root_edges, parameter, timing)?;
+        // GAMMALOOP_RSTAR_TOP_MASS_TERMS=drop|drop-odd at the top-level root:
+        // no compensation (the reference mass is renamed to the auxiliary one
+        // as at λ=0) and the λ^0 (and odd) coefficients are discarded right
+        // after the series.
+        if let Some(mode) = super::top_mass::root_mode()
+            && !mode.compensates()
+        {
+            let fixed = scaled
+                .replace(reference_mass_squared)
+                .with(auxiliary_mass_squared.clone());
+            drop(scaled);
+            streamed::guard_checkpoint("the outer-Taylor expansion")?;
+            if self.region.loops != 0 && counts::enabled() {
+                let mut shape = counts::taylor_shape(fixed.as_view(), parameter, degree);
+                shape["mass_terms"] = serde_json::json!(mode.as_str());
+                counts::set_taylor_shape(shape);
+            }
+            let orders = taylor.orders(&fixed)?;
+            drop(fixed);
+            let polynomial = Atom::add_many(
+                orders
+                    .iter()
+                    .enumerate()
+                    .filter(|(order, _)| mode.keeps_order(*order))
+                    .map(|(_, coefficient)| coefficient),
+            );
+            timing.taylor = timing.lap();
+            return Ok(polynomial);
+        }
+        streamed::guard_checkpoint("the outer-Taylor mass compensation")?;
+        let compensated =
+            taylor.compensate_mass(&scaled, reference_mass_squared, auxiliary_mass_squared);
+        drop(scaled);
+        streamed::guard_checkpoint("the outer-Taylor expansion")?;
+        // Instrumentation (opt-in, no value depends on it): the P_i x D_j
+        // shape of this product, reported by the next to_vakint call.
+        if self.region.loops != 0 && super::routing::log_level() >= 2 {
+            super::routing::log_taylor(
+                &self.graph,
+                &self.region,
+                &self.basis,
+                root_edges,
+                degree,
+                &counts::taylor_shape(compensated.as_view(), parameter, degree),
+            );
+        }
+        if self.region.loops != 0 && counts::enabled() {
+            counts::set_taylor_shape(counts::taylor_shape(
+                compensated.as_view(),
+                parameter,
+                degree,
+            ));
+        }
+        let polynomial = taylor.evaluate(&compensated)?;
+        drop(compensated);
+        timing.taylor = timing.lap();
+        Ok(polynomial)
+    }
+
+    /// The first steps of [`Self::outer_taylor`]: `expression` routed in this
+    /// component's basis and its root edges scaled by `parameter`. Laps the
+    /// routing timing.
+    fn outer_scaled(
+        &self,
+        expression: &Atom,
+        root_edges: &[EdgeIndex],
+        parameter: Symbol,
+        timing: &mut IntegrationTimings,
+    ) -> Result<Atom> {
         // The root's boundary carriers: the graph's external edges, or the full
         // crown of a proper support evaluated as its own R* root.
         // Quotient UV maps return original Q labels. Route newly introduced
@@ -2763,8 +3044,6 @@ impl RStarIntegrand {
             "an R* quotient left unintegrated boundary loop carriers: {unresolved:?}"
         );
         timing.routing = timing.lap();
-        let parameter = symbol!("rstar_outer_taylor"; Scalar);
-        let taylor = TaylorExpansion::new(parameter, degree);
         // Each intermediate is dropped as soon as its successor exists: on the
         // largest diagrams each of them is hundreds of megabytes.
         let scaled = streamed::map_term_local(
@@ -2772,35 +3051,7 @@ impl RStarIntegrand {
             routed.as_view(),
             &|piece| Self::scale_edges_view(piece, root_edges, parameter),
         )?;
-        drop(routed);
-        streamed::guard_checkpoint("the outer-Taylor mass compensation")?;
-        let compensated =
-            taylor.compensate_mass(&scaled, reference_mass_squared, auxiliary_mass_squared);
-        drop(scaled);
-        streamed::guard_checkpoint("the outer-Taylor expansion")?;
-        // Instrumentation (opt-in, no value depends on it): the P_i x D_j
-        // shape of this product, reported by the next to_vakint call.
-        if self.region.loops != 0 && super::routing::log_level() >= 2 {
-            super::routing::log_taylor(
-                &self.graph,
-                &self.region,
-                &self.basis,
-                root_edges,
-                degree,
-                &counts::taylor_shape(compensated.as_view(), parameter, degree),
-            );
-        }
-        if self.region.loops != 0 && counts::enabled() {
-            counts::set_taylor_shape(counts::taylor_shape(
-                compensated.as_view(),
-                parameter,
-                degree,
-            ));
-        }
-        let polynomial = taylor.evaluate(&compensated)?;
-        drop(compensated);
-        timing.taylor = timing.lap();
-        Ok(polynomial)
+        Ok(scaled)
     }
 
     /// The rest of [`Self::integrate`] after the outer Taylor step and its
@@ -2815,7 +3066,7 @@ impl RStarIntegrand {
         vakint_settings: &VakintSettings,
         unique_id: usize,
         root_projector: Option<&RootProjector<'_>>,
-        mut timing: IntegrationTimings,
+        timing: &mut IntegrationTimings,
     ) -> Result<Atom> {
         // The root is the only boundary which may be projected here. Child
         // and quotient pole maps are already complete, and no later pole map

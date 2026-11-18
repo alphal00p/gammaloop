@@ -1605,12 +1605,38 @@ pub(super) fn denominator_orders(
     reference_mass_squared: Symbol,
     auxiliary_mass_squared: &Atom,
 ) -> Result<std::result::Result<(BTreeMap<Atom, Vec<Atom>>, Vec<usize>), Decline>> {
+    denominator_orders_with(
+        denominators,
+        root_edges,
+        degree,
+        reference_mass_squared,
+        auxiliary_mass_squared,
+        true,
+    )
+}
+
+/// [`denominator_orders`], with (`compensate`) or without the mass
+/// compensation (the reference mass is then the auxiliary one, as at `λ=0`).
+pub(super) fn denominator_orders_with(
+    denominators: &[Atom],
+    root_edges: &[EdgeIndex],
+    degree: usize,
+    reference_mass_squared: Symbol,
+    auxiliary_mass_squared: &Atom,
+    compensate: bool,
+) -> Result<std::result::Result<(BTreeMap<Atom, Vec<Atom>>, Vec<usize>), Decline>> {
     let parameter = symbol!("rstar_outer_taylor"; Scalar);
     let taylor = TaylorExpansion::new(parameter, degree);
     let product = Atom::mul_many(denominators.iter());
     let scaled = RStarIntegrand::scale_edges(&product, root_edges, parameter);
-    let compensated =
-        taylor.compensate_mass(&scaled, reference_mass_squared, auxiliary_mass_squared);
+    let compensated = if compensate {
+        taylor.compensate_mass(&scaled, reference_mass_squared, auxiliary_mass_squared)
+    } else {
+        // At fixed reference mass (`GAMMALOOP_RSTAR_TOP_MASS_TERMS=drop`).
+        scaled
+            .replace(reference_mass_squared)
+            .with(auxiliary_mass_squared.clone())
+    };
     let orders = match taylor.orders(&compensated) {
         Ok(orders) => orders,
         Err(error) => return Ok(Err(Decline::new("den", format!("series: {error}")))),
@@ -1689,6 +1715,8 @@ pub(super) struct BoundaryRequest<'b> {
     pub additional_normalization: &'b str,
     pub epsilon: Symbol,
     pub closed_root: &'b ClosedRootNormalization,
+    /// `GAMMALOOP_RSTAR_TOP_MASS_TERMS` of this (top-level) root.
+    pub mass_terms: super::TopMassTerms,
 }
 
 /// One kept or zero pattern, for check mode and records (the key, the zero
@@ -1780,15 +1808,33 @@ pub(super) fn build_boundary(
         Ok(split) => split,
         Err(reason) => declined!(Decline::new("den", reason)),
     };
-    let (by_monomial, sizes) = match denominator_orders(
+    let (by_monomial, sizes) = match denominator_orders_with(
         &denominators,
         request.root_edges,
         request.degree,
         request.reference_mass_squared,
         request.auxiliary_mass_squared,
+        request.mass_terms.compensates(),
     )? {
         Ok(orders) => orders,
         Err(decline) => declined!(decline),
+    };
+    // GAMMALOOP_TOP_MASS_SPLIT: the den orders of the other mode as well (the
+    // split of the projected coefficients by origin, `TOP_MASS_BOUNDARY`).
+    let other_orders = if super::top_mass::split_enabled() {
+        match denominator_orders_with(
+            &denominators,
+            request.root_edges,
+            request.degree,
+            request.reference_mass_squared,
+            request.auxiliary_mass_squared,
+            !request.mass_terms.compensates(),
+        )? {
+            Ok((orders, _)) => Some(orders),
+            Err(decline) => declined!(decline),
+        }
+    } else {
+        None
     };
     stats.d_orders = sizes;
     stats.raw_patterns = by_monomial.len();
@@ -1982,13 +2028,30 @@ pub(super) fn build_boundary(
         }
         mapped_orders.insert(monomial.clone(), mapped);
     }
+    // GAMMALOOP_TOP_MASS_SPLIT: the other mode's den orders, mapped alike.
+    let mut mapped_other = HashMap::<Atom, Vec<Atom>>::new();
+    for (monomial, orders) in other_orders.iter().flatten() {
+        let mut mapped = Vec::with_capacity(orders.len());
+        for order in orders {
+            let routed = order.replace_multiple(&request.closed_root.external_routing);
+            match grammar.map_scalar(routed.as_view())? {
+                Ok(order) => mapped.push(order),
+                Err(decline) => declined!(decline),
+            }
+        }
+        mapped_other.insert(monomial.clone(), mapped);
+    }
+    // Per origin: projected terms, their summands and projection seconds.
+    let mut origin_stats = BTreeMap::<&'static str, (usize, usize, f64)>::new();
     let header_normalisation = &normalization * additional.pow(patterns[0].frame.nloops as i64);
     let block_grades = blocks.keys().cloned().collect::<Vec<_>>();
     let mut kept = Vec::new();
     let mut zero_patterns = Vec::new();
+    let mass_terms = request.mass_terms;
     for (order, pattern) in patterns.iter().enumerate() {
         // d_{j,π} = Σ_{μ∈π} rest_μ · d_{j,μ}.
         let mut orders = vec![Vec::<Atom>::new(); request.degree + 1];
+        let mut other = vec![Vec::<Atom>::new(); request.degree + 1];
         for (monomial, rest) in &pattern.raw {
             let rest = match grammar.map_scalar(rest.as_view())? {
                 Ok(rest) => rest,
@@ -1999,8 +2062,17 @@ pub(super) fn build_boundary(
                     orders[j].push(&rest * order);
                 }
             }
+            for (j, order) in mapped_other.get(monomial).into_iter().flatten().enumerate() {
+                if !order.is_zero() {
+                    other[j].push(&rest * order);
+                }
+            }
         }
         let orders = orders
+            .iter()
+            .map(|terms| Atom::add_many(terms.iter()))
+            .collect::<Vec<_>>();
+        let other = other
             .iter()
             .map(|terms| Atom::add_many(terms.iter()))
             .collect::<Vec<_>>();
@@ -2011,14 +2083,80 @@ pub(super) fn build_boundary(
             // ρ = t_g (M²)^b Σ_c C(b,c) (-1)^c Σ_{j ≤ deg-a-2c, j ≡ a (2)} d_j.
             let a = grade.degree();
             let b = grade.mass_power;
+            if other_orders.is_some() {
+                // The split by origin (GAMMALOOP_TOP_MASS_SPLIT), from the
+                // den orders with (`comp`) and without (`fixed`) compensation.
+                let (comp, fixed) = if mass_terms.compensates() {
+                    (&orders, &other)
+                } else {
+                    (&other, &orders)
+                };
+                let parity = |j: usize| j % 2 == a % 2 && a + j <= request.degree;
+                let mut origins = vec![
+                    ("l0", Vec::new()),
+                    ("l2_mom", Vec::new()),
+                    ("comp_den", Vec::new()),
+                    ("comp_ins", Vec::new()),
+                ];
+                for j in (0..=request.degree).filter(|j| parity(*j)) {
+                    origins[if a + j == 0 { 0 } else { 1 }]
+                        .1
+                        .push(fixed[j].clone());
+                    origins[2].1.push(&comp[j] - &fixed[j]);
+                }
+                for c in 1..=b {
+                    let Some(limit) = request.degree.checked_sub(a + 2 * c) else {
+                        break;
+                    };
+                    let binomial = binomial(b, c) * if c % 2 == 0 { 1 } else { -1 };
+                    for j in (0..=limit).filter(|j| j % 2 == a % 2) {
+                        origins[3].1.push(Atom::num(binomial) * &comp[j]);
+                    }
+                }
+                for (origin, parts) in origins {
+                    let started = Instant::now();
+                    let rho = (grade.structure_atom(grammar.external())
+                        * auxiliary.pow(b as i64)
+                        * Atom::add_many(parts.iter()))
+                    .expand();
+                    let entry = origin_stats.entry(origin).or_default();
+                    if !rho.is_zero() {
+                        let vectors =
+                            vakint::VakintTerm::identify_vectors_in_numerator(rho.as_view())
+                                .map_err(|error| eyre!("{error}"))?;
+                        let term = vakint::VakintTerm {
+                            integral: patterns[0].frame.integral.clone(),
+                            numerator: rho,
+                            vectors,
+                        };
+                        let projected = tensor_reduce_by_factors(
+                            request.vakint,
+                            &tensor_settings,
+                            &term,
+                            &mut images,
+                        )?
+                        .unwrap_or_else(|| term.numerator.clone());
+                        let coefficient = (&normalization * projected).expand();
+                        if !coefficient.is_zero() {
+                            entry.0 += 1;
+                            entry.1 += vakint::census::summands(coefficient.as_view());
+                        }
+                    }
+                    entry.2 += started.elapsed().as_secs_f64();
+                }
+            }
             let mut sum = Vec::new();
             for c in 0..=b {
+                // GAMMALOOP_RSTAR_TOP_MASS_TERMS=drop: no compensation (c = 0).
+                if c > 0 && !mass_terms.compensates() {
+                    break;
+                }
                 let Some(limit) = request.degree.checked_sub(a + 2 * c) else {
                     break;
                 };
                 let binomial = binomial(b, c) * if c % 2 == 0 { 1 } else { -1 };
                 for (j, order) in orders.iter().enumerate().take(limit + 1) {
-                    if j % 2 == a % 2 && !order.is_zero() {
+                    if j % 2 == a % 2 && !order.is_zero() && mass_terms.keeps_order(a + j + 2 * c) {
                         sum.push(Atom::num(binomial) * order);
                     }
                 }
@@ -2084,6 +2222,15 @@ pub(super) fn build_boundary(
         .collect::<BTreeSet<_>>()
         .len();
     clock.lap(&mut stats, "project");
+    for (origin, (terms, summands, seconds)) in &origin_stats {
+        eprintln!(
+            "TOP_MASS_BOUNDARY graph={} id={} loops={loops} deg={} mode={} origin={origin} terms={terms} summands={summands} project_s={seconds:.3}",
+            request.graph_name,
+            request.integration_id,
+            request.degree,
+            mass_terms.as_str()
+        );
+    }
     if kept.is_empty() {
         return Ok(Built::Zero(stats));
     }

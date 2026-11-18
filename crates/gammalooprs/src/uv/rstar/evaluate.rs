@@ -32,6 +32,7 @@ use super::{
     expression::{IntegrationTimings, RStarIntegrand, RootProjector},
     moments::hard_moments,
     physical::PreparedPhysicalUvTerm,
+    top_mass::{self, RStarTerms, TopMassTerms},
 };
 
 /// `GAMMALOOP_IR_HARD_KEYS` (any value): log the canonical identities of the
@@ -643,6 +644,13 @@ struct Evaluation<'a> {
     proper_uv_elapsed: Duration,
     quotient_elapsed: Duration,
     integration_elapsed: Duration,
+    /// `GAMMALOOP_RSTAR_TOP_MASS_TERMS` of a top-level root (`None` for a
+    /// child root): the scope of every outer integration of this evaluation.
+    top_mass: Option<TopMassTerms>,
+    /// `GAMMALOOP_RSTAR_TERMS` of a top-level root (`All` for a child root).
+    rstar_terms: RStarTerms,
+    /// Root terms skipped by `rstar_terms` (logged when nonzero).
+    skipped_terms: usize,
 }
 
 impl<'a> Evaluation<'a> {
@@ -678,6 +686,29 @@ impl<'a> Evaluation<'a> {
         compute_children: bool,
     ) -> Result<Self> {
         let started = Instant::now();
+        // The top-level switches act at a top-level root only; read before
+        // any work so that a bad value fails early.
+        let (top_mass, rstar_terms) = if plan.root_boundary.is_none() {
+            let mode = match top_mass::top_mass_terms()? {
+                // The odd orders vanish only for a projected (closed scalar)
+                // root channel.
+                TopMassTerms::DropOdd if root_projector.is_none() => TopMassTerms::Drop,
+                mode => mode,
+            };
+            // The bare/nonbare split is a split of the projected diagram root
+            // only, never of an unprojected propagator-insertion pole part.
+            let terms = top_mass::rstar_terms()?;
+            (
+                Some(mode),
+                if root_projector.is_some() {
+                    terms
+                } else {
+                    RStarTerms::All
+                },
+            )
+        } else {
+            (None, RStarTerms::All)
+        };
         for (_, _, edge) in graph.iter_edges_of(&plan.support) {
             ensure!(
                 edge.data.mass_atom(model).is_zero(),
@@ -763,7 +794,38 @@ impl<'a> Evaluation<'a> {
             proper_uv_elapsed,
             quotient_elapsed: Duration::ZERO,
             integration_elapsed: Duration::ZERO,
+            top_mass,
+            rstar_terms,
+            skipped_terms: 0,
         })
+    }
+
+    /// `GAMMALOOP_RSTAR_TERMS`: whether this evaluation computes a root term
+    /// with (`nonbare_term`) or without proper UV children or IR counterterms.
+    fn keeps_term(&mut self, nonbare_term: bool) -> bool {
+        let keeps = self.rstar_terms.keeps(nonbare_term);
+        if !keeps {
+            self.skipped_terms += 1;
+        }
+        keeps
+    }
+
+    /// One line per top-level root evaluation whose switches are not at
+    /// their defaults.
+    fn log_top_level(&self) {
+        if self.rstar_terms != RStarTerms::All
+            || self.top_mass.is_some_and(|mode| mode != TopMassTerms::Keep)
+        {
+            eprintln!(
+                "RSTAR_TOP graph={} marked_edge={} taylor_order={} rstar_terms={} top_mass_terms={} skipped_terms={}",
+                self.graph.name,
+                usize::from(self.plan.marked_edge),
+                self.plan.taylor_order,
+                self.rstar_terms.as_str(),
+                self.top_mass.map_or("child", TopMassTerms::as_str),
+                self.skipped_terms
+            );
+        }
     }
 
     /// Close the root metric in every root-scope remainder of this evaluation.
@@ -806,6 +868,10 @@ impl<'a> Evaluation<'a> {
             {
                 continue;
             }
+            // GAMMALOOP_RSTAR_TERMS: the bare term is the empty spinney.
+            if !self.keeps_term(!term.counterterms.is_empty()) {
+                continue;
+            }
             prepared += self.integrate_ordinary(term)?;
         }
         for (correction_index, correction) in self.plan.ir.iter().enumerate() {
@@ -814,6 +880,10 @@ impl<'a> Evaluation<'a> {
                     .remainder
                     .is_scaleless(self.graph, self.plan.marked_edge)
                 {
+                    continue;
+                }
+                // GAMMALOOP_RSTAR_TERMS: every IR correction is a nonbare term.
+                if !self.keeps_term(true) {
                     continue;
                 }
                 // The hard part feeds quotient counterterms (a `K` each): it
@@ -948,6 +1018,7 @@ impl<'a> Evaluation<'a> {
             }
         }
         let result = -self.poles(&prepared)?;
+        self.log_top_level();
         self.log_timing();
         Ok(result)
     }
@@ -1135,7 +1206,19 @@ impl<'a> Evaluation<'a> {
             Some(closure) => bare_poles * closure,
             None => bare_poles.clone(),
         };
-        let mut prepared = bare_poles + self.physical_uv_preparation()?;
+        // GAMMALOOP_RSTAR_TERMS: here the bare term is the supplied bare poles.
+        let bare_poles = if self.keeps_term(false) {
+            bare_poles
+        } else {
+            Atom::Zero
+        };
+        let physical = if self.rstar_terms.keeps(true) {
+            self.physical_uv_preparation()?
+        } else {
+            self.skipped_terms += 1;
+            Atom::Zero
+        };
+        let mut prepared = bare_poles + physical;
         if let Some(projector) = self.root_projector {
             prepared = projector(&prepared)?;
         }
@@ -1401,6 +1484,7 @@ impl<'a> Evaluation<'a> {
                 additional_normalization: &self.uv_settings.vakint.additional_normalization,
                 epsilon: self.epsilon,
                 closed_root,
+                mass_terms: self.top_mass.unwrap_or(TopMassTerms::Keep),
             },
         )
         .wrap_err_with(|| {
@@ -1732,22 +1816,25 @@ impl<'a> Evaluation<'a> {
             self.uv_settings,
             self.root_projector,
         );
+        let top = self.top_mass;
         let mut sum = crate::uv::approx::streamed::SumAccumulator::default();
         let streamed = remainder.stream_contracted(&mut |piece| {
             let integrated = super::pint6_dump::with_channel(channel.clone(), || {
-                remainder.integrate(
-                    &piece,
-                    graph,
-                    root_edges,
-                    degree,
-                    reference,
-                    auxiliary,
-                    vakint,
-                    uv_settings,
-                    &settings,
-                    id,
-                    projector,
-                )
+                top_mass::in_root_scope(top, || {
+                    remainder.integrate(
+                        &piece,
+                        graph,
+                        root_edges,
+                        degree,
+                        reference,
+                        auxiliary,
+                        vakint,
+                        uv_settings,
+                        &settings,
+                        id,
+                        projector,
+                    )
+                })
             })?;
             sum.push(integrated);
             Ok(())
@@ -1783,19 +1870,21 @@ impl<'a> Evaluation<'a> {
             uv_child_truncate: remainder.truncation_dump_label(),
         };
         let result = super::pint6_dump::with_channel(channel, || {
-            remainder.integrate(
-                expression,
-                self.graph,
-                &self.root_edges,
-                usize::try_from(self.plan.taylor_order)?,
-                self.reference_mass_squared,
-                &self.auxiliary_mass_squared,
-                self.vakint,
-                self.uv_settings,
-                &settings,
-                self.integration_id,
-                self.root_projector,
-            )
+            top_mass::in_root_scope(self.top_mass, || {
+                remainder.integrate(
+                    expression,
+                    self.graph,
+                    &self.root_edges,
+                    usize::try_from(self.plan.taylor_order)?,
+                    self.reference_mass_squared,
+                    &self.auxiliary_mass_squared,
+                    self.vakint,
+                    self.uv_settings,
+                    &settings,
+                    self.integration_id,
+                    self.root_projector,
+                )
+            })
         });
         self.integration_elapsed += started.elapsed();
         self.summary.seconds_today += started.elapsed().as_secs_f64();
