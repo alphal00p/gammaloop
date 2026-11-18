@@ -481,6 +481,7 @@ impl VakintSettings {
             rustred_p_uncovered: Default::default(),
             rustred_p_relation_cache: Default::default(),
             rustred_p_outside: Default::default(),
+            p_checkpoint_dir: None,
             p_master_basis: self.p_master_basis.into(),
             verify_numerator_identification: false,
             run_time_decimal_precision: self.run_time_decimal_precision as u32,
