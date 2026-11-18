@@ -60,6 +60,10 @@ use crate::rustred_evaluation::p_gate::{self, GateObservation, GateView, ZeroSec
 use crate::utils::vakint_macros::vk_symbol;
 use crate::{Vakint, VakintExpression, VakintSettings};
 
+/// R3: idenso's contraction in the edge basis handed directly to the lowering
+/// (helper VH lane idenso-audit).
+pub mod direct;
+
 /// The symbols of the reference path's output.
 pub struct RefpathSymbols {
     /// The space-time dimension of the contraction (also the gate view's `D`).
