@@ -163,29 +163,77 @@ fn graph_identity(engine: &Vakint, model: &Arc<feynkit_model::Model>, path: &Pat
     "checked"
 }
 
-fn run_set(set: &str) {
+fn run_set(set: &str, only: Option<&[usize]>) -> BTreeMap<&'static str, usize> {
     let Some(root) = root() else {
-        return;
+        return BTreeMap::new();
     };
     let directory = root.join(set);
     let model = refpath::load_model(&directory).unwrap();
-    let engine = Vakint::new().unwrap();
+    // The 1-4 loop p library of the gate environment when it is set (four
+    // loops need it), else the built-in 1L-3L one.
+    let mut engine = Vakint::new().unwrap();
+    if let Some(library) = std::env::var_os("VAKINT_TEST_P_LIBRARY_1_4") {
+        engine
+            .load_p_library_directory(Path::new(&library), false)
+            .unwrap();
+    }
     let mut counts = BTreeMap::<&str, usize>::new();
     for path in dots(&directory) {
+        let number = path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .and_then(|stem| stem.trim_start_matches("diagram-").parse::<usize>().ok());
+        if let Some(only) = only
+            && !number.is_some_and(|number| only.contains(&number))
+        {
+            continue;
+        }
         *counts
             .entry(graph_identity(&engine, &model, &path))
             .or_default() += 1;
     }
     eprintln!("D6 graph identity {set}: {counts:?}");
     assert!(counts.get("checked").copied().unwrap_or(0) > 0);
+    counts
 }
 
 #[test]
 fn open_index_self_energies_close_to_the_reference_at_one_loop() {
-    run_set("L1");
+    run_set("L1", None);
 }
 
 #[test]
 fn open_index_self_energies_close_to_the_reference_at_two_loops() {
-    run_set("L2");
+    run_set("L2", None);
+}
+
+/// Every three-loop graph (392 files).
+#[test]
+fn open_index_self_energies_close_to_the_reference_at_three_loops() {
+    let counts = run_set("L3", None);
+    if !counts.is_empty() {
+        assert_eq!(counts.values().sum::<usize>(), 392, "{counts:?}");
+    }
+}
+
+/// A four-loop sample: the graph numbers listed (one per line) in the file
+/// `VAKINT_TEST_D6_L4_LIST` (lane d6-open-indices: L4.sample200, stratified by
+/// class and quartic vertices); skipped without it. Needs the 1-4 loop p
+/// library (`VAKINT_TEST_P_LIBRARY_1_4`).
+#[test]
+fn open_index_self_energies_close_to_the_reference_on_a_four_loop_sample() {
+    let Some(list) = std::env::var_os("VAKINT_TEST_D6_L4_LIST") else {
+        eprintln!("SKIP: VAKINT_TEST_D6_L4_LIST is not set");
+        return;
+    };
+    let only = std::fs::read_to_string(&list)
+        .unwrap()
+        .lines()
+        .filter(|line| !line.trim().is_empty() && !line.starts_with('#'))
+        .map(|line| line.trim().parse::<usize>().unwrap())
+        .collect::<Vec<_>>();
+    let counts = run_set("L4", Some(&only));
+    if !counts.is_empty() {
+        assert_eq!(counts.values().sum::<usize>(), only.len(), "{counts:?}");
+    }
 }

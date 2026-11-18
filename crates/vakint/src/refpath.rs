@@ -615,6 +615,131 @@ fn contract_branch_open(product: &Atom) -> Result<(Atom, Vec<Atom>)> {
     Ok((cooking.uncook(reduced.expression().as_view()), ports))
 }
 
+/// D6 (lane d6-open-indices): one graph through the OPEN-INDEX route, the
+/// counterpart of [`run_graph`] without a projector: the colour branches
+/// contracted with the external ports left open ([`contract_open`]), the
+/// colour-weighted sum times `overall_factor` and `n_f` per closed quark loop
+/// through vakint's FeynKit ingress (open indices mapped to indexed momenta;
+/// ports renamed to the indices `1`, `2`), evaluated by `Vakint::evaluate`
+/// (denominator match, tensor reduction with the external momentum declared,
+/// lowering, RustRed, finaliser). The open value is `Π^{μν}` with `μ = 1`,
+/// `ν = 2`; the caller closes it. Stage seconds as in [`run_graph`] (`lower`
+/// = evaluation wall minus reduction, finalisation and observer: it contains
+/// the denominator match and the tensor reduction); `tensor_probe` = a separate
+/// timing of the denominator match plus the tensor reduction of the same
+/// input on the same engine (`VakintExpression::canonicalize` +
+/// `tensor_reduce`), reported apart.
+pub struct OpenRun {
+    pub name: String,
+    pub loops: usize,
+    pub zero_reason: Option<String>,
+    pub seconds: StageSeconds,
+    pub canonicalize_probe: f64,
+    pub tensor_probe: f64,
+    pub value: Atom,
+    pub observation: Option<GateObservation>,
+}
+
+pub fn run_graph_open(
+    vakint: &Vakint,
+    model: &Arc<Model>,
+    dot: &str,
+    extra_terms: i64,
+) -> Result<OpenRun> {
+    let s = &*SYMBOLS;
+    let started = Instant::now();
+    let diagram = FeynmanDiagram::from_dot(Arc::clone(model), dot)?;
+    let mut run = OpenRun {
+        name: diagram.name().to_string(),
+        loops: diagram.loop_count(),
+        zero_reason: None,
+        seconds: StageSeconds::default(),
+        canonicalize_probe: 0.0,
+        tensor_probe: 0.0,
+        value: Atom::Zero,
+        observation: None,
+    };
+    run.seconds.parse = started.elapsed().as_secs_f64();
+    ensure!(
+        diagram.projector().expression().is_one()
+            && diagram.numerator_prefactor().expression().is_one(),
+        "the open-index route expects projector 1 and numerator_prefactor 1"
+    );
+    if scaleless_contact(&diagram) {
+        run.zero_reason = Some("no internal edge carries the external momentum: scaleless".into());
+        return Ok(run);
+    }
+    let started = Instant::now();
+    let (branches, _) = colour_branches(&diagram)?;
+    run.seconds.colour = started.elapsed().as_secs_f64();
+    if branches.is_empty() {
+        run.zero_reason = Some("every colour branch vanishes".into());
+        return Ok(run);
+    }
+    let started = Instant::now();
+    let (open, ports) = contract_open(&diagram, &branches)?;
+    run.seconds.contract = started.elapsed().as_secs_f64();
+    ensure!(ports.len() == 2, "a two-point graph has two open ports, found {ports:?}");
+    let mut open = open;
+    for (port, label) in ports.iter().zip([1, 2]) {
+        let AtomView::Fun(slot) = port.as_view() else {
+            return Err(eyre!("port {port} is not a slot"));
+        };
+        let index = slot
+            .iter()
+            .nth(1)
+            .ok_or_else(|| eyre!("port {port} has no index"))?
+            .to_owned();
+        open = open.replace(index.to_pattern()).with(Atom::num(label).to_pattern());
+    }
+    let quark_loops = closed_quark_loops(&diagram)?;
+    let weight = feynkit_graph::expressions::evaluate_overall_factor(diagram.overall_factor().as_view())
+        * Atom::var(s.nf).pow(Atom::num(quark_loops as i64));
+    let dimension = Atom::var(s.d);
+    let kinematics = Kinematics::in_dimension(&dimension)?;
+    let family = diagram.propagator_family(&kinematics)?;
+    let settings = vakint_settings(run.loops as i64 + extra_terms);
+    let epsilon = Atom::var(vk_symbol!(&settings.epsilon_symbol));
+    let in_epsilon = Atom::num(4) - Atom::num(2) * &epsilon;
+    let started = Instant::now();
+    let input = Atom::from(VakintExpression::from_diagram(
+        &diagram,
+        &family,
+        &(open * &weight),
+        &DiagramIntegralOptions::default(),
+    )?)
+    .replace(Atom::var(s.d))
+    .with(in_epsilon);
+    run.seconds.ingress = started.elapsed().as_secs_f64();
+    // The probe: denominator match, then the tensor reduction, timed apart.
+    let started = Instant::now();
+    let mut probe = VakintExpression::try_from(input.as_view())?;
+    probe.canonicalize(&settings, &vakint.topologies, false)?;
+    run.canonicalize_probe = started.elapsed().as_secs_f64();
+    let started = Instant::now();
+    probe.tensor_reduce(vakint, &settings)?;
+    run.tensor_probe = started.elapsed().as_secs_f64();
+    // The evaluation proper.
+    let started = Instant::now();
+    let (value, observation) = p_gate::observe(|| vakint.evaluate(&settings, input.as_view()));
+    let total = started.elapsed().as_secs_f64();
+    run.value = value?;
+    let seconds = &mut run.seconds;
+    let reduce = observation.prepare_seconds + observation.library_seconds;
+    let finalise = observation.render_seconds + observation.finalize_seconds;
+    seconds.split = observation.split_seconds;
+    seconds.lowering = observation.lower_seconds;
+    seconds.prepare = observation.prepare_seconds;
+    seconds.library = observation.library_seconds;
+    seconds.render = observation.render_seconds;
+    seconds.finalize = observation.finalize_seconds;
+    seconds.reduce = reduce;
+    seconds.finalise = finalise;
+    seconds.lower = total - reduce - finalise - observation.observer_seconds;
+    run.observation = Some(observation);
+    Ok(run)
+}
+
 fn reset_peak_rss() -> bool {
     std::fs::write("/proc/self/clear_refs", "5").is_ok()
 }
