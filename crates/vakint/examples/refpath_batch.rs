@@ -36,6 +36,10 @@
 //!                                list of routed, compact (the default routing), edge (no
 //!                                routing), stored (FeynKit's stored basis), merge (merged colour
 //!                                terms), dots; `default` = routed,compact,merge (gate request 3)
+//!     [--resume-root <dir>]      RESUMABLE reductions: per graph RUSTRED_RESUME_DIR=<dir>/<id>/ (RustRed
+//!                                saves its record pass there, every RUSTRED_RESUME_SECONDS); a graph
+//!                                interrupted in an earlier run of this configuration is RESUMED, not
+//!                                recorded FAILED; the graph's directory is removed after its record
 //!     [--refinalise-from <cfg dir>]  RE-FINALISE: take each graph's Retain value from
 //!                                the records of an earlier run (same configuration but the
 //!                                binary) and compute the Symbolic value with THIS binary's
@@ -69,8 +73,9 @@
 //! PROVED_ZERO entry with its reason. A failure is a FAILED record (never
 //! retried by a later run: delete the record to retry), never a missing file
 //! or a zero; a graph interrupted in an earlier run (`.started` without a
-//! record) is recorded FAILED. Duplicate ids and `RUSTRED_RESUME_DIR` are
-//! refused. `summary.json` says whether the request is complete.
+//! record) is recorded FAILED, unless the run is resumable (`--resume-root`,
+//! then it is resumed and its record counts the attempts). Duplicate ids and an
+//! externally set `RUSTRED_RESUME_DIR` are refused. `summary.json` says whether the request is complete.
 use std::collections::BTreeMap;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
@@ -281,6 +286,8 @@ struct RunSettings {
     refinalise_from: Option<RefinaliseSource>,
     /// R3 (`--r3`): its options and whether the colour terms are merged.
     r3: Option<R3Choice>,
+    /// Resumable reductions: the root of the per-graph `RUSTRED_RESUME_DIR`s.
+    resume_root: Option<PathBuf>,
 }
 
 /// The R3 path of `--r3` (lane idenso-audit, gate request 3).
@@ -406,11 +413,16 @@ fn refinalise_source(dir: &Path, ours: &RunSettings) -> eyre::Result<RefinaliseS
 fn bound_environment() -> BTreeMap<String, String> {
     // output paths and diagnostics (the trace spill directory is scratch:
     // RustRed writes and removes its own files there; values do not depend on it)
-    const NOT_BOUND: [&str; 4] = [
+    // The resume variables are bound through the configuration's `resume` field
+    // (mode and save cadence; the directory is per graph scratch, named in each record).
+    const NOT_BOUND: [&str; 7] = [
         "RUSTRED_ORDERED_MODULAR_STATS",
         "RUSTRED_TRACE_SPILL_DIR",
         "VAKINT_P_PHASES",
         "VAKINT_LOWERING_CENSUS",
+        "RUSTRED_RESUME_DIR",
+        "RUSTRED_RESUME_SECONDS",
+        "RUSTRED_RESUME_STOP_AFTER_PHASE",
     ];
     std::env::vars()
         .filter(|(name, _)| {
@@ -449,6 +461,12 @@ fn config(settings: &RunSettings) -> (Value, String) {
         "environment_content_sha256": settings.environment_content,
     });
     let mut value = value;
+    if settings.resume_root.is_some() {
+        value["resume"] = json!({
+            "mode": "per-graph RUSTRED_RESUME_DIR under the run's resume root; an interrupted graph is resumed",
+            "seconds": std::env::var("RUSTRED_RESUME_SECONDS").ok(),
+        });
+    }
     if let Some(source) = &settings.refinalise_from {
         value["refinalise_from"] = json!({
             "cfg_digest": source.cfg_digest,
@@ -1249,6 +1267,7 @@ fn main() -> eyre::Result<()> {
     let mut stop_files = Vec::new();
     let mut refinalise_from = None;
     let mut r3 = None;
+    let mut resume_root = None;
     let mut index = 0;
     while index < args.len() {
         let value = || args.get(index + 1).cloned().expect("missing value");
@@ -1306,6 +1325,10 @@ fn main() -> eyre::Result<()> {
             }
             "--r3" => {
                 r3 = Some(R3Choice::parse(&value())?);
+                index += 1;
+            }
+            "--resume-root" => {
+                resume_root = Some(PathBuf::from(value()));
                 index += 1;
             }
             "--loop-sign-in-overall" => loop_sign_in_overall = true,
@@ -1372,6 +1395,7 @@ fn main() -> eyre::Result<()> {
         environment_content,
         refinalise_from: None,
         r3,
+        resume_root,
     };
     eyre::ensure!(
         settings.r3.is_none() || (refinalise_from.is_none() && !settings.contract_only),
@@ -1494,7 +1518,21 @@ fn run(request: &Request<'_>, settings: &RunSettings) -> eyre::Result<Value> {
             "master_catalogue_data_version": settings.catalogue_version,
             "colour_branch": "all: the record is the sum over the graph's non-zero colour branches",
         });
-        if started_path.exists() {
+        let mut attempts = 1u64;
+        // resumable runs: the graph's RUSTRED_RESUME_DIR (and its attempt counter) under the resume root
+        let resume_dir = settings.resume_root.as_ref().map(|root| root.join(&id));
+        if started_path.exists() && settings.resume_root.is_some() {
+            // resumable: continue the interrupted graph from its saved record pass
+            let counter = resume_dir.as_ref().unwrap().join("attempts");
+            attempts = std::fs::read_to_string(counter)
+                .ok()
+                .and_then(|t| t.trim().parse().ok())
+                .unwrap_or(1)
+                + 1;
+            eprintln!(
+                "[refpath_batch] graph {id}: interrupted earlier, RESUMED (attempt {attempts})"
+            );
+        } else if started_path.exists() {
             record["status"] = json!("FAILED");
             record["error"] = json!(
                 "interrupted during an earlier run (crash, kill or out of memory): not retried"
@@ -1505,6 +1543,15 @@ fn run(request: &Request<'_>, settings: &RunSettings) -> eyre::Result<Value> {
             continue;
         }
         std::fs::write(&started_path, std::process::id().to_string())?;
+        if let Some(dir) = &resume_dir {
+            std::fs::create_dir_all(dir)?;
+            std::fs::write(dir.join("attempts"), attempts.to_string())?;
+            record["resume_dir"] = json!(dir.display().to_string());
+            // SAFETY: the driver is single-threaded here (no reduction is running);
+            // RustRed reads the variable at each request.
+            unsafe { std::env::set_var("RUSTRED_RESUME_DIR", dir) };
+        }
+        record["attempts"] = json!(attempts);
         if template.is_none() && !settings.contract_only {
             let mut engine = Vakint::new()?;
             if let Some(library) = &settings.library {
@@ -1592,6 +1639,13 @@ fn run(request: &Request<'_>, settings: &RunSettings) -> eyre::Result<Value> {
             }
         }
         *totals.entry("cpu".to_string()).or_default() += record["cpu"].as_f64().unwrap_or(0.0);
+        if let Some(dir) = &resume_dir {
+            // SAFETY: as above.
+            unsafe { std::env::remove_var("RUSTRED_RESUME_DIR") };
+            if record["status"] == "OK" {
+                std::fs::remove_dir_all(dir)?;
+            }
+        }
         write_atomic(&record_path, &record.to_string())?;
         std::fs::remove_file(&started_path)?;
         let line = json!({"graph": graph, "status": record["status"], "wall": record["wall"],
@@ -1653,6 +1707,7 @@ mod tests {
             environment_content: BTreeMap::new(),
             refinalise_from: None,
             r3: None,
+            resume_root: None,
         }
     }
 
@@ -1753,6 +1808,13 @@ mod tests {
                 "environment (pruning mode VAKINT_P_ZERO_PRUNE and the like)",
                 RunSettings {
                     environment: BTreeMap::from([("VAKINT_P_ZERO_PRUNE".into(), "early".into())]),
+                    ..base.clone()
+                },
+            ),
+            (
+                "resumable reductions",
+                RunSettings {
+                    resume_root: Some(PathBuf::from("/x/resume")),
                     ..base.clone()
                 },
             ),
@@ -1993,6 +2055,57 @@ mod tests {
         };
         let error = refinalise_source(&source_dir, &transverse).unwrap_err();
         assert!(error.to_string().contains("differs"), "{error}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// RESUMABLE runs (`--resume-root`, gate 17 / rustred 12d2): a graph interrupted
+    /// in an earlier run (planted `.started`) is RESUMED, its record counts the
+    /// attempts and names its RUSTRED_RESUME_DIR, which is removed after the record;
+    /// without a resume root the same marker gives a FAILED record (unchanged).
+    #[test]
+    fn resumable_runs_resume_an_interrupted_graph_instead_of_failing_it() {
+        let Some(dir) = l1() else { return };
+        let root = std::env::temp_dir().join(format!("refpath_resume_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let resume = root.join("resume");
+        let resumable = RunSettings {
+            resume_root: Some(resume.clone()),
+            ..settings(Projection::Metric)
+        };
+        let first = run(&request(&dir, &root.join("a"), &[0]), &resumable).unwrap();
+        let cfg = PathBuf::from(first["cfg_dir"].as_str().unwrap());
+        let record = |cfg: &Path| -> Value {
+            serde_json::from_str(&std::fs::read_to_string(cfg.join("graphs/000001.json")).unwrap())
+                .unwrap()
+        };
+        // graph 1 interrupted: marker and an attempt counter left behind
+        std::fs::write(cfg.join("graphs/000001.started"), "1").unwrap();
+        std::fs::create_dir_all(resume.join("000001")).unwrap();
+        std::fs::write(resume.join("000001/attempts"), "1").unwrap();
+        let again = run(&request(&dir, &root.join("a"), &[0, 1]), &resumable).unwrap();
+        assert_eq!(again["failed"], 0, "{again}");
+        let r = record(&cfg);
+        assert_ne!(r["status"], "FAILED", "{r}");
+        assert_eq!(r["attempts"], 2);
+        assert_eq!(r["resume_dir"], resume.join("000001").display().to_string());
+        assert!(
+            !resume.join("000001").exists(),
+            "the resume directory is removed after the record"
+        );
+        assert!(!cfg.join("graphs/000001.started").exists());
+        // the configuration binds the resume mode
+        assert_ne!(
+            config(&resumable).1,
+            config(&settings(Projection::Metric)).1
+        );
+        // without a resume root: FAILED, as before
+        let plain = settings(Projection::Metric);
+        let first = run(&request(&dir, &root.join("b"), &[0]), &plain).unwrap();
+        let cfg = PathBuf::from(first["cfg_dir"].as_str().unwrap());
+        std::fs::write(cfg.join("graphs/000001.started"), "1").unwrap();
+        let again = run(&request(&dir, &root.join("b"), &[0, 1]), &plain).unwrap();
+        assert_eq!(again["failed"], 1, "{again}");
+        assert_eq!(record(&cfg)["status"], "FAILED");
         let _ = std::fs::remove_dir_all(&root);
     }
 
