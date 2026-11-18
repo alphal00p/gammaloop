@@ -608,6 +608,8 @@ fn context_field<'c>(context: &'c str, key: &str) -> Option<&'c str> {
 struct BlockRecord {
     summands: usize,
     text_bytes: usize,
+    /// sha256 (hex) of the block file as written; `None` for an inline block.
+    sha256: Option<String>,
     /// The file name, or `None` for an inline block (its text).
     file: std::result::Result<String, String>,
 }
@@ -620,6 +622,7 @@ fn write_block(
     stem: &str,
     index: usize,
     block: &Atom,
+    record: &str,
 ) -> Result<BlockRecord> {
     let summands = match block.as_view() {
         _ if block.is_zero() => Vec::new(),
@@ -632,6 +635,7 @@ fn write_block(
             return Ok(BlockRecord {
                 summands: summands.len(),
                 text_bytes: text.len(),
+                sha256: None,
                 file: Err(text),
             });
         }
@@ -650,7 +654,7 @@ fn write_block(
         let stdin = child.stdin.take().expect("piped stdin");
         let mut out = BufWriter::with_capacity(1 << 20, stdin);
         let head = format!(
-            "schema pint6.boundary-block.v1\nblock {index}\nsummands {}\n",
+            "schema pint6.boundary-block.v1\nblock {index} record={record}\nsummands {}\n",
             summands.len()
         );
         out.write_all(head.as_bytes())?;
@@ -682,6 +686,7 @@ fn write_block(
     Ok(BlockRecord {
         summands: summands.len(),
         text_bytes,
+        sha256: Some(file_sha256(&path)?),
         file: Ok(name),
     })
 }
@@ -716,7 +721,13 @@ pub(super) fn write_boundary(
     // Blocks first: their sizes go into the header.
     let mut blocks = Vec::with_capacity(boundary.blocks.len());
     for (index, block) in boundary.blocks.iter().enumerate() {
-        blocks.push(write_block(&settings.directory, &stem, index, block)?);
+        blocks.push(write_block(
+            &settings.directory,
+            &stem,
+            index,
+            block,
+            &format!("{}-{sequence}", built.integration_id),
+        )?);
     }
     let context = CONTEXT.lock().unwrap().clone();
     let term = TERM.lock().unwrap().clone();
@@ -812,7 +823,7 @@ pub(super) fn write_boundary(
         let grade = &built.grades[index];
         writeln!(
             out,
-            "block {index}\tdegree={}\tstructure={}\tmass_power={}\tsummands={}\tatom_bytes={}\ttext_bytes={}\tfile={}",
+            "block {index}\tdegree={}\tstructure={}\tmass_power={}\tsummands={}\tatom_bytes={}\ttext_bytes={}\tfile={}\tsha256={}",
             grade.degree(),
             one_line(
                 grade.structure_atom(&built.external).as_view(),
@@ -822,7 +833,8 @@ pub(super) fn write_boundary(
             block.summands,
             boundary.blocks[index].as_view().get_byte_size(),
             block.text_bytes,
-            block.file.as_ref().map_or("inline", String::as_str)
+            block.file.as_ref().map_or("inline", String::as_str),
+            block.sha256.as_deref().unwrap_or("inline")
         )?;
     }
     for (index, block) in blocks.iter().enumerate() {
@@ -845,6 +857,15 @@ pub(super) fn write_boundary(
         )?;
     }
     writeln!(out, "patterns {}", boundary.patterns.len())?;
+    writeln!(
+        out,
+        "pattern_terms {}",
+        boundary
+            .patterns
+            .iter()
+            .map(|pattern| pattern.terms.len())
+            .sum::<usize>()
+    )?;
     for (index, (pattern, meta)) in boundary.patterns.iter().zip(&built.patterns).enumerate() {
         let lines = lines(&pattern.topology)?;
         writeln!(
@@ -999,7 +1020,10 @@ fn read_block_file(path: &std::path::Path, index: usize) -> Result<Atom> {
             path.display()
         ));
     }
-    if next()? != format!("block {index}") {
+    let block_line = next()?;
+    if block_line != format!("block {index}")
+        && !block_line.starts_with(&format!("block {index} record="))
+    {
         return Err(eyre!("{}: wrong block number", path.display()));
     }
     let summands = next()?
@@ -1185,4 +1209,25 @@ pub(super) fn test_settings(directory: &std::path::Path) -> Result<DumpSettings>
         directory: directory.to_owned(),
         skip_min_p_loops: usize::MAX,
     })
+}
+
+/// The sha256 (hex) of a written file, by `sha256sum` (as the block writer
+/// already uses `zstd`): the record's integrity field.
+fn file_sha256(path: &std::path::Path) -> Result<String> {
+    let output = std::process::Command::new("sha256sum")
+        .arg(path)
+        .output()
+        .map_err(|error| eyre!("pint6 boundary record: cannot run sha256sum: {error}"))?;
+    if !output.status.success() {
+        return Err(eyre!(
+            "pint6 boundary record: sha256sum failed on {}",
+            path.display()
+        ));
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    text.split_whitespace()
+        .next()
+        .filter(|hex| hex.len() == 64)
+        .map(str::to_owned)
+        .ok_or_else(|| eyre!("pint6 boundary record: no sha256 for {}", path.display()))
 }
