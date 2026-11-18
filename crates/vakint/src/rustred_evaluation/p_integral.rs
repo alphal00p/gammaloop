@@ -1833,7 +1833,7 @@ pub(crate) fn reduce_folded_channels(
         settings,
         format!(
             "{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{}",
-            handle.cache, handle.relations_root, reducer.options.arithmetic_for(5), reducer.options.uncovered,
+            handle.cache, handle.relations_root, checkpoint_arithmetic(&reducer.options), reducer.options.uncovered,
             reducer.options.master_mode, settings.epsilon_symbol
         ),
     );
@@ -2337,6 +2337,16 @@ mod tests;
 /// vk5l-physrun level-1 checkpoints ([`crate::VakintSettings::p_checkpoint_dir`]).
 /// Bump when the stored form or the meaning of a unit changes.
 pub(crate) const P_CHECKPOINT_VERSION: &str = "vk5l-physrun.p-checkpoint.v1";
+
+/// The arithmetic part of the checkpoint salt: the five-loop arithmetic with
+/// its worker count fixed to one. The worker count changes how the replay is
+/// scheduled, never a stored value, so a unit reduced on one thread is reused
+/// on sixteen and vice versa. At one thread this is the arithmetic itself, so
+/// the keys of checkpoints written before this change (all on one thread) are
+/// unchanged.
+pub(crate) fn checkpoint_arithmetic(options: &PRequestOptions) -> OrderedWeightArithmetic {
+    options.arithmetic_for(5).with_threads(1)
+}
 
 /// One checkpoint directory with the salt every unit key includes (version,
 /// library identity, relation root, arithmetic, uncovered policy, master

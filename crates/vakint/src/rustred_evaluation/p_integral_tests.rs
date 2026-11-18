@@ -131,6 +131,32 @@ fn assert_tag_basis_equal(
 /// All 45 cases of the frozen one-loop battery: RustRed's reduced value is
 /// Forcer's frozen output exactly in the (Γ(1+mε) monomial × master) basis,
 /// under the default (modular) and the exact arithmetic.
+/// vk5l-physrun 4B: the level-1 checkpoint key does not depend on the
+/// worker count (a unit reduced on one thread is reused on sixteen), and on
+/// one thread it is the key of the checkpoints written before the change.
+#[test]
+fn checkpoint_arithmetic_ignores_the_thread_count() {
+    let mut one = VakintSettings::default();
+    one.n_cores = 1;
+    let mut sixteen = one.clone();
+    sixteen.n_cores = 16;
+    let (one, sixteen) = (request_options(&one), request_options(&sixteen));
+    assert_ne!(
+        one.arithmetic_for(5).threads(),
+        sixteen.arithmetic_for(5).threads(),
+        "the five-loop arithmetic follows n_cores"
+    );
+    assert_eq!(
+        format!("{:?}", checkpoint_arithmetic(&one)),
+        format!("{:?}", checkpoint_arithmetic(&sixteen))
+    );
+    assert_eq!(
+        format!("{:?}", checkpoint_arithmetic(&one)),
+        format!("{:?}", one.arithmetic_for(5)),
+        "one-thread keys are unchanged"
+    );
+}
+
 #[test]
 fn the_one_loop_battery_matches_forcer_exactly_in_the_tag_basis() {
     let engine = engine();
