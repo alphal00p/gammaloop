@@ -237,15 +237,16 @@ pub struct PMasterBasisData {
     pub(crate) layers: Vec<Layer>,
     masters: serde_json::Value,
     /// The catalogue extended by the new masters, per base catalogue (its
-    /// data version and master count).
-    extended: Mutex<BTreeMap<(String, usize), Arc<PMasterCatalogue>>>,
+    /// content digest: o1-verify C2, the data version and master count let
+    /// two catalogues of one process share values).
+    extended: Mutex<BTreeMap<String, Arc<PMasterCatalogue>>>,
     /// The rotation rules per epsilon symbol name and base catalogue.
     rules: Mutex<RuleCache>,
 }
 
-/// Rewrite rules `(PMaster(old), value)` per (epsilon symbol name, catalogue
-/// data version, catalogue master count).
-type RuleCache = BTreeMap<(String, String, usize), Arc<Vec<(Atom, Atom)>>>;
+/// Rewrite rules `(PMaster(old), value)` per (epsilon symbol name, content
+/// digest of the extended catalogue).
+type RuleCache = BTreeMap<(String, String), Arc<Vec<(Atom, Atom)>>>;
 
 fn invalid(source: &str, detail: impl std::fmt::Display) -> VakintError {
     VakintError::EvaluationError(format!("p master basis {source}: {detail}"))
@@ -460,7 +461,7 @@ impl PMasterBasisData {
         &self,
         catalogue: &PMasterCatalogue,
     ) -> Result<Arc<PMasterCatalogue>, VakintError> {
-        let key = (catalogue.data_version().to_owned(), catalogue.counts().0);
+        let key = catalogue.content_digest().to_owned();
         let mut cache = self.extended.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(extended) = cache.get(&key) {
             return Ok(Arc::clone(extended));
@@ -483,8 +484,7 @@ impl PMasterBasisData {
     ) -> Result<Arc<Vec<(Atom, Atom)>>, VakintError> {
         let key = (
             epsilon.get_name().to_owned(),
-            catalogue.data_version().to_owned(),
-            catalogue.counts().0,
+            catalogue.content_digest().to_owned(),
         );
         let mut cache = self.rules.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(rules) = cache.get(&key) {

@@ -331,6 +331,10 @@ enum Terminal {
 #[derive(Clone, Debug)]
 pub struct PMasterCatalogue {
     data_version: String,
+    /// sha256 of the content this catalogue was built from (the file text;
+    /// for an extension, the base digest and the added masters): the identity
+    /// of process caches derived from it ([`Self::content_digest`]).
+    content_digest: String,
     /// By symbol name (the argument of `PMaster`).
     masters: BTreeMap<String, PCatalogueMaster>,
     /// By `(node, key)`.
@@ -545,6 +549,10 @@ impl PMasterCatalogue {
         let forcer = masters::p_master_names().map_err(|error| invalid(error.to_string()))?;
         let mut catalogue = PMasterCatalogue {
             data_version: file.data_version.clone(),
+            content_digest: {
+                use sha2::{Digest, Sha256};
+                format!("{:x}", Sha256::digest(text.as_bytes()))
+            },
             masters: BTreeMap::new(),
             terminals: BTreeMap::new(),
         };
@@ -641,6 +649,7 @@ impl PMasterCatalogue {
         let epsilon = table_epsilon();
         let mut catalogue = PMasterCatalogue {
             data_version: "forcer-masters-prc".into(),
+            content_digest: "forcer-masters-prc".into(),
             masters: BTreeMap::new(),
             terminals: BTreeMap::new(),
         };
@@ -704,6 +713,12 @@ impl PMasterCatalogue {
         &self.data_version
     }
 
+    /// sha256 of the catalogue's content (see the field): two catalogues with
+    /// the same data version and counts but different values differ here.
+    pub(crate) fn content_digest(&self) -> &str {
+        &self.content_digest
+    }
+
     /// The number of masters and of terminal rows.
     pub fn counts(&self) -> (usize, usize) {
         (self.masters.len(), self.terminals.len())
@@ -722,10 +737,19 @@ impl PMasterCatalogue {
             source_name: source_name.to_owned(),
             detail,
         };
+        let masters_json = masters;
         let masters: Vec<MasterFile> = serde_json::from_value(masters.clone())
             .map_err(|error| invalid(format!("not a list of catalogue masters: {error}")))?;
         let forcer = masters::p_master_names().map_err(|error| invalid(error.to_string()))?;
         let mut extended = self.clone();
+        extended.content_digest = {
+            use sha2::{Digest, Sha256};
+            let mut hasher = Sha256::new();
+            hasher.update(self.content_digest.as_bytes());
+            hasher.update(b"\0");
+            hasher.update(masters_value_text(&masters_json).as_bytes());
+            format!("{:x}", hasher.finalize())
+        };
         let mut ids: BTreeMap<String, String> = self
             .masters
             .iter()
@@ -758,6 +782,11 @@ impl PMasterCatalogue {
     pub(crate) fn master(&self, symbol: &str) -> Option<&PCatalogueMaster> {
         self.masters.get(symbol)
     }
+}
+
+/// The canonical JSON text of `value` (serde_json's map order is stable).
+fn masters_value_text(value: &serde_json::Value) -> String {
+    value.to_string()
 }
 
 /// `PResidual(node,k..)` as text.

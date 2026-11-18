@@ -776,3 +776,39 @@ fn by_master_ids(expression: &Atom, catalogue: &PMasterCatalogue) -> Vec<(Option
     }
     out.into_iter().collect()
 }
+
+/// o1-verify C2: the extended catalogue and its rotation rules are cached per
+/// catalogue CONTENT. Two catalogues of one process with the same data
+/// version and master count but one different coefficient get their own
+/// extension and rules (keyed by data version and count, the second got the
+/// first one's values).
+#[test]
+fn extended_catalogues_are_cached_per_catalogue_content() {
+    let text = include_str!("../../data/p_master/p-master-catalogue-5l.json");
+    assert_eq!(text.matches("\"1867/864\"").count(), 1);
+    let first = catalogue();
+    let second = PMasterCatalogue::from_json(
+        "altered p-master-catalogue-5l.json",
+        &text.replacen("\"1867/864\"", "\"1868/864\"", 1),
+    )
+    .unwrap();
+    assert_eq!(first.data_version(), second.data_version());
+    assert_eq!(first.counts(), second.counts());
+    assert_ne!(first.content_digest(), second.content_digest());
+    let basis = basis();
+    let extended_first = basis.extended_catalogue(&first).unwrap();
+    let extended_second = basis.extended_catalogue(&second).unwrap();
+    assert!(!Arc::ptr_eq(&extended_first, &extended_second));
+    assert!(Arc::ptr_eq(&extended_first, &basis.extended_catalogue(&first).unwrap()));
+    let mut differing = 0;
+    for (symbol, _) in second.masters_ids() {
+        let value = |catalogue: &PMasterCatalogue| format!("{:?}", catalogue.master(symbol));
+        assert_eq!(value(&extended_second), value(&second), "{symbol}");
+        assert_eq!(value(&extended_first), value(&first), "{symbol}");
+        differing += usize::from(value(&first) != value(&second));
+    }
+    assert_eq!(differing, 1);
+    let rules_first = basis.rules(&extended_first, epsilon()).unwrap();
+    let rules_second = basis.rules(&extended_second, epsilon()).unwrap();
+    assert!(!Arc::ptr_eq(&rules_first, &rules_second));
+}
