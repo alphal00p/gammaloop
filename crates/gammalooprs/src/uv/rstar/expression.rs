@@ -344,6 +344,312 @@ fn uv_child_edge_remainder() -> bool {
     UV_CHILD_SCOPE.with(|scope| scope.get())
 }
 
+/// `GAMMALOOP_UV_CHILD_TRUNCATE=0|1|graded` (default off): truncate the routed
+/// ordinary remainder of a UV child evaluated as its own R* root (a support
+/// root) to root-momentum grade at most its Taylor order `d`, before the
+/// contraction ([`RStarIntegrand::with_root_truncation`]).
+///
+/// The outer Taylor operation scales every root momentum by `λ` and keeps
+/// total degree `d`; everything else in the product is regular at `λ = 0`,
+/// so a term with more than `d` root momenta never survives it, and the
+/// contraction commutes with the grading (results/uv-degree-truncation).
+///
+/// - unset or `0`: off; nothing changes, the cache keys included;
+/// - `1`: only children of Taylor order 0, whose root momenta are zeroed;
+/// - `graded`: every degree, a child of degree `d >= 1` as the graded parts
+///   `Π_i f_i^(g_i)` (`Σ g_i <= d`) of its dependent factors, at most
+///   `GAMMALOOP_UV_CHILD_TRUNCATE_MAX_PARTS` (default 32) of them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ChildTruncate {
+    Off,
+    DegreeZero,
+    Graded,
+}
+
+impl ChildTruncate {
+    fn parse(value: Option<&str>) -> Self {
+        match value.map(str::trim) {
+            Some("1") => Self::DegreeZero,
+            Some("graded") => Self::Graded,
+            _ => Self::Off,
+        }
+    }
+
+    /// The spelling of the mode in the cache key and the log lines.
+    fn name(self) -> &'static str {
+        match self {
+            Self::Off => "0",
+            Self::DegreeZero => "1",
+            Self::Graded => "graded",
+        }
+    }
+}
+
+static UV_CHILD_TRUNCATE: LazyLock<ChildTruncate> = LazyLock::new(|| {
+    ChildTruncate::parse(std::env::var("GAMMALOOP_UV_CHILD_TRUNCATE").ok().as_deref())
+});
+
+fn uv_child_truncate_max_parts() -> usize {
+    static PARTS: LazyLock<usize> = LazyLock::new(|| {
+        std::env::var("GAMMALOOP_UV_CHILD_TRUNCATE_MAX_PARTS")
+            .ok()
+            .and_then(|value| value.trim().parse().ok())
+            .unwrap_or(32)
+    });
+    *PARTS
+}
+
+/// The root-momentum degree to which a remainder is truncated under `mode`:
+/// only a support root (a UV child evaluated as its own R* root) of a
+/// nonnegative Taylor order the mode covers; `None` keeps today's path.
+fn truncation_degree(mode: ChildTruncate, support_root: bool, taylor_order: i32) -> Option<usize> {
+    if !support_root {
+        return None;
+    }
+    let degree = usize::try_from(taylor_order).ok()?;
+    match mode {
+        ChildTruncate::Off => None,
+        ChildTruncate::DegreeZero => (degree == 0).then_some(0),
+        ChildTruncate::Graded => Some(degree),
+    }
+}
+
+/// The Δ-cache key suffix of an R* child of Taylor order `taylor_order`
+/// under `mode`: `None` when the mode is off (the key is then today's),
+/// `#uv-child-truncate={mode}@{d}` otherwise, so that a truncated Δ never
+/// serves an untruncated request or one of another degree.
+fn truncation_key_suffix(mode: ChildTruncate, taylor_order: i32) -> Option<String> {
+    (mode != ChildTruncate::Off)
+        .then(|| format!("#uv-child-truncate={}@{taylor_order}", mode.name()))
+}
+
+/// [`truncation_key_suffix`] under the process mode; `taylor_order` is
+/// called only when the mode is on.
+pub(super) fn uv_child_truncation_key(taylor_order: impl FnOnce() -> i32) -> Option<String> {
+    match *UV_CHILD_TRUNCATE {
+        ChildTruncate::Off => None,
+        mode => truncation_key_suffix(mode, taylor_order()),
+    }
+}
+
+/// The routed remainder of a support root truncated to root grade at most
+/// [`Self::degree`] ([`RStarIntegrand::with_root_truncation`]).
+struct RootTruncation {
+    /// The root edges whose momenta were graded.
+    roots: BTreeSet<usize>,
+    degree: usize,
+    /// The truncated routed product as products of graded factors times the
+    /// untouched denominators; their sum is the truncated remainder. Empty:
+    /// the truncated remainder vanishes.
+    parts: Vec<Atom>,
+}
+
+/// The outcome of [`truncate_routed`]: the truncated parts, or why the
+/// remainder keeps today's path.
+#[derive(Debug)]
+struct TruncatedRouted {
+    parts: Vec<Atom>,
+    /// Non-denominator factors that depend on a root momentum.
+    dependent: usize,
+}
+
+/// Whether `view` contains the momentum of an edge in `roots`.
+fn contains_root(view: AtomView<'_>, roots: &BTreeSet<usize>) -> bool {
+    let mut found = false;
+    view.visitor(&mut |part| {
+        if found {
+            return false;
+        }
+        if let AtomView::Fun(momentum) = part
+            && momentum.get_symbol() == GS.emr_mom
+            && momentum.get_nargs() > 0
+            && usize::try_from(momentum.get(0)).is_ok_and(|edge| roots.contains(&edge))
+        {
+            found = true;
+            return false;
+        }
+        true
+    });
+    found
+}
+
+/// Whether every root momentum of `view` reaches its top only through sums,
+/// products, positive integer powers and `dot` (decline condition (iv)): the
+/// grading of the outer Taylor scaling is then a polynomial grading.
+fn polynomial_in_roots(view: AtomView<'_>, roots: &BTreeSet<usize>) -> bool {
+    if !contains_root(view, roots) {
+        return true;
+    }
+    match view {
+        AtomView::Num(_) | AtomView::Var(_) => true,
+        AtomView::Add(sum) => sum.iter().all(|term| polynomial_in_roots(term, roots)),
+        AtomView::Mul(product) => product
+            .iter()
+            .all(|factor| polynomial_in_roots(factor, roots)),
+        AtomView::Pow(power) => {
+            let (base, exponent) = power.get_base_exp();
+            i64::try_from(exponent).is_ok_and(|exponent| exponent > 0)
+                && polynomial_in_roots(base, roots)
+        }
+        AtomView::Fun(function) => {
+            let symbol = function.get_symbol();
+            if symbol == GS.emr_mom {
+                // The root momentum itself; its tail carries no momentum.
+                function
+                    .iter()
+                    .skip(1)
+                    .all(|arg| !contains_root(arg, roots))
+            } else if symbol == SPENSO_TAG.dot {
+                function.iter().all(|arg| polynomial_in_roots(arg, roots))
+            } else {
+                false
+            }
+        }
+    }
+}
+
+/// Whether a top-level factor of a routed product is a denominator
+/// (`den(..)` or a power of it).
+fn is_denominator(factor: AtomView<'_>) -> bool {
+    match factor {
+        AtomView::Fun(function) => function.get_symbol() == GS.den,
+        AtomView::Pow(power) => {
+            matches!(power.get_base_exp().0, AtomView::Fun(base) if base.get_symbol() == GS.den)
+        }
+        _ => false,
+    }
+}
+
+/// The routed product `N · Π den^-1` truncated to root grade at most
+/// `degree`: the grade of a term is its number of root momenta, read with
+/// the outer Taylor's own scaling ([`RStarIntegrand::scale_edges_view`] by a
+/// scalar `t`, then [`TaylorExpansion::orders`]), so slotted vectors, `dot`
+/// arguments and every tail are graded exactly as `outer_taylor` scales them.
+/// The denominators are kept untouched. `Ok(Err(reason))` declines (decline
+/// conditions (iii)-(v) and the part cap); `Err` only for a failed expansion.
+fn truncate_routed(
+    routed: &Atom,
+    root_edges: &[EdgeIndex],
+    loop_edges: &BTreeSet<usize>,
+    degree: usize,
+    max_parts: usize,
+) -> Result<std::result::Result<TruncatedRouted, &'static str>> {
+    let roots = root_edges
+        .iter()
+        .map(|edge| usize::from(*edge))
+        .collect::<BTreeSet<_>>();
+    let AtomView::Mul(product) = routed.as_view() else {
+        return Ok(Err("not_product"));
+    };
+    let mut denominators = Vec::new();
+    let mut factors = Vec::new();
+    for factor in product.iter() {
+        if is_denominator(factor) {
+            denominators.push(factor);
+        } else if factor.contains_symbol(GS.den) {
+            return Ok(Err("nonsplit"));
+        } else {
+            factors.push(factor);
+        }
+    }
+    // Labels: loop edges and roots only, so that outer_taylor's re-routing
+    // adds no root dependence after the grading (condition (iii)).
+    let mut foreign = false;
+    for factor in &factors {
+        factor.visitor(&mut |part| {
+            if let AtomView::Fun(momentum) = part
+                && momentum.get_symbol() == GS.emr_mom
+            {
+                let known = momentum.get_nargs() > 0
+                    && usize::try_from(momentum.get(0))
+                        .is_ok_and(|edge| roots.contains(&edge) || loop_edges.contains(&edge));
+                foreign |= !known;
+                return false;
+            }
+            true
+        });
+    }
+    if foreign {
+        return Ok(Err("labels"));
+    }
+    if !factors
+        .iter()
+        .all(|factor| polynomial_in_roots(*factor, &roots))
+    {
+        return Ok(Err("non_polynomial"));
+    }
+    let parameter = symbol!("rstar_root_grade"; Scalar);
+    let taylor = TaylorExpansion::new(parameter, degree);
+    let mut independent = Vec::new();
+    let mut dependent = Vec::new();
+    for factor in factors {
+        let scaled = RStarIntegrand::scale_edges_view(factor, root_edges, parameter);
+        if !scaled.contains_symbol(parameter) {
+            independent.push(factor);
+            continue;
+        }
+        let orders = taylor.orders(&scaled)?;
+        if orders.iter().any(|order| order.contains_symbol(parameter)) {
+            return Ok(Err("grading"));
+        }
+        dependent.push(orders);
+    }
+    if dependent.is_empty() {
+        return Ok(Err("no_root"));
+    }
+    // Every grade assignment g of the dependent factors with Σ g_i <= degree
+    // and no vanishing graded factor.
+    let mut assignments = Vec::new();
+    let mut grades = vec![0usize; dependent.len()];
+    'assignments: loop {
+        if grades
+            .iter()
+            .zip(&dependent)
+            .all(|(g, orders)| !orders[*g].is_zero())
+        {
+            if assignments.len() == max_parts.max(1) && degree > 0 {
+                return Ok(Err("parts"));
+            }
+            assignments.push(grades.clone());
+        }
+        // Next assignment with Σ g <= degree (odometer, first index fastest).
+        let mut k = 0;
+        loop {
+            if k == grades.len() {
+                break 'assignments;
+            }
+            grades[k] += 1;
+            if grades.iter().sum::<usize>() <= degree {
+                break;
+            }
+            grades[k] = 0;
+            k += 1;
+        }
+    }
+    let parts = assignments
+        .iter()
+        .map(|grades| {
+            Atom::mul_many(
+                independent
+                    .iter()
+                    .copied()
+                    .chain(
+                        grades
+                            .iter()
+                            .zip(&dependent)
+                            .map(|(g, orders)| orders[*g].as_view()),
+                    )
+                    .chain(denominators.iter().copied()),
+            )
+        })
+        .filter(|part| !part.is_zero())
+        .collect();
+    Ok(Ok(TruncatedRouted {
+        parts,
+        dependent: dependent.len(),
+    }))
+}
+
 /// `GAMMALOOP_UV_STREAM=off|on|auto` (default off): how the edge-basis
 /// remainder of a degree-0 UV child (`GAMMALOOP_UV_CHILD_EDGE_REMAINDER=1`) is
 /// integrated.
@@ -830,6 +1136,12 @@ pub(super) struct RStarIntegrand {
     graph: Graph,
     basis: LoopMomentumBasis,
     soft_edges: Vec<EdgeIndex>,
+    /// `GAMMALOOP_UV_CHILD_TRUNCATE`: the routed product truncated to root
+    /// grade at most the outer Taylor degree, contracted instead of
+    /// [`Self::routed`] ([`Self::with_root_truncation`]). Only an ordinary
+    /// remainder of a support root, integrated through the outer Taylor
+    /// operation, is ever tagged.
+    truncation: Option<RootTruncation>,
 }
 
 impl RStarIntegrand {
@@ -1087,7 +1399,162 @@ impl RStarIntegrand {
             graph: converter_graph,
             basis,
             soft_edges,
+            truncation: None,
         })
+    }
+
+    /// `GAMMALOOP_UV_CHILD_TRUNCATE` ([`ChildTruncate`]): tag this ordinary
+    /// remainder of an evaluation with `root_edges` and outer Taylor order
+    /// `taylor_order` with its routed product truncated to root grade at most
+    /// that order ([`truncate_routed`]). `support_root`: the evaluation is a
+    /// UV child evaluated as its own R* root. Unchanged when the mode is off,
+    /// the evaluation is not a support root, or the remainder declines (one
+    /// `UV_TRUNCATE` line with the reason when the mode is on).
+    ///
+    /// Must run before the first contraction. The tagged remainder may then
+    /// only be integrated through [`Self::outer_taylor`] with these root edges
+    /// (or more) and at most this degree; every other consumer errors.
+    pub(super) fn with_root_truncation(
+        self,
+        support_root: bool,
+        root_edges: &[EdgeIndex],
+        taylor_order: i32,
+    ) -> Result<Self> {
+        self.with_root_truncation_in(
+            *UV_CHILD_TRUNCATE,
+            uv_child_truncate_max_parts(),
+            support_root,
+            root_edges,
+            taylor_order,
+        )
+    }
+
+    /// [`Self::with_root_truncation`] under an explicit mode and part cap.
+    fn with_root_truncation_in(
+        mut self,
+        mode: ChildTruncate,
+        max_parts: usize,
+        support_root: bool,
+        root_edges: &[EdgeIndex],
+        taylor_order: i32,
+    ) -> Result<Self> {
+        if mode == ChildTruncate::Off || !support_root {
+            return Ok(self);
+        }
+        ensure!(
+            self.contracted.get().is_none() && self.truncation.is_none(),
+            "the root truncation must precede the remainder's contraction"
+        );
+        let routed_bytes = self.routed.as_view().get_byte_size();
+        let loops = self.region.loops;
+        let log = |degree: &dyn std::fmt::Display,
+                   dependent: usize,
+                   parts: usize,
+                   truncated_bytes: usize,
+                   declined: &str| {
+            eprintln!(
+                "UV_TRUNCATE mode={} loops={loops} degree={degree} roots={} dependent={dependent} parts={parts} routed_bytes={routed_bytes} truncated_bytes={truncated_bytes} declined={declined}",
+                mode.name(),
+                root_edges.len(),
+            );
+        };
+        let Some(degree) = truncation_degree(mode, support_root, taylor_order) else {
+            log(&taylor_order, 0, 0, 0, "degree");
+            return Ok(self);
+        };
+        let declined = if loops == 0 {
+            Some("tree")
+        } else if root_edges.is_empty() {
+            Some("no_roots")
+        } else if self.routed.is_zero() {
+            Some("zero")
+        } else {
+            None
+        };
+        if let Some(reason) = declined {
+            log(&degree, 0, 0, 0, reason);
+            return Ok(self);
+        }
+        let loop_edges = self
+            .basis
+            .loop_edges
+            .iter()
+            .map(|edge| usize::from(*edge))
+            .collect::<BTreeSet<_>>();
+        let truncated = {
+            let _stage = StageSpan::new("gamma.remainder.root_truncation");
+            truncate_routed(&self.routed, root_edges, &loop_edges, degree, max_parts)
+        };
+        let truncated = match truncated {
+            Ok(Ok(truncated)) => truncated,
+            Ok(Err(reason)) => {
+                log(&degree, 0, 0, 0, reason);
+                return Ok(self);
+            }
+            Err(error) => {
+                // A failed expansion of a polynomial factor: today's path.
+                log(&degree, 0, 0, 0, "series");
+                tracing::warn!("UV_TRUNCATE declined a remainder: {error:?}");
+                return Ok(self);
+            }
+        };
+        let truncated_bytes = truncated
+            .parts
+            .iter()
+            .map(|part| part.as_view().get_byte_size())
+            .sum::<usize>();
+        log(
+            &degree,
+            truncated.dependent,
+            truncated.parts.len(),
+            truncated_bytes,
+            "-",
+        );
+        self.truncation = Some(RootTruncation {
+            roots: root_edges.iter().map(|edge| usize::from(*edge)).collect(),
+            degree,
+            parts: truncated.parts,
+        });
+        Ok(self)
+    }
+
+    /// The tagged remainder's outer Taylor step must scale at least its
+    /// graded roots and keep at most its truncation degree (exactness
+    /// condition (i)); any other use of a truncated contraction is an error.
+    fn check_truncation(&self, root_edges: &[EdgeIndex], degree: usize) -> Result<()> {
+        if let Some(truncation) = &self.truncation {
+            let scaled = root_edges
+                .iter()
+                .map(|edge| usize::from(*edge))
+                .collect::<BTreeSet<_>>();
+            ensure!(
+                truncation.roots.is_subset(&scaled) && degree <= truncation.degree,
+                "root truncation used with another outer Taylor: truncated at degree {} in roots {:?}, integrated at degree {degree} in {:?}",
+                truncation.degree,
+                truncation.roots,
+                scaled
+            );
+        }
+        Ok(())
+    }
+
+    /// A consumer other than the outer Taylor integration (hard Taylor, IR
+    /// moments, physical, boundary) of a root-truncated remainder: an error.
+    fn ensure_untruncated(&self, consumer: &str) -> Result<()> {
+        ensure!(
+            self.truncation.is_none(),
+            "a root-truncated remainder reached {consumer}, which needs the whole remainder"
+        );
+        Ok(())
+    }
+
+    /// What the contraction contracts: the truncated parts of a tagged
+    /// remainder (none when it vanishes), the routed product otherwise.
+    fn contraction_inputs(&self) -> &[Atom] {
+        match &self.truncation {
+            Some(truncation) => &truncation.parts,
+            None => std::slice::from_ref(&self.routed),
+        }
     }
 
     pub fn soft_edges(&self) -> &[EdgeIndex] {
@@ -1105,6 +1572,9 @@ impl RStarIntegrand {
     /// product is exactly that by construction. Exactly one denominator per
     /// paired remaining edge, none inside `N`; `Err(reason)` otherwise.
     pub(super) fn split_routed(&self) -> std::result::Result<(Atom, Vec<Atom>), String> {
+        if self.truncation.is_some() {
+            return Err("den_split: a root-truncated remainder".into());
+        }
         let factors = match self.routed.as_view() {
             AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
             single => vec![single],
@@ -1156,6 +1626,7 @@ impl RStarIntegrand {
         numerator: Atom,
         external_routing: &[Replacement],
     ) -> Result<(Atom, bool)> {
+        self.ensure_untruncated("the remainder boundary")?;
         let started = Instant::now();
         let routed = numerator.replace_multiple(external_routing);
         drop(numerator);
@@ -1339,6 +1810,7 @@ impl RStarIntegrand {
     }
 
     pub(super) fn physical_numerator(&self) -> Result<Atom> {
+        self.ensure_untruncated("the physical integration")?;
         // The physical path transports its numerator through its own momentum
         // maps; it keeps the loop-basis contraction.
         let contracted;
@@ -1597,6 +2069,7 @@ impl RStarIntegrand {
         degree: usize,
         stats: &mut super::closed::ClosedStats,
     ) -> Result<std::result::Result<Vec<(Atom, Atom)>, String>> {
+        self.ensure_untruncated("the closed IR moments")?;
         if !self.combination_ids().is_empty() {
             return Ok(Err("kept_edges".into()));
         }
@@ -1626,6 +2099,7 @@ impl RStarIntegrand {
     /// basis before a quotient's pole projection. Hard scalar integrals remain
     /// unevaluated, including the dimension-dependent projector coefficients.
     pub fn project_hard(&self, expression: &Atom) -> Result<Atom> {
+        self.ensure_untruncated("the hard projection")?;
         let ids = self.combination_ids();
         let started = Instant::now();
         let input_bytes = expression.as_view().get_byte_size();
@@ -1764,6 +2238,7 @@ impl RStarIntegrand {
     /// linear and the parameter is a scalar, so this is the Taylor
     /// polynomial of the contracted expression, [`Self::taylor_contracted`].
     pub fn taylor(&self, degree: usize) -> Result<Atom> {
+        self.ensure_untruncated("the hard Taylor expansion")?;
         let _stage = StageSpan::new("gamma.remainder.hard_taylor");
         let parameter = symbol!("rstar_hard_taylor"; Scalar);
         streamed::dump("hard_routed", self.routed.as_view());
@@ -1977,6 +2452,7 @@ impl RStarIntegrand {
     /// The previous hard Taylor path: contract the whole routed expression,
     /// then scale and truncate it. Kept as the reference for [`Self::taylor`].
     fn taylor_contracted(&self, degree: usize) -> Result<Atom> {
+        self.ensure_untruncated("the hard Taylor expansion")?;
         let parameter = symbol!("rstar_hard_taylor"; Scalar);
         let scaled = Self::scale_edges(self.expression()?, &self.soft_edges, parameter);
         let expanded = TaylorExpansion::new(parameter, degree).evaluate(&scaled)?;
