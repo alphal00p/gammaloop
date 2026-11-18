@@ -33,8 +33,9 @@
 //!                                (routed into the chosen loop basis), ONE denominator match per
 //!                                graph, the hand-over to the direct reader, one lowering per
 //!                                graph, then one reduction per master mode. <options>: comma
-//!                                list of routed, compact, merge (merged colour terms), dots;
-//!                                `default` = routed,compact,merge (gate request 3)
+//!                                list of routed, compact (the default routing), edge (no
+//!                                routing), stored (FeynKit's stored basis), merge (merged colour
+//!                                terms), dots; `default` = routed,compact,merge (gate request 3)
 //!     [--refinalise-from <cfg dir>]  RE-FINALISE: take each graph's Retain value from
 //!                                the records of an earlier run (same configuration but the
 //!                                binary) and compute the Symbolic value with THIS binary's
@@ -304,10 +305,19 @@ impl R3Choice {
             match word {
                 "routed" => choice.options.routed = true,
                 "compact" => choice.options.compact = true,
+                // compact is the default of DirectOptions: `edge` / `stored` turn it off
+                "edge" => {
+                    choice.options.compact = false;
+                    choice.options.routed = false;
+                }
+                "stored" => {
+                    choice.options.compact = false;
+                    choice.options.routed = true;
+                }
                 "dots" => choice.options.dots = true,
                 "merge" => choice.merge_colour = true,
                 other => eyre::bail!(
-                    "--r3: unknown option {other} (routed, compact, merge, dots, default)"
+                    "--r3: unknown option {other} (routed, compact, edge, stored, merge, dots, default)"
                 ),
             }
         }
