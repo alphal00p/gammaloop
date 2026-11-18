@@ -50,6 +50,7 @@ pub(crate) mod monitor;
 mod numerator;
 mod ordered;
 pub(crate) mod p_data;
+pub mod p_gate;
 pub(crate) mod p_integral;
 pub(crate) mod p_lowering;
 pub(crate) mod p_relations;

@@ -1285,6 +1285,9 @@ fn reduce_requests_with(
     }?;
     let dispatch = super::p_relations::dispatch_counters().since(&dispatch_before);
     with_stats(|stats| stats.dispatch = dispatch);
+    if super::p_gate::active() {
+        super::p_gate::observe_stats(&last_stats());
+    }
     if phases::enabled() {
         eprintln!("vakint-p-dispatch {dispatch:?}");
         let stats = last_stats();
@@ -1638,6 +1641,9 @@ pub(crate) fn reduce_requests_folded(
     with_stats(|stats| *stats = PReduceStats::default());
     let handle = vakint.p_library()?;
     let folded = fold_requests(&handle, settings, requests)?;
+    // Helper VH lane refpath: the gate observer (a no-op unless a caller on
+    // this thread observes the folded inputs, `super::p_gate::observe`).
+    super::p_gate::observe_folded(&handle, vk_symbol!(&settings.epsilon_symbol), &folded);
     reduce_folded_channels(vakint, settings, &handle, folded, progress, mode, factored)
 }
 
@@ -2073,7 +2079,10 @@ pub(crate) fn evaluate_ordered_batch(
     phases::end("p.propagator_requests", started);
     let names = request_names(&requests)?;
     let reduced = reduce_requests(vakint, settings, &requests, progress)?;
-    finalize_reduced(vakint, settings, reduced, &names, mode)
+    let finalizing = std::time::Instant::now();
+    let result = finalize_reduced(vakint, settings, reduced, &names, mode);
+    super::p_gate::observe_finalize(finalizing.elapsed());
+    result
 }
 
 #[cfg(test)]

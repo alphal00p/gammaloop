@@ -2338,6 +2338,51 @@ fn engine_one_loop() -> Vakint {
     engine()
 }
 
+/// Helper VH lane refpath (gate hooks of reference path R2): an observed
+/// reduction gives the same values as an unobserved one, the observer's gate
+/// view is the gate view of [`fold_requests`] on the same requests, and its
+/// zero-sector filter is the census filter of the engine's library.
+#[test]
+fn the_gate_observer_sees_the_folded_inputs_and_changes_nothing() {
+    use super::super::p_gate;
+    let engine = library_engine();
+    let settings = settings(RustRedMasterMode::Symbolic, None);
+    let text = include_str!("../../tests/fixtures/p_split_requests.txt");
+    let records = request_records(text)
+        .into_iter()
+        .filter(|(family, ..)| has_p_data(&engine, family.loops))
+        .collect::<Vec<_>>();
+    assert!(!records.is_empty());
+    let requests = records
+        .iter()
+        .map(|(family, powers, external, numerator)| PropagatorRequest {
+            family,
+            powers,
+            canonical_numerator: numerator.as_view(),
+            external: external.clone(),
+        })
+        .collect::<Vec<_>>();
+    let handle = engine.p_library().unwrap();
+    let expected = p_gate::gate_view(
+        &fold_requests(&handle, &settings, &requests).unwrap(),
+        epsilon(&settings),
+    );
+    assert!(!expected.is_empty());
+    let plain = reduce_requests(&engine, &settings, &requests, None).unwrap();
+    let (observed, observation) =
+        p_gate::observe(|| reduce_requests(&engine, &settings, &requests, None));
+    assert_eq!(observed.unwrap(), plain);
+    assert_eq!(observation.view(), expected);
+    assert!(observation.reductions > 0 && observation.pairs > 0);
+    let (kept, count) = observation.view_without_zero_sectors();
+    let (by_census, census_count) = p_gate::drop_zero_sectors(&handle, observation.view());
+    assert_eq!(kept, by_census);
+    assert_eq!(count, census_count);
+    assert_eq!(count.total, expected.len());
+    // No observer outside `observe`.
+    assert!(!p_gate::active());
+}
+
 /// The inline fold of `reduce_requests_folded` before helper VH lane refpath
 /// split it into [`fold_requests`], kept verbatim (statistics aside) as the
 /// reference of [`fold_requests_is_the_inline_fold`].
