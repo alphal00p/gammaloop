@@ -294,10 +294,13 @@ mod tests {
     #[test]
     fn scalar_powers_do_not_request_dot_normalization() {
         crate::test_support::test_initialize();
-        let vector = SPENSO_TAG.rank_one_tensor_symbol("spenso::analysis_power_vector");
+        // Its own symbol: other tests of this module parse `analysis_power_vector`
+        // untagged, and in one process (cargo test) a later rank-one registration
+        // of the same name would be a redefinition with new attributes.
+        let vector = SPENSO_TAG.rank_one_tensor_symbol("spenso::analysis_power_vector_rank1");
         assert!(vector.has_tag(&SPENSO_TAG.rank1));
         let square = Atom::parse(
-            "analysis_power_vector(mink(4,a))^2",
+            "analysis_power_vector_rank1(mink(4,a))^2",
             "spenso",
             ParseSettings::symbolica(),
         )
@@ -310,7 +313,7 @@ mod tests {
         };
         assert_eq!(base.get_symbol(), vector);
         let expected = Atom::parse(
-            "g(analysis_power_vector(mink(4)),analysis_power_vector(mink(4)))",
+            "g(analysis_power_vector_rank1(mink(4)),analysis_power_vector_rank1(mink(4)))",
             "spenso",
             ParseSettings::symbolica(),
         )
@@ -329,11 +332,11 @@ mod tests {
             "g(mink(4,a),mink(4,b))^2",
             "g(mink(4,a),mink(4,b))^(-2)",
             "g(mink(4,a),mink(4,b))^(2/3)",
-            "analysis_power_vector(mink(4,a))^2",
-            "analysis_power_vector(mink(4,a))^(-3)",
-            "(analysis_power_vector(mink(4,a))^2+x)^3",
+            "analysis_power_vector_rank1(mink(4,a))^2",
+            "analysis_power_vector_rank1(mink(4,a))^(-3)",
+            "(analysis_power_vector_rank1(mink(4,a))^2+x)^3",
             "x^(g(mink(4,a),mink(4,b))^2)",
-            "scope(mink(4,a),mink(4,a),analysis_power_vector(mink(4,b))^2)",
+            "scope(mink(4,a),mink(4,a),analysis_power_vector_rank1(mink(4,b))^2)",
         ] {
             let expression = Atom::parse(source, "spenso", ParseSettings::symbolica()).unwrap();
             assert!(
