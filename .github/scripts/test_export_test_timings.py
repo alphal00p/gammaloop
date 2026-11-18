@@ -91,9 +91,13 @@ class NixWorkflowTests(unittest.TestCase):
         (self.prepared / "bin").mkdir(parents=True)
         scripts = self.root / ".github/scripts"
         scripts.mkdir(parents=True)
-        for name in ("run-nix-ci-check.sh", "export-test-timings.py"):
+        for name in (
+            "run-nix-ci-check.sh",
+            "observe-nix-build.sh",
+            "export-test-timings.py",
+        ):
             shutil.copyfile(ROOT / ".github/scripts" / name, scripts / name)
-        for name in ("env", "mkdir", "rm", "tee", "find", "jq"):
+        for name in ("bash", "df", "env", "mkdir", "rm", "tee", "find", "jq"):
             (self.bin / name).symlink_to(shutil.which(name))
         (self.bin / "python3").symlink_to(sys.executable)
         self.env = {
@@ -117,6 +121,9 @@ class NixWorkflowTests(unittest.TestCase):
             "assert not any(name in os.environ for name in "
             "('LICENSE', 'SYMBOLICA_LICENSE', 'SYMBOLICA_LICENSE_PATH', "
             "'SYMBOLICA_LICENSE_SIGNED', 'SYMBOLICA_LICENSE_FILE'))\n"
+            "if sys.argv[1:3] == ['config', 'show']:\n"
+            "    print({'cores': 2, 'max-jobs': 1, 'build-dir': ''}[sys.argv[3]])\n"
+            "    sys.exit(0)\n"
             "assert '--impure' in sys.argv\n"
             "(root / 'nix-call.json').write_text(json.dumps(sys.argv[1:]))\n"
             "if sys.argv[1] == 'eval':\n"

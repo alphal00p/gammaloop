@@ -4,7 +4,8 @@
   docsPkgs,
   craneLib,
   workspaceRoot,
-  cargoSources,
+  productionCargoSources,
+  ownTestSources,
   localCargoPatchSources,
   nonCargoBuildSources,
   symbolicaRenderData,
@@ -332,7 +333,7 @@ let
     fileset = lib.fileset.unions (
       documentationDeveloperScopeSources
       ++ [
-        cargoSources
+        productionCargoSources
         nonCargoBuildSources
         repositoryDocumentationSources
         (workspaceRoot + "/docs")
@@ -395,7 +396,7 @@ let
     root = workspaceRoot;
     fileset = lib.fileset.unions [
       (craneLib.fileset.cargoTomlAndLock workspaceRoot)
-      (craneLib.fileset.rust workspaceRoot)
+      (lib.fileset.difference (craneLib.fileset.rust workspaceRoot) ownTestSources)
       localCargoPatchSources
       (workspaceRoot + "/.cargo/config.toml")
       (lib.fileset.difference nonCargoBuildSources (

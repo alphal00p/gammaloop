@@ -197,7 +197,12 @@ class UploadSelectionTests(unittest.TestCase):
                 with tempfile.TemporaryDirectory() as temporary:
                     root = Path(temporary)
                     caller, selected = root / "caller", root / "selected"
-                    caller.mkdir()
+                    caller_scripts = caller / ".github/scripts"
+                    caller_scripts.mkdir(parents=True)
+                    shutil.copyfile(
+                        repository / ".github/scripts/observe-nix-build.sh",
+                        caller_scripts / "observe-nix-build.sh",
+                    )
                     selected.mkdir()
                     jobs = lambda names: [f"packages.x86_64-linux.{n}" for n in names]
                     for directory, names in [
@@ -229,6 +234,8 @@ class UploadSelectionTests(unittest.TestCase):
                         "    elif os.environ['UPLOAD_TEST_REF'] + '#lib.x86_64-linux.cachePublication.local' in a: print('\\n'.join(json.loads(os.environ['UPLOAD_TEST_SELECTED'])))\n"
                         "    elif '--expr' in a: print('\\n'.join(json.loads(os.environ['UPLOAD_TEST_CALLER'])))\n"
                         "    else: raise AssertionError(a)\n"
+                        "elif a[:2] == ['config', 'show']:\n"
+                        "    print({'cores': 2, 'max-jobs': 1, 'build-dir': ''}[a[2]])\n"
                         "elif a[0] == 'build':\n"
                         "    for i, target in enumerate(x for x in a if '#' in x): print('/nix/store/upload-fixture-' + str(i))\n"
                         "elif a[0] != 'copy': raise AssertionError(a)\n"
@@ -268,6 +275,7 @@ class UploadSelectionTests(unittest.TestCase):
                         len(copy["stdin"].splitlines()), len(selected_jobs)
                     )
                     self.assertIn("CI upload completed", result.stdout)
+                    self.assertIn("Nix scheduler max-jobs=1 cores=2", result.stderr)
 
 
 if __name__ == "__main__":

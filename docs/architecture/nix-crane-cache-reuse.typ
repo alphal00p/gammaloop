@@ -48,6 +48,19 @@ feature, ABI or interpreter differences. The contributor guide owns the
 #link("../../CONTRIBUTING.typ#development-commands")[development commands] and
 #link("../../CONTRIBUTING.typ#native-python")[wheel installation and GC-root rules].
 
+== Current source boundaries and docs-examples merges
+
+Crate-owned unit test modules such as the parameter binding fixtures belong
+to owner test and workspace lint inputs. Production CLI, Python and reusable
+documentation Cargo sources exclude these modules. The documentation source
+still stages its Cargo manifests, build scripts and required assets.
+
+The two docs-examples dependency builds restore their ordered parent artifacts
+directly during patching. They normalize timestamps to Crane's archive epoch
+before Cargo runs and still publish full final archives after stripping dummy
+artifacts. This removes the intermediate compression and extraction for those
+two merges while preserving standalone consumer archives.
+
 == Sources checked
 <sources-checked>
 - Crane FAQ: #link("https://crane.dev/faq/constant-rebuilds.html")

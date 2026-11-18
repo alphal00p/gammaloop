@@ -19,7 +19,7 @@ exec 3> >(tee "$result_dir/nix-build.log" >&2)
 log_pid=$!
 set +e
 env -u SYMBOLICA_LICENSE -u SYMBOLICA_LICENSE_PATH \
-    -u SYMBOLICA_LICENSE_SIGNED -u SYMBOLICA_LICENSE_FILE nix build \
+    -u SYMBOLICA_LICENSE_SIGNED -u SYMBOLICA_LICENSE_FILE bash .github/scripts/observe-nix-build.sh build \
     --impure \
     --keep-going \
     --out-link "$RUNNER_TEMP/nix-check-result" \
