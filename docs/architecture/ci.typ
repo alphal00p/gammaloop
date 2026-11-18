@@ -183,6 +183,12 @@ and uploads those selected jobs from that source, retaining its revision in gene
 and excluding ignored local build artifacts. Its default remains the local
 flake; the selected revision must match the code being qualified and pushed.
 
+Local preparation, shared GitHub producer builds, and GitHub matrix runner
+builds report the configured Nix jobs and cores, UTC timestamps on Nix
+build messages, and available scratch space before and after the build.
+The diagnostics go to stderr, leaving the output-path stream available
+for cache publication and runtime launch.
+
 The local selection is `configuration.onlyBuild` in `nix/ci.nix` for the current
 system: static checks, group Nextest producers, test dependency and binary
 producers, runtime launchers and support/barrier outputs. Use the preview below

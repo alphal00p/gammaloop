@@ -61,7 +61,7 @@ ci-checks-and-upload:
     started=$SECONDS
     # Keep all selected closures rooted until the upload finishes, including
     # across the gap between realization and nix copy on a shared daemon.
-    nix build --impure --out-link "$tmp/result" --print-out-paths "${targets[@]}" > "$tmp/outputs"
+    bash .github/scripts/observe-nix-build.sh build --impure --out-link "$tmp/result" --print-out-paths "${targets[@]}" > "$tmp/outputs"
     printf 'CI static checks and artifact preparation completed (%ss).\n' "$((SECONDS - started))"
 
     # Keep a throwaway XDG_CACHE_HOME so locally remembered unsigned narinfo cannot
