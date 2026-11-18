@@ -63,6 +63,15 @@ pub struct FromFeynkitOptions {
     /// fewer values than channels (as the beta crate). The sum over the values
     /// of `prefactor.total() × contraction` is the same graph.
     pub merge_colour: bool,
+    /// The graph's `overall_factor` is an evaluated weight that ALREADY
+    /// contains the closed-loop sign (the beta thread's reduced five-loop set
+    /// `symmetry-generation-20261113/reduced/L5`: orbit weights summed, no
+    /// `InternalFermionLoopSign` factor). When set and the factor carries no
+    /// `InternalFermionLoopSign`, the sign `(-1)^(closed fermion + ghost
+    /// loops)` is taken out of the weight into [`Prefactor::loop_sign`]
+    /// (the product `overall × loop_sign` is unchanged). Default false:
+    /// today's reading.
+    pub loop_sign_in_overall: bool,
 }
 
 impl Default for FromFeynkitOptions {
@@ -73,6 +82,7 @@ impl Default for FromFeynkitOptions {
             projector: ProjectorChoice::default(),
             pull_scalars: true,
             merge_colour: false,
+            loop_sign_in_overall: false,
         }
     }
 }
@@ -121,14 +131,16 @@ fn pull_scalars(residual: &Atom) -> (Atom, Atom) {
     }
 }
 
-/// `overall_factor` → (evaluated weight without the loop sign, loop sign).
-fn split_overall(overall: &Atom) -> Result<(Atom, i64)> {
+/// `overall_factor` → (evaluated weight without the loop sign, loop sign,
+/// whether an `InternalFermionLoopSign` factor was present).
+fn split_overall(overall: &Atom) -> Result<(Atom, i64, bool)> {
     let factors = match overall.as_view() {
         AtomView::Mul(m) => m.iter().collect::<Vec<_>>(),
         other => vec![other],
     };
     let mut rest = Atom::num(1);
     let mut sign = 1i64;
+    let mut found = false;
     for factor in factors {
         if let AtomView::Fun(f) = factor
             && f.get_symbol().get_stripped_name() == "InternalFermionLoopSign"
@@ -140,6 +152,7 @@ fn split_overall(overall: &Atom) -> Result<(Atom, i64)> {
                 .filter(|s| *s == 1 || *s == -1)
                 .ok_or_else(|| ctor(format!("bad loop sign {}", factor.to_owned())))?;
             sign *= value;
+            found = true;
         } else {
             rest *= factor.to_owned();
         }
@@ -148,7 +161,7 @@ fn split_overall(overall: &Atom) -> Result<(Atom, i64)> {
     if contains_tensor_content(rest.as_view()) {
         return Err(ctor(format!("overall factor {rest} is not a scalar")));
     }
-    Ok((rest, sign))
+    Ok((rest, sign, found))
 }
 
 /// Per value of a graph: the row choice (informational), the colour
@@ -425,7 +438,7 @@ impl FactorizedNumerator {
             }
         }
         // The graph data shared by every branch.
-        let (overall, loop_sign) = split_overall(diagram.overall_factor())?;
+        let (overall, loop_sign, sign_factor) = split_overall(diagram.overall_factor())?;
         let vertex_rules = diagram
             .vertices()
             .map(|(id, vertex)| {
@@ -518,11 +531,15 @@ impl FactorizedNumerator {
             };
             value.ports = value.open_lorentz_ports();
             value.projector = value.projector_for(options.projector)?;
-            value.prefactor.nf_power = value
-                .closed_loops()?
+            let closed = value.closed_loops()?;
+            value.prefactor.nf_power = closed
                 .iter()
                 .filter(|l| l.line == LineKind::Fermion)
                 .count() as u32;
+            if options.loop_sign_in_overall && !sign_factor && closed.len() % 2 == 1 {
+                value.prefactor.loop_sign = -1;
+                value.prefactor.overall = Atom::num(-1) * &value.prefactor.overall;
+            }
             value.validate()?;
             values.push(value);
         }
