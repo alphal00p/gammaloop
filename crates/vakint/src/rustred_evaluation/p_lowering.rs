@@ -304,6 +304,23 @@ fn degree(packed: u128, count: usize) -> u32 {
         .sum()
 }
 
+/// The packed monomial `left · right` (the sum of the slot powers), or
+/// [`Declined`] when its degree exceeds 60 or its `dot(head, head)` power 250.
+/// The bounds are checked on the operands BEFORE the addition: a slot sum of
+/// 64 or more would carry into the next slot (or `J` past 255 out of the
+/// word) and the sum would read as another, valid monomial (o1-verify C1:
+/// 32 + 32 in one slot read as degree 1). Operands are within the bounds by
+/// induction (every product passed this check), so each slot sum is at most
+/// the total degree, <= 60 < 64, whenever the check passes.
+fn packed_product(left: u128, right: u128, count: usize) -> Result<u128, Declined> {
+    if degree(left, count) + degree(right, count) > 60
+        || (left >> J_SHIFT) + (right >> J_SHIFT) > 250
+    {
+        return Err(Declined("a numerator degree beyond the packed range"));
+    }
+    Ok(left + right)
+}
+
 /// vk5l-physrun: `VAKINT_DIRECT_READER=prefix` multiplies prefix products
 /// into each group's coefficient (top-down) instead of the Horner evaluation.
 fn horner_reader() -> bool {
@@ -368,10 +385,7 @@ impl<C: Coef> Reader<'_, C> {
     ) -> Result<(), Declined> {
         for ((ls, lp), lv) in left {
             for ((rs, rp), rv) in right {
-                let packed = lp + rp;
-                if degree(packed, self.count) > 60 || (packed >> J_SHIFT) > 250 {
-                    return Err(Declined("a numerator degree beyond the packed range"));
-                }
+                let packed = packed_product(*lp, *rp, self.count)?;
                 let (spectator, negate) = self.spectators.multiply(*ls, *rs);
                 let mut value = lv.mul(rv);
                 if negate {
@@ -1960,4 +1974,29 @@ fn spectator_image(
         images.insert(key, image.clone());
     });
     Ok(Ok(image))
+}
+
+#[cfg(test)]
+mod packed_tests {
+    use super::{BITS, J_SHIFT, degree, packed_product};
+
+    /// o1-verify C1: a slot sum of 64 used to wrap into the next slot and
+    /// pass the degree check as a degree-1 monomial; it is now declined, as
+    /// is a `dot(head, head)` power beyond 250, and the bound itself holds.
+    #[test]
+    fn packed_products_beyond_the_range_are_declined_not_wrapped() {
+        let count = 20;
+        let slot = |index: u32, power: u128| power << (BITS * index);
+        let wrapped = slot(0, 32) + slot(0, 32);
+        assert_eq!(degree(wrapped, count), 1, "the wrap the check used to see");
+        assert!(packed_product(slot(0, 32), slot(0, 32), count).is_err());
+        assert!(packed_product(slot(19, 32), slot(19, 32), count).is_err());
+        assert!(packed_product(slot(0, 31), slot(3, 30), count).is_err());
+        assert!(packed_product(128 << J_SHIFT, 128 << J_SHIFT, count).is_err());
+        let product = packed_product(slot(0, 30), slot(0, 30) + slot(5, 0), count).unwrap();
+        assert_eq!((product, degree(product, count)), (slot(0, 60), 60));
+        let product = packed_product(125 << J_SHIFT, (125 << J_SHIFT) + slot(2, 7), count).unwrap();
+        assert_eq!(product >> J_SHIFT, 250);
+        assert_eq!(degree(product, count), 7);
+    }
 }
