@@ -1660,7 +1660,6 @@ impl SlotContraction {
         )
     }
 
-    #[allow(clippy::type_complexity)]
     fn contract_graph(
         &self,
         scope: &ContractionScope<'_>,
@@ -1892,6 +1891,7 @@ impl SlotContraction {
 
     /// Execute one connected component on the admitted graph. Scratch bindings,
     /// compiled factors and tentative proofs cannot escape a refused component.
+    #[allow(clippy::type_complexity)]
     fn contract_component<'a>(
         &self,
         scope: &'a ContractionScope<'_>,
