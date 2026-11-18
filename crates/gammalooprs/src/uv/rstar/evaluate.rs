@@ -1088,6 +1088,19 @@ impl<'a> Evaluation<'a> {
         let preparation = elapsed.saturating_sub(
             self.proper_uv_elapsed + self.quotient_elapsed + self.integration_elapsed,
         );
+        if super::routing::log_level() >= 1 {
+            eprintln!(
+                "RR_PHASE graph={} child={} total={:.3} proper_uv={:.3} ir_quotient={:.3} outer_integration={:.3} preparation={:.3} outer_integrations={}",
+                self.graph.name,
+                self.plan.root_boundary.is_some(),
+                elapsed.as_secs_f64(),
+                self.proper_uv_elapsed.as_secs_f64(),
+                self.quotient_elapsed.as_secs_f64(),
+                self.integration_elapsed.as_secs_f64(),
+                preparation.as_secs_f64(),
+                self.integration_id,
+            );
+        }
         tracing::info!(
             uv = true,
             rstar = true,

@@ -157,10 +157,14 @@ impl<'a> MassiveUvEvaluator<'a> {
             .ok_or_else(|| eyre!("an R* contracted support contains an unpaired half-edge"))?;
         // Route before identifying nodes, using the original boundary rather
         // than treating the retained, consumed edges as new external carriers.
-        graph.loop_momentum_basis = self
-            .graph
-            .shrunken_sub_lmb(&region.support, &contracted, region.boundary.clone())
-            .wrap_err("could not route the decorated UV quotient")?;
+        graph.loop_momentum_basis = super::routing::remainder_basis(
+            &self.graph,
+            &region.support,
+            &contracted,
+            region.boundary.clone(),
+            self.reference_mass.as_ref().map(|(edge, _)| *edge),
+        )
+        .wrap_err("could not route the decorated UV quotient")?;
 
         for (slot, polynomial) in region.insertions.iter().zip(insertions) {
             let nodes = graph
