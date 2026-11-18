@@ -22,7 +22,7 @@ pub(crate) mod forcer;
 #[cfg(test)]
 mod frontend_tests;
 mod input;
-mod laurent;
+pub(crate) mod laurent;
 pub(crate) mod massive;
 pub mod master_basis;
 pub mod master_catalogue;

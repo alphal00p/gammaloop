@@ -583,6 +583,18 @@ struct SeriesCounts {
     generic: usize,
 }
 
+/// Master monomial terms (process total) in which a tabulated master's
+/// unknown tail lies inside the orders the term needs: before lane
+/// laurent-depth these were the terms that the old expansion clipped below the
+/// requested order (or that the guard refused). A diagnostic for exposure
+/// scans: a result with none of them is byte-identical to the old expansion.
+static TAIL_IN_RANGE_TERMS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// See [`TAIL_IN_RANGE_TERMS`].
+pub(crate) fn tail_in_range_terms() -> u64 {
+    TAIL_IN_RANGE_TERMS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// The Laurent series through `ε^order` of `prefactor × coefficient ×
 /// monomial` for one master monomial of [`expand`], `None` when it is an
 /// exact zero or starts above `order`.
@@ -723,6 +735,14 @@ fn monomial_term(
     // part, Γ and PG factors, the prefactor and the other masters): each is
     // expanded exactly that far, an unknown order as its own marker
     // `Oep(j, master)`, so that the product is exact through `ε^order`.
+    if tabulated.iter().any(|master| {
+        master
+            .tail
+            .as_ref()
+            .is_some_and(|(k, _)| *k <= master.valuation + depth)
+    }) {
+        TAIL_IN_RANGE_TERMS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
     for master in &tabulated {
         let factor = master.through(master.valuation + depth);
         term = term.mul(&factor, order);

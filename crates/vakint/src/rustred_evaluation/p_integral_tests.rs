@@ -1874,11 +1874,17 @@ fn five_loop_package_drill() {
         let input = parse(input);
         let dispatch_before = engine.p_dispatch_counters();
         let started = std::time::Instant::now();
+        let tails_before = crate::p_integral::laurent::tail_in_range_terms();
         let result = engine.evaluate(&settings, input.as_view());
         let seconds = started.elapsed().as_secs_f64();
         eprintln!(
             "DISPATCH {label}: {:?}",
             engine.p_dispatch_counters().since(&dispatch_before)
+        );
+        // Lane laurent-depth: terms with a master tail inside the needed orders.
+        eprintln!(
+            "TAILS {label}: {}",
+            crate::p_integral::laurent::tail_in_range_terms() - tails_before
         );
         match (expected, result) {
             // An exact identity (e.g. an IBP relation with integer
