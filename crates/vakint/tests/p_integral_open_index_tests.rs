@@ -391,11 +391,18 @@ fn integer_labelled_metrics_are_metrics() {
             &settings,
             &format!("g(mu1,mu2)*g(mu1,mu3)*k(1,mu2)*k(1,mu3)*{topology}"),
         );
-        assert!((&symbolic - &dotted).expand().is_zero(), "{topology}: symbolic indices");
+        assert!(
+            (&symbolic - &dotted).expand().is_zero(),
+            "{topology}: symbolic indices"
+        );
     }
     // One metric with an integer-labelled open index: `g(1,2) k(1,2) k(1,3)`
     // is `k(1,1) k(1,3)`.
-    let metric = evaluate(&engine, &settings, &format!("g(1,2)*k(1,2)*k(1,3)*{BUBBLE_12}"));
+    let metric = evaluate(
+        &engine,
+        &settings,
+        &format!("g(1,2)*k(1,2)*k(1,3)*{BUBBLE_12}"),
+    );
     let plain = evaluate(&engine, &settings, &format!("k(1,1)*k(1,3)*{BUBBLE_12}"));
     assert!(
         (&metric - &plain).expand().is_zero(),
@@ -403,8 +410,16 @@ fn integer_labelled_metrics_are_metrics() {
     );
     // The case that already worked before the fix (metric between two loop
     // vectors) keeps its value.
-    let worked = evaluate(&engine, &settings, &format!("g(1,2)*k(1,1)*k(1,2)*{BUBBLE_12}"));
-    assert!((&worked - &evaluate(&engine, &settings, &format!("dot(k(1),k(1))*{BUBBLE_12}"))).expand().is_zero());
+    let worked = evaluate(
+        &engine,
+        &settings,
+        &format!("g(1,2)*k(1,1)*k(1,2)*{BUBBLE_12}"),
+    );
+    assert!(
+        (&worked - &evaluate(&engine, &settings, &format!("dot(k(1),k(1))*{BUBBLE_12}")))
+            .expand()
+            .is_zero()
+    );
 }
 
 /// Three open indices from a Taylor derivative of a propagator graph (an
@@ -432,7 +447,13 @@ fn assert_taylor_derivative(
             .collect::<Vec<_>>()
             .join(" + ");
         let scalar = evaluate(engine, settings, &input);
-        assert_closed_case(&three, &parse(&closing), &scalar, epsilon, "Taylor derivative");
+        assert_closed_case(
+            &three,
+            &parse(&closing),
+            &scalar,
+            epsilon,
+            "Taylor derivative",
+        );
     }
     let two = evaluate(engine, settings, function);
     // Closing multiplies the truncated open values by polynomials in ε (a
@@ -449,7 +470,13 @@ fn assert_taylor_derivative(
     for closing in closing_tensors(&["mu", "nu"]) {
         let left = close_indices(&(&three * parse(&closing) * parse("p(1,rho)")), epsilon);
         let right = close_indices(&(&two * parse(&closing)), epsilon) * &degree;
-        assert_series_through(&left, &right, last, &format!("Euler, closing {closing}"), epsilon);
+        assert_series_through(
+            &left,
+            &right,
+            last,
+            &format!("Euler, closing {closing}"),
+            epsilon,
+        );
     }
 }
 

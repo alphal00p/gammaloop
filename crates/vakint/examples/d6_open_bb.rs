@@ -111,13 +111,27 @@ fn main() -> eyre::Result<()> {
         .collect::<Vec<_>>();
     files.sort();
     let number = |path: &PathBuf| -> usize {
-        path.file_stem().unwrap().to_str().unwrap().trim_start_matches("diagram-").parse().unwrap()
+        path.file_stem()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .trim_start_matches("diagram-")
+            .parse()
+            .unwrap()
     };
     let selected = match &graphs {
         Some(list) => {
-            let by_number = files.iter().map(|p| (number(p), p.clone())).collect::<BTreeMap<_, _>>();
+            let by_number = files
+                .iter()
+                .map(|p| (number(p), p.clone()))
+                .collect::<BTreeMap<_, _>>();
             list.iter()
-                .map(|n| by_number.get(n).cloned().ok_or_else(|| eyre::eyre!("no diagram {n}")))
+                .map(|n| {
+                    by_number
+                        .get(n)
+                        .cloned()
+                        .ok_or_else(|| eyre::eyre!("no diagram {n}"))
+                })
                 .collect::<eyre::Result<Vec<_>>>()?
         }
         None => files.clone(),
@@ -130,7 +144,11 @@ fn main() -> eyre::Result<()> {
         .create(true)
         .append(true)
         .open(out.join("results.jsonl"))?;
-    eprintln!("[d6_open_bb] {} graphs of {}, reps {reps}, library {library:?}", selected.len(), directory.display());
+    eprintln!(
+        "[d6_open_bb] {} graphs of {}, reps {reps}, library {library:?}",
+        selected.len(),
+        directory.display()
+    );
     let q2 = vakint_parse!("dot(p(1),p(1))").unwrap();
     let g = vakint_parse!("g(1,2)").unwrap();
     let pp = vakint_parse!("p(1,1)*p(1,2)").unwrap();
@@ -138,7 +156,12 @@ fn main() -> eyre::Result<()> {
     for path in &selected {
         let graph = number(path);
         let dot = std::fs::read_to_string(path)?;
-        let options = |projection| RunOptions { projection, extra_terms: 1, count_terms: false, contract_only: false };
+        let options = |projection| RunOptions {
+            projection,
+            extra_terms: 1,
+            count_terms: false,
+            contract_only: false,
+        };
         let (mut metric_s, mut both_s, mut open_s) = (Vec::new(), Vec::new(), Vec::new());
         let (mut canon_probe, mut tensor_probe) = (Vec::new(), Vec::new());
         let mut references = BTreeMap::<&'static str, Atom>::new();
@@ -152,7 +175,9 @@ fn main() -> eyre::Result<()> {
                 let run = refpath::run_graph(&engine, &model, &dot, &options(projection))?;
                 loops = run.loops;
                 for result in &run.results {
-                    references.entry(result.projection).or_insert_with(|| result.value.clone());
+                    references
+                        .entry(result.projection)
+                        .or_insert_with(|| result.value.clone());
                 }
                 match projection {
                     Projection::Metric => metric_s.push(run.seconds.clone()),
@@ -204,7 +229,13 @@ fn main() -> eyre::Result<()> {
             let closed = open_indices::close_indices(&(&open * &closing), epsilon);
             let last = open_indices::last_order(&reference, &closed, epsilon);
             let ok = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                open_indices::assert_series_through(&closed, &(&factor * &reference), last, name, epsilon)
+                open_indices::assert_series_through(
+                    &closed,
+                    &(&factor * &reference),
+                    last,
+                    name,
+                    epsilon,
+                )
             }))
             .is_ok();
             if !ok {
@@ -222,7 +253,10 @@ fn main() -> eyre::Result<()> {
         writeln!(results, "{record}")?;
         eprintln!("[d6_open_bb] diagram {graph}: {check:?}");
     }
-    eprintln!("[d6_open_bb] done: {} graphs, {mismatches} projection mismatches", selected.len());
+    eprintln!(
+        "[d6_open_bb] done: {} graphs, {mismatches} projection mismatches",
+        selected.len()
+    );
     if mismatches > 0 {
         eyre::bail!("{mismatches} projection mismatches");
     }

@@ -679,7 +679,10 @@ pub fn run_graph_open(
     let started = Instant::now();
     let (open, ports) = contract_open(&diagram, &branches)?;
     run.seconds.contract = started.elapsed().as_secs_f64();
-    ensure!(ports.len() == 2, "a two-point graph has two open ports, found {ports:?}");
+    ensure!(
+        ports.len() == 2,
+        "a two-point graph has two open ports, found {ports:?}"
+    );
     let mut open = open;
     for (port, label) in ports.iter().zip([1, 2]) {
         let AtomView::Fun(slot) = port.as_view() else {
@@ -690,11 +693,14 @@ pub fn run_graph_open(
             .nth(1)
             .ok_or_else(|| eyre!("port {port} has no index"))?
             .to_owned();
-        open = open.replace(index.to_pattern()).with(Atom::num(label).to_pattern());
+        open = open
+            .replace(index.to_pattern())
+            .with(Atom::num(label).to_pattern());
     }
     let quark_loops = closed_quark_loops(&diagram)?;
-    let weight = feynkit_graph::expressions::evaluate_overall_factor(diagram.overall_factor().as_view())
-        * Atom::var(s.nf).pow(Atom::num(quark_loops as i64));
+    let weight =
+        feynkit_graph::expressions::evaluate_overall_factor(diagram.overall_factor().as_view())
+            * Atom::var(s.nf).pow(Atom::num(quark_loops as i64));
     let dimension = Atom::var(s.d);
     let kinematics = Kinematics::in_dimension(&dimension)?;
     let family = diagram.propagator_family(&kinematics)?;

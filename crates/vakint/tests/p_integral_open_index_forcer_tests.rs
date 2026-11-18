@@ -9,14 +9,14 @@
 //! fails only under `VAKINT_REQUIRE_FORM5=1` (the gate's setting).
 #![cfg(feature = "feynkit-ingress")]
 
+#[path = "support/open_indices.rs"]
+mod open_indices;
+#[path = "support/p_backends.rs"]
+mod p_backends;
 #[path = "support/p_integrals.rs"]
 mod p_integrals;
 #[path = "support/p_rustred.rs"]
 mod p_rustred;
-#[path = "support/p_backends.rs"]
-mod p_backends;
-#[path = "support/open_indices.rs"]
-mod open_indices;
 
 use open_indices::*;
 use p_backends::*;
