@@ -1195,6 +1195,13 @@ impl<'a> Evaluation<'a> {
     /// A root-scope remainder, closed when this evaluation closes the root.
     fn remainder(&self, term: &UvPreparationTerm) -> Result<RStarIntegrand> {
         self.remainder_with(term, self.root_closure.as_ref())
+            .and_then(|remainder| {
+                remainder.with_root_truncation(
+                    self.plan.root_boundary.is_some(),
+                    &self.root_edges,
+                    self.plan.taylor_order,
+                )
+            })
     }
 
     /// A remainder that keeps its open root slots (an IR hard part).
