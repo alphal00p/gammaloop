@@ -482,6 +482,33 @@ fn process_rss_bytes() -> Option<u64> {
 /// First id of a kept edge-momentum combination `Q(EDGE_OFFSET + n, ...)`.
 const EDGE_OFFSET: i64 = 1_000_000;
 
+/// `IDENSO_EDGE_OUTPUT=flatten`: the expanded form of `view` when it is a
+/// nested linear combination of momenta (numeric multiples and sums of
+/// vectors `vector` accepts, not all of them at the top level). Routing leaves
+/// vertex momenta such as `Q(2,μ) - (Q(2,μ) + Q(3,μ) - Q(6,μ))`; renamed as
+/// they are, only the inner sum becomes one vector and the contraction
+/// distributes the outer one (nf0 32's hottest UV-child remainder: 4.03 GB
+/// instead of 9.0 MB). Expanded, the whole combination becomes one vector.
+fn flat_combination(view: AtomView<'_>, vector: &dyn Fn(AtomView<'_>) -> bool) -> Option<Atom> {
+    fn linear(view: AtomView<'_>, vector: &dyn Fn(AtomView<'_>) -> bool) -> bool {
+        match view {
+            AtomView::Add(sum) => sum.iter().all(|term| linear(term, vector)),
+            AtomView::Mul(product) => {
+                let mut factors = product.iter().filter(|f| !matches!(f, AtomView::Num(_)));
+                factors.next().is_some_and(|f| linear(f, vector)) && factors.next().is_none()
+            }
+            other => vector(other),
+        }
+    }
+    let AtomView::Add(sum) = view else {
+        return None;
+    };
+    (idenso::edge_output::enabled("flatten")
+        && sum.iter().any(|term| !vector(term))
+        && linear(view, vector))
+    .then(|| view.expand())
+}
+
 /// `GAMMALOOP_EDGE_CONTRACTION`: comma-separated modes. Unset means
 /// `fallback,back`: hard components are contracted in the loop basis as
 /// before and only a contraction that exhausts its memory budget is redone
@@ -1536,7 +1563,11 @@ impl RStarIntegrand {
                 **out = view.to_owned();
                 return;
             }
-            let AtomView::Add(sum) = view else {
+            let flat = flat_combination(view, &|leaf| term_of(leaf).is_some());
+            let AtomView::Add(sum) = flat.as_ref().map_or(view, Atom::as_view) else {
+                if let Some(flat) = flat {
+                    **out = flat;
+                }
                 return;
             };
             let mut tail = None;
@@ -2221,40 +2252,14 @@ impl RStarIntegrand {
                 function.iter().skip(1).map(|a| a.to_owned()).collect(),
             ))
         };
-        // A numeric multiple or sum of vectors `term_of` accepts, at any depth.
-        fn linear(view: AtomView<'_>, term_of: &dyn Fn(AtomView<'_>) -> bool) -> bool {
-            match view {
-                AtomView::Add(sum) => sum.iter().all(|term| linear(term, term_of)),
-                AtomView::Mul(product) => {
-                    let mut vectors = product.iter().filter(|f| !matches!(f, AtomView::Num(_)));
-                    vectors.next().is_some_and(|f| linear(f, term_of)) && vectors.next().is_none()
-                }
-                other => term_of(other),
-            }
-        }
         let mut combinations = std::collections::BTreeMap::<Vec<(i64, Atom)>, i64>::new();
         let renamed = expression.replace_map(|view, _, out| {
-            let AtomView::Add(sum) = view else {
-                return;
-            };
-            // Routing leaves nested combinations such as `Q(2,μ) - (Q(3,μ) + Q(6,μ))`.
-            // Expanded, the whole combination becomes one vector; otherwise only
-            // the inner sum is renamed and the contraction distributes the outer
-            // one (nf0 32's hottest UV-child remainder: 4.03 GB instead of 9.0 MB).
-            let flat;
-            let sum = if sum.iter().any(|term| term_of(term).is_none())
-                && linear(view, &|leaf| term_of(leaf).is_some())
-            {
-                flat = view.expand();
-                match flat.as_view() {
-                    AtomView::Add(sum) => sum,
-                    _ => {
-                        **out = flat.clone();
-                        return;
-                    }
+            let flat = flat_combination(view, &|leaf| term_of(leaf).is_some());
+            let AtomView::Add(sum) = flat.as_ref().map_or(view, Atom::as_view) else {
+                if let Some(flat) = flat {
+                    **out = flat;
                 }
-            } else {
-                sum
+                return;
             };
             let mut tail = None;
             let mut terms = Vec::new();
@@ -2543,6 +2548,12 @@ impl RStarIntegrand {
             .simplify_algebra(&AlgebraSettings {
                 gamma: Some(GammaSimplifySettings::canonical()),
                 epsilon: true,
+                // `IDENSO_EDGE_OUTPUT=dots`: the frontier emits the dot notation itself.
+                contract: if idenso::edge_output::enabled("dots") {
+                    idenso::tensor::AlgebraContraction::Dots
+                } else {
+                    Default::default()
+                },
                 ..Default::default()
             })?
             .to_dots()?;
