@@ -223,6 +223,8 @@ impl CoefficientSum {
     }
 
     #[cfg(feature = "reference-cases")]
+    // Unused since 75d852458 (frontier merge); kept for the reference-cases accounting.
+    #[allow(dead_code)]
     fn storage_bytes(&self) -> usize {
         match self {
             Self::One(coefficient) => {
