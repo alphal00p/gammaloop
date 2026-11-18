@@ -493,9 +493,13 @@ fn flat_combination(view: AtomView<'_>, vector: &dyn Fn(AtomView<'_>) -> bool) -
     fn linear(view: AtomView<'_>, vector: &dyn Fn(AtomView<'_>) -> bool) -> bool {
         match view {
             AtomView::Add(sum) => sum.iter().all(|term| linear(term, vector)),
+            // Exactly one non-numeric factor, checked before descending into it.
             AtomView::Mul(product) => {
                 let mut factors = product.iter().filter(|f| !matches!(f, AtomView::Num(_)));
-                factors.next().is_some_and(|f| linear(f, vector)) && factors.next().is_none()
+                match (factors.next(), factors.next()) {
+                    (Some(factor), None) => linear(factor, vector),
+                    _ => false,
+                }
             }
             other => vector(other),
         }
