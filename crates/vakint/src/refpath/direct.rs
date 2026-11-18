@@ -38,8 +38,8 @@ use crate::{Vakint, VakintSettings};
 
 /// Choices of R3's idenso call. DEFAULT ([`Default`] below): `compact`
 /// routing (the spanning tree of the fewest loop + root terms, routed before
-/// idenso), `Fully` + `to_dots`. The edge basis (no routing) is
-/// `compact: false, routed: false`.
+/// idenso), `Fully` + `to_dots`, EARLY zero-sector pruning in R3's reader.
+/// The edge basis (no routing) is `compact: false, routed: false`.
 #[derive(Clone, Copy, Debug)]
 pub struct DirectOptions {
     /// `AlgebraContraction::Dots` instead of `Fully` followed by `to_dots`.
@@ -53,6 +53,13 @@ pub struct DirectOptions {
     /// over the lines (exact enumeration; the beta thread's `compact-free`
     /// key) instead of FeynKit's stored basis. Implies routing before idenso.
     pub compact: bool,
+    /// R3's reader drops zero-sector partial products EARLY
+    /// (`p_zero::ZeroPrune::Early`) in R3's own lowering, whatever
+    /// `VAKINT_P_ZERO_PRUNE` says (`check` stays `check`); `false`: the
+    /// variable decides, as for the ordinary path. Exact: only keys of zero
+    /// (scaleless) sectors are dropped; the gate compares views without them.
+    /// DEFAULT true.
+    pub prune_early: bool,
 }
 
 /// The hand-over path's default: `compact` ON (helper coordinator's decision of
@@ -66,6 +73,7 @@ impl Default for DirectOptions {
             dots: false,
             routed: false,
             compact: true,
+            prune_early: true,
         }
     }
 }
@@ -883,7 +891,19 @@ pub fn lower_graph(
         });
         let started = Instant::now();
         let mut stats = DirectStats::default();
-        let folded = match matched.lower(settings, &handle, scalar.as_view(), &mut stats)? {
+        let lowered = if options.prune_early {
+            use crate::rustred_evaluation::p_zero::{ZeroPrune, with_zero_prune, zero_prune};
+            let mode = match zero_prune() {
+                ZeroPrune::Check => ZeroPrune::Check,
+                _ => ZeroPrune::Early,
+            };
+            with_zero_prune(mode, || {
+                matched.lower(settings, &handle, scalar.as_view(), &mut stats)
+            })
+        } else {
+            matched.lower(settings, &handle, scalar.as_view(), &mut stats)
+        };
+        let folded = match lowered? {
             Ok(folded) => folded,
             Err(declined) => return Ok(DirectOutcome::Declined(declined.0.into())),
         };
@@ -1106,9 +1126,17 @@ mod tests {
                     routed: true,
                     compact: true,
                     dots: true,
+                    ..Default::default()
                 },
             ),
             (true, DirectOptions::default()),
+            (
+                true,
+                DirectOptions {
+                    prune_early: false,
+                    ..Default::default()
+                },
+            ),
         ];
         let mut lowered = 0;
         for dir in fixture_dirs() {
@@ -1183,8 +1211,8 @@ mod tests {
             }
         }
         // 7 of the 10 fixtures have a non-zero metric projection (the other 3 are
-        // exact zeros on both sides), each lowered in all 5 option combinations.
-        assert_eq!(lowered, 5 * 7, "lowered projections");
+        // exact zeros on both sides), each lowered in all 6 option combinations.
+        assert_eq!(lowered, 6 * 7, "lowered projections");
     }
 
     /// The hand-over refuses (never reads silently) an unidentified vector and

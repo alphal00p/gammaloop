@@ -35,7 +35,8 @@
 //!                                graph, then one reduction per master mode. <options>: comma
 //!                                list of routed, compact (the default routing), edge (no
 //!                                routing), stored (FeynKit's stored basis), merge (merged colour
-//!                                terms), dots; `default` = routed,compact,merge (gate request 3)
+//!                                terms), prune (early zero-sector pruning in R3's reader: the
+//!                                default), no-prune, dots; `default` = routed,compact,merge,prune
 //!     [--resume-root <dir>]      RESUMABLE reductions: per graph RUSTRED_RESUME_DIR=<dir>/<id>/ (RustRed
 //!                                saves its record pass there, every RUSTRED_RESUME_SECONDS); a graph
 //!                                interrupted in an earlier run of this configuration is RESUMED, not
@@ -300,7 +301,7 @@ struct R3Choice {
 impl R3Choice {
     fn parse(text: &str) -> eyre::Result<Self> {
         let text = if text == "default" {
-            "routed,compact,merge"
+            "routed,compact,merge,prune"
         } else {
             text
         };
@@ -322,9 +323,11 @@ impl R3Choice {
                     choice.options.routed = true;
                 }
                 "dots" => choice.options.dots = true,
+                "prune" => choice.options.prune_early = true,
+                "no-prune" => choice.options.prune_early = false,
                 "merge" => choice.merge_colour = true,
                 other => eyre::bail!(
-                    "--r3: unknown option {other} (routed, compact, edge, stored, merge, dots, default)"
+                    "--r3: unknown option {other} (routed, compact, edge, stored, merge, prune, no-prune, dots, default)"
                 ),
             }
         }
@@ -337,6 +340,7 @@ impl R3Choice {
             ("routed", o.routed),
             ("compact", o.compact),
             ("merge", self.merge_colour),
+            ("prune", o.prune_early),
             ("dots", o.dots),
         ]
         .iter()

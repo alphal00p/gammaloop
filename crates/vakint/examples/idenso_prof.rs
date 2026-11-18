@@ -22,6 +22,7 @@
 //!     [--r3-routed]        R3 contracts the ROUTED product exactly as R2 (loop basis); only the hand-over differs
 //!     [--r3-compact]       R3 routes with the spanning tree of the fewest loop + root terms (exact enumeration)
 //!     [--r3-dots]          R3 asks idenso for dot notation directly (AlgebraContraction::Dots, no to_dots)
+//!     [--r3-prune]         R3's reader prunes zero sectors early (DirectOptions::prune_early; the library default)
 //!     [--edge-contract]    idenso alone: R3's edge-basis contraction timed next to R2's (no vakint; L5)
 //!     [--ref-dir <dir>]    with --direct: also gate R3 against lane refpath's stored dumps (gate/<NNNNNN>.<projection>.gate)
 //!     [--no-staged]        skip the stage-by-stage replay of R2's contraction and the colour split timing
@@ -476,6 +477,7 @@ fn main() -> eyre::Result<()> {
     let mut r3_dots = false;
     let mut r3_routed = false;
     let mut r3_compact = false;
+    let mut r3_prune = false;
     let mut edge_contract = false;
     let mut ref_dir: Option<PathBuf> = None;
     let mut no_staged = false;
@@ -517,6 +519,7 @@ fn main() -> eyre::Result<()> {
             "--r3-dots" => r3_dots = true,
             "--r3-routed" => r3_routed = true,
             "--r3-compact" => r3_compact = true,
+            "--r3-prune" => r3_prune = true,
             "--edge-contract" => edge_contract = true,
             "--no-staged" => no_staged = true,
             "--stem-list" => {
@@ -721,6 +724,7 @@ fn main() -> eyre::Result<()> {
                         dots: r3_dots,
                         routed: r3_routed,
                         compact: false,
+                        prune_early: r3_prune,
                     },
                     None,
                 )?;
@@ -851,6 +855,7 @@ fn main() -> eyre::Result<()> {
                                 dots: r3_dots,
                                 routed: r3_routed,
                                 compact: r3_compact,
+                                prune_early: r3_prune,
                             },
                             &mut seconds,
                         )?;
@@ -960,7 +965,7 @@ fn main() -> eyre::Result<()> {
                     "wall": median(direct_runs.iter().map(|r| r.1).collect()),
                     "cpu": median(direct_runs.iter().map(|r| r.2).collect()),
                     "colour": median(direct_colour.clone()), "terms": direct_terms, "merge_colour": merge_colour, "dots": r3_dots, "routed": r3_routed,
-                    "compact": r3_compact, "routing": d(&|s| s.routing), "counts": direct_counts,
+                    "compact": r3_compact, "prune_early": r3_prune, "routing": d(&|s| s.routing), "counts": direct_counts,
                     "routing_size": direct_runs.first().map(|r| r.0.routing_size),
                     "stored_routing_size": direct_runs.first().map(|r| r.0.stored_routing_size),
                     "trees": direct_runs.first().map(|r| r.0.trees),
