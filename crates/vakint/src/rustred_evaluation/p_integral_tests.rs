@@ -5152,7 +5152,7 @@ fn boundary_showcase() {
         s.number_of_terms_in_epsilon_expansion = epsilon_terms;
         s.run_time_decimal_precision = 100;
         s.use_dot_product_notation = false;
-        s.n_cores = 1;
+        s.n_cores = std::env::var("VAKINT_TEST_P5L_DRILL_CORES").ok().and_then(|c| c.parse().ok()).unwrap_or(1);
         s
     };
     let mut symbolic = make(RustRedMasterMode::Symbolic);
