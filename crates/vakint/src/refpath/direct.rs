@@ -47,6 +47,9 @@ pub struct DirectOptions {
     /// the same polynomial, ~-20 % of R3's contraction at four loops
     /// (measured, exact). DEFAULT true.
     pub dots: bool,
+    /// idenso's frontier-level closing of quark loops
+    /// (`AlgebraSettings::gamma_closing`): the same values; opt-in, OFF by default.
+    pub closing: bool,
     /// Route the edge momenta into FeynKit's loop momenta BEFORE the
     /// contraction, exactly as R2 (idenso's input and output are then R2's);
     /// the hand-over then reads `dot(K(i), ..)` through the loop momenta's
@@ -74,6 +77,7 @@ impl Default for DirectOptions {
     fn default() -> Self {
         Self {
             dots: true,
+            closing: false,
             routed: false,
             compact: true,
             prune_early: true,
@@ -281,6 +285,7 @@ fn contract_branch_edges(
     momentum: &Atom,
     metric_only: bool,
     dots: bool,
+    closing: bool,
 ) -> Result<(Atom, Atom)> {
     use idenso::dirac::GammaSimplifySettings;
     use idenso::tensor::{AlgebraContraction, AlgebraSettings, SymbolicTensor};
@@ -325,6 +330,7 @@ fn contract_branch_edges(
             } else {
                 AlgebraContraction::Fully
             },
+            gamma_closing: closing.then(idenso::dirac::GammaClosing::default),
             ..Default::default()
         },
     )?;
@@ -395,7 +401,13 @@ pub fn contract_edges(
         let continued = product
             .replace(Minkowski {}.to_symbolic([Atom::var(W_.d_), Atom::var(W_.a___)]))
             .with(Minkowski {}.to_symbolic([d.clone(), Atom::var(W_.a___)]));
-        let (g, qq) = contract_branch_edges(&continued, momentum, metric_only, options.dots)?;
+        let (g, qq) = contract_branch_edges(
+            &continued,
+            momentum,
+            metric_only,
+            options.dots,
+            options.closing,
+        )?;
         g_sum += &branch.coefficient * g;
         qq_sum += &branch.coefficient * qq;
     }
@@ -1603,5 +1615,109 @@ mod tests {
                 .rename(&leftover, SPENSO_TAG.dot, |v| lines.vector(v), &[])
                 .is_err()
         );
+    }
+
+    /// The same identity with idenso's frontier-level closing
+    /// (`DirectOptions::closing`), without and with dots (spelled: dots is the
+    /// default): R3 hands RustRed
+    /// exactly R2's folded inputs and gives R2's values.
+    #[test]
+    fn r3_with_closing_equals_r2_key_by_key_on_the_bb_fixtures() {
+        let Some(template) = template() else {
+            eprintln!("skipped: no p library for L1-L3 in this environment");
+            return;
+        };
+        let variants = [
+            (
+                true,
+                DirectOptions {
+                    dots: false,
+                    closing: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                true,
+                DirectOptions {
+                    dots: true,
+                    closing: true,
+                    ..Default::default()
+                },
+            ),
+        ];
+        let mut lowered = 0;
+        for dir in fixture_dirs() {
+            let model = super::super::load_model(&dir).unwrap();
+            let mut files = std::fs::read_dir(&dir)
+                .unwrap()
+                .filter_map(|e| e.ok().map(|e| e.path()))
+                .filter(|p| p.extension().is_some_and(|x| x == "dot"))
+                .collect::<Vec<_>>();
+            files.sort();
+            for file in files {
+                let dot = std::fs::read_to_string(&file).unwrap();
+                let reference = super::super::run_graph(
+                    &super::super::fresh_engine(&template).unwrap(),
+                    &model,
+                    &dot,
+                    &super::super::RunOptions {
+                        count_terms: false,
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+                for (merge, options) in variants {
+                    let engine = super::super::fresh_engine(&template).unwrap();
+                    let run = run_graph_direct(
+                        &engine,
+                        &model,
+                        &dot,
+                        Projection::Metric,
+                        1,
+                        merge,
+                        options,
+                    )
+                    .unwrap();
+                    let label = format!("{} merge {merge} {options:?}", file.display());
+                    match run.outcome {
+                        None => assert!(
+                            reference.results.is_empty() && reference.zero_reason.is_some(),
+                            "{label}: zero only in R3"
+                        ),
+                        Some(DirectOutcome::Declined(reason)) => {
+                            panic!("{label}: declined: {reason}")
+                        }
+                        Some(DirectOutcome::Zero(_)) => assert!(
+                            reference
+                                .results
+                                .iter()
+                                .all(|r| super::super::gate_view(r).0.is_empty()),
+                            "{label}: zero only in R3"
+                        ),
+                        Some(DirectOutcome::Lowered(projections)) => {
+                            assert_eq!(projections.len(), reference.results.len(), "{label}");
+                            for (projection, expected) in projections.iter().zip(&reference.results)
+                            {
+                                let (view, _) =
+                                    gate_view(&engine, &run.settings, projection).unwrap();
+                                let difference =
+                                    compare_gate_views(&super::super::gate_view(expected).0, &view);
+                                assert!(difference.is_empty(), "{label}: {difference:?}");
+                                assert!(
+                                    values_equal(
+                                        projection.value.as_ref().unwrap(),
+                                        &expected.value
+                                    ),
+                                    "{label}: values differ"
+                                );
+                                lowered += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // the 7 fixtures with a non-zero metric projection, in both variants
+        assert_eq!(lowered, 2 * 7, "lowered projections");
     }
 }
