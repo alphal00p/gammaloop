@@ -441,6 +441,9 @@ struct SharedScalars {
     expansions: AHashMap<usize, Expansion>,
     expand: bool,
     dot_notation: bool,
+    /// Frontier closing: the positions whose spelling holds a routed sum
+    /// (set by `substitute_spellings`).
+    spelled: AHashSet<usize>,
 }
 
 /// Composite scalars with at most this many polynomial terms are expanded
@@ -488,6 +491,7 @@ impl SharedScalars {
             map: Arc::new(Vec::new()),
             expansions: AHashMap::new(),
             expand,
+            spelled: AHashSet::new(),
         }
     }
 
@@ -722,20 +726,100 @@ impl SharedScalars {
         if stand_ins.is_empty() {
             return;
         }
-        for spelling in self.atoms.iter_mut().chain(self.dots.iter_mut()) {
-            let substituted =
-                crate::dirac::closing::substitute_stand_ins(spelling.clone(), stand_ins);
-            if substituted != *spelling {
-                *spelling = substituted;
+        for (position, (atom, dots)) in self.atoms.iter_mut().zip(self.dots.iter_mut()).enumerate()
+        {
+            for spelling in [atom, dots] {
+                let substituted =
+                    crate::dirac::closing::substitute_stand_ins(spelling.clone(), stand_ins);
+                if substituted != *spelling {
+                    *spelling = substituted;
+                    self.spelled.insert(position);
+                }
             }
         }
+    }
+
+    /// Frontier closing, a small closed total: emit it with the spelled
+    /// routed sums multiplied out and every other variable kept as one factor,
+    /// so that an exact cancellation among the spelled sums shows as zero
+    /// while the composites the frontier keeps opaque stay opaque (the 6-Loop
+    /// thread's review note 1). `None` (the caller emits the total compact)
+    /// when no variable is spelled, a spelling carries an explicit index slot,
+    /// or the expansion would exceed `EXPANSION_WORK_LIMIT` terms.
+    fn emit_spelled_expanded(&self, polynomial: &ScalarPolynomial) -> Option<Atom> {
+        let spellings = if self.dot_notation {
+            &self.dots
+        } else {
+            &self.atoms
+        };
+        let mut slots = SlotMatcher::default();
+        let mut spelled = Vec::new();
+        for (index, variable) in polynomial.get_vars_ref().iter().enumerate() {
+            let PolyVariable::Temporary(position) = variable else {
+                return None;
+            };
+            if !self.spelled.contains(position) {
+                continue;
+            }
+            let spelling = spellings.get(*position)?;
+            if !index_free(&mut slots, spelling.as_view()) {
+                return None;
+            }
+            let sum = spelling.try_to_polynomial::<_, u32>(&Q, None).ok()?;
+            spelled.push((index, sum));
+        }
+        if spelled.is_empty() {
+            return None;
+        }
+        // the expanded term count's bound, from the term exponents
+        let mut work = 0usize;
+        for term in polynomial {
+            let mut product = 1usize;
+            for (index, sum) in &spelled {
+                product = product.checked_mul(sum.nterms().checked_pow(term.exponents[*index])?)?;
+            }
+            work = work.checked_add(product)?;
+            if work > EXPANSION_WORK_LIMIT {
+                return None;
+            }
+        }
+        let mut labelled = self.labelled(polynomial.clone())?;
+        let labels: Vec<PolyVariable> = spelled
+            .iter()
+            .map(|(index, _)| labelled.get_vars_ref()[*index].clone())
+            .collect();
+        for (label, (_, mut sum)) in labels.into_iter().zip(spelled) {
+            budget_checkpoint();
+            labelled.unify_variables(&mut sum);
+            let index = labelled
+                .get_vars_ref()
+                .iter()
+                .position(|variable| *variable == label)?;
+            labelled = labelled.replace_with_poly(index, &sum);
+        }
+        Some(
+            labelled.to_expression_with_coeff_map(|_, coefficient, out| {
+                out.to_num(coefficient.clone());
+            }),
+        )
     }
 
     /// Emit each variable in the spelling it first had in this frontier, or
     /// in dot notation when the request ends there. The polynomial is
     /// relabelled with those atoms and written into one expression buffer,
     /// which is normalized once.
-    fn emit(&self, mut polynomial: ScalarPolynomial) -> Option<Atom> {
+    fn emit(&self, polynomial: ScalarPolynomial) -> Option<Atom> {
+        Some(
+            self.labelled(polynomial)?
+                .to_expression_with_coeff_map(|_, coefficient, out| {
+                    out.to_num(coefficient.clone());
+                }),
+        )
+    }
+
+    /// The polynomial over this frontier's positions relabelled with their
+    /// spellings (the variables `emit` writes).
+    fn labelled(&self, mut polynomial: ScalarPolynomial) -> Option<ScalarPolynomial> {
         let spellings = if self.dot_notation {
             &self.dots
         } else {
@@ -760,11 +844,7 @@ impl SharedScalars {
         let mut labelled = ScalarPolynomial::new(&Q, None, Arc::new(variables));
         labelled.coefficients = std::mem::take(&mut polynomial.coefficients);
         labelled.exponents = std::mem::take(&mut polynomial.exponents);
-        Some(
-            labelled.to_expression_with_coeff_map(|_, coefficient, out| {
-                out.to_num(coefficient.clone());
-            }),
-        )
+        Some(labelled)
     }
 }
 
@@ -3015,17 +3095,18 @@ impl<'a> ComponentSum<'a, '_> {
                 0,
             );
             if !total.is_zero() {
-                // A small closed sum is expanded once its routed sums are
-                // spelled, so that an exact cancellation shows as zero, as on
-                // the unclosed path; a large one stays compact (products of
-                // sums, read sparsely downstream).
-                let small = total.nterms() <= EXPANSION_TERM_LIMIT;
-                let emitted = shared.emit(total)?;
-                terms.push(if small && !stand_ins.is_empty() {
-                    emitted.expand()
-                } else {
-                    emitted
-                });
+                // A small closed sum is emitted with its spelled routed sums
+                // multiplied out (only those), so that an exact cancellation
+                // shows as zero, as on the unclosed path; a large one stays
+                // compact (products of sums, read sparsely downstream).
+                let small = total.nterms() <= EXPANSION_TERM_LIMIT && !stand_ins.is_empty();
+                match small
+                    .then(|| shared.emit_spelled_expanded(&total))
+                    .flatten()
+                {
+                    Some(expanded) => terms.push(expanded),
+                    None => terms.push(shared.emit(total)?),
+                }
             }
         }
         self.terminal_slots = match (open_slots, scalar_form) {
