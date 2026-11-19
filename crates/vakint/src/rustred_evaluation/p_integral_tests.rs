@@ -134,6 +134,76 @@ fn assert_tag_basis_equal(
 /// vk5l-physrun 4B: the level-1 checkpoint key does not depend on the
 /// worker count (a unit reduced on one thread is reused on sixteen), and on
 /// one thread it is the key of the checkpoints written before the change.
+/// vk5l-physrun: the Symbolic value of a raw `p5l_library` result through
+/// vakint's own finaliser ([`retained_from_p5l_output`] +
+/// [`Vakint::refinalise_p_retained`], the catalogue of `Vakint::new` or
+/// `VAKINT_P_MASTER_CATALOGUE`). VAKINT_TEST_P5L_RESULT=<output file>,
+/// optional VAKINT_TEST_P5L_LOOPS (default 5), VAKINT_TEST_P5L_EPS_TERMS
+/// (default 4), VAKINT_TEST_P5L_FINALIZE_OUT=<dir> (retain.sym, symbolic.sym).
+#[test]
+fn p5l_result_finalize() {
+    let Some(path) = std::env::var_os("VAKINT_TEST_P5L_RESULT") else {
+        eprintln!("p5l_result_finalize: environment unset, skipped");
+        return;
+    };
+    let loops: usize = std::env::var("VAKINT_TEST_P5L_LOOPS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(5);
+    let mut symbolic = settings(RustRedMasterMode::Symbolic, None);
+    if let Some(terms) = std::env::var("VAKINT_TEST_P5L_EPS_TERMS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+    {
+        symbolic.number_of_terms_in_epsilon_expansion = terms;
+    }
+    let engine = Vakint::new().unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    let retained = retained_from_p5l_output(&text, epsilon(&symbolic)).unwrap();
+    let value = engine
+        .refinalise_p_retained(&symbolic, retained.as_view(), loops)
+        .unwrap();
+    eprintln!(
+        "P5L_FINALIZE Symbolic ({} eps terms): {value}",
+        symbolic.number_of_terms_in_epsilon_expansion
+    );
+    if let Some(out) = std::env::var_os("VAKINT_TEST_P5L_FINALIZE_OUT") {
+        let out = std::path::PathBuf::from(out);
+        std::fs::create_dir_all(&out).unwrap();
+        std::fs::write(out.join("retain.sym"), retained.to_canonical_string()).unwrap();
+        std::fs::write(out.join("symbolic.sym"), value.to_canonical_string()).unwrap();
+    }
+}
+
+/// [`retained_from_p5l_output`] renders a p5l line as `render_terms` does.
+#[test]
+fn p5l_output_lines_render_like_the_reduction() {
+    crate::Vakint::initialize_vakint_symbols();
+    let symbolic = settings(RustRedMasterMode::Symbolic, None);
+    let eps = epsilon(&symbolic);
+    let text = "{\"load_seconds\":1}\nUnit GammaTag([(-1, 2), (1, 1)]) : (3+d)/(d-4)\n\
+                PResidual(T011e, [1, 1, 0, -1, 2]) GammaTag([]) : 2\n";
+    let value = retained_from_p5l_output(text, eps).unwrap();
+    let dimension = Atom::num(4) - Atom::num(2) * Atom::var(eps);
+    let expected = crate::p_integral::p_gamma_symbol()
+        .call((-1i64,))
+        .pow(Atom::num(2))
+        * crate::p_integral::p_gamma_symbol().call((1i64,))
+        * (Atom::num(3) + dimension.clone())
+        / (dimension - Atom::num(4))
+        + symbolica::atom::FunctionBuilder::new(crate::p_integral::p_residual_symbol())
+            .add_arg(Atom::var(vk_symbol!("T011e")))
+            .add_arg(Atom::num(1))
+            .add_arg(Atom::num(1))
+            .add_arg(Atom::num(0))
+            .add_arg(Atom::num(-1))
+            .add_arg(Atom::num(2))
+            .finish()
+            * Atom::num(2);
+    assert_eq!((value - expected).expand(), Atom::Zero);
+    assert!(retained_from_p5l_output("no terms", eps).is_err());
+}
+
 #[test]
 fn checkpoint_arithmetic_ignores_the_thread_count() {
     let one = VakintSettings {

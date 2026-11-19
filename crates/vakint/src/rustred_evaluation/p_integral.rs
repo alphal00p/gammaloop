@@ -564,6 +564,85 @@ fn render(
     Ok(collect_terms(render_terms(handle, reduction, epsilon)?))
 }
 
+/// vk5l-physrun: the Retain value of a raw `p5l_library` result text (lines
+/// `Unit GammaTag([(m, e), ..]) : <coefficient in d>` and
+/// `PResidual(NODE, [k_1, ..]) GammaTag([..]) : <coefficient>`; other lines
+/// are ignored), built exactly as [`render_terms`] renders a reduction:
+/// `Π PGamma(m)^e · basis · coefficient(d = 4 - 2ε)` with `basis = 1` for
+/// `Unit` and `PResidual(NODE, k_1, ..)` for a residual terminal. The master
+/// substitution is NOT done here: pass the value to
+/// [`Vakint::refinalise_p_retained`] (the finaliser of [`finalize_reduced`]).
+pub fn retained_from_p5l_output(text: &str, epsilon: Symbol) -> Result<Atom, VakintError> {
+    let bad = |line: &str, what: &str| {
+        VakintError::InvalidIntegralFormat(format!("p5l output line {:.80}: {what}", line))
+    };
+    let dimension = Atom::num(4) - Atom::num(2) * Atom::var(epsilon);
+    let d = vk_symbol!("d");
+    let mut value = Atom::Zero;
+    let mut terms = 0usize;
+    for line in text.lines() {
+        let line = line.trim();
+        if !(line.starts_with("Unit GammaTag(") || line.starts_with("PResidual(")) {
+            continue;
+        }
+        let (head, coefficient) = line
+            .split_once(" : ")
+            .ok_or_else(|| bad(line, "no ' : '"))?;
+        let (basis_text, tag_text) = head
+            .rsplit_once(" GammaTag([")
+            .ok_or_else(|| bad(line, "no GammaTag"))?;
+        let tag_text = tag_text
+            .strip_suffix("])")
+            .ok_or_else(|| bad(line, "unterminated GammaTag"))?;
+        let basis = if basis_text == "Unit" {
+            Atom::num(1)
+        } else {
+            let inner = basis_text
+                .strip_prefix("PResidual(")
+                .and_then(|rest| rest.strip_suffix("])"))
+                .ok_or_else(|| bad(line, "malformed PResidual"))?;
+            let (node, key) = inner
+                .split_once(", [")
+                .ok_or_else(|| bad(line, "malformed PResidual key"))?;
+            let mut builder =
+                symbolica::atom::FunctionBuilder::new(crate::p_integral::p_residual_symbol())
+                    .add_arg(Atom::var(vk_symbol!(node.trim())));
+            for power in key.split(',').filter(|p| !p.trim().is_empty()) {
+                let power: i64 = power.trim().parse().map_err(|_| bad(line, "a key power"))?;
+                builder = builder.add_arg(Atom::num(power));
+            }
+            builder.finish()
+        };
+        let mut tag = Atom::num(1);
+        for pair in tag_text.split("), (").filter(|p| !p.trim().is_empty()) {
+            let pair = pair.trim_matches(|c| c == '(' || c == ')');
+            let (m, e) = pair
+                .split_once(',')
+                .ok_or_else(|| bad(line, "a Gamma tag pair"))?;
+            let m: i64 = m.trim().parse().map_err(|_| bad(line, "a Gamma tag m"))?;
+            let e: i64 = e
+                .trim()
+                .parse()
+                .map_err(|_| bad(line, "a Gamma tag exponent"))?;
+            tag *= crate::p_integral::p_gamma_symbol()
+                .call((m,))
+                .pow(Atom::num(e));
+        }
+        let coefficient = crate::utils::vakint_macros::vk_parse!(coefficient)
+            .map_err(|error| bad(line, &format!("coefficient: {error}")))?
+            .replace(Atom::var(d).to_pattern())
+            .with(dimension.to_pattern());
+        value += tag * basis * coefficient;
+        terms += 1;
+    }
+    if terms == 0 {
+        return Err(VakintError::InvalidIntegralFormat(
+            "p5l output: no result term".into(),
+        ));
+    }
+    Ok(value)
+}
+
 /// The terms of [`render`]: per tag and master, the coefficient at
 /// `d = 4 - 2ε`, not yet simplified.
 fn render_terms(
