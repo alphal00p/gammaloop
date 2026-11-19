@@ -1230,6 +1230,40 @@ impl Vakint {
         ))
     }
 
+    /// Strict mode at a public result boundary: the typed
+    /// [`crate::UnknownMasterCoefficients`] when `result` (the returned value
+    /// of one public call, after its sums and truncation) still depends on
+    /// expected but unknown master coefficients and `settings` refuses them;
+    /// a surviving ALARM is [`crate::MissingMasterOrders`] in either mode.
+    pub(crate) fn refuse_unknown_master_coefficients(
+        &self,
+        settings: &crate::VakintSettings,
+        result: &symbolica::atom::Atom,
+    ) -> Result<(), crate::VakintError> {
+        use symbolica::atom::AtomCore;
+        if !result.contains_symbol(crate::truncation_guard::unknown_coefficient_symbol())
+            && !result.contains_symbol(crate::truncation_guard::unknown_tail_symbol())
+        {
+            return Ok(());
+        }
+        let coefficients = self.unknown_master_coefficients(settings, result.as_view(), None)?;
+        if settings.allow_unknown_master_coefficients || coefficients.is_empty() {
+            return Ok(());
+        }
+        let catalogue = self.p_master_catalogue();
+        let backend = crate::p_integral::master_catalogue::PMasterSource::new(
+            catalogue.as_deref(),
+            "public result",
+        )
+        .backend("vakint");
+        Err(crate::UnknownMasterCoefficients {
+            backend,
+            requested_order: None,
+            coefficients,
+        }
+        .into())
+    }
+
     pub(crate) fn p_master_catalogue(&self) -> Option<Arc<crate::p_integral::PMasterCatalogue>> {
         if let Some(catalogue) = &self.p_master_catalogue {
             return Some(Arc::clone(catalogue));

@@ -731,7 +731,7 @@ fn the_ggppss_catalogue_loads_when_named() {
 /// UNKNOWN(u_m1,1)·ε + UNKNOWN(u_m1,2)·ε² + ALARM(ε³)` (file default
 /// `unknown_through_default: 2`); `u_deep` known beyond the default (ε^0..ε^4,
 /// ALARM from ε^5); `u_own` with its own `unknown_through: 1`; `u_x` a
-/// placeholder (all orders ε^-2..ε^2 UNKNOWN), carrying the unmapped terminal
+/// placeholder at the proven bound -10 (all orders ε^-10..ε^2 UNKNOWN), carrying the unmapped terminal
 /// T911 the way helper VH 2's `X[node:key][k]` atoms do.
 pub(crate) fn fixture_v2() -> Value {
     json!({
@@ -750,7 +750,7 @@ pub(crate) fn fixture_v2() -> Value {
             {"id": "u-own", "symbol": "u_own", "loops": 5, "graph": "u-graph-3",
              "leading_order": 0, "unknown_through": 1, "coefficients": {"0": {"exact": "7"}}},
             {"id": "u-x", "symbol": "u_x", "loops": 5, "graph": "u-graph-4",
-             "leading_order": -2, "placeholder": true},
+             "leading_order": -10, "placeholder": true},
             {"id": "u-dep", "symbol": "u_dep", "loops": 5, "graph": "u-graph-5",
              "leading_order": 0, "coefficients": {"0": {"exact": "1"},
              "1": {"exact": "2+3*UNKNOWN(u_m1,1)"}}},
@@ -828,7 +828,7 @@ fn version_two_catalogues_declare_expected_unknown_orders() {
     assert_eq!(depths("u_m1"), (0, 2, false));
     assert_eq!(depths("u_deep"), (4, 4, false));
     assert_eq!(depths("u_own"), (0, 1, false));
-    assert_eq!(depths("u_x"), (-3, 2, true));
+    assert_eq!(depths("u_x"), (-11, 2, true));
     // The expansion: known orders, UNKNOWN(symbol, k) up to the expected
     // depth, then the ALARM tail.
     let source = PMasterSource::new(Some(&catalogue), REQUEST);
@@ -1003,16 +1003,35 @@ fn placeholder_masters_are_all_unknown() {
     );
     assert_eq!(
         unknown_entries(&unknowns),
-        [
-            ("u-x".into(), -2, -2),
-            ("u-x".into(), -1, -1),
-            ("u-x".into(), 0, 0)
-        ]
+        (-10..=0)
+            .map(|k| ("u-x".to_string(), k, k))
+            .collect::<Vec<_>>()
     );
     let value = run_allowing(&catalogue, reduced, RustRedMasterMode::Symbolic, true).unwrap();
     assert_eq!(
-        at_unit_scale(&value, -2, 0),
-        [unknown("u_x", -2), unknown("u_x", -1), unknown("u_x", 0)]
+        at_unit_scale(&value, -10, 0),
+        (-10..=0).map(|k| unknown("u_x", k)).collect::<Vec<_>>()
+    );
+    // The loader refuses a placeholder above the proven bound -2 x loops and a
+    // mapped master whose declared leading coefficient is zero.
+    let mut shallow = fixture_v2();
+    shallow["masters"][3]["leading_order"] = json!(-7);
+    assert_names(
+        &load(&shallow).unwrap_err().to_string(),
+        &["u-x", "placeholder leading_order -7", "-10"],
+    );
+    let mut zero_leading = fixture_v2();
+    zero_leading["masters"][1]["coefficients"]["0"] = json!({"exact": "0"});
+    assert_names(
+        &load(&zero_leading).unwrap_err().to_string(),
+        &["u-deep", "declared leading order epsilon^0 is zero"],
+    );
+    // A dependence may not refer below a master's leading order.
+    let mut below = fixture_v2();
+    below["masters"][4]["coefficients"]["1"] = json!({"exact": "UNKNOWN(u_x,-11)"});
+    assert_names(
+        &load(&below).unwrap_err().to_string(),
+        &["u-dep", "UNKNOWN(u_x, -11)"],
     );
 }
 

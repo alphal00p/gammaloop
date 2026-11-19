@@ -119,6 +119,16 @@ pub use truncation_guard::{
 pub const ALLOW_UNKNOWN_MASTER_COEFFICIENTS_VARIABLE: &str =
     "VAKINT_ALLOW_UNKNOWN_MASTER_COEFFICIENTS";
 
+/// `settings` with [`VakintSettings::allow_unknown_master_coefficients`] on:
+/// the inside of a public call in strict mode carries the UNKNOWN symbols,
+/// and the call refuses them once on its result
+/// ([`Vakint::refuse_unknown_master_coefficients`]).
+pub(crate) fn unknown_master_coefficients_carried(settings: &VakintSettings) -> VakintSettings {
+    let mut inner = settings.clone();
+    inner.allow_unknown_master_coefficients = true;
+    inner
+}
+
 /// The default of [`VakintSettings::allow_unknown_master_coefficients`]
 /// (see [`ALLOW_UNKNOWN_MASTER_COEFFICIENTS_VARIABLE`]).
 pub fn allow_unknown_master_coefficients_default() -> bool {
@@ -8576,6 +8586,16 @@ Evaluated (n_loops=1, mu_r=1) :
         mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
         progress: Option<&CallerProgress>,
     ) -> Result<Atom, VakintError> {
+        // Lane unknown-masters: in strict mode the expected-but-unknown master
+        // coefficients are refused once, on the result of this public call
+        // (after the signed sum over external heads and closures and the
+        // truncation); inside, every finaliser carries them.
+        if !settings.allow_unknown_master_coefficients {
+            let inner = unknown_master_coefficients_carried(settings);
+            let value = self.evaluate_observed(&inner, input, observation, progress)?;
+            self.refuse_unknown_master_coefficients(settings, &value)?;
+            return Ok(value);
+        }
         if let Some(progress) = progress {
             progress.configure(settings);
         }

@@ -512,6 +512,19 @@ fn insert_master(
             "{name}: a placeholder master has no coefficients"
         )));
     }
+    // A placeholder's orders below its leading order count as ZERO, so its
+    // leading order must be the proven bound: at most one UV and one IR (soft)
+    // pole per loop of a massless propagator integral, i.e. -2·loops (reviewer:
+    // a placeholder at -7 silently gave a zero finite part on T278).
+    let bound = -2 * master.loops as i64;
+    if master.placeholder && master.leading_order > bound {
+        return Err(invalid(format!(
+            "{name}: placeholder leading_order {} is above the proven bound {bound} = -2 x {} loops \
+             (one UV and one IR pole per loop): its orders below the leading order would silently \
+             count as zero",
+            master.leading_order, master.loops
+        )));
+    }
     if !plain_identifier(&master.symbol) {
         return Err(invalid(format!(
             "{name}: symbol {:?} is not a plain identifier",
@@ -577,6 +590,17 @@ fn insert_master(
                 significant_digits: coefficient.significant_digits.or(master.significant_digits),
             },
         );
+    }
+    // The declared leading order is data of the published expansion: its
+    // coefficient must not be an exact zero (else the expansion starts later
+    // and the declaration is wrong).
+    if let Some(leading) = coefficients.get(&master.leading_order)
+        && leading.exact.as_ref().is_some_and(|exact| exact.is_zero())
+    {
+        return Err(invalid(format!(
+            "{name}: its coefficient at the declared leading order epsilon^{} is zero",
+            master.leading_order
+        )));
     }
     let mut known_through = master.leading_order - 1;
     while coefficients.contains_key(&(known_through + 1)) {

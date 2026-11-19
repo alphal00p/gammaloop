@@ -1,0 +1,57 @@
+{
+  "schema": "vakint.p-master-catalogue.v2",
+  "version": 2,
+  "data_version": "astra-native-t268-1654",
+  "normalisation": "g-scheme",
+  "unknown_through_default": 2,
+  "masters": [
+    {
+      "id": "review-t268",
+      "symbol": "review_t268",
+      "loops": 5,
+      "graph": "test-T268",
+      "leading_order": 0,
+      "known_through": 0,
+      "alarm_from": 3,
+      "coefficients": {
+        "0": {
+          "exact": "1"
+        }
+      }
+    }
+  ],
+  "terminals": [
+    {
+      "node": "T268",
+      "key": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "status": "mapped",
+      "combination": [
+        {
+          "master": "review-t268",
+          "coefficient": "1"
+        }
+      ]
+    }
+  ]
+}

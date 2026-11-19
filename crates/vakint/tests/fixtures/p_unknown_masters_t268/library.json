@@ -1,0 +1,764 @@
+{
+  "counts": {
+    "classes": 1,
+    "dag_edges": 0,
+    "dag_nodes": 1,
+    "edge_maps": 0,
+    "owners": {
+      "custom": 1
+    },
+    "presentations": 2,
+    "sectors": 2,
+    "terminals": 2,
+    "tops": 1,
+    "zero_sectors": 0
+  },
+  "edge_maps": [],
+  "files": {
+    "census": "census.rrbin",
+    "census_json": "census.json",
+    "families": "families/p-families.json",
+    "family_files": [
+      {
+        "bytes": 2960,
+        "file": "families/P05373c99ef72fce4_e13.rrbin",
+        "name": "P05373c99ef72fce4_e13"
+      },
+      {
+        "bytes": 2943,
+        "file": "families/T268.rrbin",
+        "name": "T268"
+      }
+    ],
+    "layer": null,
+    "topology": "topology/p-topologies.json"
+  },
+  "identity": "p-library:scope=5-5:P_OWNER_LIBRARY_SEMANTICS=rustred-p-owner-library-2026-11-05,P_CLASS_KEY_VERSION=1,P_CENSUS_VERSION=2,P_PRESENTATION_VERSION=4,P_FAMILIES_VERSION=1,P_GAMMA_TAG_VERSION=1,P_GAMMA_TAG_MAX_M=8,P_GAMMA_TAG_WIDTH=16,P_INSERTION_KERNEL_VERSION=1,P_CARPET_KERNEL_VERSION=1,P_TRIANGLE_TEMPLATE_VERSION=1,P_DIAMOND_TEMPLATE_VERSION=1,P_SCHEME_TEMPLATE_VERSION=5,P_CUSTOM_OWNER_VERSION=2,P_LIBRARY_SCHEMA=rustred.p-owner-library.v1,P_FAMILIES_SCHEMA=rustred.p-families.v1,P_BASIS_LAYER_SCHEMA=rustred.p-basis-layer.v1,P_TOPOLOGY_VERSION=1,P_FAMILIES_5L_VERSION=1,P_PACKAGE_REVISION=astra-unknown-1654-terminal",
+  "nodes": [
+    {
+      "fallback": null,
+      "index": 0,
+      "lane": "custom",
+      "presentation": 1,
+      "trivial": false
+    }
+  ],
+  "owners": [
+    {
+      "class": "L5T14-d1a75c796f852965",
+      "custom": {
+        "charts": [
+          16383
+        ],
+        "lp_count": 1,
+        "residuals": 1,
+        "two_sided_axes": 0
+      },
+      "edge_maps": [],
+      "lane": "custom",
+      "node": 0,
+      "payload": {
+        "bytes": 85117,
+        "encoding": "gzip",
+        "file": "owners/L5T14-d1a75c796f852965.rrbin"
+      },
+      "presentation": 1,
+      "roles": "none",
+      "terminals": [
+        1
+      ]
+    }
+  ],
+  "presentations": [
+    {
+      "family": "families/P05373c99ef72fce4_e13.rrbin",
+      "index": 0,
+      "kind": {
+        "top": {
+          "name": "P05373c99ef72fce4_e13"
+        }
+      },
+      "loops": 5,
+      "node": null,
+      "slots": [
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              0,
+              0,
+              -1,
+              1,
+              -1,
+              0
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              0,
+              0,
+              1,
+              -1,
+              1,
+              1
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              -1,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              0,
+              0,
+              0,
+              -1,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              0,
+              0,
+              -1,
+              1,
+              0,
+              -1
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              0,
+              1,
+              -1,
+              0,
+              0,
+              -1
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              0,
+              -1,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              0,
+              0,
+              1,
+              0,
+              1,
+              0
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              0,
+              0,
+              0,
+              0,
+              -1,
+              0
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              1,
+              -1,
+              1,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              -1,
+              1,
+              0,
+              0,
+              0,
+              -1
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              0,
+              0,
+              1,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              0,
+              0,
+              -1,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "isp": {
+            "left": [
+              0,
+              -1,
+              0,
+              0,
+              0,
+              1
+            ],
+            "right": [
+              0,
+              -1,
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "isp": {
+            "left": [
+              0,
+              0,
+              0,
+              -1,
+              0,
+              1
+            ],
+            "right": [
+              0,
+              0,
+              0,
+              -1,
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "isp": {
+            "left": [
+              1,
+              0,
+              0,
+              -1,
+              0,
+              0
+            ],
+            "right": [
+              1,
+              0,
+              0,
+              -1,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "isp": {
+            "left": [
+              1,
+              0,
+              0,
+              0,
+              -1,
+              0
+            ],
+            "right": [
+              1,
+              0,
+              0,
+              0,
+              -1,
+              0
+            ]
+          }
+        },
+        {
+          "isp": {
+            "left": [
+              0,
+              1,
+              0,
+              -1,
+              0,
+              0
+            ],
+            "right": [
+              0,
+              1,
+              0,
+              -1,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "isp": {
+            "left": [
+              0,
+              1,
+              0,
+              0,
+              -1,
+              0
+            ],
+            "right": [
+              0,
+              1,
+              0,
+              0,
+              -1,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "family": "families/T268.rrbin",
+      "index": 1,
+      "kind": "caller",
+      "loops": 5,
+      "node": {
+        "index": 0,
+        "key": "010a000000000000000001010006010000070100000901000106010001070100010901000204010002050100020801000304010003050100030801000407010005060100"
+      },
+      "slots": [
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              0,
+              1,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              0,
+              0,
+              1,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              0,
+              -1,
+              -1,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              -1,
+              -1,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              1,
+              0,
+              -1,
+              0,
+              0,
+              -1
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              0,
+              1,
+              1,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              0,
+              0,
+              0,
+              -1,
+              1,
+              0
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              0,
+              0,
+              0,
+              1,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              0,
+              0,
+              0,
+              0,
+              -1,
+              0
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              -1,
+              0,
+              0,
+              1,
+              -1,
+              1
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              1,
+              0,
+              0,
+              -1,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              0,
+              0,
+              0,
+              0,
+              1,
+              -1
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              -1,
+              0,
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "line": {
+            "eps_units": 0,
+            "momentum": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "isp": {
+            "left": [
+              0,
+              1,
+              0,
+              0,
+              0,
+              1
+            ],
+            "right": [
+              0,
+              1,
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "isp": {
+            "left": [
+              0,
+              0,
+              0,
+              1,
+              0,
+              1
+            ],
+            "right": [
+              0,
+              0,
+              0,
+              1,
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "isp": {
+            "left": [
+              0,
+              1,
+              0,
+              -1,
+              0,
+              0
+            ],
+            "right": [
+              0,
+              1,
+              0,
+              -1,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "isp": {
+            "left": [
+              0,
+              1,
+              0,
+              0,
+              -1,
+              0
+            ],
+            "right": [
+              0,
+              1,
+              0,
+              0,
+              -1,
+              0
+            ]
+          }
+        },
+        {
+          "isp": {
+            "left": [
+              0,
+              0,
+              1,
+              -1,
+              0,
+              0
+            ],
+            "right": [
+              0,
+              0,
+              1,
+              -1,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "isp": {
+            "left": [
+              0,
+              0,
+              1,
+              0,
+              -1,
+              0
+            ],
+            "right": [
+              0,
+              0,
+              1,
+              0,
+              -1,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "producer": {
+    "name": "RustRed",
+    "rustred_version": "0.1.0",
+    "symbolica_version": "symbolica-v3.0.1-114-gea791219"
+  },
+  "schema": "rustred.p-owner-library.v1",
+  "scope": [
+    5,
+    5
+  ],
+  "symbolica_save_format": 6,
+  "terminals": [
+    "unit",
+    {
+      "residual": {
+        "key": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "owner": "L5T14-d1a75c796f852965"
+      }
+    }
+  ],
+  "versions": {
+    "P_BASIS_LAYER_SCHEMA": "rustred.p-basis-layer.v1",
+    "P_CARPET_KERNEL_VERSION": "1",
+    "P_CENSUS_VERSION": "2",
+    "P_CLASS_KEY_VERSION": "1",
+    "P_CUSTOM_OWNER_VERSION": "2",
+    "P_DIAMOND_TEMPLATE_VERSION": "1",
+    "P_FAMILIES_SCHEMA": "rustred.p-families.v1",
+    "P_FAMILIES_VERSION": "1",
+    "P_GAMMA_TAG_MAX_M": "8",
+    "P_GAMMA_TAG_VERSION": "1",
+    "P_GAMMA_TAG_WIDTH": "16",
+    "P_INSERTION_KERNEL_VERSION": "1",
+    "P_LIBRARY_SCHEMA": "rustred.p-owner-library.v1",
+    "P_OWNER_LIBRARY_SEMANTICS": "rustred-p-owner-library-2026-11-05",
+    "P_PRESENTATION_VERSION": "4",
+    "P_SCHEME_TEMPLATE_VERSION": "5",
+    "P_TOPOLOGY_VERSION": "1",
+    "P_TRIANGLE_TEMPLATE_VERSION": "1"
+  }
+}

@@ -5738,3 +5738,144 @@ fn warm_plan_cache_never_serves_unknown_master_coefficients_to_refuse() {
     refused(run(pole, "refuse-first", false), "refuse after allow");
     std::fs::remove_dir_all(&root).ok();
 }
+
+/// Lane unknown-masters (Astra's native probe arm-probe-1401 on 1654e4490):
+/// strict mode refuses at the PUBLIC result boundary, after the signed sum
+/// over the external-head groups of ONE call. `ε^5·[(1+U)·B(p1) - U·B(p2)]`
+/// (U = UNKNOWN(u_m1,1), B a one-loop bubble) is `ε^5·B` in both modes: the
+/// unknown cancels between the heads. The mirror `ε^5·[(1+U)·B(p1) -
+/// 2U·B(p2)]` does not cancel: strict refuses, naming the pair once; allow
+/// keeps it.
+#[test]
+fn strict_refusal_applies_after_the_sum_over_external_heads() {
+    let engine = engine();
+    let unknown = crate::truncation_guard::unknown_coefficient_symbol();
+    let bubble =
+        |p: &str| format!("topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-{p},0,1))");
+    let evaluate = |input: &str, allow: bool| {
+        let mut settings = settings(RustRedMasterMode::Symbolic, None);
+        settings.number_of_terms_in_epsilon_expansion = 6;
+        settings.allow_unknown_master_coefficients = allow;
+        engine.evaluate(&settings, parse(input).as_view())
+    };
+    let control = evaluate(&format!("ε^5*{}", bubble("p(1)")), false).unwrap();
+    assert!(!control.is_zero());
+    let cancelling = format!(
+        "ε^5*(1+UNKNOWN(u_m1,1))*{}-ε^5*UNKNOWN(u_m1,1)*{}",
+        bubble("p(1)"),
+        bubble("p(2)")
+    );
+    for allow in [false, true] {
+        let value = evaluate(&cancelling, allow).unwrap();
+        assert!(!value.contains_symbol(unknown), "allow {allow}: {value}");
+        assert!(
+            (&value - &control).expand().is_zero(),
+            "allow {allow}: {value} vs {control}"
+        );
+    }
+    let surviving = format!(
+        "ε^5*(1+UNKNOWN(u_m1,1))*{}-2*ε^5*UNKNOWN(u_m1,1)*{}",
+        bubble("p(1)"),
+        bubble("p(2)")
+    );
+    match evaluate(&surviving, false) {
+        Err(crate::VakintError::UnknownMasterCoefficients(unknowns)) => {
+            let pairs: Vec<_> = unknowns
+                .coefficients
+                .iter()
+                .map(|u| (u.master.as_str(), u.order))
+                .collect();
+            assert_eq!(pairs, [("u_m1", 1)], "{unknowns}");
+        }
+        other => panic!("expected the typed refusal, got {other:?}"),
+    }
+    let kept = evaluate(&surviving, true).unwrap();
+    assert!(kept.contains_symbol(unknown), "{kept}");
+}
+
+/// Lane unknown-masters, Astra's five-loop confirmation (arm-t268-1413): the
+/// actual all-ones T268 terminal of s12349d-r2 (production top
+/// P05373c99ef72fce4_e13, route, family payloads and owner; fixture
+/// `tests/fixtures/p_unknown_masters_t268`, reviewer-built) with a v2
+/// catalogue whose master `review_t268` is 1 + UNKNOWN(review_t268,1)·ε + ...
+/// Dividing by ε puts UNKNOWN into the finite part of ONE head: strict refuses.
+/// The difference of the same input at p(1) and p(2) in ONE call cancels the
+/// UNKNOWN: strict and allow agree, and equal the value with the order known
+/// (= 0); the mirror with weight 2 on p(2) refuses, naming the pair once.
+#[cfg(feature = "five-loop-p")]
+#[test]
+fn strict_refusal_after_the_sum_on_a_five_loop_terminal() {
+    use crate::p_integral::PMasterCatalogue;
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/p_unknown_masters_t268");
+    let review: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(directory.join("review-catalogue.json")).unwrap(),
+    )
+    .unwrap();
+    let mut fixed = review.clone();
+    fixed["masters"][0]["known_through"] = serde_json::json!(2);
+    fixed["masters"][0]["coefficients"]["1"] = serde_json::json!({"exact": "0"});
+    fixed["masters"][0]["coefficients"]["2"] = serde_json::json!({"exact": "0"});
+    let engine_with = |catalogue: &serde_json::Value| {
+        let mut engine = Vakint::new().unwrap();
+        engine.load_p_library_directory(&directory, false).unwrap();
+        engine.disable_default_p_master_catalogue();
+        engine.set_p_master_catalogue(
+            PMasterCatalogue::from_json("t268 review", &catalogue.to_string()).unwrap(),
+        );
+        engine
+    };
+    let (review_engine, fixed_engine) = (engine_with(&review), engine_with(&fixed));
+    let term = |p: &str| {
+        format!("dot({p},{p})^4*topo(P05373c99ef72fce4_e13({p},1,1,1,1,1,1,1,1,1,1,1,1,1,1))/ε")
+    };
+    let evaluate = |engine: &Vakint, input: &str, allow: bool| {
+        let mut settings = settings(RustRedMasterMode::Symbolic, None);
+        settings.number_of_terms_in_epsilon_expansion = 6;
+        settings.allow_unknown_master_coefficients = allow;
+        engine.evaluate(&settings, parse(input).as_view())
+    };
+    let pairs = |result: Result<Atom, crate::VakintError>| match result {
+        Err(crate::VakintError::UnknownMasterCoefficients(unknowns)) => unknowns
+            .coefficients
+            .iter()
+            .map(|u| (u.master.clone(), u.order))
+            .collect::<Vec<_>>(),
+        other => panic!("expected the typed refusal, got {other:?}"),
+    };
+    let unknown = crate::truncation_guard::unknown_coefficient_symbol();
+    let single = term("p(1)");
+    assert_eq!(
+        pairs(evaluate(&review_engine, &single, false)),
+        [("review-t268".to_owned(), 1)]
+    );
+    assert!(
+        evaluate(&review_engine, &single, true)
+            .unwrap()
+            .contains_symbol(unknown)
+    );
+    let difference = format!("{}-{}", term("p(1)"), term("p(2)"));
+    let strict = evaluate(&review_engine, &difference, false).unwrap();
+    let allowed = evaluate(&review_engine, &difference, true).unwrap();
+    let reference = evaluate(&fixed_engine, &difference, false).unwrap();
+    assert!(!strict.contains_symbol(unknown), "{strict}");
+    assert!(
+        (&strict - &allowed).expand().is_zero(),
+        "{strict} vs {allowed}"
+    );
+    assert!(
+        (&strict - &reference).expand().is_zero(),
+        "{strict} vs {reference}"
+    );
+    assert!(!strict.is_zero());
+    let mirror = format!("{}-2*{}", term("p(1)"), term("p(2)"));
+    assert_eq!(
+        pairs(evaluate(&review_engine, &mirror, false)),
+        [("review-t268".to_owned(), 1)]
+    );
+    assert!(
+        evaluate(&review_engine, &mirror, true)
+            .unwrap()
+            .contains_symbol(unknown)
+    );
+}

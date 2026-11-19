@@ -1,0 +1,268 @@
+{
+  "schema": "rustred.p-families.v1",
+  "provenance": "exported by scripts/p_families_from_vakint.py from gammaloop 21f6624e2:crates/vakint/src/p_integral.rs + 5L tops of p-families-5L.v1.json (p5l-converter) | vk5l-wp6 stages 12349: 1-4 + P05373c99ef72fce4_e1,P05373c99ef72fce4_e13,P28bbd9922728f59c_e1,P28bbd9922728f59c_e11,P28bbd9922728f59c_e13,P28bbd9922728f59c_e14,P28bbd9922728f59c_e3,P28bbd9922728f59c_e5,P28bbd9922728f59c_e7,P28bbd9922728f59c_e9,P31ce20b7cbb3f542_e1,P31ce20b7cbb3f542_e10,P31ce20b7cbb3f542_e7,P3dc41bbf2115e501_e1,P3dc41bbf2115e501_e13,P3dc41bbf2115e501_e15,P3dc41bbf2115e501_e5,P3dc41bbf2115e501_e7,P3dc41bbf2115e501_e9,P3e892c5a34c7100d_e1,P3e892c5a34c7100d_e11,P3e892c5a34c7100d_e15,P3e892c5a34c7100d_e5,P3e892c5a34c7100d_e7,P47437688db9db7d3_e1,P47437688db9db7d3_e10,P47437688db9db7d3_e13,P47437688db9db7d3_e4,P5c03540956a38684_e1,P5c03540956a38684_e6,P6060726d8885b4d8_e1,P6060726d8885b4d8_e6,P62b7d0ea55c4864e_e1,P62b7d0ea55c4864e_e11,P62b7d0ea55c4864e_e13,P62b7d0ea55c4864e_e14,P62b7d0ea55c4864e_e3,P62b7d0ea55c4864e_e4,P62b7d0ea55c4864e_e6,P62b7d0ea55c4864e_e7,P62b7d0ea55c4864e_e9,P70d08bd9fbf8b598_e1,P70d08bd9fbf8b598_e11,P70d08bd9fbf8b598_e13,P70d08bd9fbf8b598_e15,P70d08bd9fbf8b598_e2,P70d08bd9fbf8b598_e3,P70d08bd9fbf8b598_e5,P70d08bd9fbf8b598_e9,P91b4725a2debf5da_e1,P91b4725a2debf5da_e10,P91b4725a2debf5da_e13,P91b4725a2debf5da_e4,P94d07569bd0c1afa_e1,P94d07569bd0c1afa_e10,P94d07569bd0c1afa_e12,P94d07569bd0c1afa_e3,P94d07569bd0c1afa_e4,P94d07569bd0c1afa_e6,Pbc09329a50dbf2f3_e1,Pcf742ca25d7a22c0_e1,Pcf742ca25d7a22c0_e13,Pcf742ca25d7a22c0_e14,Pcf742ca25d7a22c0_e9",
+  "families": [
+    {
+      "name": "P05373c99ef72fce4_e13",
+      "loops": 5,
+      "vertices": 10,
+      "lines": [
+        {
+          "endpoints": [
+            4,
+            8
+          ],
+          "momentum": [
+            0,
+            0,
+            -1,
+            1,
+            -1,
+            0
+          ]
+        },
+        {
+          "endpoints": [
+            5,
+            8
+          ],
+          "momentum": [
+            0,
+            0,
+            1,
+            -1,
+            1,
+            1
+          ]
+        },
+        {
+          "endpoints": [
+            1,
+            9
+          ],
+          "momentum": [
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "endpoints": [
+            1,
+            10
+          ],
+          "momentum": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "endpoints": [
+            4,
+            7
+          ],
+          "momentum": [
+            0,
+            0,
+            0,
+            -1,
+            0,
+            0
+          ]
+        },
+        {
+          "endpoints": [
+            5,
+            7
+          ],
+          "momentum": [
+            0,
+            0,
+            -1,
+            1,
+            0,
+            -1
+          ]
+        },
+        {
+          "endpoints": [
+            2,
+            9
+          ],
+          "momentum": [
+            0,
+            1,
+            -1,
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "endpoints": [
+            2,
+            10
+          ],
+          "momentum": [
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "endpoints": [
+            4,
+            6
+          ],
+          "momentum": [
+            0,
+            0,
+            1,
+            0,
+            1,
+            0
+          ]
+        },
+        {
+          "endpoints": [
+            5,
+            6
+          ],
+          "momentum": [
+            0,
+            0,
+            0,
+            0,
+            -1,
+            0
+          ]
+        },
+        {
+          "endpoints": [
+            3,
+            9
+          ],
+          "momentum": [
+            1,
+            -1,
+            1,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "endpoints": [
+            3,
+            10
+          ],
+          "momentum": [
+            -1,
+            1,
+            0,
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "endpoints": [
+            2,
+            7
+          ],
+          "momentum": [
+            0,
+            0,
+            1,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "endpoints": [
+            3,
+            6
+          ],
+          "momentum": [
+            0,
+            0,
+            -1,
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "isps": [
+        [
+          0,
+          -1,
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          0,
+          -1,
+          0,
+          1
+        ],
+        [
+          1,
+          0,
+          0,
+          -1,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          -1,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0,
+          -1,
+          0
+        ]
+      ],
+      "external": {
+        "in": 1,
+        "out": 8
+      },
+      "gram": [
+        [
+          -1
+        ]
+      ]
+    }
+  ]
+}

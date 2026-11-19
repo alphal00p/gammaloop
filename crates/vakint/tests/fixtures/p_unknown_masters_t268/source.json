@@ -1,0 +1,15 @@
+{
+  "source": "/common/build-cache/vhirschi/p_integral_dev/vk5l-wp6-2/pkg/s12349d-r2/lib",
+  "class_id": "L5T14-d1a75c796f852965",
+  "original_top": 17,
+  "original_owner": 127,
+  "original_node": 47,
+  "top": "P05373c99ef72fce4_e13",
+  "manifest_sha256": "87496ee89106a296d501dcd622471edf96d2d9aec5ccaf8c3baa2e3ea774cecd",
+  "unchanged_files": {
+    "families/P05373c99ef72fce4_e13.rrbin": "049caf6e618de4d83a5e437aac8e9b662d1951b82c91ac0552e03f9de585f486",
+    "families/T268.rrbin": "802a7a480e3ef59db0ec5e3d08f52f642c384737c995f090b4a2ebbf070f69c5",
+    "owners/L5T14-d1a75c796f852965.rrbin": "ac3be6f1ef134a0c1fe795ecb72b5374bbf8890f2591adca71ff416e49a2c94f"
+  },
+  "restriction": "Only the two genuine all-active sectors of this terminal path are present. Other sectors are absent from this reviewer fixture."
+}

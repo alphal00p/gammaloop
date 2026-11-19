@@ -164,6 +164,15 @@ impl LoweredClosure {
         vakint: &Vakint,
         settings: &crate::VakintSettings,
     ) -> Result<Atom, VakintError> {
+        // Lane unknown-masters: strict refusal applies once, to the result of
+        // this public call (after its signed sums); inside, UNKNOWN symbols
+        // are carried.
+        if !settings.allow_unknown_master_coefficients {
+            let inner = crate::unknown_master_coefficients_carried(settings);
+            let value = self.evaluate(vakint, &inner)?;
+            vakint.refuse_unknown_master_coefficients(settings, &value)?;
+            return Ok(value);
+        }
         use crate::rustred_evaluation::p_integral as rr;
         let handle = vakint.p_library()?;
         let mode = settings
@@ -214,6 +223,22 @@ impl LoweredClosure {
         vakint: &Vakint,
         settings: &[&crate::VakintSettings],
     ) -> Result<Vec<Atom>, VakintError> {
+        // Lane unknown-masters: strict refusal once per returned result.
+        if settings
+            .iter()
+            .any(|s| !s.allow_unknown_master_coefficients)
+        {
+            let inner: Vec<crate::VakintSettings> = settings
+                .iter()
+                .map(|s| crate::unknown_master_coefficients_carried(s))
+                .collect();
+            let inner: Vec<&crate::VakintSettings> = inner.iter().collect();
+            let values = self.evaluate_modes(vakint, &inner)?;
+            for (s, value) in settings.iter().zip(&values) {
+                vakint.refuse_unknown_master_coefficients(s, value)?;
+            }
+            return Ok(values);
+        }
         use crate::rustred_evaluation::p_integral as rr;
         let mode_of = |settings: &crate::VakintSettings| {
             settings
@@ -667,6 +692,15 @@ impl MassiveClosure {
         settings: &crate::VakintSettings,
         inputs: &[(Self, DirectClosureInput)],
     ) -> Result<Vec<Atom>, VakintError> {
+        // Lane unknown-masters: strict refusal once per returned result.
+        if !settings.allow_unknown_master_coefficients {
+            let inner = crate::unknown_master_coefficients_carried(settings);
+            let values = Self::evaluate_direct_batch(vakint, &inner, inputs)?;
+            for value in &values {
+                vakint.refuse_unknown_master_coefficients(settings, value)?;
+            }
+            return Ok(values);
+        }
         let mode = lowering_mode();
         if mode == "legacy" {
             let ordinary = inputs
@@ -1028,6 +1062,15 @@ impl MassiveClosure {
         settings: &crate::VakintSettings,
         inputs: &[(Self, DirectClosureInput)],
     ) -> Result<Atom, VakintError> {
+        // Lane unknown-masters: strict refusal applies once, to the result of
+        // this public call (after its signed sums); inside, UNKNOWN symbols
+        // are carried.
+        if !settings.allow_unknown_master_coefficients {
+            let inner = crate::unknown_master_coefficients_carried(settings);
+            let value = Self::evaluate_direct_sum(vakint, &inner, inputs)?;
+            vakint.refuse_unknown_master_coefficients(settings, &value)?;
+            return Ok(value);
+        }
         settings.with_resource_budget(|| {
             let mut classes = Vec::<LoweredClosure>::new();
             let mut result = Atom::Zero;
@@ -1104,6 +1147,22 @@ impl MassiveClosure {
         settings: &[&crate::VakintSettings],
         inputs: &[(Self, DirectClosureInput)],
     ) -> Result<Vec<Atom>, VakintError> {
+        // Lane unknown-masters: strict refusal once per returned result.
+        if settings
+            .iter()
+            .any(|s| !s.allow_unknown_master_coefficients)
+        {
+            let inner: Vec<crate::VakintSettings> = settings
+                .iter()
+                .map(|s| crate::unknown_master_coefficients_carried(s))
+                .collect();
+            let inner: Vec<&crate::VakintSettings> = inner.iter().collect();
+            let values = Self::evaluate_direct_sum_modes(vakint, &inner, inputs)?;
+            for (s, value) in settings.iter().zip(&values) {
+                vakint.refuse_unknown_master_coefficients(s, value)?;
+            }
+            return Ok(values);
+        }
         let Some(first) = settings.first() else {
             return Ok(Vec::new());
         };
@@ -1191,6 +1250,15 @@ impl MassiveClosure {
         settings: &crate::VakintSettings,
         inputs: &[(Self, Atom)],
     ) -> Result<Vec<Atom>, VakintError> {
+        // Lane unknown-masters: strict refusal once per returned result.
+        if !settings.allow_unknown_master_coefficients {
+            let inner = crate::unknown_master_coefficients_carried(settings);
+            let values = Self::evaluate_batch(vakint, &inner, inputs)?;
+            for value in &values {
+                vakint.refuse_unknown_master_coefficients(settings, value)?;
+            }
+            return Ok(values);
+        }
         let mut results = Vec::with_capacity(inputs.len());
         for chunk in inputs.chunks(32) {
             results
@@ -1526,6 +1594,15 @@ impl MassiveClosure {
         settings: &crate::VakintSettings,
         input: AtomView,
     ) -> Result<Atom, VakintError> {
+        // Lane unknown-masters: strict refusal applies once, to the result of
+        // this public call (after its signed sums); inside, UNKNOWN symbols
+        // are carried.
+        if !settings.allow_unknown_master_coefficients {
+            let inner = crate::unknown_master_coefficients_carried(settings);
+            let value = self.evaluate(vakint, &inner, input)?;
+            vakint.refuse_unknown_master_coefficients(settings, &value)?;
+            return Ok(value);
+        }
         settings.with_resource_budget(|| {
             let (head, _) = external_head(&self.momentum)?;
             if self.mass_squared.contains_symbol(S.k)
@@ -2757,13 +2834,11 @@ pub(crate) fn finalisation_key(mode: RustRedMasterMode, s: &crate::VakintSetting
         s.rustred_p_uncovered,
         s.rustred_p_outside,
         s.allow_unknown_integrals,
-    ) + if s.allow_unknown_master_coefficients {
-        // Only when on, so that the keys of every existing (default) entry
-        // stay the same (lane unknown-masters).
-        "|unknown master coefficients allowed"
-    } else {
-        ""
-    }
+    )
+    // allow_unknown_master_coefficients is not part of the key: a public call
+    // finalises with the UNKNOWN symbols carried and refuses (strict mode) only
+    // on its returned result, so a stored value never depends on the option
+    // (lane unknown-masters).
 }
 
 /// `expression` holds an ε-dependent tag (`PG`, `PGamma`, `PMaster`,
