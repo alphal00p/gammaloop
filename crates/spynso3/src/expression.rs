@@ -3927,6 +3927,7 @@ impl TensorExpression {
             dot_notation: false,
             order: order.as_deref(),
             max_passes: max_steps_per_domain,
+            gamma_closing: None,
         };
         let value = self
             .value

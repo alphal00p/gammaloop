@@ -23,7 +23,13 @@
 //! open at emission (a port on the root) is emitted as a word and evaluated by
 //! the next GAMMA round. Symbolica's cooperative resource budget is checked
 //! before every word evaluation; an exhausted budget aborts as anywhere in the
-//! frontier, and the thread's closing switch is restored on unwinding.
+//! frontier.
+//!
+//! No global state: the choice travels as an argument, from
+//! `AlgebraSettings::gamma_closing` to the planner's structural
+//! `ContractSettings::gamma_closing` (part of its reduction policy, hence of
+//! fingerprints and checkpoints) and from there to the frontier's contractor.
+//! Prerequisite contractions never close.
 
 use std::collections::HashMap;
 
@@ -250,33 +256,6 @@ fn stripped_slot(slot: &Atom) -> Option<Atom> {
             .add_arg(dimension)
             .finish(),
     )
-}
-
-// ---- the closing switch -------------------------------------------------------
-
-thread_local! {
-    /// Whether frontier closing is active on this thread.
-    static FRONTIER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-}
-
-/// Whether frontier closing is active on this thread (set for the duration of
-/// a `simplify_algebra` whose settings ask for it; read by the frontier).
-#[inline]
-pub(crate) fn frontier_active() -> bool {
-    FRONTIER.with(std::cell::Cell::get)
-}
-
-/// Run `operation` with frontier closing active (restored afterwards, also on
-/// unwinding).
-pub(crate) fn with_frontier<R>(operation: impl FnOnce() -> R) -> R {
-    struct Restore(bool);
-    impl Drop for Restore {
-        fn drop(&mut self) {
-            FRONTIER.with(|cell| cell.set(self.0));
-        }
-    }
-    let _restore = Restore(FRONTIER.with(|cell| cell.replace(true)));
-    operation()
 }
 
 /// A Dirac trace word: `trace(rep, gamma(in, out, letter), ...)` whose every
@@ -771,8 +750,8 @@ mod tests {
     }
 
     /// A forced exhaustion of the cooperative resource budget aborts the
-    /// closing contraction with the budget's panic; the thread's closing switch
-    /// is restored, and the same input then gives the unclosed path's value.
+    /// closing contraction with the budget's panic, and the same input then
+    /// gives the unclosed path's value (no state survives the abort).
     #[test]
     fn an_exhausted_budget_aborts_cleanly() {
         use symbolica::utils::resources::{ResourceBudget, ResourceLimits};
@@ -791,7 +770,6 @@ mod tests {
             .or_else(|| payload.downcast_ref::<&str>().map(|text| text.to_string()))
             .unwrap_or_default();
         assert!(message.contains("resource budget exhausted"), "{message}");
-        assert!(!super::frontier_active(), "closing switch left on");
         let closed = simplified(&input, Some(GammaClosing::default()));
         assert_eq!((&closed - &simplified(&input, None)).expand(), Atom::Zero);
     }

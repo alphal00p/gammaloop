@@ -75,6 +75,8 @@ pub(crate) struct SlotContraction {
     expand: bool,
     expand_scalars: bool,
     dot_notation: bool,
+    // Frontier-level closing of quark loops (`ContractSettings::gamma_closing`).
+    closing: bool,
     representations: Option<Vec<LibraryRep>>,
     observations:
         Option<std::sync::Arc<crate::tensor::simplification::observation::DomainObservations>>,
@@ -98,6 +100,7 @@ impl SlotContraction {
             expand: true,
             expand_scalars: false,
             dot_notation: false,
+            closing: false,
             representations: None,
             observations: None,
             graph: None,
@@ -142,6 +145,13 @@ impl SlotContraction {
     /// (see `ContractSettings::dot_notation`).
     pub(crate) fn emitting_dots(mut self, dots: bool) -> Self {
         self.dot_notation = dots;
+        self
+    }
+
+    /// Close quark-loop trace words per state at emission instead of selecting
+    /// them (see `ContractSettings::gamma_closing`).
+    pub(crate) fn closing_words(mut self, closing: bool) -> Self {
+        self.closing = closing;
         self
     }
 

@@ -1864,7 +1864,7 @@ impl SlotContraction {
                 // Frontier closing (opt-in, inert when unset): a trace word is
                 // never selected; it rides along with its bound ports and is
                 // closed per state at emission.
-                let word = crate::dirac::closing::frontier_active()
+                let word = self.closing
                     && scope
                         .literal(node)
                         .is_some_and(crate::dirac::closing::is_word);
@@ -2768,7 +2768,7 @@ impl<'a> ComponentSum<'a, '_> {
         // one group writes (sum of its weights) x (its values), after the
         // variable map is complete. The routed sums stay stand-ins until the
         // variables are spelled.
-        let closing = crate::dirac::closing::frontier_active();
+        let closing = self.contractor.closing;
         let mut words: AHashMap<(usize, Vec<Argument<'a>>), Result<usize, Atom>> = AHashMap::new();
         let mut values: Vec<Atom> = Vec::new();
         let mut groups: Vec<(Vec<usize>, CoefficientSum)> = Vec::new();

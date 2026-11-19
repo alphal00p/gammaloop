@@ -109,6 +109,7 @@ pub(crate) enum ReductionPolicy {
         dot_notation: bool,
         order: Option<Vec<usize>>,
         max_passes: Option<usize>,
+        gamma_closing: Option<crate::dirac::GammaClosing>,
     },
 }
 
@@ -147,6 +148,7 @@ impl ReductionRequest<'_> {
                 dot_notation: settings.dot_notation,
                 order: settings.order.map(<[_]>::to_vec),
                 max_passes: settings.max_passes,
+                gamma_closing: settings.gamma_closing,
             },
         }
     }
@@ -369,17 +371,6 @@ impl SymbolicTensor<PartialStructure> {
             result.proofs.reduction.as_mut().unwrap().status = ReductionStatus::Complete;
             return Ok(result);
         }
-        // Frontier-level closing (opt-in): the whole reduction runs with the
-        // frontier's closing switch on (thread-local, restored afterwards and on
-        // unwinding).
-        if let ReductionRequest::Algebra(settings) = request
-            && settings.gamma_closing.is_some()
-            && !crate::dirac::closing::frontier_active()
-        {
-            return crate::dirac::closing::with_frontier(|| {
-                Self::plan_reduction_source(source, request)
-            });
-        }
         if let ReductionRequest::Algebra(settings) = request
             && settings.color.is_some()
             && let Some(aliases) = WildcardLabelAliases::of(source.expression.as_view())
@@ -399,6 +390,9 @@ impl SymbolicTensor<PartialStructure> {
             ReductionRequest::Algebra(settings) => ContractSettings {
                 expand_scalar_spectators: settings.expand_scalar_spectators,
                 dot_notation: settings.contract == AlgebraContraction::Dots,
+                // Frontier-level closing travels with the structural
+                // contraction only (prerequisite contractions never close).
+                gamma_closing: settings.gamma_closing,
                 ..match &settings.contract {
                     AlgebraContraction::None => prerequisite_settings,
                     AlgebraContraction::Minimal => ContractSettings {
