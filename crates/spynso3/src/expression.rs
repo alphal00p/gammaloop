@@ -3928,6 +3928,7 @@ impl TensorExpression {
             order: order.as_deref(),
             max_passes: max_steps_per_domain,
             gamma_closing: None,
+            frontier_order: idenso::tensor::FrontierOrder::Boundary,
         };
         let value = self
             .value

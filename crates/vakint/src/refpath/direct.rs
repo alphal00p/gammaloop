@@ -66,6 +66,9 @@ pub struct DirectOptions {
     /// (scaleless) sectors are dropped; the gate compares views without them.
     /// DEFAULT true.
     pub prune_early: bool,
+    /// idenso's factorized-frontier factor order (`AlgebraSettings::frontier_order`):
+    /// the same values; DEFAULT today's order (`FrontierOrder::Boundary`).
+    pub frontier_order: idenso::tensor::FrontierOrder,
 }
 
 /// The hand-over path's default: `compact` ON (helper coordinator's decision of
@@ -81,6 +84,7 @@ impl Default for DirectOptions {
             routed: false,
             compact: true,
             prune_early: true,
+            frontier_order: idenso::tensor::FrontierOrder::Boundary,
         }
     }
 }
@@ -286,6 +290,7 @@ fn contract_branch_edges(
     metric_only: bool,
     dots: bool,
     closing: bool,
+    order: idenso::tensor::FrontierOrder,
 ) -> Result<(Atom, Atom)> {
     use idenso::dirac::GammaSimplifySettings;
     use idenso::tensor::{AlgebraContraction, AlgebraSettings, SymbolicTensor};
@@ -331,6 +336,7 @@ fn contract_branch_edges(
                 AlgebraContraction::Fully
             },
             gamma_closing: closing.then(idenso::dirac::GammaClosing::default),
+            frontier_order: order,
             ..Default::default()
         },
     )?;
@@ -407,6 +413,7 @@ pub fn contract_edges(
             metric_only,
             options.dots,
             options.closing,
+            options.frontier_order,
         )?;
         g_sum += &branch.coefficient * g;
         qq_sum += &branch.coefficient * qq;
@@ -978,7 +985,11 @@ fn lower_scalars(
 /// D6 through the hand-over (R3-open): one branch contracted by R3's idenso
 /// chain with the external Lorentz ports left OPEN (no projector): the open
 /// scalar (uncooked) and its two ports (`mink(D, ..)` slots, canonical order).
-fn contract_branch_open_edges(product: &Atom, dots: bool) -> Result<(Atom, Vec<Atom>)> {
+fn contract_branch_open_edges(
+    product: &Atom,
+    dots: bool,
+    order: idenso::tensor::FrontierOrder,
+) -> Result<(Atom, Vec<Atom>)> {
     use idenso::dirac::GammaSimplifySettings;
     use idenso::tensor::{AlgebraContraction, AlgebraSettings, SymbolicTensor};
     use idenso::{CookMode, CookSettings, IndexTooling};
@@ -1008,6 +1019,7 @@ fn contract_branch_open_edges(product: &Atom, dots: bool) -> Result<(Atom, Vec<A
         } else {
             AlgebraContraction::Fully
         },
+        frontier_order: order,
         ..Default::default()
     })?;
     let reduced = if dots {
@@ -1083,7 +1095,8 @@ fn contract_open_terms(
     let mut ports: Option<Vec<Atom>> = None;
     for branch in branches {
         let continued = routed_product(diagram, branch, options, compact, expand_couplings)?;
-        let (open, branch_ports) = contract_branch_open_edges(&continued, options.dots)?;
+        let (open, branch_ports) =
+            contract_branch_open_edges(&continued, options.dots, options.frontier_order)?;
         match &ports {
             None => ports = Some(branch_ports),
             Some(known) => eyre::ensure!(
@@ -1308,6 +1321,7 @@ pub fn lower_entry(
             metric_only,
             options.dots,
             options.closing,
+            options.frontier_order,
         )?;
         g_sum += &term.coefficient * g;
         qq_sum += &term.coefficient * qq;
@@ -1549,6 +1563,14 @@ mod tests {
                     ..Default::default()
                 },
             ),
+            // idenso's opt-in frontier order: the same folded inputs and values
+            (
+                true,
+                DirectOptions {
+                    frontier_order: idenso::tensor::FrontierOrder::Merge { cap: Some(12) },
+                    ..Default::default()
+                },
+            ),
         ];
         let mut lowered = 0;
         for dir in fixture_dirs() {
@@ -1623,8 +1645,8 @@ mod tests {
             }
         }
         // 7 of the 10 fixtures have a non-zero metric projection (the other 3 are
-        // exact zeros on both sides), each lowered in all 7 option combinations.
-        assert_eq!(lowered, 7 * 7, "lowered projections");
+        // exact zeros on both sides), each lowered in all 8 option combinations.
+        assert_eq!(lowered, 7 * 8, "lowered projections");
     }
 
     /// R3-open (D6 through the hand-over) gives the open-index route's open

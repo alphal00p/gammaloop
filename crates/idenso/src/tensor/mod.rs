@@ -917,7 +917,7 @@ impl SymbolicNetParse for AtomView<'_> {
 }
 
 pub mod contract;
-pub use contract::ContractSettings;
+pub use contract::{ContractSettings, FrontierOrder};
 pub use simplification::{AlgebraContraction, AlgebraSettings, ReductionStatus};
 
 impl<Aind: AbsInd + ParseableAind> Concretize<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>>

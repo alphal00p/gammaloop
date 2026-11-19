@@ -167,6 +167,7 @@ pub(crate) fn algebra_settings(
         expand_scalar_spectators: false,
         max_passes: max_steps_per_domain,
         gamma_closing: None,
+        frontier_order: idenso::tensor::FrontierOrder::Boundary,
     })
 }
 

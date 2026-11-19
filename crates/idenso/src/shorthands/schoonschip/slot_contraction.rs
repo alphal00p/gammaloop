@@ -77,6 +77,8 @@ pub(crate) struct SlotContraction {
     dot_notation: bool,
     // Frontier-level closing of quark loops (`ContractSettings::gamma_closing`).
     closing: bool,
+    // The factorized frontier's factor order (`ContractSettings::frontier_order`).
+    frontier_order: crate::tensor::FrontierOrder,
     representations: Option<Vec<LibraryRep>>,
     observations:
         Option<std::sync::Arc<crate::tensor::simplification::observation::DomainObservations>>,
@@ -101,6 +103,7 @@ impl SlotContraction {
             expand_scalars: false,
             dot_notation: false,
             closing: false,
+            frontier_order: crate::tensor::FrontierOrder::Boundary,
             representations: None,
             observations: None,
             graph: None,
@@ -152,6 +155,12 @@ impl SlotContraction {
     /// them (see `ContractSettings::gamma_closing`).
     pub(crate) fn closing_words(mut self, closing: bool) -> Self {
         self.closing = closing;
+        self
+    }
+
+    /// The factorized frontier's factor order (see `ContractSettings::frontier_order`).
+    pub(crate) fn ordering_factors(mut self, order: crate::tensor::FrontierOrder) -> Self {
+        self.frontier_order = order;
         self
     }
 

@@ -1531,6 +1531,23 @@ impl SlotContraction {
             .as_ref()
     }
 
+    /// Terms of a factor's literal once distributed (sums add, products
+    /// multiply, positive integer powers multiply), for [`crate::tensor::FrontierOrder`].
+    fn estimated_terms(value: AtomView<'_>) -> f64 {
+        match value {
+            AtomView::Add(add) => add.iter().map(Self::estimated_terms).sum(),
+            AtomView::Mul(product) => product.iter().map(Self::estimated_terms).product(),
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                match i64::try_from(exponent) {
+                    Ok(n) if n > 0 => Self::estimated_terms(base).powi(n.min(64) as i32),
+                    _ => 1.0,
+                }
+            }
+            _ => 1.0,
+        }
+    }
+
     fn factor_order(
         &self,
         scope: &ContractionScope<'_>,
@@ -1579,15 +1596,55 @@ impl SlotContraction {
             .collect::<Vec<_>>();
         let mut boundary = std::collections::BTreeSet::new();
         let mut planned = Vec::with_capacity(selected.len());
+        // The opt-in orders (`ContractSettings::frontier_order`): `None` is
+        // today's order; `Some(cap)`: the closing rule, then the merge score for
+        // factors of at most `cap` terms (`cap = 0`: the closing rule alone).
+        let order = match self.frontier_order {
+            crate::tensor::FrontierOrder::Boundary => None,
+            crate::tensor::FrontierOrder::Close => Some(0.0),
+            crate::tensor::FrontierOrder::Merge { cap } => {
+                Some(cap.map_or(f64::INFINITY, |cap| f64::from(cap.max(1))))
+            }
+        };
+        let sizes = if order.is_some() {
+            nodes
+                .iter()
+                .map(|&node| scope.literal(node).map_or(1.0, Self::estimated_terms))
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
         while !selected.is_empty() {
-            let best = (0..selected.len()).min_by_key(|&i| {
-                let position = selected[i];
-                (
-                    boundary.symmetric_difference(&edges[position]).count(),
-                    std::cmp::Reverse(boundary.intersection(&edges[position]).count()),
-                    position,
-                )
-            })?;
+            let closing = order.and_then(|_| {
+                (0..selected.len()).find(|&i| {
+                    let position = selected[i];
+                    sizes[position] <= 1.0
+                        && !edges[position].is_empty()
+                        && edges[position].is_subset(&boundary)
+                })
+            });
+            let best = match (closing, order) {
+                (Some(best), _) => Some(best),
+                (None, Some(cap)) if cap >= 1.0 => (0..selected.len()).min_by_key(|&i| {
+                    let position = selected[i];
+                    let after = boundary.symmetric_difference(&edges[position]).count() as f64;
+                    let size = sizes[position].max(1.0);
+                    let weight = if size <= cap { size.log2() } else { 0.0 };
+                    (
+                        ((after + weight) * 1024.0).round() as i64,
+                        std::cmp::Reverse(boundary.intersection(&edges[position]).count()),
+                        position,
+                    )
+                }),
+                _ => (0..selected.len()).min_by_key(|&i| {
+                    let position = selected[i];
+                    (
+                        boundary.symmetric_difference(&edges[position]).count(),
+                        std::cmp::Reverse(boundary.intersection(&edges[position]).count()),
+                        position,
+                    )
+                }),
+            }?;
             let position = selected.remove(best);
             boundary = boundary
                 .symmetric_difference(&edges[position])

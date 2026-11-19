@@ -67,6 +67,9 @@ pub struct AlgebraSettings {
     /// state with the state's bound vectors. Values are unchanged; `None` (the
     /// default) leaves the planner unchanged.
     pub gamma_closing: Option<crate::dirac::GammaClosing>,
+    /// The factorized frontier's factor order of the structural contraction;
+    /// see [`crate::tensor::FrontierOrder`] (default: today's order).
+    pub frontier_order: crate::tensor::FrontierOrder,
 }
 
 impl Default for AlgebraSettings {
@@ -80,6 +83,7 @@ impl Default for AlgebraSettings {
             expand_scalar_spectators: false,
             max_passes: None,
             gamma_closing: None,
+            frontier_order: crate::tensor::FrontierOrder::Boundary,
         }
     }
 }
@@ -110,6 +114,7 @@ pub(crate) enum ReductionPolicy {
         order: Option<Vec<usize>>,
         max_passes: Option<usize>,
         gamma_closing: Option<crate::dirac::GammaClosing>,
+        frontier_order: crate::tensor::FrontierOrder,
     },
 }
 
@@ -149,6 +154,7 @@ impl ReductionRequest<'_> {
                 order: settings.order.map(<[_]>::to_vec),
                 max_passes: settings.max_passes,
                 gamma_closing: settings.gamma_closing,
+                frontier_order: settings.frontier_order,
             },
         }
     }
@@ -393,6 +399,8 @@ impl SymbolicTensor<PartialStructure> {
                 // Frontier-level closing travels with the structural
                 // contraction only (prerequisite contractions never close).
                 gamma_closing: settings.gamma_closing,
+                // The frontier order travels with the structural contraction only.
+                frontier_order: settings.frontier_order,
                 ..match &settings.contract {
                     AlgebraContraction::None => prerequisite_settings,
                     AlgebraContraction::Minimal => ContractSettings {

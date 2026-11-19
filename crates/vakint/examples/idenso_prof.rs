@@ -729,6 +729,7 @@ fn main() -> eyre::Result<()> {
                         routed: r3_routed,
                         compact: false,
                         prune_early: r3_prune,
+                        ..Default::default()
                     },
                     None,
                 )?;
@@ -861,6 +862,7 @@ fn main() -> eyre::Result<()> {
                                 routed: r3_routed,
                                 compact: r3_compact,
                                 prune_early: r3_prune,
+                                ..Default::default()
                             },
                             &mut seconds,
                         )?;

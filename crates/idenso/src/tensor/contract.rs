@@ -22,6 +22,26 @@ thread_local! {
     pub(crate) static CONTRACT_PARTS_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
+/// The factor order of the factorized frontier (helper VH lane idenso-audit).
+/// Every order gives the same value; only the intermediate states differ.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum FrontierOrder {
+    /// The least live boundary first (today's order).
+    #[default]
+    Boundary,
+    /// A single-term factor whose slots are all on the live boundary only
+    /// closes them (dots and renamings that merge states): it goes as soon as
+    /// its slots are present; otherwise [`Self::Boundary`].
+    Close,
+    /// [`Self::Close`], otherwise the factor of least
+    /// `new boundary + log2(estimated terms)`, so that a vertex sum waits while
+    /// its slots are mostly open; factors of more than `cap` terms (`None`: no
+    /// cap) are scored by their boundary alone, so that a large factor (an
+    /// expanded trace) still goes while the state is small. Measured best:
+    /// `cap = 12` (four-loop B -> B: 0.87x of the contraction, no class slower).
+    Merge { cap: Option<u32> },
+}
+
 /// Contraction scheduling and whether rank-one tensors may form compact products.
 /// Metric-only contraction retains explicit vector endpoints, including Vakint inputs.
 #[derive(Clone, Copy, Debug)]
@@ -59,6 +79,8 @@ pub struct ContractSettings<'a> {
     /// factorized frontier never selects a trace word and closes it per state
     /// at emission. `None` (the default): words are ordinary factors.
     pub gamma_closing: Option<crate::dirac::GammaClosing>,
+    /// The factorized frontier's factor order (default: [`FrontierOrder::Boundary`]).
+    pub frontier_order: FrontierOrder,
 }
 
 impl Default for ContractSettings<'_> {
@@ -75,6 +97,7 @@ impl Default for ContractSettings<'_> {
             dot_notation: false,
             max_passes: None,
             gamma_closing: None,
+            frontier_order: FrontierOrder::Boundary,
         }
     }
 }
@@ -164,6 +187,7 @@ impl SymbolicTensor<PartialStructure> {
                         .expanding_scalars(settings.expand_scalar_spectators)
                         .emitting_dots(settings.dot_notation)
                         .closing_words(settings.gamma_closing.is_some())
+                        .ordering_factors(settings.frontier_order)
                         .observed(observed);
                 let contractor = match self.shallow_graph() {
                     Ok(graph) => contractor.planned(
@@ -367,6 +391,7 @@ impl SymbolicTensor<PartialStructure> {
             .expanding_scalars(settings.expand_scalar_spectators)
             .emitting_dots(settings.dot_notation)
             .closing_words(settings.gamma_closing.is_some())
+            .ordering_factors(settings.frontier_order)
             .expanding(settings.expand)
             .observed(result.root.reduction_observations());
         if self.reduction_observations().candidates.intrinsic
@@ -463,6 +488,7 @@ impl SymbolicTensor<PartialStructure> {
                     .expanding_scalars(settings.expand_scalar_spectators)
                     .emitting_dots(settings.dot_notation)
                     .closing_words(settings.gamma_closing.is_some())
+                    .ordering_factors(settings.frontier_order)
                     .expanding(settings.expand)
                     .contract_inner_products(result.root.expression.as_view());
             result.root = result.root.with_identity_result(expression, None)?;
@@ -491,6 +517,7 @@ impl SymbolicTensor<PartialStructure> {
                     .expanding_scalars(settings.expand_scalar_spectators)
                     .emitting_dots(settings.dot_notation)
                     .closing_words(settings.gamma_closing.is_some())
+                    .ordering_factors(settings.frontier_order)
                     .expanding(settings.expand)
                     .observed(updated);
             let contractor = match result.root.shallow_graph() {
@@ -639,6 +666,7 @@ impl SymbolicTensor<PartialStructure> {
                     .expanding_scalars(settings.expand_scalar_spectators)
                     .emitting_dots(settings.dot_notation)
                     .closing_words(settings.gamma_closing.is_some())
+                    .ordering_factors(settings.frontier_order)
                     .contract_ordered(
                         source.as_view(),
                         settings.rank_one,
@@ -657,6 +685,7 @@ impl SymbolicTensor<PartialStructure> {
             .expanding_scalars(settings.expand_scalar_spectators)
             .emitting_dots(settings.dot_notation)
             .closing_words(settings.gamma_closing.is_some())
+            .ordering_factors(settings.frontier_order)
             .expanding(settings.expand)
             .observed(domain.reduction_observations());
         let contractor = match domain.shallow_graph() {
