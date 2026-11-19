@@ -520,9 +520,9 @@ impl SymbolicTensor<PartialStructure> {
                         (value, status, notation_only) = before.contract_domain(structural)?;
                         (value, status)
                     } else if operation == GAMMA
-                        && settings.gamma_closing.is_some()
+                        && let Some(closing) = settings.gamma_closing
                         && let Some((worded, worded_status)) =
-                            match crate::dirac::closing::frontier_step(&before)? {
+                            match crate::dirac::closing::frontier_step(&before, &closing)? {
                                 // Frontier closing: the loop becomes one word that
                                 // the frontier closes per state.
                                 crate::dirac::closing::FrontierStep::Written(worded) => {

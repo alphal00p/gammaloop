@@ -43,10 +43,36 @@ use crate::tensor::SymbolicTensor;
 use crate::tensor::inference::TensorInferenceError;
 
 /// Frontier-level closing of quark loops ([`crate::tensor::AlgebraSettings::gamma_closing`]).
-/// No parameters today; constructed with `GammaClosing::default()`.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+/// Constructed with `GammaClosing::default()`; its fields can be changed.
+///
+/// A long word whose ports mostly pair among themselves is not written. A
+/// port that a chain of single-term metrics leads to another port of the same
+/// word (a gluon with both ends on the loop, a closure metric) is bound the
+/// same way in every state of the environment, so the states differ in the
+/// few letters bound through the remaining ports, while each closed state
+/// evaluates the whole word again. The ordinary gamma pass contracts the pairs
+/// first and evaluates the word once. Measured on the five-loop B self-energy
+/// 41040 (16 letters, 2 of 8 ports reaching a tensor sum, 37 states): 3.2x
+/// slower closed than unclosed; with this rule it takes the unclosed path.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-pub struct GammaClosing {}
+pub struct GammaClosing {
+    /// A word of at least this many letters (gamma matrices; a slash is bound
+    /// into its gamma)...
+    pub long_word_letters: usize,
+    /// ...is written only when at least this many of its ports reach a tensor
+    /// sum. Shorter words are always written.
+    pub long_word_free_ports: usize,
+}
+
+impl Default for GammaClosing {
+    fn default() -> Self {
+        Self {
+            long_word_letters: 16,
+            long_word_free_ports: 3,
+        }
+    }
+}
 
 fn budget_checkpoint() {
     if let Err(error) = symbolica::utils::resources::checkpoint() {
@@ -293,6 +319,45 @@ pub(crate) enum FrontierStep {
     Nothing,
 }
 
+/// The word's open ports (the Lorentz slots of its Dirac factors that occur
+/// once and are not slashed) that reach a tensor sum, a tensor of other than
+/// two slots, or nothing. A port that a chain of single-term two-slot factors
+/// (metrics) leads to another open port is paired, not counted.
+fn free_ports(factors: &[AtomView<'_>], slots: &[Slots], slash: &[bool], ports: &[Atom]) -> usize {
+    let open: Vec<&Atom> = ports
+        .iter()
+        .filter(|port| !(0..factors.len()).any(|i| slash[i] && slots[i].minkowski.contains(*port)))
+        .collect();
+    let mut free = 0;
+    for port in &open {
+        let mut current: &Atom = port;
+        let mut used = vec![false; factors.len()];
+        loop {
+            let next = (0..factors.len()).find(|&i| {
+                !used[i] && !slots[i].bispinor && !slash[i] && slots[i].minkowski.contains(current)
+            });
+            let Some(i) = next else {
+                free += 1;
+                break;
+            };
+            used[i] = true;
+            if matches!(factors[i], AtomView::Add(_)) || slots[i].minkowski.len() != 2 {
+                free += 1;
+                break;
+            }
+            let Some(other) = slots[i].minkowski.iter().find(|slot| *slot != current) else {
+                free += 1;
+                break;
+            };
+            if open.contains(&other) {
+                break;
+            }
+            current = other;
+        }
+    }
+    free
+}
+
 /// The GAMMA arm's step in frontier mode: [`FrontierStep::Written`] when it
 /// rewrote at least one Dirac region into a word; [`FrontierStep::Pending`]
 /// when a word already written still meets a tensor sum through its own
@@ -301,6 +366,7 @@ pub(crate) enum FrontierStep {
 /// evaluate as usual (a word whose ports reach no sum included).
 pub(crate) fn frontier_step(
     tensor: &SymbolicTensor<PartialStructure>,
+    closing: &GammaClosing,
 ) -> Result<FrontierStep, TensorInferenceError> {
     let symbols = symbols();
     let mut matcher = SlotMatcher::default();
@@ -381,6 +447,14 @@ pub(crate) fn frontier_step(
         }
         // the word only pays when the environment holds a tensor sum
         if dirac.is_empty() || !tensor_sum(&slash) {
+            out += term.to_owned();
+            continue;
+        }
+        // a long word whose ports mostly pair among themselves: the ordinary
+        // gamma pass (see [`GammaClosing`])
+        if dirac.len() >= closing.long_word_letters
+            && free_ports(&factors, &slots, &slash, &ports) < closing.long_word_free_ports
+        {
             out += term.to_owned();
             continue;
         }
@@ -747,6 +821,39 @@ mod tests {
         }
         assert!(WORDS.with(Cell::get) > 0, "no word written");
         assert!(CLOSED.with(Cell::get) > 0, "no word closed");
+    }
+
+    /// The long-word rule: a word written from an explicit cycle whose two
+    /// ports reach a vertex sum (2 free ports) is not written when the rule
+    /// asks for 3 (the ordinary gamma pass gives the unclosed path's value and
+    /// certificates), and is written when it asks for 2 or under the default
+    /// (a four-letter word is not long).
+    #[test]
+    fn a_long_word_with_few_free_ports_is_not_written() {
+        let inputs = inputs();
+        let rule = |free_ports: usize| GammaClosing {
+            long_word_letters: 0,
+            long_word_free_ports: free_ports,
+        };
+        let words = |input: &Atom, closing: GammaClosing| {
+            WORDS.with(|count| count.set(0));
+            let (closed, closed_scalar, terminal) = simplified_full(input, Some(closing));
+            let written = WORDS.with(Cell::get);
+            let (plain, plain_scalar, plain_terminal) = simplified_full(input, None);
+            assert_eq!((&closed - &plain).expand(), Atom::Zero, "input {input}");
+            assert_eq!(
+                (closed_scalar, terminal),
+                (plain_scalar, plain_terminal),
+                "certificates, input {input}"
+            );
+            written
+        };
+        // the explicit cycles: four letters, ports s0 and s1 on a vertex sum
+        for input in &inputs[4..6] {
+            assert!(words(input, GammaClosing::default()) > 0, "input {input}");
+            assert_eq!(words(input, rule(3)), 0, "input {input}");
+            assert!(words(input, rule(2)) > 0, "input {input}");
+        }
     }
 
     /// A forced exhaustion of the cooperative resource budget aborts the
