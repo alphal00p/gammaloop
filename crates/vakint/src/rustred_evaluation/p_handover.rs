@@ -20,7 +20,7 @@
 //! declines and the caller keeps the ordinary path.
 use std::collections::{BTreeMap, BTreeSet};
 
-use symbolica::atom::{Atom, AtomCore, AtomView};
+use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder};
 use symbolica::function;
 
 use super::p_data::PLibraryHandle;
@@ -281,6 +281,113 @@ impl HandOver {
                 .cloned()
                 .ok_or_else(|| format!("an unknown edge {edge}")),
         }
+    }
+
+    /// [`Self::rename`] for an OPEN numerator (D6: external Lorentz ports left
+    /// open, labelled by integers): besides every scalar product
+    /// `dot_symbol(a, b)`, every indexed vector `v(.., mink(D, i))` that
+    /// `vector` identifies becomes its image with the index attached to each
+    /// of its vectors (`k(j, i)`, `p(1, i)`, as vakint's FeynKit ingress maps
+    /// open indices), and a metric `metric_symbol(mink(D, a), mink(D, b))`
+    /// becomes vakint's `g(a, b)`. Refuses what it cannot read, as `rename`.
+    pub fn rename_open(
+        &self,
+        scalar: &Atom,
+        dot_symbol: symbolica::atom::Symbol,
+        metric_symbol: symbolica::atom::Symbol,
+        vector: impl Fn(AtomView<'_>) -> Option<VectorRef>,
+        forbidden: &[symbolica::atom::Symbol],
+    ) -> Result<Atom, String> {
+        use spenso::structure::representation::{BaseRepName, Minkowski};
+        let head = function!(S.p, 1);
+        let index_of = |slot: AtomView<'_>| -> Option<Atom> {
+            match slot {
+                AtomView::Fun(f)
+                    if f.get_symbol() == Minkowski::selfless_symbol() && f.get_nargs() == 2 =>
+                {
+                    f.iter().nth(1).map(|index| index.to_owned())
+                }
+                _ => None,
+            }
+        };
+        let indexed = |image: &Atom, index: &Atom| {
+            image.replace_map(|term, _context, out| {
+                if let AtomView::Fun(v) = term
+                    && (v.get_symbol() == S.k || v.get_symbol() == S.p)
+                    && v.get_nargs() == 1
+                {
+                    **out = FunctionBuilder::new(v.get_symbol())
+                        .add_arg(v.iter().next().unwrap())
+                        .add_arg(index)
+                        .finish();
+                }
+            })
+        };
+        let mut failure = None;
+        let renamed = scalar.replace_map(|view, _, out| {
+            let AtomView::Fun(f) = view else {
+                return;
+            };
+            let arguments = f.iter().collect::<Vec<_>>();
+            if f.get_symbol() == dot_symbol && arguments.len() == 2 {
+                let image = |v: AtomView<'_>| {
+                    vector(v)
+                        .ok_or_else(|| format!("an unknown vector {v}"))
+                        .and_then(|r| self.image(r))
+                };
+                match (image(arguments[0]), image(arguments[1])) {
+                    (Ok(EdgeImage::Loop(x)), Ok(EdgeImage::Loop(y))) => {
+                        **out = function!(S.dot, x, y)
+                    }
+                    (Ok(EdgeImage::Loop(x)), Ok(EdgeImage::Head(c)))
+                    | (Ok(EdgeImage::Head(c)), Ok(EdgeImage::Loop(x))) => {
+                        **out = Atom::num(c) * function!(S.dot, x, &head)
+                    }
+                    (Ok(EdgeImage::Head(c)), Ok(EdgeImage::Head(e))) => {
+                        **out = Atom::num(c * e) * function!(S.dot, &head, &head)
+                    }
+                    (Err(error), _) | (_, Err(error)) => failure = Some(error),
+                }
+                return;
+            }
+            if f.get_symbol() == metric_symbol
+                && arguments.len() == 2
+                && let (Some(a), Some(b)) = (index_of(arguments[0]), index_of(arguments[1]))
+            {
+                **out = function!(S.g, a, b);
+                return;
+            }
+            let Some(index) = arguments.last().and_then(|last| index_of(*last)) else {
+                return;
+            };
+            match vector(view).map(|r| self.image(r)) {
+                Some(Ok(EdgeImage::Loop(x))) => **out = indexed(&x, &index),
+                Some(Ok(EdgeImage::Head(c))) => **out = Atom::num(c) * function!(S.p, 1, &index),
+                Some(Err(error)) => failure = Some(error),
+                None => {}
+            }
+        });
+        if let Some(error) = failure {
+            return Err(error);
+        }
+        if forbidden
+            .iter()
+            .chain([&dot_symbol, &metric_symbol])
+            .any(|symbol| renamed.contains_symbol(*symbol))
+        {
+            return Err("momentum or metric notation left after the open rename".into());
+        }
+        if let Some(symbol) = renamed
+            .get_all_symbols(true)
+            .into_iter()
+            .find(|symbol| symbol.get_name().starts_with("spenso::"))
+        {
+            return Err(format!(
+                "unconverted tensor notation {} in the contracted open numerator",
+                symbol.get_name()
+            ));
+        }
+        Ok(renamed)
     }
 
     /// The contracted scalar in the reader's momenta: every scalar product

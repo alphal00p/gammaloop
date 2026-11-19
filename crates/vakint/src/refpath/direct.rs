@@ -95,6 +95,9 @@ pub struct DirectSeconds {
     pub handover: f64,
     /// `lower_closure` (read, classify, slot substitution, fold).
     pub lower: f64,
+    /// R3-open (D6): the FeynKit tensor reduction of the renamed open
+    /// numerator with `p(1)` external.
+    pub tensor: f64,
     pub reduce: f64,
     pub finalise: f64,
     /// Choosing the compact basis (option `compact`), and its routing size
@@ -930,6 +933,246 @@ pub fn lower_graph(
         return Ok(DirectOutcome::Zero("zero numerator"));
     }
     Ok(DirectOutcome::Lowered(out))
+}
+
+/// D6 through the hand-over (R3-open): one branch contracted by R3's idenso
+/// chain with the external Lorentz ports left OPEN (no projector): the open
+/// scalar (uncooked) and its two ports (`mink(D, ..)` slots, canonical order).
+fn contract_branch_open_edges(product: &Atom, dots: bool) -> Result<(Atom, Vec<Atom>)> {
+    use idenso::dirac::GammaSimplifySettings;
+    use idenso::tensor::{AlgebraContraction, AlgebraSettings, SymbolicTensor};
+    use idenso::{CookMode, CookSettings, IndexTooling};
+    use spenso::structure::abstract_index::AbstractIndex;
+    use spenso::structure::representation::LibrarySlot;
+    use spenso::structure::slot::IsAbstractSlot;
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let cooked = cooking.try_cook(product.as_view())?;
+    let mut ports = Vec::new();
+    for port in cooked.list_dangling::<AbstractIndex>()?.iter() {
+        let slot = LibrarySlot::<AbstractIndex>::try_from(port.as_view())?;
+        eyre::ensure!(
+            slot.rep_name() == (Minkowski {}).into(),
+            "an open index outside the Lorentz representation: {}",
+            cooking.uncook(slot.to_atom().as_view())
+        );
+        ports.push(cooking.uncook(slot.to_atom().as_view()));
+    }
+    ports.sort_by_key(|port| port.to_canonical_string());
+    let simplified = SymbolicTensor::infer_indexed(cooked)?.simplify_algebra(&AlgebraSettings {
+        gamma: Some(GammaSimplifySettings::canonical()),
+        epsilon: true,
+        contract: if dots {
+            AlgebraContraction::Dots
+        } else {
+            AlgebraContraction::Fully
+        },
+        ..Default::default()
+    })?;
+    let reduced = if dots {
+        simplified
+    } else {
+        simplified.to_dots()?
+    };
+    Ok((cooking.uncook(reduced.expression().as_view()), ports))
+}
+
+/// D6 through the hand-over (R3-open): the colour-weighted sum of the terms
+/// contracted with the ports left open ([`contract_branch_open_edges`]),
+/// couplings expanded in the residuals (`gs = 1`), routed as `options` and
+/// `compact` say, no projector and no normalisation (the counterpart of
+/// [`super::contract_open`]). Returns the open numerator and its two ports.
+pub fn contract_edges_open(
+    diagram: &FeynmanDiagram,
+    branches: &[ColourBranch],
+    options: DirectOptions,
+    compact: Option<(&Lines, &CompactBasis)>,
+) -> Result<(Atom, Vec<Atom>)> {
+    let basis = diagram.loop_momentum_basis();
+    let d = Atom::var(SYMBOLS.d);
+    let couplings = |value: &Atom| {
+        diagram
+            .model()
+            .expand_couplings(value)
+            .replace(Atom::var(symbolica::symbol!("UFO::gs")))
+            .with(Atom::num(1))
+    };
+    let mut sum = Atom::Zero;
+    let mut ports: Option<Vec<Atom>> = None;
+    for branch in branches {
+        let product = branch
+            .residuals
+            .iter()
+            .fold(Atom::num(1), |product, residual| {
+                product * couplings(residual)
+            });
+        let product = match compact {
+            Some((lines, chosen)) => lines
+                .route_compact(&product, chosen)
+                .map_err(|e| eyre::eyre!(e))?,
+            None if options.routed => basis.route_expression(&product),
+            None => product,
+        };
+        let continued = product
+            .replace(Minkowski {}.to_symbolic([Atom::var(W_.d_), Atom::var(W_.a___)]))
+            .with(Minkowski {}.to_symbolic([d.clone(), Atom::var(W_.a___)]));
+        let (open, branch_ports) = contract_branch_open_edges(&continued, options.dots)?;
+        match &ports {
+            None => ports = Some(branch_ports),
+            Some(known) => eyre::ensure!(
+                *known == branch_ports,
+                "the colour terms have different open ports: {known:?} and {branch_ports:?}"
+            ),
+        }
+        sum += &branch.coefficient * open;
+    }
+    Ok((sum, ports.unwrap_or_default()))
+}
+
+/// D6 through the hand-over (R3-open): one graph's OPEN `Π^{μν}` (ports
+/// labelled `1`, `2` in canonical order, as [`super::run_graph_open`]) lowered
+/// by R3: idenso's contraction with the ports open, ONE denominator match,
+/// the open rename (indexed edge momenta -> indexed images, port metrics ->
+/// `g(1, 2)`; no expansion), the FeynKit tensor reduction of that numerator
+/// with `p(1)` declared external (in the first match's momenta), then the
+/// direct reader (the open structures are loop-free spectators). Returns one
+/// projection named `open`; reduce it with [`reduce_projection`]. The value
+/// is that of [`super::run_graph_open`] (exactness = the caller's gate).
+#[allow(clippy::too_many_arguments)]
+pub fn lower_graph_open(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    diagram: &FeynmanDiagram,
+    branches: &[ColourBranch],
+    momentum: &Atom,
+    weight: &Atom,
+    options: DirectOptions,
+    seconds: &mut DirectSeconds,
+) -> Result<DirectOutcome> {
+    let mut lines = match lines_of(diagram, momentum) {
+        Ok(lines) => lines,
+        Err(reason) => return Ok(DirectOutcome::Declined(reason)),
+    };
+    let chosen = if options.compact {
+        let started = Instant::now();
+        let chosen = match lines.compact_basis() {
+            Ok(chosen) => chosen,
+            Err(reason) => return Ok(DirectOutcome::Declined(reason)),
+        };
+        lines.loop_edges = Some(chosen.cotree.clone());
+        seconds.routing += started.elapsed().as_secs_f64();
+        Some(chosen)
+    } else {
+        None
+    };
+    let started = Instant::now();
+    let (open, ports) = contract_edges_open(
+        diagram,
+        branches,
+        options,
+        chosen.as_ref().map(|chosen| (&lines, chosen)),
+    )?;
+    seconds.contract += started.elapsed().as_secs_f64();
+    eyre::ensure!(
+        ports.len() == 2,
+        "a two-point graph has two open ports, found {ports:?}"
+    );
+    let mut open = open * weight;
+    for (port, label) in ports.iter().zip([1, 2]) {
+        let AtomView::Fun(slot) = port.as_view() else {
+            eyre::bail!("port {port} is not a slot");
+        };
+        let index = slot
+            .iter()
+            .nth(1)
+            .ok_or_else(|| eyre::eyre!("port {port} has no index"))?
+            .to_owned();
+        open = open
+            .replace(index.to_pattern())
+            .with(Atom::num(label).to_pattern());
+    }
+    if open.is_zero() {
+        return Ok(DirectOutcome::Zero("zero numerator"));
+    }
+    let started = Instant::now();
+    let matched = match match_lines(vakint, settings, lines.loops, &lines.lines, &lines.edges)? {
+        Matched::Ready(matched) => std::sync::Arc::<p_handover::HandOver>::from(matched),
+        Matched::Scaleless => return Ok(DirectOutcome::Zero("scaleless after the match")),
+        Matched::Declined(reason) => return Ok(DirectOutcome::Declined(reason)),
+    };
+    seconds.matching += started.elapsed().as_secs_f64();
+    let epsilon = Atom::var(vk_symbol!(&settings.epsilon_symbol));
+    let in_epsilon = Atom::num(4) - Atom::num(2) * &epsilon;
+    let handle = vakint.p_library().map_err(crate::VakintError::from)?;
+    let forbidden = [
+        feynkit_graph::symbols::momentum(),
+        feynkit_graph::symbols::loop_momentum(),
+        feynkit_graph::symbols::external_momentum(),
+    ];
+    let started = Instant::now();
+    let renamed = match matched.rename_open(
+        &open,
+        SPENSO_TAG.dot,
+        spenso::network::library::symbolic::ETS.metric,
+        |v| lines.vector(v),
+        &forbidden,
+    ) {
+        Ok(renamed) => renamed.replace(Atom::var(SYMBOLS.d)).with(in_epsilon),
+        Err(reason) => return Ok(DirectOutcome::Declined(reason)),
+    };
+    seconds.handover += started.elapsed().as_secs_f64();
+    // The tensor reduction with p(1) external (vakint's p-integral prepass),
+    // on the factorised numerator: no expansion before it.
+    let started = Instant::now();
+    let mut term = crate::VakintTerm {
+        integral: Atom::num(1),
+        numerator: renamed,
+        vectors: Vec::new(),
+    };
+    term.tensor_reduce_propagator(
+        settings,
+        &symbolica::function!(crate::symbols::S.p, 1),
+        false,
+    )?;
+    seconds.tensor += started.elapsed().as_secs_f64();
+    let mut dots = std::collections::BTreeSet::new();
+    term.numerator.as_view().visitor(&mut |node| {
+        if let AtomView::Fun(f) = node
+            && f.get_symbol() == crate::symbols::S.dot
+        {
+            dots.insert(node.to_owned());
+            return false;
+        }
+        true
+    });
+    let started = Instant::now();
+    let mut stats = DirectStats::default();
+    let lowered = if options.prune_early {
+        use crate::rustred_evaluation::p_zero::{ZeroPrune, with_zero_prune, zero_prune};
+        let mode = match zero_prune() {
+            ZeroPrune::Check => ZeroPrune::Check,
+            _ => ZeroPrune::Early,
+        };
+        with_zero_prune(mode, || {
+            matched.lower(settings, &handle, term.numerator.as_view(), &mut stats)
+        })
+    } else {
+        matched.lower(settings, &handle, term.numerator.as_view(), &mut stats)
+    };
+    let folded = match lowered? {
+        Ok(folded) => folded,
+        Err(declined) => return Ok(DirectOutcome::Declined(declined.0.into())),
+    };
+    seconds.lower += started.elapsed().as_secs_f64();
+    Ok(DirectOutcome::Lowered(vec![DirectProjection {
+        projection: "open",
+        folded,
+        value: None,
+        stats,
+        distinct_dots: dots.len(),
+        handover: matched,
+    }]))
 }
 
 /// The reduction and finalisation of one lowered projection under `settings`
