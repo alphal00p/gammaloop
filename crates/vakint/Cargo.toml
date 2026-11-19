@@ -128,6 +128,10 @@ name = "r3_open_bb"
 required-features = ["feynkit-ingress"]
 
 [[example]]
+name = "r3_contract_probe"
+required-features = ["feynkit-ingress"]
+
+[[example]]
 name = "external_data_acceptance"
 required-features = ["feynkit-ingress"]
 
