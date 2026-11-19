@@ -316,9 +316,9 @@ enum Local3DDeformation {
     /// branch scope replaces the mass scope, so enclosing operations co-scale
     /// the result together with the soft branch it subtracts from.
     OrdinaryOnSoftBranch,
-    /// U on residue rows whose completed zero-mode branches have their soft
-    /// sets inside its support: the UV counterterm of their static theory,
-    /// which introduces the static-theory masses `mIR` in place of `mUV`
+    /// U on residue rows whose outermost completed zero-mode branch has soft
+    /// lines in its support: a UV counterterm of their static theory, which
+    /// introduces the static-theory masses `mIR` in place of `mUV`
     /// ([`SoftBranches::expands_static_cograph`]).
     OrdinaryOnStaticCograph,
     /// The co-scaled soft chart of the vacuum and zero-temperature IR
@@ -358,12 +358,14 @@ impl Local3DDeformation {
         }
     }
 
-    /// The value of the Taylor parameter in the finished series on
-    /// `support`: one, or the order tag of the zero-mode host, so that its
-    /// term of relative order `j` carries `lambda^(j - dod)`.
-    fn order_tag(self, support: &SuBitGraph) -> Atom {
+    /// The value of the Taylor parameter in the finished series of the
+    /// operation on `subgraph`: one, or the order tag of the zero-mode host
+    /// `subgraph`, so that its term of relative order `j` carries
+    /// `lambda^(j - dod)`, also when an integrated prefix contracted part of
+    /// the host.
+    fn order_tag(self, subgraph: &SuBitGraph) -> Atom {
         match self {
-            Self::ZeroMode { .. } => zero_mode_order(Atom::var(support.symbol())),
+            Self::ZeroMode { .. } => zero_mode_order(Atom::var(subgraph.symbol())),
             Self::Ordinary
             | Self::OrdinaryOnSoftBranch
             | Self::OrdinaryOnStaticCograph
@@ -581,6 +583,12 @@ impl<'r> NodeOperation<'r> {
 /// coefficient-parametric body and retain each complete key's argument row.
 /// This kernel does not add the current operation's subtraction minus;
 /// forest composition supplies it once, retaining signs already in the branch.
+///
+/// The operation acts on `active_subgraph`, the part of `current` that no
+/// integrated prefix of the family contracted. A zero-mode host acts there
+/// as on its whole support ([`ensure_zero_mode_chart`]). Once a prefix
+/// contracted the whole connected host, the family is the host's own
+/// add-back, whose integrated U leaves `S0` of the contracted host alone.
 pub(super) fn apply_taylor<S: ForestNodeLike>(
     ctx: &UVCtx<'_>,
     orientation: OrientationProjection<'_>,
@@ -604,12 +612,17 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
             // When that annihilates the input, as for the whole-graph U on a
             // chain without a frozen soft branch, skip the numerator and
             // Taylor work.
+            let soft_branches = SoftBranches::new(
+                ctx.graph,
+                current.subgraph(),
+                Local3DDeformation::Ordinary,
+            );
             let projected = integrands.fallible_map(|_, atom| {
                 Direct3dApproximation::project_unfrozen_occupations(
                     ctx,
                     atom,
                     support,
-                    Local3DDeformation::Ordinary,
+                    soft_branches,
                 )
             })?;
             if projected.is_zero() {
@@ -617,12 +630,13 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
             }
         }
         NodeOperation::ZeroMode(region) => {
-            // A sector whose integrated prefix covers part of the host, for
-            // instance one bubble of a union host, is zero there.
+            // Every sector meets the host in the chart of its active support,
+            // a vanishing one included, so that the local and the integrated
+            // routes keep one invariant.
+            ensure_zero_mode_chart(ctx, current, region, support, lmb)?;
             if integrands.is_zero() {
                 return Ok(integrands.clone());
             }
-            ensure_zero_mode_chart(ctx, current, region, support, lmb)?;
         }
         NodeOperation::Ordinary | NodeOperation::Soft => {}
     }
@@ -660,12 +674,48 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
             soft.zip_add(&uv_remainder)
         }
         NodeOperation::ZeroMode(region) => {
-            let terms =
-                ZeroModeTerm::expand(ctx, orientation, current, given, region, lmb, &started)?;
+            let terms = ZeroModeTerm::expand(
+                ctx,
+                orientation,
+                current,
+                given,
+                region,
+                support,
+                lmb,
+                &started,
+            )?;
             let soft = ZeroModeTerm::restore(&terms, |term| Ok(Cow::Borrowed(&term.frozen)))?;
             match region.kind() {
                 // The U of each factor precedes a union host in the forest.
                 ZeroModeHostKind::Union => Ok(soft),
+                // A connected host whose whole support an integrated prefix
+                // contracted acts on its own add-back, which already holds
+                // its U: the integrated form of its `U S0` is `S0` of the
+                // contracted host on that add-back, the self-suffix.
+                ZeroModeHostKind::Connected if support.is_empty() => {
+                    // Enclosing operations tell the rows of the branch by its
+                    // owner (`Direct3dApproximation::t`). Without a loop of
+                    // its own the branch names it only through its order tag
+                    // and soft scope.
+                    let owners = SoftBranches::new(
+                        ctx.graph,
+                        current.subgraph(),
+                        Local3DDeformation::Ordinary,
+                    )
+                    .row_owners(&soft)?;
+                    let unowned = soft.iter_keys().zip(&owners).any(|((_, roots), owners)| {
+                        roots.iter().any(|(_, root)| !root.is_zero())
+                            && !owners.contains(current.subgraph())
+                    });
+                    ensure!(
+                        !unowned,
+                        "unsupported zero-mode forest: the zero mode of the connected host {} on \
+                         its own integrated add-back has a term of the host's degree, which no \
+                         tag ties to its branch",
+                        current.subgraph().string_label()
+                    );
+                    Ok(soft)
+                }
                 // The zero-mode branch is a frozen vertex for every enclosing
                 // operation, whose U therefore subtracts only the reduced
                 // cograph. U(X) and U(S0(X)) must keep separate expansion
@@ -795,9 +845,18 @@ fn start_family<S: ForestNodeLike>(
     })
 }
 
-/// Every nonzero sector of a zero-mode host expands its whole support in the
-/// host's canonical chart, which the zero bins and enclosing hosts that
-/// cancel against it share, and keeps the soft set outside its support.
+/// Every sector of a zero-mode host expands its active `support`, the host
+/// less the part that an integrated prefix contracted, possibly all of it.
+/// It does so in the host's canonical chart contracted by that part, the
+/// chart that the zero bins and the enclosing hosts cancelling against the
+/// sector share, which is empty once the whole host is contracted. The soft
+/// set stays outside the support.
+///
+/// The host keeps its region, its owner and its degree on a contracted
+/// support. An integrated prefix inside the host leaves its soft set, and
+/// with it every frequency class, untouched. A prefix in the soft set never
+/// reaches the zero-mode operation: its replay keeps the U of a connected
+/// host alone ([`crate::uv::hedge_poset`]).
 fn ensure_zero_mode_chart<S: ForestNodeLike>(
     ctx: &UVCtx<'_>,
     current: &S,
@@ -805,28 +864,50 @@ fn ensure_zero_mode_chart<S: ForestNodeLike>(
     support: &SuBitGraph,
     lmb: &LoopMomentumBasis,
 ) -> Result<()> {
+    let graph = ctx.graph;
     let host = current.subgraph().string_label();
-    ensure!(
-        support == current.subgraph(),
-        "internal error: a nonzero sector reaches the zero-mode host {host} on the partial \
-         support {}",
-        support.string_label(),
-    );
-    let loop_edges = lmb.loop_edges.iter().copied().collect::<BTreeSet<_>>();
+    let contracted = current.subgraph().subtract(support);
     let canonical = region
         .coordinate_loop_edges()
         .iter()
         .copied()
         .collect::<BTreeSet<_>>();
+    let expected = if contracted.is_empty() {
+        canonical
+    } else if support.is_empty() {
+        BTreeSet::new()
+    } else {
+        let canonical_lmb = graph.canonical_component_lmb(current.subgraph())?;
+        let internal = InternalSubGraph::try_new(contracted.clone(), graph.as_ref())
+            .ok_or_else(|| {
+                eyre!(
+                    "internal error: the integrated part of the zero-mode host {host} is not an \
+                     internal subgraph"
+                )
+            })?;
+        graph
+            .shrunken_sub_lmb(
+                current.subgraph(),
+                &internal,
+                graph.dummy_stripped_external_flows_of(current.subgraph()),
+                Some(&canonical_lmb),
+            )?
+            .loop_edges
+            .iter()
+            .copied()
+            .collect()
+    };
+    let loop_edges = lmb.loop_edges.iter().copied().collect::<BTreeSet<_>>();
     ensure!(
-        loop_edges == canonical,
+        loop_edges == expected,
         "internal error: the zero-mode host {host} must expand in its canonical chart {:?}, \
-         not in {:?}",
-        canonical,
+         contracted by its integrated part {}, on its support {}, not in {:?}",
+        expected,
+        contracted.string_label(),
+        support.string_label(),
         loop_edges,
     );
-    let static_lines = ctx
-        .graph
+    let static_lines = graph
         .iter_edges_of(support)
         .filter(|(pair, edge, _)| pair.is_paired() && region.sigma().contains(edge))
         .map(|(_, edge, _)| edge)
@@ -857,6 +938,12 @@ impl ZeroModeTerm {
     /// coefficient of its sector, Taylor-expanded through its order `J`,
     /// re-keyed to static soft energies and frozen.
     ///
+    /// The Taylor series acts on the active `support` in the chart `lmb`,
+    /// which [`ensure_zero_mode_chart`] checked; an integrated prefix
+    /// contracted the rest of the host, and the series co-scales its owners
+    /// as hard. The branch, its order tag `lambda^(j - dod)` and its degree
+    /// belong to the whole host either way.
+    ///
     /// The region has one order per class in each tuple, as
     /// [`ThermalZeroModeRegion`] builds them.
     ///
@@ -864,18 +951,23 @@ impl ZeroModeTerm {
     ///
     /// The projection, Taylor series, re-keying or freezing fails, in the
     /// context of the host and its tuple.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the zero-mode operation keeps both forest-node contexts, its region, its active \
+                  support and its chart explicit"
+    )]
     fn expand<S: ForestNodeLike>(
         ctx: &UVCtx<'_>,
         orientation: OrientationProjection<'_>,
         current: &S,
         given: &S,
         region: &ThermalZeroModeRegion,
+        support: &SuBitGraph,
         lmb: &LoopMomentumBasis,
         started: &StartedFamily,
     ) -> Result<Vec<Self>> {
         let graph = ctx.graph;
-        let support = current.subgraph();
-        let host = support.string_label();
+        let host = current.subgraph().string_label();
         debug_assert!(
             region
                 .tuples()
@@ -947,7 +1039,7 @@ impl ZeroModeTerm {
                     Direct3dApproximation::freeze_soft_branch(
                         &expanded,
                         graph,
-                        support,
+                        current.subgraph(),
                         lmb,
                         &started.mass_scope,
                     )
@@ -1149,7 +1241,7 @@ impl Local3DLoopRescaling {
             ?deformation,
             "After series in local 3D hard parameter"
         );
-        let order_tag = deformation.order_tag(rescaled_subgraph).to_pattern();
+        let order_tag = deformation.order_tag(current.subgraph()).to_pattern();
         let a = series_atom.replace(GS.rescale).with(&order_tag);
 
         debug_tags!(#generation, #profile, #uv, #local, #summary;
@@ -1181,14 +1273,21 @@ impl Direct3dApproximation<'_> {
         let graph = ctx.graph;
         let reduced = current.reduced_subgraph(given);
         let rescaled_subgraph = active_subgraph.unwrap_or_else(|| current.subgraph());
-        let soft_branches = SoftBranches::new(graph, rescaled_subgraph, deformation);
+        // The roles of completed soft branches are relative to the
+        // operation's subgraph: the part of it that an integrated prefix
+        // contracted keeps its owners, and the branches inside it stay frozen.
+        let soft_branches = SoftBranches::new(graph, current.subgraph(), deformation);
         // U takes the vacuum limit of every active occupation except those
         // retained by a frozen soft branch, whose temperature is co-scaled
         // below instead. Disjoint thermal coefficients keep their owners.
         let vacuum_integrand;
         let integrand = if deformation.is_ordinary() {
-            vacuum_integrand =
-                Self::project_unfrozen_occupations(ctx, integrand, rescaled_subgraph, deformation)?;
+            vacuum_integrand = Self::project_unfrozen_occupations(
+                ctx,
+                integrand,
+                rescaled_subgraph,
+                soft_branches,
+            )?;
             &vacuum_integrand
         } else {
             integrand
@@ -1202,7 +1301,7 @@ impl Direct3dApproximation<'_> {
         // enclosing operations co-scale; every other operation uses the
         // ordinary scope.
         let mass_scope = if deformation == Local3DDeformation::OrdinaryOnSoftBranch {
-            thermal_soft::soft_branch_scope(rescaled_subgraph)
+            thermal_soft::soft_branch_scope(current.subgraph())
         } else {
             function!(*LOCAL_3D_MASS_SCOPE, usize::from(scope_edge) as i64)
         };
@@ -1294,11 +1393,24 @@ impl Direct3dApproximation<'_> {
         // Scale the complete scalar head, leaving its owner independent of Taylor t.
         // Normalized localization kernels stay outside the series, and the auxiliary
         // OSE deformation mass keeps its separate role below.
+        // A zero-mode chart is the soft expansion at fixed masses. It scales
+        // the algebraic vacuum masses of a contained integrated vertex, whose
+        // homogeneity turns that into the soft expansion, but holds their
+        // logarithms fixed, as the prefix localizer does for physical masses
+        // (`Direct3dApproximation::run_integrated`): those are logarithms
+        // of the vacuum mass over the MS-bar scale, which the soft expansion
+        // leaves alone.
+        let zero_mode_chart = matches!(deformation, Local3DDeformation::ZeroMode { .. });
         let mut invalid_mass_owner = None;
         atomarg = atomarg.replace_map(|view, _, output| {
             let AtomView::Fun(mass) = view else {
                 return;
             };
+            if zero_mode_chart && mass.get_symbol() == Symbol::LOG {
+                // Settled as it is: its arguments are not visited.
+                **output = view.to_owned();
+                return;
+            }
             if mass.get_symbol() != GS.m_uv_vacuum {
                 return;
             }
@@ -1413,9 +1525,9 @@ impl Direct3dApproximation<'_> {
     }
 
     /// The Taylor series of the chart `deformation` on `integrands`. An
-    /// ordinary U is the UV counterterm of a static theory on the residue
-    /// rows whose completed zero-mode branches have their soft sets inside
-    /// its support ([`SoftBranches::expands_static_cograph`]), and acts there
+    /// ordinary U is a UV counterterm of a static theory on the residue rows
+    /// whose outermost completed zero-mode branch has soft lines in its
+    /// support ([`SoftBranches::expands_static_cograph`]), and acts there
     /// as [`Local3DDeformation::OrdinaryOnStaticCograph`]; it stays ordinary
     /// on the other rows. A U never expands a row partly as either: a row
     /// holding a completed branch is a re-keyed static row of its `S0`, apart
@@ -1444,8 +1556,7 @@ impl Direct3dApproximation<'_> {
         if deformation != Local3DDeformation::Ordinary {
             return chart(deformation, integrands);
         }
-        let support = active_subgraph.unwrap_or_else(|| current.subgraph());
-        let soft_branches = SoftBranches::new(ctx.graph, support, deformation);
+        let soft_branches = SoftBranches::new(ctx.graph, current.subgraph(), deformation);
         let mut loop_lines = None;
         let static_rows = soft_branches
             .row_owners(integrands)?
@@ -1590,9 +1701,9 @@ impl Direct3dApproximation<'_> {
         } else {
             series
         };
-        let order_tag = deformation
-            .order_tag(active_subgraph.unwrap_or_else(|| current.subgraph()))
-            .to_pattern();
+        // A zero-mode branch is tagged by its host, also on a contracted
+        // support.
+        let order_tag = deformation.order_tag(current.subgraph()).to_pattern();
         series.map_expressions(|atom| {
             let a = atom
                 .replace(GS.rescale)

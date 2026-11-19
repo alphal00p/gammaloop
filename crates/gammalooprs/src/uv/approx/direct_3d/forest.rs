@@ -1,7 +1,7 @@
-use std::{collections::BTreeMap, ops::Neg};
+use std::{collections::BTreeMap, iter, ops::Neg};
 
 use color_eyre::Result;
-use eyre::eyre;
+use eyre::{WrapErr, eyre};
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps};
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -23,6 +23,7 @@ use crate::{
             },
         },
         marker::{UvMarker, UvOperation},
+        thermal_zero_mode::ZeroModeHostKind,
         uv_graph::UVE,
     },
 };
@@ -455,16 +456,32 @@ impl<'a> Direct3dApproximation<'a> {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn run_integrated<S: ForestNodeLike, I: ForestNodeLike, M: ForestNodeLike>(
+    /// The localized add-back of an integrated prefix before any local
+    /// operation acts on it: the product of the finite counterterms of its
+    /// connected components, `finite_counterterms` with their owners,
+    /// localized on the cograph of `integrated_node` with the normalized
+    /// kernel.
+    ///
+    /// A prefix that ends on a connected zero-mode host `γ` integrated `γ`'s
+    /// own U, which `γ`'s operation also applies to its zero mode
+    /// (`U_γ S0_γ`). The integrated form of that term is the zero mode of
+    /// the contracted host on the add-back, `ι_γ S0_γ = S0ᶜ_γ ι_γ`, so the
+    /// prefix is `(1 - S0ᶜ_γ)` of the add-back: a second sector, the
+    /// self-suffix. This is its only source, both for every descendant that
+    /// replays the prefix and for the node's own final integrand. A prefix of
+    /// several components holds no host's own U: a component in the soft set
+    /// of the host replays after it as a static U, which has no integrated
+    /// counterpart.
+    ///
+    /// # Errors
+    ///
+    /// The localization fails, or the zero-mode operation of the host on its
+    /// contracted support does.
+    pub(crate) fn localize_prefix<I: ForestNodeLike>(
         &mut self,
         finite_counterterms: &[(&Atom, &I)],
         integrated_node: &I,
-        current: &S,
-        given: &S,
-        marker_current: &M,
-        marker_given: &M,
-    ) -> Result<Direct3dCts> {
+    ) -> Result<Vec<DirectSector>> {
         // Each finite effective vertex retains its connected source owner.
         // Equal masses in disjoint integrated prefixes must remain distinct
         // until an enclosing operation contains their respective components.
@@ -472,6 +489,10 @@ impl<'a> Direct3dApproximation<'a> {
             finite_counterterms
                 .iter()
                 .fold(Atom::one(), |product, (coefficient, component)| {
+                    // A vanishing prefix, the root's included, owns no scale.
+                    if product.is_zero() || coefficient.is_zero() {
+                        return Atom::Zero;
+                    }
                     let mass_scope =
                         function!(*LOCAL_3D_MASS_SCOPE, usize::from(component.lmb_id()) as i64);
                     // Preserve each completed component's vacuum mass before multiplying
@@ -501,19 +522,79 @@ impl<'a> Direct3dApproximation<'a> {
                 });
         let (active, frozen_integrands) =
             self.localize_integrated(&finite_counterterm, integrated_node)?;
+        let contracted = self.graph.empty_subgraph();
+        let self_suffix = match integrated_node.thermal_zero_mode() {
+            Some(region)
+                if region.kind() == ZeroModeHostKind::Connected
+                    && !finite_counterterm.is_zero() =>
+            {
+                let ctx = UVCtx::new(self.graph, self.settings);
+                let (canonical_lmb, chart) =
+                    coordinate_lmb(&ctx, integrated_node, integrated_node, None, &[], &contracted)?;
+                let self_suffix = -apply_taylor(
+                    &ctx,
+                    self.localizer.orientation,
+                    integrated_node,
+                    integrated_node,
+                    Some(contracted.clone()),
+                    &chart,
+                    &active,
+                )
+                .wrap_err_with(|| {
+                    format!(
+                        "while subtracting the zero mode of the connected host {} from its own \
+                         integrated add-back",
+                        integrated_node.subgraph().string_label()
+                    )
+                })?;
+                let step = Local3DLoopRescaling::ReducedSubgraph.projection_step(
+                    &ctx,
+                    integrated_node,
+                    integrated_node,
+                    &contracted,
+                    Some(&contracted),
+                    &canonical_lmb,
+                    &chart,
+                );
+                Some(DirectSector {
+                    active_subgraph: contracted.clone(),
+                    coordinate_frames: Vec::new(),
+                    projection_paths: paths_with_step(&[], &step),
+                    active: self_suffix,
+                    frozen_integrands: frozen_integrands.clone(),
+                })
+            }
+            _ => None,
+        };
+        Ok(iter::once(DirectSector {
+            active_subgraph: contracted,
+            coordinate_frames: Vec::new(),
+            projection_paths: Vec::new(),
+            active,
+            frozen_integrands,
+        })
+        .chain(self_suffix)
+        .collect())
+    }
+
+    /// The sectors of the integrated prefix `finite_counterterms` of
+    /// `integrated_node` ([`Self::localize_prefix`]) after the local
+    /// operation of `current` given `given`, with its subtraction minus.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn run_integrated<S: ForestNodeLike, I: ForestNodeLike, M: ForestNodeLike>(
+        &mut self,
+        finite_counterterms: &[(&Atom, &I)],
+        integrated_node: &I,
+        current: &S,
+        given: &S,
+        marker_current: &M,
+        marker_given: &M,
+    ) -> Result<Direct3dCts> {
+        let prefix = self.localize_prefix(finite_counterterms, integrated_node)?;
         let ctx = UVCtx::new(self.graph, self.settings);
         let active_subgraph = current.reduced_subgraph(given);
         let (canonical_lmb, coordinate_lmb) =
             coordinate_lmb(&ctx, current, given, None, &[], &active_subgraph)?;
-        let active = -apply_taylor(
-            &ctx,
-            self.localizer.orientation,
-            current,
-            given,
-            Some(active_subgraph.clone()),
-            &coordinate_lmb,
-            &active,
-        )?;
         let step = Local3DLoopRescaling::ReducedSubgraph.projection_step(
             &ctx,
             current,
@@ -523,18 +604,31 @@ impl<'a> Direct3dApproximation<'a> {
             &canonical_lmb,
             &coordinate_lmb,
         );
-        let sector = DirectSector {
-            active_subgraph: active_subgraph.clone(),
-            projection_paths: paths_with_step(&[], &step),
-            coordinate_frames: vec![DirectCoordinateFrame {
-                active_subgraph,
-                lmb: coordinate_lmb,
-            }],
-            active,
-            frozen_integrands,
-        };
+        let sectors = prefix
+            .into_iter()
+            .map(|sector| {
+                Ok(DirectSector {
+                    active_subgraph: active_subgraph.clone(),
+                    coordinate_frames: vec![DirectCoordinateFrame {
+                        active_subgraph: active_subgraph.clone(),
+                        lmb: coordinate_lmb.clone(),
+                    }],
+                    projection_paths: paths_with_step(&sector.projection_paths, &step),
+                    active: -apply_taylor(
+                        &ctx,
+                        self.localizer.orientation,
+                        current,
+                        given,
+                        Some(active_subgraph.clone()),
+                        &coordinate_lmb,
+                        &sector.active,
+                    )?,
+                    frozen_integrands: sector.frozen_integrands,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
 
-        Direct3dCts::from_sectors(vec![sector])?.map(|atom| {
+        Direct3dCts::from_sectors(sectors)?.map(|atom| {
             Ok(UvMarker::new(ctx.settings).apply(
                 UvOperation::Approx,
                 marker_current.subgraph(),

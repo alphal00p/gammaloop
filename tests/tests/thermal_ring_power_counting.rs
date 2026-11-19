@@ -13,7 +13,7 @@
 //! leaves the static soft set of the q-gluons without a zero-mode host, which
 //! generation rejects before any forest work. The tadpole ring's zero-mode
 //! subtraction without vacuum subtraction, which generates in seconds, checks
-//! that the static-theory mass `general.m_ir` follows `general.m_uv` until set.
+//! that the static-theory mass `general.m_ir` is independent of `general.m_uv`.
 
 use color_eyre::Result;
 use gammaloop_integration_tests as integration_tests;
@@ -267,40 +267,49 @@ fn thermal_ring_graphs_match_the_generated_diagrams() -> Result<()> {
 /// against the hard p and k of [`RING_POINT`].
 const SOFT_Q_POINT: [f64; 9] = [0.031, -0.012, 0.027, 0.71, 0.23, 0.43, -0.37, 0.61, 0.29];
 
-/// The static-theory mass `general.m_ir` of the zero-mode subtraction follows
-/// `general.m_uv` until it is set. The tadpole ring without vacuum
-/// subtraction, whose whole-graph U is the UV counterterm of the static theory
-/// of its union host, evaluates identically in arb with `m_ir` unset and set
-/// to the run card's `m_uv`, and differently at `m_ir = 0.3`.
+/// The static-theory mass `general.m_ir` of the zero-mode subtraction is a
+/// setting of its own, independent of `general.m_uv`. The tadpole ring
+/// without vacuum subtraction, whose whole-graph U is the UV counterterm of
+/// the static theory of its union host, starts at the run card's
+/// `m_ir = m_uv` and evaluates differently in arb at `m_ir = 0.3`; moving
+/// `m_uv` then keeps `m_ir`, and restoring both masses restores the run
+/// card's value exactly.
 #[test]
-fn thermal_ring_static_theory_mass_follows_m_uv_until_set() -> Result<()> {
+fn thermal_ring_static_theory_mass_is_independent_of_m_uv() -> Result<()> {
     let _serial = integration_tests::SERIAL_TEST_LOCK.lock();
     let name = TADPOLE_RING.name;
     let (mut cli, state_path) = TADPOLE_RING.fresh_cli(&format!("{name}_static_theory_mass"))?;
     integration_tests::run_commands(&mut cli, VacuumSubtraction::Off.subtraction_commands())?;
-    let general = &thermal_rings::runtime_settings(&cli, name)?.general;
-    assert_eq!(general.m_ir, None, "{name} must start with m_ir unset");
-    let m_uv = general.m_uv;
+    let m_uv = thermal_rings::assert_run_card_static_theory_mass(&cli, name)?;
     let value = |cli: &mut CLIState| {
         thermal_rings::evaluate_momentum_point(cli, name, Evaluation::Arb, &SOFT_Q_POINT)
     };
-    let unset = value(&mut cli)?;
-    thermal_rings::set_static_theory_mass(&mut cli, name, m_uv)?;
-    let following = value(&mut cli)?;
-    assert_eq!(
-        following, unset,
-        "{name} with m_ir = m_uv = {m_uv} must evaluate as with m_ir unset"
-    );
+    let card = value(&mut cli)?;
     let m_ir = 0.3;
     thermal_rings::set_static_theory_mass(&mut cli, name, m_ir)?;
     let apart = value(&mut cli)?;
     let change =
-        evaluation_comparison::complex_distance(apart, unset) / unset.re.abs().max(unset.im.abs());
-    println!("{name}: m_ir unset {unset}, m_ir = {m_ir} {apart}, relative change {change:e}");
+        evaluation_comparison::complex_distance(apart, card) / card.re.abs().max(card.im.abs());
+    println!("{name}: m_ir = m_uv {card}, m_ir = {m_ir} {apart}, relative change {change:e}");
     assert!(
         change > MIN_STATIC_THEORY_MASS_CHANGE,
         "{name} at m_ir = {m_ir} must differ from m_ir = m_uv = {m_uv} at a soft-q point: \
-         {apart} vs {unset}"
+         {apart} vs {card}"
+    );
+    let set_m_uv = |cli: &mut CLIState, m_uv: f64| {
+        cli.run_command(&format!(
+            "set process -p {name} -i {name} kv general.m_uv={m_uv}"
+        ))
+    };
+    set_m_uv(&mut cli, 2.0 * m_uv)?;
+    let kept = thermal_rings::runtime_settings(&cli, name)?.general.m_ir;
+    assert_eq!(kept, m_ir, "{name}: moving m_uv must keep m_ir");
+    set_m_uv(&mut cli, m_uv)?;
+    thermal_rings::set_static_theory_mass(&mut cli, name, m_uv)?;
+    assert_eq!(
+        value(&mut cli)?,
+        card,
+        "{name} with both masses restored must evaluate as the run card"
     );
     integration_tests::clean_test(state_path);
     Ok(())

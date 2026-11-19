@@ -151,10 +151,10 @@ pub(crate) fn validate_local_counterterm_schemes(
     {
         let spinneys = spinneys?;
         // Only the zero-mode operation of the direct local-3D hedge-poset
-        // route without integrated counterterms subtracts a thermal soft
-        // component. Elsewhere the host policy leaves the classification
-        // unchanged, and vacuum subtraction only omits the full observable,
-        // whose U vanishes on completed thermal weights.
+        // route subtracts a thermal soft component, with and without
+        // integrated counterterms. Elsewhere the host policy leaves the
+        // classification unchanged, and vacuum subtraction only omits the
+        // full observable, whose U vanishes on completed thermal weights.
         if medium.mode.is_finite_temperature()
             && !freezes_soft_branches
             && let Some(soft) = spinneys.iter().find(|spinney| {
@@ -162,7 +162,7 @@ pub(crate) fn validate_local_counterterm_schemes(
             })
         {
             return Err(eyre!(
-                "graph '{}' cut {cut_index}: thermal soft counterterm component {} (d={}) is local-only and needs frozen thermal soft branches; set uv.orchestrator=hedge_poset, uv.final_integrand=3D and uv.generate_integrated=false",
+                "graph '{}' cut {cut_index}: thermal soft counterterm component {} (d={}) needs frozen thermal soft branches; set uv.orchestrator=hedge_poset and uv.final_integrand=3D",
                 graph.name,
                 soft.filter().string_label(),
                 soft.dod,
@@ -391,7 +391,12 @@ fn hedge_poset_renormalization_part(
     };
     let wood = HedgePosetWood::new(cuts, graph, &generation_settings)?;
     let mut forest = wood.unfold();
-    forest.integrate(graph, crate::utils::vakint()?, settings)?;
+    forest.integrate(
+        graph,
+        crate::utils::vakint()?,
+        settings,
+        generation_settings.medium.vacuum_subtraction,
+    )?;
     forest.renormalization_part_of_ends(graph, settings)
 }
 
@@ -893,20 +898,37 @@ mod tests {
         );
         assert!(message.contains("uv.orchestrator=hedge_poset"), "{message}");
 
-        // Integrated thermal soft counterterms are rejected before any forest work.
+        // With integrated counterterms the route freezes soft branches too, so
+        // the host policy demotes the quark bubble to a plain U.
         let integrated_settings = UVgenerationSettings {
             generate_integrated: true,
             ..settings
         };
-        let error =
-            validate_local_counterterm_schemes(&graph, &cuts, &integrated_settings, &medium)
-                .expect_err("thermal soft counterterms are local-only");
-        let message = error.to_string();
+        validate_local_counterterm_schemes(&graph, &cuts, &integrated_settings, &medium)
+            .expect("integrated counterterms must accept the demoted quark bubble");
+        let mut demoted = graph
+            .classified_spinneys(
+                &graph.full_filter(),
+                &integrated_settings,
+                &graph.loop_momentum_basis,
+            )
+            .unwrap();
+        assign_zero_mode_hosts(
+            &graph,
+            &graph.full_filter(),
+            &mut demoted,
+            &integrated_settings,
+            &medium,
+            &cuts,
+        )
+        .unwrap();
         assert!(
-            message.contains("thermal soft counterterm component"),
-            "{message}"
+            demoted.iter().any(|spinney| {
+                spinney.filter() == &child
+                    && spinney.renormalization_scheme == ApproximationType::MUV
+            }),
+            "integrated counterterms must demote the quark bubble without a zero-mode region"
         );
-        assert!(message.contains("generate_integrated=false"), "{message}");
     }
 
     #[test]

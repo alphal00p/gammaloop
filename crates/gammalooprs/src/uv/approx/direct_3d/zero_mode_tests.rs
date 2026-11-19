@@ -32,11 +32,13 @@ use crate::graph::{LMBext, LoopMomentumBasis};
 use crate::initialisation::test_initialise;
 use crate::integrands::process::param_builder::FnMapEntry;
 use crate::utils::W_;
-use crate::uv::approx::direct_3d::Direct3dCts;
+use crate::uv::approx::direct_3d::{Direct3dCts, DirectSector};
 use crate::uv::approx::direct_3d::branches::DirectResidueKey;
 use crate::uv::approx::final_integrand::{FinalIntegrandBuilder, FinalIntegrands};
 use crate::uv::approx::integrated::IntegratedCts;
-use crate::uv::approx::local_3d::{Local3DLoopRescaling, Localizer};
+use crate::uv::approx::local_3d::{
+    Local3DConceptualBranch, Local3DLoopRescaling, Local3DSignedBranch, Localizer,
+};
 use crate::uv::approx::{ForestNodeLike, OrientationProjection, Rooted, UVCtx};
 use crate::uv::hedge_poset::OwnedForestNode;
 use crate::uv::test_fixtures::{Ring, edge_set, local_3d_settings};
@@ -1551,7 +1553,7 @@ fn zero_mode_projection_short_circuits_projected_rows() -> Result<()> {
             &ctx,
             atom,
             second.subgraph(),
-            Local3DDeformation::Ordinary,
+            SoftBranches::new(&graph, second.subgraph(), Local3DDeformation::Ordinary),
         )?;
         start(&ctx, &second, &vacuum, &Atom::one(), None, second.lmb())
     })?;
@@ -2913,45 +2915,598 @@ fn zero_mode_chart_unifies_occupation_representatives() -> Result<()> {
     Ok(())
 }
 
-/// A sector that reaches the union host with only its second
-/// bubble active, as after an integrated first bubble, is zero there and
-/// is returned as it is; a nonzero sector on that partial support is an
-/// internal error.
+/// The sectors of the integrated prefix `vertex` of `node` on a
+/// [`SpatialRing`], from the prefix localizer that every replay enters it
+/// with ([`Direct3dApproximation::localize_prefix`]). The vertex gets the
+/// factor `i` of the energy integral of each contracted loop, which the
+/// evaluation of a residue root divides out with those of the whole ring.
+fn localized_prefix(
+    spatial: &mut SpatialRing,
+    vertex: &Atom,
+    node: &OwnedForestNode,
+    vacuum_subtraction: bool,
+) -> Result<Vec<DirectSector>> {
+    let settings = UVgenerationSettings::default();
+    let cutset = CutSet::empty(spatial.graph.n_hedges());
+    let localizer = Localizer::new(&cutset, spatial.cff.orientation(vacuum_subtraction));
+    let loops = i64::try_from(node.lmb().loop_edges.len())?;
+    let vertex = vertex * Atom::i().pow(loops);
+    Direct3dApproximation::new(localizer, &mut spatial.graph, &settings)
+        .localize_prefix(&[(&vertex, node)], node)
+}
+
+/// The spatial component `Q(0, cind(axis))` of the ring momentum `q`, and its
+/// energy at `axis = 0`.
+fn ring_q(axis: usize) -> Atom {
+    GS.emr_mom(EdgeIndex(0), GS.cind(axis))
+}
+
+/// A symbolic integrated vertex of degree two in the vacuum mass `M` and the
+/// ring momentum `q`, like the finite counterterm of a ring bubble: the
+/// constant `v0 M^2`, the q-linear `v1 M q_1`, the quadratic `v2 q^2` and the
+/// energy term `v3 q_0^2`, with the rational `v = coefficients`.
+fn ring_vertex(coefficients: [(i64, i64); 4]) -> Atom {
+    let [v0, v1, v2, v3] = coefficients
+        .map(|(numerator, denominator)| Atom::num(numerator) / Atom::num(denominator));
+    let mass = Atom::var(GS.m_uv_vacuum);
+    let q_squared = (1..=3).map(|axis| ring_q(axis).pow(2)).sum::<Atom>();
+    v0 * mass.pow(2) + v1 * &mass * ring_q(1) + v2 * q_squared + v3 * ring_q(0).pow(2)
+}
+
+/// The vertex coefficients of [`ring_vertex`] in the pins of contracted
+/// zero-mode operations.
+const RING_VERTEX: [(i64, i64); 4] = [(3, 4), (-5, 4), (3, 5), (7, 5)];
+
+/// A zero-mode host acts on a sector whose integrated prefix contracted
+/// part of it: on the quark ring, the union host on the add-back of its
+/// first bubble expands the second bubble in the host's canonical chart
+/// contracted by the first, `{e4}`, and refuses the uncontracted chart, for
+/// a vanishing sector too; on the add-back of the join it expands nothing in
+/// the empty chart. The soft set stays outside the support.
 #[test]
-fn host_operation_short_circuits_zero_sectors() -> Result<()> {
+fn zero_mode_chart_accepts_the_contracted_canonical_chart() -> Result<()> {
     test_initialise()?;
-    let spatial = SpatialRing::new(Ring::Quark)?;
+    let vacuum_subtraction = true;
+    let mut spatial = SpatialRing::new(Ring::Quark)?;
+    let first = forest_node(&spatial.graph, &[2, 3], ApproximationType::MUV, 2)?;
+    let join = forest_node(&spatial.graph, &[2, 3, 4, 5], ApproximationType::MUV, 4)?;
+    let host = host_node(
+        &spatial.graph,
+        &[2, 3, 4, 5],
+        4,
+        spatial
+            .ring
+            .region(&spatial.graph, &[2, 3, 4, 5], vacuum_subtraction)?,
+    )?;
+    let vertex = ring_vertex(RING_VERTEX);
+    let [after_first] =
+        <[DirectSector; 1]>::try_from(localized_prefix(&mut spatial, &vertex, &first, true)?)
+            .map_err(|_| eyre!("an ordinary prefix has one sector"))?;
+    let [after_join] =
+        <[DirectSector; 1]>::try_from(localized_prefix(&mut spatial, &vertex, &join, true)?)
+            .map_err(|_| eyre!("a join prefix has one sector"))?;
     let graph = &spatial.graph;
     let settings = UVgenerationSettings::default();
     let ctx = UVCtx::new(graph, &settings);
-    let orientation = spatial.cff.orientation(true);
-    let host = host_node(
-        graph,
-        &[2, 3, 4, 5],
-        4,
-        spatial.ring.region(graph, &[2, 3, 4, 5], true)?,
-    )?;
-    let first = forest_node(graph, &[2, 3], ApproximationType::MUV, 2)?;
-    let second = forest_node(graph, &[4, 5], ApproximationType::MUV, 2)?;
-    let root = spatial.root(true)?;
-    let zero = root.map(|_| Atom::Zero);
-    let operation = |sector: &DirectResidueBranches| {
+    let orientation = spatial.cff.orientation(vacuum_subtraction);
+    let second = graph.edge_subgraph(&[4, 5]);
+    let empty = graph.empty_subgraph::<SuBitGraph>();
+    let operation = |given: &OwnedForestNode,
+                     support: &SuBitGraph,
+                     lmb: &LoopMomentumBasis,
+                     sector: &DirectResidueBranches| {
         apply_taylor(
             &ctx,
             orientation,
             &host,
-            &first,
-            Some(second.subgraph().clone()),
-            second.lmb(),
+            given,
+            Some(support.clone()),
+            lmb,
             sector,
         )
     };
-    assert_eq!(operation(&zero)?, zero, "a zero sector passes unchanged");
-    let error = operation(&root).expect_err("a nonzero partial-support sector is refused");
+
+    let (_, contracted) = coordinate_lmb(&ctx, &host, &first, None, &[], &second)?;
+    assert_eq!(contracted.loop_edges.raw, [EdgeIndex(4)]);
+    let static_mode = operation(&first, &second, &contracted, &after_first.active)?;
+    assert!(!static_mode.is_zero(), "S0_h of the first bubble's add-back");
+    assert_keyed_to_soft_set(
+        &static_mode,
+        orientation,
+        &edge_set(&[0, 1]),
+        "S0_h on the support of the second bubble",
+    )?;
+    let uncontracted = canonical_lmb(graph, &host)?;
+    let zero = after_first.active.map(|_| Atom::Zero);
+    for sector in [&after_first.active, &zero] {
+        let error = operation(&first, &second, &uncontracted, sector)
+            .expect_err("the uncontracted chart is refused");
+        assert!(
+            format!("{error:?}").contains("must expand in its canonical chart"),
+            "{error:?}"
+        );
+    }
+    assert_eq!(
+        operation(&first, &second, &contracted, &zero)?,
+        zero,
+        "a vanishing sector passes the check unchanged"
+    );
+
+    let (_, nothing) = coordinate_lmb(&ctx, &host, &join, None, &[], &empty)?;
+    assert!(nothing.loop_edges.is_empty());
+    assert!(!operation(&join, &empty, &nothing, &after_join.active)?.is_zero());
+    let error = operation(&join, &empty, &contracted, &after_join.active)
+        .expect_err("a chart with a loop is refused on the empty support");
     assert!(
-        format!("{error:?}").contains("on the partial support"),
+        format!("{error:?}").contains("must expand in its canonical chart"),
         "{error:?}"
     );
+    Ok(())
+}
+
+/// The union host on an integrated factor is the zero mode of the
+/// contracted host (L1): on the quark ring, `S0_h` on the add-back of the
+/// first bubble with the vertex `V(q)` of [`ring_vertex`] expands the
+/// exact static mode `[x^-4](V N_B F_{G/A})` of the contracted ring in `q`
+/// through its order `J = 1`: `|q s|^4 S0_h = c0 + c1 s` with the Taylor
+/// coefficients of `|q s|^4 [x^-4]` at `s = 0`, while its vacuum-soft order
+/// is that limit of `|q s|^3 [x^-3]` in the hard-vacuum sector. Only the
+/// static mode at `q0 = 0` and the orders `j <= J` of `V` enter: the
+/// quadratic and the energy terms of `V` drop out, the q-linear term stays.
+#[test]
+fn union_host_s0_on_an_integrated_factor_is_the_contracted_static_mode() -> Result<()> {
+    test_initialise()?;
+    let vacuum_subtraction = true;
+    let mut spatial = SpatialRing::new(Ring::Quark)?;
+    let first = forest_node(&spatial.graph, &[2, 3], ApproximationType::MUV, 2)?;
+    let host = host_node(
+        &spatial.graph,
+        &[2, 3, 4, 5],
+        4,
+        spatial
+            .ring
+            .region(&spatial.graph, &[2, 3, 4, 5], vacuum_subtraction)?,
+    )?;
+    let [v0, v1, _, _] = RING_VERTEX;
+    let vertices = [
+        RING_VERTEX,
+        [v0, v1, (0, 1), (0, 1)],
+        [v0, (0, 1), (0, 1), (0, 1)],
+    ];
+    let mut prefixes = Vec::new();
+    for coefficients in vertices {
+        let [prefix] = <[DirectSector; 1]>::try_from(localized_prefix(
+            &mut spatial,
+            &ring_vertex(coefficients),
+            &first,
+            vacuum_subtraction,
+        )?)
+        .map_err(|_| eyre!("an ordinary prefix has one sector"))?;
+        prefixes.push(prefix.active);
+    }
+    let graph = &spatial.graph;
+    let settings = UVgenerationSettings::default();
+    let ctx = UVCtx::new(graph, &settings);
+    let orientation = spatial.cff.orientation(vacuum_subtraction);
+    let second = graph.edge_subgraph(&[4, 5]);
+    let (_, chart) = coordinate_lmb(&ctx, &host, &first, None, &[], &second)?;
+    // The second bubble's vertices, which its operation would attach.
+    let with_second = |prefix: &DirectResidueBranches| {
+        prefix.multiply_key_mapped(
+            orientation,
+            graph,
+            &SpatialRing::vertex(4, 5),
+            DirectResidueBranches::numerator_scope(),
+        )
+    };
+    let mut images = Vec::new();
+    for prefix in &prefixes {
+        images.push(apply_taylor(
+            &ctx,
+            orientation,
+            &host,
+            &first,
+            Some(second.clone()),
+            &chart,
+            &with_second(prefix)?,
+        )?);
+    }
+    let full = with_second(&prefixes[0])?;
+    let mut exact = project(
+        graph,
+        &full,
+        vec![class(graph, &[0, 1], &[4])?],
+        ZeroModeSector::Complete,
+    )?;
+    let exact_static = exact
+        .remove(&vec![4])
+        .ok_or_else(|| eyre!("the static order is projected"))?;
+    let mut exact = project(
+        graph,
+        &full,
+        vec![class(graph, &[0, 1], &[3])?],
+        ZeroModeSector::HardVacuum,
+    )?;
+    let exact_vacuum = exact
+        .remove(&vec![3])
+        .ok_or_else(|| eyre!("the vacuum-soft order is projected"))?;
+
+    let steps = [1.0, 0.5, 0.25];
+    let nodes = [0.2, 0.1, 0.05, 0.025, 0.0125];
+    let node_steps = nodes.iter().flat_map(|s| [*s, -*s]).collect::<Vec<_>>();
+    let (beta, mu) = (0.5, QUARK_MU);
+    for index in 0..LOOP_MOMENTA.len() {
+        let context = format!("point {index}");
+        let [q, _, _] = LOOP_MOMENTA[index];
+        let at = |family: &DirectResidueBranches, steps: &[f64]| -> Result<Vec<(f64, f64)>> {
+            let kinematics = steps
+                .iter()
+                .map(|s| scaled_ring(index, *s))
+                .collect::<Vec<_>>();
+            let points = kinematics
+                .iter()
+                .map(|kinematics| uv_ring_point(kinematics, beta, mu, IR_MASS))
+                .collect::<Vec<_>>();
+            Ok(zero_mode_temperature_parts(&spatial, family, &points)?
+                .into_iter()
+                .zip(steps)
+                .map(|((static_part, vacuum_soft), s)| {
+                    let q = norm3(q) * s.abs();
+                    (static_part * q.powi(4), vacuum_soft * q.powi(3))
+                })
+                .collect())
+        };
+        let exact_static = at(&exact_static, &node_steps)?;
+        let exact_vacuum = at(&exact_vacuum, &node_steps)?;
+        let lookup = |values: &[(f64, f64)], thermal: bool, s: f64| {
+            let position = node_steps
+                .iter()
+                .position(|step| *step == s)
+                .expect("a Taylor node");
+            let (static_part, vacuum_soft) = values[position];
+            if thermal { static_part } else { vacuum_soft }
+        };
+        let (c0, c1) = taylor_at_zero(|s| lookup(&exact_static, true, s));
+        let (vacuum, _) = taylor_at_zero(|s| lookup(&exact_vacuum, false, s));
+        assert!(c1.abs() > 1e-3 * c0.abs(), "{context}: no q-linear term");
+        let images = images
+            .iter()
+            .map(|image| at(image, &steps))
+            .collect::<Result<Vec<_>>>()?;
+        for (step, s) in steps.into_iter().enumerate() {
+            let context = format!("{context}, s {s}");
+            let (static_part, vacuum_soft) = images[0][step];
+            assert!(
+                (static_part - (c0 + c1 * s)).abs() <= 1e-6 * (c0.abs() + c1.abs()),
+                "{context}: |q|^4 S0_h = {static_part} != {c0} + {c1} s"
+            );
+            assert_close(vacuum_soft, vacuum, 1e-6, &format!("{context}: vacuum-soft"));
+            // The orders beyond J and the energy term drop out exactly.
+            assert_close(
+                images[1][step].0,
+                static_part,
+                1e-10,
+                &format!("{context}: V^(2)"),
+            );
+            assert_close(
+                images[1][step].1,
+                vacuum_soft,
+                1e-10,
+                &format!("{context}: V^(2), vacuum-soft"),
+            );
+            // The q-linear term of the vertex is kept.
+            assert!(
+                (images[2][step].0 - static_part).abs() > 1e-4 * static_part.abs(),
+                "{context}: the q-linear vertex term is dropped"
+            );
+        }
+    }
+    Ok(())
+}
+
+/// A connected host's own U is part of its integrated add-back, so the
+/// prefix localizer subtracts the host's zero mode from it (L2):
+/// `ι_A S0_A = S0ᶜ_A ι_A`. On the gluon and ghost rings the add-back of
+/// host A comes with a second sector, `-S0ᶜ_A` of it, the zero mode of the
+/// contracted host alone: at its endpoint `J - dod(A) = -2` it keeps the
+/// vertex at `q = 0`, `V(0) = v0 M^2`, times the static modes of the soft
+/// set, exactly the projection of the add-back with that vertex. Its rows
+/// name the branch of A by its order tag `lambda_A^-2`, and its step applies
+/// `S0` alone.
+#[test]
+fn own_host_s0_on_its_integrated_prefix_is_the_static_vertex() -> Result<()> {
+    test_initialise()?;
+    let vacuum_subtraction = true;
+    for ring in [Ring::Mixed, Ring::Ghost] {
+        let mut spatial = SpatialRing::new(ring)?;
+        let host = host_node(
+            &spatial.graph,
+            &[2, 3],
+            2,
+            spatial
+                .ring
+                .region(&spatial.graph, &[2, 3], vacuum_subtraction)?,
+        )?;
+        let [plain, self_suffix] = <[DirectSector; 2]>::try_from(localized_prefix(
+            &mut spatial,
+            &ring_vertex(RING_VERTEX),
+            &host,
+            vacuum_subtraction,
+        )?)
+        .map_err(|_| eyre!("{ring:?}: the add-back of host A has a self-suffix"))?;
+        let constant = localized_prefix(
+            &mut spatial,
+            &ring_vertex([RING_VERTEX[0], (0, 1), (0, 1), (0, 1)]),
+            &host,
+            vacuum_subtraction,
+        )?
+        .into_iter()
+        .next()
+        .ok_or_else(|| eyre!("{ring:?}: the add-back has a plain sector"))?;
+        let graph = &spatial.graph;
+        assert!(plain.projection_paths.is_empty());
+        let [path] = self_suffix.projection_paths.as_slice() else {
+            panic!("{ring:?}: the self-suffix has one projection path");
+        };
+        let [step] = path.steps.as_slice() else {
+            panic!("{ring:?}: the self-suffix is one step");
+        };
+        assert_eq!(
+            step.conceptual_branches,
+            vec![Local3DSignedBranch {
+                branch: Local3DConceptualBranch::S,
+                coefficient: 1,
+            }],
+            "{ring:?}: the self-suffix applies S0 alone"
+        );
+        assert!(step.route_loop_edges.is_empty(), "{ring:?}: the contracted host has no chart");
+        let order_tag = zero_mode_order(Atom::var(host.subgraph().symbol())).pow(-2);
+        assert!(
+            self_suffix
+                .active
+                .factorized_sum()
+                .contains(order_tag.as_view()),
+            "{ring:?}: the self-suffix rows carry lambda_A^-2"
+        );
+        assert_eq!(self_suffix.frozen_integrands, plain.frozen_integrands);
+
+        let mut projected = project(
+            graph,
+            &constant.active,
+            vec![class(graph, &[0, 1], &[4])?, class(graph, &[4], &[2])?],
+            ZeroModeSector::Complete,
+        )?;
+        let expected = projected
+            .remove(&vec![4, 2])
+            .ok_or_else(|| eyre!("the static order is projected"))?;
+        let kinematics = LOOP_MOMENTA.map(RingKinematics::new);
+        let points = kinematics
+            .iter()
+            .flat_map(|kinematics| {
+                PIN_MEDIA.map(|(beta, mu)| uv_ring_point(kinematics, beta, mu, IR_MASS))
+            })
+            .collect::<Vec<_>>();
+        let actual = spatial.values(&-self_suffix.active, &points)?;
+        let expected = spatial.values(&expected, &points)?;
+        for (index, (actual, expected)) in actual.into_iter().zip(expected).enumerate() {
+            assert!(expected.abs() > 0.0, "{ring:?}, point {index}: no static vertex");
+            assert_close(actual, expected, 1e-10, &format!("{ring:?}, point {index}"));
+        }
+    }
+    Ok(())
+}
+
+/// A connected host annihilates an integrated prefix that contracted one
+/// of its frequency classes: on the gluon ring, `S0_A` on the add-back of
+/// the second loop B, which holds the class `{e4}` of the soft set of A, is
+/// exactly zero, so the host's operation there is its plain U alone,
+/// `H_A ι_B = U_A ι_B`, the replay the union states use
+/// (`Forests::replayed_plain_u`).
+#[test]
+fn zero_mode_host_annihilates_an_integrated_class() -> Result<()> {
+    test_initialise()?;
+    let vacuum_subtraction = true;
+    let mut spatial = SpatialRing::new(Ring::Mixed)?;
+    let second = forest_node(&spatial.graph, &[4, 5], ApproximationType::MUV, 2)?;
+    let host = host_node(
+        &spatial.graph,
+        &[2, 3],
+        2,
+        spatial
+            .ring
+            .region(&spatial.graph, &[2, 3], vacuum_subtraction)?,
+    )?;
+    let plain_u = forest_node(&spatial.graph, &[2, 3], ApproximationType::MUV, 2)?;
+    let [prefix] = <[DirectSector; 1]>::try_from(localized_prefix(
+        &mut spatial,
+        &ring_vertex(RING_VERTEX),
+        &second,
+        vacuum_subtraction,
+    )?)
+    .map_err(|_| eyre!("an ordinary prefix has one sector"))?;
+    let graph = &spatial.graph;
+    let settings = UVgenerationSettings::default();
+    let ctx = UVCtx::new(graph, &settings);
+    let orientation = spatial.cff.orientation(vacuum_subtraction);
+    let root = empty_forest_node(graph);
+    let lmb = canonical_lmb(graph, &host)?;
+    let region = host
+        .thermal_zero_mode()
+        .ok_or_else(|| eyre!("host A has a zero-mode region"))?;
+    let started = start_family(
+        &ctx,
+        orientation,
+        &host,
+        &root,
+        None,
+        &lmb,
+        &prefix.active,
+    )?;
+    let terms = ZeroModeTerm::expand(
+        &ctx,
+        orientation,
+        &host,
+        &root,
+        region,
+        host.subgraph(),
+        &lmb,
+        &started,
+    )?;
+    assert!(
+        terms.iter().all(|term| term.frozen.is_zero()),
+        "S0_A of the add-back of B vanishes"
+    );
+    let operation = |node: &OwnedForestNode| {
+        apply_taylor(&ctx, orientation, node, &root, None, &lmb, &prefix.active)
+    };
+    let hosted = operation(&host)?;
+    let plain = operation(&plain_u)?;
+    let kinematics = LOOP_MOMENTA.map(RingKinematics::new);
+    let points = kinematics
+        .iter()
+        .flat_map(|kinematics| {
+            PIN_MEDIA.map(|(beta, mu)| uv_ring_point(kinematics, beta, mu, IR_MASS))
+        })
+        .collect::<Vec<_>>();
+    let hosted = spatial.values(&hosted, &points)?;
+    let plain = spatial.values(&plain, &points)?;
+    for (index, (hosted, plain)) in hosted.into_iter().zip(plain).enumerate() {
+        assert!(plain.abs() > 0.0, "point {index}: U_A of the add-back of B");
+        assert_close(hosted, plain, 1e-12, &format!("point {index}"));
+    }
+    Ok(())
+}
+
+/// A zero-mode chart expands an integrated vertex in the soft momenta at
+/// fixed masses: it scales the vertex's algebraic vacuum masses with its
+/// loops, but holds its logarithms of the vacuum mass over the MS-bar scale
+/// fixed. On the quark ring, `S0_h` on the add-back of the first bubble with
+/// a vertex whose constant and q-linear terms, the latter at a kept order,
+/// carry `log(M^2/mu^2)` leaves no logarithm depending on the order tag, and
+/// equals `S0_h` on the vertex with a fixed symbol `L` in place of the
+/// logarithm, at `L = log(M^2/mu^2)`.
+#[test]
+fn zero_mode_chart_holds_prefix_logarithms() -> Result<()> {
+    test_initialise()?;
+    let vacuum_subtraction = true;
+    let mut spatial = SpatialRing::new(Ring::Quark)?;
+    let first = forest_node(&spatial.graph, &[2, 3], ApproximationType::MUV, 2)?;
+    let host = host_node(
+        &spatial.graph,
+        &[2, 3, 4, 5],
+        4,
+        spatial
+            .ring
+            .region(&spatial.graph, &[2, 3, 4, 5], vacuum_subtraction)?,
+    )?;
+    let mass = Atom::var(GS.m_uv_vacuum);
+    let logarithm_symbol = Atom::var(symbol!("zero_mode_test_logarithm"));
+    let vertex = |logarithm: &Atom| {
+        mass.pow(2) * (Atom::num(2) + Atom::num(3) * logarithm)
+            + &mass * ring_q(1) * (Atom::num(-1) + Atom::num(5) * logarithm)
+            + ring_vertex([(0, 1), (0, 1), (3, 5), (7, 5)])
+    };
+    let logarithm = function!(Symbol::LOG, mass.pow(2) / Atom::var(GS.mu_r_sq));
+    let mut prefixes = Vec::new();
+    for logarithm in [&logarithm, &logarithm_symbol] {
+        let [prefix] = <[DirectSector; 1]>::try_from(localized_prefix(
+            &mut spatial,
+            &vertex(logarithm),
+            &first,
+            vacuum_subtraction,
+        )?)
+        .map_err(|_| eyre!("an ordinary prefix has one sector"))?;
+        prefixes.push(prefix.active);
+    }
+    let graph = &spatial.graph;
+    let settings = UVgenerationSettings::default();
+    let ctx = UVCtx::new(graph, &settings);
+    let orientation = spatial.cff.orientation(vacuum_subtraction);
+    let second = graph.edge_subgraph(&[4, 5]);
+    let (_, chart) = coordinate_lmb(&ctx, &host, &first, None, &[], &second)?;
+    let images = prefixes
+        .iter()
+        .map(|prefix| {
+            apply_taylor(
+                &ctx,
+                orientation,
+                &host,
+                &first,
+                Some(second.clone()),
+                &chart,
+                &prefix.multiply_key_mapped(
+                    orientation,
+                    graph,
+                    &SpatialRing::vertex(4, 5),
+                    DirectResidueBranches::numerator_scope(),
+                )?,
+            )
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let with_logarithm = images[0].resolved_scalars()?.factorized_sum();
+    let mut logarithms = 0;
+    with_logarithm.as_view().visitor(&mut |view| {
+        if let AtomView::Fun(call) = view
+            && call.get_symbol() == Symbol::LOG
+        {
+            logarithms += 1;
+            assert!(
+                !view.contains_symbol(*ZERO_MODE_ORDER) && !view.contains_symbol(GS.rescale),
+                "a logarithm depends on the order tag: {view}"
+            );
+            return false;
+        }
+        true
+    });
+    assert!(logarithms > 0, "the logarithm of the vertex survives");
+    let mu_r = 2.0_f64;
+    let kinematics = LOOP_MOMENTA.map(RingKinematics::new);
+    let points = kinematics
+        .iter()
+        .flat_map(|kinematics| {
+            PIN_MEDIA.map(|(beta, mu)| {
+                uv_ring_point(kinematics, beta, mu, IR_MASS)
+                    .with(Atom::var(GS.mu_r_sq), mu_r * mu_r)
+                    .with(
+                        logarithm_symbol.clone(),
+                        (UV_MASS * UV_MASS / (mu_r * mu_r)).ln(),
+                    )
+            })
+        })
+        .collect::<Vec<_>>();
+    let actual = spatial.values(&images[0], &points)?;
+    let fixed = spatial.values(&images[1], &points)?;
+    for (index, (actual, fixed)) in actual.into_iter().zip(fixed).enumerate() {
+        assert!(fixed.abs() > 0.0, "point {index}: S0_h of the vertex");
+        assert_close(actual, fixed, 1e-10, &format!("point {index}"));
+    }
+    Ok(())
+}
+
+/// Under vacuum subtraction the thermal weight `W - V(W)` vanishes on a
+/// cograph without loops, so the add-back of an operation that covers every
+/// loop localizes to zero, as its local U does; without vacuum subtraction
+/// it is the vacuum weight times the kernel.
+#[test]
+fn vacuum_subtracted_loopless_cograph_localizes_to_zero() -> Result<()> {
+    test_initialise()?;
+    let mut spatial = SpatialRing::new(Ring::Quark)?;
+    let whole = whole_ring_node(&spatial.graph)?;
+    let vertex = Atom::var(GS.m_uv_vacuum).pow(4);
+    for vacuum_subtraction in [true, false] {
+        let [localized] = <[DirectSector; 1]>::try_from(localized_prefix(
+            &mut spatial,
+            &vertex,
+            &whole,
+            vacuum_subtraction,
+        )?)
+        .map_err(|_| eyre!("an ordinary prefix has one sector"))?;
+        assert_eq!(
+            localized.active.is_zero(),
+            vacuum_subtraction,
+            "vacuum subtraction {vacuum_subtraction}"
+        );
+    }
     Ok(())
 }
 
@@ -3033,7 +3588,16 @@ impl MixedRingHostA {
         let region = node
             .thermal_zero_mode()
             .ok_or_else(|| eyre!("host A has a zero-mode region"))?;
-        let terms = ZeroModeTerm::expand(&ctx, orientation, &node, &root, region, &lmb, &started)?;
+        let terms = ZeroModeTerm::expand(
+            &ctx,
+            orientation,
+            &node,
+            &root,
+            region,
+            node.subgraph(),
+            &lmb,
+            &started,
+        )?;
         let sigma = region.sigma();
         for term in &terms {
             assert_keyed_to_soft_set(&term.frozen, orientation, sigma, "S0_A")?;
@@ -3534,8 +4098,8 @@ const UV_MASS: f64 = 1.3;
 /// tell it apart from [`UV_MASS`].
 const IR_MASS: f64 = 0.45;
 
-/// The static-theory masses of the pins: following `M`, as `general.m_ir`
-/// unset does, and apart from it.
+/// The static-theory masses of the pins: equal to `M`, where the two masses
+/// cannot be told apart, and apart from it.
 const STATIC_THEORY_MASSES: [f64; 2] = [UV_MASS, IR_MASS];
 
 /// The evaluation point of `kinematics` at `(beta, mu)`, the UV mass and the
@@ -3591,8 +4155,9 @@ fn uv_static_bubble(l: [f64; 3], q: [f64; 3]) -> (f64, f64) {
 /// `B^(0) = N_0/(k^2 + m^2)^2`,
 /// `B^(1) = N_1/(k^2 + m^2)^2 + 2 (k.q) N_0/(k^2 + m^2)^3`.
 /// At `m = 0` these are the Taylor terms `B_0^(0)`, `B_0^(1)` of the static
-/// mode; at `m = M` they are `[U B_0]`, U_B of the static loop at its degree
-/// `+1`, whose mass rearrangement would only start at the relative order two.
+/// mode; at the static-theory mass `m = m_IR` they are `[U B_0]`, U_B of the
+/// static loop at its degree `+1`, whose mass rearrangement would only start
+/// at the relative order two.
 fn static_second_loop(second: SecondVertices, k: [f64; 3], q: [f64; 3], mass: f64) -> (f64, f64) {
     let constant = second.value(k, [0.0; 3]);
     let linear = (second.value(k, q) - second.value(k, scaled3(q, -1.0))) / 2.0;
@@ -3613,9 +4178,10 @@ fn whole_ring_node(graph: &Graph) -> Result<OwnedForestNode> {
 
 /// The factors of the mixed ring's closed forms at one point and medium, for
 /// a [`SpatialRing`]'s numerators. Derived by hand from the static mode
-/// `S_A F = T^2 Pi_A^(0)(p) N_B/(q^4 k^2 (k - q)^2)` of host A. U_A and U_B
-/// introduce the UV mass `M`, and U_G the static-theory mass `m_IR` on the
-/// lines no inner U made massive.
+/// `S_A F = T^2 Pi_A^(0)(p) N_B/(q^4 k^2 (k - q)^2)` of host A. The own U_A
+/// of the host introduces the UV mass `M`; U_B and U_G, whose supports hold
+/// static lines of `S_A`, introduce the static-theory mass `m_IR` on the lines
+/// no inner U made massive.
 struct MixedRingFactors {
     /// `T_zm(0) T_zm(4) = T^2`, the temperatures of the static q and k modes.
     temperatures: f64,
@@ -3629,7 +4195,7 @@ struct MixedRingFactors {
     /// `N_B/((k^2 + m_IR^2)((k - q)^2 + m_IR^2))` after U_G.
     static_second: f64,
     uv_second: f64,
-    /// [`static_second_loop`] at `m = 0` and at `m = M`.
+    /// [`static_second_loop`] at `m = 0` and, after U_B, at `m = m_IR`.
     second_taylor: (f64, f64),
     uv_second_taylor: (f64, f64),
 }
@@ -3653,7 +4219,7 @@ impl MixedRingFactors {
             static_second: vertices / (dot3(k, k) * dot3(k_q, k_q)),
             uv_second: vertices * uv_propagator(k, ir_mass) * uv_propagator(k_q, ir_mass),
             second_taylor: static_second_loop(second, k, q, 0.0),
-            uv_second_taylor: static_second_loop(second, k, q, UV_MASS),
+            uv_second_taylor: static_second_loop(second, k, q, ir_mass),
         }
     }
 }
@@ -3678,12 +4244,12 @@ const PIN_MEDIA: [(f64, f64); 2] = [(1.0, 0.0), (0.5, QUARK_MU)];
 /// from the fixture's `N_0 = N_B(k, k - q) = k.(k - q)`
 /// (`N_0(k, 0) = k^2`) and `Pi_A^(0)` ([`MixedRingFactors`]), at three
 /// points, `T = 1` and `T = 2`, `M = 1.3`, and the static-theory mass
-/// `m = m_IR` of U_G equal to `M` and apart from it:
+/// `m = m_IR` of U_B and U_G equal to `M` and apart from it:
 /// - G/A has degree `6 - 8 + 2 = 0`:
 ///   `U_G S_A = T^2 Pi_A^(0) N_0/((q^2+m^2)^2 (k^2+m^2) ((k-q)^2+m^2))`,
-///   and `U_G U_A S_A` is the same with `U_A Pi_A^(0)` at `M`;
+///   and `U_G U_A S_A` is the same with the own `U_A Pi_A^(0)` at `M`;
 /// - U_B expands the static loop at its degree `+1`,
-///   `U_B S_A = T^2 Pi_A^(0) [U B_0]/q^4` at `M`, after which G/A has degree 0:
+///   `U_B S_A = T^2 Pi_A^(0) [U B_0]/q^4` at `m`, after which G/A has degree 0:
 ///   `U_G U_B S_A = T^2 Pi_A^(0) [U B_0]/(q^2+m^2)^2`;
 /// - the ring has degree `j - 1`, so U_G keeps the q-linear terms only:
 ///   `U_G S S_A = T^2 Pi_A^(0) B_0^(1)/(q^2+m^2)^2`,
@@ -4345,15 +4911,17 @@ fn vs_false_sector_mixes_full_and_minimal_depth() -> Result<()> {
 
 /// Which U images carry the static-theory mass `mIR`, and which the UV mass
 /// `mUV`, on the mixed ring without vacuum subtraction, with host A and the
-/// union host. U_G is the UV counterterm of the static theory on every row of
-/// a completed zero-mode branch, whose soft set it contains: `U_G S_A`,
-/// `U_G U_A S_A`, `U_G U_B S_A` and `U_G S S_A` carry `mIR`, and `mUV` only
-/// where an inner U introduced it. U_A on its own branch, U_B on the soft
-/// lines of A and U_G on the unfrozen ring keep `mUV` alone. On the host's
-/// whole operation `H_A F = S_A + U_A F - U_A S_A`, U_G gives `mIR` to the
-/// rows of `S_A` and `U_A S_A` and `mUV` to those of `U_A F`: with `m_IR`
-/// equal to `M` and apart from it, its image is the sum of its images of the
-/// three parts.
+/// union host. A U whose support holds a static line of a completed zero-mode
+/// branch is a UV counterterm of the static theory on the branch's rows: U_B
+/// on the soft lines `{4,5}` of A gives `U_B S_A` and `U_G U_B S_A` `mIR`
+/// alone, and U_G, holding every soft line, gives `mIR` to `U_G S_A`,
+/// `U_G U_A S_A` and `U_G S S_A`, with `mUV` only where the own U_A introduced
+/// it, as in `U_B U_A S_A`. The own U_A on its branch, and U_A, U_B and U_G on
+/// the unfrozen ring (`U_B U_A F`, `U_G U_A F`), keep `mUV` alone. On the
+/// host's whole operation `H_A F = S_A + U_A F - U_A S_A`, U_B and U_G give
+/// `mIR` to the rows of `S_A` and `U_A S_A` and `mUV` to those of `U_A F`:
+/// with `m_IR` equal to `M` and apart from it, each image is the sum of its
+/// images of the three parts.
 #[test]
 fn static_theory_mass_only_on_static_cographs() -> Result<()> {
     test_initialise()?;
@@ -4393,6 +4961,9 @@ fn static_theory_mass_only_on_static_cographs() -> Result<()> {
     let u_a_f = u(&first, &root, &integrand)?;
     let u_b_s_a = u(&second, &root, &s_a)?;
     let h_a_f = u(&host_a.node, &root, &integrand)?;
+    let u_b_u_a_s_a = u(&second, &host_a.node, &u_a_s_a)?;
+    let u_b_u_a_f = u(&second, &first, &u_a_f)?;
+    let u_b_h_a_f = u(&second, &host_a.node, &h_a_f)?;
     let u_g_s_a = u(&whole, &host_a.node, &s_a)?;
     let u_g_u_a_s_a = u(&whole, &host_a.node, &u_a_s_a)?;
     let u_g_u_a_f = u(&whole, &first, &u_a_f)?;
@@ -4400,13 +4971,16 @@ fn static_theory_mass_only_on_static_cographs() -> Result<()> {
     // (image, carries mIR, carries mUV)
     let images = [
         ("U_A S_A", &u_a_s_a, false, true),
-        ("U_B S_A", &u_b_s_a, false, true),
+        ("U_B S_A", &u_b_s_a, true, false),
+        ("U_B U_A S_A", &u_b_u_a_s_a, true, true),
         ("U_A F", &u_a_f, false, true),
+        ("U_B U_A F", &u_b_u_a_f, false, true),
+        ("U_B H_A F", &u_b_h_a_f, true, true),
         ("U_G F", &u(&whole, &root, &integrand)?, false, true),
         ("U_G U_A F", &u_g_u_a_f, false, true),
         ("U_G S_A", &u_g_s_a, true, false),
         ("U_G U_A S_A", &u_g_u_a_s_a, true, true),
-        ("U_G U_B S_A", &u(&whole, &second, &u_b_s_a)?, true, true),
+        ("U_G U_B S_A", &u(&whole, &second, &u_b_s_a)?, true, false),
         (
             "U_G S S_A",
             &u(&whole, &union, &u(&union, &host_a.node, &s_a)?)?,
@@ -4434,6 +5008,11 @@ fn static_theory_mass_only_on_static_cographs() -> Result<()> {
     );
 
     let kinematics = LOOP_MOMENTA.map(RingKinematics::new);
+    // (U, its images of H_A F, S_A, U_A S_A and U_A F)
+    let operations = [
+        ("U_B", [&u_b_h_a_f, &u_b_s_a, &u_b_u_a_s_a, &u_b_u_a_f]),
+        ("U_G", [&u_g_h_a_f, &u_g_s_a, &u_g_u_a_s_a, &u_g_u_a_f]),
+    ];
     for ir_mass in STATIC_THEORY_MASSES {
         let points = kinematics
             .iter()
@@ -4441,44 +5020,47 @@ fn static_theory_mass_only_on_static_cographs() -> Result<()> {
                 PIN_MEDIA.map(|(beta, mu)| uv_ring_point(kinematics, beta, mu, ir_mass))
             })
             .collect::<Vec<_>>();
-        let [whole_operation, s, u_on_s, ordinary] =
-            [&u_g_h_a_f, &u_g_s_a, &u_g_u_a_s_a, &u_g_u_a_f]
-                .map(|image| spatial.values(image, &points));
-        for (index, (((whole_operation, s), u_on_s), ordinary)) in whole_operation?
-            .into_iter()
-            .zip(s?)
-            .zip(u_on_s?)
-            .zip(ordinary?)
-            .enumerate()
-        {
-            assert!(
-                ordinary.abs() > 0.0 && s.abs() > 0.0,
-                "point {index}: U_G U_A F or U_G S_A vanishes"
-            );
-            assert_close(
-                whole_operation,
-                s + ordinary - u_on_s,
-                1e-10,
-                &format!("U_G H_A F, point {index}, m_IR {ir_mass}"),
-            );
+        for (name, images) in operations {
+            let [whole_operation, s, u_on_s, ordinary] =
+                images.map(|image| spatial.values(image, &points));
+            for (index, (((whole_operation, s), u_on_s), ordinary)) in whole_operation?
+                .into_iter()
+                .zip(s?)
+                .zip(u_on_s?)
+                .zip(ordinary?)
+                .enumerate()
+            {
+                assert!(
+                    ordinary.abs() > 0.0 && s.abs() > 0.0,
+                    "point {index}: {name} U_A F or {name} S_A vanishes"
+                );
+                assert_close(
+                    whole_operation,
+                    s + ordinary - u_on_s,
+                    1e-10,
+                    &format!("{name} H_A F, point {index}, m_IR {ir_mass}"),
+                );
+            }
         }
     }
     Ok(())
 }
 
-/// The ordinary U of a support is the UV counterterm of a static theory on a
-/// row iff the soft set of the row's outermost completed zero-mode branch
-/// lies inside the support, the soft set of a branch being the loop lines
-/// outside it. On the mixed ring the whole graph contains the soft set
-/// `{0,1,4,5}` of host A and the triangle D1 does not; so does that soft set
-/// itself, disjoint from A. A row that also holds the branch of the union
-/// host `h = {2,3,4,5}` around A is decided by h alone, whose zero-mode
-/// operation expanded A's further soft lines `{4,5}` as hard ones: the static
-/// pair `{0,1}`, disjoint from h, contains the soft set of h but not that of
-/// A. A row with the incomparable branches of A and of the bubble `{4,5}`,
-/// whose soft set `{0,1,2,3}` lies outside `{0,1,4,5}`, is an error.
+/// The ordinary U of a support is a UV counterterm of a static theory on a
+/// row iff the support holds a line of the soft set of the row's outermost
+/// completed zero-mode branch, the soft set of a branch being the loop lines
+/// outside it. On the mixed ring the soft set of host A is `{0,1,4,5}`: the
+/// whole graph, the triangle D1 `{0,1,2,3,4}`, the bubble B `{4,5}`, the
+/// static pair `{0,1}` and the soft set itself all hold some of it, and only
+/// the own branch `{2,3}`, which its own U alone revisits, holds none. A row
+/// that also holds the branch of the union host `h = {2,3,4,5}` around A is
+/// decided by h alone, whose zero-mode operation expanded A's further soft
+/// lines `{4,5}` as hard ones: B holds soft lines of A but not of h. A row
+/// with the incomparable branches of A and of B, whose soft set is
+/// `{0,1,2,3}`, is static for a support meeting both soft sets, and an error
+/// for B, which meets A's soft set but not its own.
 #[test]
-fn static_cograph_needs_the_whole_soft_set() -> Result<()> {
+fn static_cograph_needs_a_soft_line() -> Result<()> {
     test_initialise()?;
     let graph = Ring::Mixed.topology()?;
     let loop_lines = graph.uncut_loop_lines();
@@ -4487,6 +5069,7 @@ fn static_cograph_needs_the_whole_soft_set() -> Result<()> {
     let bubble_b = graph.edge_subgraph(&[4, 5]);
     let union_h = graph.edge_subgraph(&[2, 3, 4, 5]);
     let static_pair = graph.edge_subgraph(&[0, 1]);
+    let soft_set_a = graph.edge_subgraph(&[0, 1, 4, 5]);
     let expands = |support: &SuBitGraph, owners: &[&SuBitGraph]| {
         SoftBranches::new(&graph, support, Local3DDeformation::Ordinary).expands_static_cograph(
             &owners
@@ -4496,18 +5079,23 @@ fn static_cograph_needs_the_whole_soft_set() -> Result<()> {
             &loop_lines,
         )
     };
-    assert!(expands(&loop_lines, &[&host_a])?);
-    assert!(!expands(
+    for support in [
+        &loop_lines,
         &graph.edge_subgraph(&[0, 1, 2, 3, 4]),
-        &[&host_a]
-    )?);
-    assert!(expands(&graph.edge_subgraph(&[0, 1, 4, 5]), &[&host_a])?);
+        &bubble_b,
+        &static_pair,
+        &soft_set_a,
+    ] {
+        assert!(expands(support, &[&host_a])?, "{}", support.string_label());
+    }
+    assert!(!expands(&host_a, &[&host_a])?);
     assert!(!expands(&loop_lines, &[])?);
     assert!(expands(&loop_lines, &[&host_a, &union_h])?);
-    assert!(!expands(&static_pair, &[&host_a])?);
     assert!(expands(&static_pair, &[&host_a, &union_h])?);
-    let error = expands(&graph.edge_subgraph(&[0, 1, 4, 5]), &[&host_a, &bubble_b])
-        .expect_err("a U containing the soft set of one branch but not of another is refused")
+    assert!(!expands(&bubble_b, &[&host_a, &union_h])?);
+    assert!(expands(&soft_set_a, &[&host_a, &bubble_b])?);
+    let error = expands(&bubble_b, &[&host_a, &bubble_b])
+        .expect_err("a U holding soft lines of one branch but none of another is refused")
         .to_string();
     assert!(error.contains("unsupported zero-mode forest"), "{error}");
     Ok(())

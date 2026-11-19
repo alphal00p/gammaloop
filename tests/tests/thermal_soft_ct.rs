@@ -96,16 +96,17 @@ const EXPONENT_TOLERANCE: f64 = 0.05;
 /// successive differences of the remainder, so the r² gate fails where the
 /// linear approach coefficient on the profiled ray vanishes by accident, and
 /// the masses move these zeros: on the ghost ring's S(e3) ray with vacuum
-/// subtraction at muB = 0, m_IR = 0.3 reads +3.95 at r² 0.938, and the code
-/// before `general.m_ir` fails the same way at m_UV = 0.74 (+3.84 at r² 0.93),
-/// with a bounded remainder in both. At 0.5 the ray reads +4.03 at r² 0.9996.
+/// subtraction at muB = 0, m_IR = 0.3 on U_G alone reads +3.95 at r² 0.938,
+/// and the code before `general.m_ir` fails the same way at m_UV = 0.74
+/// (+3.84 at r² 0.93), with a bounded remainder in both. At 0.5, with U_B on
+/// the rows of S0_A at m_IR as well, the ray reads +3.996 at r² 0.99999.
 const STATIC_THEORY_MASS: f64 = 0.5;
 
 /// The static-theory mass of a slow-lane generation.
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum StaticTheoryMass {
-    /// `general.m_ir` unset, following `general.m_uv`.
-    FollowsUv,
+    /// The run card's `general.m_ir`, equal to its `general.m_uv`.
+    RunCard,
     /// `general.m_ir` set to this value.
     Apart(f64),
 }
@@ -114,16 +115,16 @@ impl StaticTheoryMass {
     /// The purpose that names the generation's state.
     fn purpose(self) -> &'static str {
         match self {
-            Self::FollowsUv => "zero_mode",
+            Self::RunCard => "zero_mode",
             Self::Apart(_) => "zero_mode_static_theory_mass",
         }
     }
 
-    /// The suffix that names this mass in a gate's context: none while it
-    /// follows `general.m_uv`.
+    /// The suffix that names this mass in a gate's context: none at the run
+    /// card's mass.
     fn context_suffix(self) -> String {
         match self {
-            Self::FollowsUv => String::new(),
+            Self::RunCard => String::new(),
             Self::Apart(m_ir) => format!(" (m_ir={m_ir})"),
         }
     }
@@ -951,12 +952,13 @@ fn generate_subtraction(
         generation.medium.vacuum_subtraction,
         vacuum_subtraction.enabled()
     );
+    thermal_rings::assert_run_card_static_theory_mass(&cli, ring.name)?;
     thermal_rings::assert_ring_structure(&cli, ring)?;
     Ok((cli, state_path))
 }
 
 fn assert_zero_mode_subtraction(case: &RingCase) -> Result<()> {
-    assert_zero_mode_subtraction_with(case, StaticTheoryMass::FollowsUv)
+    assert_zero_mode_subtraction_with(case, StaticTheoryMass::RunCard)
 }
 
 /// The IR and UV gates of `case`, without its approach probes, with

@@ -1083,6 +1083,17 @@ impl Full4dCts {
 }
 
 impl Local4dCts {
+    /// The vanishing local counterterm of a node whose zero-temperature
+    /// counterpart is not generated, such as a zero-mode union host.
+    pub(crate) fn zero() -> Self {
+        Self(FourDSectors::active_atom(Atom::Zero))
+    }
+
+    /// Whether this local counterterm vanishes in every sector.
+    pub(crate) fn is_zero(&self) -> bool {
+        self.0.atom.is_zero() && self.0.all().all(|sector| sector.atom.is_zero())
+    }
+
     pub(crate) fn atom(&self) -> &Atom {
         &self.0.atom
     }

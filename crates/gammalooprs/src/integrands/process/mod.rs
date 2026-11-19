@@ -2344,7 +2344,7 @@ impl LmbMultiChannelingSetup {
         self.master_edge_masses.invalidate();
         let parameters = &mut self.graph.param_builder;
         parameters.m_uv_value(Complex::new_re(F(settings.general.m_uv)));
-        parameters.m_ir_value(Complex::new_re(F(settings.general.m_ir())));
+        parameters.m_ir_value(Complex::new_re(F(settings.general.m_ir)));
         parameters.renormalization_localization_scale_value(Complex::new_re(F(settings
             .general
             .renormalization_localization_scale)));
@@ -3594,11 +3594,10 @@ pub(crate) fn validate_process_runtime_settings(
     }
     // A static theory's UV counterterm needs a positive regulator mass for its
     // soft lines.
-    if let Some(m_ir) = settings.general.m_ir
-        && !(m_ir.is_finite() && m_ir > 0.0)
-    {
+    let m_ir = settings.general.m_ir;
+    if !(m_ir.is_finite() && m_ir > 0.0) {
         return Err(eyre!(
-            "`runtime.general.m_ir` must be finite and positive when set; got {m_ir}; unset it to follow `runtime.general.m_uv`"
+            "`runtime.general.m_ir` must be finite and positive; got {m_ir}"
         ));
     }
     // The shared process parameter layout always includes M, even when unused.
@@ -8771,19 +8770,19 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn m_ir_must_be_finite_and_positive_when_set() {
-        let validate = |m_ir: Option<f64>| {
+    fn m_ir_must_be_finite_and_positive() {
+        let validate = |m_ir: f64| {
             let mut settings = RuntimeSettings::default();
             settings.general.m_ir = m_ir;
             validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff])
         };
-        for m_ir in [None, Some(0.3), Some(1e4)] {
+        for m_ir in [0.3, 1000.0, 1e4] {
             validate(m_ir).unwrap();
         }
         // A vanishing or negative mass leaves the static soft lines massless
         // or tachyonic, and a NaN or infinite one has no counterterm.
         for m_ir in [0.0, -0.3, f64::NAN, f64::INFINITY] {
-            let error = validate(Some(m_ir)).unwrap_err().to_string();
+            let error = validate(m_ir).unwrap_err().to_string();
             assert!(
                 error.contains("`runtime.general.m_ir` must be finite and positive"),
                 "m_ir = {m_ir}: {error}"

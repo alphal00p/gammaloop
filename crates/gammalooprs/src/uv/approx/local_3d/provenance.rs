@@ -152,10 +152,13 @@ impl Local3DLoopRescaling {
             match current.thermal_zero_mode().map(ThermalZeroModeRegion::kind) {
                 // A connected zero-mode host subtracts its zero mode and the UV of
                 // its hard part: S0 + U - U S0.
-                Some(ZeroModeHostKind::Connected) => soft_and_hard(),
+                Some(ZeroModeHostKind::Connected) if !rescaled_subgraph.is_empty() => {
+                    soft_and_hard()
+                }
                 // A union host applies S0 alone; the U of each factor precedes it
-                // in the forest.
-                Some(ZeroModeHostKind::Union) => (
+                // in the forest. So does a connected host on its own integrated
+                // add-back, which holds its U: the self-suffix.
+                Some(ZeroModeHostKind::Connected | ZeroModeHostKind::Union) => (
                     vec![signed(Local3DConceptualBranch::S, 1)],
                     Local3DMaterialization::FactorizedSoft,
                 ),

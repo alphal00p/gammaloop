@@ -545,10 +545,10 @@ impl UVgenerationSettings {
     /// Whether every enclosing U treats a completed thermal soft branch as a
     /// frozen vertex, and so subtracts the reduced cograph of a soft
     /// component locally. Only the direct local-3D hedge-poset route at
-    /// finite temperature without integrated counterterms implements this.
+    /// finite temperature implements this, with and without integrated
+    /// counterterms.
     pub(crate) fn freezes_thermal_soft_branches(&self, medium: &MediumSettings) -> bool {
         medium.mode.is_finite_temperature()
-            && !self.generate_integrated
             && self.orchestrator == UVOrchestrator::HedgePoset
             && self.final_integrand == FinalIntegrandDimension::ThreeD
     }

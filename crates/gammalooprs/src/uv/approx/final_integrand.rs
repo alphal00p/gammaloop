@@ -12,7 +12,9 @@ use crate::{
         Integrands, UVgenerationSettings, UltravioletGraph,
         approx::{
             ForestNodeLike,
-            direct_3d::{Direct3dCts, DirectResidueBranches, normalize_local_tags},
+            direct_3d::{
+                Direct3dApproximation, Direct3dCts, DirectResidueBranches, normalize_local_tags,
+            },
             integrated::IntegratedCts,
             local_3d::Localizer,
             projected_4d::Projected4dCts,
@@ -138,13 +140,15 @@ impl FinalIntegrands {
 
 pub(crate) struct FinalIntegrandBuilder<'a> {
     localizer: Localizer<'a>,
+    settings: &'a UVgenerationSettings,
     marker: UvMarker,
 }
 
 impl<'a> FinalIntegrandBuilder<'a> {
-    pub(crate) fn new(localizer: Localizer<'a>, settings: &UVgenerationSettings) -> Self {
+    pub(crate) fn new(localizer: Localizer<'a>, settings: &'a UVgenerationSettings) -> Self {
         Self {
             localizer,
+            settings,
             marker: UvMarker::new(settings),
         }
     }
@@ -186,16 +190,16 @@ impl<'a> FinalIntegrandBuilder<'a> {
             file.atom = %resnum.to_canonical_string(),
             "Cograph numerator before residue mapping"
         );
-        let localized_integrated = self
-            .localizer
-            .localize(
-                &integrated.physical_finite_counterterm_atom(),
-                graph,
-                current,
-            )?
-            .combine()?;
-        let localized_integrated = DirectResidueBranches::from_transient(&localized_integrated)?
-            .map(|atom| self.marker.prefix(&full_graph, current.subgraph(), atom));
+        // The node's own add-back comes from the prefix localizer that every
+        // descendant replays it with, the one source of the self-suffix of a
+        // connected zero-mode host.
+        let finite_counterterm = integrated.physical_finite_counterterm_atom();
+        let localized_integrated = Direct3dCts::from_sectors(
+            Direct3dApproximation::new(self.localizer, graph, self.settings)
+                .localize_prefix(&[(&finite_counterterm, current)], current)?,
+        )?
+        .branches()?
+        .map(|atom| self.marker.prefix(&full_graph, current.subgraph(), atom));
         let localized_local = local_terms
             .branches()?
             .map(|atom| self.marker.prefix(&full_graph, current.subgraph(), atom));

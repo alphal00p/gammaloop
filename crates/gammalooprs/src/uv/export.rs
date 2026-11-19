@@ -430,7 +430,12 @@ fn export_hedge_poset_forest(
 
     let expressions = match &generation_settings.uv.final_integrand {
         FinalIntegrandDimension::FourD => {
-            forests.integrate(graph, crate::utils::vakint()?, &generation_settings.uv)?;
+            forests.integrate(
+                graph,
+                crate::utils::vakint()?,
+                &generation_settings.uv,
+                generation_settings.medium.vacuum_subtraction,
+            )?;
             forests.export_4d_node_expressions(forest_index)?
         }
         FinalIntegrandDimension::ThreeD => {

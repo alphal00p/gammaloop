@@ -1231,17 +1231,107 @@ impl Forests {
         Ok(states)
     }
 
+    /// The plain U ([`Spinney::to_plain_u`]) that a replay applies in place
+    /// of the connected zero-mode host `current` to a sector whose integrated
+    /// prefix `prefix` meets the host's soft set, if it does.
+    ///
+    /// The factor of a join that holds a connected host replays before the
+    /// factors in the host's soft set ([`Self::pinned_replay_order`]), so the
+    /// U of such a factor acts on the host's zero mode on static rows, as a
+    /// static U without an integrated counterpart. The integrated prefix of
+    /// that factor therefore meets the host's U alone, also where it
+    /// contracted only part of a frequency class of the host, which would
+    /// leave the zero-mode projection incomplete.
+    ///
+    /// # Errors
+    ///
+    /// A union host whose soft set meets `prefix`, which a factorized join
+    /// does not produce: it has no U to keep.
+    fn replayed_plain_u(
+        &self,
+        graph: &Graph,
+        current: &ForestNode<'_>,
+        prefix: &SuBitGraph,
+    ) -> Result<Option<Spinney>> {
+        let Some(region) = current.thermal_zero_mode() else {
+            return Ok(None);
+        };
+        if !graph
+            .paired_edges(prefix)
+            .iter()
+            .any(|edge| region.sigma().contains(edge))
+        {
+            return Ok(None);
+        }
+        match region.kind() {
+            ZeroModeHostKind::Connected => Ok(Some(current.spinney.to_plain_u())),
+            ZeroModeHostKind::Union => Err(eyre!(
+                "graph '{}': unsupported zero-mode forest: the integrated prefix {} lies in the \
+                 soft set of the union zero-mode host {}",
+                graph.name,
+                prefix.string_label(),
+                current.subgraph().string_label()
+            )),
+        }
+    }
+
+    /// Whether `node` has a counterpart in the zero-temperature integrated
+    /// lane ([`Self::compute_4d_for_node`]). Only UV counterterms with the
+    /// vacuum mass have integrated counterparts. A zero-mode operation and
+    /// the static U's above it are local only, so a union host and every
+    /// node above one have none; a connected host enters by its U. Under
+    /// `vacuum_subtraction` an operation covering every loop has none
+    /// either: its add-back would sit on a loopless cograph, whose
+    /// vacuum-subtracted weight vanishes, as its local U does.
+    fn has_zero_temperature_counterpart(
+        &self,
+        node: NodeIndex,
+        graph: &Graph,
+        vacuum_subtraction: bool,
+    ) -> bool {
+        let operation = &self.graph[node];
+        let above_union_host = operation
+            .key
+            .iter_levels_top_down()
+            .flat_map(|level| level.iter_leaf_ops())
+            .any(|op| {
+                let HedgePair::Paired { sink, .. } = self.wood.graph[&op.data].1 else {
+                    panic!("edge in trace key is not paired");
+                };
+                self.wood.graph[self.wood.graph.node_id(sink)].wood_role() == WoodRole::UnionHost
+            });
+        let covers_every_loop = operation
+            .covers()
+            .is_some_and(|cover| graph.n_loops(&cover) == graph.n_loops(&graph.full_filter()));
+        !above_union_host && !(vacuum_subtraction && covers_every_loop)
+    }
+
+    /// The zero-temperature local counterterm of `node` and its integrated
+    /// value, from those of the nodes below it. A node without a counterpart
+    /// there ([`Self::has_zero_temperature_counterpart`]) gets zero, without
+    /// an integration. A connected zero-mode host is its plain U
+    /// ([`Spinney::to_plain_u`]): the replay of its prefix dresses that
+    /// add-back with the host's own zero mode
+    /// ([`Direct3dApproximation::localize_prefix`]).
     fn compute_4d_for_node(
         &self,
         node: NodeIndex,
         graph: &Graph,
         vakint: &Vakint,
         settings: &UVgenerationSettings,
+        vacuum_subtraction: bool,
     ) -> Result<(Local4dCts, IntegratedCts)> {
         let operation = &self.graph[node];
         if operation.key.is_empty() {
             return Ok((Local4dCts::root(), IntegratedCts::root()));
         }
+        if !self.has_zero_temperature_counterpart(node, graph, vacuum_subtraction) {
+            return Ok((Local4dCts::zero(), IntegratedCts::root()));
+        }
+        let source = self.source_spinney(node);
+        let cover = operation
+            .covers()
+            .expect("a non-root operation has a cover");
 
         if self.graph.is_disjoint_union(node) {
             let components = self.disconnected_component_nodes(node)?;
@@ -1259,11 +1349,7 @@ impl Forests {
                 );
             }
 
-            let depth = graph.n_loops(
-                &operation
-                    .covers()
-                    .expect("a non-root operation has a cover"),
-            ) + 1;
+            let depth = graph.n_loops(&cover) + 1;
             return Ok((
                 Local4dCts::from_full_product(full_components),
                 IntegratedCts::factorized_product(integrated_components, depth)?,
@@ -1274,11 +1360,22 @@ impl Forests {
             .graph
             .unique_parent(node)
             .ok_or_else(|| eyre!("{operation} has no unique 4D parent"))?;
+        let parent_operation = &self.graph[parent];
         let full = self
             .recursion_input_4d(parent)
             .wrap_err_with(|| format!("while loading the 4D parent for {operation}"))?;
-        let step_order = self.graph[parent].key.op_count();
+        let step_order = parent_operation.key.op_count();
         let (current, given) = self.wood.current_given_pair(edge, step_order);
+        let plain_u;
+        let current = if source.thermal_zero_mode().is_some() {
+            plain_u = source.to_plain_u();
+            ForestNode {
+                spinney: &plain_u,
+                topo_order: current.topo_order,
+            }
+        } else {
+            current
+        };
         let ctx = UVCtx::new(graph, settings);
         let integrated_approximation = Integrated::new(vakint, &self.wood.vakint_settings);
         let local = local_4d::uv_limit(&full, &ctx, &current, &given, &current, &given)?;
@@ -1328,12 +1425,23 @@ impl Forests {
                 .filter(|state| !state.local_edges.is_empty())
             {
                 let integrated_operation = &self.graph[state.integrated];
+                let prefix_cover = integrated_operation
+                    .covers()
+                    .unwrap_or_else(|| graph.empty_subgraph());
                 let mut edges = state.local_edges.into_iter().enumerate();
                 let (offset, first_edge) = edges
                     .next()
                     .expect("a proper integrated prefix has a local suffix");
                 let step_order = integrated_operation.key.op_count() + offset;
                 let (current, given) = self.wood.current_given_pair(first_edge, step_order);
+                let plain_u = self.replayed_plain_u(graph, &current, &prefix_cover)?;
+                let current = match &plain_u {
+                    Some(spinney) => ForestNode {
+                        spinney,
+                        topo_order: step_order,
+                    },
+                    None => current,
+                };
 
                 // An empty integrated prefix starts from the per-cut root integrand. Every
                 // other prefix enters through the reduced branch of its first local operation.
@@ -1394,6 +1502,14 @@ impl Forests {
                 for (offset, edge) in edges {
                     let step_order = integrated_operation.key.op_count() + offset;
                     let (current, given) = self.wood.current_given_pair(edge, step_order);
+                    let plain_u = self.replayed_plain_u(graph, &current, &prefix_cover)?;
+                    let current = match &plain_u {
+                        Some(spinney) => ForestNode {
+                            spinney,
+                            topo_order: step_order,
+                        },
+                        None => current,
+                    };
                     sector = Direct3dApproximation::new(localizer, graph, settings)
                         .run_local(&sector, &current, &given, &current, &given)?;
                 }
@@ -1468,11 +1584,16 @@ impl Forests {
         })
     }
 
+    /// Compute the zero-temperature local counterterm and the integrated
+    /// value of every node ([`Self::compute_4d_for_node`]).
+    /// `vacuum_subtraction` is that of the local 3D lane localizing these
+    /// values, if any.
     pub fn integrate(
         &mut self,
         graph: &Graph,
         vakint: &Vakint,
         settings: &UVgenerationSettings,
+        vacuum_subtraction: bool,
     ) -> Result<()> {
         for (order, nidx) in self
             .graph
@@ -1482,7 +1603,8 @@ impl Forests {
         {
             debug!(order, nidx=%nidx, key=%self.graph[nidx], "Computing hedge-poset 4D term");
             let operation = self.graph[nidx].clone();
-            let (local_4d, integrated) = self.compute_4d_for_node(nidx, graph, vakint, settings)?;
+            let (local_4d, integrated) =
+                self.compute_4d_for_node(nidx, graph, vakint, settings, vacuum_subtraction)?;
             let cover = operation
                 .covers()
                 .unwrap_or_else(|| self.graph.empty_subgraph())
@@ -1524,7 +1646,7 @@ impl Forests {
             let started = std::time::Instant::now();
             if settings.generate_integrated || settings.local_uv_cts_from_expanded_4d_integrands {
                 // Local-4D projection also needs these coefficients when analytic addbacks are off.
-                self.integrate(graph, vakint, settings)?;
+                self.integrate(graph, vakint, settings, orientation.vacuum_subtraction)?;
             } else {
                 // Direct local-3D consumes only the zero integrated lane. Seed every
                 // operation because a disconnected replay can visit a prefix first.
@@ -2739,7 +2861,7 @@ mod tests {
         };
         let cut_structure = CutStructure::empty(&graph);
         let mut forests = Wood::new(cut_structure, &graph, &settings)?.unfold();
-        forests.integrate(&graph, crate::utils::vakint()?, &settings.uv)?;
+        forests.integrate(&graph, crate::utils::vakint()?, &settings.uv, settings.medium.vacuum_subtraction)?;
 
         let unions = forests
             .graph
@@ -2999,7 +3121,7 @@ mod tests {
             ..Default::default()
         };
         let mut forests = Wood::new(CutStructure::empty(&graph), &graph, &settings)?.unfold();
-        forests.integrate(&graph, crate::utils::vakint()?, &settings.uv)?;
+        forests.integrate(&graph, crate::utils::vakint()?, &settings.uv, settings.medium.vacuum_subtraction)?;
 
         let union = forests
             .graph
@@ -3241,7 +3363,7 @@ mod tests {
                 ..Default::default()
             };
             let mut forests = Wood::new(CutStructure::empty(&graph), &graph, &settings)?.unfold();
-            forests.integrate(&graph, utils::vakint()?, &settings.uv)?;
+            forests.integrate(&graph, utils::vakint()?, &settings.uv, settings.medium.vacuum_subtraction)?;
             let mut pole = Atom::Zero;
             let mut bare_parent_count = 0;
             let mut nested_parent_count = 0;
@@ -3328,7 +3450,7 @@ mod tests {
             ..Default::default()
         };
         let mut forests = Wood::new(CutStructure::empty(&graph), &graph, &settings)?.unfold();
-        forests.integrate(&graph, crate::utils::vakint()?, &settings.uv)?;
+        forests.integrate(&graph, crate::utils::vakint()?, &settings.uv, settings.medium.vacuum_subtraction)?;
 
         let terminals = forests
             .graph
@@ -4211,7 +4333,7 @@ mod tests {
         )?;
         let expected = atomic.atom() + nested.atom();
         let mut forests = wood.unfold();
-        forests.integrate(&graph, crate::utils::vakint()?, &settings.uv)?;
+        forests.integrate(&graph, crate::utils::vakint()?, &settings.uv, settings.medium.vacuum_subtraction)?;
         let actual = forests
             .graph
             .iter_nodes()
@@ -4540,7 +4662,7 @@ mod tests {
             expected += term.atom();
         }
         let mut forests = wood.unfold();
-        forests.integrate(&graph, crate::utils::vakint()?, &settings.uv)?;
+        forests.integrate(&graph, crate::utils::vakint()?, &settings.uv, settings.medium.vacuum_subtraction)?;
         let actual = forests
             .graph
             .iter_nodes()
@@ -4630,7 +4752,7 @@ mod tests {
                     .then_some((parent, child, edge))
             })
             .expect("spectacles has a connected child above its disconnected union");
-        f.integrate(&spectacles, crate::utils::vakint()?, &settings.uv)?;
+        f.integrate(&spectacles, crate::utils::vakint()?, &settings.uv, settings.medium.vacuum_subtraction)?;
 
         let step_order = f.graph[union].key.op_count();
         let (current, given) = f.wood.current_given_pair(edge, step_order);
