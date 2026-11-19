@@ -7713,6 +7713,35 @@ class Model:
         name : str
             Coupling name.
         """
+    def parse_expression(self, source: builtins.str) -> Expression:
+        r"""
+        Parse a diagram expression with this model's parameter and coupling names.
+
+        Graph and tensor functions use the same short names as DOT input.
+        Unknown names use the calling module's Symbolica namespace, as in
+        ``E(...)``. Explicit namespaces select the exact symbol.
+
+        Examples
+        --------
+        >>> model = hep.Model.standard_model()
+        >>> weight = model.parse_expression("GC_11*Q(0,cind(0))")
+        >>> assert model.parse_expression("MT") == model.parameter("MT").symbol
+
+        Parameters
+        ----------
+        source : str
+            Symbolica expression in diagram notation.
+
+        Returns
+        -------
+        Expression
+            Parsed expression, suitable for operations such as ``model.expand_couplings``.
+
+        Raises
+        ------
+        ValueError
+            If the expression cannot be parsed.
+        """
     def scalar_bindings(self, card: typing.Optional[ParameterCard] = None, *, overrides: typing.Optional[typing.Dict[symbolica.Expression, symbolica.Expression]] = None) -> typing.Dict[symbolica.Expression, symbolica.Expression]:
         r"""
         Return exact model scalar bindings with all named dependencies resolved.
@@ -8046,7 +8075,7 @@ class ModelExpression:
     @property
     def expression(self) -> Expression:
         r"""
-        Return the symbolic expression text.
+        Return the formula with its model parameter and coupling symbols.
 
         Examples
         --------

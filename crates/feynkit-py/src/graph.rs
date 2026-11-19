@@ -34,8 +34,6 @@ use symbolica::api::python::{
 };
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::id::{ReplaceWith, Replacement};
-use symbolica::parser::ParseSettings;
-use symbolica::wrap_input;
 use symbolica::{function, symbol};
 
 #[cfg(feature = "python_stubgen")]
@@ -57,12 +55,6 @@ use crate::tensor::PyTensorReducer;
 
 #[cfg(feature = "linnet-python")]
 use crate::graph_interop::LinnetCache;
-
-pub(crate) fn parse_symbolic_annotation(value: &str) -> Result<PythonExpression, String> {
-    Atom::parse_with_default_namespace(wrap_input!(value), ParseSettings::default())
-        .map(|expr| PythonExpression { expr })
-        .map_err(|parse_error| parse_error.to_string())
-}
 
 /// An interaction point in a Feynman diagram.
 ///
@@ -5076,7 +5068,7 @@ impl PyFeynmanDiagram {
 
 #[cfg(test)]
 mod tests {
-    use super::{DiagramSelection, PyFeynmanDiagram, parse_symbolic_annotation};
+    use super::{DiagramSelection, PyFeynmanDiagram};
     use feynkit_graph::FeynmanDiagram;
     use feynkit_model::Model;
     use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
@@ -5149,11 +5141,5 @@ mod tests {
         pyo3::Python::attach(|py| {
             spynso3::expression::TensorExpression::from_atom_interface(py, atom, None).unwrap();
         });
-    }
-
-    #[test]
-    fn symbolic_annotations_are_parsed_fallibly() {
-        assert!(parse_symbolic_annotation("g^2*(x+y)").is_ok());
-        assert!(parse_symbolic_annotation("g+").is_err());
     }
 }

@@ -12,7 +12,7 @@ use linnet::half_edge::{
     involution::Orientation,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
-use symbolica::atom::{Atom, AtomCore};
+use symbolica::atom::{Atom, AtomCore, Symbol};
 use symbolica::domains::rational::Rational;
 use symbolica::id::{Pattern, Replacement};
 use symbolica::parser::ParseSettings;
@@ -1538,6 +1538,19 @@ impl Model {
     pub fn particle_is_massless(&self, particle: ParticleId) -> bool {
         self.particle_by_id(particle)
             .is_ok_and(|particle| particle.is_massless(self))
+    }
+
+    /// Look up the symbol for a parameter or coupling declared by this model.
+    ///
+    /// ```
+    /// use feynkit_model::Model;
+    /// use symbolica::symbol;
+    /// assert_eq!(Model::phi4().scalar_symbol("lam"), Some(symbol!("UFO::lam")));
+    /// ```
+    #[must_use]
+    pub fn scalar_symbol(&self, name: &str) -> Option<Symbol> {
+        (self.indexes.parameters.contains_key(name) || self.indexes.couplings.contains_key(name))
+            .then(|| symbol!(&format!("UFO::{name}")))
     }
 
     pub fn parameter_id(&self, name: &str) -> Result<ParameterId, ModelError> {

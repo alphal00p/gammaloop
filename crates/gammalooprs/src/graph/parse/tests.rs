@@ -18,6 +18,7 @@ use symbolica::{
 use typed_index_collections::ti_vec;
 
 use super::Graph;
+use crate::utils;
 use crate::{
     finalized_runtime_dot,
     graph::{
@@ -60,6 +61,28 @@ fn parse_triangle_fixture(loop_edge: usize, loop_edge_mass: Option<i64>) -> Grap
     triangle_fixture(loop_edge, loop_edge_mass)
         .into_finalized_runtime_graph(&crate::utils::load_generic_model("scalars"))
         .unwrap()
+}
+
+#[test]
+fn runtime_dot_resolves_model_names_and_preserves_explicit_local_names() {
+    test_initialise().unwrap();
+    let model = utils::load_generic_model("scalars");
+    let source = triangle_fixture(3, None)
+        .replace("node [num=\"1\"]", "node [num=\"lam\"]")
+        .replace(
+            "graph [projector=\"1\"]",
+            "graph [projector=\"1\" overall_factor=\"lam + gammalooprs::lam\"]",
+        );
+    let graph = Graph::import_dot(&source, &model).unwrap().remove(0);
+    let coupling = Atom::var(symbol!("UFO::lam"));
+    assert_eq!(graph.underlying[NodeIndex(0)].num.expression(), &coupling);
+    assert_eq!(
+        graph.overall_factor,
+        coupling + Atom::var(symbol!("gammalooprs::lam"))
+    );
+    let exported = graph.dot_serialize(&DotExportSettings::default());
+    let restored = Graph::import_dot(&exported, &model).unwrap().remove(0);
+    assert_eq!(restored.overall_factor, graph.overall_factor);
 }
 
 #[test]
@@ -1396,9 +1419,8 @@ fn compact_gamma_loop_indices_bind_to_native_rule_ports() {
     let source =
         include_str!("../../../../../tests/resources/graphs/local_ir_gluon_self_energy.dot");
     let qualified = Graph::import_dot(source, &model).unwrap().remove(0);
-    let unqualified = Graph::import_dot(&source.replace("gammalooprs::", ""), &model)
-        .unwrap()
-        .remove(0);
+    let shorthand = source.replace("gammalooprs::", "").replace("spenso::", "");
+    let unqualified = Graph::import_dot(&shorthand, &model).unwrap().remove(0);
     // This explicitly supplied gluon projector closes the independently
     // instantiated color and Lorentz ports; disconnected copies of either
     // interface would fail exact network closure.

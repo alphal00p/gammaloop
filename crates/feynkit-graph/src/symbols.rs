@@ -16,6 +16,10 @@
 //!     assert!(html.contains("<mmultiscripts>"));
 //! }
 //! ```
+mod input;
+
+pub use input::parse_expression;
+
 use spenso::network::tags;
 use spenso::network::tags::{COMPONENT_LABELS_SUBSCRIPT_TAG, SPENSO_TAG};
 use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
