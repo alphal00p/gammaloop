@@ -593,6 +593,144 @@ impl SharedScalars {
         Expansion::Base(self.position(atom.clone()))
     }
 
+    /// Frontier closing: scalar values (closed trace words evaluated by the
+    /// gamma kernel) as polynomials over this frontier's variable map; their
+    /// products of sums are expanded by polynomial arithmetic, never as atoms.
+    /// Every variable is registered before any polynomial is built, so all of
+    /// them share the final map (later arithmetic never re-orders a grown
+    /// map). The kernel writes a value in factored form, the same subword
+    /// result repeated wherever the recurrence reused it: each value is
+    /// converted level by level (sums merged, products multiplied, like terms
+    /// combined at every level), each repeated sum or product once.
+    fn polynomials_of(&mut self, values: &[Atom]) -> Vec<Option<ScalarPolynomial>> {
+        fn leaves<'v>(view: AtomView<'v>, seen: &mut AHashSet<AtomView<'v>>, out: &mut Vec<Atom>) {
+            match view {
+                AtomView::Num(_) => {}
+                AtomView::Add(_) | AtomView::Mul(_) => {
+                    if !seen.insert(view) {
+                        return;
+                    }
+                    let children: Vec<AtomView<'v>> = match view {
+                        AtomView::Add(add) => add.iter().collect(),
+                        AtomView::Mul(product) => product.iter().collect(),
+                        _ => unreachable!(),
+                    };
+                    for child in children {
+                        leaves(child, seen, out);
+                    }
+                }
+                AtomView::Pow(power) if natural_exponent(view).is_some() => {
+                    leaves(power.get_base_exp().0, seen, out);
+                }
+                _ => {
+                    if seen.insert(view) {
+                        out.push(view.to_owned());
+                    }
+                }
+            }
+        }
+        fn natural_exponent(view: AtomView<'_>) -> Option<usize> {
+            let AtomView::Pow(power) = view else {
+                return None;
+            };
+            let exponent = i64::try_from(power.get_base_exp().1).ok()?;
+            usize::try_from(exponent).ok()
+        }
+        fn convert<'v>(
+            view: AtomView<'v>,
+            zero: &ScalarPolynomial,
+            positions: &AHashMap<Atom, usize>,
+            cache: &mut AHashMap<AtomView<'v>, ScalarPolynomial>,
+        ) -> Option<ScalarPolynomial> {
+            match view {
+                AtomView::Num(_) => Some(zero.constant(Rational::try_from(view).ok()?)),
+                AtomView::Add(_) | AtomView::Mul(_) => {
+                    if let Some(known) = cache.get(&view) {
+                        return Some(known.clone());
+                    }
+                    let polynomial = match view {
+                        AtomView::Add(add) => {
+                            let mut sum = CoefficientSum::One(zero.clone());
+                            for term in add.iter() {
+                                sum.push(
+                                    convert(term, zero, positions, cache)?,
+                                    #[cfg(feature = "reference-cases")]
+                                    0,
+                                );
+                            }
+                            sum.finish(
+                                #[cfg(feature = "reference-cases")]
+                                0,
+                            )
+                        }
+                        AtomView::Mul(product) => {
+                            let mut out = zero.one();
+                            for factor in product.iter() {
+                                out = &out * &convert(factor, zero, positions, cache)?;
+                            }
+                            out
+                        }
+                        _ => unreachable!(),
+                    };
+                    cache.insert(view, polynomial.clone());
+                    Some(polynomial)
+                }
+                AtomView::Pow(power) if natural_exponent(view).is_some() => {
+                    let base = convert(power.get_base_exp().0, zero, positions, cache)?;
+                    Some(base.pow(natural_exponent(view)?))
+                }
+                _ => {
+                    let mut exponents = vec![0u32; zero.nvars()];
+                    exponents[*positions.get(&view.to_owned())?] = 1;
+                    Some(zero.monomial(Rational::one(), exponents))
+                }
+            }
+        }
+        let mut found = Vec::new();
+        {
+            let mut seen = AHashSet::new();
+            for value in values {
+                leaves(value.as_view(), &mut seen, &mut found);
+            }
+        }
+        for leaf in found {
+            self.position(leaf);
+        }
+        let zero = ScalarPolynomial::new(&Q, None, self.map.clone());
+        values
+            .iter()
+            .map(|value| {
+                budget_checkpoint();
+                // one value's repeated subwords; values do not share them
+                let mut cache = AHashMap::new();
+                convert(value.as_view(), &zero, &self.positions, &mut cache)
+            })
+            .collect()
+    }
+
+    /// Frontier closing: spell the routed-sum stand-ins of closed values as
+    /// their sums, in every variable that holds one (once per variable,
+    /// instead of rewriting the emitted expression). The values stay compact
+    /// over the stand-ins: a scalar product with a routed sum is emitted as one
+    /// factor (`dot(k1 + k2, p)` normalised by its linearity), not expanded
+    /// into the frontier's own dots. Measured (2026-11-19, L4 B->B q1 and the
+    /// L5 sample): spelling the sums at the leaves BEFORE the conversion gives
+    /// a fully expanded output, but costs more in the contraction, the
+    /// hand-over and the lowering (which reads products of sums sparsely) than
+    /// the compact form; values are equal either way.
+    fn substitute_spellings(&mut self, stand_ins: &[(Atom, Atom)]) {
+        if stand_ins.is_empty() {
+            return;
+        }
+        for spelling in self.atoms.iter_mut().chain(self.dots.iter_mut()) {
+            let substituted =
+                crate::dirac::closing::substitute_stand_ins(spelling.clone(), stand_ins);
+            if substituted != *spelling {
+                *spelling = substituted;
+            }
+        }
+    }
+
     /// Emit each variable in the spelling it first had in this frontier, or
     /// in dot notation when the request ends there. The polynomial is
     /// relabelled with those atoms and written into one expression buffer,
@@ -1723,8 +1861,14 @@ impl SlotContraction {
             .iter()
             .enumerate()
             .filter_map(|(i, &node)| {
-                scope
-                    .contains_work(node, self, self.contraction_settings(rank_one))
+                // Frontier closing (opt-in, inert when unset): a trace word is
+                // never selected; it rides along with its bound ports and is
+                // closed per state at emission.
+                let word = crate::dirac::closing::frontier_active()
+                    && scope
+                        .literal(node)
+                        .is_some_and(crate::dirac::closing::is_word);
+                (!word && scope.contains_work(node, self, self.contraction_settings(rank_one)))
                     .then_some(i)
             })
             .collect();
@@ -2618,7 +2762,107 @@ impl<'a> ComponentSum<'a, '_> {
         let mut open_slots: Option<Vec<Atom>> = None;
         let mut any_open = false;
         let mut terminal = true;
+        // Frontier closing (opt-in): every distinct binding of a word is
+        // evaluated once by the gamma kernel. The states whose words all
+        // closed and that keep no tensor are grouped by their closed values:
+        // one group writes (sum of its weights) x (its values), after the
+        // variable map is complete. The routed sums stay stand-ins until the
+        // variables are spelled.
+        let closing = crate::dirac::closing::frontier_active();
+        let mut words: AHashMap<(usize, Vec<Argument<'a>>), Result<usize, Atom>> = AHashMap::new();
+        let mut values: Vec<Atom> = Vec::new();
+        let mut groups: Vec<(Vec<usize>, CoefficientSum)> = Vec::new();
+        let mut group_of: AHashMap<Vec<usize>, usize> = AHashMap::new();
+        let mut stand_ins: Vec<(Atom, Atom)> = Vec::new();
+        // a closed value written beside a tensor: its stand-ins are
+        // substituted in the root
+        let mut loose_values = false;
         for (remaining, weight) in states {
+            let remaining_count = remaining.factors.len();
+            let mut closed = Vec::new();
+            let mut extra = Vec::new();
+            let mut state_slots = Vec::new();
+            for (position, arguments) in remaining.factors {
+                // A word closed by this state's bound vectors is a scalar
+                // (conservatively in need of dot normalisation). A word still
+                // open is emitted as today (no certificate).
+                if closing && crate::dirac::closing::is_word(self.opaque_factors[position].0) {
+                    let key = (position, arguments);
+                    let evaluated = match words.get(&key) {
+                        Some(evaluated) => evaluated.clone(),
+                        None => {
+                            let word = self.emit_factor(position, &key.1)?;
+                            budget_checkpoint();
+                            let evaluated =
+                                match crate::dirac::closing::evaluate_closed_word(word.as_view()) {
+                                    Some((value, opaque)) => {
+                                        for pair in opaque {
+                                            // two routed sums under one stand-in
+                                            // name (a 64-bit hash collision):
+                                            // decline, the source is kept
+                                            if stand_ins.iter().any(|(stand_in, sum)| {
+                                                *stand_in == pair.0 && *sum != pair.1
+                                            }) {
+                                                return None;
+                                            }
+                                            if !stand_ins.contains(&pair) {
+                                                stand_ins.push(pair);
+                                            }
+                                        }
+                                        values.push(value);
+                                        Ok(values.len() - 1)
+                                    }
+                                    None => Err(word),
+                                };
+                            words.insert(key, evaluated.clone());
+                            evaluated
+                        }
+                    };
+                    match evaluated {
+                        Ok(value) => closed.push(value),
+                        Err(word) => {
+                            scalar_form = None;
+                            extra.push(word);
+                        }
+                    }
+                    continue;
+                }
+                scalar_form = scalar_form
+                    .zip(self.scalar_form(self.opaque_factors[position].0))
+                    .filter(|_| self.opaque_factors[position].1.is_empty())
+                    .map(|(first, second)| first || second);
+                extra.push(self.emit_factor(position, &arguments)?);
+            }
+            if !closed.is_empty() {
+                scalar_form = scalar_form.map(|_| true);
+                if extra.is_empty() && remaining.residual.is_empty() {
+                    closed.sort_unstable();
+                    let group = match group_of.get(&closed) {
+                        Some(&group) => group,
+                        None => {
+                            group_of.insert(closed.clone(), groups.len());
+                            groups.push((
+                                closed,
+                                CoefficientSum::One(ScalarPolynomial::new_zero(&Q)),
+                            ));
+                            groups.len() - 1
+                        }
+                    };
+                    groups[group].1.push(
+                        weight,
+                        #[cfg(feature = "reference-cases")]
+                        0,
+                    );
+                    // no open slots: a closed state of the terminal bookkeeping
+                    match &open_slots {
+                        None => open_slots = Some(Vec::new()),
+                        Some(slots) => terminal &= slots.is_empty(),
+                    }
+                    continue;
+                }
+                loose_values = true;
+                extra.extend(closed.into_iter().map(|value| values[value].clone()));
+            }
             let poly_start = std::time::Instant::now();
             let trace_terms = weight.nterms();
             let mut factors = vec![shared.emit(weight)?];
@@ -2626,21 +2870,14 @@ impl<'a> ComponentSum<'a, '_> {
             if trace {
                 eprintln!(
                     "FRONTIER emit_state terms={trace_terms} remaining={} residual={} atom_bytes={} emit_s={:.3} rss_mib={}",
-                    remaining.factors.len(),
+                    remaining_count,
                     remaining.residual.len(),
                     factors[0].as_view().get_byte_size(),
                     poly_start.elapsed().as_secs_f64(),
                     trace_rss_mib()
                 );
             }
-            let mut state_slots = Vec::new();
-            for (position, arguments) in remaining.factors {
-                scalar_form = scalar_form
-                    .zip(self.scalar_form(self.opaque_factors[position].0))
-                    .filter(|_| self.opaque_factors[position].1.is_empty())
-                    .map(|(first, second)| first || second);
-                factors.push(self.emit_factor(position, &arguments)?);
-            }
+            factors.extend(extra);
             for (variable, exponent) in remaining.residual {
                 if let Some(slots) = self.open_slots(&self.variables[variable]) {
                     // Each power repeats the slots, so a repeated (internal)
@@ -2679,12 +2916,71 @@ impl<'a> ComponentSum<'a, '_> {
             }
             terms.push(Atom::mul_many(factors));
         }
+        if !groups.is_empty() {
+            let polynomials = shared.polynomials_of(&values);
+            shared.substitute_spellings(&stand_ins);
+            let mut total = CoefficientSum::One(ScalarPolynomial::new_zero(&Q));
+            for (closed, weights) in groups {
+                budget_checkpoint();
+                let mut weight = weights.finish(
+                    #[cfg(feature = "reference-cases")]
+                    0,
+                );
+                if closed.iter().all(|&value| polynomials[value].is_some()) {
+                    // one expanded polynomial of all closed states
+                    for &value in &closed {
+                        let mut value = polynomials[value].clone()?;
+                        weight.unify_variables(&mut value);
+                        weight = &weight * &value;
+                    }
+                    total.push(
+                        weight,
+                        #[cfg(feature = "reference-cases")]
+                        0,
+                    );
+                    continue;
+                }
+                // a value the polynomial conversion declined: weights x value
+                let mut factors = vec![shared.emit(weight)?];
+                for value in closed {
+                    factors.push(match &polynomials[value] {
+                        Some(polynomial) => shared.emit(polynomial.clone())?,
+                        None => crate::dirac::closing::substitute_stand_ins(
+                            values[value].clone(),
+                            &stand_ins,
+                        ),
+                    });
+                }
+                terms.push(Atom::mul_many(factors));
+            }
+            let total = total.finish(
+                #[cfg(feature = "reference-cases")]
+                0,
+            );
+            if !total.is_zero() {
+                // A small closed sum is expanded once its routed sums are
+                // spelled, so that an exact cancellation shows as zero, as on
+                // the unclosed path; a large one stays compact (products of
+                // sums, read sparsely downstream).
+                let small = total.nterms() <= EXPANSION_TERM_LIMIT;
+                let emitted = shared.emit(total)?;
+                terms.push(if small && !stand_ins.is_empty() {
+                    emitted.expand()
+                } else {
+                    emitted
+                });
+            }
+        }
         self.terminal_slots = match (open_slots, scalar_form) {
             (Some(slots), Some(needs_dots)) if any_open && terminal => Some((slots, needs_dots)),
             _ => None,
         };
         let add_start = std::time::Instant::now();
-        let root = Atom::add_many(terms);
+        let root = if loose_values {
+            crate::dirac::closing::substitute_stand_ins(Atom::add_many(terms), &stand_ins)
+        } else {
+            Atom::add_many(terms)
+        };
         if trace {
             eprintln!(
                 "FRONTIER emitted bytes={} emit_poly_s={:.3} add_many_s={:.3} emission_s={:.3} total_s={:.3} rss_mib={}",

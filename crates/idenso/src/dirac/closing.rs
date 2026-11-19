@@ -418,6 +418,8 @@ pub(crate) fn frontier_step(
                 rest = &rest * &factor.to_owned();
             }
         }
+        #[cfg(test)]
+        tests::WORDS.with(|count| count.set(count.get() + 1));
         out += &rest * &word;
         changed = true;
         pending = true;
@@ -563,6 +565,8 @@ pub(crate) fn evaluate_closed_word(word: AtomView<'_>) -> Option<(Atom, Vec<(Ato
     let closed =
         spenso::trace!(&representation; word_letters.iter().map(|letter| crate::gamma!(letter)));
     let (value, _) = simplifier.evaluate_terminal_trace::<false>(closed.as_view())?;
+    #[cfg(test)]
+    tests::CLOSED.with(|count| count.set(count.get() + 1));
     Some((value, opaque))
 }
 
@@ -584,4 +588,211 @@ pub(crate) fn substitute_stand_ins(value: Atom, stand_ins: &[(Atom, Atom)]) -> A
         .map(|(stand_in, sum)| symbolica::id::Replacement::new(stand_in.to_pattern(), sum.clone()))
         .collect();
     value.replace_multiple(&replacements)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::Cell;
+
+    use spenso::g;
+    use spenso::network::tags::SPENSO_TAG as T;
+    use spenso::trace;
+    use symbolica::atom::{Atom, AtomCore, FunctionBuilder};
+
+    use super::GammaClosing;
+    use crate::dirac::GammaSimplifySettings;
+    use crate::gamma;
+    use crate::tensor::{AlgebraContraction, AlgebraSettings, SymbolicTensor};
+    use crate::test_support::test_initialize;
+
+    thread_local! {
+        /// Words written by the GAMMA arm and closed words evaluated, on this thread.
+        pub(super) static WORDS: Cell<u64> = const { Cell::new(0) };
+        pub(super) static CLOSED: Cell<u64> = const { Cell::new(0) };
+    }
+
+    fn vector(name: &str, slot: &Atom) -> Atom {
+        FunctionBuilder::new(T.rank_one_tensor_symbol(&format!("idenso::closing_test::{name}")))
+            .add_arg(slot)
+            .finish()
+    }
+
+    /// gamma(b0,b1,s0) gamma(b1,b2,s6) gamma(b2,b3,s1) gamma(b3,b0,s7) slash(s6) p2(s7)
+    fn explicit_cycle_with(r: &crate::test_support::TestReps, s: &[Atom], slash: &Atom) -> Atom {
+        explicit_cycle(r, s) / vector("p1", &s[6]) * slash
+    }
+
+    /// gamma(b0,b1,s0) gamma(b1,b2,s6) gamma(b2,b3,s1) gamma(b3,b0,s7) p1(s6) p2(s7)
+    fn explicit_cycle(r: &crate::test_support::TestReps, s: &[Atom]) -> Atom {
+        let b: Vec<_> = (0..4)
+            .map(|index| r.bis4.pattern(Atom::num((20 + index) as i64)))
+            .collect();
+        let gamma = |a: &Atom, c: &Atom, mu: &Atom| {
+            FunctionBuilder::new(crate::dirac::AGS.gamma)
+                .add_arg(a)
+                .add_arg(c)
+                .add_arg(mu)
+                .finish()
+        };
+        gamma(&b[0], &b[1], &s[0])
+            * gamma(&b[1], &b[2], &s[6])
+            * gamma(&b[2], &b[3], &s[1])
+            * gamma(&b[3], &b[0], &s[7])
+            * vector("p1", &s[6])
+            * vector("p2", &s[7])
+    }
+
+    /// The expanded dot polynomial and the two certificates gammalooprs reads
+    /// (closed scalar, terminal polynomial) of the simplified tensor.
+    fn simplified_full(input: &Atom, closing: Option<GammaClosing>) -> (Atom, bool, bool) {
+        let settings = AlgebraSettings {
+            gamma: Some(GammaSimplifySettings::canonical()),
+            epsilon: true,
+            contract: AlgebraContraction::Fully,
+            gamma_closing: closing,
+            ..Default::default()
+        };
+        let tensor = SymbolicTensor::infer(input.clone())
+            .unwrap()
+            .simplify_algebra(&settings)
+            .unwrap();
+        let certificates = (
+            tensor.is_certified_closed_scalar(),
+            tensor.is_certified_terminal_polynomial(),
+        );
+        let value = tensor.to_dots().unwrap().into_expression().expand();
+        (value, certificates.0, certificates.1)
+    }
+
+    fn simplified(input: &Atom, closing: Option<GammaClosing>) -> Atom {
+        simplified_full(input, closing).0
+    }
+
+    /// The inputs: open words with a metric/vector sum, three-gluon vertex
+    /// sums (one and two), an explicit gamma cycle, a routed-sum slash letter,
+    /// an open word next to an unrelated interface sum, and a word whose own
+    /// ports reach no sum.
+    fn inputs() -> Vec<Atom> {
+        let r = test_initialize();
+        let spin = r.bis4.to_symbolic([]);
+        let s: Vec<_> = (0..8)
+            .map(|index| r.mink_d.pattern(Atom::num(index)))
+            .collect();
+        let d = r.mink_d.to_symbolic([]);
+        let slash = |name: &str| vector(name, &d);
+        let x = Atom::var(symbolica::symbol!("idenso::closing_test::x"));
+        let p1 = slash("p1");
+        let p2 = slash("p2");
+        let open = trace!(&spin; [gamma!(&s[0]), gamma!(&p1), gamma!(&s[1]), gamma!(&p2)]);
+        let open3 = trace!(&spin; [gamma!(&s[0]), gamma!(&p1), gamma!(&s[1]), gamma!(&p2), gamma!(&s[2]), gamma!(&p1)]);
+        let vertex = |a: &Atom, b: &Atom, c: &Atom| {
+            // a three-gluon-like vertex: g(a,b)(k1-k2)(c) + cyclic
+            g!(a, b) * (vector("k1", c) - vector("k2", c))
+                + g!(b, c) * (vector("k2", a) - vector("k3", a))
+                + g!(c, a) * (vector("k3", b) - vector("k1", b))
+        };
+        vec![
+            &open * (g!(&s[0], &s[1]) * &x + vector("p3", &s[0]) * vector("p4", &s[1])),
+            &open3 * vertex(&s[0], &s[1], &s[2]),
+            &open3
+                * vertex(&s[0], &s[1], &s[5])
+                * (g!(&s[5], &s[2]) * &x + vector("p4", &s[5]) * vector("p3", &s[2])),
+            &open * vertex(&s[0], &s[4], &s[5]) * vertex(&s[1], &s[4], &s[5]),
+            // an explicit gamma cycle (the planner's raw form): two vertex
+            // letters, two slashes as separate vectors, closed by a vertex sum
+            explicit_cycle(r, &s) * vertex(&s[0], &s[1], &s[5]) * vector("p4", &s[5]),
+            // a routed-sum slash letter: (p3 + p4) on the cycle's second slot
+            explicit_cycle_with(r, &s, &(vector("p3", &s[6]) + vector("p4", &s[6])))
+                * vertex(&s[0], &s[1], &s[5])
+                * vector("p2", &s[5]),
+            // an open word next to an unrelated interface sum (s3 stays open)
+            &open
+                * (g!(&s[0], &s[1]) * &x + vector("p3", &s[0]) * vector("p4", &s[1]))
+                * (vector("k1", &s[3]) + vector("k2", &s[3])),
+            // a word whose own ports reach no sum, a sum elsewhere in the term:
+            // written, never pending, evaluated by the ordinary gamma pass
+            &open * g!(&s[0], &s[1]) * (vector("k1", &s[3]) + vector("k2", &s[3])),
+        ]
+    }
+
+    /// Frontier closing gives the unclosed path's polynomial and both of its
+    /// certificates (closed scalar, terminal polynomial), writes and closes
+    /// words, and leaves no word under
+    /// `AlgebraContraction::None` or `Minimal`.
+    #[test]
+    fn closing_equals_the_unclosed_path() {
+        let inputs = inputs();
+        WORDS.with(|count| count.set(0));
+        CLOSED.with(|count| count.set(0));
+        for input in &inputs {
+            let (plain, closed_scalar, terminal) = simplified_full(input, None);
+            let (closed, closed_closed_scalar, closed_terminal) =
+                simplified_full(input, Some(GammaClosing::default()));
+            assert_eq!((&closed - &plain).expand(), Atom::Zero, "input {input}");
+            assert_eq!(
+                (closed_closed_scalar, closed_terminal),
+                (closed_scalar, terminal),
+                "certificates, input {input}"
+            );
+            // STRUCTURE never enabled (None), or minimal: no word may stay
+            // unevaluated
+            for contract in [AlgebraContraction::None, AlgebraContraction::Minimal] {
+                let run = |closing: Option<GammaClosing>| {
+                    let settings = AlgebraSettings {
+                        gamma: Some(GammaSimplifySettings::canonical()),
+                        epsilon: true,
+                        contract: contract.clone(),
+                        gamma_closing: closing,
+                        ..Default::default()
+                    };
+                    SymbolicTensor::infer(input.clone())
+                        .unwrap()
+                        .simplify_algebra(&settings)
+                        .unwrap()
+                        .into_expression()
+                };
+                let plain_run = run(None);
+                let closed_run = run(Some(GammaClosing::default()));
+                assert!(
+                    !closed_run.as_view().to_string().contains("trace("),
+                    "contract {contract:?} leaves a word: {closed_run}"
+                );
+                let difference =
+                    (&simplified(&closed_run, None) - &simplified(&plain_run, None)).expand();
+                assert_eq!(
+                    difference,
+                    Atom::Zero,
+                    "contract {contract:?}, input {input}"
+                );
+            }
+        }
+        assert!(WORDS.with(Cell::get) > 0, "no word written");
+        assert!(CLOSED.with(Cell::get) > 0, "no word closed");
+    }
+
+    /// A forced exhaustion of the cooperative resource budget aborts the
+    /// closing contraction with the budget's panic; the thread's closing switch
+    /// is restored, and the same input then gives the unclosed path's value.
+    #[test]
+    fn an_exhausted_budget_aborts_cleanly() {
+        use symbolica::utils::resources::{ResourceBudget, ResourceLimits};
+        let input = inputs().swap_remove(3);
+        let budget = ResourceBudget::new(ResourceLimits {
+            max_elapsed: Some(std::time::Duration::ZERO),
+            ..Default::default()
+        });
+        let aborted = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            budget.run(|| simplified(&input, Some(GammaClosing::default())))
+        }));
+        let payload = aborted.expect_err("an exhausted budget must abort");
+        let message = payload
+            .downcast_ref::<String>()
+            .cloned()
+            .or_else(|| payload.downcast_ref::<&str>().map(|text| text.to_string()))
+            .unwrap_or_default();
+        assert!(message.contains("resource budget exhausted"), "{message}");
+        assert!(!super::frontier_active(), "closing switch left on");
+        let closed = simplified(&input, Some(GammaClosing::default()));
+        assert_eq!((&closed - &simplified(&input, None)).expand(), Atom::Zero);
+    }
 }
