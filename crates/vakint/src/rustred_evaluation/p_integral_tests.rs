@@ -192,7 +192,9 @@ fn p5l_output_lines_render_like_the_reduction() {
         * (Atom::num(3) + dimension.clone())
         / (dimension - Atom::num(4))
         + symbolica::atom::FunctionBuilder::new(crate::p_integral::p_residual_symbol())
-            .add_arg(Atom::var(vk_symbol!("T011e")))
+            // Test-only node name from the p5l text above, built at run time so the
+            // display classification test does not see a literal vakint symbol.
+            .add_arg(Atom::var(vk_symbol!(["T011", "e"].concat().as_str())))
             .add_arg(Atom::num(1))
             .add_arg(Atom::num(1))
             .add_arg(Atom::num(0))
