@@ -18,7 +18,7 @@ use color_eyre::Result;
 use regex::Regex;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use symbolica::parse;
+use symbolica::namespace;
 use tabled::{
     builder::Builder,
     settings::{style::HorizontalLine, themes::Theme, Style},
@@ -32,8 +32,9 @@ use feynkit_generator::{
     NumeratorGrouping, ParticleSelector, Process as GenerationProcess, SelfEnergyFilterOptions,
     SewnFilterOptions, SnailFilterOptions, TadpoleFilterOptions, VertexSelector,
 };
-use feynkit_graph::EdgeId;
+use feynkit_graph::{symbols, EdgeId};
 use gammalooprs::model::Model;
+use gammalooprs::numerator::aind::Aind;
 use gammalooprs::processes::amplitude::Amplitude;
 use gammalooprs::processes::{
     merge_generated_graph_reports, CrossSection, GeneratedGraphReport, GenerationTimings,
@@ -1220,6 +1221,8 @@ pub enum ParseError {
     InvalidLmbSpec(ParseIntError),
     #[error("invalid external-state projector: {0}")]
     InvalidProjector(String),
+    #[error("invalid numerator prefactor: {0}")]
+    InvalidNumeratorPrefactor(String),
 }
 
 pub fn parse_spec_with_model(
@@ -1338,12 +1341,16 @@ pub fn parse_spec_with_model(
         }
     }
     if let Some(projector) = &args.global_prefactor_projector {
-        let projector = gammalooprs::numerator::aind::Aind::native_hedge_slots(&parse!(projector))
+        let projector = symbols::parse_expression(projector, namespace!(), Some(model))
+            .map_err(ParseError::InvalidProjector)?;
+        let projector = Aind::native_hedge_slots(&projector)
             .map_err(|error| ParseError::InvalidProjector(error.to_string()))?;
         options = options.projector(projector);
     }
     if let Some(numerator) = &args.global_prefactor_num {
-        options = options.numerator_prefactor(parse!(numerator));
+        let numerator = symbols::parse_expression(numerator, namespace!(), Some(model))
+            .map_err(ParseError::InvalidNumeratorPrefactor)?;
+        options = options.numerator_prefactor(numerator);
     }
     spec.process_definition.generation_options = options;
 
@@ -2212,6 +2219,7 @@ mod tests {
     use gammalooprs::processes::{DotExportSettings, ProcessCollection};
     use gammalooprs::utils::load_generic_model;
     use std::time::Duration;
+    use symbolica::parse;
 
     #[test]
     fn thermal_xs_generation_is_rejected_before_changing_processes() -> Result<()> {
@@ -2860,13 +2868,15 @@ mod tests {
     fn supplied_projector_preserves_external_owners_and_converts_only_local_slots() {
         let model = load_generic_model("sm");
         let mut args = base_args("a > d d~");
-        args.global_prefactor_projector = Some(
-            "gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0))) * \
-             spenso::g(spenso::cof(3,gammalooprs::hedge(1)),spenso::cof(3,gammalooprs::hedge(2)))"
-                .into(),
-        );
+        args.global_prefactor_projector =
+            Some("ϵ(0,mink(4,hedge(0))) * g(cof(3,hedge(1)),cof(3,hedge(2)))".into());
+        args.global_prefactor_num = Some("MT * Q(0,cind(0))^2".into());
         let spec = parse_spec_with_model(&args, GenerationType::Amplitude, &model).unwrap();
         let options = serde_json::to_value(&spec.process_definition.generation_options).unwrap();
+        assert_eq!(
+            parse!(options["numerator_prefactor"].as_str().unwrap()),
+            parse!("UFO::MT * gammalooprs::Q(0,spenso::cind(0))^2"),
+        );
         assert_eq!(
             parse!(options["projector"].as_str().unwrap()),
             parse!(
@@ -2879,6 +2889,12 @@ mod tests {
         assert!(matches!(
             parse_spec_with_model(&args, GenerationType::Amplitude, &model),
             Err(ParseError::InvalidProjector(_))
+        ));
+        args.global_prefactor_projector = None;
+        args.global_prefactor_num = Some("Q(".into());
+        assert!(matches!(
+            parse_spec_with_model(&args, GenerationType::Amplitude, &model),
+            Err(ParseError::InvalidNumeratorPrefactor(_))
         ));
     }
 

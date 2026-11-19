@@ -17,7 +17,8 @@ impl FeynmanDiagram {
         let attributes = &parsed.global_data.statements;
         let mut builder = Self::builder(Arc::clone(&model), parsed.global_data.name.clone());
         if let Some(value) = attributes.get("overall_factor") {
-            builder.overall_factor = Self::parse_expression("overall_factor", value.clone())?;
+            builder.overall_factor =
+                Self::parse_expression(Some(&model), "overall_factor", value.clone())?;
         }
         for (attribute, metadata, destination) in [
             (
@@ -29,10 +30,10 @@ impl FeynmanDiagram {
         ] {
             if let Some(value) = attributes.get(attribute) {
                 *destination = NumeratorInterface::admit(
-                    Self::parse_expression(attribute, value.clone())?,
+                    Self::parse_expression(Some(&model), attribute, value.clone())?,
                     attributes
                         .get(metadata)
-                        .map(|value| NumeratorInterface::parse(value))
+                        .map(|value| NumeratorInterface::parse_with_model(value, &model))
                         .transpose()?,
                 )?;
             }
@@ -41,6 +42,7 @@ impl FeynmanDiagram {
         for (node, _, data) in parsed.iter_nodes() {
             let numerator = NumeratorInterface::admit(
                 Self::parse_expression(
+                    Some(&model),
                     "vertex numerator",
                     data.statements
                         .get("num")
@@ -49,7 +51,7 @@ impl FeynmanDiagram {
                 )?,
                 data.statements
                     .get("num_interface")
-                    .map(|value| NumeratorInterface::parse(value))
+                    .map(|value| NumeratorInterface::parse_with_model(value, &model))
                     .transpose()?,
             )?;
             nodes.insert(
@@ -135,13 +137,14 @@ impl FeynmanDiagram {
             let mut edge = DiagramEdge::new(particle, !model.particle_is_self_conjugate(particle));
             edge.numerator = NumeratorInterface::admit(
                 Self::parse_expression(
+                    Some(&model),
                     "edge numerator",
                     attributes.get("num").cloned().unwrap_or_else(|| "1".into()),
                 )?,
                 data.data
                     .statements
                     .get("num_interface")
-                    .map(|value| NumeratorInterface::parse(value))
+                    .map(|value| NumeratorInterface::parse_with_model(value, &model))
                     .transpose()?,
             )?;
             let tag = attributes
@@ -597,12 +600,53 @@ fn parse_blob_range(value: &str) -> Option<RangeInclusive<usize>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use spenso::structure::abstract_index::AbstractIndex;
+    use spenso::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
     use spenso::structure::partial::PartialIndex;
     use spenso::structure::representation::LibraryRep;
     use spenso::structure::slot::IsAbstractSlot;
     use spenso::tensor_symbol;
-    use symbolica::function;
+    use symbolica::{function, parse};
+
+    #[test]
+    fn compact_dot_resolves_short_names_in_numerators() {
+        let model = Arc::new(
+            Model::from_json(include_str!(
+                "../../feynkit-model/tests/fixtures/scalars_2p_3p.json"
+            ))
+            .unwrap(),
+        );
+        let dot = r#"digraph scalar_propagator {
+            graph [num="SCALAR_COUPLING*(lam+example::lam)"];
+            ext [style=invis];
+            a [num="Q(0,cind(0))"];
+            ext -> a [particle="scalar_1"];
+            a -> ext [particle="scalar_1"];
+        }"#;
+        let diagram = FeynmanDiagram::from_dot(Arc::clone(&model), dot).unwrap();
+        assert_eq!(
+            diagram.numerator().expression(),
+            &function!(symbols::momentum(), 0, function!(AIND_SYMBOLS.cind, 0))
+        );
+        assert_eq!(
+            diagram.numerator_prefactor().expression(),
+            &parse!("UFO::SCALAR_COUPLING*(UFO::lam+example::lam)")
+        );
+        let restored =
+            FeynmanDiagram::from_dot(Arc::clone(&model), &diagram.to_dot().unwrap()).unwrap();
+        assert_eq!(restored.to_json().unwrap(), diagram.to_json().unwrap());
+
+        let mut snapshot = diagram.serde_view();
+        snapshot.projector = "0".into();
+        snapshot.projector_interface = Some(vec!["mink(lam)".into()]);
+        let restored =
+            FeynmanDiagram::from_json(model, &serde_json::to_string(&snapshot).unwrap()).unwrap();
+        let expected = NumeratorInterface::admit(
+            Atom::Zero,
+            Some(NumeratorInterface(vec![parse!("spenso::mink(UFO::lam)")])),
+        )
+        .unwrap();
+        assert!(restored.projector().same_value(&expected));
+    }
 
     #[test]
     fn compact_projector_layout_distinguishes_inference_from_declaration() {

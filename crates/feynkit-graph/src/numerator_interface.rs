@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use feynkit_model::Model;
 use idenso::tensor::SymbolicTensor;
 use idenso::tensor::inference::InterfaceInference;
 use idenso::{CookMode, CookSettings};
@@ -50,13 +51,39 @@ impl NumeratorInterface {
     /// # Errors
     /// Returns a JSON or symbolic parse error for malformed declarations.
     pub fn parse(source: &str) -> Result<Self, DiagramError> {
-        let ports: Vec<String> = serde_json::from_str(source)?;
-        Ok(Self(
-            ports
-                .into_iter()
-                .map(|port| FeynmanDiagram::parse_expression("numerator interface", port))
-                .collect::<Result<_, _>>()?,
-        ))
+        Self::from_ports(serde_json::from_str(source)?, None)
+    }
+
+    /// Parse port dimensions and labels in the same model as their numerator.
+    ///
+    /// ```
+    /// use feynkit_graph::NumeratorInterface;
+    /// use feynkit_model::Model;
+    /// use symbolica::parse;
+    /// let ports = NumeratorInterface::parse_with_model(r#"["mink(4,lam)"]"#, &Model::phi4())?;
+    /// assert_eq!(ports.0, [parse!("spenso::mink(4,UFO::lam)")]);
+    /// # Ok::<(), feynkit_graph::DiagramError>(())
+    /// ```
+    ///
+    /// # Errors
+    /// Returns a JSON or symbolic parse error for malformed declarations.
+    pub fn parse_with_model(source: &str, model: &Model) -> Result<Self, DiagramError> {
+        Self::from_ports(serde_json::from_str(source)?, Some(model))
+    }
+
+    pub(crate) fn from_ports(
+        ports: Vec<String>,
+        model: Option<&Model>,
+    ) -> Result<Self, DiagramError> {
+        ports
+            .into_iter()
+            .map(|port| FeynmanDiagram::parse_expression(model, "numerator interface", port))
+            .collect::<Result<_, _>>()
+            .map(Self)
+    }
+
+    pub(crate) fn canonical_ports(&self) -> Vec<String> {
+        self.0.iter().map(AtomCore::to_canonical_string).collect()
     }
 
     /// Encode logical ports in canonical source notation; see [`NumeratorInterface`].
@@ -344,22 +371,13 @@ impl NumeratorInterface {
 
 impl Serialize for NumeratorInterface {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.0
-            .iter()
-            .map(AtomCore::to_canonical_string)
-            .collect::<Vec<_>>()
-            .serialize(serializer)
+        self.canonical_ports().serialize(serializer)
     }
 }
 
 impl<'de> Deserialize<'de> for NumeratorInterface {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let ports = Vec::<String>::deserialize(deserializer)?;
-        ports
-            .into_iter()
-            .map(|port| FeynmanDiagram::parse_expression("numerator interface", port))
-            .collect::<Result<Vec<_>, _>>()
-            .map(Self)
+        Self::from_ports(Vec::<String>::deserialize(deserializer)?, None)
             .map_err(DeserializeError::custom)
     }
 }

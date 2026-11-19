@@ -27,7 +27,7 @@ use crate::{
     uv::uv_graph::UVE,
 };
 
-use super::parse::string_utils::consistent_dot_identity;
+use super::parse::string_utils::{self, consistent_dot_identity};
 use super::parse::{NumeratorInterface, StripParse, ToQuoted};
 use crate::graph::Autogen;
 use color_eyre::Result;
@@ -663,13 +663,17 @@ impl ParseEdge {
                 .get::<_, String>("num")
                 .transpose()?
                 .map(|a| -> Result<Atom> {
-                    Ok(Self::localize_ainds(a.strip_parse::<Atom>()?, eid, p))
+                    Ok(Self::localize_ainds(
+                        string_utils::parse_expression(&a, model)?,
+                        eid,
+                        p,
+                    ))
                 })
                 .transpose()?;
             let num_interface = e
                 .get::<_, String>("num_interface")
                 .transpose()?
-                .map(|value| NumeratorInterface::parse(&value))
+                .map(|value| NumeratorInterface::parse_with_model(&value, model))
                 .transpose()?
                 .map(|interface| {
                     NumeratorInterface(
@@ -684,13 +688,14 @@ impl ParseEdge {
             let mass = e
                 .get::<_, String>("mass")
                 .transpose()?
-                .map(|a| a.strip_parse::<Atom>())
+                .map(|a| string_utils::parse_expression(&a, model))
                 .transpose()?;
 
             let momtrop_edge_power: Option<Atom> = e
                 .get::<_, String>("momtrop_edge_power")
                 .transpose()?
-                .map(|a| parse!(&a));
+                .map(|a| string_utils::parse_expression(&a, model))
+                .transpose()?;
             let vakint_edge_power: Option<isize> =
                 e.get::<_, isize>("vakint_edge_power").transpose()?;
 

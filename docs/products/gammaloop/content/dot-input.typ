@@ -210,6 +210,13 @@ index and its existing endpoint indices; their function forms, such as `source(0
 corresponding tensor-index identities. This local shorthand is resolved for edge numerators,
 not for an arbitrary graph or vertex expression.
 
+For example, `num="GC_11*Q(0,cind(0))"` multiplies a Standard Model coupling by
+the time component of edge 0. Graph and tensor function names such as `Q`, `cind`,
+`g`, and `mink` resolve to their registered definitions. Bare scalar names can
+refer to parameters and couplings of the loaded model. An explicit namespace
+such as `example::GC_11` selects that symbol even when the model has a coupling
+with the same name. Projectors and generation prefactors accept the same syntax.
+
 By contrast, generated `hedge(h)` or `hedge(h, k)` expressions contain explicit tensor-index
 identities: `h` is not a local port number within the statement. Preserve the exported topology,
 indices, and numerator expressions together. Sewing can move graph records without renaming

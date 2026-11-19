@@ -8,14 +8,11 @@ use std::{
     },
 };
 
-use feynkit_graph::{DiagramId, EdgeId};
+use feynkit_graph::{DiagramId, EdgeId, symbols};
 use feynkit_model::Model;
 use serde::{Deserialize, Serialize};
-use symbolica::{
-    atom::{Atom, AtomCore},
-    graph::Graph,
-    parser::ParseSettings,
-};
+use symbolica::atom::{Atom, AtomCore};
+use symbolica::graph::Graph;
 
 use crate::{
     EdgeColor, GenerationError, NodeColor, ParticleSelector, SelectorError, VertexSelector,
@@ -707,12 +704,8 @@ impl GenerationOptions {
 
     fn from_persistent(persistent: GenerationOptionsPersistent) -> Result<Self, String> {
         let parse = |expression: String, field: &str| {
-            Atom::parse(
-                &expression,
-                "feynkit_generation_options",
-                ParseSettings::default(),
-            )
-            .map_err(|message| format!("failed to parse {field} '{expression}': {message}"))
+            symbols::parse_expression(&expression, "feynkit_generation_options", None)
+                .map_err(|message| format!("failed to parse {field} '{expression}': {message}"))
         };
         Ok(Self {
             threads: persistent.threads,
@@ -1179,10 +1172,11 @@ mod tests {
     }
 
     use symbolica::atom::Atom;
+    use symbolica::parse;
 
     use super::{GenerationFilter, GenerationOptions, GraphGroupingOptions, NumeratorGrouping};
     use crate::{ParticleSelector, VertexSelector};
-    use feynkit_graph::{DiagramId, EdgeId};
+    use feynkit_graph::{DiagramId, EdgeId, symbols};
 
     #[test]
     fn covariant_partner_diagnostic_distinguishes_orders_from_subsets() {
@@ -1294,6 +1288,23 @@ mod tests {
         assert_eq!(decoded, options);
         assert!(decoded.filter.is_none());
         assert!(decoded.progress.is_none());
+    }
+
+    #[test]
+    fn generation_options_parse_graph_heads_in_symbolic_inputs() {
+        let mut input = serde_json::to_value(GenerationOptions::default()).unwrap();
+        input["numerator_prefactor"] = "weight * Q(1)".into();
+        input["projector"] = "P(0) + experiment::P(0)".into();
+        let options: GenerationOptions = serde_json::from_value(input).unwrap();
+
+        assert_eq!(
+            options.numerator_prefactor,
+            parse!("feynkit_generation_options::weight") * symbols::momentum().call(1),
+        );
+        assert_eq!(
+            options.projector,
+            Some(symbols::external_momentum().call(0) + parse!("experiment::P(0)")),
+        );
     }
 
     #[test]
