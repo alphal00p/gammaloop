@@ -177,11 +177,74 @@ pub(crate) static ISOTROPIC_CHILDREN: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
 /// `GAMMALOOP_UV_CHILDREN_LOG=1`: one stderr line per proper UV child request
-/// of an R*-route plan (route, loops, seconds); for smoke tests and timing.
+/// of an R*-route plan (route, loops, seconds, the child's edge ids); for smoke
+/// tests, timing and per-child views.
 fn uv_children_log() -> bool {
     static LOG: LazyLock<bool> =
         LazyLock::new(|| std::env::var_os("GAMMALOOP_UV_CHILDREN_LOG").is_some());
     *LOG
+}
+
+/// The internal (paired) edge ids of `support`, sorted. Edge ids are the
+/// graph's `EdgeIndex`, which a DOT-parsed graph orders by the DOT edges'
+/// explicit `id`; a child's own R* run and the decorated UV quotient keep them.
+fn uv_child_edge_ids(graph: &Graph, support: &SuBitGraph) -> Vec<usize> {
+    let mut ids = graph
+        .underlying
+        .iter_edges_of(support)
+        .filter(|(pair, _, _)| matches!(pair, HedgePair::Paired { .. }))
+        .map(|(_, id, _)| usize::from(id))
+        .collect::<Vec<_>>();
+    ids.sort_unstable();
+    ids.dedup();
+    ids
+}
+
+fn join_edge_ids(ids: &[usize]) -> String {
+    ids.iter()
+        .map(usize::to_string)
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+/// The log-only provenance fields of a `UV_CHILD` line besides its edges:
+/// - `nested=1 parent_edges=… top_graph=…` when the plan's root is not every
+///   non-dummy internal edge of `graph` (a child's own R* run, or the
+///   remainder of a decorated UV quotient, whose consumed edges are dummies);
+///   the ids stay in `graph`'s, i.e. the top-level diagram's, numbering;
+/// - `quotient=1` when `graph` has dummy internal edges (a decorated quotient:
+///   its contracted UV subgraph is a vertex, its other edges keep their ids);
+/// - `surrogate=1` for a `_scalar_insertion` surrogate, whose edge ids are the
+///   surrogate diagram's own (its bubble chain has no image in the original).
+fn uv_child_context(graph: &Graph, root: &SuBitGraph) -> String {
+    let mut all = Vec::new();
+    let mut dummy = false;
+    for (pair, id, data) in graph.underlying.iter_edges() {
+        if matches!(pair, HedgePair::Paired { .. }) {
+            if data.data.is_dummy {
+                dummy = true;
+            } else {
+                all.push(usize::from(id));
+            }
+        }
+    }
+    all.sort_unstable();
+    let root_edges = uv_child_edge_ids(graph, root);
+    let mut fields = String::new();
+    if root_edges != all {
+        fields.push_str(&format!(
+            " nested=1 parent_edges={} top_graph={}",
+            join_edge_ids(&root_edges),
+            graph.name
+        ));
+    }
+    if dummy {
+        fields.push_str(" quotient=1");
+    }
+    if graph.name.ends_with("_scalar_insertion") {
+        fields.push_str(" surrogate=1");
+    }
+    fields
 }
 
 /// Which values of the reference mass a consumer of the proper UV children
@@ -928,13 +991,16 @@ impl RStarPlan {
                 "Proper UV child of an R*-route plan"
             );
             if uv_children_log() {
+                let seconds = started.elapsed().as_secs_f64();
                 eprintln!(
-                    "UV_CHILD graph={} route={route} loops={} degree={} parent_loops={} seconds={:.3}",
+                    "UV_CHILD graph={} route={route} loops={} degree={} parent_loops={} seconds={:.3} edges={}{}",
                     graph.name,
                     call.argument.loops,
                     call.taylor_order,
                     graph.n_loops(&self.support),
-                    started.elapsed().as_secs_f64()
+                    seconds,
+                    join_edge_ids(&uv_child_edge_ids(graph, support)),
+                    uv_child_context(graph, &self.support)
                 );
             }
             children.insert(support.clone(), polynomial);
@@ -1019,9 +1085,10 @@ impl RStarPlan {
                     ISOTROPIC_CHILDREN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     if uv_children_log() {
                         eprintln!(
-                            "UV_CHILD_CLOSURE graph={} loops={} closure=isotropic",
+                            "UV_CHILD_CLOSURE graph={} loops={} closure=isotropic edges={}",
                             graph.name,
-                            graph.n_loops(support)
+                            graph.n_loops(support),
+                            join_edge_ids(&uv_child_edge_ids(graph, support))
                         );
                     }
                     plan.isotropic_counterterm(graph, model, vakint, settings, pairings)
