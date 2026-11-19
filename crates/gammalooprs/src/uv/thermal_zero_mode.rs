@@ -463,12 +463,7 @@ struct SoftSets<'a> {
 
 impl<'a> SoftSets<'a> {
     fn new(graph: &'a Graph, cut_subgraph: &SuBitGraph) -> Self {
-        // A tree line is in no cycle, so dropping it keeps the loops.
-        let internal = InternalSubGraph::cleaned_filter_pessimist(
-            graph.underlying.non_bridges_of(cut_subgraph),
-            graph.as_ref(),
-        )
-        .filter;
+        let internal = graph.loop_lines(cut_subgraph);
         Self {
             graph,
             loops: graph.n_loops(&internal),

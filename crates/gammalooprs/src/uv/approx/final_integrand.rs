@@ -606,6 +606,8 @@ impl<'a> FinalIntegrandBuilder<'a> {
             Ok(atom
                 .replace(GS.m_uv_expansion)
                 .with(GS.m_uv_vacuum)
+                .replace(GS.m_ir_expansion)
+                .with(GS.m_ir_vacuum)
                 .replace(GS.dim_epsilon)
                 .with(0))
         }

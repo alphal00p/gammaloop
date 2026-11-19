@@ -217,6 +217,21 @@ pub struct GammaloopSymbols {
     /// This symbol prints as `mUV` and is the public symbolic representative of the
     /// `general.m_uv` runtime setting.
     pub m_uv_vacuum: Symbol,
+    /// Expansion mass of the UV counterterms of a static theory, the roles of
+    /// [`Self::m_uv_expansion`] for [`Self::m_ir_vacuum`].
+    ///
+    /// This symbol prints as `mIRexp`; final assembly replaces it by `mIR`.
+    pub m_ir_expansion: Symbol,
+    /// Terminal mass of the UV counterterms of the static theory of a
+    /// finite-temperature zero mode: the masses a local U introduces on a
+    /// residue row whose completed zero-mode branch has its whole soft set
+    /// inside the U's support. They regulate the static soft lines in the
+    /// infrared.
+    ///
+    /// This symbol prints as `mIR` and is the public symbolic representative of
+    /// the `general.m_ir` runtime setting, which follows `general.m_uv` unless
+    /// set.
+    pub m_ir_vacuum: Symbol,
     /// UV localization scale factor
     pub renormalization_localization_scale: Symbol,
     pub mu_r_sq: Symbol,
@@ -1014,6 +1029,34 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
             match opt.custom_print_mode.get("spenso") {
                 Some(PrintUserData::Integer(_)) if opt.typst_mode().is_some() => {
                     Some("m_\"UV\"".to_string())
+                }
+                _ => None,
+            }
+        }
+    ),
+    m_ir_expansion: symbol!(
+        "mIRexp",
+        print = |a, opt, _state| {
+            let AtomView::Var(_a) = a else {
+                return None;
+            };
+            match opt.custom_print_mode.get("spenso") {
+                Some(PrintUserData::Integer(_)) if opt.typst_mode().is_some() => {
+                    Some("m_\"IRexp\"".to_string())
+                }
+                _ => None,
+            }
+        }
+    ),
+    m_ir_vacuum: symbol!(
+        "mIR",
+        print = |a, opt, _state| {
+            let AtomView::Var(_a) = a else {
+                return None;
+            };
+            match opt.custom_print_mode.get("spenso") {
+                Some(PrintUserData::Integer(_)) if opt.typst_mode().is_some() => {
+                    Some("m_\"IR\"".to_string())
                 }
                 _ => None,
             }
@@ -2230,6 +2273,18 @@ mod tests {
                 .printer(SpensoPrintSettings::typst_options())
                 .to_string(),
             r#"m_"UV""#
+        );
+        assert_eq!(
+            Atom::var(GS.m_ir_expansion)
+                .printer(SpensoPrintSettings::typst_options())
+                .to_string(),
+            r#"m_"IRexp""#
+        );
+        assert_eq!(
+            Atom::var(GS.m_ir_vacuum)
+                .printer(SpensoPrintSettings::typst_options())
+                .to_string(),
+            r#"m_"IR""#
         );
         assert_eq!(
             Atom::var(GS.mu_r_sq)

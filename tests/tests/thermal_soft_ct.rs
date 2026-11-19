@@ -19,6 +19,11 @@
 //!   arbitrary precision, and f64 values that agree with it or whose errors
 //!   track the control's on the same point.
 //!
+//! The `*_with_static_theory_mass` tests repeat the IR and UV gates of the
+//! quark ring and of the ghost ring with and without vacuum subtraction, with
+//! the static theory's UV counterterms at `general.m_ir` apart from the run
+//! cards' `general.m_uv`.
+//!
 //! The `*_default_stability_levels` tests check the production stability
 //! levels of the quark ring against arb at widely separated scales and next to
 //! soft quarks, on both sides of the escalation thresholds, where a rotation
@@ -85,6 +90,44 @@ const MAX_LOCUS_CHANGE: f64 = 1e-2;
 /// Distance of a probe's local exponent from its expected power (measured at
 /// most 6e-3).
 const EXPONENT_TOLERANCE: f64 = 0.05;
+
+/// The static-theory mass `general.m_ir` of the `*_with_static_theory_mass`
+/// tests, apart from the run cards' `general.m_uv = 1`. The profiles fit the
+/// successive differences of the remainder, so the r² gate fails where the
+/// linear approach coefficient on the profiled ray vanishes by accident, and
+/// the masses move these zeros: on the ghost ring's S(e3) ray with vacuum
+/// subtraction at muB = 0, m_IR = 0.3 reads +3.95 at r² 0.938, and the code
+/// before `general.m_ir` fails the same way at m_UV = 0.74 (+3.84 at r² 0.93),
+/// with a bounded remainder in both. At 0.5 the ray reads +4.03 at r² 0.9996.
+const STATIC_THEORY_MASS: f64 = 0.5;
+
+/// The static-theory mass of a slow-lane generation.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum StaticTheoryMass {
+    /// `general.m_ir` unset, following `general.m_uv`.
+    FollowsUv,
+    /// `general.m_ir` set to this value.
+    Apart(f64),
+}
+
+impl StaticTheoryMass {
+    /// The purpose that names the generation's state.
+    fn purpose(self) -> &'static str {
+        match self {
+            Self::FollowsUv => "zero_mode",
+            Self::Apart(_) => "zero_mode_static_theory_mass",
+        }
+    }
+
+    /// The suffix that names this mass in a gate's context: none while it
+    /// follows `general.m_uv`.
+    fn context_suffix(self) -> String {
+        match self {
+            Self::FollowsUv => String::new(),
+            Self::Apart(m_ir) => format!(" (m_ir={m_ir})"),
+        }
+    }
+}
 
 /// The baryon chemical potentials of the slow lane.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -791,6 +834,22 @@ fn thermal_gluon_quark_ring_zero_mode_subtraction() -> Result<()> {
     assert_zero_mode_subtraction(&MIXED)
 }
 
+#[test]
+fn thermal_quark_ring_zero_mode_subtraction_with_static_theory_mass() -> Result<()> {
+    assert_gates_with_static_theory_mass(&QUARK)
+}
+
+#[test]
+fn thermal_ghost_quark_ring_zero_mode_subtraction_with_static_theory_mass() -> Result<()> {
+    assert_gates_with_static_theory_mass(&GHOST)
+}
+
+#[test]
+fn thermal_ghost_quark_ring_zero_mode_subtraction_without_vacuum_subtraction_with_static_theory_mass()
+-> Result<()> {
+    assert_gates_with_static_theory_mass(&GHOST_WITHOUT_VACUUM_SUBTRACTION)
+}
+
 /// The bare control's profile of one limit at one chemical potential.
 struct ControlProfile {
     chemical_potential: ChemicalPotential,
@@ -897,6 +956,27 @@ fn generate_subtraction(
 }
 
 fn assert_zero_mode_subtraction(case: &RingCase) -> Result<()> {
+    assert_zero_mode_subtraction_with(case, StaticTheoryMass::FollowsUv)
+}
+
+/// The IR and UV gates of `case`, without its approach probes, with
+/// `general.m_ir` at [`STATIC_THEORY_MASS`]: the static theory's UV
+/// counterterms then regulate the static soft lines with their own mass, and
+/// every other counterterm keeps `general.m_uv`.
+fn assert_gates_with_static_theory_mass(case: &RingCase) -> Result<()> {
+    assert_zero_mode_subtraction_with(
+        &RingCase {
+            probes: &[],
+            ..*case
+        },
+        StaticTheoryMass::Apart(STATIC_THEORY_MASS),
+    )
+}
+
+fn assert_zero_mode_subtraction_with(
+    case: &RingCase,
+    static_theory_mass: StaticTheoryMass,
+) -> Result<()> {
     let _serial = SERIAL_TEST_LOCK.lock();
     let started = Instant::now();
     let ring = case.ring;
@@ -906,7 +986,11 @@ fn assert_zero_mode_subtraction(case: &RingCase) -> Result<()> {
     let control_time = started.elapsed();
 
     let generation_started = Instant::now();
-    let (mut cli, state_path) = generate_subtraction(ring, case.vacuum_subtraction, "zero_mode")?;
+    let (mut cli, state_path) =
+        generate_subtraction(ring, case.vacuum_subtraction, static_theory_mass.purpose())?;
+    if let StaticTheoryMass::Apart(m_ir) = static_theory_mass {
+        thermal_rings::set_static_theory_mass(&mut cli, name, m_ir)?;
+    }
     let generation_time = generation_started.elapsed();
 
     for chemical_potential in ChemicalPotential::ALL {
@@ -914,7 +998,11 @@ fn assert_zero_mode_subtraction(case: &RingCase) -> Result<()> {
             continue;
         }
         let mu_b = chemical_potential.value();
-        let context = format!("{name} {} at muB={mu_b}", case.vacuum_subtraction);
+        let context = format!(
+            "{name} {} at muB={mu_b}{}",
+            case.vacuum_subtraction,
+            static_theory_mass.context_suffix()
+        );
         cli.run_command(&format!("set model muB={mu_b}"))?;
 
         let profiles_started = Instant::now();

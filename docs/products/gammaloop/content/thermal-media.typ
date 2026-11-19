@@ -138,9 +138,14 @@ host is an error that names this setting, so with the default `MUV` prescription
 are rejected at finite temperature. With the default `generate_integrated = true` no
 zero-mode subtraction runs and, with the default `MUV` prescription, no error is raised: the
 static soft divergence remains in the integrand. The subtraction works with and without
-vacuum subtraction. Its integrated add-back is not generated yet, so integrated results still
-depend on the UV reference mass `runtime.general.m_uv`. Near a soft static mode the
-remainder's rounding error cannot be estimated by rotations, so in graphs with a zero-mode
+vacuum subtraction. A UV counterterm applied to a zero-mode subtraction whose soft lines all
+lie in its subgraph is, on that term, the UV counterterm of the static theory: it regulates
+those lines with the mass `runtime.general.m_ir`, which follows `runtime.general.m_uv` while
+unset. The choice is made per term: the same counterterm keeps `m_uv` on the terms without
+such a zero-mode subtraction, and so do all other counterterms. The integrated add-back is not
+generated yet, so integrated results still depend on `runtime.general.m_uv` and
+`runtime.general.m_ir`. Near a soft static mode the remainder's rounding error cannot be
+estimated by rotations, so in graphs with a zero-mode
 subtraction evaluation starts at higher precision when the softest static line is soft
 against the temperature
 (`runtime.stability.zero_mode_energy_escalation_factor`), or when the softest massless line of

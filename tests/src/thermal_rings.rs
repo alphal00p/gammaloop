@@ -16,6 +16,7 @@ use gammaloop_api::state::ProcessRef;
 use gammalooprs::integrands::process::ir::SingleLimitReport;
 use gammalooprs::momentum::ThreeMomentum;
 use gammalooprs::processes::ProcessCollection;
+use gammalooprs::settings::RuntimeSettings;
 use gammalooprs::settings::runtime::{Precision, StabilityLevelSetting};
 use gammalooprs::uv::profile::{UV_PROFILE_MAX_DOD, UVLimitSelection, UVProfilePassFail};
 use gammalooprs::uv::uv_graph::UVE;
@@ -665,8 +666,8 @@ fn evaluate_as<T>(
     }
 }
 
-/// The stability levels of the integrand `name` of the process `name`.
-pub fn stability_levels(cli: &CLIState, name: &str) -> Result<Vec<StabilityLevelSetting>> {
+/// The runtime settings of the integrand `name` of the process `name`.
+pub fn runtime_settings<'a>(cli: &'a CLIState, name: &str) -> Result<&'a RuntimeSettings> {
     let process_id = cli
         .state
         .resolve_process_ref(Some(&ProcessRef::Unqualified(name.to_owned())))?;
@@ -675,10 +676,30 @@ pub fn stability_levels(cli: &CLIState, name: &str) -> Result<Vec<StabilityLevel
         .process_list
         .get_integrand(process_id, name)?
         .require_generated()?
-        .get_settings()
-        .stability
-        .levels
-        .clone())
+        .get_settings())
+}
+
+/// The stability levels of the integrand `name` of the process `name`.
+pub fn stability_levels(cli: &CLIState, name: &str) -> Result<Vec<StabilityLevelSetting>> {
+    Ok(runtime_settings(cli, name)?.stability.levels.clone())
+}
+
+/// Set the infrared regulator mass `general.m_ir` of the static theory's UV
+/// counterterms of the integrand `name` of the process `name`, and check
+/// that the integrand applies it.
+pub fn set_static_theory_mass(cli: &mut CLIState, name: &str, m_ir: f64) -> Result<()> {
+    cli.run_command(&format!(
+        "set process -p {name} -i {name} kv general.m_ir={m_ir}"
+    ))
+    .with_context(|| format!("setting general.m_ir of {name} to {m_ir}"))?;
+    let general = &runtime_settings(cli, name)?.general;
+    if general.m_ir != Some(m_ir) {
+        return Err(eyre!(
+            "{name} kept general.m_ir = {:?} instead of {m_ir}",
+            general.m_ir
+        ));
+    }
+    Ok(())
 }
 
 fn set_stability_levels(

@@ -233,6 +233,7 @@ macro_rules! define_gamma_loop_pairs {
 
 define_gamma_loop_pairs! {
     m_uv,
+    m_ir,
     renormalization_localization_scale,
     mu_r_sq,
     numerator_sampling_scale,
@@ -331,6 +332,9 @@ impl GammaLoopPairs {
     ) -> (Self, usize) {
         let mut pairs = GammaLoopPairs {
             m_uv: [Atom::var(GS.m_uv_vacuum), Atom::var(GS.m_uv_expansion)]
+                .into_iter()
+                .collect(),
+            m_ir: [Atom::var(GS.m_ir_vacuum), Atom::var(GS.m_ir_expansion)]
                 .into_iter()
                 .collect(),
             renormalization_localization_scale: ParamValuePairs::default_from_symbol(
@@ -1456,17 +1460,33 @@ impl<T: FloatLike> ParamBuilder<T> {
     #[inline]
     pub(crate) fn m_uv_value(&mut self, m_uv: Complex<F<T>>) {
         debug_assert!(self.pairs.m_uv.value_range.len() == 2);
+        let range = self.pairs.m_uv.value_range.clone();
+        self.fill_mass_pair(range, &m_uv);
+    }
 
+    /// Bind the terminal and expansion masses `mIR` and `mIRexp` of the static
+    /// theory's UV counterterms.
+    #[inline]
+    pub(crate) fn m_ir_value(&mut self, m_ir: Complex<F<T>>) {
+        debug_assert!(self.pairs.m_ir.value_range.len() == 2);
+        let range = self.pairs.m_ir.value_range.clone();
+        self.fill_mass_pair(range, &m_ir);
+    }
+
+    /// Write `mass` into every slot of the terminal and expansion mass pair at
+    /// `range` in each value buffer, whose slots are strided by the buffer's
+    /// position.
+    fn fill_mass_pair(&mut self, range: Range<usize>, mass: &Complex<F<T>>) {
         for (index, values) in self.values.iter_mut().enumerate() {
             let multiplicative_offset = index + 1;
-            let mut start = self.pairs.m_uv.value_range.start * multiplicative_offset;
-            for _ in self.pairs.m_uv.value_range.clone() {
-                values[start] = m_uv.clone();
+            let mut start = range.start * multiplicative_offset;
+            for _ in range.clone() {
+                values[start] = mass.clone();
                 start += multiplicative_offset;
             }
             debug_assert_eq!(
                 start,
-                self.pairs.m_uv.value_range.end * multiplicative_offset,
+                range.end * multiplicative_offset,
                 "Not filled up UV mass params"
             );
         }
