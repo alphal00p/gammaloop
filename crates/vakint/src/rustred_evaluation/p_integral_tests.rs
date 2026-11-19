@@ -1718,6 +1718,40 @@ mod five_loop_guards {
                 .unwrap()
                 .is_empty()
         );
+        // Per eps order (Astra on d90d8d6be): 1 + ε^2·M·c(z) + ε^5·M with
+        // c(z) = 0 exactly is 1 + ε^5·M: first affected order 5, and for the
+        // ALARM the master order 3 only, as for the plain input.
+        let c = "((z+1)/(z^2-1)-1/(z-1))";
+        assert_eq!(
+            check(&format!("1+ε^2*UNKNOWN(u_m1,1)*{c}+ε^5*UNKNOWN(u_m1,1)")).unwrap(),
+            vec![("u-m1".to_owned(), 1, 5)]
+        );
+        let alarm = |text: &str| match engine.unknown_master_coefficients(
+            &symbolic,
+            parse(text).as_view(),
+            Some(5),
+        ) {
+            Err(crate::VakintError::MissingMasterOrders(missing)) => missing
+                .masters
+                .iter()
+                .map(|m| {
+                    (
+                        m.first_missing_order,
+                        m.last_needed_order,
+                        m.first_affected_result_order,
+                    )
+                })
+                .collect::<Vec<_>>(),
+            other => panic!("{text}: expected MissingMasterOrders, got {other:?}"),
+        };
+        let plain = alarm("1+ε^5*Oep(3,PMaster(u_m1))");
+        assert_eq!(plain, vec![(3, Some(3), 5)]);
+        assert_eq!(
+            alarm(&format!(
+                "1+ε^2*Oep(3,PMaster(u_m1))*{c}+ε^5*Oep(3,PMaster(u_m1))"
+            )),
+            plain
+        );
         // An ALARM tail in a caller's result is an error.
         let alarm = crate::truncation_guard::unknown_tail(
             vk_symbol!(&symbolic.epsilon_symbol),

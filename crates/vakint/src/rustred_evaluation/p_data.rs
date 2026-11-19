@@ -1214,6 +1214,7 @@ impl Vakint {
         let alarm = crate::truncation_guard::exact_part(
             &expression,
             crate::truncation_guard::unknown_tail_symbol(),
+            epsilon,
         );
         crate::truncation_guard::ensure_known_orders(
             &symbolica::atom::AtomCore::expand(&alarm),

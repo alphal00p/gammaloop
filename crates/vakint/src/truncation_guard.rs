@@ -214,7 +214,7 @@ pub(crate) fn unknown_coefficients(
     // Only monomials in the UNKNOWN atoms whose coefficient is nonzero
     // EXACTLY (over a common denominator): `expand` alone leaves
     // ε^4·U·((z+1)/(z^2-1) - 1/(z-1)) (reviewer, 2876099b6).
-    let expanded = exact_part(expression, unknown_coefficient_symbol()).expand();
+    let expanded = exact_part(expression, unknown_coefficient_symbol(), epsilon).expand();
     let terms: Vec<AtomView> = match expanded.as_view() {
         AtomView::Add(sum) => sum.iter().collect(),
         term => vec![term],
@@ -258,8 +258,10 @@ pub(crate) fn unknown_coefficients(
 /// `symbol` (UNKNOWN or the ALARM tail `Oep`), keeping only the monomials in
 /// those atoms whose coefficient is nonzero EXACTLY: each coefficient is
 /// brought over a common denominator (other functions and constants as
-/// symbols) and its numerator tested for zero. No numerical test.
-pub(crate) fn exact_part(expression: &Atom, symbol: Symbol) -> Atom {
+/// symbols) and its numerator tested for zero, separately for each power of
+/// `epsilon` (so a part that vanishes at one order never reports that order).
+/// No numerical test.
+pub(crate) fn exact_part(expression: &Atom, symbol: Symbol, epsilon: Symbol) -> Atom {
     let mut atoms = std::collections::BTreeSet::new();
     expression.visitor(&mut |part| {
         if let AtomView::Fun(function) = part
@@ -276,13 +278,24 @@ pub(crate) fn exact_part(expression: &Atom, symbol: Symbol) -> Atom {
     let atoms: Vec<Atom> = atoms.into_iter().collect();
     let mut part = Atom::Zero;
     for (monomial, coefficient) in expression.expand().coefficient_list::<i16>(&atoms) {
-        if monomial == Atom::num(1)
-            || coefficient.is_zero()
-            || coefficient.together().expand().is_zero()
-        {
+        if monomial == Atom::num(1) || coefficient.is_zero() {
             continue;
         }
-        part += monomial * coefficient;
+        let expanded = coefficient.expand();
+        let terms: Vec<AtomView> = match expanded.as_view() {
+            AtomView::Add(sum) => sum.iter().collect(),
+            term => vec![term],
+        };
+        let mut by_power = BTreeMap::<i64, Atom>::new();
+        for term in terms {
+            *by_power.entry(epsilon_power(term, epsilon)).or_default() += term.to_owned();
+        }
+        for group in by_power.into_values() {
+            if group.is_zero() || group.together().expand().is_zero() {
+                continue;
+            }
+            part += &monomial * group;
+        }
     }
     part
 }
