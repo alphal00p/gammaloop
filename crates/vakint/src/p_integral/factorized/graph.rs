@@ -287,9 +287,7 @@ fn hand_over(
     if vakint.p_library().is_err() {
         return Ok(Err("no p library".into()));
     }
-    vakint
-        .validate_settings(settings)
-        .map_err(|e| evaluation(e))?;
+    vakint.validate_settings(settings).map_err(evaluation)?;
     let dimension = Atom::var(first.dimension);
     let terms = values
         .iter()
