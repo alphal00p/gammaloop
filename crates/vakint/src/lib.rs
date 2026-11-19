@@ -2259,6 +2259,13 @@ impl EvaluationMethod {
         numerator: AtomView,
         integral_specs: &ReplacementRules,
     ) -> Result<Atom, VakintError> {
+        // Lane unknown-masters: strict refusal once, on this public call's result.
+        if !settings.allow_unknown_master_coefficients {
+            let inner = unknown_master_coefficients_carried(settings);
+            let value = self.evaluate_integral(vakint, &inner, numerator, integral_specs)?;
+            vakint.refuse_unknown_master_coefficients(settings, &value)?;
+            return Ok(value);
+        }
         let result = self.reduce_integral(vakint, settings, numerator, integral_specs, 0)?;
         if self.numerical_output() {
             vakint.resolve_rustred_numerical(result, settings)
@@ -3132,6 +3139,13 @@ impl VakintTerm {
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
+        // Lane unknown-masters: strict refusal once, on this public call's result.
+        if !settings.allow_unknown_master_coefficients {
+            let inner = unknown_master_coefficients_carried(settings);
+            self.evaluate_integral(vakint, &inner)?;
+            let value: Atom = self.clone().into();
+            return vakint.refuse_unknown_master_coefficients(settings, &value);
+        }
         settings.with_resource_budget(|| {
             let numerical = match self.reduce_integral(vakint, settings, 0, None)? {
                 IntegralEvaluation::RustRed { loop_count, mode } => {
@@ -5258,6 +5272,13 @@ impl VakintExpression {
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
+        // Lane unknown-masters: strict refusal once, on this public call's result.
+        if !settings.allow_unknown_master_coefficients {
+            let inner = unknown_master_coefficients_carried(settings);
+            self.evaluate_integral_observed(vakint, &inner, None, None)?;
+            let value: Atom = self.clone().into();
+            return vakint.refuse_unknown_master_coefficients(settings, &value);
+        }
         self.evaluate_integral_observed(vakint, settings, None, None)
     }
 
@@ -8730,6 +8751,13 @@ Evaluated (n_loops=1, mu_r=1) :
         observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
         progress: Option<&CallerProgress>,
     ) -> Result<Atom, VakintError> {
+        // Lane unknown-masters: strict refusal once, on this public call's result.
+        if !settings.allow_unknown_master_coefficients {
+            let inner = unknown_master_coefficients_carried(settings);
+            let value = self.evaluate_integral_observed(&inner, input, observation, progress)?;
+            self.refuse_unknown_master_coefficients(settings, &value)?;
+            return Ok(value);
+        }
         if let Some(progress) = progress {
             progress.configure(settings);
         }

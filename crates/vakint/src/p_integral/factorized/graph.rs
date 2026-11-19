@@ -25,8 +25,8 @@ use feynkit_model::Model;
 use symbolica::atom::Atom;
 
 use super::{
-    FactorizedNumerator, FromFeynkitOptions, ProjectorChoice, Result, evaluate_factorized,
-    evaluate_factorized_vacuum,
+    FactorizedError, FactorizedNumerator, FromFeynkitOptions, ProjectorChoice, Result,
+    evaluate_factorized, evaluate_factorized_vacuum,
 };
 use crate::{Vakint, VakintSettings};
 
@@ -81,6 +81,17 @@ pub fn evaluate_graph(
     model: &Model,
     options: &FromFeynkitOptions,
 ) -> Result<GraphValue> {
+    // Lane unknown-masters: strict refusal once, on the sum over the branches.
+    if !settings.allow_unknown_master_coefficients {
+        let inner = crate::unknown_master_coefficients_carried(settings);
+        let result = evaluate_graph(vakint, &inner, diagram, model, options)?;
+        vakint
+            .refuse_unknown_master_coefficients(settings, &result.value)
+            .map_err(|error| FactorizedError::Evaluation {
+                detail: error.to_string(),
+            })?;
+        return Ok(result);
+    }
     let mut options = options.clone();
     if diagram.loop_momentum_basis().external_edges.is_empty() {
         options.projector = ProjectorChoice::None;

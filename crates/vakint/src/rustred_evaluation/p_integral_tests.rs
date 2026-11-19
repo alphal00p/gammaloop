@@ -5791,6 +5791,32 @@ fn strict_refusal_applies_after_the_sum_over_external_heads() {
     }
     let kept = evaluate(&surviving, true).unwrap();
     assert!(kept.contains_symbol(unknown), "{kept}");
+    // The staged public entry Vakint::evaluate_integral (also the Python
+    // binding's evaluate_integral): the same boundary (Astra, 078449d49).
+    let evaluate_integral = |input: &str, allow: bool| {
+        let mut settings = settings(RustRedMasterMode::Symbolic, None);
+        settings.number_of_terms_in_epsilon_expansion = 6;
+        settings.allow_unknown_master_coefficients = allow;
+        engine.evaluate_integral(&settings, parse(input).as_view())
+    };
+    let staged_control = evaluate_integral(&format!("ε^5*{}", bubble("p(1)")), false).unwrap();
+    for allow in [false, true] {
+        let value = evaluate_integral(&cancelling, allow).unwrap();
+        assert!(
+            !value.contains_symbol(unknown),
+            "staged, allow {allow}: {value}"
+        );
+        assert!(
+            (&value - &staged_control).expand().is_zero(),
+            "staged, allow {allow}: {value} vs {staged_control}"
+        );
+    }
+    match evaluate_integral(&surviving, false) {
+        Err(crate::VakintError::UnknownMasterCoefficients(unknowns)) => {
+            assert_eq!(unknowns.coefficients.len(), 1, "{unknowns}");
+        }
+        other => panic!("staged: expected the typed refusal, got {other:?}"),
+    }
 }
 
 /// Lane unknown-masters, Astra's five-loop confirmation (arm-t268-1413): the

@@ -594,8 +594,14 @@ fn insert_master(
     // The declared leading order is data of the published expansion: its
     // coefficient must not be an exact zero (else the expansion starts later
     // and the declaration is wrong).
+    // Exactly: over a common denominator in the supported constants (treated
+    // as symbols), the numerator vanishes (reviewer's witness
+    // 1/a - 1/b - 1/(ab), a = 1+zeta(3), b = 2+zeta(3)). No numerical test.
     if let Some(leading) = coefficients.get(&master.leading_order)
-        && leading.exact.as_ref().is_some_and(|exact| exact.is_zero())
+        && leading
+            .exact
+            .as_ref()
+            .is_some_and(|exact| exact.is_zero() || exact.together().expand().is_zero())
     {
         return Err(invalid(format!(
             "{name}: its coefficient at the declared leading order epsilon^{} is zero",

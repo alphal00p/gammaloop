@@ -1021,6 +1021,18 @@ pub fn evaluate_factorized_vacuum_streamed(
     prefactor: &Atom,
     streaming: Streaming,
 ) -> Result<VacuumValue> {
+    // Lane unknown-masters: strict refusal once, on this call's summed value.
+    if !settings.allow_unknown_master_coefficients {
+        let inner = crate::unknown_master_coefficients_carried(settings);
+        let result =
+            evaluate_factorized_vacuum_streamed(vakint, &inner, value, prefactor, streaming)?;
+        vakint
+            .refuse_unknown_master_coefficients(settings, &result.vakint_value)
+            .map_err(|error| FactorizedError::Evaluation {
+                detail: error.to_string(),
+            })?;
+        return Ok(result);
+    }
     // the resource guard (H2): refuse, naming the predicted size, rather than
     // run into the caller's process memory budget
     let mut network = value.factor_product();

@@ -1026,6 +1026,17 @@ fn placeholder_masters_are_all_unknown() {
         &load(&zero_leading).unwrap_err().to_string(),
         &["u-deep", "declared leading order epsilon^0 is zero"],
     );
+    // The zero test is exact over a common denominator in the constants
+    // (reviewer's witness: 1/a - 1/b - 1/(ab) = 0 with a = 1+zeta(3),
+    // b = 2+zeta(3)), never numerical.
+    let mut hidden_zero = fixture_v2();
+    hidden_zero["masters"][1]["coefficients"]["0"] = json!({
+        "exact": "1/(1+zeta(3))-1/(2+zeta(3))-1/((1+zeta(3))*(2+zeta(3)))"
+    });
+    assert_names(
+        &load(&hidden_zero).unwrap_err().to_string(),
+        &["u-deep", "declared leading order epsilon^0 is zero"],
+    );
     // A dependence may not refer below a master's leading order.
     let mut below = fixture_v2();
     below["masters"][4]["coefficients"]["1"] = json!({"exact": "UNKNOWN(u_x,-11)"});
