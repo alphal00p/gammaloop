@@ -640,13 +640,6 @@ fn zero_mode_hosts_reject_unsupported_routes() -> Result<()> {
                 ..settings.clone()
             },
         ),
-        (
-            "integrated",
-            UVgenerationSettings {
-                generate_integrated: true,
-                ..settings.clone()
-            },
-        ),
     ] {
         for vacuum_subtraction in [true, false] {
             let error = validate_local_counterterm_schemes(
@@ -659,11 +652,37 @@ fn zero_mode_hosts_reject_unsupported_routes() -> Result<()> {
             let message = error.to_string();
             assert!(
                 message.contains("thermal soft counterterm component")
-                    && message.contains("uv.generate_integrated=false")
-                    && message.contains("uv.orchestrator=hedge_poset"),
+                    && message.contains("uv.orchestrator=hedge_poset")
+                    && !message.contains("generate_integrated"),
                 "{route}: {message}"
             );
         }
+    }
+
+    // Integrated counterterms keep the route's frozen soft branches, so the
+    // union host is assigned as without them.
+    let integrated = UVgenerationSettings {
+        generate_integrated: true,
+        ..settings.clone()
+    };
+    for vacuum_subtraction in [true, false] {
+        let medium = thermal_medium(vacuum_subtraction);
+        validate_local_counterterm_schemes(&graph, &empty, &integrated, &medium)?;
+        let mut spinneys = classified(&graph, &integrated)?;
+        assign_zero_mode_hosts(
+            &graph,
+            &uncut(&graph),
+            &mut spinneys,
+            &integrated,
+            &medium,
+            &empty,
+        )?;
+        let hosts = spinneys
+            .iter()
+            .filter(|spinney| spinney.thermal_zero_mode().is_some())
+            .map(|spinney| edges_of(&graph, spinney))
+            .collect::<Vec<_>>();
+        assert_eq!(hosts, [edge_set(&[2, 3, 4, 5])], "VS {vacuum_subtraction}");
     }
 
     // Without the full observable the static cograph of the host has no U.

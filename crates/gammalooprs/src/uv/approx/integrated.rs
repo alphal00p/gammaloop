@@ -136,6 +136,22 @@ impl IntegratedCts {
         self.projected_atom(false)
     }
 
+    /// Whether every order of the Laurent expansion vanishes.
+    pub(crate) fn is_zero(&self) -> bool {
+        self.expansion.terms().all(|(_, coefficient)| coefficient.is_zero())
+    }
+
+    /// The integrated counterterm whose Laurent expansion in `epsilon`,
+    /// through `depth` orders, is that of `integral`, with no consumed loop
+    /// measure: a symbolic stand-in for an analytic integration.
+    #[cfg(test)]
+    pub(crate) fn from_integral(integral: &Atom, depth: usize) -> Result<Self> {
+        Ok(Self {
+            expansion: series(integral, depth)?,
+            scale_power: 0,
+        })
+    }
+
     pub(crate) fn finite_counterterm_atom(&self) -> Atom {
         -self.projected_atom(true)
     }

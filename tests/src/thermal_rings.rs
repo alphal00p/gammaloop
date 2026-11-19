@@ -692,14 +692,26 @@ pub fn set_static_theory_mass(cli: &mut CLIState, name: &str, m_ir: f64) -> Resu
         "set process -p {name} -i {name} kv general.m_ir={m_ir}"
     ))
     .with_context(|| format!("setting general.m_ir of {name} to {m_ir}"))?;
-    let general = &runtime_settings(cli, name)?.general;
-    if general.m_ir != Some(m_ir) {
-        return Err(eyre!(
-            "{name} kept general.m_ir = {:?} instead of {m_ir}",
-            general.m_ir
-        ));
+    let kept = runtime_settings(cli, name)?.general.m_ir;
+    if kept != m_ir {
+        return Err(eyre!("{name} kept general.m_ir = {kept} instead of {m_ir}"));
     }
     Ok(())
+}
+
+/// Check that the run card of `name` sets the static-theory mass
+/// `general.m_ir` to its `general.m_uv`, as the gates of every ring were
+/// measured with, and return that mass.
+pub fn assert_run_card_static_theory_mass(cli: &CLIState, name: &str) -> Result<f64> {
+    let general = &runtime_settings(cli, name)?.general;
+    if general.m_ir != general.m_uv {
+        return Err(eyre!(
+            "{name} starts with general.m_ir = {} apart from general.m_uv = {}",
+            general.m_ir,
+            general.m_uv
+        ));
+    }
+    Ok(general.m_ir)
 }
 
 fn set_stability_levels(

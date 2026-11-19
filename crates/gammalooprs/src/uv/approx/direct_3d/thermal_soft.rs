@@ -209,52 +209,51 @@ impl<'a> SoftBranches<'a> {
     }
 
     /// Whether this operation's U acts on a residue row that depends on the
-    /// completed zero-mode branches `owners` as the UV counterterm of their
-    /// static theory: whether the soft set of the row's outermost branch, the
-    /// lines of `loop_lines` outside its support, lies inside this
-    /// operation's support. A branch strictly inside another one was taken
+    /// completed zero-mode branches `owners` as a UV counterterm of their
+    /// static theory: whether this operation's support holds a line of the
+    /// soft set of the row's outermost branch, the lines of `loop_lines`
+    /// outside its support. A branch strictly inside another one was taken
     /// over by it, whose zero-mode operation expanded the inner branch's
-    /// further soft lines as hard ones. The U then makes every static soft
-    /// line of the row massive, so its image of the row is infrared finite on
-    /// its own and the masses it introduces there only regulate the static
-    /// theory. Otherwise the image keeps massless static lines and the U
-    /// introduces the vacuum masses. The own U of a connected host, which
+    /// further soft lines as hard ones. The soft lines of the row are static,
+    /// so such a U is the UV counterterm of a static subgraph: the masses it
+    /// introduces on the row regulate the static theory, and its integral is
+    /// a counterterm of that theory rather than a vacuum one. Only a U whose
+    /// support holds no soft line of the row introduces the vacuum masses
+    /// there. The own U of a connected host, which acts inside its branch,
     /// cancels the soft region of its image of the unfrozen integrand and
-    /// needs the same masses there, never gets here
-    /// ([`Local3DDeformation::OrdinaryOnSoftBranch`]); a U holding part of the
-    /// soft set is not constrained in the infrared, since an enclosing host
-    /// subtracts the soft region of its image with the image's own masses.
+    /// needs the vacuum masses there, never gets here
+    /// ([`Local3DDeformation::OrdinaryOnSoftBranch`]).
     ///
     /// # Errors
     ///
-    /// A row whose outermost branches lie both inside and outside the
-    /// operation's support in this sense. Zero-mode hosts form a chain under
-    /// inclusion, which leaves a single outermost branch per row.
+    /// A row with an outermost branch whose soft set meets the operation's
+    /// support and another one whose soft set does not. Zero-mode hosts form
+    /// a chain under inclusion, which leaves a single outermost branch per
+    /// row.
     pub(super) fn expands_static_cograph(
         &self,
         owners: &BTreeSet<SuBitGraph>,
         loop_lines: &SuBitGraph,
     ) -> Result<bool> {
-        let (inside, outside): (Vec<_>, Vec<_>) = owners
+        let (meeting, apart): (Vec<_>, Vec<_>) = owners
             .iter()
             .filter(|owner| {
                 !owners
                     .iter()
                     .any(|outer| outer != *owner && outer.includes(*owner))
             })
-            .partition(|owner| self.support.includes(&loop_lines.subtract(*owner)));
-        if !inside.is_empty() && !outside.is_empty() {
+            .partition(|owner| self.support.intersects(&loop_lines.subtract(*owner)));
+        if !meeting.is_empty() && !apart.is_empty() {
             return Err(eyre!(
-                "unsupported zero-mode forest: the U on {} contains the soft sets of the outermost \
-                 completed zero-mode branches {} but not those of {} of the same residue row, so \
-                 it is neither the UV counterterm of their static theory nor an ordinary U of the \
-                 row",
+                "unsupported zero-mode forest: the U on {} holds soft lines of the outermost \
+                 completed zero-mode branches {} but none of {} of the same residue row, so it is \
+                 neither a UV counterterm of their static theory nor an ordinary U of the row",
                 self.support.string_label(),
-                inside.iter().map(|owner| owner.string_label()).join(", "),
-                outside.iter().map(|owner| owner.string_label()).join(", "),
+                meeting.iter().map(|owner| owner.string_label()).join(", "),
+                apart.iter().map(|owner| owner.string_label()).join(", "),
             ));
         }
-        Ok(!inside.is_empty())
+        Ok(!meeting.is_empty())
     }
 
     /// Whether this operation multiplies the tag `view` by its Taylor
@@ -328,15 +327,16 @@ impl<'a> SoftBranches<'a> {
 
 impl Direct3dApproximation<'_> {
     /// The vacuum limit an ordinary operation takes of the occupations on its
-    /// support. Occupations retained by a frozen soft branch are kept: their
-    /// temperature is co-scaled by [`Self::compensate_thermal_distributions`].
+    /// active `support`. Occupations retained by a branch that
+    /// `soft_branches`, the operation's view of the completed soft branches,
+    /// sees frozen are kept: their temperature is co-scaled by
+    /// [`Self::compensate_thermal_distributions`].
     pub(super) fn project_unfrozen_occupations(
         ctx: &UVCtx<'_>,
         integrand: &Atom,
         support: &SuBitGraph,
-        deformation: Local3DDeformation,
+        soft_branches: SoftBranches<'_>,
     ) -> Result<Atom> {
-        let soft_branches = SoftBranches::new(ctx.graph, support, deformation);
         let active_edges = ctx
             .graph
             .iter_edges_of(support)

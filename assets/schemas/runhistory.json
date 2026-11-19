@@ -1899,11 +1899,8 @@
           "type": "boolean"
         },
         "m_ir": {
-          "description": "Infrared regulator mass of the static theory's ultraviolet counterterms, in the model's\nenergy units; unset, it follows `m_uv`. At finite temperature, a local UV counterterm\napplied to a zero-mode subtraction whose soft lines all lie in its subgraph is, on that\nterm, the UV counterterm of the static theory and gives the lines it makes massive this\nmass. The choice is made per term: the same counterterm uses `m_uv` on its terms without\nsuch a zero-mode subtraction, and so do all other counterterms. Must be finite and\npositive when set.",
-          "type": [
-            "number",
-            "null"
-          ],
+          "description": "Infrared regulator mass of the static theory's ultraviolet counterterms, in the model's\nenergy units, independent of `m_uv`. At finite temperature, a local UV counterterm\napplied to a zero-mode subtraction whose subgraph holds a static soft line of that\nsubtraction is, on that term, the UV counterterm of the static theory and gives the\nlines it makes massive this mass. The choice is made per term: the same counterterm\nuses `m_uv` on its terms without such a zero-mode subtraction, and so do the zero-mode\nhost's own counterterm and all other counterterms. Must be finite and positive.",
+          "type": "number",
           "format": "double"
         },
         "m_uv": {

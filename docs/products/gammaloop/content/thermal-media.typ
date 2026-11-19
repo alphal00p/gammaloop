@@ -128,23 +128,26 @@ exact equality; nearly coincident poles remain a numerical issue.
 
 At finite temperature the Matsubara zero mode of massless bosonic lines without a chemical
 potential makes soft regions such as a static gluon between two polarization loops
-divergent. GammaLoop subtracts them locally on the default hedge-poset route with
-`generate_integrated = false`: each divergent static soft set is assigned to a zero-mode
+divergent. GammaLoop subtracts them locally on the default hedge-poset direct-3D route:
+each divergent static soft set is assigned to a zero-mode
 host, the subgraph that stays hard; its counterterm keeps the zero-frequency mode of the soft
 lines and expands the hard part in their momenta. Hosts are `IR` subgraphs, so this needs
 `renormalization_prescription.massless_power_divergent = IR`; every other `IR` subgraph
 receives a plain UV counterterm. On this route a divergent static soft set without a supported
 host is an error that names this setting, so with the default `MUV` prescription such graphs
-are rejected at finite temperature. With the default `generate_integrated = true` no
-zero-mode subtraction runs and, with the default `MUV` prescription, no error is raised: the
-static soft divergence remains in the integrand. The subtraction works with and without
-vacuum subtraction. A UV counterterm applied to a zero-mode subtraction whose soft lines all
-lie in its subgraph is, on that term, the UV counterterm of the static theory: it regulates
-those lines with the mass `runtime.general.m_ir`, which follows `runtime.general.m_uv` while
-unset. The choice is made per term: the same counterterm keeps `m_uv` on the terms without
-such a zero-mode subtraction, and so do all other counterterms. The integrated add-back is not
-generated yet, so integrated results still depend on `runtime.general.m_uv` and
-`runtime.general.m_ir`. Near a soft static mode the remainder's rounding error cannot be
+are rejected at finite temperature, with and without integrated counterterms. The integrated
+add-back of a zero-mode subtraction is not generated yet: with the default
+`generate_integrated = true`, generating a graph that has a zero-mode host stops with an error
+saying so, and `generate_integrated = false` generates the local subtraction alone. The
+subtraction works with and without vacuum subtraction. A UV counterterm applied to a
+zero-mode subtraction whose subgraph holds static soft lines of that subtraction is, on that
+term, a UV counterterm of the static theory: it regulates those lines with the mass
+`runtime.general.m_ir`. That setting has the default of `runtime.general.m_uv` (1000) but does
+not follow it, so set both when changing `m_uv`. The choice is made per term: the same
+counterterm keeps `m_uv` on the terms without such a zero-mode subtraction, and so do the
+host's own counterterm and all other counterterms. Without the integrated add-back, results
+depend on `runtime.general.m_uv` and `runtime.general.m_ir`. Near a soft static mode the
+remainder's rounding error cannot be
 estimated by rotations, so in graphs with a zero-mode
 subtraction evaluation starts at higher precision when the softest static line is soft
 against the temperature

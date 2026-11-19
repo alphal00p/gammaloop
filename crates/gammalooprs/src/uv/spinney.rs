@@ -166,6 +166,33 @@ impl Spinney {
         self.renormalization_scheme = ApproximationType::MUV;
     }
 
+    /// A connected zero-mode host as its plain `MUV` U, without its region.
+    /// The zero-mode subtraction is local only, so the zero-temperature
+    /// integrated lane counts the host by its U, and so does the replay of a
+    /// sector whose integrated prefix lies in the host's soft set: a U of the
+    /// prefix acts on the host's zero mode as a static U, which has no
+    /// integrated counterpart, and leaves the host's U alone to act on the
+    /// add-back. The plain spinney is an independent copy for the operation
+    /// that needs this view.
+    ///
+    /// # Panics
+    ///
+    /// If this spinney hosts no connected zero-mode region.
+    pub(crate) fn to_plain_u(&self) -> Self {
+        assert!(
+            self.thermal_zero_mode
+                .as_ref()
+                .is_some_and(|region| region.kind() == ZeroModeHostKind::Connected),
+            "only a connected zero-mode host has a plain U, not {}",
+            self.subgraph.string_label()
+        );
+        Self {
+            renormalization_scheme: ApproximationType::MUV,
+            thermal_zero_mode: None,
+            ..self.clone()
+        }
+    }
+
     /// The finite-temperature zero-mode region this spinney hosts, if any.
     pub(crate) fn thermal_zero_mode(&self) -> Option<&ThermalZeroModeRegion> {
         self.thermal_zero_mode.as_ref()

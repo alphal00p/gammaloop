@@ -369,8 +369,11 @@ components decide. Hosts therefore need
 
 The pass runs iff `subtract_uv` and
 `UVgenerationSettings::freezes_thermal_soft_branches` hold: finite temperature,
-`hedge_poset`, a 3D final integrand and `generate_integrated = false`. It does not
-depend on vacuum subtraction. `Graph::restrict_full_observable_spinney` then keeps
+`hedge_poset` and a 3D final integrand. It depends neither on vacuum subtraction nor
+on `generate_integrated`; with integrated counterterms, generation stops where the
+integrated lane reaches a host
+(#link(<zero-mode-integrated-add-back>)[Integrated add-back]).
+`Graph::restrict_full_observable_spinney` then keeps
 the full-observable spinney under vacuum subtraction as a plain `MUV` U when a host
 exists, and drops it otherwise; without vacuum subtraction the spinney keeps its
 ordinary U. A host always needs it: its static cograph is logarithmically divergent
@@ -504,15 +507,19 @@ from $M$; the second checks symbolically that they vanish, whatever the masses.
 The static soft lines of a residue row are the soft set $Sigma(gamma)$ of its
 outermost completed zero-mode branch $gamma$: a branch strictly inside $gamma$ was
 taken over by it, and the zero-mode operation of $gamma$ expanded that branch's
-further soft lines as hard ones. A U whose support $X$ contains $Sigma(gamma)$ is, on
-that row, the UV counterterm of the static theory: on the rings, $U_G$ on every row of
-$S^0_A$ and $S^0_h$, the vacuum-soft rows $S^0_(h, 3)$ included. The masses it
-introduces there, on the lines of $X$ that no inner U has made massive, are the
-static-theory mass $m_"IR"$: the terminal symbol `mIR` and the expansion symbol
-`mIRexp`, the roles of `mUV` and `mUVexp` (`OrdinaryEnergyMasses`), bound to the
-runtime setting `general.m_ir`, which follows `general.m_uv` while unset. The choice
-is made per forest term, not per U: the same $U_G$ keeps $M$ on $U_G F$ and
-$U_G U_A F$. Every other mass is $M$:
+further soft lines as hard ones. A U whose support $X$ holds a line of $Sigma(gamma)$
+is, on that row, a UV counterterm of the static theory: the lines of $Sigma(gamma)$
+are static there, so $U_X$ subtracts the UV region of a static subgraph, and its
+integral is a counterterm of the static theory rather than a 4D vacuum integral. On
+the rings these are $U_G$ on every row of $S^0_A$ and $S^0_h$, the vacuum-soft rows
+$S^0_(h, 3)$ included, and $U_B$ and the two-loop $U_D$ on the rows of $S^0_A$. The
+masses such a U introduces there, on the lines of $X$ that no inner U has made
+massive, are the static-theory mass $m_"IR"$: the terminal symbol `mIR` and the
+expansion symbol `mIRexp`, the roles of `mUV` and `mUVexp` (`OrdinaryEnergyMasses`),
+bound to the runtime setting `general.m_ir`. It is a setting of its own, with the
+default of `general.m_uv` (1000) and independent of it. The choice is made per forest
+term, not per U: the same $U_G$ keeps $M$ on $U_G F$ and $U_G U_A F$, and $U_B$ on
+$U_B F$ and $U_B U_A F$. Every other mass is $M$:
 
 - If $Sigma(gamma) subset.eq X$, $U_X F$ makes every line of $Sigma(gamma)$ massive,
   so it has no soft region of $gamma$, and $U_X S^0_gamma F$ cancels no infrared
@@ -523,60 +530,72 @@ $U_G U_A F$. Every other mass is $M$:
   with the series, reproduces the large-momentum expansion through the depth of $U_X$
   whatever $m_"IR"$, at depth zero and one on the rings as at any higher depth, and so
   does an inner U with $M$ through its own depth.
-- The own U of a connected host, $U_A S^0_A$ in $H_A$, keeps $M$, as the infrared
-  requires: $Sigma(A)$ lies outside $A$, in the soft region of $Sigma(A)$ the term
-  $U_A F$ tends to $[integral_p U_A Pi_A](q = 0)$ times the static mode, and
-  $U_A S^0_A F$ cancels exactly that only with the same masses. A different mass
-  leaves a constant times the static mode, a logarithmic infrared divergence on the
-  gluon and ghost rings: with $m_"IR"$ there, $S(e_4)$ and its joint limits read
-  about $0$ instead of $+1$.
-- A U whose support holds only part of $Sigma(gamma)$, as $U_B S^0_A$ and
-  $U_D S^0_A$, keeps $M$ as well, although no infrared cancellation fixes its mass.
+- If $X$ holds only part of $Sigma(gamma)$, as for $U_B S^0_A$ and $U_D S^0_A$,
   $U_X F$ has no soft region of $gamma$ either, its lines of $Sigma(gamma)$ in $X$
   being massive. The soft region that $U_X S^0_gamma F$ keeps, from its massless
   lines of $Sigma(gamma)$ outside $X$, is subtracted by the enclosing host acting on
-  the same term ($S^0_h U_B S^0_A F$), and its UV cancellation against $S^0_gamma F$
-  holds for any mass. Unlike the static theory's counterterm above, such a term is
-  not infrared finite on its own, and $m_"IR"$ goes exactly to the terms that are.
-  Giving it $m_"IR"$ instead also leaves every soft and joint limit and the UV
-  profile of the ghost ring finite, with and without vacuum subtraction; only the own
-  U taking $m_"IR"$ breaks them.
+  the same term ($S^0_h U_B S^0_A F$) with the image's own masses, and its UV
+  cancellation against $S^0_gamma F$ holds for any mass, so no infrared cancellation
+  fixes its mass: $m_"IR"$ there keeps every soft and joint limit and the UV profile of
+  the ghost ring finite, with and without vacuum subtraction. It takes $m_"IR"$
+  because its image is a counterterm of the static theory: $U_B$ on a row of $S^0_A$
+  is the 3D UV counterterm of the static bubble $B$, linear in $T$, which no 4D vacuum
+  add-back reproduces ($S^0_A$ annihilates the integrated $U_B$, whose class
+  ${e_4}$ it contracts). With $M$, its mass dependence would survive in the deferred
+  static terms.
+- The own U of a connected host, $U_A S^0_A$ in $H_A$, acts inside its branch and
+  keeps $M$, as the infrared requires: $Sigma(A)$ lies outside $A$, in the soft
+  region of $Sigma(A)$ the term $U_A F$ tends to $[integral_p U_A Pi_A](q = 0)$ times
+  the static mode, and $U_A S^0_A F$ cancels exactly that only with the same masses.
+  A different mass leaves a constant times the static mode, a logarithmic infrared
+  divergence on the gluon and ghost rings: with $m_"IR"$ there, $S(e_4)$ and its
+  joint limits read about $0$ instead of $+1$.
 - Masses already in the row stay as they are: those inside the frozen branch, such as
-  the $U_A$ of $[integral_p (1 - U_A) Pi_A^((0))]$, and those of an inner U on its soft
-  lines, such as $U_B$ in $U_G U_B S^0_A$. An enclosing U rescales a terminal mass,
+  the $U_A$ of $[integral_p (1 - U_A) Pi_A^((0))]$, and those of an inner U, such as
+  the $m_"IR"$ of $U_B$ in $U_G U_B S^0_A$. An enclosing U rescales a terminal mass,
   `mUV` or `mIR`, like the loop momenta, and keeps its symbol.
 
 $Sigma(gamma)$ consists of the loop lines of the uncut structure outside $gamma$
-(`Graph::uncut_loop_lines`, on the only structure hosts live on), so a U containing a
-frozen branch contains its soft set iff it contains every loop line; on the rings only
-$U_G$ does. The ordinary U decides per residue row: `SoftBranches::row_owners` collects
-the completed branches each row holds, visiting each definition its rows share once,
-and `SoftBranches::expands_static_cograph` applies the rule. It expands the rows of a
-static cograph in the chart `Local3DDeformation::OrdinaryOnStaticCograph`, the others
-ordinarily, each part with its own copy of the numerator and scalar bodies its rows
-call, so $U_G$ on $H_A F$ gives $m_"IR"$ to the rows of $S^0_A$ and $U_A S^0_A$ and $M$
-to those of $U_A F$. A row holding a completed branch is a re-keyed static row of its
-`S0`, apart from every row of the unfrozen integrand, so no row mixes the two; the
-connected host, the one operation that adds both kinds of rows into one family, checks
-that their residue keys stay apart. A row whose outermost branches have their soft
-sets partly inside and partly outside $X$ is a generation error. The hosts form a chain
-under inclusion, which leaves a single outermost branch per row, so no host assignment
-produces one. The pins
+(`Graph::uncut_loop_lines`, on the only structure hosts live on), so every ordinary U
+acting on a row of $gamma$ holds a line of it: a U strictly containing $gamma$ holds a
+loop line outside it, and a U disjoint from $gamma$ lies inside $Sigma(gamma)$. Only
+the own U revisits the support of its branch. The ordinary U decides per residue row:
+`SoftBranches::row_owners` collects the completed branches each row holds, visiting
+each definition its rows share once, and `SoftBranches::expands_static_cograph`
+applies the rule. It expands the rows of a static cograph in the chart
+`Local3DDeformation::OrdinaryOnStaticCograph`, the others ordinarily, each part with
+its own copy of the numerator and scalar bodies its rows call, so $U_B$ and $U_G$ on
+$H_A F$ give $m_"IR"$ to the rows of $S^0_A$ and $U_A S^0_A$ and $M$ to those of
+$U_A F$. A row holding a completed branch is a re-keyed static row of its `S0`, apart
+from every row of the unfrozen integrand, so no row mixes the two; the connected
+host, the one operation that adds both kinds of rows into one family, checks that
+their residue keys stay apart. A row with one outermost branch whose soft set meets
+$X$ and another whose soft set does not is a generation error. The hosts form a
+chain under inclusion, which leaves a single outermost branch per row, so no host
+assignment produces one. The pins
 `enclosing_u_acts_on_frozen_s0_at_the_static_cograph_degree`,
 `vacuum_soft_term_gets_its_ring_u` and `vs_false_sector_mixes_full_and_minimal_depth`
 evaluate every U image with $m_"IR" = M$ and $m_"IR" != M$;
 `static_theory_mass_only_on_static_cographs` pins which images carry `mIR` and that
-$U_G H_A F$ splits its rows, and `static_cograph_needs_the_whole_soft_set` pins the
-row rule, the outermost branch deciding, and the error.
+$U_B H_A F$ and $U_G H_A F$ split their rows, and `static_cograph_needs_a_soft_line`
+pins the row rule, the outermost branch deciding, and the error.
 
 === Integrated add-back
 <zero-mode-integrated-add-back>
-The integrated add-back of the zero-mode subtraction is not generated: with
-`generate_integrated = true` the host policy does not run, and scheme validation
-rejects every positive-degree finite-temperature `IR` component. The local remainder
-$R$ needs no add-back to be integrable, but $integral R$ depends on the vacuum mass
-$M$ (`mUV`) and the static-theory mass $m_"IR"$ (`mIR`) until the add-back is
-supplied. On the rings, with $Pi_X$ the integrand
+The integrated add-back of the zero-mode subtraction is not generated yet. With
+`generate_integrated = true` the route freezes soft branches as without it: scheme
+validation and the host policy, including its hostless check, run unchanged. The
+integrated lane (`Forests::integrate`) then refuses the first node that ends on a
+zero-mode host, the point where an integrated prefix would reach a zero-mode
+operation, with an error that its integrated counterterms are not yet supported and
+that names the host. With the mass rule above, every U that carries $M$ on a
+zero-mode term (a U acting before every `S0` of its term, or a host's own U) is a
+$T$-independent 4D vacuum counterterm, whose integrated counterpart is the finite
+conversion from $M$ to 4D MS-bar; the `S0` operations and the static-theory U's stay
+local, and their add-back is deferred.
+The local remainder $R$ needs no add-back to be integrable, but $integral R$ depends
+on the vacuum mass $M$ (`mUV`) and the static-theory mass $m_"IR"$ (`mIR`) until the
+add-back is supplied. On the rings, with $Pi_X$ the integrand
 of bubble $X$ at static external $q$ after its Matsubara sum, $Pi_X^((i))$ its
 order-$i$ Taylor term in $q$, $Pi_X^v$ its vacuum part, $N_0(k, q)$ the numerator
 of the second bubble's vertices at zero energies, and $S^0_(h, 3)$ the vacuum-soft
@@ -592,10 +611,10 @@ tuple of $S^0_h$:
     $ U_G (1 - U_A)(1 - U_B) S^0_A = & T^2 [integral_p (1 - U_A) Pi_A^((0))]
       integral_q integral_k \{ frac(N_0(k, q), (q^2 + m_"IR"^2)^2 (k^2 + m_"IR"^2)
       ((k - q)^2 + m_"IR"^2)) \
-      & - frac(N_0(k, 0), (q^2 + m_"IR"^2)^2 (k^2 + M^2)^2) - (q"-linear") \}, $
-    where the $U_A$ in the bracket and the $U_B$ behind the second and the
-    $q$-linear terms keep $M$, with a $1 \/ epsilon$ pole and logarithms of $m_"IR"$
-    and $M$, the matching pole of the static theory;
+      & - frac(N_0(k, 0), (q^2 + m_"IR"^2)^2 (k^2 + m_"IR"^2)^2) - (q"-linear") \}, $
+    where the $U_A$ in the bracket keeps $M$ and the $U_B$ behind the second and the
+    $q$-linear terms takes $m_"IR"$, with a $1 \/ epsilon$ pole and logarithms of
+    $m_"IR"$, the matching pole of the static theory;
   - under vacuum subtraction, $U_G S^0_(h, 3) U_A U_B$, independent of $T$, with
     the $1 \/ epsilon$ pole of $integral (q^2 + m_"IR"^2)^(-3 \/ 2)$ and the vacuum
     vertices $U_A Pi_A^v (0)$, $U_B Pi_B^v (0)$ at $M$;
@@ -622,7 +641,8 @@ exists yet.
   these zeros. The static-theory terms are analytic where a hard quark line goes soft
   and only shift that coefficient, so $m_"IR"$ moves them as $M$ does: on the ghost
   ring with vacuum subtraction, the slow lane's $S(e_3)$ ray at $mu_B = 0$ reads
-  $+3.95$ at $r^2 = 0.938$ with $m_"IR" = 0.3 M$, and without any static-theory mass
+  $+3.95$ at $r^2 = 0.938$ with $m_"IR" = 0.3 M$ on $U_G$ alone (before $U_B$ on
+  the rows of $S^0_A$ took $m_"IR"$ too), and without any static-theory mass
   (the code before `general.m_ir`) it reads $+3.84$ at $r^2 = 0.93$ for $M = 0.74$
   and $+4.08$ at $r^2 = 0.88$ for $M = 0.745$, while the remainder stays bounded. The
   slow lane's `*_with_static_theory_mass` cases therefore run at
@@ -760,17 +780,18 @@ For accepted tails, tables label the sparse terminal-zero evidence as `zero tail
   reduces to U. At finite temperature, positive-degree `IR` is the operation of a
   zero-mode host, described in
   #link(<finite-temperature-zero-mode-subtraction>)[Finite-temperature zero-mode subtraction],
-  whose integrated add-back is not generated. Integrated `IR` uses the signed finite
-  projection described above.
+  whose integrated add-back is not generated: with integrated counterterms,
+  generation stops where the integrated lane reaches a zero-mode host. Integrated
+  `IR` uses the signed finite projection described above.
 - Scheme validation rejects a positive-degree MUV parent containing a
   positive-degree IR child: its reduced-cograph subtraction lacks the containing
-  soft branch. At finite temperature on the hedge-poset direct-3D route without
-  integrated counterterms, the zero-mode host policy runs first: only zero-mode
+  soft branch. At finite temperature on the hedge-poset direct-3D route, with and
+  without integrated counterterms, the zero-mode host policy runs first: only zero-mode
   hosts keep `IR`, every other `IR` spinney becomes a plain U, and every enclosing
   operation treats a completed zero-mode branch as a frozen vertex, so a parent's U
   is the local subtraction of its static reduced cograph. On every other route a
-  positive-degree finite-temperature `IR` component is rejected up front, including
-  with integrated counterterms. It also rejects IR and PolePart components in one nested or
+  positive-degree finite-temperature `IR` component is rejected up front. It also
+  rejects IR and PolePart components in one nested or
   disconnected UV wood until their combined integrated policy is implemented.
   Components that cannot occur together in a wood do not trigger this rejection.
 - Local `OS` dispatch remains deferred, and requesting integrated OS is rejected

@@ -224,13 +224,13 @@ pub struct GammaloopSymbols {
     pub m_ir_expansion: Symbol,
     /// Terminal mass of the UV counterterms of the static theory of a
     /// finite-temperature zero mode: the masses a local U introduces on a
-    /// residue row whose completed zero-mode branch has its whole soft set
-    /// inside the U's support. They regulate the static soft lines in the
+    /// residue row whose outermost completed zero-mode branch has a soft line
+    /// in the U's support. They regulate the static soft lines in the
     /// infrared.
     ///
     /// This symbol prints as `mIR` and is the public symbolic representative of
-    /// the `general.m_ir` runtime setting, which follows `general.m_uv` unless
-    /// set.
+    /// the `general.m_ir` runtime setting, which is independent of
+    /// `general.m_uv`.
     pub m_ir_vacuum: Symbol,
     /// UV localization scale factor
     pub renormalization_localization_scale: Symbol,

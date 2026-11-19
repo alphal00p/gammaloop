@@ -19,7 +19,12 @@ impl Localizer<'_> {
         graph: &mut Graph,
         integrated_node: &S,
     ) -> Result<FrozenActiveCt> {
-        if expr.is_zero() {
+        // A vacuum-subtracted thermal weight `W - V(W)` vanishes on a cograph
+        // without loops, the one left by an operation that covers every
+        // loop, so that its add-back vanishes with its local U.
+        let loopless_cograph =
+            graph.n_loops(integrated_node.subgraph()) == graph.n_loops(&graph.full_filter());
+        if expr.is_zero() || (self.orientation.vacuum_subtraction && loopless_cograph) {
             let indices = self.cutset.residue_selector.generate_allowed_keys();
             return Ok(FrozenActiveCt {
                 active: OrientationIntegrands::from_ids_and_indices(

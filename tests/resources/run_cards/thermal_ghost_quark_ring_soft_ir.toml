@@ -144,6 +144,9 @@ compile = false
 inverse_temperature = 1.0
 evaluator_method = "SingleParametric"
 m_uv = 1.0
+# The static-theory mass of the zero-mode subtraction has its own default (1000);
+# the slow-lane gates were measured with it equal to m_uv.
+m_ir = 1.0
 mu_r = 2.0
 
 [default_runtime_settings.kinematics]

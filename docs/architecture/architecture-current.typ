@@ -374,10 +374,11 @@ its vacuum-soft term, at relative order `-ω(Σ)-1`. Every `IR` spinney without 
 route a divergent soft set without a host is an error that names
 `renormalization_prescription.massless_power_divergent = IR`, so with the default
 `MUV` such a graph is rejected at finite temperature. Only the hedge-poset direct-3D
-route without integrated counterterms freezes completed branches and runs this
-policy; the other routes reject finite-temperature `IR` components of positive
-degree but do not search for soft sets without a host. Vacuum subtraction is
-optional. The orders, tags, minimal depth of enclosing operations, add-back
+route freezes completed branches and runs this policy, with and without integrated
+counterterms; the other routes reject finite-temperature `IR` components of positive
+degree but do not search for soft sets without a host. With integrated counterterms,
+generation stops where the integrated lane reaches a zero-mode host, whose integrated
+counterparts are not generated yet. Vacuum subtraction is optional. The orders, tags, minimal depth of enclosing operations, add-back
 bookkeeping and known limitations are documented in
 #link("uv-renormalization.typ#finite-temperature-zero-mode-subtraction")[the UV renormalization architecture].
 
