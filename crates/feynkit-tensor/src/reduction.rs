@@ -353,6 +353,9 @@ pub struct TensorReducer {
     row_mode: Option<blocks::RowMode>,
     /// Block-path dispatch; `None` reads `FEYNKIT_TENSORREDUCE_DISPATCH` once.
     dispatch: Option<blocks::Dispatch>,
+    /// Chunks of the source's top-level terms reduced in the caller's rayon
+    /// pool ([`Self::with_parallel_chunks`]); 0 or 1: one call.
+    parallel_chunks: usize,
 }
 
 impl TensorReducer {
@@ -385,6 +388,7 @@ impl TensorReducer {
             resource_limits: ResourceLimits::default(),
             row_mode: None,
             dispatch: None,
+            parallel_chunks: 0,
         }
     }
 
@@ -473,6 +477,38 @@ impl TensorReducer {
         self
     }
 
+    /// Reduce the source's top-level terms in `chunks` consecutive chunks (in
+    /// the source's canonical term order), each chunk assembled, checked against
+    /// the source's interface and reduced in its own task, the chunks
+    /// run in the CALLER'S rayon pool: a call from a rayon worker uses that
+    /// worker's pool and never builds one of its own (with one thread, as under
+    /// `RAYON_NUM_THREADS=1`, the chunks run one after another). The caller's
+    /// resource budget is captured and re-entered in every chunk, with a
+    /// checkpoint before and after each, together with
+    /// [`Self::with_resources`]. The chunk reductions are concatenated in chunk
+    /// order, whatever order they complete in: the result is the same, term by
+    /// term, for every thread count and schedule. It equals the one-call
+    /// reduction as a value; its rows are not merged across chunks. `0` or `1`
+    /// (the default): one call, unchanged. Without the `native` feature the
+    /// chunks run one after another.
+    ///
+    /// ```
+    /// use feynkit_tensor::TensorReducer;
+    /// use symbolica::parse;
+    ///
+    /// let reducer = TensorReducer::new(parse!("D")).with_parallel_chunks(8);
+    /// assert_eq!(reducer.parallel_chunks(), 8);
+    /// ```
+    pub fn with_parallel_chunks(mut self, chunks: usize) -> Self {
+        self.parallel_chunks = chunks;
+        self
+    }
+
+    /// The chunk count of [`Self::with_parallel_chunks`] (0: one call).
+    pub fn parallel_chunks(&self) -> usize {
+        self.parallel_chunks
+    }
+
     /// Return the process-memory and elapsed-time configuration.
     pub fn resource_limits(&self) -> ResourceLimits {
         self.resource_limits
@@ -553,11 +589,79 @@ impl TensorReducer {
         &self,
         source: &SymbolicTensor<PartialStructure>,
     ) -> Result<TensorReduction, TensorReductionError> {
+        if self.parallel_chunks > 1
+            && let AtomView::Add(_) = source.expression().as_view()
+        {
+            return self.reduce_chunked(source);
+        }
         ResourceBudget::new(self.resource_limits).run(|| {
             let reduction = self.reduce_scoped(source)?;
             resources::checkpoint()?;
             Ok(reduction)
         })
+    }
+
+    /// The source's top-level terms in its canonical order (the source itself
+    /// if it is not a sum).
+    fn source_terms(source: &SymbolicTensor<PartialStructure>) -> Vec<Atom> {
+        match source.expression().as_view() {
+            AtomView::Add(sum) => sum.iter().map(|term| term.to_owned()).collect(),
+            other => vec![other.to_owned()],
+        }
+    }
+
+    /// Terms per chunk: at most [`Self::parallel_chunks`] consecutive chunks of
+    /// equal size (the last one shorter).
+    fn chunk_size(&self, terms: usize) -> usize {
+        terms.div_ceil(self.parallel_chunks.max(1)).max(1)
+    }
+
+    /// One chunk of [`Self::reduce_chunked`] inside the caller's captured
+    /// budget and this reducer's own limits, a checkpoint before and after:
+    /// the chunk's terms are checked against the source's interface here, in
+    /// the worker, then reduced.
+    fn reduce_chunk(
+        &self,
+        caller: &ResourceBudget,
+        source: &SymbolicTensor<PartialStructure>,
+        terms: &[Atom],
+    ) -> Result<TensorReduction, TensorReductionError> {
+        caller.run_captured(|| {
+            ResourceBudget::new(self.resource_limits).run(|| {
+                resources::checkpoint()?;
+                let chunk = source.with_checked_expression(Atom::add_many(terms.iter()))?;
+                let reduction = self.reduce_scoped(&chunk)?;
+                resources::checkpoint()?;
+                Ok(reduction)
+            })
+        })
+    }
+
+    /// [`Self::with_parallel_chunks`]: the chunks reduced in the caller's
+    /// rayon pool, merged in chunk order ([`merge_chunk_reductions`]).
+    fn reduce_chunked(
+        &self,
+        source: &SymbolicTensor<PartialStructure>,
+    ) -> Result<TensorReduction, TensorReductionError> {
+        let terms = Self::source_terms(source);
+        let size = self.chunk_size(terms.len());
+        let caller = ResourceBudget::capture_current();
+        #[cfg(feature = "native")]
+        let results = {
+            use rayon::prelude::*;
+            terms
+                .par_chunks(size)
+                .enumerate()
+                .map(|(index, chunk)| (index, self.reduce_chunk(&caller, source, chunk)))
+                .collect::<Vec<_>>()
+        };
+        #[cfg(not(feature = "native"))]
+        let results = terms
+            .chunks(size)
+            .enumerate()
+            .map(|(index, chunk)| (index, self.reduce_chunk(&caller, source, chunk)))
+            .collect::<Vec<_>>();
+        merge_chunk_reductions(source, results, self.output_term_limit)
     }
 
     fn reduce_scoped(
@@ -1615,6 +1719,46 @@ fn outside_pair(left: &Outside, right: &Outside) -> Atom {
     }
 }
 
+/// The chunk reductions of a chunked reduction, received in ANY order (each
+/// with its chunk index), concatenated in chunk order: the first failing chunk
+/// in that order is the error; the terms, the largest rank and the open
+/// interface are those of the source.
+fn merge_chunk_reductions(
+    source: &SymbolicTensor<PartialStructure>,
+    mut results: Vec<(usize, Result<TensorReduction, TensorReductionError>)>,
+    output_term_limit: Option<usize>,
+) -> Result<TensorReduction, TensorReductionError> {
+    results.sort_by_key(|(index, _)| *index);
+    let mut terms = Vec::new();
+    let mut max_rank = 0;
+    for (_, result) in results {
+        let reduction = result?;
+        max_rank = max_rank.max(reduction.max_rank);
+        terms.extend(reduction.terms);
+    }
+    if let Some(limit) = output_term_limit
+        && terms.len() > limit
+    {
+        return Err(TensorReductionError::OutputLimit {
+            terms: terms.len(),
+            limit,
+        });
+    }
+    let zero = source.with_checked_expression(Atom::Zero)?;
+    let fully_contracted = zero
+        .structure()
+        .logical_slots()
+        .iter()
+        .all(|slot| slot.rep().rep != LibraryRep::from(Minkowski {}));
+    Ok(TensorReduction {
+        terms,
+        zero,
+        max_rank,
+        fully_contracted,
+        budget: ResourceBudget::capture_current(),
+    })
+}
+
 #[cfg(test)]
 fn minkowski_slot(dimension: &Atom, index: &Atom) -> Atom {
     FunctionBuilder::new(Minkowski::selfless_symbol())
@@ -2080,6 +2224,139 @@ mod tests {
             .add_arg(minkowski_slot(dimension, left))
             .add_arg(minkowski_slot(dimension, right))
             .finish()
+    }
+
+    /// Seven top-level terms, rank two in `k(1)`, `k(2)` with the open indices
+    /// mu, nu, compact dots with `q` and `p`, cooked as vakint cooks.
+    fn chunk_fixture() -> (TensorReducer, SymbolicTensor<PartialStructure>) {
+        let (k, q, p, _) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::chunk_D"));
+        let mu = Atom::var(symbol!("feynkit_tensor_test::chunk_mu"));
+        let nu = Atom::var(symbol!("feynkit_tensor_test::chunk_nu"));
+        let km = |l: i64| indexed(k, l, &dimension, &mu);
+        let kn = |l: i64| indexed(k, l, &dimension, &nu);
+        let kq = |l: i64| dot(&compact(k, l, &dimension), &compact(q, 1, &dimension));
+        let kp = |l: i64| dot(&compact(k, l, &dimension), &compact(p, 1, &dimension));
+        let numerator = km(1) * kn(1) * kq(1) * kq(1)
+            + km(1) * kn(2) * kq(2) * kp(1)
+            + Atom::num(3) * km(2) * kn(2)
+            + km(1) * indexed(q, 1, &dimension, &nu) * kq(1) * kp(2)
+            + km(2) * indexed(p, 1, &dimension, &nu) * kp(2)
+            + Atom::num(5)
+                * km(1)
+                * kn(1)
+                * dot(&compact(k, 1, &dimension), &compact(k, 2, &dimension))
+            + km(2) * kn(1) * kq(1) * kq(2);
+        let cooking = idenso::CookSettings::indices()
+            .with_mode(idenso::CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let reducer = TensorReducer::new(dimension).with_integrated_head(k);
+        let source = reducer
+            .admit(cooking.try_cook(numerator.as_view()).unwrap())
+            .unwrap();
+        (reducer, source)
+    }
+
+    #[cfg(feature = "native")]
+    #[test]
+    fn chunked_reduction_is_independent_of_the_thread_count_and_equals_one_call() {
+        let (reducer, source) = chunk_fixture();
+        assert_eq!(reducer.parallel_chunks(), 0);
+        let one_call = reducer.reduce(&source).unwrap().into_expression().unwrap();
+        let chunked = reducer.clone().with_parallel_chunks(3);
+        let terms = TensorReducer::source_terms(&source);
+        assert!(terms.chunks(chunked.chunk_size(terms.len())).count() > 1);
+        let mut texts = Vec::new();
+        for threads in [1, 2, 8] {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .unwrap();
+            let result = pool
+                .install(|| chunked.reduce(&source))
+                .unwrap()
+                .into_expression()
+                .unwrap();
+            assert_eq!(
+                result.structure().logical_slots(),
+                one_call.structure().logical_slots()
+            );
+            assert!(
+                (result.expression() - one_call.expression())
+                    .together()
+                    .is_zero(),
+                "{threads} threads"
+            );
+            texts.push(result.expression().to_canonical_string());
+        }
+        assert!(texts.windows(2).all(|pair| pair[0] == pair[1]));
+        // one chunk is the one-call path, term by term
+        let single = reducer
+            .with_parallel_chunks(1)
+            .reduce(&source)
+            .unwrap()
+            .into_expression()
+            .unwrap();
+        assert_eq!(
+            single.expression().to_canonical_string(),
+            one_call.expression().to_canonical_string()
+        );
+    }
+
+    #[test]
+    fn chunk_merge_does_not_depend_on_completion_order() {
+        let (reducer, source) = chunk_fixture();
+        let chunked = reducer.with_parallel_chunks(4);
+        let terms = TensorReducer::source_terms(&source);
+        let chunks = terms
+            .chunks(chunked.chunk_size(terms.len()))
+            .collect::<Vec<_>>();
+        let n = chunks.len();
+        assert_eq!(n, 4);
+        let caller = ResourceBudget::capture_current();
+        let merged = |order: Vec<usize>| {
+            let results = order
+                .into_iter()
+                .map(|i| (i, chunked.reduce_chunk(&caller, &source, chunks[i])))
+                .collect::<Vec<_>>();
+            merge_chunk_reductions(&source, results, None)
+                .unwrap()
+                .into_expression()
+                .unwrap()
+                .expression()
+                .to_canonical_string()
+        };
+        let in_order = merged((0..n).collect());
+        assert_eq!(merged((0..n).rev().collect()), in_order);
+        assert_eq!(merged(vec![2, 0, 3, 1]), in_order);
+        let parallel = chunked.reduce(&source).unwrap().into_expression().unwrap();
+        assert_eq!(parallel.expression().to_canonical_string(), in_order);
+    }
+
+    #[test]
+    fn chunked_reduction_honours_the_callers_budget_in_every_chunk() {
+        let (reducer, source) = chunk_fixture();
+        let chunked = reducer.with_parallel_chunks(3);
+        let elapsed = ResourceLimits {
+            max_elapsed: Some(Duration::ZERO),
+            ..ResourceLimits::default()
+        };
+        // the caller's scope, captured on the calling thread and re-entered in the workers
+        let result = ResourceBudget::new(elapsed).run(|| chunked.reduce(&source));
+        assert!(matches!(
+            result,
+            Err(TensorReductionError::Resource(
+                ResourceLimitError::Elapsed { .. }
+            ))
+        ));
+        // the reducer's own limits
+        let result = chunked.clone().with_resources(elapsed).reduce(&source);
+        assert!(matches!(
+            result,
+            Err(TensorReductionError::Resource(
+                ResourceLimitError::Elapsed { .. }
+            ))
+        ));
     }
 
     fn materialization_fixture(

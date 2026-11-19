@@ -14,6 +14,7 @@ feynkit-graph = { version = "0.1.0", path = "../feynkit-graph", default-features
 linnet.workspace = true
 idenso = { version = "0.3.0", path = "../idenso", default-features = false }
 spenso = { version = "0.6.0", path = "../spenso", default-features = false, features = ["shadowing"] }
+rayon = { workspace = true, optional = true }
 symbolica = { workspace = true }
 thiserror = { workspace = true }
 
@@ -22,5 +23,5 @@ feynkit-model = { workspace = true }
 
 [features]
 default = ["native"]
-native = ["feynkit-graph/native", "idenso/native", "spenso/native"]
+native = ["dep:rayon", "feynkit-graph/native", "idenso/native", "spenso/native"]
 wasm = ["feynkit-graph/wasm", "idenso/wasm", "spenso/wasm"]

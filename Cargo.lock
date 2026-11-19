@@ -2018,6 +2018,7 @@ dependencies = [
  "feynkit-model",
  "idenso",
  "linnet",
+ "rayon",
  "spenso",
  "symbolica",
  "thiserror 2.0.18",
