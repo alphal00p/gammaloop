@@ -55,6 +55,40 @@ use super::{GraphRegion, TaylorExpansion, integrate_single_mass, project::projec
 
 pub(super) type RootProjector<'a> = dyn Fn(&Atom) -> Result<Atom> + 'a;
 
+/// The open shape of a UV child closed by [`RStarIntegrand::dirac_boundary`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DiracKind {
+    /// Taylor degree 0, one open Dirac line and one open Lorentz slot `mu`:
+    /// the counterterm is `c gamma^mu`.
+    Vertex,
+    /// Taylor degree 1, one open Dirac line and no Lorentz slot: the
+    /// counterterm is `c_e slash(Q_e)`.
+    SelfEnergy,
+}
+
+/// The Dirac closure of a UV child: `Delta = K[normalization * closure . X]
+/// * structure`, where `closure` (momentum free) closes the open Dirac line
+/// into a trace and `structure` reopens it.
+#[derive(Clone, Debug)]
+pub struct DiracBoundary {
+    pub kind: DiracKind,
+    /// `gamma(column, row, mu)`: multiplied into every root-scope remainder
+    /// it closes `X_{row,column}^mu` into `Tr[gamma_mu X^mu]` (vertex) or
+    /// `Tr[gamma_nu X]` with the free index `nu` (self-energy).
+    pub closure: Atom,
+    /// `gamma(row, column, mu)`, the reassembled open structure.
+    pub structure: Atom,
+    /// `1/(Tr[1] d)` (vertex) or `1/Tr[1]` (self-energy), with `Tr[1]` the
+    /// dimension of the bispinor representation (idenso's trace of the unit).
+    pub normalization: Atom,
+}
+
+/// The fresh Minkowski index `nu` of the self-energy Dirac closure. It is
+/// free only inside the child's own root scope and contracted in the
+/// child's `Delta`; the cache wraps it as a private dummy.
+pub(super) static DIRAC_CLOSURE_INDEX: LazyLock<Symbol> =
+    LazyLock::new(|| symbol!("gammalooprs::uv_dirac_closure_nu"));
+
 // The shared transport knows explicit edge momenta and these FeynKit basis
 // coordinates. Other live momentum conventions must keep their own occurrence.
 static UNSUPPORTED_PHYSICAL_MOMENTA: LazyLock<Vec<Symbol>> = LazyLock::new(|| {
@@ -1401,6 +1435,151 @@ impl RStarIntegrand {
             ]
             .map(|pairing| cooking.uncook(pairing.as_view())),
         ))
+    }
+
+    /// The Dirac closure of a UV child with one open Dirac line, when its
+    /// counterterm has a unique, complete Dirac structure; `None` otherwise.
+    ///
+    /// The numerator over `support` must be parity even (no `gamma5`, chiral
+    /// projector or Levi-Civita symbol) and its open slots exactly two
+    /// bispinor slots of one representation, the row `r` and column `c` of
+    /// the open line, plus
+    /// * at Taylor degree 0, one Minkowski slot `mu` (a quark-gluon vertex):
+    ///   a constant matrix with one Lorentz index is `c gamma^mu` in `d`
+    ///   dimensions, so `Delta = Tr[gamma_mu Delta^mu] / (Tr[1] d) gamma^mu`;
+    /// * at Taylor degree 1, no Minkowski slot (a self-energy): linear in the
+    ///   boundary momenta `Q_e`, `Delta = sum_e Q_e^rho A_{e,rho}` with
+    ///   constant matrices `A_{e,rho} = c_e gamma_rho`, so
+    ///   `Delta = Tr[gamma_nu Delta] / Tr[1] gamma^nu` with a fresh index `nu`
+    ///   (a closed trace with one open Lorentz index, `slash(p)` reassembled).
+    ///
+    /// The row and column are read off the gamma matrices of the numerator:
+    /// each open spinor slot must occur only in gamma matrices, the one only
+    /// as their row and the other only as their column. `Tr[1]` is the
+    /// dimension of the bispinor representation, as idenso traces it.
+    pub fn dirac_boundary(
+        graph: &Graph,
+        support: &SuBitGraph,
+        taylor_order: i32,
+    ) -> Result<Option<DiracBoundary>> {
+        if !matches!(taylor_order, 0 | 1) {
+            return Ok(None);
+        }
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let numerator = graph
+            .numerator(support, &graph.empty_subgraph())
+            .to_d_dim(GS.dim)
+            .get_single_atom()?;
+        let parity_odd = [
+            idenso::dirac::AGS.gamma5,
+            idenso::dirac::AGS.projp,
+            idenso::dirac::AGS.projm,
+            *idenso::epsilon::EPSILON_SYMBOL,
+        ];
+        if parity_odd
+            .iter()
+            .any(|symbol| numerator.contains_symbol(*symbol))
+        {
+            return Ok(None);
+        }
+        let tensor = SymbolicTensor::infer(cooking.try_cook(numerator.as_view())?)?;
+        let bispinor: spenso::structure::representation::LibraryRep =
+            idenso::representations::Bispinor {}.into();
+        let minkowski: spenso::structure::representation::LibraryRep = Minkowski {}.into();
+        let mut spinors = Vec::new();
+        let mut lorentz = Vec::new();
+        for slot in tensor.structure().logical_slots() {
+            let spenso::structure::partial::PartialIndex::Explicit(index) = slot.aind else {
+                return Ok(None);
+            };
+            let slot = slot
+                .rep()
+                .slot::<spenso::structure::abstract_index::AbstractIndex, _>(index);
+            if slot.rep().rep == bispinor {
+                spinors.push(slot);
+            } else if slot.rep().rep == minkowski {
+                lorentz.push(slot);
+            } else {
+                return Ok(None);
+            }
+        }
+        if spinors.len() != 2 || spinors[0].rep() != spinors[1].rep() {
+            return Ok(None);
+        }
+        let kind = match (lorentz.len(), taylor_order) {
+            (1, 0) => DiracKind::Vertex,
+            (0, 1) => DiracKind::SelfEnergy,
+            _ => return Ok(None),
+        };
+        let spinor_atoms = spinors
+            .iter()
+            .map(|slot| cooking.uncook(slot.to_atom().as_view()))
+            .collect::<Vec<_>>();
+        // Occurrences of each open spinor slot: as a gamma row, as a gamma
+        // column, anywhere.
+        let mut rows = [0_usize; 2];
+        let mut columns = [0_usize; 2];
+        let mut total = [0_usize; 2];
+        numerator.visitor(&mut |part| {
+            for (k, atom) in spinor_atoms.iter().enumerate() {
+                if part == atom.as_view() {
+                    total[k] += 1;
+                }
+            }
+            if let AtomView::Fun(fun) = part
+                && fun.get_symbol() == idenso::dirac::AGS.gamma
+                && fun.get_nargs() == 3
+            {
+                for (k, atom) in spinor_atoms.iter().enumerate() {
+                    if fun.get(0) == atom.as_view() {
+                        rows[k] += 1;
+                    }
+                    if fun.get(1) == atom.as_view() {
+                        columns[k] += 1;
+                    }
+                }
+            }
+            true
+        });
+        let only_gamma = (0..2).all(|k| total[k] == rows[k] + columns[k]);
+        let (row, column) = if !only_gamma {
+            return Ok(None);
+        } else if rows[0] > 0 && columns[0] == 0 && columns[1] > 0 && rows[1] == 0 {
+            (0, 1)
+        } else if rows[1] > 0 && columns[1] == 0 && columns[0] > 0 && rows[0] == 0 {
+            (1, 0)
+        } else {
+            return Ok(None);
+        };
+        let trace_of_one = cooking.uncook(spinors[0].rep().dim.to_symbolic().as_view());
+        let (index, normalization) = match kind {
+            DiracKind::Vertex => (
+                cooking.uncook(lorentz[0].to_atom().as_view()),
+                Atom::one() / (&trace_of_one * &Atom::var(GS.dim)),
+            ),
+            DiracKind::SelfEnergy => (
+                Minkowski {}.new_rep(GS.dim).to_symbolic([Atom::from(
+                    crate::numerator::aind::Aind::Symbol(*DIRAC_CLOSURE_INDEX),
+                )]),
+                Atom::one() / trace_of_one,
+            ),
+        };
+        let gamma = |i: usize, j: usize| {
+            function!(
+                idenso::dirac::AGS.gamma,
+                &spinor_atoms[i],
+                &spinor_atoms[j],
+                &index
+            )
+        };
+        Ok(Some(DiracBoundary {
+            kind,
+            closure: gamma(column, row),
+            structure: gamma(row, column),
+            normalization,
+        }))
     }
 
     /// As [`Self::new`], with an optional root closure multiplied into the
