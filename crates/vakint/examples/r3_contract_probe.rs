@@ -5,9 +5,15 @@
 //! attributed to it. No match, no lowering, no reduction.
 //!
 //! ```text
-//! r3_contract_probe <prepared dir> --graph-list <file> [--no-merge] [--no-compact] [--no-dots]
+//! r3_contract_probe <prepared dir> --graph-list <file> [--no-merge] [--no-compact] [--no-dots] [--reps <n>]
+//!     [--order boundary|close|merge|merge:<cap>] [--orders <order>,<order>,..]
+//!     [--closings off,on]  (idenso's frontier-level closing, DirectOptions::closing)
+//! (`--orders` x `--closings`: the variants interleaved per repetition, one line per graph and variant)
 //! ```
-//! Prints one JSON line per graph on stdout.
+//! Prints one JSON line per graph on stdout: the median contraction seconds
+//! over `--reps`, the expanded scalar's term count and a hash of its canonical
+//! form (to compare idenso configurations, e.g. the frontier order
+//! `DirectOptions::frontier_order`).
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
@@ -16,10 +22,28 @@ use serde_json::json;
 use symbolica::atom::{Atom, AtomCore};
 use vakint::refpath::{self, Projection, direct};
 
+fn parse_order(text: &str) -> eyre::Result<idenso::tensor::FrontierOrder> {
+    use idenso::tensor::FrontierOrder;
+    Ok(match text {
+        "boundary" | "off" => FrontierOrder::Boundary,
+        "close" => FrontierOrder::Close,
+        "merge" => FrontierOrder::Merge { cap: None },
+        other => match other.strip_prefix("merge:") {
+            Some(cap) => FrontierOrder::Merge {
+                cap: Some(cap.parse()?),
+            },
+            None => eyre::bail!("unknown order {other}"),
+        },
+    })
+}
+
 fn main() -> eyre::Result<()> {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
     let (mut directory, mut graphs) = (None, Vec::<usize>::new());
     let mut merge = true;
+    let mut reps = 1usize;
+    let mut orders = Vec::new();
+    let mut closings: Vec<bool> = Vec::new();
     let mut options = direct::DirectOptions::default();
     let mut index = 0;
     while index < args.len() {
@@ -33,6 +57,32 @@ fn main() -> eyre::Result<()> {
                 index += 1;
             }
             "--no-merge" => merge = false,
+            "--reps" => {
+                reps = args[index + 1].parse()?;
+                index += 1;
+            }
+            "--order" => {
+                options.frontier_order = parse_order(&args[index + 1])?;
+                index += 1;
+            }
+            "--closings" => {
+                closings = args[index + 1]
+                    .split(',')
+                    .map(|c| match c {
+                        "off" => Ok(false),
+                        "on" => Ok(true),
+                        other => Err(eyre::eyre!("unknown closing {other}")),
+                    })
+                    .collect::<eyre::Result<_>>()?;
+                index += 1;
+            }
+            "--orders" => {
+                orders = args[index + 1]
+                    .split(',')
+                    .map(parse_order)
+                    .collect::<eyre::Result<_>>()?;
+                index += 1;
+            }
             "--no-compact" => options.compact = false,
             "--no-dots" => options.dots = false,
             other if directory.is_none() && !other.starts_with("--") => {
@@ -45,7 +95,21 @@ fn main() -> eyre::Result<()> {
     let directory = directory.ok_or_else(|| eyre::eyre!("no prepared directory"))?;
     let model = refpath::load_model(&directory)?;
     for graph in graphs {
-        if let Err(error) = probe(&directory, &model, graph, merge, options) {
+        let orders = if orders.is_empty() {
+            vec![options.frontier_order]
+        } else {
+            orders.clone()
+        };
+        let closings = if closings.is_empty() {
+            vec![options.closing]
+        } else {
+            closings.clone()
+        };
+        let variants = closings
+            .iter()
+            .flat_map(|&closing| orders.iter().map(move |&order| (order, closing)))
+            .collect::<Vec<_>>();
+        if let Err(error) = probe(&directory, &model, graph, merge, options, reps, &variants) {
             eprintln!("PROBE skip graph={graph} {error}");
         }
     }
@@ -58,6 +122,8 @@ fn probe(
     graph: usize,
     merge: bool,
     options: direct::DirectOptions,
+    reps: usize,
+    orders: &[(idenso::tensor::FrontierOrder, bool)],
 ) -> eyre::Result<()> {
     let s = &*refpath::SYMBOLS;
     {
@@ -87,30 +153,54 @@ fn probe(
             "PROBE begin graph={graph} terms={} branches={branches}",
             terms.len()
         );
-        let started = Instant::now();
-        let numerators = direct::contract_edges(
-            &diagram,
-            &terms,
-            &momentum,
-            &q_squared,
-            Projection::Metric,
-            options,
-            chosen.as_ref().map(|chosen| (&lines, chosen)),
-        )?;
-        let seconds = started.elapsed().as_secs_f64();
-        let scalar_terms: usize = numerators
-            .iter()
-            .map(|(_, v)| match v.expand().as_view() {
-                symbolica::atom::AtomView::Add(a) => a.get_nargs(),
-                _ => 1,
-            })
-            .sum();
-        eprintln!("PROBE end graph={graph} contract_s={seconds:.3}");
-        println!(
-            "{}",
-            json!({"graph": graph, "terms": terms.len(), "branches": branches,
-                "contract_s": seconds, "scalar_terms": scalar_terms})
-        );
+        // The orders interleaved per repetition (rotated, so that none always
+        // runs first): paired timings robust to the host's load drifting.
+        let mut seconds = vec![Vec::with_capacity(reps.max(1)); orders.len()];
+        let mut numerators = vec![Vec::new(); orders.len()];
+        for rep in 0..reps.max(1) {
+            for step in 0..orders.len() {
+                let which = (step + rep) % orders.len();
+                let mut options = options;
+                (options.frontier_order, options.closing) = orders[which];
+                let started = Instant::now();
+                numerators[which] = direct::contract_edges(
+                    &diagram,
+                    &terms,
+                    &momentum,
+                    &q_squared,
+                    Projection::Metric,
+                    options,
+                    chosen.as_ref().map(|chosen| (&lines, chosen)),
+                )?;
+                seconds[which].push(started.elapsed().as_secs_f64());
+            }
+        }
+        for (which, (order, closing)) in orders.iter().enumerate() {
+            let seconds = &mut seconds[which];
+            seconds.sort_by(f64::total_cmp);
+            let median = seconds[seconds.len() / 2];
+            let mut scalar_terms = 0usize;
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            for (name, value) in &numerators[which] {
+                let expanded = value.expand();
+                scalar_terms += match expanded.as_view() {
+                    symbolica::atom::AtomView::Add(a) => a.get_nargs(),
+                    _ => 1,
+                };
+                std::hash::Hash::hash(name, &mut hasher);
+                std::hash::Hash::hash(&expanded.to_canonical_string(), &mut hasher);
+            }
+            let hash = format!("{:016x}", std::hash::Hasher::finish(&hasher));
+            eprintln!(
+                "PROBE end graph={graph} order={order:?} closing={closing} contract_s={median:.3}"
+            );
+            println!(
+                "{}",
+                json!({"graph": graph, "terms": terms.len(), "branches": branches,
+                    "contract_s": median, "contract_all_s": seconds, "scalar_terms": scalar_terms,
+                    "hash": hash, "order": format!("{order:?}"), "closing": closing})
+            );
+        }
     }
     Ok(())
 }

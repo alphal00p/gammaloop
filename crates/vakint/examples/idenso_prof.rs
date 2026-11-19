@@ -22,6 +22,7 @@
 //!     [--r3-routed]        R3 contracts the ROUTED product exactly as R2 (loop basis); only the hand-over differs
 //!     [--r3-compact]       R3 routes with the spanning tree of the fewest loop + root terms (exact enumeration)
 //!     [--r3-closing]       R3 with idenso's frontier-level closing of quark loops (DirectOptions::closing)
+//!     [--r3-order <o>]     R3 with idenso's frontier order (DirectOptions::frontier_order): boundary | close | merge | merge:<cap>
 //!     [--r3-dots]          R3 asks idenso for dot notation directly (AlgebraContraction::Dots, no to_dots)
 //!     [--r3-prune]         R3's reader prunes zero sectors early (DirectOptions::prune_early; the library default)
 //!     [--edge-contract]    idenso alone: R3's edge-basis contraction timed next to R2's (no vakint; L5)
@@ -477,6 +478,7 @@ fn main() -> eyre::Result<()> {
     let mut merge_colour = false;
     let mut r3_dots = false;
     let mut r3_closing = false;
+    let mut r3_order = idenso::tensor::FrontierOrder::Boundary;
     let mut r3_routed = false;
     let mut r3_compact = false;
     let mut r3_prune = false;
@@ -520,6 +522,22 @@ fn main() -> eyre::Result<()> {
             "--merge-colour" => merge_colour = true,
             "--r3-dots" => r3_dots = true,
             "--r3-closing" => r3_closing = true,
+            "--r3-order" => {
+                r3_order = match args[i + 1].as_str() {
+                    "boundary" => idenso::tensor::FrontierOrder::Boundary,
+                    "close" => idenso::tensor::FrontierOrder::Close,
+                    "merge" => idenso::tensor::FrontierOrder::Merge { cap: None },
+                    other => idenso::tensor::FrontierOrder::Merge {
+                        cap: Some(
+                            other
+                                .strip_prefix("merge:")
+                                .and_then(|cap| cap.parse().ok())
+                                .unwrap_or_else(|| panic!("unknown --r3-order {other}")),
+                        ),
+                    },
+                };
+                i += 1;
+            }
             "--r3-routed" => r3_routed = true,
             "--r3-compact" => r3_compact = true,
             "--r3-prune" => r3_prune = true,
@@ -726,10 +744,10 @@ fn main() -> eyre::Result<()> {
                     refpath::direct::DirectOptions {
                         dots: r3_dots,
                         closing: r3_closing,
+                        frontier_order: r3_order,
                         routed: r3_routed,
                         compact: false,
                         prune_early: r3_prune,
-                        ..Default::default()
                     },
                     None,
                 )?;
@@ -859,10 +877,10 @@ fn main() -> eyre::Result<()> {
                             refpath::direct::DirectOptions {
                                 dots: r3_dots,
                                 closing: r3_closing,
+                                frontier_order: r3_order,
                                 routed: r3_routed,
                                 compact: r3_compact,
                                 prune_early: r3_prune,
-                                ..Default::default()
                             },
                             &mut seconds,
                         )?;
@@ -976,7 +994,7 @@ fn main() -> eyre::Result<()> {
                     "routing_size": direct_runs.first().map(|r| r.0.routing_size),
                     "stored_routing_size": direct_runs.first().map(|r| r.0.stored_routing_size),
                     "trees": direct_runs.first().map(|r| r.0.trees),
-                    "closing": r3_closing,
+                    "closing": r3_closing, "frontier_order": format!("{r3_order:?}"),
                 });
             }
             let m = |f: &dyn Fn(&refpath::StageSeconds) -> f64| {
