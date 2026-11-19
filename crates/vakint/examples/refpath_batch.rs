@@ -37,7 +37,9 @@
 //!                                routing), stored (FeynKit's stored basis), merge (merged colour
 //!                                terms), prune (early zero-sector pruning in R3's reader: the
 //!                                default), no-prune, dots (idenso emits dot notation: the
-//!                                default), no-dots; `default` = routed,compact,merge,prune,dots
+//!                                default), no-dots, closing (idenso's frontier-level closing
+//!                                of quark loops: the default), no-closing; `default` =
+//!                                routed,compact,merge,prune,dots,closing
 //!     [--resume-root <dir>]      RESUMABLE reductions: per graph RUSTRED_RESUME_DIR=<dir>/<id>/ (RustRed
 //!                                saves its record pass there, every RUSTRED_RESUME_SECONDS); a graph
 //!                                interrupted in an earlier run of this configuration is RESUMED, not
@@ -302,7 +304,7 @@ struct R3Choice {
 impl R3Choice {
     fn parse(text: &str) -> eyre::Result<Self> {
         let text = if text == "default" {
-            "routed,compact,merge,prune,dots"
+            "routed,compact,merge,prune,dots,closing"
         } else {
             text
         };
@@ -325,11 +327,13 @@ impl R3Choice {
                 }
                 "dots" => choice.options.dots = true,
                 "no-dots" => choice.options.dots = false,
+                "closing" => choice.options.closing = true,
+                "no-closing" => choice.options.closing = false,
                 "prune" => choice.options.prune_early = true,
                 "no-prune" => choice.options.prune_early = false,
                 "merge" => choice.merge_colour = true,
                 other => eyre::bail!(
-                    "--r3: unknown option {other} (routed, compact, edge, stored, merge, prune, no-prune, dots, no-dots, default)"
+                    "--r3: unknown option {other} (routed, compact, edge, stored, merge, prune, no-prune, dots, no-dots, closing, no-closing, default)"
                 ),
             }
         }
@@ -344,6 +348,7 @@ impl R3Choice {
             ("merge", self.merge_colour),
             ("prune", o.prune_early),
             ("dots", o.dots),
+            ("closing", o.closing),
         ]
         .iter()
         .filter(|(_, on)| *on)

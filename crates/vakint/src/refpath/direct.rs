@@ -48,7 +48,12 @@ pub struct DirectOptions {
     /// (measured, exact). DEFAULT true.
     pub dots: bool,
     /// idenso's frontier-level closing of quark loops
-    /// (`AlgebraSettings::gamma_closing`): the same values; opt-in, OFF by default.
+    /// (`AlgebraSettings::gamma_closing`, `GammaClosing::default()`: a word
+    /// of 16 letters or more is closed only when 3 of its ports reach a
+    /// tensor sum): the same values, the gluon environment contracted before
+    /// the quark loop's trace. DEFAULT true (measured single core: four-loop
+    /// B -> B contraction -39 %, five-loop quark graphs -63 %, exact on every
+    /// gated set).
     pub closing: bool,
     /// Route the edge momenta into FeynKit's loop momenta BEFORE the
     /// contraction, exactly as R2 (idenso's input and output are then R2's);
@@ -80,7 +85,7 @@ impl Default for DirectOptions {
     fn default() -> Self {
         Self {
             dots: true,
-            closing: false,
+            closing: true,
             routed: false,
             compact: true,
             prune_early: true,
@@ -1786,12 +1791,12 @@ mod tests {
         );
     }
 
-    /// The same identity with idenso's frontier-level closing
-    /// (`DirectOptions::closing`), without and with dots (spelled: dots is the
-    /// default): R3 hands RustRed
-    /// exactly R2's folded inputs and gives R2's values.
+    /// The same identity WITHOUT idenso's frontier-level closing
+    /// (`DirectOptions::closing` is the default, so the unclosed path is
+    /// spelled), without and with dots: R3 hands RustRed exactly R2's folded
+    /// inputs and gives R2's values.
     #[test]
-    fn r3_with_closing_equals_r2_key_by_key_on_the_bb_fixtures() {
+    fn r3_without_closing_equals_r2_key_by_key_on_the_bb_fixtures() {
         let Some(template) = template() else {
             eprintln!("skipped: no p library for L1-L3 in this environment");
             return;
@@ -1801,7 +1806,7 @@ mod tests {
                 true,
                 DirectOptions {
                     dots: false,
-                    closing: true,
+                    closing: false,
                     ..Default::default()
                 },
             ),
@@ -1809,7 +1814,7 @@ mod tests {
                 true,
                 DirectOptions {
                     dots: true,
-                    closing: true,
+                    closing: false,
                     ..Default::default()
                 },
             ),
