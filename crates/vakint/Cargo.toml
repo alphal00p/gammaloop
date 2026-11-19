@@ -132,6 +132,10 @@ name = "r3_contract_probe"
 required-features = ["feynkit-ingress"]
 
 [[example]]
+name = "graph_entry_bb"
+required-features = ["feynkit-ingress"]
+
+[[example]]
 name = "external_data_acceptance"
 required-features = ["feynkit-ingress"]
 
