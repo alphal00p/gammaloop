@@ -837,24 +837,9 @@ pub fn lower_graph(
     options: DirectOptions,
     seconds: &mut DirectSeconds,
 ) -> Result<DirectOutcome> {
-    let mut lines = match lines_of(diagram, momentum) {
-        Ok(lines) => lines,
+    let (lines, chosen) = match graph_lines(diagram, momentum, options, seconds) {
+        Ok(found) => found,
         Err(reason) => return Ok(DirectOutcome::Declined(reason)),
-    };
-    let chosen = if options.compact {
-        let started = Instant::now();
-        let chosen = match lines.compact_basis() {
-            Ok(chosen) => chosen,
-            Err(reason) => return Ok(DirectOutcome::Declined(reason)),
-        };
-        lines.loop_edges = Some(chosen.cotree.clone());
-        seconds.routing += started.elapsed().as_secs_f64();
-        seconds.routing_size += chosen.size;
-        seconds.stored_routing_size += chosen.stored_size;
-        seconds.trees += chosen.trees;
-        Some(chosen)
-    } else {
-        None
     };
     let started = Instant::now();
     let numerators = contract_edges(
@@ -867,6 +852,50 @@ pub fn lower_graph(
         chosen.as_ref().map(|chosen| (&lines, chosen)),
     )?;
     seconds.contract += started.elapsed().as_secs_f64();
+    let numerators = numerators
+        .into_iter()
+        .map(|(name, numerator)| (name, numerator * weight))
+        .collect();
+    lower_scalars(
+        vakint, settings, &lines, numerators, reduce, options, seconds,
+    )
+}
+
+/// The lines of a two-point graph in the hand-over's coordinates
+/// ([`lines_of`]) and, with `options.compact`, the compact basis (its cotree
+/// recorded on the lines; seconds and sizes in `seconds`).
+fn graph_lines(
+    diagram: &FeynmanDiagram,
+    momentum: &Atom,
+    options: DirectOptions,
+    seconds: &mut DirectSeconds,
+) -> std::result::Result<(Lines, Option<CompactBasis>), String> {
+    let mut lines = lines_of(diagram, momentum)?;
+    if !options.compact {
+        return Ok((lines, None));
+    }
+    let started = Instant::now();
+    let chosen = lines.compact_basis()?;
+    lines.loop_edges = Some(chosen.cotree.clone());
+    seconds.routing += started.elapsed().as_secs_f64();
+    seconds.routing_size += chosen.size;
+    seconds.stored_routing_size += chosen.stored_size;
+    seconds.trees += chosen.trees;
+    Ok((lines, Some(chosen)))
+}
+
+/// R3 after the contraction: ONE denominator match of the graph's lines, then
+/// per named scalar numerator (weight included) the hand-over's rename, the
+/// direct reader and, with `reduce`, the reduction and finalisation.
+fn lower_scalars(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    lines: &Lines,
+    numerators: Vec<(&'static str, Atom)>,
+    reduce: bool,
+    options: DirectOptions,
+    seconds: &mut DirectSeconds,
+) -> Result<DirectOutcome> {
     let started = Instant::now();
     let matched = match match_lines(vakint, settings, lines.loops, &lines.lines, &lines.edges)? {
         Matched::Ready(matched) => std::sync::Arc::<p_handover::HandOver>::from(matched),
@@ -884,7 +913,6 @@ pub fn lower_graph(
     ];
     let mut out = Vec::new();
     for (name, numerator) in numerators {
-        let numerator = numerator * weight;
         if numerator.is_zero() {
             continue;
         }
@@ -1001,34 +1029,60 @@ pub fn contract_edges_open(
     options: DirectOptions,
     compact: Option<(&Lines, &CompactBasis)>,
 ) -> Result<(Atom, Vec<Atom>)> {
-    let basis = diagram.loop_momentum_basis();
-    let d = Atom::var(SYMBOLS.d);
+    contract_open_terms(diagram, branches, options, compact, true)
+}
+
+/// The product of a term's residuals (with `expand_couplings`: the model's
+/// couplings expanded and `gs = 1`, as R2; without: as given), routed as
+/// `options` and `compact` say, every `mink(..)` in this chain's `D`.
+fn routed_product(
+    diagram: &FeynmanDiagram,
+    branch: &ColourBranch,
+    options: DirectOptions,
+    compact: Option<(&Lines, &CompactBasis)>,
+    expand_couplings: bool,
+) -> Result<Atom> {
     let couplings = |value: &Atom| {
+        if !expand_couplings {
+            return value.clone();
+        }
         diagram
             .model()
             .expand_couplings(value)
             .replace(Atom::var(symbolica::symbol!("UFO::gs")))
             .with(Atom::num(1))
     };
+    let product = branch
+        .residuals
+        .iter()
+        .fold(Atom::num(1), |product, residual| {
+            product * couplings(residual)
+        });
+    let product = match compact {
+        Some((lines, chosen)) => lines
+            .route_compact(&product, chosen)
+            .map_err(|e| eyre::eyre!(e))?,
+        None if options.routed => diagram.loop_momentum_basis().route_expression(&product),
+        None => product,
+    };
+    Ok(product
+        .replace(Minkowski {}.to_symbolic([Atom::var(W_.d_), Atom::var(W_.a___)]))
+        .with(Minkowski {}.to_symbolic([Atom::var(SYMBOLS.d), Atom::var(W_.a___)])))
+}
+
+/// [`contract_edges_open`] with the couplings expanded or not
+/// ([`routed_product`]).
+fn contract_open_terms(
+    diagram: &FeynmanDiagram,
+    branches: &[ColourBranch],
+    options: DirectOptions,
+    compact: Option<(&Lines, &CompactBasis)>,
+    expand_couplings: bool,
+) -> Result<(Atom, Vec<Atom>)> {
     let mut sum = Atom::Zero;
     let mut ports: Option<Vec<Atom>> = None;
     for branch in branches {
-        let product = branch
-            .residuals
-            .iter()
-            .fold(Atom::num(1), |product, residual| {
-                product * couplings(residual)
-            });
-        let product = match compact {
-            Some((lines, chosen)) => lines
-                .route_compact(&product, chosen)
-                .map_err(|e| eyre::eyre!(e))?,
-            None if options.routed => basis.route_expression(&product),
-            None => product,
-        };
-        let continued = product
-            .replace(Minkowski {}.to_symbolic([Atom::var(W_.d_), Atom::var(W_.a___)]))
-            .with(Minkowski {}.to_symbolic([d.clone(), Atom::var(W_.a___)]));
+        let continued = routed_product(diagram, branch, options, compact, expand_couplings)?;
         let (open, branch_ports) = contract_branch_open_edges(&continued, options.dots)?;
         match &ports {
             None => ports = Some(branch_ports),
@@ -1062,21 +1116,9 @@ pub fn lower_graph_open(
     options: DirectOptions,
     seconds: &mut DirectSeconds,
 ) -> Result<DirectOutcome> {
-    let mut lines = match lines_of(diagram, momentum) {
-        Ok(lines) => lines,
+    let (lines, chosen) = match graph_lines(diagram, momentum, options, seconds) {
+        Ok(found) => found,
         Err(reason) => return Ok(DirectOutcome::Declined(reason)),
-    };
-    let chosen = if options.compact {
-        let started = Instant::now();
-        let chosen = match lines.compact_basis() {
-            Ok(chosen) => chosen,
-            Err(reason) => return Ok(DirectOutcome::Declined(reason)),
-        };
-        lines.loop_edges = Some(chosen.cotree.clone());
-        seconds.routing += started.elapsed().as_secs_f64();
-        Some(chosen)
-    } else {
-        None
     };
     let started = Instant::now();
     let (open, ports) = contract_edges_open(
@@ -1107,6 +1149,20 @@ pub fn lower_graph_open(
     if open.is_zero() {
         return Ok(DirectOutcome::Zero("zero numerator"));
     }
+    lower_open(vakint, settings, &lines, open, options, seconds)
+}
+
+/// R3-open after the contraction: ONE denominator match, the open rename, the
+/// tensor reduction with `p(1)` external, the direct reader; one projection
+/// named `open` (its open indices as they are in `open`).
+fn lower_open(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    lines: &Lines,
+    open: Atom,
+    options: DirectOptions,
+    seconds: &mut DirectSeconds,
+) -> Result<DirectOutcome> {
     let started = Instant::now();
     let matched = match match_lines(vakint, settings, lines.loops, &lines.lines, &lines.edges)? {
         Matched::Ready(matched) => std::sync::Arc::<p_handover::HandOver>::from(matched),
@@ -1185,6 +1241,97 @@ pub fn lower_graph_open(
         distinct_dots: dots.len(),
         handover: matched,
     }]))
+}
+
+/// The projector of the GRAPH ENTRY's hand-over ([`lower_entry`]): the
+/// conventions of the input type's adapter (`p_integral::factorized`),
+/// UNNORMALISED.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EntryProjector {
+    /// `g(port₀, port₁) · Π` (`ProjectorChoice::Metric`).
+    Metric,
+    /// `(p² g(port₀, port₁) − p^port₀ p^port₁) · Π / p²`
+    /// (`ProjectorChoice::Transverse`: `p2_power = −1`).
+    Transverse,
+    /// No projector (`ProjectorChoice::None`): `Π` with its two ports open,
+    /// their index atoms kept as they are (the caller's).
+    Open,
+}
+
+/// The GRAPH ENTRY's hand-over (helper VH, lane idenso-audit;
+/// `p_integral::factorized::evaluate_graph`): one call per two-point graph on
+/// `terms` = the input type's own colour branches (each: a coefficient and
+/// the product of the value's factors in this chain's `D`). As R3 / R3-open
+/// (compact routing, Dots, early pruning as `options` say), except that the
+/// residuals are contracted AS GIVEN (no coupling expansion, no `gs = 1`: the
+/// caller's notation) and the projector is the adapter's, unnormalised. No
+/// weight: the coefficients carry everything. One projection, named after
+/// the projector; reduce it with [`reduce_projection`].
+#[allow(clippy::too_many_arguments)]
+pub fn lower_entry(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    diagram: &FeynmanDiagram,
+    terms: &[ColourBranch],
+    momentum: &Atom,
+    projector: EntryProjector,
+    options: DirectOptions,
+    seconds: &mut DirectSeconds,
+) -> Result<DirectOutcome> {
+    let (lines, chosen) = match graph_lines(diagram, momentum, options, seconds) {
+        Ok(found) => found,
+        Err(reason) => return Ok(DirectOutcome::Declined(reason)),
+    };
+    let compact = chosen.as_ref().map(|chosen| (&lines, chosen));
+    let started = Instant::now();
+    if projector == EntryProjector::Open {
+        let (open, ports) = contract_open_terms(diagram, terms, options, compact, false)?;
+        seconds.contract += started.elapsed().as_secs_f64();
+        if ports.len() != 2 {
+            return Ok(DirectOutcome::Declined(format!(
+                "a two-point graph has two open ports, found {}",
+                ports.len()
+            )));
+        }
+        if open.is_zero() {
+            return Ok(DirectOutcome::Zero("zero numerator"));
+        }
+        return lower_open(vakint, settings, &lines, open, options, seconds);
+    }
+    let metric_only = projector == EntryProjector::Metric;
+    let (mut g_sum, mut qq_sum) = (Atom::Zero, Atom::Zero);
+    for term in terms {
+        let continued = routed_product(diagram, term, options, compact, false)?;
+        let (g, qq) = contract_branch_edges(
+            &continued,
+            momentum,
+            metric_only,
+            options.dots,
+            options.closing,
+        )?;
+        g_sum += &term.coefficient * g;
+        qq_sum += &term.coefficient * qq;
+    }
+    let numerator = if metric_only {
+        g_sum
+    } else {
+        let d = Atom::var(SYMBOLS.d);
+        let q_squared = feynkit_kinematics::Kinematics::in_dimension(&d)?
+            .with_momenta([momentum.clone()])?
+            .scalar_product(momentum, momentum)?;
+        g_sum - qq_sum / q_squared
+    };
+    seconds.contract += started.elapsed().as_secs_f64();
+    let name = if metric_only { "metric" } else { "transverse" };
+    lower_scalars(
+        vakint,
+        settings,
+        &lines,
+        vec![(name, numerator)],
+        false,
+        options,
+        seconds,
+    )
 }
 
 /// The reduction and finalisation of one lowered projection under `settings`

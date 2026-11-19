@@ -69,7 +69,7 @@ pub use feynkit::{
     FromFeynkitOptions, OverallFactorSource, ProjectorChoice, dot_sets_graph_attribute,
 };
 #[cfg(feature = "feynkit-ingress")]
-pub use graph::{GraphIntegral, GraphValue, evaluate_graph};
+pub use graph::{GraphIntegral, GraphRoute, GraphValue, evaluate_graph, evaluate_graph_adapter};
 pub use oracle::contract_with_idenso;
 pub use text::{parse_factorized_records, read_factorized_records};
 pub use vacuum::{VacuumValue, evaluate_factorized_vacuum};
