@@ -664,3 +664,434 @@ fn uv_child_closure_parses_the_environment_syntax() -> Result<()> {
     }
     Ok(())
 }
+
+#[test]
+fn uv_child_closure_parses_the_dirac_comma_list() -> Result<()> {
+    use super::DiracClosure;
+    let dirac = |min_loops, check| DiracClosure { min_loops, check };
+    let cases = [
+        (
+            "dirac",
+            UvChildClosure::Dirac {
+                isotropic: None,
+                dirac: dirac(1, false),
+            },
+        ),
+        (
+            "dirac:3",
+            UvChildClosure::Dirac {
+                isotropic: None,
+                dirac: dirac(3, false),
+            },
+        ),
+        (
+            "dirac-check",
+            UvChildClosure::Dirac {
+                isotropic: None,
+                dirac: dirac(1, true),
+            },
+        ),
+        (
+            " dirac-check:2 ",
+            UvChildClosure::Dirac {
+                isotropic: None,
+                dirac: dirac(2, true),
+            },
+        ),
+        (
+            "isotropic,dirac",
+            UvChildClosure::Dirac {
+                isotropic: Some(1),
+                dirac: dirac(1, false),
+            },
+        ),
+        (
+            "dirac-check:2, isotropic:4",
+            UvChildClosure::Dirac {
+                isotropic: Some(4),
+                dirac: dirac(2, true),
+            },
+        ),
+        ("isotropic:0", UvChildClosure::Isotropic { min_loops: 1 }),
+    ];
+    for (value, expected) in cases {
+        let parsed = UvChildClosure::parse(value)?;
+        assert_eq!(parsed, expected, "`{value}`");
+        // Display is the cache-key spelling and parses back to the same mode.
+        assert_eq!(
+            UvChildClosure::parse(&parsed.to_string())?,
+            parsed,
+            "`{parsed}`"
+        );
+    }
+    // The existing spellings, hence the existing cache keys, are unchanged.
+    assert_eq!(UvChildClosure::Off.to_string(), "off");
+    assert_eq!(
+        UvChildClosure::Isotropic { min_loops: 4 }.to_string(),
+        "isotropic:4"
+    );
+    assert_eq!(
+        UvChildClosure::parse("isotropic:2,dirac")?.to_string(),
+        "isotropic:2,dirac:1"
+    );
+    assert_eq!(
+        UvChildClosure::parse("dirac-check")?.to_string(),
+        "dirac-check:1"
+    );
+    for invalid in [
+        "dirac,dirac-check",
+        "dirac,dirac",
+        "isotropic,isotropic:2",
+        "dirac:x",
+        "dirac,",
+        ",",
+        "dirac;isotropic",
+        "trace",
+        "isotropic,off",
+    ] {
+        ensure!(
+            UvChildClosure::parse(invalid).is_err(),
+            "accepted `{invalid}`"
+        );
+    }
+    // The settings key: off unchanged, the Dirac mode spelled out.
+    let key = |closure| RStarPlan::rstar_child_key("{}".into(), RSTAR, closure, None);
+    assert_eq!(key(UvChildClosure::Off), "{}#uv-children=rstar:1");
+    assert_eq!(
+        key(UvChildClosure::parse("dirac")?),
+        "{}#uv-children=rstar:1#child-closure=dirac:1"
+    );
+    assert_ne!(
+        key(UvChildClosure::parse("dirac")?),
+        key(UvChildClosure::parse("dirac-check")?)
+    );
+    Ok(())
+}
+
+/// The open slots of the numerator over `support`: bispinor, Minkowski and
+/// other slots.
+fn open_slot_shape(graph: &Graph, support: &SuBitGraph) -> Result<(usize, usize, usize)> {
+    use crate::uv::uv_graph::UltravioletGraph;
+    use spenso::structure::{partial::PartialStructureExt, slot::IsAbstractSlot};
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let numerator = graph
+        .numerator(support, &graph.empty_subgraph())
+        .to_d_dim(GS.dim)
+        .get_single_atom()?;
+    let tensor = SymbolicTensor::infer(cooking.try_cook(numerator.as_view())?)?;
+    let bispinor: spenso::structure::representation::LibraryRep =
+        idenso::representations::Bispinor {}.into();
+    let minkowski: spenso::structure::representation::LibraryRep =
+        spenso::structure::representation::Minkowski {}.into();
+    let mut shape = (0, 0, 0);
+    for slot in tensor.structure().logical_slots() {
+        let rep = slot.rep().rep;
+        if rep == bispinor {
+            shape.0 += 1;
+        } else if rep == minkowski {
+            shape.1 += 1;
+        } else {
+            shape.2 += 1;
+        }
+    }
+    Ok(shape)
+}
+
+/// The Dirac closure (opt-in) takes exactly the open-Dirac-line shapes with
+/// a proven basis (degree-0 vertex `{gamma^mu}`, degree-1 self-energy
+/// `{gamma^nu}`) and declines every other child: gluon and ghost children,
+/// four-point children, either quark shape at the other Taylor degree, and
+/// any child with open colour slots.
+#[test]
+fn dirac_boundary_takes_only_the_proven_shapes() -> Result<()> {
+    use super::expression::{DiracKind, RStarIntegrand};
+    test_initialise()?;
+    let settings = settings();
+    let (mut vertices, mut self_energies, mut declined, mut coloured) = (0, 0, 0, 0);
+    for (name, dot) in [
+        ("L2/7", include_str!("testdata/l2-d7.dot")),
+        ("L3/166", include_str!("testdata/l3-d166.dot")),
+        ("L3/185", include_str!("testdata/l3-d185.dot")),
+        ("L3/241", include_str!("testdata/l3-d241.dot")),
+        ("L4/2774", include_str!("testdata/l4-d2774.dot")),
+        ("L4/4613", include_str!("testdata/l4-d4613.dot")),
+    ] {
+        for full_colour in [false, true] {
+            let diagram = if full_colour {
+                load(dot)?
+            } else {
+                colour_factored(&load(dot)?)?
+            };
+            let graph = diagram.to_gamma_loop_graph(None, true)?;
+            let model = diagram.model();
+            let plan = RStarPlan::with_automatic_edge(&graph, model, &settings)?;
+            for call in &plan.counterterms {
+                let support = &call.argument.support;
+                let shape = open_slot_shape(&graph, support)?;
+                let expected = match (shape, call.taylor_order) {
+                    ((2, 1, 0), 0) => Some(DiracKind::Vertex),
+                    ((2, 0, 0), 1) => Some(DiracKind::SelfEnergy),
+                    _ => None,
+                };
+                let label = format!(
+                    "{name}{} child {} shape={shape:?} degree={}",
+                    if full_colour { " full colour" } else { "" },
+                    support.string_label(),
+                    call.taylor_order
+                );
+                let boundary = RStarIntegrand::dirac_boundary(&graph, support, call.taylor_order)?;
+                ensure!(
+                    boundary.as_ref().map(|boundary| boundary.kind) == expected,
+                    "{label}: dirac_boundary {:?}, expected {expected:?}",
+                    boundary.as_ref().map(|boundary| boundary.kind)
+                );
+                // The quark shapes at any other degree are declined.
+                if expected.is_some() {
+                    for degree in [-1, 0, 1, 2]
+                        .into_iter()
+                        .filter(|degree| *degree != call.taylor_order)
+                    {
+                        ensure!(
+                            RStarIntegrand::dirac_boundary(&graph, support, degree)?.is_none(),
+                            "{label}: taken at degree {degree}"
+                        );
+                    }
+                }
+                match expected {
+                    Some(DiracKind::Vertex) => vertices += 1,
+                    Some(DiracKind::SelfEnergy) => self_energies += 1,
+                    None => declined += 1,
+                }
+                coloured += usize::from(full_colour && shape.0 == 2 && shape.2 > 0);
+            }
+        }
+    }
+    eprintln!(
+        "DIRAC_BOUNDARY vertices={vertices} self_energies={self_energies} declined={declined} coloured_quark_children={coloured}"
+    );
+    ensure!(vertices > 0 && self_energies > 0 && declined > 0 && coloured > 0);
+    Ok(())
+}
+
+/// The Dirac closure in check mode on the two- to four-loop children: every
+/// closed child equals its open tensor (an error otherwise), and every child
+/// still equals massive R exactly.
+#[test]
+fn dirac_child_closure_matches_the_open_tensor_and_massive_r() -> Result<()> {
+    with_production_piece_limit(dirac_child_closure_matches_the_open_tensor_and_massive_r_body)
+}
+
+fn dirac_child_closure_matches_the_open_tensor_and_massive_r_body() -> Result<()> {
+    use std::sync::atomic::Ordering;
+    test_initialise()?;
+    let vakint = Vakint::new()?;
+    let closure = UvChildClosure::parse("isotropic,dirac-check")?;
+    let closed_before = super::plan::DIRAC_CHILDREN.load(Ordering::Relaxed);
+    let checks_before = super::plan::DIRAC_CHECKS
+        .each_ref()
+        .map(|count| count.load(Ordering::Relaxed));
+    let mut coverage = Coverage::default();
+    for (name, dot, max_loops) in [
+        ("L2/7", include_str!("testdata/l2-d7.dot"), usize::MAX),
+        ("L3/166", include_str!("testdata/l3-d166.dot"), usize::MAX),
+        ("L3/185", include_str!("testdata/l3-d185.dot"), usize::MAX),
+        ("L3/241", include_str!("testdata/l3-d241.dot"), usize::MAX),
+        ("L4/2774", include_str!("testdata/l4-d2774.dot"), 3),
+        ("L4/4613", include_str!("testdata/l4-d4613.dot"), 3),
+    ] {
+        compare_children_with(name, dot, &vakint, max_loops, false, closure, &mut coverage)?;
+    }
+    let closed = super::plan::DIRAC_CHILDREN.load(Ordering::Relaxed) - closed_before;
+    let after = super::plan::DIRAC_CHECKS
+        .each_ref()
+        .map(|count| count.load(Ordering::Relaxed));
+    let [checked, identical, equal] = [0, 1, 2].map(|k| after[k] - checks_before[k]);
+    eprintln!(
+        "DIRAC_COVERAGE closed={closed} checked={checked} identical={identical} equal={equal} {coverage:?}"
+    );
+    ensure!(
+        closed > 0 && checked == closed && equal == checked,
+        "{coverage:?}"
+    );
+    ensure!(
+        coverage.loops.is_superset(&BTreeSet::from([1, 2, 3])),
+        "{coverage:?}"
+    );
+    Ok(())
+}
+
+/// The check over production diagram sets, every Dirac-shaped UV child of
+/// each diagram's plan (and their nested children) with a cache shared
+/// across diagrams. Heavy, so ignored; configured by environment:
+/// `GAMMALOOP_DIRAC_CHECK_DIRS` (colon-separated directories of
+/// `diagram-*.dot`), `GAMMALOOP_DIRAC_CHECK_MAX_LOOPS` (default 3),
+/// `GAMMALOOP_DIRAC_CHECK_THREADS` (default 4), `GAMMALOOP_DIRAC_CHECK_LIMIT`
+/// (diagrams per directory, default all). One `DIRAC_CLOSURE_CHECK` line per
+/// distinct child, `DIRAC_CHILD` per request, `DIRAC_DECLINED` per declined
+/// child with an open Dirac line. Resumable: with
+/// `GAMMALOOP_DIRAC_CHECK_PROGRESS` (a file), every diagram that completed
+/// without error is appended to it and skipped on a later run.
+#[test]
+#[ignore = "checks every Dirac-shaped child of a diagram set (long)"]
+fn dirac_child_closure_check_over_diagram_sets() -> Result<()> {
+    use super::expression::RStarIntegrand;
+    use std::sync::{
+        Mutex,
+        atomic::{AtomicUsize, Ordering},
+    };
+    test_initialise()?;
+    let variable = |name: &str| std::env::var(name).ok().filter(|value| !value.is_empty());
+    let directories = variable("GAMMALOOP_DIRAC_CHECK_DIRS")
+        .ok_or_else(|| eyre!("set GAMMALOOP_DIRAC_CHECK_DIRS"))?;
+    let max_loops: usize =
+        variable("GAMMALOOP_DIRAC_CHECK_MAX_LOOPS").map_or(Ok(3), |v| v.parse())?;
+    let threads: usize = variable("GAMMALOOP_DIRAC_CHECK_THREADS").map_or(Ok(4), |v| v.parse())?;
+    let limit: usize =
+        variable("GAMMALOOP_DIRAC_CHECK_LIMIT").map_or(Ok(usize::MAX), |v| v.parse())?;
+    let mut files = Vec::new();
+    for directory in directories.split(':') {
+        let mut entries = std::fs::read_dir(directory)?
+            .map(|entry| entry.map(|entry| entry.path()))
+            .collect::<std::io::Result<Vec<_>>>()?
+            .into_iter()
+            .filter(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with("diagram-") && name.ends_with(".dot"))
+            })
+            .collect::<Vec<_>>();
+        entries.sort();
+        entries.truncate(limit);
+        files.extend(entries);
+    }
+    let progress = variable("GAMMALOOP_DIRAC_CHECK_PROGRESS");
+    let done: BTreeSet<String> = progress
+        .as_ref()
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .map(|text| text.lines().map(str::to_owned).collect())
+        .unwrap_or_default();
+    let total = files.len();
+    files.retain(|path| !done.contains(&path.display().to_string()));
+    eprintln!(
+        "DIRAC_CHECK_RESUME diagrams={total} done={} remaining={}",
+        total - files.len(),
+        files.len()
+    );
+    let progress = progress.map(|path| {
+        Mutex::new(
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path),
+        )
+    });
+    let closure = UvChildClosure::parse("dirac-check")?;
+    let settings = settings();
+    let cache = Arc::new(CountertermCache::default());
+    let next = AtomicUsize::new(0);
+    let requests = AtomicUsize::new(0);
+    let declined = AtomicUsize::new(0);
+    let failures = Mutex::new(Vec::new());
+    let started = Instant::now();
+    std::thread::scope(|scope| {
+        for _ in 0..threads.max(1) {
+            scope.spawn(|| {
+                with_production_piece_limit(|| {
+                    let vakint = match Vakint::new() {
+                        Ok(vakint) => vakint,
+                        Err(error) => {
+                            failures.lock().unwrap().push(format!("vakint: {error:#}"));
+                            return;
+                        }
+                    };
+                    loop {
+                        let index = next.fetch_add(1, Ordering::Relaxed);
+                        let Some(path) = files.get(index) else { break };
+                        let name = path.display().to_string();
+                        let outcome = (|| -> Result<()> {
+                            let dot = std::fs::read_to_string(path)?;
+                            let diagram = colour_factored(&load(&dot)?)?;
+                            let graph = diagram.to_gamma_loop_graph(None, true)?;
+                            let model = diagram.model();
+                            let plan = RStarPlan::with_automatic_edge(&graph, model, &settings)?;
+                            for call in &plan.counterterms {
+                                let support = &call.argument.support;
+                                if call.argument.loops > max_loops {
+                                    continue;
+                                }
+                                let boundary =
+                                    RStarIntegrand::dirac_boundary(&graph, support, call.taylor_order)?;
+                                let Some(boundary) = boundary else {
+                                    let shape = open_slot_shape(&graph, support)?;
+                                    if shape.0 > 0 {
+                                        declined.fetch_add(1, Ordering::Relaxed);
+                                        eprintln!(
+                                            "DIRAC_DECLINED diagram={name} support={} loops={} degree={} shape={shape:?}",
+                                            support.string_label(),
+                                            call.argument.loops,
+                                            call.taylor_order
+                                        );
+                                    }
+                                    continue;
+                                };
+                                let child_started = Instant::now();
+                                let delta = RStarPlan::rstar_child_counterterm(
+                                    &cache, &graph, support, model, &vakint, &settings, RSTAR, closure,
+                                )
+                                .wrap_err_with(|| format!("{name}: child {}", support.string_label()))?;
+                                requests.fetch_add(1, Ordering::Relaxed);
+                                eprintln!(
+                                    "DIRAC_CHILD diagram={name} support={} loops={} degree={} kind={:?} zero={} seconds={:.3}",
+                                    support.string_label(),
+                                    call.argument.loops,
+                                    call.taylor_order,
+                                    boundary.kind,
+                                    delta.is_zero(),
+                                    child_started.elapsed().as_secs_f64()
+                                );
+                            }
+                            Ok(())
+                        })();
+                        if let Err(error) = outcome {
+                            eprintln!("DIRAC_FAILURE diagram={name}: {error:#}");
+                            failures.lock().unwrap().push(format!("{name}: {error:#}"));
+                        } else if let Some(Ok(file)) = progress.as_ref().map(|file| file.lock()) {
+                            use std::io::Write;
+                            if let Ok(file) = file.as_ref() {
+                                let mut file: &std::fs::File = file;
+                                let _ = writeln!(file, "{name}");
+                            }
+                        }
+                    }
+                })
+            });
+        }
+    });
+    let [checked, identical, equal] = super::plan::DIRAC_CHECKS
+        .each_ref()
+        .map(|count| count.load(Ordering::Relaxed));
+    let failures = failures.into_inner().unwrap();
+    eprintln!(
+        "DIRAC_CHECK_SUMMARY diagrams={} requests={} distinct_checked={checked} identical={identical} equal={equal} declined_dirac_line={} failures={} seconds={:.1} cache={:?}",
+        files.len(),
+        requests.load(Ordering::Relaxed),
+        declined.load(Ordering::Relaxed),
+        failures.len(),
+        started.elapsed().as_secs_f64(),
+        cache.stats()
+    );
+    ensure!(
+        failures.is_empty(),
+        "{} failures, first: {}",
+        failures.len(),
+        failures[0]
+    );
+    ensure!(
+        equal == checked,
+        "{} of {checked} children differ",
+        checked - equal
+    );
+    Ok(())
+}
