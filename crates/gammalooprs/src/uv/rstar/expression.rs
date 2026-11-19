@@ -708,7 +708,7 @@ fn contains_root(view: AtomView<'_>, roots: &BTreeSet<usize>) -> bool {
 /// Whether every root momentum of `view` reaches its top only through sums,
 /// products, positive integer powers and `dot` (decline condition (iv)): the
 /// grading of the outer Taylor scaling is then a polynomial grading.
-fn polynomial_in_roots(view: AtomView<'_>, roots: &BTreeSet<usize>) -> bool {
+pub(super) fn polynomial_in_roots(view: AtomView<'_>, roots: &BTreeSet<usize>) -> bool {
     if !contains_root(view, roots) {
         return true;
     }
@@ -804,10 +804,31 @@ fn truncate_routed(
     if foreign {
         return Ok(Err("labels"));
     }
-    if !factors
+    if let Some(factor) = factors
         .iter()
-        .all(|factor| polynomial_in_roots(*factor, &roots))
+        .find(|factor| !polynomial_in_roots(**factor, &roots))
     {
+        // Name the function that carries a root momentum (diagnostics).
+        let mut culprit = None;
+        factor.visitor(&mut |view| {
+            if culprit.is_some() {
+                return false;
+            }
+            if let AtomView::Fun(function) = view
+                && function.get_symbol() != GS.emr_mom
+                && function.get_symbol() != SPENSO_TAG.dot
+                && contains_root(view, &roots)
+            {
+                let text = view.to_string().chars().take(200).collect::<String>();
+                culprit = Some(format!("{} {text}", function.get_symbol().get_name()));
+                return false;
+            }
+            true
+        });
+        eprintln!(
+            "UV_TRUNCATE_NONPOLY function={}",
+            culprit.unwrap_or_else(|| "none".into())
+        );
         return Ok(Err("non_polynomial"));
     }
     let parameter = symbol!("rstar_root_grade"; Scalar);
