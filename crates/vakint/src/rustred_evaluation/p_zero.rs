@@ -114,6 +114,7 @@ pub(crate) fn zero_prune() -> ZeroPrune {
 
 /// Run `f` with the pruning `mode` on this thread (tests; R3's `prune_early`,
 /// `refpath::direct::DirectOptions`, for its own lowering only).
+#[cfg(any(test, feature = "feynkit-ingress"))]
 pub(crate) fn with_zero_prune<R>(mode: ZeroPrune, f: impl FnOnce() -> R) -> R {
     struct Restore(Option<ZeroPrune>);
     impl Drop for Restore {
