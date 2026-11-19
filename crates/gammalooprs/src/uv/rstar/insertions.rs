@@ -45,8 +45,9 @@ type CachedIntegral = Arc<OnceLock<Result<Atom, String>>>;
 
 /// Every slashed momentum `gamma(i, j, Q(e, R(D)))` of an insertion
 /// coefficient (idenso's canonical form, e.g. a quark self-energy `c slash(p)`)
-/// written as `gamma(i, j, R(D, nu_k)) Q(e, R(D, nu_k))` with a contracted index
-/// `nu_k`, renamed fresh by [`freshen_insertion_indices`]. The momentum then
+/// written as `gamma(i, j, R(D, nu_k)) Q(e, R(D, nu_k))` with a contracted symbol
+/// index `nu_k`, unique in the process. Applied after
+/// [`freshen_insertion_indices`], whose `dummy(N)` indices Spenso does not parse. The momentum then
 /// reaches the surrogate's coefficient vertex only through `Q`, as in the
 /// Feynman rules, so the UV-child degree truncation can grade it
 /// (`polynomial_in_roots`); a function of the momentum declines it. Chains
@@ -83,7 +84,8 @@ pub(super) fn open_slashes(coefficient: &Atom) -> Atom {
     } else {
         coefficient.clone()
     };
-    let mut next = 0_usize;
+    // Process-unique: a surrogate may carry several coefficients.
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     unchained.replace_map(|view, _, out| {
         if !is_slash(view) {
             return;
@@ -95,10 +97,10 @@ pub(super) fn open_slashes(coefficient: &Atom) -> Atom {
         let AtomView::Fun(bare) = momentum.get(1) else {
             return;
         };
+        let next = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let index = Atom::from(Aind::Symbol(symbol!(&format!(
             "gammalooprs::insertion_slash_{next}"
         ))));
-        next += 1;
         let mut slot = symbolica::atom::FunctionBuilder::new(bare.get_symbol());
         for argument in bare.iter() {
             slot = slot.add_arg(argument);
@@ -343,14 +345,16 @@ impl PropagatorInsertionEvaluator {
             let excised = diagram.excise_with_mapping(&insertion.support, &[])?;
             let coefficient = self.normalized_insertion(&excised.diagram, vakint, loops)?;
             let vanishes = coefficient.is_zero();
-            let mut coefficient = freshen_insertion_indices(
+            // Slashes are opened after the freshening, with process-unique
+            // symbol indices: freshened `dummy(N)` indices are not Spenso indices.
+            let mut coefficient = open_slashes(&freshen_insertion_indices(
                 &excised.relabeling.restore_atom(&coefficient)?,
                 &[
                     NumeratorInterface::export(surrogate.numerator()).0,
                     NumeratorInterface::export(surrogate.projector()).0,
                     NumeratorInterface::export(surrogate.numerator_prefactor()).0,
                 ],
-            )?;
+            )?);
             let mut current = insertion.clone();
             for map in &maps {
                 coefficient = map.translate_atom(&coefficient, None)?;
@@ -633,7 +637,7 @@ impl PropagatorInsertionEvaluator {
             polynomial,
             "normalized insertion is not polynomial in its external momentum"
         );
-        Ok(open_slashes(&coefficient))
+        Ok(coefficient)
     }
 
     fn integrate_cached(
@@ -775,8 +779,9 @@ mod tests {
         test_initialise()?;
         let mink = Minkowski {}.new_rep(GS.dim);
         let spin = Bispinor {}.new_rep(4);
-        let i = spin.to_symbolic([Atom::from(Aind::Hedge(8, 0))]);
-        let j = spin.to_symbolic([Atom::from(Aind::Hedge(9, 0))]);
+        // Symbol indices parse both as Spenso indices and as `Aind`.
+        let i = spin.to_symbolic([Atom::from(Aind::Symbol(symbol!("open_slashes_i")))]);
+        let j = spin.to_symbolic([Atom::from(Aind::Symbol(symbol!("open_slashes_j")))]);
         let slash = |edge: i64| {
             function!(
                 idenso::dirac::AGS.gamma,
@@ -792,7 +797,14 @@ mod tests {
             coefficient.as_view(),
             &roots
         ));
-        let opened = open_slashes(&coefficient);
+        // The production order: freshen, then open, then the surrogate's
+        // Spenso parse (`with_coefficient`), which rejected `dummy(N)` indices.
+        let freshened = freshen_insertion_indices(&coefficient, &[])?;
+        let opened = open_slashes(&freshened);
+        SymbolicTensor::infer(coefficient.clone())
+            .wrap_err_with(|| format!("slashed input: {coefficient}"))?;
+        SymbolicTensor::infer(opened.clone())
+            .wrap_err_with(|| format!("freshened: {freshened}\nopened: {opened}"))?;
         assert!(super::super::expression::polynomial_in_roots(
             opened.as_view(),
             &roots
