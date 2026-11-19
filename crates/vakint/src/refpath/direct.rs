@@ -1468,6 +1468,91 @@ mod tests {
         assert_eq!(lowered, 7 * 7, "lowered projections");
     }
 
+    /// R3-open (D6 through the hand-over) gives the open-index route's open
+    /// `Π^{μν}` exactly, with the same folded inputs (key by key, zero-sector
+    /// keys dropped), on the B -> B fixtures of one to three loops.
+    #[test]
+    fn r3_open_equals_the_open_route_on_the_bb_fixtures() {
+        let Some(template) = template() else {
+            eprintln!("skipped: no p library for L1-L3 in this environment");
+            return;
+        };
+        let s = &*SYMBOLS;
+        let mut lowered = 0;
+        for dir in fixture_dirs() {
+            let model = super::super::load_model(&dir).unwrap();
+            let mut files = std::fs::read_dir(&dir)
+                .unwrap()
+                .filter_map(|e| e.ok().map(|e| e.path()))
+                .filter(|p| p.extension().is_some_and(|x| x == "dot"))
+                .collect::<Vec<_>>();
+            files.sort();
+            for file in files {
+                let dot = std::fs::read_to_string(&file).unwrap();
+                let label = file.display().to_string();
+                let engine = super::super::fresh_engine(&template).unwrap();
+                let open = super::super::run_graph_open(&engine, &model, &dot, 1).unwrap();
+                let open_view = open
+                    .observation
+                    .as_ref()
+                    .map(|o| o.view_without_zero_sectors().0)
+                    .unwrap_or_default();
+                let engine = super::super::fresh_engine(&template).unwrap();
+                let diagram =
+                    FeynmanDiagram::from_dot(std::sync::Arc::clone(&model), &dot).unwrap();
+                if super::super::scaleless_contact(&diagram) {
+                    assert!(open.value.is_zero(), "{label}: zero only in R3-open");
+                    continue;
+                }
+                let (terms, _) = colour_terms(&diagram, false).unwrap();
+                if terms.is_empty() {
+                    assert!(open.value.is_zero(), "{label}: zero only in R3-open");
+                    continue;
+                }
+                let dimension = Atom::var(s.d);
+                let kinematics = feynkit_kinematics::Kinematics::in_dimension(&dimension).unwrap();
+                let family = diagram.propagator_family(&kinematics).unwrap();
+                let momentum = family.external_momenta()[0].clone();
+                let weight = feynkit_graph::expressions::evaluate_overall_factor(
+                    diagram.overall_factor().as_view(),
+                ) * Atom::var(s.nf).pow(Atom::num(
+                    super::super::closed_quark_loops(&diagram).unwrap() as i64,
+                ));
+                let settings = super::super::vakint_settings(diagram.loop_count() as i64 + 1);
+                let mut seconds = DirectSeconds::default();
+                let outcome = lower_graph_open(
+                    &engine,
+                    &settings,
+                    &diagram,
+                    &terms,
+                    &momentum,
+                    &weight,
+                    DirectOptions::default(),
+                    &mut seconds,
+                )
+                .unwrap();
+                match outcome {
+                    DirectOutcome::Declined(reason) => panic!("{label}: declined: {reason}"),
+                    DirectOutcome::Zero(_) => {
+                        assert!(open.value.is_zero(), "{label}: zero only in R3-open");
+                        assert!(open_view.is_empty(), "{label}: keys only in the open route");
+                    }
+                    DirectOutcome::Lowered(projections) => {
+                        let projection = &projections[0];
+                        let (view, _) = gate_view(&engine, &settings, projection).unwrap();
+                        let difference = compare_gate_views(&open_view, &view);
+                        assert!(difference.is_empty(), "{label}: {difference:?}");
+                        let value = reduce_projection(&engine, &settings, projection).unwrap();
+                        assert!(values_equal(&value, &open.value), "{label}: values differ");
+                        lowered += 1;
+                    }
+                }
+            }
+        }
+        // the 7 fixtures with a non-zero value (as the scalar test)
+        assert_eq!(lowered, 7, "lowered open graphs");
+    }
+
     /// The hand-over refuses (never reads silently) an unidentified vector and
     /// leftover tensor notation.
     #[test]
