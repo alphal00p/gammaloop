@@ -922,6 +922,45 @@ fn dirac_child_closure_matches_the_open_tensor_and_massive_r_body() -> Result<()
     Ok(())
 }
 
+/// The IR Dirac closure (`GAMMALOOP_IR_DIRAC_CLOSURE=check`) on the UV children
+/// of L3/166, whose IR corrections have a hard part with one open quark line
+/// (omega 0, one Lorentz slot: the vertex shape). In check mode every closed
+/// hard part's reassembled moments must equal the open ones (an error
+/// otherwise), and each child, computed with the closed hard parts, must still
+/// equal massive R (`compare_children_with`). Requires at least one closed
+/// IR hard part, all checked and equal.
+#[test]
+fn ir_dirac_closure_matches_the_open_hard_part_and_massive_r() -> Result<()> {
+    with_production_piece_limit(|| {
+        super::ir_dirac::with_ir_dirac_mode(super::ir_dirac::IrDiracMode::Check, || {
+            test_initialise()?;
+            let vakint = Vakint::new()?;
+            let _ = super::ir_dirac::take_counts();
+            let mut coverage = Coverage::default();
+            compare_children_with(
+                "L3/166",
+                include_str!("testdata/l3-d166.dot"),
+                &vakint,
+                usize::MAX,
+                false,
+                UvChildClosure::parse("dirac")?,
+                &mut coverage,
+            )?;
+            let counts = super::ir_dirac::take_counts();
+            eprintln!("IR_DIRAC_COVERAGE {counts:?} {coverage:?}");
+            let get = |key: &str| counts.get(key).copied().unwrap_or(0);
+            let closed =
+                get("today:vertex:closed") + get("child:vertex:closed") + get("child:slash:closed");
+            ensure!(closed > 0, "no IR hard part was Dirac-closed: {counts:?}");
+            ensure!(
+                get("check") == closed && get("check_equal") == closed,
+                "every closed IR hard part must be checked and equal: {counts:?}"
+            );
+            Ok(())
+        })
+    })
+}
+
 /// The check over production diagram sets, every Dirac-shaped UV child of
 /// each diagram's plan (and their nested children) with a cache shared
 /// across diagrams. Heavy, so ignored; configured by environment:
