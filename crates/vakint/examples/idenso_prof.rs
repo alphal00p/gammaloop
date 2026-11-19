@@ -731,6 +731,7 @@ fn main() -> eyre::Result<()> {
         if edge_contract {
             let mut edge_runs = Vec::new();
             let mut edge_terms = 0usize;
+            let mut edge_hash = String::new();
             let (terms, _) = refpath::direct::colour_terms(&diagram, merge_colour)?;
             for _ in 0..reps {
                 let wall = Instant::now();
@@ -753,11 +754,18 @@ fn main() -> eyre::Result<()> {
                 )?;
                 edge_runs.push((wall.elapsed().as_secs_f64(), cpu_seconds() - cpu));
                 edge_terms = value.iter().map(|(_, v)| terms_of(&v.expand())).sum();
+                // the contracted values' FORM (not expanded), for determinism
+                // checks across processes and runs
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                for (_, v) in &value {
+                    std::hash::Hash::hash(&v.to_canonical_string(), &mut hasher);
+                }
+                edge_hash = format!("{:016x}", std::hash::Hasher::finish(&hasher));
             }
             edge = json!({
                 "wall": median(edge_runs.iter().map(|r| r.0).collect()),
                 "cpu": median(edge_runs.iter().map(|r| r.1).collect()),
-                "terms": edge_terms, "colour_terms": terms.len(), "dots": r3_dots, "routed": r3_routed, "merge_colour": merge_colour,
+                "terms": edge_terms, "form_hash": edge_hash, "colour_terms": terms.len(), "dots": r3_dots, "routed": r3_routed, "merge_colour": merge_colour,
                 "routed_terms": reference_terms.unwrap_or(0),
             });
         }
