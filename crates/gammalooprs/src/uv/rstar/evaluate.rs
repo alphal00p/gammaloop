@@ -30,7 +30,7 @@ use super::{
     ChildMass, CountertermCall, IrCorrection, IrForestTerm, MassiveUvEvaluator, RStarPlan,
     UvChildrenRoute, UvPreparationTerm,
     boundary::{self, BoundaryMode, BoundaryRequest, Built, ClosedRootNormalization},
-    expression::{IntegrationTimings, RStarIntegrand, RootProjector},
+    expression::{DiracBoundary, DiracKind, IntegrationTimings, RStarIntegrand, RootProjector},
     moments::hard_moments,
     physical::PreparedPhysicalUvTerm,
     top_mass::{self, RStarTerms, TopMassTerms},
@@ -521,6 +521,48 @@ impl RStarPlan {
             .fold(channels, |tensor, (marker, pairing)| {
                 tensor.replace(Atom::var(*marker)).with(pairing.clone())
             }))
+    }
+
+    /// The local MS counterterm of a graph with one open Dirac line whose
+    /// counterterm has a unique Dirac structure
+    /// ([`RStarIntegrand::dirac_boundary`]), as a closed trace instead of the
+    /// open matrix.
+    ///
+    /// A degree-0 vertex is `c gamma^mu` with `c = Tr[gamma_mu X^mu] /
+    /// (Tr[1] d)`; a degree-1 self-energy is `V_nu gamma^nu` with `V_nu =
+    /// Tr[gamma_nu X] / Tr[1]` (linear in the boundary momenta). MS acts on
+    /// the coefficient of the basis element, which this projection is. As in
+    /// [`Self::isotropic_counterterm`], the momentum-free `gamma` closure
+    /// closes every root-scope remainder, the rational normalization joins
+    /// after the Taylor step inside this graph's `K`, and nested children
+    /// and quotients keep their open slots. The open structure is then
+    /// multiplied back.
+    pub fn dirac_counterterm(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        boundary: &DiracBoundary,
+    ) -> Result<Atom> {
+        let normalize = |tensor: &Atom| -> Result<Atom> { Ok(tensor * &boundary.normalization) };
+        let mut evaluation = Evaluation::new(
+            self,
+            graph,
+            model,
+            vakint,
+            uv_settings,
+            Some(&normalize),
+            None,
+            ChildMass::Reference,
+        )?;
+        evaluation.root_closure = Some(boundary.closure.clone());
+        evaluation.channel = match boundary.kind {
+            DiracKind::Vertex => ("dirac vertex", "1/(Tr[1] d)"),
+            DiracKind::SelfEnergy => ("dirac self-energy", "1/Tr[1]"),
+        };
+        let trace = evaluation.counterterm()?;
+        Ok(trace * &boundary.structure)
     }
 
     /// Reconstruct all poles of the bare, infrared-finite massless propagator

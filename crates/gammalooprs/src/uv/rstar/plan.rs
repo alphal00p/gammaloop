@@ -109,8 +109,13 @@ static UV_CHILDREN_ROUTE: LazyLock<UvChildrenRoute> = LazyLock::new(|| {
 /// contracted. `Off` (the default) contracts the open child tensor.
 /// `Isotropic { min_loops }` computes a logarithmically divergent child with
 /// four open Lorentz slots and at least `min_loops` loops through its three
-/// scalar metric channels ([`RStarPlan::isotropic_counterterm`]). Exact
-/// either way; which is faster depends on the child class, so it is opt-in.
+/// scalar metric channels ([`RStarPlan::isotropic_counterterm`]).
+/// `Dirac { isotropic, dirac }` adds the Dirac closure
+/// ([`RStarPlan::dirac_counterterm`]): a child with one open Dirac line whose
+/// counterterm has a unique Dirac structure (a degree-0 vertex `c gamma^mu`,
+/// a degree-1 self-energy `c slash(p)`) is computed as a closed trace, and the
+/// isotropic closure as well when `isotropic` is set. Exact either way; which
+/// is faster depends on the child class, so it is opt-in.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum UvChildClosure {
     #[default]
@@ -118,6 +123,26 @@ pub enum UvChildClosure {
     Isotropic {
         min_loops: usize,
     },
+    Dirac {
+        isotropic: Option<usize>,
+        dirac: DiracClosure,
+    },
+}
+
+/// The Dirac child closure of [`UvChildClosure::Dirac`]: children of at least
+/// `min_loops` loops; `check` also computes the open tensor of every closed
+/// child and requires it to equal the closed one (`DIRAC_CLOSURE_CHECK`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct DiracClosure {
+    pub min_loops: usize,
+    pub check: bool,
+}
+
+impl std::fmt::Display for DiracClosure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = if self.check { "dirac-check" } else { "dirac" };
+        write!(f, "{name}:{}", self.min_loops)
+    }
 }
 
 impl std::fmt::Display for UvChildClosure {
@@ -125,35 +150,72 @@ impl std::fmt::Display for UvChildClosure {
         match self {
             Self::Off => write!(f, "off"),
             Self::Isotropic { min_loops } => write!(f, "isotropic:{min_loops}"),
+            Self::Dirac {
+                isotropic: Some(min_loops),
+                dirac,
+            } => write!(f, "isotropic:{min_loops},{dirac}"),
+            Self::Dirac {
+                isotropic: None,
+                dirac,
+            } => write!(f, "{dirac}"),
         }
     }
 }
 
 impl UvChildClosure {
-    /// `GAMMALOOP_UV_CHILD_CLOSURE`: unset, empty or `off`; `isotropic`; or
-    /// `isotropic:N` for children of at least N loops. Anything else is an
-    /// error.
+    /// `GAMMALOOP_UV_CHILD_CLOSURE`: unset, empty or `off`; otherwise a comma
+    /// list of `isotropic`, `dirac` or `dirac-check` (each at most once, and
+    /// not both Dirac modes), each optionally `:N` for children of at least
+    /// N loops. Anything else is an error.
     pub fn parse(value: &str) -> Result<Self> {
         let value = value.trim();
         if value.is_empty() || value == "off" {
             return Ok(Self::Off);
         }
-        let (name, threshold) = match value.split_once(':') {
-            Some((name, threshold)) => (name.trim(), Some(threshold.trim())),
-            None => (value, None),
-        };
-        ensure!(
-            name == "isotropic",
-            "GAMMALOOP_UV_CHILD_CLOSURE must be `off`, `isotropic` or `isotropic:N`, not `{value}`"
-        );
-        let min_loops = match threshold {
-            None => 1,
-            Some(threshold) => threshold.parse::<usize>().wrap_err_with(|| {
-                format!("GAMMALOOP_UV_CHILD_CLOSURE loop threshold `{threshold}` is not an integer")
-            })?,
-        };
-        Ok(Self::Isotropic {
-            min_loops: min_loops.max(1),
+        let syntax = "GAMMALOOP_UV_CHILD_CLOSURE must be `off` or a comma list of \
+                      `isotropic[:N]`, `dirac[:N]` or `dirac-check[:N]`";
+        let mut isotropic = None;
+        let mut dirac = None;
+        for item in value.split(',') {
+            let item = item.trim();
+            let (name, threshold) = match item.split_once(':') {
+                Some((name, threshold)) => (name.trim(), Some(threshold.trim())),
+                None => (item, None),
+            };
+            let min_loops = match threshold {
+                None => 1,
+                Some(threshold) => threshold.parse::<usize>().wrap_err_with(|| {
+                    format!(
+                        "GAMMALOOP_UV_CHILD_CLOSURE loop threshold `{threshold}` is not an integer"
+                    )
+                })?,
+            }
+            .max(1);
+            match name {
+                "isotropic" => {
+                    ensure!(
+                        isotropic.is_none(),
+                        "{syntax}, not `{value}` (isotropic twice)"
+                    );
+                    isotropic = Some(min_loops);
+                }
+                "dirac" | "dirac-check" => {
+                    ensure!(
+                        dirac.is_none(),
+                        "{syntax}, not `{value}` (two Dirac closures)"
+                    );
+                    dirac = Some(DiracClosure {
+                        min_loops,
+                        check: name == "dirac-check",
+                    });
+                }
+                _ => return Err(eyre!("{syntax}, not `{value}`")),
+            }
+        }
+        Ok(match (isotropic, dirac) {
+            (isotropic, Some(dirac)) => Self::Dirac { isotropic, dirac },
+            (Some(min_loops), None) => Self::Isotropic { min_loops },
+            (None, None) => unreachable!("a nonempty list names a closure"),
         })
     }
 
@@ -161,8 +223,24 @@ impl UvChildClosure {
         *UV_CHILD_CLOSURE
     }
 
+    /// Whether the isotropic closure applies to a child of `loops` loops.
     fn applies(&self, loops: usize) -> bool {
-        matches!(self, Self::Isotropic { min_loops } if loops >= *min_loops)
+        match self {
+            Self::Isotropic { min_loops }
+            | Self::Dirac {
+                isotropic: Some(min_loops),
+                ..
+            } => loops >= *min_loops,
+            _ => false,
+        }
+    }
+
+    /// The Dirac closure for a child of `loops` loops, when it applies.
+    fn dirac(&self, loops: usize) -> Option<DiracClosure> {
+        match self {
+            Self::Dirac { dirac, .. } if loops >= dirac.min_loops => Some(*dirac),
+            _ => None,
+        }
     }
 }
 
@@ -175,6 +253,19 @@ static UV_CHILD_CLOSURE: LazyLock<UvChildClosure> = LazyLock::new(|| {
 #[cfg(test)]
 pub(crate) static ISOTROPIC_CHILDREN: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
+
+/// Children computed through [`RStarPlan::dirac_counterterm`], for tests.
+#[cfg(test)]
+pub(crate) static DIRAC_CHILDREN: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+/// `dirac-check` outcomes, for tests: checked, identical, equal.
+#[cfg(test)]
+pub(crate) static DIRAC_CHECKS: [std::sync::atomic::AtomicUsize; 3] = [
+    std::sync::atomic::AtomicUsize::new(0),
+    std::sync::atomic::AtomicUsize::new(0),
+    std::sync::atomic::AtomicUsize::new(0),
+];
 
 /// `GAMMALOOP_UV_CHILDREN_LOG=1`: one stderr line per proper UV child request
 /// of an R*-route plan (route, loops, seconds, the child's edge ids); for smoke
@@ -1077,6 +1168,19 @@ impl RStarPlan {
             } else {
                 None
             };
+            // A child with one open Dirac line and a unique Dirac structure
+            // (degree-0 vertex, degree-1 self-energy): a closed trace.
+            let dirac = match closure.dirac(graph.n_loops(support)) {
+                Some(mode) if isotropic.is_none() => {
+                    super::expression::RStarIntegrand::dirac_boundary(
+                        graph,
+                        support,
+                        plan.taylor_order,
+                    )?
+                    .map(|boundary| (mode, boundary))
+                }
+                _ => None,
+            };
             let delta = super::expression::in_uv_child_scope(plan.taylor_order, || match isotropic
                 .as_ref()
             {
@@ -1093,7 +1197,12 @@ impl RStarPlan {
                     }
                     plan.isotropic_counterterm(graph, model, vakint, settings, pairings)
                 }
-                None => plan.counterterm(graph, model, vakint, settings),
+                None => match dirac.as_ref() {
+                    Some((mode, boundary)) => Self::dirac_child_counterterm(
+                        &plan, graph, support, model, vakint, settings, *mode, boundary,
+                    ),
+                    None => plan.counterterm(graph, model, vakint, settings),
+                },
             })
             .wrap_err_with(|| {
                 format!(
@@ -1117,6 +1226,118 @@ impl RStarPlan {
             );
             Ok(literal_zero_if_vanishing(delta))
         })
+    }
+
+    /// `Delta` of a child through [`Self::dirac_counterterm`]; under
+    /// `dirac-check` also the open tensor, which must equal it
+    /// (`DIRAC_CLOSURE_CHECK`, an error otherwise). The closed `Delta` is
+    /// returned either way. Called in the child's root scope.
+    #[allow(clippy::too_many_arguments)]
+    fn dirac_child_counterterm(
+        plan: &Self,
+        graph: &Graph,
+        support: &SuBitGraph,
+        model: &Model,
+        vakint: &Vakint,
+        settings: &UVgenerationSettings,
+        mode: DiracClosure,
+        boundary: &super::expression::DiracBoundary,
+    ) -> Result<Atom> {
+        #[cfg(test)]
+        DIRAC_CHILDREN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let loops = graph.n_loops(support);
+        let kind = match boundary.kind {
+            super::expression::DiracKind::Vertex => "vertex",
+            super::expression::DiracKind::SelfEnergy => "self_energy",
+        };
+        if uv_children_log() {
+            eprintln!(
+                "UV_CHILD_CLOSURE graph={} loops={loops} closure=dirac kind={kind}",
+                graph.name
+            );
+        }
+        let started = Instant::now();
+        let closed = plan.dirac_counterterm(graph, model, vakint, settings, boundary)?;
+        if !mode.check {
+            return Ok(closed);
+        }
+        let closed_seconds = started.elapsed().as_secs_f64();
+        let started = Instant::now();
+        let open = plan.counterterm(graph, model, vakint, settings)?;
+        let open_seconds = started.elapsed().as_secs_f64();
+        let (identical, equal) = Self::dirac_closure_agrees(graph, support, model, &closed, &open)?;
+        #[cfg(test)]
+        {
+            use std::sync::atomic::Ordering;
+            DIRAC_CHECKS[0].fetch_add(1, Ordering::Relaxed);
+            DIRAC_CHECKS[1].fetch_add(usize::from(identical), Ordering::Relaxed);
+            DIRAC_CHECKS[2].fetch_add(usize::from(equal), Ordering::Relaxed);
+        }
+        eprintln!(
+            "DIRAC_CLOSURE_CHECK graph={} support={} loops={loops} degree={} kind={kind} identical={identical} equal={equal} zero={} closed_seconds={closed_seconds:.3} open_seconds={open_seconds:.3}",
+            graph.name,
+            support.string_label(),
+            plan.taylor_order,
+            open.expand().is_zero(),
+        );
+        ensure!(
+            equal,
+            "DIRAC_CLOSURE_CHECK: the Dirac closure of the {loops}-loop {kind} child {} differs from the open tensor\nclosed: {closed}\nopen: {open}",
+            support.string_label()
+        );
+        Ok(closed)
+    }
+
+    /// Whether the closed and open `Delta` of one child agree: `identical`
+    /// as cached `Delta` (the cache's canonical form), `equal` after gamma and
+    /// colour simplification of their difference in canonical labels.
+    fn dirac_closure_agrees(
+        graph: &Graph,
+        support: &SuBitGraph,
+        model: &Model,
+        closed: &Atom,
+        open: &Atom,
+    ) -> Result<(bool, bool)> {
+        use idenso::{
+            CookMode, CookSettings,
+            color::ColorSimplifySettings,
+            dirac::GammaSimplifySettings,
+            tensor::{AlgebraSettings, SymbolicTensor},
+        };
+        let identity =
+            crate::uv::counterterm_identity::CountertermIdentity::new(graph, support, model)?;
+        let identical = (identity.canonicalize_delta(closed)?
+            - identity.canonicalize_delta(open)?)
+        .expand()
+        .is_zero();
+        if identical {
+            return Ok((true, true));
+        }
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let difference = (identity.canonicalize_integrand(closed)?
+            - identity.canonicalize_integrand(open)?)
+        .expand();
+        if difference.is_zero() {
+            return Ok((false, true));
+        }
+        let tensor = SymbolicTensor::infer_indexed(cooking.try_cook(difference.as_view())?)?
+            .undo_trace()?
+            .undo_chain()?
+            .simplify_algebra(&AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::default()),
+                color: Some(ColorSimplifySettings::default()),
+                ..Default::default()
+            })?
+            .to_dots()?;
+        let reduced = cooking.uncook(tensor.expression().as_view()).expand();
+        if reduced.is_zero() {
+            return Ok((false, true));
+        }
+        let canonical = SymbolicTensor::infer(cooking.try_cook(reduced.as_view())?)?.canonize()?;
+        let canonical = cooking.uncook(canonical.expression().as_view()).expand();
+        Ok((false, canonical.together().is_zero()))
     }
 
     fn evaluate_massive_uv_children(
