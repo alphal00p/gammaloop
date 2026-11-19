@@ -453,11 +453,13 @@ mod tests {
                     let adapter =
                         evaluate_graph_adapter(&engine, &settings, &diagram, &model, &options)
                             .unwrap_or_else(|e| panic!("{label}: {e}"));
-                    if entry.branches > 0 {
+                    assert_eq!(entry.integral, adapter.integral, "{label}");
+                    // Scaleless contact graphs (no internal line carries the
+                    // external momentum) are no propagator integral: 0 on both.
+                    if adapter.integral == GraphIntegral::Propagator {
                         assert_eq!(entry.route, GraphRoute::HandOver, "{label}");
                         handed += 1;
                     }
-                    assert_eq!(entry.integral, adapter.integral, "{label}");
                     assert!(
                         (&entry.value - &adapter.value).expand().is_zero(),
                         "{label}: hand-over {} vs adapter {}",
@@ -471,6 +473,7 @@ mod tests {
             }
         }
         eprintln!("graph entry: {handed} hand-overs, {non_zero} non-zero values equal");
-        assert!(handed >= 40 && non_zero >= 30, "{handed} / {non_zero}");
+        // the 7 fixtures with a non-zero value (as R3's fixture tests) x 5 choices
+        assert_eq!((handed, non_zero), (7 * 5, 7 * 5));
     }
 }
