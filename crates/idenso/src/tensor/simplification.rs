@@ -61,6 +61,12 @@ pub struct AlgebraSettings {
     pub expand_scalar_spectators: bool,
     /// Optional limit on successful transformations per domain. `None` is unlimited.
     pub max_passes: Option<usize>,
+    /// Opt-in frontier-level closing of quark loops ([`crate::dirac::GammaClosing`]):
+    /// the GAMMA pass writes a quark loop whose environment holds a tensor sum
+    /// as one trace word, and the factorized frontier closes that word per
+    /// state with the state's bound vectors. Values are unchanged; `None` (the
+    /// default) leaves the planner unchanged.
+    pub gamma_closing: Option<crate::dirac::GammaClosing>,
 }
 
 impl Default for AlgebraSettings {
@@ -73,6 +79,7 @@ impl Default for AlgebraSettings {
             collect_coefficients: true,
             expand_scalar_spectators: false,
             max_passes: None,
+            gamma_closing: None,
         }
     }
 }
@@ -362,6 +369,17 @@ impl SymbolicTensor<PartialStructure> {
             result.proofs.reduction.as_mut().unwrap().status = ReductionStatus::Complete;
             return Ok(result);
         }
+        // Frontier-level closing (opt-in): the whole reduction runs with the
+        // frontier's closing switch on (thread-local, restored afterwards and on
+        // unwinding).
+        if let ReductionRequest::Algebra(settings) = request
+            && settings.gamma_closing.is_some()
+            && !crate::dirac::closing::frontier_active()
+        {
+            return crate::dirac::closing::with_frontier(|| {
+                Self::plan_reduction_source(source, request)
+            });
+        }
         if let ReductionRequest::Algebra(settings) = request
             && settings.color.is_some()
             && let Some(aliases) = WildcardLabelAliases::of(source.expression.as_view())
@@ -468,6 +486,9 @@ impl SymbolicTensor<PartialStructure> {
             let mut certified = false;
             // Set when a structural round only collected chain/trace notation.
             let mut notation_only = false;
+            // Set when the GAMMA arm's structural step (frontier closing) made
+            // progress: GAMMA is scheduled again.
+            let mut regamma = false;
             let mut before = plan.value.clone();
             before.proofs.frontier = ReductionStatus::Complete;
             let (value, operation_status) = match request {
@@ -496,6 +517,33 @@ impl SymbolicTensor<PartialStructure> {
                         let status;
                         (value, status, notation_only) = before.contract_domain(structural)?;
                         (value, status)
+                    } else if operation == GAMMA
+                        && settings.gamma_closing.is_some()
+                        && let Some((worded, worded_status)) =
+                            match crate::dirac::closing::frontier_step(&before)? {
+                                // Frontier closing: the loop becomes one word that
+                                // the frontier closes per state.
+                                crate::dirac::closing::FrontierStep::Written(worded) => {
+                                    Some((*worded, ReductionStatus::Complete))
+                                }
+                                // A word that meets a sum on its own ports: run the
+                                // structural contraction (the frontier, which closes
+                                // it) here; without progress the gamma pass below
+                                // evaluates it as usual.
+                                crate::dirac::closing::FrontierStep::Pending
+                                    if enabled & STRUCTURE != 0 =>
+                                {
+                                    let (contracted, status, _) =
+                                        before.contract_domain(structural)?;
+                                    // the structural progress may have touched only
+                                    // other families: GAMMA must still see the word
+                                    regamma = contracted != before;
+                                    (contracted != before).then_some((contracted, status))
+                                }
+                                _ => None,
+                            }
+                    {
+                        (worded, worded_status)
                     } else {
                         let observed = &plan.observed;
                         let prerequisites = before.contract_prerequisites(prerequisite_settings, |value| {
@@ -622,6 +670,11 @@ impl SymbolicTensor<PartialStructure> {
                 // Nor does a notation-only structural result.
                 if notation_only {
                     plan.pending &= !STRUCTURE;
+                }
+                // Frontier closing: a word left by the arm's structural step is
+                // revisited by GAMMA whatever families that step changed.
+                if regamma {
+                    plan.pending |= enabled & GAMMA;
                 }
             }
             if operation_status == ReductionStatus::Deferred {

@@ -166,6 +166,7 @@ pub(crate) fn algebra_settings(
         collect_coefficients,
         expand_scalar_spectators: false,
         max_passes: max_steps_per_domain,
+        gamma_closing: None,
     })
 }
 

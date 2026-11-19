@@ -632,8 +632,10 @@ pub fn id_atom(i: impl Into<Atom>, j: impl Into<Atom>) -> Atom {
     function!(ETS.metric, i.into(), j.into())
 }
 
+pub(crate) mod closing;
 mod macros;
 mod simplify;
+pub use closing::GammaClosing;
 pub(crate) use simplify::DiracSimplifier;
 pub use simplify::{GammaChainOrdering, GammaOutput, GammaSimplifySettings};
 #[cfg(test)]
