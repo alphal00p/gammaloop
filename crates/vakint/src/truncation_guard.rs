@@ -188,10 +188,14 @@ pub(crate) fn ensure_unknown_coefficients_allowed(
     if allow || !expression.contains_symbol(unknown_coefficient_symbol()) {
         return Ok(());
     }
+    let coefficients = unknown_coefficients(expression, epsilon, describe);
+    if coefficients.is_empty() {
+        return Ok(());
+    }
     Err(UnknownMasterCoefficients {
         backend: backend.to_owned(),
         requested_order,
-        coefficients: unknown_coefficients(expression, epsilon, describe),
+        coefficients,
     })
 }
 
@@ -207,7 +211,10 @@ pub(crate) fn unknown_coefficients(
         return Vec::new();
     }
     let mut found = BTreeMap::<(String, i64), i64>::new();
-    let expanded = expression.expand();
+    // Only monomials in the UNKNOWN atoms whose coefficient is nonzero
+    // EXACTLY (over a common denominator): `expand` alone leaves
+    // ε^4·U·((z+1)/(z^2-1) - 1/(z-1)) (reviewer, 2876099b6).
+    let expanded = exact_part(expression, unknown_coefficient_symbol()).expand();
     let terms: Vec<AtomView> = match expanded.as_view() {
         AtomView::Add(sum) => sum.iter().collect(),
         term => vec![term],
@@ -245,6 +252,39 @@ pub(crate) fn unknown_coefficients(
             },
         )
         .collect()
+}
+
+/// The part of `expression` that depends on the atoms of the function
+/// `symbol` (UNKNOWN or the ALARM tail `Oep`), keeping only the monomials in
+/// those atoms whose coefficient is nonzero EXACTLY: each coefficient is
+/// brought over a common denominator (other functions and constants as
+/// symbols) and its numerator tested for zero. No numerical test.
+pub(crate) fn exact_part(expression: &Atom, symbol: Symbol) -> Atom {
+    let mut atoms = std::collections::BTreeSet::new();
+    expression.visitor(&mut |part| {
+        if let AtomView::Fun(function) = part
+            && function.get_symbol() == symbol
+        {
+            atoms.insert(part.to_owned());
+            return false;
+        }
+        true
+    });
+    if atoms.is_empty() {
+        return Atom::Zero;
+    }
+    let atoms: Vec<Atom> = atoms.into_iter().collect();
+    let mut part = Atom::Zero;
+    for (monomial, coefficient) in expression.expand().coefficient_list::<i16>(&atoms) {
+        if monomial == Atom::num(1)
+            || coefficient.is_zero()
+            || coefficient.together().expand().is_zero()
+        {
+            continue;
+        }
+        part += monomial * coefficient;
+    }
+    part
 }
 
 /// Whether any unknown master tail is present.

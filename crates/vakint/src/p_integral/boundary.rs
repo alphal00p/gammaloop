@@ -332,7 +332,7 @@ impl RemainderBoundary {
         options: BoundaryOptions,
     ) -> Result<(Atom, BoundaryStats), VakintError> {
         // Lane unknown-masters: strict refusal once, on the sum of the patterns.
-        if !settings.allow_unknown_master_coefficients {
+        if let Some(_boundary) = crate::public_result_boundary() {
             let inner = crate::unknown_master_coefficients_carried(settings);
             let (value, stats) = self.evaluate_with_stats(vakint, &inner, options)?;
             vakint.refuse_unknown_master_coefficients(settings, &value)?;

@@ -82,7 +82,7 @@ pub fn evaluate_graph(
     options: &FromFeynkitOptions,
 ) -> Result<GraphValue> {
     // Lane unknown-masters: strict refusal once, on the sum over the branches.
-    if !settings.allow_unknown_master_coefficients {
+    if let Some(_boundary) = crate::public_result_boundary() {
         let inner = crate::unknown_master_coefficients_carried(settings);
         let result = evaluate_graph(vakint, &inner, diagram, model, options)?;
         vakint

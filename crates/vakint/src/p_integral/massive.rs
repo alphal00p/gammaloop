@@ -167,7 +167,7 @@ impl LoweredClosure {
         // Lane unknown-masters: strict refusal applies once, to the result of
         // this public call (after its signed sums); inside, UNKNOWN symbols
         // are carried.
-        if !settings.allow_unknown_master_coefficients {
+        if let Some(_boundary) = crate::public_result_boundary() {
             let inner = crate::unknown_master_coefficients_carried(settings);
             let value = self.evaluate(vakint, &inner)?;
             vakint.refuse_unknown_master_coefficients(settings, &value)?;
@@ -224,10 +224,7 @@ impl LoweredClosure {
         settings: &[&crate::VakintSettings],
     ) -> Result<Vec<Atom>, VakintError> {
         // Lane unknown-masters: strict refusal once per returned result.
-        if settings
-            .iter()
-            .any(|s| !s.allow_unknown_master_coefficients)
-        {
+        if let Some(_boundary) = crate::public_result_boundary() {
             let inner: Vec<crate::VakintSettings> = settings
                 .iter()
                 .map(|s| crate::unknown_master_coefficients_carried(s))
@@ -693,7 +690,7 @@ impl MassiveClosure {
         inputs: &[(Self, DirectClosureInput)],
     ) -> Result<Vec<Atom>, VakintError> {
         // Lane unknown-masters: strict refusal once per returned result.
-        if !settings.allow_unknown_master_coefficients {
+        if let Some(_boundary) = crate::public_result_boundary() {
             let inner = crate::unknown_master_coefficients_carried(settings);
             let values = Self::evaluate_direct_batch(vakint, &inner, inputs)?;
             for value in &values {
@@ -1065,7 +1062,7 @@ impl MassiveClosure {
         // Lane unknown-masters: strict refusal applies once, to the result of
         // this public call (after its signed sums); inside, UNKNOWN symbols
         // are carried.
-        if !settings.allow_unknown_master_coefficients {
+        if let Some(_boundary) = crate::public_result_boundary() {
             let inner = crate::unknown_master_coefficients_carried(settings);
             let value = Self::evaluate_direct_sum(vakint, &inner, inputs)?;
             vakint.refuse_unknown_master_coefficients(settings, &value)?;
@@ -1148,10 +1145,7 @@ impl MassiveClosure {
         inputs: &[(Self, DirectClosureInput)],
     ) -> Result<Vec<Atom>, VakintError> {
         // Lane unknown-masters: strict refusal once per returned result.
-        if settings
-            .iter()
-            .any(|s| !s.allow_unknown_master_coefficients)
-        {
+        if let Some(_boundary) = crate::public_result_boundary() {
             let inner: Vec<crate::VakintSettings> = settings
                 .iter()
                 .map(|s| crate::unknown_master_coefficients_carried(s))
@@ -1251,7 +1245,7 @@ impl MassiveClosure {
         inputs: &[(Self, Atom)],
     ) -> Result<Vec<Atom>, VakintError> {
         // Lane unknown-masters: strict refusal once per returned result.
-        if !settings.allow_unknown_master_coefficients {
+        if let Some(_boundary) = crate::public_result_boundary() {
             let inner = crate::unknown_master_coefficients_carried(settings);
             let values = Self::evaluate_batch(vakint, &inner, inputs)?;
             for value in &values {
@@ -1597,7 +1591,7 @@ impl MassiveClosure {
         // Lane unknown-masters: strict refusal applies once, to the result of
         // this public call (after its signed sums); inside, UNKNOWN symbols
         // are carried.
-        if !settings.allow_unknown_master_coefficients {
+        if let Some(_boundary) = crate::public_result_boundary() {
             let inner = crate::unknown_master_coefficients_carried(settings);
             let value = self.evaluate(vakint, &inner, input)?;
             vakint.refuse_unknown_master_coefficients(settings, &value)?;

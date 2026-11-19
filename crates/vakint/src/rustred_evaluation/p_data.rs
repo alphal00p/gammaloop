@@ -1210,8 +1210,13 @@ impl Vakint {
             catalogue.as_deref(),
             "caller result",
         );
-        crate::truncation_guard::ensure_known_orders(
+        // A surviving ALARM (exactly nonzero coefficient) is an error.
+        let alarm = crate::truncation_guard::exact_part(
             &expression,
+            crate::truncation_guard::unknown_tail_symbol(),
+        );
+        crate::truncation_guard::ensure_known_orders(
+            &symbolica::atom::AtomCore::expand(&alarm),
             epsilon,
             requested_order,
             &source.backend("caller result"),
@@ -1230,20 +1235,24 @@ impl Vakint {
         ))
     }
 
-    /// Strict mode at a public result boundary: the typed
-    /// [`crate::UnknownMasterCoefficients`] when `result` (the returned value
-    /// of one public call, after its sums and truncation) still depends on
-    /// expected but unknown master coefficients and `settings` refuses them;
-    /// a surviving ALARM is [`crate::MissingMasterOrders`] in either mode.
+    /// The check of a public result boundary (the returned value of the
+    /// outermost public evaluation call, after its sums and truncation): a
+    /// surviving ALARM tail, whatever produced it (a finaliser or a caller's
+    /// input), is [`crate::MissingMasterOrders`] in either mode; a surviving
+    /// UNKNOWN is [`crate::UnknownMasterCoefficients`] unless `settings`
+    /// allows them. "Surviving" = exactly nonzero coefficient
+    /// ([`crate::truncation_guard::exact_part`]).
     pub(crate) fn refuse_unknown_master_coefficients(
         &self,
         settings: &crate::VakintSettings,
         result: &symbolica::atom::Atom,
     ) -> Result<(), crate::VakintError> {
         use symbolica::atom::AtomCore;
-        if !result.contains_symbol(crate::truncation_guard::unknown_coefficient_symbol())
-            && !result.contains_symbol(crate::truncation_guard::unknown_tail_symbol())
-        {
+        // ALARM: an error at every public result, in either mode; UNKNOWN:
+        // refused in strict mode only.
+        let alarm = result.contains_symbol(crate::truncation_guard::unknown_tail_symbol());
+        let unknown = result.contains_symbol(crate::truncation_guard::unknown_coefficient_symbol());
+        if !alarm && (!unknown || settings.allow_unknown_master_coefficients) {
             return Ok(());
         }
         let coefficients = self.unknown_master_coefficients(settings, result.as_view(), None)?;

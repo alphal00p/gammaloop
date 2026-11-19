@@ -119,6 +119,38 @@ pub use truncation_guard::{
 pub const ALLOW_UNKNOWN_MASTER_COEFFICIENTS_VARIABLE: &str =
     "VAKINT_ALLOW_UNKNOWN_MASTER_COEFFICIENTS";
 
+thread_local! {
+    /// Nesting depth of public result boundaries on this thread.
+    static PUBLIC_RESULT_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// The guard of the outermost public evaluation call on this thread.
+pub(crate) struct PublicResultBoundary;
+
+impl Drop for PublicResultBoundary {
+    fn drop(&mut self) {
+        PUBLIC_RESULT_DEPTH.with(|depth| depth.set(depth.get().saturating_sub(1)));
+    }
+}
+
+/// `Some` for the OUTERMOST public evaluation call on this thread (lane
+/// unknown-masters): that call runs its inside with the UNKNOWN symbols
+/// carried and checks its returned value once
+/// ([`Vakint::refuse_unknown_master_coefficients`]: a surviving ALARM is
+/// always an error, a surviving UNKNOWN only in strict mode). Nested public
+/// calls get `None` and leave the decision to it. A nested call on another
+/// thread acts as its own boundary (an earlier check: fail-closed).
+pub(crate) fn public_result_boundary() -> Option<PublicResultBoundary> {
+    PUBLIC_RESULT_DEPTH.with(|depth| {
+        if depth.get() == 0 {
+            depth.set(1);
+            Some(PublicResultBoundary)
+        } else {
+            None
+        }
+    })
+}
+
 /// `settings` with [`VakintSettings::allow_unknown_master_coefficients`] on:
 /// the inside of a public call in strict mode carries the UNKNOWN symbols,
 /// and the call refuses them once on its result
@@ -2260,7 +2292,7 @@ impl EvaluationMethod {
         integral_specs: &ReplacementRules,
     ) -> Result<Atom, VakintError> {
         // Lane unknown-masters: strict refusal once, on this public call's result.
-        if !settings.allow_unknown_master_coefficients {
+        if let Some(_boundary) = crate::public_result_boundary() {
             let inner = unknown_master_coefficients_carried(settings);
             let value = self.evaluate_integral(vakint, &inner, numerator, integral_specs)?;
             vakint.refuse_unknown_master_coefficients(settings, &value)?;
@@ -3140,11 +3172,18 @@ impl VakintTerm {
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
         // Lane unknown-masters: strict refusal once, on this public call's result.
-        if !settings.allow_unknown_master_coefficients {
+        if let Some(_boundary) = crate::public_result_boundary() {
+            // On any error the receiver is restored to its input.
+            let saved = self.clone();
             let inner = unknown_master_coefficients_carried(settings);
-            self.evaluate_integral(vakint, &inner)?;
-            let value: Atom = self.clone().into();
-            return vakint.refuse_unknown_master_coefficients(settings, &value);
+            let result = self.evaluate_integral(vakint, &inner).and_then(|()| {
+                let value: Atom = self.clone().into();
+                vakint.refuse_unknown_master_coefficients(settings, &value)
+            });
+            if result.is_err() {
+                *self = saved;
+            }
+            return result;
         }
         settings.with_resource_budget(|| {
             let numerical = match self.reduce_integral(vakint, settings, 0, None)? {
@@ -5092,7 +5131,7 @@ impl fmt::Display for VakintExpression {
 }
 
 impl VakintExpression {
-    fn prepare_evaluation(
+    pub(crate) fn prepare_evaluation(
         input: AtomView,
         vakint: &Vakint,
         settings: &VakintSettings,
@@ -5273,11 +5312,20 @@ impl VakintExpression {
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
         // Lane unknown-masters: strict refusal once, on this public call's result.
-        if !settings.allow_unknown_master_coefficients {
+        if let Some(_boundary) = crate::public_result_boundary() {
+            // On any error the receiver is restored to its input.
+            let saved = self.clone();
             let inner = unknown_master_coefficients_carried(settings);
-            self.evaluate_integral_observed(vakint, &inner, None, None)?;
-            let value: Atom = self.clone().into();
-            return vakint.refuse_unknown_master_coefficients(settings, &value);
+            let result = self
+                .evaluate_integral_observed(vakint, &inner, None, None)
+                .and_then(|()| {
+                    let value: Atom = self.clone().into();
+                    vakint.refuse_unknown_master_coefficients(settings, &value)
+                });
+            if result.is_err() {
+                *self = saved;
+            }
+            return result;
         }
         self.evaluate_integral_observed(vakint, settings, None, None)
     }
@@ -8611,7 +8659,7 @@ Evaluated (n_loops=1, mu_r=1) :
         // coefficients are refused once, on the result of this public call
         // (after the signed sum over external heads and closures and the
         // truncation); inside, every finaliser carries them.
-        if !settings.allow_unknown_master_coefficients {
+        if let Some(_boundary) = crate::public_result_boundary() {
             let inner = unknown_master_coefficients_carried(settings);
             let value = self.evaluate_observed(&inner, input, observation, progress)?;
             self.refuse_unknown_master_coefficients(settings, &value)?;
@@ -8752,7 +8800,7 @@ Evaluated (n_loops=1, mu_r=1) :
         progress: Option<&CallerProgress>,
     ) -> Result<Atom, VakintError> {
         // Lane unknown-masters: strict refusal once, on this public call's result.
-        if !settings.allow_unknown_master_coefficients {
+        if let Some(_boundary) = crate::public_result_boundary() {
             let inner = unknown_master_coefficients_carried(settings);
             let value = self.evaluate_integral_observed(&inner, input, observation, progress)?;
             self.refuse_unknown_master_coefficients(settings, &value)?;

@@ -1691,6 +1691,33 @@ mod five_loop_guards {
                 .unwrap()
                 .is_empty()
         );
+        // The checker decides on EXACT coefficients (Astra on 2876099b6):
+        // 1 + ε^4·U·((z+1)/(z^2-1) - 1/(z-1)) is exactly 1; its neighbours (U
+        // alone; the doubled subtraction) keep U, affecting ε^4. An ALARM
+        // marker with an exactly vanishing coefficient is no ALARM.
+        let check = |text: &str| {
+            engine
+                .unknown_master_coefficients(&symbolic, parse(text).as_view(), Some(4))
+                .map(|found| {
+                    found
+                        .into_iter()
+                        .map(|u| (u.master, u.order, u.first_affected_result_order))
+                        .collect::<Vec<_>>()
+                })
+        };
+        let zero = "1+ε^4*UNKNOWN(u_m1,1)*((z+1)/(z^2-1)-1/(z-1))";
+        assert!(check(zero).unwrap().is_empty(), "{:?}", check(zero));
+        let expected = vec![("u-m1".to_owned(), 1, 4)];
+        assert_eq!(check("1+ε^4*UNKNOWN(u_m1,1)").unwrap(), expected);
+        assert_eq!(
+            check("1+ε^4*UNKNOWN(u_m1,1)*((z+1)/(z^2-1)-2/(z-1))").unwrap(),
+            expected
+        );
+        assert!(
+            check("1+ε^3*Oep(3,PMaster(u_m1))*((z+1)/(z^2-1)-1/(z-1))")
+                .unwrap()
+                .is_empty()
+        );
         // An ALARM tail in a caller's result is an error.
         let alarm = crate::truncation_guard::unknown_tail(
             vk_symbol!(&symbolic.epsilon_symbol),
@@ -5817,6 +5844,15 @@ fn strict_refusal_applies_after_the_sum_over_external_heads() {
         }
         other => panic!("staged: expected the typed refusal, got {other:?}"),
     }
+    // The in-place API keeps its receiver unchanged when it fails.
+    let mut strict = settings(RustRedMasterMode::Symbolic, None);
+    strict.number_of_terms_in_epsilon_expansion = 6;
+    let mut expression =
+        crate::VakintExpression::prepare_evaluation(parse(&surviving).as_view(), &engine, &strict)
+            .unwrap();
+    let before = expression.clone();
+    assert!(expression.evaluate_integral(&engine, &strict).is_err());
+    assert_eq!(expression, before);
 }
 
 /// Lane unknown-masters, Astra's five-loop confirmation (arm-t268-1413): the
@@ -5904,4 +5940,89 @@ fn strict_refusal_after_the_sum_on_a_five_loop_terminal() {
             .unwrap()
             .contains_symbol(unknown)
     );
+}
+
+/// Lane unknown-masters (Astra on 2876099b6): an ALARM tail marker carried
+/// in by the caller (here a closure numerator holding Oep) is an error at the
+/// public result boundary in EITHER mode, also under Retain with UNKNOWN
+/// allowed, on MassiveClosure::evaluate_direct_sum and on
+/// RemainderBoundary::evaluate_with_stats.
+#[test]
+fn a_carried_alarm_fails_at_every_public_result() {
+    let engine = Vakint::new().unwrap();
+    let make = |mode: RustRedMasterMode, allow: bool| {
+        let mut s = settings(mode, None);
+        s.epsilon_symbol = "gammalooprs::ε".into();
+        s.mu_r_sq_symbol = "gammalooprs::μᵣ²".into();
+        s.integral_normalization_factor = crate::LoopNormalizationFactor::MSbar;
+        s.number_of_terms_in_epsilon_expansion = 2;
+        s.run_time_decimal_precision = 40;
+        s.use_dot_product_notation = false;
+        s.n_cores = 1;
+        s.ordered_cache = crate::OrderedCacheSettings::off();
+        s.allow_unknown_master_coefficients = allow;
+        s
+    };
+    let alarm = "gammalooprs::ε*vakint::Oep(3,vakint::u_massive_probe)";
+    let topology = parse("topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))");
+    let mut routing = (1..=5)
+        .map(|i| (parse(&format!("k({i})")), parse(&format!("k({i})"))))
+        .collect::<Vec<_>>();
+    routing.push((parse("p(1)"), parse("p(1)")));
+    let inputs = vec![(
+        crate::p_integral::MassiveClosure {
+            momentum: parse("p(1)"),
+            mass_squared: parse("mUV^2"),
+            power: 2,
+        },
+        crate::p_integral::DirectClosureInput {
+            topology,
+            routing,
+            numerator: parse(alarm),
+        },
+    )];
+    let root = std::env::temp_dir().join(format!(
+        "vakint-unknown-masters-alarm-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    let header = root.join("header.txt");
+    std::fs::write(
+        &header,
+        format!(
+            "schema pint6.remainder-boundary.v1\nlabel unknown-masters alarm\nepsilon_terms 2\np_loops 1\n\
+             closure_momentum p(1)\nclosure_mass_squared 1\nrouting 0\nblocks 1\n\
+             block 0\tsummands=1\tfile=inline\nblock_atom 0\t1\npatterns 1\n\
+             pattern 0\tclosure_power=2\tterms=1\tref_closure=none\n\
+             pattern_topology 0\ttopo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))\n\
+             pattern_term 0\t0\t{alarm}\nend\n"
+        ),
+    )
+    .unwrap();
+    let record = crate::p_integral::read_boundary_record(&header).unwrap();
+    for mode in [RustRedMasterMode::Retain, RustRedMasterMode::Symbolic] {
+        for allow in [true, false] {
+            let s = make(mode, allow);
+            let sum = crate::p_integral::MassiveClosure::evaluate_direct_sum(&engine, &s, &inputs);
+            assert!(
+                matches!(sum, Err(crate::VakintError::MissingMasterOrders(_))),
+                "evaluate_direct_sum {mode:?} allow {allow}: {sum:?}"
+            );
+            let boundary = record.boundary.evaluate_with_stats(
+                &engine,
+                &s,
+                crate::p_integral::BoundaryOptions { strict: true },
+            );
+            assert!(
+                matches!(boundary, Err(crate::VakintError::MissingMasterOrders(_))),
+                "boundary {mode:?} allow {allow}: {:?}",
+                boundary.map(|(value, _)| value)
+            );
+        }
+    }
+    std::fs::remove_dir_all(&root).ok();
 }

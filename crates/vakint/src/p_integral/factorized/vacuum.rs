@@ -1022,7 +1022,7 @@ pub fn evaluate_factorized_vacuum_streamed(
     streaming: Streaming,
 ) -> Result<VacuumValue> {
     // Lane unknown-masters: strict refusal once, on this call's summed value.
-    if !settings.allow_unknown_master_coefficients {
+    if let Some(_boundary) = crate::public_result_boundary() {
         let inner = crate::unknown_master_coefficients_carried(settings);
         let result =
             evaluate_factorized_vacuum_streamed(vakint, &inner, value, prefactor, streaming)?;
