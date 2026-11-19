@@ -483,9 +483,10 @@ impl VakintSettings {
             rustred_p_outside: Default::default(),
             p_checkpoint_dir: None,
             p_master_basis: self.p_master_basis.into(),
-            // Expected but unknown five-loop master coefficients are refused in
-            // gammaloop (no gammaloop setting yet: it would change the schemas).
-            allow_unknown_master_coefficients: false,
+            // Expected but unknown five-loop master coefficients: refused unless
+            // VAKINT_ALLOW_UNKNOWN_MASTER_COEFFICIENTS allows them (no gammaloop
+            // setting yet: it would change the settings schemas).
+            allow_unknown_master_coefficients: vakint::allow_unknown_master_coefficients_default(),
             verify_numerator_identification: false,
             run_time_decimal_precision: self.run_time_decimal_precision as u32,
             allow_unknown_integrals: false,

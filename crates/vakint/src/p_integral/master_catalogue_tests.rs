@@ -1082,22 +1082,62 @@ fn unknown_masters_physical_key_file() {
     // Optional: GGPPSS's printed dependences (helper VH 2's dependences.v1.tsv:
     // `master order kind ... combination`, DEPENDENT rows `(a)*Int[i][j] + ..`)
     // and extra relations `id:order=expression;...` (expressions in
-    // UNKNOWN(symbol,k)). Only the UNKNOWN parts are loaded: the known constant
-    // part of a DEPENDENT order is left out, which changes known numbers of the
-    // result, never its UNKNOWN coefficients.
+    // UNKNOWN(symbol,k)). Helper VH 2's notation is translated: zN -> zeta(N),
+    // m35 / m37 / m335 (GGPPSS MZV[3,5] ..., increasing) -> MZV(5,3) / MZV(7,3)
+    // / MZV(5,3,3) (the catalogue's convention), Int[i][j] ->
+    // UNKNOWN(ggppss_int_i,j).
+    let helper_text = |text: &str| {
+        let text = regex::Regex::new(r"Int\[(\d+)\]\[(-?\d+)\]")
+            .unwrap()
+            .replace_all(text, "UNKNOWN(ggppss_int_$1,$2)")
+            .into_owned();
+        let text = regex::Regex::new(r"\bm335\b")
+            .unwrap()
+            .replace_all(&text, "MZV(5,3,3)")
+            .into_owned();
+        let text = regex::Regex::new(r"\bm35\b")
+            .unwrap()
+            .replace_all(&text, "MZV(5,3)")
+            .into_owned();
+        let text = regex::Regex::new(r"\bm37\b")
+            .unwrap()
+            .replace_all(&text, "MZV(7,3)")
+            .into_owned();
+        // Mathematica forms of the dependence file: Zeta[n], MZV[a,b,..]
+        // (GGPPSS increasing indices -> the catalogue's decreasing order).
+        let text = regex::Regex::new(r"\bZeta\[(\d+)\]")
+            .unwrap()
+            .replace_all(&text, "zeta($1)")
+            .into_owned();
+        let text = regex::Regex::new(r"\bMZV\[([\d,\s]+)\]")
+            .unwrap()
+            .replace_all(&text, |c: &regex::Captures| {
+                let mut indices: Vec<&str> = c[1].split(',').map(str::trim).collect();
+                indices.reverse();
+                format!("MZV({})", indices.join(","))
+            })
+            .into_owned();
+        regex::Regex::new(r"\bz(\d+)\b")
+            .unwrap()
+            .replace_all(&text, "zeta($1)")
+            .into_owned()
+    };
     let mut relations: Vec<(String, i64, String)> = Vec::new();
     if let Ok(path) = std::env::var("VAKINT_TEST_UNKNOWN_DEPENDENCES") {
-        let int = regex::Regex::new(r"Int\[(\d+)\]\[(-?\d+)\]").unwrap();
-        for line in std::fs::read_to_string(path).unwrap().lines().skip(1) {
-            let fields: Vec<&str> = line.split('\t').collect();
-            if fields.len() < 6 || fields[2] != "DEPENDENT" {
+        // dependences.v1.json: DEPENDENT orders = known_part + sum symbols.
+        let table: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        for entry in table["dependences"].as_array().unwrap() {
+            if entry["kind"] != json!("DEPENDENT") {
                 continue;
             }
-            let expression = int.replace_all(fields[5], "UNKNOWN(ggppss_int_$1,$2)");
+            let mut expression = format!("({})", entry["known_part"].as_str().unwrap());
+            for (symbol, coefficient) in entry["symbols"].as_object().unwrap() {
+                expression += &format!("+({})*{symbol}", coefficient.as_str().unwrap());
+            }
             relations.push((
-                fields[0].into(),
-                fields[1].parse().unwrap(),
-                expression.into(),
+                entry["master"].as_str().unwrap().into(),
+                entry["order"].as_i64().unwrap(),
+                helper_text(&expression),
             ));
         }
     }
@@ -1105,7 +1145,7 @@ fn unknown_masters_physical_key_file() {
         for item in extra.split(';').filter(|item| !item.is_empty()) {
             let (head, expression) = item.split_once('=').unwrap();
             let (id, order) = head.rsplit_once(':').unwrap();
-            relations.push((id.into(), order.parse().unwrap(), expression.into()));
+            relations.push((id.into(), order.parse().unwrap(), helper_text(expression)));
         }
     }
     // The catalogue admits references to FREE coordinates only: resolve
@@ -1150,7 +1190,15 @@ fn unknown_masters_physical_key_file() {
             (
                 id.clone(),
                 *order,
-                crate::truncation_guard::plain_name(&value),
+                // The printer spells Symbolica's ζ and π as Zeta and Pi; the
+                // catalogue reads zeta and pi.
+                regex::Regex::new(r"\bPi\b")
+                    .unwrap()
+                    .replace_all(
+                        &crate::truncation_guard::plain_name(&value).replace("Zeta(", "zeta("),
+                        "pi",
+                    )
+                    .into_owned(),
             )
         })
         .collect();
@@ -1220,6 +1268,25 @@ fn unknown_masters_physical_key_file() {
         lines += 1;
     }
     eprintln!("unknown_masters_physical_key_file: {lines} reduced terms from {key_file}");
+    // RustRed's reduce-file prints I_M(K) (the terminal rows of the catalogue
+    // likewise carry their (εG(1,1))^L): the G-scheme value of the key is
+    // I_G(K) = (-1)^|K| (εG(1,1))^-L I_M(K) with
+    // εG(1,1) = Γ(1+ε)Γ(1-ε)²/(Γ(1-2ε)(d-3)). VAKINT_TEST_UNKNOWN_LOOPS = L and
+    // VAKINT_TEST_UNKNOWN_SIGN = (-1)^|K| apply it (without them the harness
+    // finalises I_M(K), whose ε-expansion carries exp(-Lγε)).
+    if let Ok(loops) = std::env::var("VAKINT_TEST_UNKNOWN_LOOPS") {
+        let loops: i64 = loops.parse().unwrap();
+        let tag = |m: i64, e: i64| p_gamma_symbol().call(&[Atom::num(m)][..]).pow(Atom::num(e));
+        reduced = reduced
+            * tag(1, -loops)
+            * tag(-1, -2 * loops)
+            * tag(-2, loops)
+            * (Atom::num(1) - Atom::num(2) * eps()).pow(Atom::num(loops));
+    }
+    if let Ok(sign) = std::env::var("VAKINT_TEST_UNKNOWN_SIGN") {
+        reduced = reduced * Atom::num(sign.parse::<i64>().unwrap());
+    }
+    let reduced = reduced.expand();
     let started = std::time::Instant::now();
     let refused = run_allowing(
         &catalogue,
@@ -1258,6 +1325,33 @@ fn unknown_masters_physical_key_file() {
         let coefficient = finite.coefficient(symbol.as_view()).expand();
         eprintln!("eps^0 coefficient of {symbol}: {coefficient}");
         coefficients.insert(crate::truncation_guard::plain_name(symbol), coefficient);
+    }
+    let known_finite = finite
+        .replace(
+            crate::truncation_guard::unknown_coefficient_symbol()
+                .call(
+                    &[
+                        Atom::var(crate::symbols::S.x_),
+                        Atom::var(crate::symbols::S.y_),
+                    ][..],
+                )
+                .to_pattern(),
+        )
+        .with(Atom::Zero.to_pattern())
+        .expand();
+    eprintln!("eps^0 known part: {known_finite}");
+    eprintln!(
+        "eps^0 contains EulerGamma: {}",
+        known_finite.contains_symbol(symbolica::transcendental::euler_gamma())
+    );
+    if let Ok(expect) = std::env::var("VAKINT_TEST_UNKNOWN_EXPECT_FINITE") {
+        let expected = parse_constant(&helper_text(&expect), false).unwrap();
+        assert_eq!(
+            (&known_finite - &expected).expand(),
+            Atom::Zero,
+            "eps^0 known part {known_finite} != {expected}"
+        );
+        eprintln!("eps^0 known part EQUALS the expected value");
     }
     if let Ok(expect) = std::env::var("VAKINT_TEST_UNKNOWN_EXPECT") {
         let mut expected = BTreeMap::new();

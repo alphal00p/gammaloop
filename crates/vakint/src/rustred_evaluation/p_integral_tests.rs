@@ -5634,3 +5634,107 @@ fn equal_inputs_with_cancelling_unknown_master_orders_agree() {
     assert_eq!(alarm.masters.len(), 1);
     assert_eq!(alarm.masters[0].first_missing_order, 8);
 }
+
+/// Lane unknown-masters: a WARM finalised-plan cache of a massive closure
+/// never serves UNKNOWN(master, k) to a refusing setting. The closure's
+/// coefficient carries a version-2 catalogue terminal (`PResidual(T910,1)`,
+/// whose row is `u_m1` of `master_catalogue::tests::fixture_v2`: known
+/// through ε^0, UNKNOWN at ε^1, ε^2, ALARM from ε^3; a `PMaster` of a
+/// catalogue is not admitted in a closure coefficient); per pole power `k` of the coefficient the plan is
+/// filled under allow and queried under refuse on the same cache directory
+/// (typed refusal), and the reverse order (refuse, allow, refuse).
+#[test]
+fn warm_plan_cache_never_serves_unknown_master_coefficients_to_refuse() {
+    use crate::p_integral::PMasterCatalogue;
+    use crate::p_integral::master_catalogue::tests::fixture_v2;
+    let root = std::env::temp_dir().join(format!(
+        "vakint-unknown-masters-plan-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    let mut engine = Vakint::new().unwrap();
+    engine.disable_default_p_master_catalogue();
+    engine.set_p_master_catalogue(
+        PMasterCatalogue::from_json("test catalogue v2", &fixture_v2().to_string()).unwrap(),
+    );
+    let unknown = crate::truncation_guard::unknown_coefficient_symbol();
+    let run = |pole: i64, directory: &str, allow: bool| -> Result<Atom, crate::VakintError> {
+        let header = root.join(format!("header-{pole}.txt"));
+        std::fs::write(
+            &header,
+            format!(
+                "schema pint6.remainder-boundary.v1\nlabel unknown-masters bubble\nepsilon_terms 3\np_loops 1\n\
+                 closure_momentum p(1)\nclosure_mass_squared 1\nrouting 0\nblocks 1\n\
+                 block 0\tsummands=1\tfile=inline\nblock_atom 0\t1\npatterns 1\n\
+                 pattern 0\tclosure_power=2\tterms=1\tref_closure=none\n\
+                 pattern_topology 0\ttopo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,1))\n\
+                 pattern_term 0\t0\tgammalooprs::ε^({})*PResidual(T910,1)\nend\n",
+                -pole
+            ),
+        )
+        .unwrap();
+        let record = crate::p_integral::read_boundary_record(&header).unwrap();
+        let mut s = settings(RustRedMasterMode::Symbolic, None);
+        s.epsilon_symbol = "gammalooprs::ε".into();
+        s.mu_r_sq_symbol = "gammalooprs::μᵣ²".into();
+        s.integral_normalization_factor = crate::LoopNormalizationFactor::MSbar;
+        s.number_of_terms_in_epsilon_expansion = 3;
+        s.run_time_decimal_precision = 40;
+        s.use_dot_product_notation = false;
+        s.n_cores = 1;
+        s.ordered_cache = crate::OrderedCacheSettings::off();
+        s.p_checkpoint_dir = Some(root.join(directory));
+        s.allow_unknown_master_coefficients = allow;
+        let (plans, _) = record.boundary.lower_with_stats(
+            &engine,
+            &s,
+            crate::p_integral::BoundaryOptions { strict: true },
+        )?;
+        let mut value = Atom::Zero;
+        for plan in plans {
+            for result in plan.evaluate_modes(&engine, &[&s])? {
+                value += result;
+            }
+        }
+        Ok(value.expand())
+    };
+    let refused = |result: Result<Atom, crate::VakintError>, what: &str| match result {
+        Err(crate::VakintError::UnknownMasterCoefficients(unknowns)) => {
+            assert!(
+                unknowns.coefficients.iter().all(|u| u.master == "u-m1"),
+                "{what}: {unknowns}"
+            );
+        }
+        other => panic!("{what}: expected the typed refusal, got {other:?}"),
+    };
+    // The smallest coefficient pole that brings an UNKNOWN order (and no
+    // ALARM) into the result.
+    let pole = (0..6)
+        .find(|&pole| {
+            let probe = run(pole, &format!("probe{pole}"), true);
+            eprintln!("probe ε^-{pole}: {probe:?}");
+            probe.is_ok_and(|value| value.contains_symbol(unknown))
+        })
+        .expect("no coefficient pole brings UNKNOWN(u_m1, k) into the closure");
+    eprintln!("warm plan cache test: coefficient ε^-{pole}");
+    // Warm under allow, then refuse on the same cache.
+    let allowed = run(pole, "allow-first", true).unwrap();
+    assert!(allowed.contains_symbol(unknown));
+    let warm = run(pole, "allow-first", true).unwrap();
+    assert_eq!(
+        (&warm - &allowed).expand(),
+        Atom::Zero,
+        "the warm hit must return the stored value"
+    );
+    refused(run(pole, "allow-first", false), "refuse after a warm allow");
+    // The reverse order.
+    refused(run(pole, "refuse-first", false), "refuse on a cold cache");
+    let allowed_second = run(pole, "refuse-first", true).unwrap();
+    assert_eq!((&allowed_second - &allowed).expand(), Atom::Zero);
+    refused(run(pole, "refuse-first", false), "refuse after allow");
+    std::fs::remove_dir_all(&root).ok();
+}

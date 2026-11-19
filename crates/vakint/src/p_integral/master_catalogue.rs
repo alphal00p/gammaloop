@@ -80,6 +80,14 @@
 //!   "terminals": [ ... ] }                   // unchanged; a row may map onto a placeholder
 //! ```
 //!
+//! A placeholder's `leading_order` is required (as for every master; there
+//! is no default): its orders below it are ZERO by declaration, so it must be
+//! a proven lower bound of the terminal's valuation, not an estimate (an ALARM
+//! below it cannot work: those orders enter every result that uses the
+//! terminal). A five-loop massless p-integral has at most one UV and one IR
+//! (soft) pole per loop, ε^-10 in the G-scheme; a dotted corner of T277 was seen
+//! from ε^-7, so -5 is too shallow there.
+//!
 //! `unknown_from` is a version 1 field and refused in version 2. A master known
 //! beyond `unknown_through_default` has no UNKNOWN orders (ALARM right after
 //! its last known order). `UNKNOWN(symbol, k)` is an exact symbol through the

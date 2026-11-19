@@ -112,6 +112,24 @@ pub use truncation_guard::{
     MissingMasterOrder, MissingMasterOrders, UnknownMasterCoefficient, UnknownMasterCoefficients,
 };
 
+/// Environment variable giving the default of
+/// [`VakintSettings::allow_unknown_master_coefficients`]: `1`, `true`, `on`
+/// or `allow` allow expected but unknown master coefficients; unset or anything
+/// else refuses them.
+pub const ALLOW_UNKNOWN_MASTER_COEFFICIENTS_VARIABLE: &str =
+    "VAKINT_ALLOW_UNKNOWN_MASTER_COEFFICIENTS";
+
+/// The default of [`VakintSettings::allow_unknown_master_coefficients`]
+/// (see [`ALLOW_UNKNOWN_MASTER_COEFFICIENTS_VARIABLE`]).
+pub fn allow_unknown_master_coefficients_default() -> bool {
+    std::env::var(ALLOW_UNKNOWN_MASTER_COEFFICIENTS_VARIABLE).is_ok_and(|value| {
+        matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "on" | "allow"
+        )
+    })
+}
+
 use regex::Regex;
 use rug::float::Constant;
 use spenso::{
@@ -2616,6 +2634,10 @@ pub struct VakintSettings {
     /// entered it after the exact expansion. On: the symbols stay in the
     /// result. Orders beyond `unknown_through` (ALARM) are always the error
     /// [`MissingMasterOrders`]. Retain mode never substitutes master values.
+    /// Default: [`allow_unknown_master_coefficients_default`] (off unless the
+    /// environment variable [`ALLOW_UNKNOWN_MASTER_COEFFICIENTS_VARIABLE`] is
+    /// set), so callers that build their settings elsewhere (gammaloop's R*,
+    /// the beta-function driver) can allow them without a code change.
     pub allow_unknown_master_coefficients: bool,
     pub tensor_reduction_method: TensorReductionMethod,
     // This quantity is typically set equal to *one plus the maximum loop count* of the UV regularisation problem considered.
@@ -2964,7 +2986,7 @@ impl Default for VakintSettings {
             rustred_p_relation_cache: PRelationCacheSettings::default(),
             rustred_p_outside: RustRedPOutsideSettings::default(),
             p_master_basis: PMasterBasis::Original,
-            allow_unknown_master_coefficients: false,
+            allow_unknown_master_coefficients: allow_unknown_master_coefficients_default(),
             tensor_reduction_method: TensorReductionMethod::FeynKit,
             // Default to a three-loop UV subtraction problem, for which alphaLoop implementation can be used.
             number_of_terms_in_epsilon_expansion: 4,
