@@ -181,10 +181,9 @@ cloning and loading preserve the same constraint. Only an OS component with a
 massive boundary fermion creates a fixed reference. A massive internal bubble
 inside a massless external-quark self-energy does not create this constraint: its
 subtraction point is still zero and its two projectors sum to the identity.
-Combined state manifest version 22 records this layout on top of the fully
-indexed version-21 interfaces. Both the older indexed-only version 21 and the
-earlier partial-interface OS version 21 require regeneration; no positional
-compatibility decoder is provided.
+State manifest version 23 records the generated frame in the ordered CFF/LTD
+representation layout. Both predecessors used version 22 with incompatible
+positional layouts. Regenerate earlier full states from their source recipes.
 
 $U_1$ is the existing ordinary degree-one UV operation, including its auxiliary
 vacuum mass prescription. First complete both on-shell branches, including the
@@ -1070,7 +1069,10 @@ bodies retain their factorization. Exact native component identities and an
 independent numeric tensor contraction check this extraction separately from
 the three physics routes. Compiling an evaluator and contracting a tensor at a
 fixed point have different costs, so their construction and evaluation times
-are recorded separately.
+are recorded separately. The few-point quark-in-gluon reference binds the
+kinematic chart to each retained numerator before resolving its calls into
+the numerical tensor network. A factored matrix control checks all components
+against resolution before binding at two external momenta.
 
 === Retained private oracle and isolated native references
 
@@ -1566,8 +1568,8 @@ the temporal-trace results retain their original revision only.
 
 The historical combined state manifest version 19 joined that repaired
 FeynKit layout with generated fixed OS frame metadata; both earlier
-version-18 layouts required regeneration. The current Indexed OS port
-uses version 22 as documented above, with the same strict regeneration policy.
+version-18 layouts required regeneration. The later Indexed OS port used version 22. The current layout and its
+regeneration policy are documented above.
 The earlier rebase used owned copies when changing borrowed CFF generation
 options and propagated errors from the now-fallible parameter builder in the
 kernel-jet reference test. Its boosted soft-control test retained zero
@@ -3082,6 +3084,16 @@ row is literally one and its complete G-free coefficient of $G^4$ is exactly
 zero; all other graph factors remain opaque. Exact row recomposition binds
 this proof to the original input. No graph numerator or Phi polynomial is
 materialized, and no common CFF denominator is cleared.
+
+On FeynKit base `27ba0987`, run `66c273eb-b27b-4f42-8909-f09723bb5f1a`
+covers the same 49 bare and 287 completed rows. The completed input has 175
+literal zeros. Five direct groups and seven invariant groups cover 72 rows.
+Four of the invariant groups retain conjugate transverse Weyl components.
+Collecting their Cartesian coefficients proves that every nonconstant
+component cancels. For a group control with exact coupling rows $1+G^4 c$,
+the original control minus one at $G=1$ equals the complete coefficient $c$.
+The last 40 rows form two disjoint triples, each with its original 405-node
+Laurent grid and an independent unit-shift check at every node.
 
 The separate observation child `28bdf6aa` passes the same mass case in
 121.351 seconds. Before any physical diagnostic normalization it retains

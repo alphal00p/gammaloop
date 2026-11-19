@@ -642,12 +642,15 @@ impl Graph {
         let needs_bounds = ltd_source
             .as_ref()
             .is_none_or(|(parsed, _)| !three_dimensional_reps::repeated_groups(parsed).is_empty());
+        // This report lives in the physical parent's namespace. Canonical
+        // classes are expanded only for degree reporting, never for dispatch.
+        // Preserve remote classes through analysis: replacing them by zero or
+        // one can cancel a spectator factor and erase an active owner's rank.
+        // Their reference degrees are discarded only after structural analysis.
         let degree_analysis_started = Instant::now();
         let (prepared_numerator, fixed_affine_blocks) =
             source.prepare_affine_numerator(analysis_numerator)?;
         let analysis_numerator = &prepared_numerator;
-        // CFF capacities and raised-LTD sampling bounds share the existing
-        // analysis. Ordinary LTD evaluates the full physical affine numerator.
         let physical_energy_degree_bounds = if needs_bounds {
             let physical_report_numerator = analysis_numerator.replace_map(|view, _, output| {
                 if let AtomView::Fun(denominator) = view
@@ -668,28 +671,45 @@ impl Graph {
                     let Some(id) = GS.uv_class_data(momentum.get(0)) else {
                         return;
                     };
-                    **output =
-                        classes
-                            .iter()
-                            .find(|class| class.id == id)
-                            .map_or(Atom::Zero, |class| {
-                                class.momentum_with_indices(
-                                    &momentum
-                                        .iter()
-                                        .skip(1)
-                                        .map(|index| index.to_owned())
-                                        .collect::<Vec<_>>(),
-                                )
-                            });
+                    **output = classes.iter().find(|class| class.id == id).map_or_else(
+                        || view.to_owned(),
+                        |class| {
+                            class.momentum_with_indices(
+                                &momentum
+                                    .iter()
+                                    .skip(1)
+                                    .map(|index| index.to_owned())
+                                    .collect::<Vec<_>>(),
+                            )
+                        },
+                    );
                 });
-            self.automatic_numerator_energy_degree_bounds_in_atoms_excluding_with_min_degree(
-                [&physical_report_numerator],
-                excluded_numerator_edges.iter().copied(),
-                1,
-            )
-            .map_err(|error| {
-                eyre::eyre!("could not analyze numerator in physical EMR energy variables: {error}")
-            })?
+            let active_physical_edges =
+                self.underlying
+                    .iter_edges()
+                    .filter_map(|(pair, edge, data)| {
+                        (pair.is_paired()
+                            && !data.data.is_dummy
+                            && !excluded_numerator_edges.contains(&edge))
+                        .then_some(edge)
+                    });
+            let reference_degrees =
+                EnergyPowerAnalyzer::for_physical_emr_edges(active_physical_edges)
+                    .analyze_reference_atom(&physical_report_numerator)
+                    .map_err(|error| {
+                        eyre::eyre!(
+                            "could not analyze numerator in physical EMR energy variables: {error}"
+                        )
+                    })?;
+            reference_degrees
+                .iter()
+                .filter_map(|(reference, degree)| match reference {
+                    EnergyReference::Physical(edge) if degree > 0 => {
+                        Some((usize::from(edge), degree))
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
         } else {
             Vec::new()
         };
@@ -2270,6 +2290,84 @@ mod tests {
                 .energy_degree_bounds()
                 .is_empty()
         );
+        Ok(())
+    }
+
+    #[test]
+    fn exact_physical_owner_rank_survives_a_foreign_class_factor() -> Result<()> {
+        use crate::utils::symbols::{UvDenominatorClassId, UvMomentumProvenanceRole};
+        test_initialise()?;
+        let graph: Graph = finalized_runtime_dot!(digraph physical_owner_with_foreign_classes {
+            graph [projector="1"]
+            edge [num=1 mass=1]
+            node [num=1]
+            a -> b [source="{ufo_order:0}" sink="{ufo_order:0}" id=0 lmb_id=0]
+            b -> a [source="{ufo_order:1}" sink="{ufo_order:1}" id=1]
+        })?;
+        let owners = [EdgeIndex(0), EdgeIndex(1)];
+        let denominators = owners.map(|source_edge| {
+            let momentum = FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(source_edge))
+                .finish();
+            let full_expr = (0..=3).fold(-Atom::one(), |sum, index| {
+                sum + Atom::num(if index == 0 { 1 } else { -1 })
+                    * GS.emr_mom(source_edge, GS.cind(index)).pow(2)
+            });
+            FourDDenominator {
+                source_edge,
+                momentum,
+                mass_squared: Atom::one(),
+                full_expr,
+            }
+        });
+        let source = GraphThreeDSource::from_exact_denominators_in_uv_sub_lmb(
+            &graph,
+            &denominators,
+            owners,
+            [],
+            &graph.loop_momentum_basis,
+            ExactUvSubLmbFrame::TaylorVacuum,
+        )?;
+        let fixed = symbolica::function!(
+            GS.emr_mom,
+            GS.uv_momentum_provenance_tag(
+                0,
+                UvMomentumProvenanceRole::PhysicalSourceFixed,
+                symbolica::function!(GS.emr_mom, 0)
+            ),
+            GS.cind(0)
+        );
+        let foreign = |class| {
+            symbolica::function!(
+                GS.emr_mom,
+                GS.uv_class_ref(UvDenominatorClassId(class)),
+                GS.cind(0)
+            )
+        };
+        // Neither zero nor one is a valid replacement for a remote factor:
+        // both would annihilate this independent difference of future classes.
+        let spectator = foreign(77) - foreign(78);
+        let numerator = (fixed + Atom::one()) * &spectator;
+        let preparation = graph.prepare_3d_expression_for_4d_term(
+            &source,
+            &graph.denominator_only_cff_3d_expression_options(),
+            &numerator,
+            &[],
+        )?;
+        assert_eq!(preparation.physical_energy_degree_bounds, vec![(0, 1)]);
+        for plan in &preparation.energy_assignment_plans {
+            preparation
+                .exact_source_energy_mapper
+                .certify_assignment(plan)?;
+            preparation
+                .exact_source_energy_mapper
+                .prepare_numerator(plan)?;
+            let unchanged = plan.map_factors(|factor, _| Ok::<_, eyre::Report>(factor.clone()))?;
+            assert_eq!(
+                unchanged, numerator,
+                "degree reporting must not rewrite the factorized production numerator"
+            );
+        }
         Ok(())
     }
 

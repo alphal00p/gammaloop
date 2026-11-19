@@ -96,7 +96,11 @@ impl Graph {
                 let started = Instant::now();
                 let integrands = integrands
                     .into_iter()
-                    .map(|integrands| integrands.map_expressions(|atom| Ok(marker.finish(atom))))
+                    .map(|mut integrands| {
+                        integrands.fixed_on_shell_spatial_velocity =
+                            fixed_on_shell_spatial_velocity.clone();
+                        integrands.map_expressions(|atom| Ok(marker.finish(atom)))
+                    })
                     .collect::<Result<_>>()?;
                 stats.representation_mut(representation).total_time += started.elapsed();
                 Ok((representation, integrands))

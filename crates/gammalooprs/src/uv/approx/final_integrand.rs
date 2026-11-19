@@ -36,6 +36,14 @@ use symbolica::{
     symbol,
 };
 use three_dimensional_reps::{CffGenerationContext, RepresentationMode};
+#[cfg(test)]
+#[path = "projected_assembly_certificate.rs"]
+pub(super) mod projected_assembly_certificate;
+#[cfg(test)]
+use projected_assembly_certificate::{
+    ProjectedAssemblyCertificate, ProjectedAssemblyEmission, ProjectedAssemblySkip,
+    ProjectedAssemblySource, ProjectedLocalAssembly,
+};
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct FinalIntegrands {
     integrands: Integrands,

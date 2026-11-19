@@ -15,11 +15,13 @@ use crate::{
     },
 };
 use color_eyre::eyre::ensure;
+use idenso::tensor::{SymbolicNetExt, SymbolicNetParse};
 use idenso::{
     color::{CS, ColorSimplifySettings},
     dirac::GammaSimplifySettings,
     representations::Bispinor,
 };
+use spenso::network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing};
 use spenso::network::{library::symbolic::ETS, tags::SPENSO_TAG};
 use spenso::structure::{
     TensorStructure,
@@ -166,6 +168,8 @@ fn native_parent_scalar_certificate_accepts_ranked_zero() -> Result<()> {
 #[test]
 fn native_parent_external_frame_retains_homogeneous_lorentz_dimensions() -> Result<()> {
     use color_eyre::eyre::ensure;
+    use idenso::tensor::{SymbolicNetExt, SymbolicNetParse};
+    use spenso::network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing};
 
     test_initialise()?;
     let [left, right] = ["left", "right"]
@@ -268,6 +272,31 @@ fn native_d09_laurent_grid_preserves_factors_and_rejects_unsupported_domains() -
 }
 
 impl QcdMassReference {
+    /// Expose compact vector arguments, retaining chains, traces and scalar products.
+    fn explicit_momenta(
+        tensor: &SymbolicTensor<IndexedStructure>,
+    ) -> Result<SymbolicTensor<IndexedStructure>> {
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let explicit = cooking
+            .uncook(tensor.expression().as_view())
+            .parse_to_symbolic_net::<Aind>(&ParseSettings {
+                shorthand_parsing: ShorthandParsing::Expand {
+                    schoonschip: SchoonschipExpansionMode {
+                        inner_products: false,
+                        expand_inside_chains: true,
+                        expand_schoonship: true,
+                    },
+                    trace: false,
+                    chain: false,
+                },
+                ..Default::default()
+            })?
+            .simple_execute::<()>()?;
+        Ok(tensor.with_checked_expression(cooking.try_cook(explicit.as_view())?)?)
+    }
+
     /// Exact d-dimensional comparison retaining every original pole descriptor.
     pub(in crate::uv) fn certify_vacuum_rational_identity(
         label: &str,
@@ -604,7 +633,14 @@ impl QcdMassReference {
             unchanged_momentum_leaves = momenta.len(), temporal_transposes,
             "Reversible external frame, native temporal symmetry and Gram relations retain the input dimension"
         );
-        Ok(completed_tensor.with_checked_expression(cooking.try_cook(constrained.as_view())?)?)
+        let constrained =
+            completed_tensor.with_checked_expression(cooking.try_cook(constrained.as_view())?)?;
+        // A compact slash may contain a scalar multiple of the temporal vector.
+        // Expose that linear slot before reducing the Clifford word and its Gram factors.
+        let explicit = Self::explicit_momenta(&constrained)?;
+        let reduced = explicit.simplify_algebra(&algebra)?.to_dots()?;
+        let physical = kinematics.apply(&cooking.uncook(reduced.expression().as_view()));
+        Ok(reduced.with_checked_expression(cooking.try_cook(physical.as_view())?)?)
     }
 
     /// Prove a factorized D09 chart identity by a full exact unisolvent grid.
@@ -2377,34 +2413,7 @@ impl QcdMassReference {
                         "D09 emitted Phi changed a frozen localization kernel"
                     );
                 }
-                let cooking = CookSettings::indices()
-                    .with_mode(CookMode::ReversibleEncoding)
-                    .with_representation_payloads(true, true);
-                let explicit_momenta = |tensor: &SymbolicTensor<IndexedStructure>| -> Result<_> {
-                    use idenso::tensor::{SymbolicNetExt, SymbolicNetParse};
-                    use spenso::network::parsing::{
-                        ParseSettings, SchoonschipExpansionMode, ShorthandParsing,
-                    };
-                    // Proper Schoonschip vector slots are materialized through
-                    // their existing owner on one complete factorized matrix.
-                    let explicit = cooking
-                        .uncook(tensor.expression().as_view())
-                        .parse_to_symbolic_net::<Aind>(&ParseSettings {
-                            shorthand_parsing: ShorthandParsing::Expand {
-                                schoonschip: SchoonschipExpansionMode {
-                                    inner_products: false,
-                                    expand_inside_chains: true,
-                                    expand_schoonship: true,
-                                },
-                                trace: false,
-                                chain: false,
-                            },
-                            ..Default::default()
-                        })?
-                        .simple_execute::<()>()?;
-                    Ok(tensor.with_checked_expression(cooking.try_cook(explicit.as_view())?)?)
-                };
-                let probe = explicit_momenta(&normalize(&mass_control)?)?;
+                let probe = Self::explicit_momenta(&normalize(&mass_control)?)?;
                 let probe = probe.with_checked_expression(emitted_point(probe.expression())?)?;
                 let probe_projection = projector.clone().multiply(probe.clone())?;
                 Self::certify_parent_tensor_zero(
@@ -2604,7 +2613,7 @@ impl QcdMassReference {
                             // Native multiplication connects written spin/color
                             // endpoints. It does not multiply scalar traces of
                             // the separate partial F/G families.
-                            let complete = explicit_momenta(&normalize(&complete)?)?;
+                            let complete = Self::explicit_momenta(&normalize(&complete)?)?;
                             let complete = complete
                                 .with_checked_expression(emitted_point(complete.expression())?)?;
                             let projected_raw = projector.clone().multiply(complete.clone())?;
@@ -3046,14 +3055,35 @@ impl QcdMassReference {
                         );
                         Ok(view)
                     };
+                    let component_keys = k.iter().chain(&l).cloned().collect::<Vec<_>>();
                     let compact_chart = |atom: &Atom| -> Result<Atom> {
                         let mut current = atom.clone();
                         for _ in 0..8 {
                             let next = current
                                 .replace_map_bottom_up(|part, context, output| {
-                                    if context.function_level == 0
-                                        && matches!(part, AtomView::Add(_) | AtomView::Mul(_))
+                                    if context.function_level != 0 {
+                                        return;
+                                    }
+                                    // Cartesian Weyl components can cancel within an affine
+                                    // chart sum, e.g. (x+i*y)*(x-i*y)-x^2-y^2. Keep its
+                                    // invariant factors opaque. Replace the sum only when
+                                    // every nonconstant component coefficient is exactly zero.
+                                    if matches!(part, AtomView::Add(_))
+                                        && part.contains_symbol(GS.emr_mom)
+                                        && let Some(rows) =
+                                            part.coefficient_list_exact(&component_keys)
+                                        && rows.iter().all(|(monomial, coefficient)| {
+                                            monomial.is_one()
+                                                || coefficient.collect_compact_factors().is_zero()
+                                        })
                                     {
+                                        **output = rows
+                                            .into_iter()
+                                            .find(|(monomial, _)| monomial.is_one())
+                                            .map_or_else(Atom::zero, |(_, coefficient)| {
+                                                coefficient.collect_compact_factors()
+                                            });
+                                    } else if matches!(part, AtomView::Add(_) | AtomView::Mul(_)) {
                                         **output = part.collect_compact_factors();
                                     }
                                 })
@@ -3148,12 +3178,31 @@ impl QcdMassReference {
                                             *monomial == coupling.pow(4),
                                             "D09 original+1 has an unsupported coupling degree"
                                         );
-                                        eyre::ensure!(
+                                        let mut zero =
                                             coefficient.collect_compact_factors().is_zero()
                                                 || (invariant
                                                     && compact_chart(&chart_view(coefficient)?)?
-                                                        .is_zero()),
-                                            "D09 original+1 retains a nonzero complete coupling coefficient"
+                                                        .is_zero());
+                                        if !zero && invariant {
+                                            // Exact recomposition above binds the original control to
+                                            // 1 + G^4*c with G absent from c. Evaluating control-1 at
+                                            // G=1 gives all of c, while retaining the input's grouping.
+                                            eyre::ensure!(
+                                                rows.len() == 2
+                                                    && rows.iter().any(|(key, value)| key.is_one()
+                                                        && value.is_one()),
+                                                "D09 unit-coupling extraction requires the original unit constant"
+                                            );
+                                            let residual = (&original_control - Atom::one())
+                                                .collect_compact_factors();
+                                            let unit = chart_view(&residual)?
+                                                .replace(coupling.to_pattern())
+                                                .with(1);
+                                            zero = compact_chart(&unit)?.is_zero();
+                                        }
+                                        eyre::ensure!(
+                                            zero,
+                                            "D09 original+1 retains a nonzero complete coupling coefficient for {members:?}"
                                         );
                                     }
                                     debug_tags!(#uv, #local, #four_d, #cff, #inspect;

@@ -44,6 +44,7 @@ use spenso::algebra::algebraic_traits::IsZero;
 use spenso::algebra::complex::Complex;
 use std::sync::Once;
 use std::time::{Duration, Instant};
+use symbolica::atom::Atom;
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
 use tracing::{debug, warn};
 use typed_index_collections::TiVec;
@@ -64,6 +65,7 @@ use crate::{
     settings::runtime::IntegratorSettings,
     settings::runtime::ParameterizationSettings,
     settings::runtime::Precision,
+    settings::runtime::RotationSetting,
     settings::runtime::StabilityLevelSetting,
     settings::runtime::StabilitySettings,
     settings::runtime::{IntegratedPhase, SamplingChannelWeight, SamplingSettings},
@@ -3542,6 +3544,7 @@ pub(crate) fn validate_process_runtime_settings(
     settings: &RuntimeSettings,
     explicit_orientation_sum_only: bool,
     generated_representations: &[RepresentationMode],
+    fixed_on_shell_spatial_velocities: &[&[String; 3]],
 ) -> Result<()> {
     if generated_representations.is_empty() {
         return Err(eyre!("integrand has no generated 3D representations"));
@@ -3550,6 +3553,56 @@ pub(crate) fn validate_process_runtime_settings(
         return Err(eyre!(
             "`runtime.stability.levels` must contain at least one stability level"
         ));
+    }
+    for rotation in &settings.stability.rotation_axis {
+        rotation.validate()?;
+    }
+    for velocity in fixed_on_shell_spatial_velocities {
+        let velocity = velocity
+            .iter()
+            .map(|component| {
+                Atom::parse(component, "gammalooprs::uv", Default::default())
+                    .map_err(|error| eyre!(error))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        // Axis alignment is an exact statement about the generated reference,
+        // not a floating-point angular tolerance. Settings f64 values are
+        // converted to their exact binary rationals for this certificate.
+        let aligned_with_coordinate_axis = |axis: usize| {
+            velocity
+                .iter()
+                .enumerate()
+                .all(|(index, value)| index == axis || value.is_zero())
+        };
+        for (index, rotation) in settings.stability.rotation_axis.iter().enumerate() {
+            let preserves_reference = match rotation {
+                RotationSetting::None {} => true,
+                RotationSetting::Pi2X {} => aligned_with_coordinate_axis(0),
+                RotationSetting::Pi2Y {} => aligned_with_coordinate_axis(1),
+                RotationSetting::Pi2Z {} => aligned_with_coordinate_axis(2),
+                RotationSetting::EulerAngles { alpha, beta, gamma } => [*alpha, *beta, *gamma]
+                    .into_iter()
+                    .enumerate()
+                    .all(|(axis, angle)| angle == 0.0 || aligned_with_coordinate_axis(axis)),
+                RotationSetting::AxisAngle { axis, cos_theta } => {
+                    let axis = axis.map(|component| {
+                        let exact = rug::Rational::from_f64(component)
+                            .expect("validated finite rotation axis");
+                        Atom::num(symbolica::domains::rational::Rational::from(exact))
+                    });
+                    *cos_theta == 1.0
+                        || (0..3).all(|i| {
+                            let j = (i + 1) % 3;
+                            (&axis[i] * &velocity[j] - &axis[j] * &velocity[i]).is_zero()
+                        })
+                }
+            };
+            if !preserves_reference {
+                return Err(eyre!(
+                    "runtime.stability.rotation_axis[{index}] changes the generated fixed on-shell subtraction velocity {velocity:?}; use an axis_angle rotation about its spatial direction, or regenerate with a compatible fixed point"
+                ));
+            }
+        }
     }
     if let Some(parameterization) = settings.sampling.get_parameterization_settings() {
         let alpha = parameterization.sampling_channels.alpha;
@@ -8067,6 +8120,7 @@ pub(crate) mod tests {
                         &settings,
                         explicit,
                         &[RepresentationMode::Cff],
+                        &[],
                     )
                     .unwrap_err();
                     assert!(
@@ -8082,17 +8136,23 @@ pub(crate) mod tests {
         for invalid in [0.0, -1.0, f64::NAN, f64::INFINITY] {
             settings.kinematics.e_cm = invalid;
             assert!(
-                validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff])
-                    .unwrap_err()
-                    .to_string()
-                    .contains("kinematics.e_cm")
+                validate_process_runtime_settings(
+                    &settings,
+                    false,
+                    &[RepresentationMode::Cff],
+                    &[]
+                )
+                .unwrap_err()
+                .to_string()
+                .contains("kinematics.e_cm")
             );
         }
         settings.kinematics.e_cm = 600.0;
         // The physical dimension is admitted at its target boundary; generic
         // warmup also serves reference functions with their known dimensions.
         assert!(settings.stability.integrated_energy_dimension.is_none());
-        validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff]).unwrap();
+        validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff], &[])
+            .unwrap();
     }
 
     #[test]
@@ -8582,30 +8642,33 @@ pub(crate) mod tests {
     fn explicit_orientation_sum_rejects_runtime_filters_and_unavailable_representations() {
         let mut settings = RuntimeSettings::default();
         settings.general.orientation_pat = OrientationPattern::from_user_pattern("(+)").unwrap();
-        let error = validate_process_runtime_settings(&settings, true, &[RepresentationMode::Cff])
-            .unwrap_err();
+        let error =
+            validate_process_runtime_settings(&settings, true, &[RepresentationMode::Cff], &[])
+                .unwrap_err();
         assert!(error.to_string().contains("orientation_pat` must be unset"));
 
-        validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff]).unwrap();
+        validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff], &[])
+            .unwrap();
 
         settings.general.orientation_pat = OrientationPattern::default();
         settings.stability.levels[0].three_dimensional_representation =
             Some(RepresentationMode::Ltd);
-        let error = validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff])
-            .unwrap_err();
+        let error =
+            validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff], &[])
+                .unwrap_err();
         assert!(format!("{error:#}").contains("was not generated"));
 
         settings.stability.levels[0].three_dimensional_representation = None;
         settings.general.orientation_pat = OrientationPattern::from_user_pattern("(+)").unwrap();
         let generated = [RepresentationMode::Ltd, RepresentationMode::Cff];
-        assert!(validate_process_runtime_settings(&settings, false, &generated).is_err());
+        assert!(validate_process_runtime_settings(&settings, false, &generated, &[]).is_err());
         settings.general.orientation_pat = OrientationPattern::default();
         settings.sampling = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
             sample_orientations: true,
             ..Default::default()
         });
         assert!(
-            validate_process_runtime_settings(&settings, false, &generated)
+            validate_process_runtime_settings(&settings, false, &generated, &[])
                 .unwrap_err()
                 .to_string()
                 .contains("individual-orientation")
@@ -8616,8 +8679,9 @@ pub(crate) mod tests {
     fn runtime_requires_at_least_one_stability_level() {
         let mut settings = RuntimeSettings::default();
         settings.stability.levels.clear();
-        let error = validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff])
-            .unwrap_err();
+        let error =
+            validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff], &[])
+                .unwrap_err();
         assert!(error.to_string().contains("runtime.stability.levels"));
     }
 
@@ -8632,7 +8696,13 @@ pub(crate) mod tests {
                 axis,
                 cos_theta: 0.0,
             }];
-            validate_process_runtime_settings(&settings, false, &[&nonaxial]).unwrap();
+            validate_process_runtime_settings(
+                &settings,
+                false,
+                &[RepresentationMode::Cff],
+                &[&nonaxial],
+            )
+            .unwrap();
         }
         for rotation in [
             RotationSetting::Pi2X {},
@@ -8649,9 +8719,15 @@ pub(crate) mod tests {
             },
         ] {
             settings.stability.rotation_axis = vec![rotation];
-            validate_process_runtime_settings(&settings, false, &[]).unwrap();
-            let error =
-                validate_process_runtime_settings(&settings, false, &[&nonaxial]).unwrap_err();
+            validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff], &[])
+                .unwrap();
+            let error = validate_process_runtime_settings(
+                &settings,
+                false,
+                &[RepresentationMode::Cff],
+                &[&nonaxial],
+            )
+            .unwrap_err();
             assert!(
                 error
                     .to_string()
@@ -8667,8 +8743,17 @@ pub(crate) mod tests {
                 gamma: 0.3,
             },
         ];
-        validate_process_runtime_settings(&settings, false, &[&axial]).unwrap();
-        assert!(validate_process_runtime_settings(&settings, false, &[&axial, &nonaxial]).is_err());
+        validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff], &[&axial])
+            .unwrap();
+        assert!(
+            validate_process_runtime_settings(
+                &settings,
+                false,
+                &[RepresentationMode::Cff],
+                &[&axial, &nonaxial]
+            )
+            .is_err()
+        );
         settings.stability.rotation_axis = vec![
             RotationSetting::None {},
             RotationSetting::AxisAngle {
@@ -8676,13 +8761,20 @@ pub(crate) mod tests {
                 cos_theta: 1.0,
             },
         ];
-        validate_process_runtime_settings(&settings, false, &[&axial, &nonaxial]).unwrap();
+        validate_process_runtime_settings(
+            &settings,
+            false,
+            &[RepresentationMode::Cff],
+            &[&axial, &nonaxial],
+        )
+        .unwrap();
     }
 
     #[test]
     fn numerator_sampling_scale_requires_nonzero_runtime_value() {
         let mut settings = RuntimeSettings::default();
-        validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff]).unwrap();
+        validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff], &[])
+            .unwrap();
 
         for scale in [0.0, -0.0] {
             settings.general.numerator_sampling_scale = scale;
@@ -8691,6 +8783,7 @@ pub(crate) mod tests {
                     &settings,
                     explicit_orientation_sum_only,
                     &[RepresentationMode::Cff],
+                    &[],
                 )
                 .unwrap_err();
                 assert!(error.to_string().contains("sampling scale M"));
@@ -8698,7 +8791,8 @@ pub(crate) mod tests {
         }
 
         settings.general.numerator_sampling_scale = -2.0;
-        validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff]).unwrap();
+        validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff], &[])
+            .unwrap();
     }
 
     #[test]

@@ -496,6 +496,12 @@ impl AmplitudeIntegrand {
             &self.settings,
             self.data.explicit_orientation_sum_only,
             &self.data.three_d_representations,
+            &self
+                .data
+                .graph_terms
+                .iter()
+                .filter_map(|term| term.fixed_on_shell_spatial_velocity.as_ref())
+                .collect::<Vec<_>>(),
         )?;
         let mut symbolica_state = Vec::new();
         State::export(&mut symbolica_state)

@@ -102,8 +102,15 @@ impl Integrands {
     pub fn expressions(&self) -> impl Iterator<Item = &Atom> {
         self.atoms
             .values()
-            .chain(self.numerators.iter().map(|entry| entry.rhs.expression()))
-            .chain(self.scalars.iter().map(|entry| &entry.rhs))
+            .chain(self.definitions().map(|(_, body)| body))
+    }
+
+    /// Iterate over stored calls and bodies without substituting them into roots.
+    pub fn definitions(&self) -> impl Iterator<Item = (&Atom, &Atom)> {
+        self.numerators
+            .iter()
+            .map(|entry| (&entry.lhs, entry.rhs.expression()))
+            .chain(self.scalars.iter().map(|entry| (&entry.lhs, &entry.rhs)))
     }
 
     pub(crate) fn numerators(&self) -> &[Arc<NumeratorDefinition>] {

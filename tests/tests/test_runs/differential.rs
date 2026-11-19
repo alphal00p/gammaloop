@@ -338,7 +338,7 @@ fn lu_differential_json_observables_resume_from_workspace() -> Result<()> {
     };
     let fingerprint_before_save = integrand_fingerprint(&cli.state)?;
 
-    // Resume the completed workspace through a real format-22 full-state round
+    // Resume the completed workspace through a real format-23 full-state round
     // trip, preserving the existing event/statistics and checkpoint assertions.
     cli.state
         .save(&cli.cli_settings.state.folder, true, false)?;
@@ -346,7 +346,7 @@ fn lu_differential_json_observables_resume_from_workspace() -> Result<()> {
     let manifest: TomlValue = toml::from_str(&fs::read_to_string(
         cli.cli_settings.state.folder.join("state_manifest.toml"),
     )?)?;
-    assert_eq!(manifest["version"].as_integer(), Some(22));
+    assert_eq!(manifest["version"].as_integer(), Some(23));
     cli.state = State::load(cli.cli_settings.state.folder.clone(), None, None)?;
     assert_eq!(integrand_fingerprint(&cli.state)?, fingerprint_before_save);
     cli.state.activate_loaded_integrand_backends(false)?;

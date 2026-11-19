@@ -3502,8 +3502,261 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::graph::parse::NumeratorInterface;
     use crate::utils;
     use crate::uv::approx::integrated::Integrated;
+
+    #[test]
+    fn boosted_projector_is_left_multiplication_in_explicit_weyl_components() -> Result<()> {
+        use crate::uv::approx::local_4d::on_shell_tests::{fixture, scalar_component};
+        test_initialise()?;
+        let (graph, current, _) = fixture(false)?;
+        let [incoming, outgoing] = [0, 1].map(|hedge| {
+            graph.underlying[Hedge(hedge)]
+                .edge_spin_slots()
+                .next()
+                .unwrap()
+                .to_atom()
+        });
+        // The single matrix unit E_(0,2) isolates one column of the left
+        // projector. This is a port-order oracle, not a physical UV numerator.
+        let matrix_unit = function!(GS.delta_vec, GS.cind(0), &outgoing)
+            * function!(GS.delta_vec, GS.cind(2), &incoming);
+        let matrix_unit = NumeratorInterface::admit(matrix_unit, None)?.try_into_indexed()?;
+        let velocity = [
+            Atom::num((5, 4)),
+            Atom::num((1, 4)),
+            Atom::num((1, 2)),
+            Atom::num((1, 2)),
+        ];
+        let branches = graph.on_shell_branches(
+            &graph.model,
+            &matrix_unit,
+            current.subgraph(),
+            current.lmb(),
+            &velocity,
+        )?;
+        for (sign, branch) in [1, -1].into_iter().zip(branches) {
+            let branch = NumeratorInterface::export(&branch).0;
+            // Independent Weyl matrices give the first column of
+            // (1 + sign*(v0 gamma0 - vi gamma^i))/2 explicitly.
+            let first_column = [
+                Atom::num((1, 2)),
+                Atom::Zero,
+                Atom::num(sign) * (&velocity[0] + &velocity[3]) / Atom::num(2),
+                Atom::num(sign) * (&velocity[1] + Atom::i() * &velocity[2]) / Atom::num(2),
+            ];
+            for (row, expected) in first_column.iter().enumerate() {
+                for column in 0..4 {
+                    // Keep gamma slots abstract until tensor execution. A
+                    // concrete slot substitution would leave an opaque scalar
+                    // gamma call instead of looking up its matrix entries.
+                    let component = &branch
+                        * function!(GS.delta_vec, GS.cind(row), &outgoing)
+                        * function!(GS.delta_vec, GS.cind(column), &incoming);
+                    let actual = scalar_component(&component.replace(GS.dim).with(4))?;
+                    assert_eq!(
+                        actual,
+                        if column == 2 {
+                            expected.clone()
+                        } else {
+                            Atom::Zero
+                        },
+                        "branch={sign}, row={row}, column={column}"
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn boosted_projectors_obey_exact_weyl_projector_algebra() -> Result<()> {
+        use crate::uv::approx::local_4d::on_shell_tests::{fixture, scalar_component};
+        test_initialise()?;
+        let (graph, current, _) = fixture(false)?;
+        let [incoming, outgoing] = [0, 1].map(|hedge| {
+            graph.underlying[Hedge(hedge)]
+                .edge_spin_slots()
+                .next()
+                .unwrap()
+                .to_atom()
+        });
+        let identity = function!(
+            spenso::network::library::symbolic::ETS.metric,
+            &outgoing,
+            &incoming
+        );
+        let matrix_unit = function!(GS.delta_vec, GS.cind(0), &outgoing)
+            * function!(GS.delta_vec, GS.cind(2), &incoming);
+        let matrix_unit = NumeratorInterface::admit(matrix_unit, None)?.try_into_indexed()?;
+        let identity = NumeratorInterface::admit(identity, None)?.try_into_indexed()?;
+        let component = |matrix: &SymbolicTensor<IndexedStructure>, row: usize, column: usize| {
+            let matrix = NumeratorInterface::export(matrix).0;
+            scalar_component(
+                &(matrix
+                    * function!(GS.delta_vec, GS.cind(row), &outgoing)
+                    * function!(GS.delta_vec, GS.cind(column), &incoming))
+                .replace(GS.dim)
+                .with(4),
+            )
+        };
+        for velocity in [
+            [Atom::one(), Atom::Zero, Atom::Zero, Atom::Zero],
+            [Atom::num((5, 4)), Atom::num((3, 4)), Atom::Zero, Atom::Zero],
+            [
+                Atom::num((5, 4)),
+                Atom::num((1, 4)),
+                Atom::num((1, 2)),
+                Atom::num((1, 2)),
+            ],
+        ] {
+            let [v0, v1, v2, v3] = &velocity;
+            // Independent Weyl blocks: slash(v) = [[0, v0*1-sigma.v],
+            // [v0*1+sigma.v, 0]]. No gamma construction or simplifier supplies
+            // these entries, including the imaginary sigma2 components.
+            let slash = [
+                [Atom::Zero, Atom::Zero, v0 - v3, -v1 + Atom::i() * v2],
+                [Atom::Zero, Atom::Zero, -v1 - Atom::i() * v2, v0 + v3],
+                [v0 + v3, v1 - Atom::i() * v2, Atom::Zero, Atom::Zero],
+                [v1 + Atom::i() * v2, v0 - v3, Atom::Zero, Atom::Zero],
+            ];
+            let branches = graph.on_shell_branches(
+                &graph.model,
+                &identity,
+                current.subgraph(),
+                current.lmb(),
+                &velocity,
+            )?;
+            let inserted = graph.on_shell_branches(
+                &graph.model,
+                &matrix_unit,
+                current.subgraph(),
+                current.lmb(),
+                &velocity,
+            )?;
+            let mut matrices = Vec::new();
+            for (branch_index, sign) in [1, -1].into_iter().enumerate() {
+                let mut matrix = Vec::new();
+                for (row, slash_row) in slash.iter().enumerate() {
+                    let mut entries = Vec::new();
+                    for (column, slash_entry) in slash_row.iter().enumerate() {
+                        let actual = component(&branches[branch_index], row, column)?;
+                        let expected = (Atom::num(i32::from(row == column))
+                            + Atom::num(sign) * slash_entry)
+                            / Atom::num(2);
+                        assert_eq!(actual, expected, "sign={sign}, row={row}, column={column}");
+                        entries.push(actual);
+                    }
+                    matrix.push(entries);
+                }
+                let mut differs_from_right_multiplication = false;
+                for (row, entries) in matrix.iter().enumerate() {
+                    for (column, right_entry) in matrix[2].iter().enumerate() {
+                        let left = if column == 2 {
+                            entries[0].clone()
+                        } else {
+                            Atom::Zero
+                        };
+                        let right = if row == 0 {
+                            right_entry.clone()
+                        } else {
+                            Atom::Zero
+                        };
+                        assert_eq!(component(&inserted[branch_index], row, column)?, left);
+                        differs_from_right_multiplication |= left != right;
+                    }
+                }
+                assert!(
+                    differs_from_right_multiplication,
+                    "E02 must distinguish P*E02 from E02*P"
+                );
+                matrices.push(matrix);
+            }
+            for row in 0..4 {
+                for column in 0..4 {
+                    assert_eq!(
+                        &matrices[0][row][column] + &matrices[1][row][column],
+                        Atom::num(i32::from(row == column)),
+                    );
+                    for left in 0..2 {
+                        for right in 0..2 {
+                            let product = Atom::add_many((0..4).map(|inner| {
+                                &matrices[left][row][inner] * &matrices[right][inner][column]
+                            }));
+                            assert_eq!(
+                                product,
+                                if left == right {
+                                    matrices[left][row][column].clone()
+                                } else {
+                                    Atom::Zero
+                                },
+                                "P{left}*P{right}, row={row}, column={column}",
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn boosted_point_projection_roundtrip_preserves_spatial_shift_and_component_owner() {
+        crate::initialisation::test_initialise().unwrap();
+        let velocity = [
+            Atom::num((3, 2)),
+            Atom::one(),
+            Atom::num((1, 2)),
+            Atom::Zero,
+        ];
+        let mass = Atom::var(symbol!("boosted_point_projection::mass"; Scalar));
+        for coordinate_sign in [1, -1] {
+            for branch_sign in [1, -1] {
+                let point = OnShellProjectionPoint {
+                    component: 0,
+                    edge: EdgeIndex(5),
+                    coordinate: EdgeIndex(9),
+                    coordinate_sign,
+                    mass: Atom::num(branch_sign) * &mass,
+                    velocity: velocity.clone(),
+                    source_edges: BTreeSet::from([EdgeIndex(2)]),
+                };
+                let fixed = GS.on_shell_momentum(point.edge, &point.mass, &velocity);
+                assert_eq!(point.restore(&point.lift(&fixed, false)), fixed);
+                let vector_slot = spenso::mink!(4, Atom::from(Aind::new_dummy()));
+                let full_vector = point.bind(&GS.emr_mom(point.coordinate, &vector_slot));
+                let spatial_vector = point.bind(&GS.emr_vec(point.coordinate, &vector_slot));
+                let time = Atom::num(coordinate_sign) * &point.mass * &velocity[0];
+                assert!(
+                    (spatial_vector - (full_vector - time * GS.energy_delta(&vector_slot)))
+                        .expand()
+                        .is_zero()
+                );
+                for (component, velocity_component) in velocity.iter().enumerate() {
+                    let index = GS.cind(component);
+                    let indexed = GS.indexed_momentum(&fixed, std::slice::from_ref(&index));
+                    assert_eq!(point.restore(&point.lift(&indexed, true)), indexed);
+                    let expected = Atom::num(coordinate_sign) * &point.mass * velocity_component;
+                    assert_eq!(point.bind(&GS.emr_mom(point.coordinate, &index)), expected);
+                    assert_eq!(
+                        point.bind(&GS.emr_vec(point.coordinate, &index)),
+                        if component == 0 { Atom::Zero } else { expected },
+                    );
+                    // A carrier owned by a surrounding component is not this
+                    // projection's crown, even if its payload uses that coordinate.
+                    let tag = GS.uv_momentum_provenance_tag(
+                        Atom::num(12).as_view(),
+                        UvMomentumProvenanceRole::PhysicalSourceFixed,
+                        function!(GS.emr_mom, usize::from(point.coordinate)).as_view(),
+                    );
+                    let cograph = function!(GS.emr_mom, tag, &index);
+                    assert_eq!(point.bind(&cograph), cograph);
+                }
+            }
+        }
+    }
+
     use crate::{
         finalized_runtime_dot,
         graph::{Graph, GraphThreeDSource},

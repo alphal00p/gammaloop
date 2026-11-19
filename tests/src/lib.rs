@@ -14,6 +14,7 @@ use gammaloop_api::{
     state::{CommandHistory, RunHistory, State, SyncSettings},
 };
 
+use gammalooprs::processes::{GenerationTimings, ProcessCollection};
 use gammalooprs::{
     initialisation::initialise, integrands::HasIntegrand, utils::load_generic_model,
 };
@@ -205,8 +206,6 @@ impl CLIState {
         process_id: usize,
         integrand_name: &str,
     ) -> Result<serde_json::Value> {
-        use gammalooprs::processes::{GraphGenerationStats, ProcessCollection};
-
         let summary = self
             .state
             .generation_summary(process_id, integrand_name)
@@ -227,28 +226,33 @@ impl CLIState {
             .graphs
             .iter()
             .map(|graph| {
-                let data = &graph.derived_data;
-                let root_bytes = data.all_mighty_integrand.as_view().get_byte_size();
-                let definition_bytes = data
-                    .all_mighty_numerators
-                    .iter()
-                    .map(|entry| {
-                        entry.lhs.as_view().get_byte_size()
-                            + entry.rhs.expression().as_view().get_byte_size()
-                    })
-                    .sum::<usize>();
+                let mut root_bytes = 0;
+                let mut definition_bytes = 0;
+                let mut definition_count = 0usize;
+                for data in graph.derived_data.representations.values() {
+                    let integrand = &data.all_mighty_integrand;
+                    root_bytes += integrand
+                        .iter()
+                        .map(|(_, root)| root.as_view().get_byte_size())
+                        .sum::<usize>();
+                    for (call, body) in integrand.definitions() {
+                        definition_bytes +=
+                            call.as_view().get_byte_size() + body.as_view().get_byte_size();
+                        definition_count += 1;
+                    }
+                }
                 serde_json::json!({
                     "graph_name": graph.graph.name,
                     "root_bytes": root_bytes,
                     "definition_bytes": definition_bytes,
-                    "definition_count": data.all_mighty_numerators.len(),
+                    "definition_count": definition_count,
                     "total_bytes": root_bytes + definition_bytes,
                 })
             })
             .collect::<Vec<_>>();
-        let mut stats = GraphGenerationStats::default();
+        let mut timings = GenerationTimings::default();
         for report in &summary.reports {
-            stats.merge_in_place(&report.stats);
+            timings.merge_in_place(&report.stats.timings);
         }
         #[cfg(target_os = "linux")]
         let process_lifetime_peak_rss_bytes = std::fs::read_to_string("/proc/self/status")
@@ -275,13 +279,13 @@ impl CLIState {
             "generation_peak_ram_bytes": summary.peak_ram_bytes,
             "process_lifetime_peak_rss_bytes": process_lifetime_peak_rss_bytes,
             "process_lifetime_peak_rss_scope": "process_start_through_report_capture_including_model_import",
-            "generation_native_seconds": stats.total_time.as_secs_f64(),
-            "generation_expression_seconds": stats.expression_build_time().as_secs_f64(),
-            "evaluator_build_seconds": stats.evaluator_build_time().as_secs_f64(),
-            "evaluator_spenso_seconds": stats.evaluator_spenso_time.as_secs_f64(),
-            "evaluator_symbolica_seconds": stats.evaluator_symbolica_time.as_secs_f64(),
-            "evaluator_compile_seconds": stats.evaluator_compile_time.as_secs_f64(),
-            "evaluator_count": stats.evaluator_count,
+            "generation_native_seconds": timings.total_time.as_secs_f64(),
+            "generation_expression_seconds": timings.expression_build_time().as_secs_f64(),
+            "evaluator_build_seconds": timings.evaluator_build_time().as_secs_f64(),
+            "evaluator_spenso_seconds": timings.evaluator_spenso_time.as_secs_f64(),
+            "evaluator_symbolica_seconds": timings.evaluator_symbolica_time.as_secs_f64(),
+            "evaluator_compile_seconds": timings.evaluator_compile_time.as_secs_f64(),
+            "evaluator_count": timings.evaluator_count,
             "expression_representation": "factorized_pre_evaluator_roots_and_function_definitions",
             "expression_sizes": expressions,
         }))

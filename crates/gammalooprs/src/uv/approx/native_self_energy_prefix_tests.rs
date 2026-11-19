@@ -1931,9 +1931,10 @@ fn native_gluon_tadpole_ir_child_cancels_locally_before_its_scaleless_integral()
             let local_projection = local.atom().with_checked_expression(
                 GS.erase_uv_momentum_provenance(local.atom().expression()),
             )?;
-            exact_zero(
+            QcdMassReference::certify_vacuum_rational_identity(
                 "actual U2+S1-U2S1 with one forest minus cancels the bare tadpole",
-                &local_projection.try_add(&bare)?,
+                &local_projection,
+                &bare.with_checked_expression(-bare.expression())?,
             )?;
             // Bare IR policy integrates this massless S term. Do not replace its
             // actual nonzero input by zero merely because its integral vanishes.
@@ -1984,12 +1985,15 @@ fn native_gluon_tadpole_ir_child_cancels_locally_before_its_scaleless_integral()
                 "retain actual source/cograph factors"
             );
             let cograph_denominator = graph.denominator(&reduced, model, |_| -1);
-            let complete_cancellation = local_projection.try_add(&bare)?.multiply(cograph)?;
-            exact_zero(
+            let insertion = |child: SymbolicTensor<IndexedStructure>| -> Result<_> {
+                let numerator = child.multiply(cograph.clone())?;
+                Ok(numerator
+                    .with_checked_expression(numerator.expression() * &cograph_denominator)?)
+            };
+            QcdMassReference::certify_vacuum_rational_identity(
                 "D03 source plus actual proper prefix cancels before integration",
-                &complete_cancellation.with_checked_expression(
-                    complete_cancellation.expression() * &cograph_denominator,
-                )?,
+                &insertion(local_projection.clone())?,
+                &insertion(bare.with_checked_expression(-bare.expression())?)?,
             )?;
 
             // Only after all local identities: run the existing independent

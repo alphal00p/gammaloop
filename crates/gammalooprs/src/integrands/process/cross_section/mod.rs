@@ -514,6 +514,12 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
             &self.settings,
             self.data.explicit_orientation_sum_only,
             &self.data.three_d_representations,
+            &self
+                .data
+                .graph_terms
+                .iter()
+                .filter_map(|term| term.fixed_on_shell_spatial_velocity.as_ref())
+                .collect::<Vec<_>>(),
         )?;
 
         self.data.rotations = Some(
@@ -626,6 +632,7 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionGraphTerm {
+    pub(crate) fixed_on_shell_spatial_velocity: Option<[String; 3]>,
     pub integrand:
         BTreeMap<RepresentationMode, TiVec<CutGroupId, BTreeMap<CutCFFIndex, EvaluatorStack>>>,
     pub graph: Graph,
@@ -1472,8 +1479,9 @@ impl CrossSectionGraphTerm {
                 integrand,
                 fixed_on_shell_spatial_velocity: graph
                     .derived_data
-                    .cut_paramatric_integrand
-                    .iter()
+                    .cut_parametric_integrands
+                    .values()
+                    .flat_map(|cuts| cuts.iter())
                     .find_map(|cut| cut.fixed_on_shell_spatial_velocity.clone()),
                 graph: graph.graph.clone(),
                 cut_esurface: graph.cut_esurface.clone(),

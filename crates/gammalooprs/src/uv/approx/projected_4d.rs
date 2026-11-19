@@ -106,6 +106,10 @@ pub(crate) struct Local4dProjectionContext {
     pub(crate) projected_component_requests: usize,
     /// Measured representation-independent 4D/canonical/source preparation.
     pub(crate) shared_preparation_time: Duration,
+    #[cfg(test)]
+    pub(crate) certify_denominator_reconstruction: bool,
+    #[cfg(test)]
+    pub(crate) denominator_reconstruction_certificates: usize,
 }
 
 impl Default for Local4dProjectionContext {
@@ -119,6 +123,10 @@ impl Default for Local4dProjectionContext {
             source_preparation_builds: 0,
             projected_component_requests: 0,
             shared_preparation_time: Duration::ZERO,
+            #[cfg(test)]
+            certify_denominator_reconstruction: false,
+            #[cfg(test)]
+            denominator_reconstruction_certificates: 0,
         }
     }
 }
@@ -733,8 +741,73 @@ mod tests {
     };
     use symbolica::{
         atom::{AtomCore, FunctionBuilder},
+        domains::rational::Rational,
+        function,
         id::Replacement,
     };
+
+    #[test]
+    fn ordinary_ltd_taylor_projection_does_not_request_degree_reports() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = finalized_runtime_dot!(digraph ordinary_ltd_taylor {
+            graph [projector=1]
+            edge [num=1 mass=1]
+            node [num=1]
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            a -> b [id=1 mass=2 source="{ufo_order:1}" sink="{ufo_order:1}"]
+        })?;
+        let numerator = GS.emr_mom(EdgeIndex(0), GS.cind(0)).pow(2) + Atom::one();
+        let mut coefficient = numerator;
+        for edge in [EdgeIndex(0), EdgeIndex(1)] {
+            let momentum = FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(edge))
+                .finish();
+            let mass_squared = Atom::num((usize::from(edge) + 1).pow(2));
+            let polynomial = (1..=3).fold(
+                GS.emr_mom(edge, GS.cind(0)).pow(2) - &mass_squared,
+                |polynomial, index| polynomial - GS.emr_mom(edge, GS.cind(index)).pow(2),
+            );
+            coefficient *= GS
+                .den(usize::from(edge), momentum, mass_squared, polynomial)
+                .pow(-1);
+        }
+        let full = graph.full_filter();
+        let canonical = FourDSector::new(
+            SymbolicTensor::infer_indexed(coefficient)?,
+            vec![(full.clone(), full, graph.loop_momentum_basis.clone())],
+            Vec::new(),
+        )
+        .canonical_projection(&graph)?;
+        assert!(
+            canonical
+                .terms
+                .iter()
+                .all(|term| term.powers.values().all(|p| *p == 1))
+        );
+        let cutset = CutSet::empty(graph.n_hedges());
+        let pattern = OrientationPattern::default();
+        let production = Default::default();
+        let mut options = graph.denominator_only_cff_3d_expression_options();
+        options.representation = three_dimensional_reps::RepresentationMode::Ltd;
+        options.energy_degree_bounds = None;
+        let reports = std::sync::Mutex::new(Vec::new());
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::exact(&production, &options, &pattern, true)
+                .with_energy_degree_bound_reports(&reports),
+        );
+        let projected = localizer.project_factorized_taylor_sector(
+            &mut graph,
+            &canonical,
+            &mut Local4dProjectionContext::default(),
+        )?;
+        assert_eq!(projected.numerators().len(), 1);
+        let reports = reports.into_inner().unwrap();
+        assert_eq!(reports.len(), 1);
+        assert!(reports[0].physical_parent_bounds.is_empty());
+        assert!(reports[0].assigned_cff_source_bounds.is_empty());
+        Ok(())
+    }
 
     impl Local4dProjectionContext {
         fn assert_physical_family(
@@ -1093,65 +1166,229 @@ mod tests {
     }
 
     #[test]
-    fn ordinary_ltd_taylor_projection_does_not_request_degree_reports() -> Result<()> {
+    fn on_shell_point_projection_matches_independent_bubble_residues() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph ordinary_ltd_taylor {
+        let model = crate::utils::load_generic_model("sm");
+        let mut graph: Graph = finalized_runtime_dot!(digraph on_shell_bubble {
             graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            a -> b [id=1 mass=2 source="{ufo_order:1}" sink="{ufo_order:1}"]
-        })?;
-        let numerator = GS.emr_mom(EdgeIndex(0), GS.cind(0)).pow(2) + Atom::one();
-        let mut coefficient = numerator;
-        for edge in [EdgeIndex(0), EdgeIndex(1)] {
-            let momentum = FunctionBuilder::new(GS.emr_mom)
-                .add_arg(usize::from(edge))
-                .finish();
-            let mass_squared = Atom::num((usize::from(edge) + 1).pow(2));
-            let polynomial = (1..=3).fold(
-                GS.emr_mom(edge, GS.cind(0)).pow(2) - &mass_squared,
-                |polynomial, index| polynomial - GS.emr_mom(edge, GS.cind(index)).pow(2),
-            );
-            coefficient *= GS
-                .den(usize::from(edge), momentum, mass_squared, polynomial)
-                .pow(-1);
-        }
-        let full = graph.full_filter();
-        let canonical = FourDSector::new(
-            SymbolicTensor::infer_indexed(coefficient)?,
-            vec![(full.clone(), full, graph.loop_momentum_basis.clone())],
-            Vec::new(),
-        )
-        .canonical_projection(&graph)?;
-        assert!(
-            canonical
-                .terms
-                .iter()
-                .all(|term| term.powers.values().all(|p| *p == 1))
-        );
+            incoming [style=invis]
+            outgoing [style=invis]
+            incoming -> a [id=0 sink="{ufo_order:0}"]
+            a -> b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            a -> b [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            b -> outgoing [id=3 source="{ufo_order:2}"]
+        }, &model)?;
+        let owners = graph
+            .full_filter()
+            .subtract(&graph.external_filter::<SuBitGraph>());
+        let subgraph = InternalSubGraph::cleaned_filter_optimist(owners.clone(), graph.as_ref());
+        let lmb = graph.try_compatible_sub_lmb(
+            &subgraph,
+            graph.dummy_stripped_external_flows_of(&subgraph),
+            &graph.loop_momentum_basis,
+        )?;
+        let external = *lmb.ext_edges.iter().next().unwrap();
+        let mass = Atom::var(symbol!("os_projection_test::mass"));
+        let scalar_parameter = symbol!("os_projection_test::a");
+        let scalar = Atom::var(scalar_parameter);
+        let spectator = Atom::var(symbol!("os_projection_test::b"))
+            + Atom::var(symbol!("os_projection_test::c"));
+        let loop_momentum = function!(GS.emr_mom, 1);
+        let loop_energy = GS.emr_mom(EdgeIndex(1), GS.cind(0));
+        let spatial_squared = (1..=3)
+            .map(|index| GS.emr_mom(EdgeIndex(1), GS.cind(index)).pow(2))
+            .sum::<Atom>();
+        let gluon_energy = Atom::var(symbol!("os_projection_test::E_gluon"));
         let cutset = CutSet::empty(graph.n_hedges());
         let pattern = OrientationPattern::default();
         let production = Default::default();
-        let mut options = graph.denominator_only_cff_3d_expression_options();
-        options.representation = three_dimensional_reps::RepresentationMode::Ltd;
-        options.energy_degree_bounds = None;
-        let reports = std::sync::Mutex::new(Vec::new());
+        let options = graph.denominator_only_cff_3d_expression_options();
         let localizer = Localizer::new(
             &cutset,
-            OrientationProjection::exact(&production, &options, &pattern, true)
-                .with_energy_degree_bound_reports(&reports),
+            OrientationProjection::exact(&production, &options, &pattern, false),
         );
-        let projected = localizer.project_factorized_taylor_sector(
-            &mut graph,
-            &canonical,
-            &mut Local4dProjectionContext::default(),
-        )?;
-        assert_eq!(projected.numerators().len(), 1);
-        let reports = reports.into_inner().unwrap();
-        assert_eq!(reports.len(), 1);
-        assert!(reports[0].physical_parent_bounds.is_empty());
-        assert!(reports[0].assigned_cff_source_bounds.is_empty());
+        let mut context = Local4dProjectionContext::default();
+        for (request, sign) in [-1, 1, 0, -1].into_iter().enumerate() {
+            let branch_mass = if sign == 0 { Atom::Zero } else { mass.clone() };
+            let fermion_invariant = &spatial_squared + branch_mass.pow(2);
+            let fermion_ose = fermion_invariant.sqrt();
+            let fermion_energy = if sign == 0 {
+                gluon_energy.clone()
+            } else {
+                Atom::var(symbol!("os_projection_test::E_fermion"))
+            };
+            let point_energy = Atom::num(sign) * &branch_mass;
+            let point = GS.on_shell_momentum(
+                external,
+                &point_energy,
+                &UVgenerationSettings::default().on_shell_velocity()?,
+            );
+            let gluon_momentum = &point - &loop_momentum;
+            let quadratic = |momentum: &Atom, mass_squared: Atom| {
+                (0..=3).fold(-mass_squared, |sum, index| {
+                    sum + Atom::num(if index == 0 { 1 } else { -1 })
+                        * GS.indexed_momentum(momentum, &[GS.cind(index)]).pow(2)
+                })
+            };
+            let fermion_denominator = GS.den(
+                1,
+                &loop_momentum,
+                branch_mass.pow(2),
+                quadratic(&loop_momentum, branch_mass.pow(2)),
+            );
+            let gluon_denominator = GS.den(
+                2,
+                &gluon_momentum,
+                0,
+                quadratic(&gluon_momentum, Atom::Zero),
+            );
+            // The point remains indexed until projection. The independent
+            // numerator factors are never combined with denominator algebra.
+            let numerator = (&loop_energy + &scalar) * &spectator;
+            let sector = FourDSector::new(
+                crate::graph::parse::NumeratorInterface::admit(
+                    numerator / fermion_denominator / gluon_denominator,
+                    None,
+                )?
+                .try_into_indexed()?,
+                vec![(owners.clone(), owners.clone(), lmb.clone())],
+                Vec::new(),
+            );
+            let canonical = sector.canonical_projection(&graph)?;
+            assert!(
+                canonical
+                    .terms
+                    .iter()
+                    .all(|term| !term.on_shell_points.is_empty())
+            );
+            for term in &canonical.terms {
+                assert_eq!(term.source_witness.len(), 2);
+                assert_eq!(term.powers.values().sum::<usize>(), 2);
+                assert_eq!(
+                    term.source_witness
+                        .iter()
+                        .map(|denominator| denominator.mass_squared.clone())
+                        .collect::<std::collections::BTreeSet<_>>(),
+                    std::collections::BTreeSet::from([Atom::Zero, branch_mass.pow(2)]),
+                );
+            }
+            let projected = localizer
+                .project_factorized_taylor_sector(&mut graph, &canonical, &mut context)?
+                .resolved()?;
+            assert_eq!(
+                context.source_preparation_builds,
+                (request + 1).min(3),
+                "different fixed points need distinct prepared mappers; repeating a point reuses its exact binding"
+            );
+            let actual = projected
+                .iter()
+                .next()
+                .unwrap()
+                .1
+                .clone()
+                .replace(crate::utils::ose_atom_from_index(EdgeIndex(1)))
+                .with(fermion_ose.clone())
+                // Both exact positive source energies are compared in a
+                // neutral formal frame. Replace every half-integer invariant
+                // power, including inverse roots in the residue measure.
+                .replace_map(|view, _, output| {
+                    let symbolica::atom::AtomView::Pow(power) = view else {
+                        return;
+                    };
+                    let energy = if power.get_base() == fermion_invariant.as_view() {
+                        &fermion_energy
+                    } else if power.get_base() == spatial_squared.as_view() {
+                        &gluon_energy
+                    } else {
+                        return;
+                    };
+                    let twice_exponent = power.get_exp().to_owned() * Atom::num(2);
+                    if let Ok(exponent) = i64::try_from(twice_exponent.as_view()) {
+                        **output = energy.pow(exponent);
+                    }
+                });
+            assert!(!actual.contains_symbol(GS.os_mom));
+            assert!(!actual.contains_symbol(GS.emr_mom));
+            // Clockwise Feynman contour: the poles below are k0=E_m and
+            // k0=p0+E_0. The production bridge includes i/(2 pi)^3.
+            let expected = if sign == 0 {
+                // At m=pOS=0 there is one double pole. Differentiating
+                // (z+a)/(z+E)^2 at z=E gives -a/(4*E^3).
+                Atom::i() * &scalar * &spectator
+                    / (Atom::num(32) * Atom::var(GS.pi).pow(3) * gluon_energy.pow(3))
+            } else {
+                let residue = (&fermion_energy + &scalar)
+                    / (Atom::num(2)
+                        * &fermion_energy
+                        * ((&point_energy - &fermion_energy).pow(2) - gluon_energy.pow(2)))
+                    + (&point_energy + &gluon_energy + &scalar)
+                        / (Atom::num(2)
+                            * &gluon_energy
+                            * ((&point_energy + &gluon_energy).pow(2) - fermion_energy.pow(2)));
+                -Atom::i() * residue * &spectator / (Atom::num(8) * Atom::var(GS.pi).pow(3))
+            };
+            // Certify the two exact coefficients of the degree-one numerator
+            // separately. Rational cancellation then acts on scalar contour
+            // weights only, never on the complete graph numerator sum.
+            let actual = actual / &spectator;
+            let expected = expected / &spectator;
+            for value in [&actual, &expected] {
+                assert!(
+                    value
+                        .derivative(scalar_parameter)
+                        .derivative(scalar_parameter)
+                        .is_zero()
+                );
+            }
+            for coefficient in [1, 0] {
+                let extract = |value: &Atom| {
+                    if coefficient == 0 {
+                        value.replace(scalar_parameter).with(Atom::Zero)
+                    } else {
+                        value.derivative(scalar_parameter)
+                    }
+                };
+                let actual_coefficient = extract(&actual);
+                let expected_coefficient = extract(&expected);
+                let difference = (&actual_coefficient - &expected_coefficient).together();
+                assert!(
+                    difference.is_zero(),
+                    "OS branch {sign}, numerator coefficient {coefficient}: actual={actual_coefficient}, expected={expected_coefficient}, difference={difference}"
+                );
+                if sign != 0 {
+                    // On the positive soft ray k=rho*r, choose m=|r|=1.
+                    // The independent residue has weights proportional to
+                    // 1/(E*w^2) and sigma/(w^2*(E+w)). The radial measure
+                    // rho^2 therefore leaves finite, nonzero limits 1 and
+                    // sigma. Apply this check to the certified production
+                    // coefficients, without expanding any graph numerator.
+                    let rho = symbol!("os_projection_test::soft_rho");
+                    let radial = Atom::var(rho);
+                    let weighted = (&actual_coefficient * Atom::num(32) * Atom::var(GS.pi).pow(3)
+                        / Atom::i()
+                        * radial.pow(2))
+                    .replace(fermion_energy.clone())
+                    .with((Atom::one() + radial.pow(2)).sqrt())
+                    .replace(gluon_energy.clone())
+                    .with(radial)
+                    .replace(mass.clone())
+                    .with(Atom::one());
+                    let soft_series = weighted.series(rho, Atom::Zero, 0)?;
+                    assert_eq!(
+                        soft_series.get_trailing_exponent(),
+                        Rational::from(0),
+                        "OS branch {sign}, coefficient {coefficient} must have exactly integrable rho^-2 soft scaling"
+                    );
+                    assert_eq!(
+                        soft_series.coefficient(Rational::from(0)),
+                        Some(Atom::num(if coefficient == 1 { 1 } else { sign })),
+                        "the massive OS soft-limit check must retain its nonzero leading term"
+                    );
+                }
+            }
+        }
         Ok(())
     }
 

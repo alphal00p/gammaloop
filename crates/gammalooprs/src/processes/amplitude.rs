@@ -934,6 +934,7 @@ impl AmplitudeGraph {
             derived_data: AmplitudeDerivedData {
                 threshold_topology: None,
                 representations: BTreeMap::new(),
+                fixed_on_shell_spatial_velocity: None,
 
                 lmbs: None,
                 tropical_sampler: None,
@@ -1572,6 +1573,10 @@ impl AmplitudeGraph {
             "Generation timing milestone"
         );
         let assign_started = std::time::Instant::now();
+        self.derived_data.fixed_on_shell_spatial_velocity = parametric_exprs
+            .values()
+            .flatten()
+            .find_map(|expr| expr.fixed_on_shell_spatial_velocity.clone());
         for (representation, expressions) in parametric_exprs {
             let representation_started = std::time::Instant::now();
             let [expr] = expressions.as_slice() else {
@@ -2601,6 +2606,7 @@ pub struct AmplitudeDerivedData {
     /// Master topology and coordinates used to interpret graph-group threshold metadata.
     pub threshold_topology: Option<(Graph, TiVec<LmbIndex, LoopMomentumBasis>)>,
     pub representations: BTreeMap<RepresentationMode, AmplitudeRepresentationData>,
+    pub(crate) fixed_on_shell_spatial_velocity: Option<[String; 3]>,
     pub resolved_threshold_counterterms: Option<ResolvedThresholdCounterterms>,
     pub raised_data: RaisedEsurfaceData,
     pub raised_esurface_ids: TiVec<EsurfaceID, RaisedEsurfaceId>,

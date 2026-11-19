@@ -930,7 +930,13 @@ the same selected physical axes. Multiplication and CFF assembly retain their
 strict matching-key checks; numerator definitions remain shared.
 
 
-The shared CFF core also returns its surviving-denominator-rank source frame as typed metadata. GammaLoop consumes that bridge exactly once for root, reduced, and exact production CFF sources, cancelling the shared-core-local uniform convention before the physical Minkowski measure `i^L/(2*pi)^(3L)` is applied. Integrated UV addbacks use the same convention, with additional Vakint normalization `1`. The NLO acceptance layer independently generates orientation-local direct 3D, explicit-sum direct 3D, and projected local 4D with local and integrated UV and threshold counterterms. It compares complete GL0/GL2 values at a common native- Arb point in all three routes; the fast Monte Carlo tests integrate explicit-sum 3D. DD acceptance checks the inclusive `(alpha_s/pi) * LO` correction, graphwise UV-mass and localization-scale independence, cancellation of total renormalization-scale dependence, opposite GL0/GL2 squared-scale logarithms, and the physical and projected EMR energy bounds. TT acceptance uses the fully-MSbar scheme, without on-shell counterterms.
+The shared CFF core also returns its surviving-denominator-rank source frame as typed metadata. GammaLoop consumes that bridge exactly once for root, reduced, and exact production CFF sources, cancelling the shared-core-local uniform convention before the physical Minkowski measure `i^L/(2*pi)^(3L)` is applied. Integrated UV addbacks use the same convention, with additional Vakint normalization `1`. The NLO acceptance layer independently generates orientation-local direct 3D, explicit-sum direct 3D, and projected local 4D with local and integrated UV and threshold counterterms. It compares complete GL0/GL2 values at a common native- Arb point in all three routes; the fast Monte Carlo tests integrate explicit-sum 3D. DD acceptance checks the inclusive `(alpha_s/pi) * LO` correction, graphwise UV-mass and localization-scale independence, cancellation of total renormalization-scale dependence, opposite GL0/GL2 squared-scale logarithms, and the physical and projected EMR energy bounds. TT acceptance retains the published fully-MSbar control and adds a separate
+pole-mass test with OS quark self-energies and MS-bar vertex corrections. The
+OS test includes virtual ttbar and real ttbar-g cuts, requires agreement with
+an independent inclusive vector-current reference, and varies the UV mass
+and localization scale at the summed/integrated boundary. The full statistical
+scale scan belongs to the main-push suite; small exact algebra and pointwise
+route controls remain separate.
 
 Direct-photon benchmarks use the off-shell spin projector `-g^(mu nu)` and no picobarn conversion. The inclusive lepton-process targets instead use the Eq. (7.1) normalization `2(4 pi alpha)/(3 Ecm^3)` and the conversion to picobarns; individual lepton-process graph components are not assigned the unconverted published photon targets. Acceptances require positive real LO and the signed real NLO correction, checking the imaginary component separately. Diagram contributions can have either real sign. Current validation results and measured timings belong in the accompanying test evidence and PR.
 
@@ -1627,20 +1633,24 @@ serialized. This changes the positional runtime payload from the former Atom
 fields. Earlier full GammaLoop states must be regenerated; canonical FeynKit model and
 source-recipe artifacts retain their raw-expression contract. Diagram
 DOT/JSON stores expression strings with optional logical-port metadata when
-the expression cannot recover it. Full state version 22 encodes explicit slots
-for runtime numerators, including global numerator/projector interfaces, and
-rejects unresolved ports. Standalone evaluator archives contain lowered scalar programs and
+the expression cannot recover it. Full state version 23 retains explicit indexed
+slots for runtime numerators, including global numerator/projector interfaces.
+It rejects unresolved ports. Generated amplitudes and cross sections retain
+their fixed OS frame and the velocity and rotation settings.
+Standalone evaluator archives contain lowered scalar programs and
 neither runtime graphs nor retained tensor definitions, so this change leaves
 their independent amplitude version 17 and cross-section version 20 unchanged.
 
 === Persistence Compatibility Contract
 <persistence-compatibility-contract>
-- State format is versioned with `state_manifest.toml` (`version = 22` currently).
-- Version 22 combines fully indexed tensor payloads with ordered CFF/LTD
-  expressions, evaluators and denominator catalogues. Main format20 and
-  published FeynKit format21 are incompatible predecessors; both are rejected
-  before model parsing, Symbolica import or positional process decoding.
-  Regenerate those full states from their source recipes.
+- State format is versioned with `state_manifest.toml` (`version = 23` currently).
+- Version 23 combines ordered CFF/LTD expressions, evaluators and denominator
+  catalogues with the exact fixed OS spatial frame of each generated amplitude
+  or cross section. Both version-22 branches used explicit indexed interfaces.
+  FeynKit version 22 stored the ordered representation payloads. Counterterms
+  version 22 stored the fixed OS frames. Regenerate states from either version
+  using their source recipes. The manifest guard rejects them before model
+  parsing, Symbolica import or positional process decoding.
 - Parameter builders persist authoritative entries, values and pair layout;
   their derived function map is rebuilt on decode and is excluded from the
   wire payload and resume fingerprints. Parameter identities use canonical
@@ -1654,8 +1664,8 @@ their independent amplitude version 17 and cross-section version 20 unchanged.
 - The older version history below describes FeynKit's development lineage;
   its format20 is distinct from main's independently evolved format20.
 - Version 21 stores explicit indexed slots rather than partial-index wire tags.
-  Earlier full states must be regenerated; source recipes are not relabeled
-  binary archives. The logical layout and ranked-zero axes remain retained.
+  The parallel OS version 21 used partial-interface tags with its fixed-frame
+  metadata. Regenerate either version from the source recipe. The logical layout and ranked-zero axes remain retained.
 - Version 20 also retains the tensor interfaces of global numerator prefactors
   and projectors. Their positional runtime payload cannot be read as the former
   Atom fields; earlier full states must be regenerated.

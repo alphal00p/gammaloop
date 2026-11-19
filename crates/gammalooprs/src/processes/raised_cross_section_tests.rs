@@ -1067,7 +1067,12 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
             let fixed_reference = ["1/4", "1/2", "1/2"].map(str::to_owned);
             let mut retained_cut_references = 0;
             for graph in &mut cross_section.supergraphs {
-                for cut in &mut graph.derived_data.cut_paramatric_integrand {
+                for cut in graph
+                    .derived_data
+                    .cut_parametric_integrands
+                    .values_mut()
+                    .flat_map(|cuts| cuts.iter_mut())
+                {
                     assert!(cut.fixed_on_shell_spatial_velocity.is_none());
                     cut.fixed_on_shell_spatial_velocity = Some(fixed_reference.clone());
                     retained_cut_references += 1;
@@ -1097,7 +1102,12 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
                 CrossSection::load(save_root.0.join("raised_cross_section"), context).unwrap();
             let mut restored_cut_references = 0;
             for graph in &mut loaded.supergraphs {
-                for cut in &mut graph.derived_data.cut_paramatric_integrand {
+                for cut in graph
+                    .derived_data
+                    .cut_parametric_integrands
+                    .values_mut()
+                    .flat_map(|cuts| cuts.iter_mut())
+                {
                     assert_eq!(
                         cut.fixed_on_shell_spatial_velocity.as_ref(),
                         Some(&fixed_reference)

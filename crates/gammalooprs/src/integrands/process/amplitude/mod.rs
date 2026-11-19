@@ -105,6 +105,7 @@ use super::{
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeGraphTerm {
+    pub(crate) fixed_on_shell_spatial_velocity: Option<[String; 3]>,
     pub original_integrand: BTreeMap<RepresentationMode, EvaluatorStack>,
     pub(crate) fermi_surfaces: Vec<(Option<OrientationID>, FermiSurfaceEvaluator)>,
     pub orientations: TiVec<OrientationID, EdgeVec<Orientation>>,
@@ -3052,6 +3053,12 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
             &self.settings,
             self.data.explicit_orientation_sum_only,
             &self.data.three_d_representations,
+            &self
+                .data
+                .graph_terms
+                .iter()
+                .filter_map(|term| term.fixed_on_shell_spatial_velocity.as_ref())
+                .collect::<Vec<_>>(),
         )?;
 
         self.data.rotations = Some(

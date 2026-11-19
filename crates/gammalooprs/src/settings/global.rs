@@ -172,6 +172,7 @@ impl GenerationSettings {
             runtime,
             self.requires_complete_orientation_sum(),
             &self.three_dimensional_representations,
+            &[],
         )
     }
 

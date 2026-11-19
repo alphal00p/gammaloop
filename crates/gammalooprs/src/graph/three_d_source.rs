@@ -485,7 +485,6 @@ impl ExactSourceEnergyMapper {
     }
 
     /// Replace temporal components while retaining the production spatial frame.
-    #[cfg(test)]
     pub(crate) fn map_numerator(
         &self,
         loop_energy_map: &[LinearEnergyExpr],
@@ -757,7 +756,6 @@ impl ExactSourceEnergyMapper {
             .collect()
     }
 
-    #[cfg(test)]
     pub(crate) fn map_planned_numerator(
         &self,
         loop_energy_map: &[LinearEnergyExpr],

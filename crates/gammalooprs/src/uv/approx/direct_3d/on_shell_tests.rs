@@ -1,6 +1,7 @@
 //! Direct OS component and forest checks against the certified 4D route.
 
 use super::*;
+use crate::utils::F;
 use crate::{
     graph::{FeynmanGraph, Graph, cuts::CutSet, parse::NumeratorInterface},
     initialisation::test_initialise,
@@ -25,6 +26,7 @@ use idenso::{
     tensor::{SymbolicNetExt, SymbolicNetParse, SymbolicTensor},
 };
 use linnet::half_edge::involution::EdgeIndex;
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use spenso::network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing};
 use spenso::structure::{IndexedStructure, abstract_index::AIND_SYMBOLS};
 use symbolica::domains::float::Real;
@@ -807,28 +809,16 @@ impl DirectForestFixture {
                     .run_local(&source, &parent, &root, &parent, &root)?;
                 let parent_term =
                     builder.build_direct(&mut graph, &parent, &bare_parent, &parent_integrated)?;
-                completed = completed
-                    .zip_add(bare)?
-                    .zip_add(child)?
-                    .zip_add(parent_term)?;
+                completed = completed.zip_add([bare, child, parent_term])?;
                 if let Some(box_child) = &box_child {
                     let box_ct = Direct3dApproximation::new(localizer, &mut graph, &settings)
                         .run_local(&source, box_child, &root, box_child, &root)?;
                     let nested_box = Direct3dApproximation::new(localizer, &mut graph, &settings)
                         .run_local(&box_ct, &parent, box_child, &parent, box_child)?;
-                    completed = completed
-                        .zip_add(builder.build_direct(
-                            &mut graph,
-                            box_child,
-                            &box_ct,
-                            &integrated,
-                        )?)?
-                        .zip_add(builder.build_direct(
-                            &mut graph,
-                            &parent,
-                            &nested_box,
-                            &integrated,
-                        )?)?;
+                    completed = completed.zip_add([
+                        builder.build_direct(&mut graph, box_child, &box_ct, &integrated)?,
+                        builder.build_direct(&mut graph, &parent, &nested_box, &integrated)?,
+                    ])?;
                 }
             }
             crate::debug_tags!(#generation, #profile, #uv, #summary;
@@ -969,10 +959,7 @@ impl DirectForestFixture {
                 &parent_projected,
                 &parent_integrated,
             )?;
-            projected_final = projected_final
-                .zip_add(bare)?
-                .zip_add(child_term)?
-                .zip_add(parent_term)?;
+            projected_final = projected_final.zip_add([bare, child_term, parent_term])?;
             if let (Some(box_child), Some(box_local)) = (&box_child, &box_local) {
                 let nested_box = uv_limit(
                     &Full4dCts::from_factorized_local(box_local),
@@ -987,19 +974,15 @@ impl DirectForestFixture {
                 let nested_box_projected =
                     Projected4dApproximation::new(localizer, &mut graph, &settings)
                         .project_local_4d(&nested_box, &mut projection_context)?;
-                projected_final = projected_final
-                    .zip_add(builder.build_projected(
-                        &mut graph,
-                        box_child,
-                        &box_projected,
-                        &integrated,
-                    )?)?
-                    .zip_add(builder.build_projected(
+                projected_final = projected_final.zip_add([
+                    builder.build_projected(&mut graph, box_child, &box_projected, &integrated)?,
+                    builder.build_projected(
                         &mut graph,
                         &parent,
                         &nested_box_projected,
                         &integrated,
-                    )?)?;
+                    )?,
+                ])?;
             }
         }
         crate::debug_tags!(#generation, #profile, #uv, #summary;
@@ -1269,8 +1252,9 @@ impl DirectForestFixture {
                     // tensor contraction than symbolic family compilation. The
                     // multi-point radial scans retain shared preparation through
                     // full_forest_evaluator. Resolution preserves graph factors.
-                    let resolved: Atom = expression.resolved()?.iter().map(|(_, atom)| atom).sum();
-                    ForestTensorEvaluator::new(self, &graph, route, &resolved)
+                    ForestTensorEvaluator::from_reference_integrands(
+                        self, &graph, route, expression,
+                    )
                 }
                 _ => ForestTensorEvaluator::new_shared(self, &graph, route, expression),
             })
@@ -1528,19 +1512,20 @@ impl DirectForestFixture {
                 Some(numerator.expression()),
             )?;
             let cuts = CutStructure::empty(&graph);
-            let mut generated = UVOrchestrator::HedgePoset.parametric_integrands(
-                &mut graph,
+            let mut generated = graph.parametric_integrands(
                 &model,
                 cuts,
                 crate::utils::vakint()?,
-                OrientationProjection::exact_expression(
+                &[OrientationProjection::exact_expression(
                     &production,
                     &options,
                     &settings.orientation_pattern,
                     true,
-                ),
+                )],
                 &settings,
+                &mut Default::default(),
             )?;
+            let mut generated = generated.remove(&options.representation).unwrap();
             assert_eq!(
                 generated.len(),
                 1,
@@ -2006,12 +1991,22 @@ impl ForestTensorEvaluator {
         route: usize,
         expression: &Atom,
     ) -> Result<Self> {
-        use crate::utils::F;
         let input = [(crate::cff::CutCFFIndex::new_all_none(), expression.clone())]
             .into_iter()
             .collect();
-        let (bound, builder, output_labels) = Self::bind(graph, &input).wrap_err_with(|| {
-            format!("forest reference binding: fixture={fixture:?}, route={route}, source=resolved input")
+        Self::from_reference_integrands(fixture, graph, route, &input)
+    }
+
+    /// Bind each graph-owned numerator once before resolving its repeated calls
+    /// into the independent numerical tensor network.
+    fn from_reference_integrands(
+        fixture: DirectForestFixture,
+        graph: &Graph,
+        route: usize,
+        input: &crate::uv::Integrands,
+    ) -> Result<Self> {
+        let (bound, builder, output_labels) = Self::bind(graph, input).wrap_err_with(|| {
+            format!("forest reference binding: fixture={fixture:?}, route={route}")
         })?;
         let value: Atom = bound.resolved()?.iter().map(|(_, atom)| atom).sum();
         let mut network = value.parse_into_net()?;
@@ -2912,6 +2907,12 @@ fn shared_forest_oracle_preserves_factored_matrix_functions() -> Result<()> {
     let resolved: Atom = input.resolved()?.iter().map(|(_, atom)| atom).sum();
     let mut reference =
         ForestTensorEvaluator::new(DirectForestFixture::OsQuarkInQuark, &graph, 0, &resolved)?;
+    let mut bound_reference = ForestTensorEvaluator::from_reference_integrands(
+        DirectForestFixture::OsQuarkInQuark,
+        &graph,
+        0,
+        &input,
+    )?;
     let mut shared =
         ForestTensorEvaluator::new_shared(DirectForestFixture::OsQuarkInQuark, &graph, 0, &input)?;
     assert_eq!(
@@ -2940,6 +2941,7 @@ fn shared_forest_oracle_preserves_factored_matrix_functions() -> Result<()> {
         let external = external.map(Atom::num);
         let loops = [[Atom::num(9), Atom::num(12), Atom::Zero]];
         let expected = reference.evaluate(&external, &loops)?;
+        assert_eq!(bound_reference.evaluate(&external, &loops)?, expected);
         let actual = shared.evaluate(&external, &loops)?;
         let zero = ForestNumber::new(F(ArbPrec::default()).zero(), F(ArbPrec::default()).zero());
         for key in expected
@@ -3836,8 +3838,9 @@ fn disjoint_finite_prefix_is_linear_and_agrees_across_routes() -> Result<()> {
         ("local", &parts.local),
         ("finite", &parts.finite),
     ] {
-        let mut routes = Vec::new();
-        for (route, expression) in expressions.iter().enumerate() {
+        // Each route owns its evaluator and family catalog. Indexed collection
+        // keeps selector, explicit and projected results in comparison order.
+        let routes = expressions.par_iter().enumerate().map(|(route, expression)| {
             let value = ForestTensorEvaluator::new_shared(fixture, &graph, route, expression)?
                 .evaluate(&external, &loops)?;
             crate::debug_tags!(#uv,#summary;
@@ -3845,8 +3848,8 @@ fn disjoint_finite_prefix_is_linear_and_agrees_across_routes() -> Result<()> {
                 file.values=?value,
                 "Evaluated one original finite-prefix contribution with its retained family catalog"
             );
-            routes.push(value);
-        }
+            Ok(value)
+        }).collect::<Result<Vec<_>>>()?;
         values.push(routes);
     }
     let pinched = parts

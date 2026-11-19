@@ -345,10 +345,15 @@ impl EmittedVectorIntegral {
             certify_denominator_reconstruction: true,
             ..Default::default()
         };
-        forests.compute(
-            &mut graph,
+        forests.prepare_four_d(
+            &graph,
             &model,
             crate::utils::vakint()?,
+            &settings.uv,
+            &mut projection_context,
+        )?;
+        forests.compute(
+            &mut graph,
             orientation,
             &settings.uv,
             &mut projection_context,

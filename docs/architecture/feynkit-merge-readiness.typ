@@ -9,13 +9,15 @@ retained numerator store belonging to the selected representation. Scalar
 definitions are resolved before dispatch; diagnostic traversal inspects the
 stored factorized roots and bodies without distributing numerators.
 
-Full-state format22 combines the two incompatible predecessor layouts: main20
-and published FeynKit21. The existing manifest version guard rejects both
-before model parsing, symbolic import or process deserialization. Old full
-states must be regenerated; standalone archive versioning remains independent.
+FeynKit's full-state version 22 combined main's ordered representation payloads
+with the indexed interfaces of the published FeynKit version 21. Version 23
+also persists the generated fixed OS frames. Regenerate either predecessor's
+version-22 full states from its source recipes. The manifest guard checks the
+version before model parsing, symbolic import or process deserialization.
+Standalone archive versioning remains independent.
 Parameter builders encode authoritative entries and rebuild their derived
 function map on load. Omitting that rebuildable cache makes resume fingerprints
-stable through the format22 roundtrip; the strict generated-integrand guard
+stable through the state roundtrip; the strict generated-integrand guard
 and observable/checkpoint assertions remain unchanged.
 Parameter-pair serialization retains slot/range order and fully qualified
 symbolic identity across fresh-process import. Floating coefficient leaves stay
@@ -797,7 +799,8 @@ not source serialization and re-admission. The selected-coefficient diagnostic
 collector remains a general-interface boundary because individual factors can
 have unresolved ports even when their complete product is scalar.
 The Indexed-slot migration introduced upstream full-state manifest version 21.
-This combined OS layout uses version 22; regenerate earlier full states. The
+The Indexed OS port added fixed-frame metadata in its version 22. The
+combined ordered CFF/LTD and OS layout uses version 23. The
 layout and current regeneration rule are specified by
 #link("architecture-current.typ#persistence-compatibility-contract")[GammaLoop's persistence contract].
 Standalone evaluator formats remain unchanged.

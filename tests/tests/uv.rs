@@ -5991,60 +5991,88 @@ const LOCAL_OS_NAME: &str = "local_os_top_self_energy";
 #[test]
 fn massive_top_self_energy_local_os_dispatch_uses_projected_four_d() -> Result<()> {
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
-    let state_path = get_tests_workspace_path().join(format!(
-        "{LOCAL_OS_NAME}_cff_explicit_false_project_local_4d_false"
-    ));
-    clean_test(&state_path);
-    let panic = catch_unwind(AssertUnwindSafe(|| {
-        let _ = local_ct_cli(
-            LOCAL_OS_CARD,
-            LOCAL_OS_NAME,
-            false,
-            false,
-            false,
-            RepresentationMode::Cff,
-        );
-    }))
-    .expect_err("the local OS fixture must reach the intentional deferred-dispatch panic");
-    clean_test(&state_path);
-    let message = panic
-        .downcast_ref::<String>()
-        .map(String::as_str)
-        .or_else(|| panic.downcast_ref::<&str>().copied())
-        .unwrap_or("non-string panic payload");
-    assert!(
-        message.contains(
-            "local on-shell counterterms are deferred until local counterterms can be derived from the 4D expanded representation"
-        ),
-        "unexpected local OS panic: {message}",
-    );
+    let mut cli = get_test_cli(
+        Some(LOCAL_OS_CARD.into()),
+        get_tests_workspace_path().join("local_os_unintegrated_projected_four_d"),
+        Some("local_os_unintegrated_projected_four_d".to_string()),
+        true,
+    )?;
+    cli.cli_settings.global.generation.uv.generate_integrated = false;
+    cli.run_command("run generate")?;
+    assert_generated_local_integrand(&cli, LOCAL_OS_NAME, LOCAL_OS_NAME, 3)?;
+    assert_selected_local_identifier(
+        &cli,
+        LOCAL_OS_NAME,
+        LOCAL_OS_NAME,
+        ApproximationType::OS,
+        [-6, 6],
+        [6, 21],
+        1,
+    )?;
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
 }
 
 #[test]
 fn paper_appendix_b1_os_child_projects_with_live_parent_momentum() -> Result<()> {
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
-    const NAME: &str = "paper_appendix_b1_nested_gluon_self_energy_os";
-    let state_path = get_tests_workspace_path()
-        .join(format!("{NAME}_cff_explicit_false_project_local_4d_false"));
-    clean_test(&state_path);
-    let panic = catch_unwind(AssertUnwindSafe(|| {
-        let _ = local_ct_cli(
-            "paper_appendix_b1_nested_gluon_self_energy_os.toml",
-            NAME,
-            false,
-            false,
-            false,
-            RepresentationMode::Cff,
-        );
-    }))
-    .expect_err("the Appendix-B.1 OS fixture must reach the intentional deferred-dispatch panic");
-    clean_test(&state_path);
-    let message = format!("{error:#}");
-    assert!(
-        message.contains("on-shell/OS component")
-            && message.contains("nested or disconnected scheme policy"),
-        "unexpected Appendix-B.1 OS error: {message}",
-    );
+    const PROCESS: &str = "paper_appendix_b1_nested_gluon_self_energy";
+    const INTEGRAND: &str = "deferred_os";
+    let mut cli = local_ct_cli(
+        "paper_appendix_b1_nested_gluon_self_energy_os.toml",
+        "paper_appendix_b1_os_child_projected",
+        false,
+        true,
+        true,
+        RepresentationMode::Cff,
+    )?;
+    assert_generated_local_integrand(&cli, PROCESS, INTEGRAND, 6)?;
+    for momentum in [
+        [19.0, -29.0, 37.0, 11.0, 43.0, -23.0],
+        [41.0, 17.0, -31.0, -13.0, 59.0, 7.0],
+    ] {
+        let value =
+            evaluate_momentum_sample(&mut cli, PROCESS, INTEGRAND, &momentum, None, f64::EPSILON)?;
+        assert!(value.value.re.is_finite() && value.value.im.is_finite());
+    }
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+fn paper_appendix_b1_os_child_direct_dispatch_keeps_mixed_prescriptions() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+    const PROCESS: &str = "paper_appendix_b1_nested_gluon_self_energy";
+    const INTEGRAND: &str = "deferred_os";
+    let cli = local_ct_cli(
+        "paper_appendix_b1_nested_gluon_self_energy_os.toml",
+        "paper_appendix_b1_os_child_direct_dispatch",
+        false,
+        false,
+        false,
+        RepresentationMode::Cff,
+    )?;
+    assert_generated_local_integrand(&cli, PROCESS, INTEGRAND, 6)?;
+    assert_selected_local_identifier(
+        &cli,
+        PROCESS,
+        INTEGRAND,
+        ApproximationType::OS,
+        [-6, 6],
+        [6, 21],
+        1,
+    )?;
+    assert_selected_local_identifier(
+        &cli,
+        PROCESS,
+        INTEGRAND,
+        ApproximationType::IR,
+        [-21, 21],
+        [6, 21],
+        1,
+    )?;
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
 }
 
 #[test]
@@ -6644,6 +6672,82 @@ mod slow {
             }
         }
         Ok(())
+    }
+
+    #[test]
+    fn local_os_nested_generation_matches_all_routes() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+        OsRouteFixture::NestedOsTopSelfEnergy.check_routes("os_quark_nested_route_matrix")
+    }
+
+    #[test]
+    fn local_os_integrated_rainbow_generation_matches_all_routes() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+        OsRouteFixture::IntegratedNestedOsTopSelfEnergy
+            .check_routes("os_integrated_rainbow_route_matrix")
+    }
+
+    #[test]
+    fn local_os_soft_gluon_generation_matches_all_routes() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+        OsRouteFixture::SoftGluonInOsTop.check_routes("os_soft_gluon_route_matrix")
+    }
+
+    #[test]
+    fn local_os_disjoint_generation_matches_all_routes() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+        OsRouteFixture::DisjointOsTopSelfEnergies.check_routes("os_disjoint_route_matrix")
+    }
+
+    #[test]
+    fn local_os_three_loop_generation_matches_all_routes() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+        OsRouteFixture::ThreeLoopOsTopSelfEnergy.check_routes("os_three_loop_route_matrix")
+    }
+
+    #[test]
+    fn local_os_primitive_complete_uv_scaling_matrix() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+        OsRouteFixture::PrimitiveTopSelfEnergy.check_uv_scaling(true, false)
+    }
+
+    #[test]
+    fn local_os_quark_in_gluon_complete_uv_scaling_matrix() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+        OsRouteFixture::AppendixB1NestedOsChild.check_uv_scaling(true, true)
+    }
+
+    #[test]
+    fn local_os_quark_in_quark_complete_uv_scaling_matrix() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+        OsRouteFixture::NestedOsTopSelfEnergy.check_uv_scaling(true, true)
+    }
+
+    #[test]
+    fn local_os_soft_gluon_complete_uv_scaling_matrix() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+        OsRouteFixture::SoftGluonInOsTop.check_uv_scaling(true, false)
+    }
+
+    #[test]
+    fn local_os_disjoint_complete_uv_scaling_matrix() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+        OsRouteFixture::DisjointOsTopSelfEnergies.check_uv_scaling(true, true)
+    }
+
+    #[test]
+    fn local_os_three_loop_complete_uv_scaling_matrix() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+        // For this bounded scan, projected construction savings dominate the
+        // direct evaluator's smaller per-sample cost. The separate route
+        // matrix retains pointwise checks of both direct representations.
+        // The profiler inherits this pool and clones evaluator state across
+        // parallel subsets. One worker bounds RAM without reducing coverage.
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .stack_size(32 * 1024 * 1024)
+            .build()?
+            .install(|| OsRouteFixture::ThreeLoopOsTopSelfEnergy.check_uv_scaling(true, true))
     }
 
     fn run_double_triangle_soft_ir_case(

@@ -1735,6 +1735,7 @@ mod native_mass_inventory_tests;
 mod tests {
     use crate::initialisation;
     use crate::utils;
+    use crate::uv::approx::integrated::native_mass_tests::QcdMassReference;
     use crate::uv::uv_graph::UVE;
     use crate::{
         finalized_runtime_dot,

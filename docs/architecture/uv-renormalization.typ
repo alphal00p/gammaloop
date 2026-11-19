@@ -2,7 +2,8 @@
 <uv-renormalization-architecture>
 #let slash(body) = math.cancel(body, stroke: 0.55pt)
 #quote(block: true)[
-#strong[Scope:] Shared soft/UV preparation with CFF and vacuum LTD projection.
+#strong[Scope:] Shared soft/UV preparation, CFF and vacuum LTD projection,
+and component-local on-shell operations and their admitted forest histories.
 
 #strong[Lifecycle:] Current implementation architecture. Unsupported
 prescription paths are recorded explicitly under
@@ -485,7 +486,7 @@ its own tag. The normalized frozen kernels remain outside the Taylor operation.
 This preserves the engineering weight of finite mass vertices without rescaling
 unrelated factors in a disconnected product.
 
-The projected local-4D route is separate: it completes the Taylor expansion in four dimensions, reconstructs the exact source occurrence graph, and certifies the signed numerator mapping and denominator reconstruction before projecting that completed term to the requested representation. CFF selects a factorized EMR capacity assignment. Ordinary LTD retains the certified physical affine assignment without numerator-degree analysis; repeated LTD poles require bounds for exact finite sampling. Canonical denominator classes also gate the raw physical degree report, so diagnostic reporting does not reintroduce degree analysis for ordinary LTD. That reconstruction machinery is exclusive to projected local4D and is not a replacement for the direct replay above.
+The projected local-4D route is separate: it completes the Taylor expansion in four dimensions, reconstructs the exact source occurrence graph, and certifies the signed numerator mapping and denominator reconstruction before projecting that completed term to the requested representation. CFF selects a factorized minimax EMR capacity assignment for derivative-created occurrences. Ordinary LTD retains the certified physical affine assignment without numerator-degree analysis; repeated LTD poles require bounds for exact finite sampling. Canonical denominator classes also gate the raw physical degree report, so diagnostic reporting does not reintroduce degree analysis for ordinary LTD. Direct OS reuses the original-source certificates and applies its own post-residue Taylor operations and component replay.
 
 Final assembly retains the existing cut-keyed `Integrands` roots and shared
 numerator definitions. Projected sectors complete their source-local residue sums
