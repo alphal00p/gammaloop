@@ -242,6 +242,15 @@ pub struct GeneralSettings {
     /// Ultraviolet reference mass used by local counterterms, in the model's energy units.
     #[serde(skip_serializing_if = "is_float::<1000>")]
     pub m_uv: f64,
+    /// Infrared regulator mass of the static theory's ultraviolet counterterms, in the model's
+    /// energy units; unset, it follows `m_uv`. At finite temperature, a local UV counterterm
+    /// applied to a zero-mode subtraction whose soft lines all lie in its subgraph is, on that
+    /// term, the UV counterterm of the static theory and gives the lines it makes massive this
+    /// mass. The choice is made per term: the same counterterm uses `m_uv` on its terms without
+    /// such a zero-mode subtraction, and so do all other counterterms. Must be finite and
+    /// positive when set.
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub m_ir: Option<f64>,
     /// Localization scale applied to ultraviolet counterterms, in the model's energy units.
     #[serde(skip_serializing_if = "is_float::<1000>")]
     pub renormalization_localization_scale: f64,
@@ -281,6 +290,7 @@ impl Default for GeneralSettings {
             debug_cache: false,
             orientation_pat: OrientationPattern::default(),
             m_uv: 1000.0,
+            m_ir: None,
             renormalization_localization_scale: 1000.0,
             mu_r: 1000.0,
             numerator_sampling_scale: 1.0,
@@ -297,6 +307,12 @@ impl Default for GeneralSettings {
 impl GeneralSettings {
     pub(crate) fn mu_r_sq(&self) -> f64 {
         self.mu_r * self.mu_r
+    }
+
+    /// The infrared regulator mass of the static theory's UV counterterms:
+    /// `m_ir`, or `m_uv` while it is unset.
+    pub(crate) fn m_ir(&self) -> f64 {
+        self.m_ir.unwrap_or(self.m_uv)
     }
 }
 
@@ -1043,6 +1059,40 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&declared).unwrap()["integrated_energy_dimension"],
             -6
+        );
+    }
+
+    #[test]
+    fn m_ir_follows_m_uv_until_set_and_roundtrips() {
+        let _guard = ShowDefaultsGuard::new(false);
+        let defaults = GeneralSettings::default();
+        assert_eq!(defaults.m_ir, None);
+        assert_eq!(defaults.m_ir(), defaults.m_uv);
+        let moved = GeneralSettings {
+            m_uv: 7.0,
+            ..defaults.clone()
+        };
+        assert_eq!(moved.m_ir(), 7.0);
+        assert!(!toml::to_string(&moved).unwrap().contains("m_ir"));
+        let declared = GeneralSettings {
+            m_ir: Some(0.3),
+            ..moved
+        };
+        let serialized = toml::to_string(&declared).unwrap();
+        assert!(serialized.contains("m_ir = 0.3"), "{serialized}");
+        let parsed = toml::from_str::<GeneralSettings>(&serialized).unwrap();
+        assert_eq!(parsed, declared);
+        assert_eq!((parsed.m_uv, parsed.m_ir()), (7.0, 0.3));
+        let roundtrip =
+            serde_json::from_value::<GeneralSettings>(serde_json::to_value(&declared).unwrap())
+                .unwrap();
+        assert_eq!(roundtrip, declared);
+        drop(_guard);
+        let _guard = ShowDefaultsGuard::new(true);
+        let shown = serde_json::to_value(GeneralSettings::default()).unwrap();
+        assert!(
+            shown.get("m_ir").is_some_and(|m_ir| m_ir.is_null()),
+            "{shown}"
         );
     }
 

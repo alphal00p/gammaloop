@@ -2344,6 +2344,7 @@ impl LmbMultiChannelingSetup {
         self.master_edge_masses.invalidate();
         let parameters = &mut self.graph.param_builder;
         parameters.m_uv_value(Complex::new_re(F(settings.general.m_uv)));
+        parameters.m_ir_value(Complex::new_re(F(settings.general.m_ir())));
         parameters.renormalization_localization_scale_value(Complex::new_re(F(settings
             .general
             .renormalization_localization_scale)));
@@ -3589,6 +3590,15 @@ pub(crate) fn validate_process_runtime_settings(
     if quad_hierarchy > 0.0 && arb_hierarchy > 0.0 && quad_hierarchy <= arb_hierarchy {
         return Err(eyre!(
             "`runtime.stability.zero_mode_hierarchy_quad_escalation_factor` ({quad_hierarchy:e}) must be above `runtime.stability.zero_mode_hierarchy_escalation_factor` ({arb_hierarchy:e}) when both are positive, since every hierarchy it would catch already starts at the last stability level; set it to a negative value to disable it"
+        ));
+    }
+    // A static theory's UV counterterm needs a positive regulator mass for its
+    // soft lines.
+    if let Some(m_ir) = settings.general.m_ir
+        && !(m_ir.is_finite() && m_ir > 0.0)
+    {
+        return Err(eyre!(
+            "`runtime.general.m_ir` must be finite and positive when set; got {m_ir}; unset it to follow `runtime.general.m_uv`"
         ));
     }
     // The shared process parameter layout always includes M, even when unused.
@@ -8758,6 +8768,27 @@ pub(crate) mod tests {
         let error = validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff])
             .unwrap_err();
         assert!(error.to_string().contains("runtime.stability.levels"));
+    }
+
+    #[test]
+    fn m_ir_must_be_finite_and_positive_when_set() {
+        let validate = |m_ir: Option<f64>| {
+            let mut settings = RuntimeSettings::default();
+            settings.general.m_ir = m_ir;
+            validate_process_runtime_settings(&settings, false, &[RepresentationMode::Cff])
+        };
+        for m_ir in [None, Some(0.3), Some(1e4)] {
+            validate(m_ir).unwrap();
+        }
+        // A vanishing or negative mass leaves the static soft lines massless
+        // or tachyonic, and a NaN or infinite one has no counterterm.
+        for m_ir in [0.0, -0.3, f64::NAN, f64::INFINITY] {
+            let error = validate(Some(m_ir)).unwrap_err().to_string();
+            assert!(
+                error.contains("`runtime.general.m_ir` must be finite and positive"),
+                "m_ir = {m_ir}: {error}"
+            );
+        }
     }
 
     #[test]

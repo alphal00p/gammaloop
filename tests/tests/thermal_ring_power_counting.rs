@@ -11,7 +11,9 @@
 //!
 //! With UV subtraction, the MUV prescription of massless power divergences
 //! leaves the static soft set of the q-gluons without a zero-mode host, which
-//! generation rejects before any forest work.
+//! generation rejects before any forest work. The tadpole ring's zero-mode
+//! subtraction without vacuum subtraction, which generates in seconds, checks
+//! that the static-theory mass `general.m_ir` follows `general.m_uv` until set.
 
 use color_eyre::Result;
 use gammaloop_integration_tests as integration_tests;
@@ -27,6 +29,9 @@ use Expected::{Collinear, Power};
 
 /// Collinear rays approach a smooth bare region; their fits are not exact powers.
 const MIN_COLLINEAR_SCALING: f64 = 0.5;
+/// Relative change of the subtracted tadpole ring at [`SOFT_Q_POINT`] when
+/// `general.m_ir` moves from `m_uv = 1` to 0.3 (measured 4.5e-4 at muB = 0).
+const MIN_STATIC_THEORY_MASS_CHANGE: f64 = 1e-5;
 
 #[derive(Clone, Copy)]
 enum Expected {
@@ -254,6 +259,49 @@ fn thermal_ring_graphs_match_the_generated_diagrams() -> Result<()> {
             );
         }
     }
+    integration_tests::clean_test(state_path);
+    Ok(())
+}
+
+/// Loop momenta [q, p, k] = [e0, e2, e4] with a soft static q, |q| = 0.043,
+/// against the hard p and k of [`RING_POINT`].
+const SOFT_Q_POINT: [f64; 9] = [0.031, -0.012, 0.027, 0.71, 0.23, 0.43, -0.37, 0.61, 0.29];
+
+/// The static-theory mass `general.m_ir` of the zero-mode subtraction follows
+/// `general.m_uv` until it is set. The tadpole ring without vacuum
+/// subtraction, whose whole-graph U is the UV counterterm of the static theory
+/// of its union host, evaluates identically in arb with `m_ir` unset and set
+/// to the run card's `m_uv`, and differently at `m_ir = 0.3`.
+#[test]
+fn thermal_ring_static_theory_mass_follows_m_uv_until_set() -> Result<()> {
+    let _serial = integration_tests::SERIAL_TEST_LOCK.lock();
+    let name = TADPOLE_RING.name;
+    let (mut cli, state_path) = TADPOLE_RING.fresh_cli(&format!("{name}_static_theory_mass"))?;
+    integration_tests::run_commands(&mut cli, VacuumSubtraction::Off.subtraction_commands())?;
+    let general = &thermal_rings::runtime_settings(&cli, name)?.general;
+    assert_eq!(general.m_ir, None, "{name} must start with m_ir unset");
+    let m_uv = general.m_uv;
+    let value = |cli: &mut CLIState| {
+        thermal_rings::evaluate_momentum_point(cli, name, Evaluation::Arb, &SOFT_Q_POINT)
+    };
+    let unset = value(&mut cli)?;
+    thermal_rings::set_static_theory_mass(&mut cli, name, m_uv)?;
+    let following = value(&mut cli)?;
+    assert_eq!(
+        following, unset,
+        "{name} with m_ir = m_uv = {m_uv} must evaluate as with m_ir unset"
+    );
+    let m_ir = 0.3;
+    thermal_rings::set_static_theory_mass(&mut cli, name, m_ir)?;
+    let apart = value(&mut cli)?;
+    let change =
+        evaluation_comparison::complex_distance(apart, unset) / unset.re.abs().max(unset.im.abs());
+    println!("{name}: m_ir unset {unset}, m_ir = {m_ir} {apart}, relative change {change:e}");
+    assert!(
+        change > MIN_STATIC_THEORY_MASS_CHANGE,
+        "{name} at m_ir = {m_ir} must differ from m_ir = m_uv = {m_uv} at a soft-q point: \
+         {apart} vs {unset}"
+    );
     integration_tests::clean_test(state_path);
     Ok(())
 }

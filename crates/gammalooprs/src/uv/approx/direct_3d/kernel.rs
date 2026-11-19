@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::sync::LazyLock;
 
 use color_eyre::Result;
@@ -21,7 +21,7 @@ use crate::{
     numerator::symbolica_ext::NumeratorAtomExt,
     utils::{GS, W_},
     uv::{
-        ApproximationType,
+        ApproximationType, Integrands,
         approx::{ForestNodeLike, OrientationProjection, UVCtx},
         uv_graph::UVE,
     },
@@ -31,7 +31,8 @@ use crate::{
 use crate::uv::approx::local_3d::Local3DLoopRescaling;
 
 use super::{
-    branches::DirectResidueBranches, coefficients::numerator_family_calls,
+    branches::{DirectResidueBranches, DirectResidueKey},
+    coefficients::numerator_family_calls,
     forest::Direct3dApproximation,
 };
 use thermal_soft::{SoftBranchRole, SoftBranches};
@@ -315,6 +316,11 @@ enum Local3DDeformation {
     /// branch scope replaces the mass scope, so enclosing operations co-scale
     /// the result together with the soft branch it subtracts from.
     OrdinaryOnSoftBranch,
+    /// U on residue rows whose completed zero-mode branches have their soft
+    /// sets inside its support: the UV counterterm of their static theory,
+    /// which introduces the static-theory masses `mIR` in place of `mUV`
+    /// ([`SoftBranches::expands_static_cograph`]).
+    OrdinaryOnStaticCograph,
     /// The co-scaled soft chart of the vacuum and zero-temperature IR
     /// subtraction, through relative order `dod - 1`.
     Soft,
@@ -330,7 +336,10 @@ enum Local3DDeformation {
 
 impl Local3DDeformation {
     fn is_ordinary(self) -> bool {
-        matches!(self, Self::Ordinary | Self::OrdinaryOnSoftBranch)
+        matches!(
+            self,
+            Self::Ordinary | Self::OrdinaryOnSoftBranch | Self::OrdinaryOnStaticCograph
+        )
     }
 
     /// Whether the chart expands in the external momenta at fixed masses,
@@ -343,7 +352,7 @@ impl Local3DDeformation {
     /// Last retained power of the inverted Taylor parameter.
     fn series_endpoint(self) -> i64 {
         match self {
-            Self::Ordinary | Self::OrdinaryOnSoftBranch => 0,
+            Self::Ordinary | Self::OrdinaryOnSoftBranch | Self::OrdinaryOnStaticCograph => 0,
             Self::Soft => -1,
             Self::ZeroMode { endpoint } => endpoint,
         }
@@ -355,7 +364,10 @@ impl Local3DDeformation {
     fn order_tag(self, support: &SuBitGraph) -> Atom {
         match self {
             Self::ZeroMode { .. } => zero_mode_order(Atom::var(support.symbol())),
-            Self::Ordinary | Self::OrdinaryOnSoftBranch | Self::Soft => Atom::num(1),
+            Self::Ordinary
+            | Self::OrdinaryOnSoftBranch
+            | Self::OrdinaryOnStaticCograph
+            | Self::Soft => Atom::num(1),
         }
     }
 }
@@ -369,21 +381,41 @@ struct OrdinaryEnergyMasses {
 }
 
 impl OrdinaryEnergyMasses {
+    /// The masses that the ordinary U of `deformation` introduces, in the
+    /// scope `mass_scope`: the static-theory pair `mIR`, `mIRexp` on a static
+    /// cograph, and the vacuum pair `mUV`, `mUVexp` otherwise.
+    fn new(deformation: Local3DDeformation, mass_scope: &Atom) -> Self {
+        let (vacuum, expansion) = match deformation {
+            Local3DDeformation::OrdinaryOnStaticCograph => (GS.m_ir_vacuum, GS.m_ir_expansion),
+            Local3DDeformation::Ordinary
+            | Local3DDeformation::OrdinaryOnSoftBranch
+            | Local3DDeformation::Soft
+            | Local3DDeformation::ZeroMode { .. } => (GS.m_uv_vacuum, GS.m_uv_expansion),
+        };
+        Self {
+            vacuum_squared: (Atom::var(vacuum) * mass_scope).pow(2),
+            expansion_squared: (Atom::var(expansion) * mass_scope).pow(2),
+        }
+    }
+
     /// Normalize a rescaled invariant before inversion so its Laurent series
     /// never contains a square root of a negative parameter power.
     fn normalize(&self, invariant: Atom) -> Atom {
         let rescale_squared = Atom::var(GS.rescale).pow(2);
-        if invariant.contains_symbol(GS.m_uv_vacuum) {
+        // The terminal masses an inner U leaves in the energies it projected:
+        // the vacuum mass, and the static-theory mass of a U on a static
+        // cograph.
+        let terminal = [GS.m_uv_vacuum, GS.m_ir_vacuum];
+        if terminal.iter().any(|mass| invariant.contains_symbol(*mass)) {
             // An inner U already supplied this terminal vacuum
             // energy. Scale its actual vacuum mass with the
             // active loop before factoring the energy, rather
             // than applying the MUV rearrangement a second time.
-            // This relies on mUV being reserved for terminal
-            // masses inside an active OSE argument.
-            invariant
-                .replace(GS.m_uv_vacuum)
-                .with(Atom::var(GS.m_uv_vacuum) * GS.rescale)
-                / rescale_squared
+            // This relies on mUV and mIR being reserved for
+            // terminal masses inside an active OSE argument.
+            terminal.iter().fold(invariant, |invariant, mass| {
+                invariant.replace(*mass).with(Atom::var(*mass) * GS.rescale)
+            }) / rescale_squared
         } else {
             // A fresh projection keeps the expansion mass in
             // Taylor coefficients and uses the vacuum mass in
@@ -647,6 +679,23 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
                             &term.frozen,
                         )?))
                     })?;
+                    // An enclosing U tells the rows of a static cograph by
+                    // the completed branches they hold (`Direct3dApproximation::t`),
+                    // so no residue row may add the U image of the unfrozen
+                    // integrand to a zero-mode term: the zero-mode terms are
+                    // re-keyed to static soft energies, the image keeps the
+                    // keys of the integrand.
+                    let zero_mode_keys = soft
+                        .iter_keys()
+                        .chain(uv_on_soft.iter_keys())
+                        .map(|(key, _)| key)
+                        .collect::<HashSet<_>>();
+                    ensure!(
+                        uv.iter_keys().all(|(key, _)| !zero_mode_keys.contains(key)),
+                        "internal error: a residue row of the zero-mode host {} adds the U image \
+                         of its unfrozen integrand to a zero-mode term",
+                        support.string_label()
+                    );
                     soft.zip_add(&uv)?.zip_add(&-uv_on_soft)
                 }
             }
@@ -1274,12 +1323,10 @@ impl Direct3dApproximation<'_> {
 
         // Normalize each active OSE invariant before inversion so its Laurent
         // series never contains a square root of a negative parameter power.
-        // Ordinary U performs the established MUV rearrangement. Soft S
-        // factors the co-scaled physical energy without introducing MUV.
-        let uv_masses = OrdinaryEnergyMasses {
-            vacuum_squared: (Atom::var(GS.m_uv_vacuum) * &mass_scope).pow(2),
-            expansion_squared: (Atom::var(GS.m_uv_expansion) * &mass_scope).pow(2),
-        };
+        // Ordinary U performs the established MUV rearrangement, with the
+        // static-theory mass on a static cograph. Soft S factors the
+        // co-scaled physical energy without introducing MUV.
+        let uv_masses = OrdinaryEnergyMasses::new(deformation, &mass_scope);
         for eid in &lmb.loop_edges {
             let eid = eid.0 as i64;
             let uv_masses = uv_masses.clone();
@@ -1365,7 +1412,79 @@ impl Direct3dApproximation<'_> {
         Ok(compact)
     }
 
+    /// The Taylor series of the chart `deformation` on `integrands`. An
+    /// ordinary U is the UV counterterm of a static theory on the residue
+    /// rows whose completed zero-mode branches have their soft sets inside
+    /// its support ([`SoftBranches::expands_static_cograph`]), and acts there
+    /// as [`Local3DDeformation::OrdinaryOnStaticCograph`]; it stays ordinary
+    /// on the other rows. A U never expands a row partly as either: a row
+    /// holding a completed branch is a re-keyed static row of its `S0`, apart
+    /// from every row of the unfrozen integrand, as [`apply_taylor`] checks
+    /// where a connected host adds both kinds of rows.
     fn t<S: ForestNodeLike>(
+        deformation: Local3DDeformation,
+        ctx: &UVCtx<'_>,
+        current: &S,
+        given: &S,
+        integrands: &DirectResidueBranches,
+        active_subgraph: Option<&SuBitGraph>,
+        lmb: &LoopMomentumBasis,
+    ) -> Result<DirectResidueBranches> {
+        let chart = |deformation, integrands: &DirectResidueBranches| {
+            Self::chart_series(
+                deformation,
+                ctx,
+                current,
+                given,
+                integrands,
+                active_subgraph,
+                lmb,
+            )
+        };
+        if deformation != Local3DDeformation::Ordinary {
+            return chart(deformation, integrands);
+        }
+        let support = active_subgraph.unwrap_or_else(|| current.subgraph());
+        let soft_branches = SoftBranches::new(ctx.graph, support, deformation);
+        let mut loop_lines = None;
+        let static_rows = soft_branches
+            .row_owners(integrands)?
+            .iter()
+            .map(|owners| {
+                if owners.is_empty() {
+                    return Ok(false);
+                }
+                let loop_lines = loop_lines.get_or_insert_with(|| ctx.graph.uncut_loop_lines());
+                soft_branches.expands_static_cograph(owners, loop_lines)
+            })
+            .collect::<Result<Vec<_>>>()?;
+        if static_rows.iter().all(|is_static| !is_static) {
+            return chart(deformation, integrands);
+        }
+        if static_rows.iter().all(|is_static| *is_static) {
+            return chart(Local3DDeformation::OrdinaryOnStaticCograph, integrands);
+        }
+        // The two charts introduce different masses, so each part keeps its
+        // own copy of the numerator and scalar bodies its rows call.
+        let (static_part, ordinary_part): (Vec<_>, Vec<_>) = integrands
+            .iter_keys()
+            .zip(&static_rows)
+            .partition(|(_, is_static)| **is_static);
+        let family = |part: Vec<((&DirectResidueKey, &Integrands), &bool)>| {
+            DirectResidueBranches::from_keyed(
+                part.into_iter()
+                    .map(|((key, roots), _)| (key.clone(), roots.clone())),
+            )
+        };
+        chart(
+            Local3DDeformation::OrdinaryOnStaticCograph,
+            &family(static_part)?,
+        )?
+        .zip_add(&chart(deformation, &family(ordinary_part)?)?)
+    }
+
+    /// [`Self::t`] of one chart on every row of `integrands`.
+    fn chart_series<S: ForestNodeLike>(
         deformation: Local3DDeformation,
         ctx: &UVCtx<'_>,
         current: &S,

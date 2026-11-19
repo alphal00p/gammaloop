@@ -7,6 +7,7 @@ use eyre::eyre;
 use idenso::color::{ColorSimplifier, ColorSimplifySettings};
 use idenso::dirac::GammaSimplifier;
 use idenso::shorthands::metric::MetricSimplifier;
+use itertools::Itertools;
 use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps};
 use symbolica::symbol;
 
@@ -2377,6 +2378,8 @@ fn normalize_local_operation(graph: &Graph, atom: &Atom) -> Atom {
         .with(Atom::var(GS.m_uv_vacuum))
         .replace(GS.m_uv_expansion)
         .with(Atom::var(GS.m_uv_vacuum))
+        .replace(GS.m_ir_expansion)
+        .with(Atom::var(GS.m_ir_vacuum))
         .replace(function!(GS.on_shell_energy, W_.a_, W_.prop_))
         .with(Atom::var(W_.prop_).sqrt())
         .replace(graph[EdgeIndex(2)].mass_atom())
@@ -3527,15 +3530,26 @@ fn zero_mode_chart_probe_to_depth_matches_the_probe_through_zero() -> Result<()>
 /// frozen zero-mode branch.
 const UV_MASS: f64 = 1.3;
 
-/// The evaluation point of `kinematics` at `(beta, mu)` and the UV mass.
-fn uv_ring_point(kinematics: &RingKinematics, beta: f64, mu: f64) -> Point<'_> {
-    ring_point(kinematics, beta, mu).with(Atom::var(GS.m_uv_vacuum), UV_MASS)
+/// The static-theory mass `mIR` of a U on a static cograph, where the pins
+/// tell it apart from [`UV_MASS`].
+const IR_MASS: f64 = 0.45;
+
+/// The static-theory masses of the pins: following `M`, as `general.m_ir`
+/// unset does, and apart from it.
+const STATIC_THEORY_MASSES: [f64; 2] = [UV_MASS, IR_MASS];
+
+/// The evaluation point of `kinematics` at `(beta, mu)`, the UV mass and the
+/// static-theory mass `ir_mass`.
+fn uv_ring_point(kinematics: &RingKinematics, beta: f64, mu: f64, ir_mass: f64) -> Point<'_> {
+    ring_point(kinematics, beta, mu)
+        .with(Atom::var(GS.m_uv_vacuum), UV_MASS)
+        .with(Atom::var(GS.m_ir_vacuum), ir_mass)
 }
 
-/// `1/(l^2 + M^2)`: a static line of momentum `l` after an enclosing U, at
-/// its leading order.
-fn uv_propagator(l: [f64; 3]) -> f64 {
-    1.0 / (dot3(l, l) + UV_MASS * UV_MASS)
+/// `1/(l^2 + m^2)`: a static line of momentum `l` after an enclosing U of
+/// mass `m`, at its leading order.
+fn uv_propagator(l: [f64; 3], mass: f64) -> f64 {
+    1.0 / (dot3(l, l) + mass * mass)
 }
 
 /// `Pi^vac(0; l) = N(l, l) int dw/(2 pi) 1/(w^2 + l^2)^2 = l^2/(4 |l|^3)`,
@@ -3599,18 +3613,20 @@ fn whole_ring_node(graph: &Graph) -> Result<OwnedForestNode> {
 
 /// The factors of the mixed ring's closed forms at one point and medium, for
 /// a [`SpatialRing`]'s numerators. Derived by hand from the static mode
-/// `S_A F = T^2 Pi_A^(0)(p) N_B/(q^4 k^2 (k - q)^2)` of host A.
+/// `S_A F = T^2 Pi_A^(0)(p) N_B/(q^4 k^2 (k - q)^2)` of host A. U_A and U_B
+/// introduce the UV mass `M`, and U_G the static-theory mass `m_IR` on the
+/// lines no inner U made massive.
 struct MixedRingFactors {
     /// `T_zm(0) T_zm(4) = T^2`, the temperatures of the static q and k modes.
     temperatures: f64,
     /// The frozen vertex `Pi_A^(0)(p)`, and its U `U_A Pi_A^(0)(p)`.
     bubble: f64,
     uv_bubble: f64,
-    /// The static ring `1/q^4`, and `1/(q^2 + M^2)^2` after U_G.
+    /// The static ring `1/q^4`, and `1/(q^2 + m_IR^2)^2` after U_G.
     static_ring: f64,
     uv_ring: f64,
     /// The static second loop `N_B/(k^2 (k - q)^2)` per unit `T_zm(4)`, and
-    /// `N_B/((k^2 + M^2)((k - q)^2 + M^2))` after U_G.
+    /// `N_B/((k^2 + m_IR^2)((k - q)^2 + m_IR^2))` after U_G.
     static_second: f64,
     uv_second: f64,
     /// [`static_second_loop`] at `m = 0` and at `m = M`.
@@ -3619,7 +3635,13 @@ struct MixedRingFactors {
 }
 
 impl MixedRingFactors {
-    fn new(second: SecondVertices, [q, p, k]: [[f64; 3]; 3], beta: f64, mu: f64) -> Self {
+    fn new(
+        second: SecondVertices,
+        [q, p, k]: [[f64; 3]; 3],
+        beta: f64,
+        mu: f64,
+        ir_mass: f64,
+    ) -> Self {
         let k_q = difference3(k, q);
         let vertices = second.value(k, q);
         Self {
@@ -3627,9 +3649,9 @@ impl MixedRingFactors {
             bubble: static_bubble_at_zero(p, beta, mu),
             uv_bubble: uv_static_bubble(p, q).0,
             static_ring: 1.0 / dot3(q, q).powi(2),
-            uv_ring: uv_propagator(q).powi(2),
+            uv_ring: uv_propagator(q, ir_mass).powi(2),
             static_second: vertices / (dot3(k, k) * dot3(k_q, k_q)),
-            uv_second: vertices * uv_propagator(k) * uv_propagator(k_q),
+            uv_second: vertices * uv_propagator(k, ir_mass) * uv_propagator(k_q, ir_mass),
             second_taylor: static_second_loop(second, k, q, 0.0),
             uv_second_taylor: static_second_loop(second, k, q, UV_MASS),
         }
@@ -3655,21 +3677,23 @@ const PIN_MEDIA: [(f64, f64); 2] = [(1.0, 0.0), (0.5, QUARK_MU)];
 /// static lines massive. Every nonzero depth pin against its closed form,
 /// from the fixture's `N_0 = N_B(k, k - q) = k.(k - q)`
 /// (`N_0(k, 0) = k^2`) and `Pi_A^(0)` ([`MixedRingFactors`]), at three
-/// points, `T = 1` and `T = 2`, `M = 1.3`:
+/// points, `T = 1` and `T = 2`, `M = 1.3`, and the static-theory mass
+/// `m = m_IR` of U_G equal to `M` and apart from it:
 /// - G/A has degree `6 - 8 + 2 = 0`:
-///   `U_G S_A = T^2 Pi_A^(0) N_0/((q^2+M^2)^2 (k^2+M^2) ((k-q)^2+M^2))`,
-///   and `U_G U_A S_A` is the same with `U_A Pi_A^(0)`;
+///   `U_G S_A = T^2 Pi_A^(0) N_0/((q^2+m^2)^2 (k^2+m^2) ((k-q)^2+m^2))`,
+///   and `U_G U_A S_A` is the same with `U_A Pi_A^(0)` at `M`;
 /// - U_B expands the static loop at its degree `+1`,
-///   `U_B S_A = T^2 Pi_A^(0) [U B_0]/q^4`, after which G/A has degree 0:
-///   `U_G U_B S_A = T^2 Pi_A^(0) [U B_0]/(q^2+M^2)^2`;
+///   `U_B S_A = T^2 Pi_A^(0) [U B_0]/q^4` at `M`, after which G/A has degree 0:
+///   `U_G U_B S_A = T^2 Pi_A^(0) [U B_0]/(q^2+m^2)^2`;
 /// - the ring has degree `j - 1`, so U_G keeps the q-linear terms only:
-///   `U_G S S_A = T^2 Pi_A^(0) B_0^(1)/(q^2+M^2)^2`,
-///   `U_G S U_B S_A = T^2 Pi_A^(0) [U B_0]^(1)/(q^2+M^2)^2`, and on the
+///   `U_G S S_A = T^2 Pi_A^(0) B_0^(1)/(q^2+m^2)^2`,
+///   `U_G S U_B S_A = T^2 Pi_A^(0) [U B_0]^(1)/(q^2+m^2)^2`, and on the
 ///   quark ring without vacuum subtraction
-///   `U_G S_h F = T [Pi_A Pi_B]^(1)/(q^2+M^2)^2`.
+///   `U_G S_h F = T [Pi_A Pi_B]^(1)/(q^2+m^2)^2`.
 ///
 /// The images of the vacuum-soft order are pinned by
-/// `vacuum_soft_term_gets_its_ring_u`.
+/// `vacuum_soft_term_gets_its_ring_u`, and which images carry `mIR` by
+/// `static_theory_mass_only_on_static_cographs`.
 #[test]
 fn enclosing_u_acts_on_frozen_s0_at_the_static_cograph_degree() -> Result<()> {
     test_initialise()?;
@@ -3799,26 +3823,39 @@ fn enclosing_u_acts_on_frozen_s0_at_the_static_cograph_degree() -> Result<()> {
         }
     }
     let kinematics = LOOP_MOMENTA.map(RingKinematics::new);
-    let points = kinematics
-        .iter()
-        .flat_map(|kinematics| PIN_MEDIA.map(|(beta, mu)| uv_ring_point(kinematics, beta, mu)))
-        .collect::<Vec<_>>();
-    for MixedRingPin {
-        name,
-        image,
-        closed_form,
-    } in pins
-    {
-        let mut values = spatial.values(&image, &points)?.into_iter();
-        for (index, momenta) in LOOP_MOMENTA.into_iter().enumerate() {
-            for (beta, mu) in PIN_MEDIA {
-                let context = format!("{name}, point {index}, beta {beta}, mu {mu}");
-                let expected =
-                    closed_form(&MixedRingFactors::new(spatial.second, momenta, beta, mu));
-                assert!(expected.abs() > 0.0, "{context}: the closed form vanishes");
-                let actual = values.next().expect("one value per point");
-                if (actual - expected).abs() > 1e-8 * expected.abs() {
-                    mismatches.push(format!("{context}: {actual} != {expected}"));
+    let points = |ir_mass| {
+        kinematics
+            .iter()
+            .flat_map(|kinematics| {
+                PIN_MEDIA.map(|(beta, mu)| uv_ring_point(kinematics, beta, mu, ir_mass))
+            })
+            .collect::<Vec<_>>()
+    };
+    for ir_mass in STATIC_THEORY_MASSES {
+        let points = points(ir_mass);
+        for MixedRingPin {
+            name,
+            image,
+            closed_form,
+        } in &pins
+        {
+            let mut values = spatial.values(image, &points)?.into_iter();
+            for (index, momenta) in LOOP_MOMENTA.into_iter().enumerate() {
+                for (beta, mu) in PIN_MEDIA {
+                    let context =
+                        format!("{name}, point {index}, beta {beta}, mu {mu}, m_IR {ir_mass}");
+                    let expected = closed_form(&MixedRingFactors::new(
+                        spatial.second,
+                        momenta,
+                        beta,
+                        mu,
+                        ir_mass,
+                    ));
+                    assert!(expected.abs() > 0.0, "{context}: the closed form vanishes");
+                    let actual = values.next().expect("one value per point");
+                    if (actual - expected).abs() > 1e-8 * expected.abs() {
+                        mismatches.push(format!("{context}: {actual} != {expected}"));
+                    }
                 }
             }
         }
@@ -3854,17 +3891,20 @@ fn enclosing_u_acts_on_frozen_s0_at_the_static_cograph_degree() -> Result<()> {
         &canonical_lmb(graph, &whole)?,
         &s_h,
     )?;
-    let mut values = quark.values(&image, &points)?.into_iter();
-    for (index, [q, p, k]) in LOOP_MOMENTA.into_iter().enumerate() {
-        for (beta, mu) in PIN_MEDIA {
-            let context = format!("U_G S_h F, point {index}, beta {beta}, mu {mu}");
-            let (c0, c1) = taylor_at_zero(|s| quark_ring_static_mode([q, p, k], s, beta, mu));
-            let ring = uv_propagator(q).powi(2);
-            let actual = values.next().expect("one value per point");
-            // The q-linear coefficient is a difference of terms of the size
-            // of c0, which sets the precision.
-            if (actual - c1 * ring).abs() > 1e-7 * (c0.abs() + c1.abs()) * ring {
-                mismatches.push(format!("{context}: {actual} != {}", c1 * ring));
+    for ir_mass in STATIC_THEORY_MASSES {
+        let mut values = quark.values(&image, &points(ir_mass))?.into_iter();
+        for (index, [q, p, k]) in LOOP_MOMENTA.into_iter().enumerate() {
+            for (beta, mu) in PIN_MEDIA {
+                let context =
+                    format!("U_G S_h F, point {index}, beta {beta}, mu {mu}, m_IR {ir_mass}");
+                let (c0, c1) = taylor_at_zero(|s| quark_ring_static_mode([q, p, k], s, beta, mu));
+                let ring = uv_propagator(q, ir_mass).powi(2);
+                let actual = values.next().expect("one value per point");
+                // The q-linear coefficient is a difference of terms of the size
+                // of c0, which sets the precision.
+                if (actual - c1 * ring).abs() > 1e-7 * (c0.abs() + c1.abs()) * ring {
+                    mismatches.push(format!("{context}: {actual} != {}", c1 * ring));
+                }
             }
         }
     }
@@ -3911,7 +3951,9 @@ fn minimal_depth_annihilates_subcritical_cographs() -> Result<()> {
     let kinematics = LOOP_MOMENTA.map(RingKinematics::new);
     let points = kinematics
         .iter()
-        .flat_map(|kinematics| PIN_MEDIA.map(|(beta, mu)| uv_ring_point(kinematics, beta, mu)))
+        .flat_map(|kinematics| {
+            PIN_MEDIA.map(|(beta, mu)| uv_ring_point(kinematics, beta, mu, UV_MASS))
+        })
         .collect::<Vec<_>>();
     let assert_nonzero = |values: Vec<f64>, context: &str| {
         assert!(
@@ -4004,7 +4046,9 @@ fn zero_mode_s0_commutes_with_hard_u() -> Result<()> {
     let kinematics = LOOP_MOMENTA.map(RingKinematics::new);
     let points = kinematics
         .iter()
-        .flat_map(|kinematics| PIN_MEDIA.map(|(beta, mu)| uv_ring_point(kinematics, beta, mu)))
+        .flat_map(|kinematics| {
+            PIN_MEDIA.map(|(beta, mu)| uv_ring_point(kinematics, beta, mu, UV_MASS))
+        })
         .collect::<Vec<_>>();
 
     let quark = SpatialRing::new(Ring::Quark)?;
@@ -4108,12 +4152,13 @@ fn zero_mode_s0_commutes_with_hard_u() -> Result<()> {
 /// The vacuum-soft order of the quark ring's union host gets the
 /// ring's U. The ring `|q|^-3` has degree 0, so U_G keeps its leading term
 /// with the frozen vacuum vertex fixed:
-/// `U_G S^(3) X = -V_A V_B (q^2 + M^2)^(-3/2)/4`, nonzero, for the chains
-/// `X = F`, `U_A F` and `U_B F`, with `V = Pi^vac(0)` for a bubble the chain
-/// leaves alone and `V = U Pi^vac(0)` ([`uv_static_bubble`]) for one its
-/// hard U replaced. Their static orders keep the q-linear terms only, as in
-/// `enclosing_u_acts_on_frozen_s0_at_the_static_cograph_degree`:
-/// `T [X_A X_B]^(1)/(q^2 + M^2)^2` with the thermal `Pi(q)` or the 4D U of
+/// `U_G S^(3) X = -V_A V_B (q^2 + m^2)^(-3/2)/4`, nonzero, with the
+/// static-theory mass `m = m_IR` of U_G equal to `M` and apart from it, for the
+/// chains `X = F`, `U_A F` and `U_B F`, with `V = Pi^vac(0)` for a bubble the
+/// chain leaves alone and `V = U Pi^vac(0)` ([`uv_static_bubble`]) at `M` for
+/// one its hard U replaced. Their static orders keep the q-linear terms only,
+/// as in `enclosing_u_acts_on_frozen_s0_at_the_static_cograph_degree`:
+/// `T [X_A X_B]^(1)/(q^2 + m^2)^2` with the thermal `Pi(q)` or the 4D U of
 /// each bubble through first order in q.
 #[test]
 fn vacuum_soft_term_gets_its_ring_u() -> Result<()> {
@@ -4148,10 +4193,6 @@ fn vacuum_soft_term_gets_its_ring_u() -> Result<()> {
     let whole = whole_ring_node(graph)?;
     let whole_lmb = canonical_lmb(graph, &whole)?;
     let kinematics = LOOP_MOMENTA.map(RingKinematics::new);
-    let points = kinematics
-        .iter()
-        .flat_map(|kinematics| PIN_MEDIA.map(|(beta, mu)| uv_ring_point(kinematics, beta, mu)))
-        .collect::<Vec<_>>();
     // Each chain with the bubbles its hard U replaced.
     let chains = [
         ("U_G S F", &root, integrand.clone(), [false, false]),
@@ -4161,10 +4202,21 @@ fn vacuum_soft_term_gets_its_ring_u() -> Result<()> {
     for (name, given, sector, hard) in chains {
         let s = apply_taylor(&ctx, orientation, &union, given, None, &union_lmb, &sector)?;
         let image = apply_taylor(&ctx, orientation, &whole, &union, None, &whole_lmb, &s)?;
-        let mut parts = zero_mode_temperature_parts(&quark, &image, &points)?.into_iter();
-        for (index, [q, p, k]) in LOOP_MOMENTA.into_iter().enumerate() {
-            for (beta, mu) in PIN_MEDIA {
-                let context = format!("{name}, point {index}, beta {beta}, mu {mu}");
+        for ir_mass in STATIC_THEORY_MASSES {
+            let points = kinematics
+                .iter()
+                .flat_map(|kinematics| {
+                    PIN_MEDIA.map(|(beta, mu)| uv_ring_point(kinematics, beta, mu, ir_mass))
+                })
+                .collect::<Vec<_>>();
+            let mut parts = zero_mode_temperature_parts(&quark, &image, &points)?.into_iter();
+            for ((index, [q, p, k]), (beta, mu)) in LOOP_MOMENTA
+                .into_iter()
+                .enumerate()
+                .cartesian_product(PIN_MEDIA)
+            {
+                let context =
+                    format!("{name}, point {index}, beta {beta}, mu {mu}, m_IR {ir_mass}");
                 // (vacuum vertex, value at q = 0, q-linear term) per bubble.
                 let [(vertex_a, a0, a1), (vertex_b, b0, b1)] =
                     [(p, hard[0]), (k, hard[1])].map(|(l, replaced)| {
@@ -4177,7 +4229,7 @@ fn vacuum_soft_term_gets_its_ring_u() -> Result<()> {
                             (vacuum_static_bubble(l), value, slope)
                         }
                     });
-                let ring = uv_propagator(q);
+                let ring = uv_propagator(q, ir_mass);
                 let (static_part, vacuum_soft) = parts.next().expect("one value per point");
                 let expected = -vertex_a * vertex_b * ring.powf(1.5) / 4.0;
                 assert!(expected.abs() > 0.0, "{context}: the vertex vanishes");
@@ -4199,11 +4251,13 @@ fn vacuum_soft_term_gets_its_ring_u() -> Result<()> {
 /// the full 4D depth on the first and at the minimal depth on the second:
 /// `U_G(F + S_h F) = U_G F + U_G S_h F`. `U_G F` is the ordinary 4D U, of
 /// degree four: nonzero without vacuum subtraction, independent of `T` and
-/// `mu`, and equal to the U of the same ring's vacuum CFF. And
-/// `U_G S_h F = T Pi_A^(1)(q; p) Pi_T(k)/(q^2 + M^2)^2` with the exact
+/// `mu`, and equal to the U of the same ring's vacuum CFF, at the UV mass `M`.
+/// And `U_G S_h F = T Pi_A^(1)(q; p) Pi_T(k)/(q^2 + m_IR^2)^2` with the exact
 /// tadpole `Pi_T(k) = T sum 1/(w^2 + k^2)` of the four-gluon vertex: only
 /// the q-linear term of `S_h F = (T/q^4) T_q^(1)[Pi_A] Pi_T` reaches the
-/// ring's degree 0.
+/// ring's degree 0. The one call gives the rows of `S_h F` the static-theory
+/// mass `m_IR` and those of `F` the mass `M`, with `m_IR` equal to `M` and
+/// apart from it.
 #[test]
 fn vs_false_sector_mixes_full_and_minimal_depth() -> Result<()> {
     test_initialise()?;
@@ -4234,14 +4288,9 @@ fn vs_false_sector_mixes_full_and_minimal_depth() -> Result<()> {
     let u_g = |sector: &DirectResidueBranches| {
         apply_taylor(&ctx, orientation, &whole, &root, None, &whole_lmb, sector)
     };
-    let kinematics = LOOP_MOMENTA.map(RingKinematics::new);
-    let points = kinematics
-        .iter()
-        .flat_map(|kinematics| PIN_MEDIA.map(|(beta, mu)| uv_ring_point(kinematics, beta, mu)))
-        .collect::<Vec<_>>();
-    let mixed = tadpole.values(&u_g(&integrand.zip_add(&s_h)?)?, &points)?;
-    let unfrozen = tadpole.values(&u_g(&integrand)?, &points)?;
-    let frozen = tadpole.values(&u_g(&s_h)?, &points)?;
+    let mixed = u_g(&integrand.zip_add(&s_h)?)?;
+    let unfrozen = u_g(&integrand)?;
+    let frozen = u_g(&s_h)?;
     // The same U of the ring's vacuum CFF.
     let vacuum = SpatialRing::in_medium(Ring::Tadpole, tadpole.second, MediumMode::Vacuum)?;
     let vacuum_whole = whole_ring_node(&vacuum.graph)?;
@@ -4254,18 +4303,36 @@ fn vs_false_sector_mixes_full_and_minimal_depth() -> Result<()> {
         &canonical_lmb(&vacuum.graph, &vacuum_whole)?,
         &vacuum.root(false)?,
     )?;
-    let vacuum_u = vacuum.values(&vacuum_u, &points)?;
-    let mut values = mixed.into_iter().zip(unfrozen).zip(frozen).zip(vacuum_u);
-    for (index, [q, p, k]) in LOOP_MOMENTA.into_iter().enumerate() {
-        for (beta, mu) in PIN_MEDIA {
-            let context = format!("point {index}, beta {beta}, mu {mu}");
+    // With the static-theory mass apart from M, U_G F keeps M and U_G S_h F
+    // takes m_IR in the same call.
+    let kinematics = LOOP_MOMENTA.map(RingKinematics::new);
+    for ir_mass in STATIC_THEORY_MASSES {
+        let points = kinematics
+            .iter()
+            .flat_map(|kinematics| {
+                PIN_MEDIA.map(|(beta, mu)| uv_ring_point(kinematics, beta, mu, ir_mass))
+            })
+            .collect::<Vec<_>>();
+        let [mixed, unfrozen, frozen] =
+            [&mixed, &unfrozen, &frozen].map(|image| tadpole.values(image, &points));
+        let mut values = mixed?
+            .into_iter()
+            .zip(unfrozen?)
+            .zip(frozen?)
+            .zip(vacuum.values(&vacuum_u, &points)?);
+        for ((index, [q, p, k]), (beta, mu)) in LOOP_MOMENTA
+            .into_iter()
+            .enumerate()
+            .cartesian_product(PIN_MEDIA)
+        {
+            let context = format!("point {index}, beta {beta}, mu {mu}, m_IR {ir_mass}");
             let (((mixed, unfrozen), frozen), vacuum_u) =
                 values.next().expect("one value per point");
             assert!(unfrozen.abs() > 0.0, "{context}: U_G F vanishes");
             assert_close(unfrozen, vacuum_u, 1e-10, &format!("{context}: U_G F"));
             assert_close(mixed, unfrozen + frozen, 1e-10, &context);
             let (a0, a1) = taylor_at_zero(|s| static_quark_bubble(p, scaled3(q, s), beta, mu));
-            let factor = bose_tadpole(beta, norm3(k)) * uv_propagator(q).powi(2) / beta;
+            let factor = bose_tadpole(beta, norm3(k)) * uv_propagator(q, ir_mass).powi(2) / beta;
             assert!(
                 (frozen - a1 * factor).abs() <= 1e-7 * (a0.abs() + a1.abs()) * factor.abs(),
                 "{context}: U_G S_h F: {frozen} != {}",
@@ -4273,6 +4340,176 @@ fn vs_false_sector_mixes_full_and_minimal_depth() -> Result<()> {
             );
         }
     }
+    Ok(())
+}
+
+/// Which U images carry the static-theory mass `mIR`, and which the UV mass
+/// `mUV`, on the mixed ring without vacuum subtraction, with host A and the
+/// union host. U_G is the UV counterterm of the static theory on every row of
+/// a completed zero-mode branch, whose soft set it contains: `U_G S_A`,
+/// `U_G U_A S_A`, `U_G U_B S_A` and `U_G S S_A` carry `mIR`, and `mUV` only
+/// where an inner U introduced it. U_A on its own branch, U_B on the soft
+/// lines of A and U_G on the unfrozen ring keep `mUV` alone. On the host's
+/// whole operation `H_A F = S_A + U_A F - U_A S_A`, U_G gives `mIR` to the
+/// rows of `S_A` and `U_A S_A` and `mUV` to those of `U_A F`: with `m_IR`
+/// equal to `M` and apart from it, its image is the sum of its images of the
+/// three parts.
+#[test]
+fn static_theory_mass_only_on_static_cographs() -> Result<()> {
+    test_initialise()?;
+    let vacuum_subtraction = false;
+    let spatial = SpatialRing::new(Ring::Mixed)?;
+    let graph = &spatial.graph;
+    let settings = UVgenerationSettings::default();
+    let ctx = UVCtx::new(graph, &settings);
+    let orientation = spatial.cff.orientation(vacuum_subtraction);
+    let root = empty_forest_node(graph);
+    let integrand = spatial.root(vacuum_subtraction)?;
+    let host_a = MixedRingHostA::new(&spatial, vacuum_subtraction)?;
+    let s_a = host_a.s0()?;
+    let u_a_s_a = host_a.own_u_on_s0(&ctx)?;
+    let first = forest_node(graph, &[2, 3], ApproximationType::MUV, 2)?;
+    let second = forest_node(graph, &[4, 5], ApproximationType::MUV, 2)?;
+    let union = host_node(
+        graph,
+        &[2, 3, 4, 5],
+        4,
+        spatial
+            .ring
+            .region(graph, &[2, 3, 4, 5], vacuum_subtraction)?,
+    )?;
+    let whole = whole_ring_node(graph)?;
+    let u = |node: &OwnedForestNode, given: &OwnedForestNode, sector: &DirectResidueBranches| {
+        apply_taylor(
+            &ctx,
+            orientation,
+            node,
+            given,
+            None,
+            &canonical_lmb(graph, node)?,
+            sector,
+        )
+    };
+    let u_a_f = u(&first, &root, &integrand)?;
+    let u_b_s_a = u(&second, &root, &s_a)?;
+    let h_a_f = u(&host_a.node, &root, &integrand)?;
+    let u_g_s_a = u(&whole, &host_a.node, &s_a)?;
+    let u_g_u_a_s_a = u(&whole, &host_a.node, &u_a_s_a)?;
+    let u_g_u_a_f = u(&whole, &first, &u_a_f)?;
+    let u_g_h_a_f = u(&whole, &host_a.node, &h_a_f)?;
+    // (image, carries mIR, carries mUV)
+    let images = [
+        ("U_A S_A", &u_a_s_a, false, true),
+        ("U_B S_A", &u_b_s_a, false, true),
+        ("U_A F", &u_a_f, false, true),
+        ("U_G F", &u(&whole, &root, &integrand)?, false, true),
+        ("U_G U_A F", &u_g_u_a_f, false, true),
+        ("U_G S_A", &u_g_s_a, true, false),
+        ("U_G U_A S_A", &u_g_u_a_s_a, true, true),
+        ("U_G U_B S_A", &u(&whole, &second, &u_b_s_a)?, true, true),
+        (
+            "U_G S S_A",
+            &u(&whole, &union, &u(&union, &host_a.node, &s_a)?)?,
+            true,
+            false,
+        ),
+        ("U_G H_A F", &u_g_h_a_f, true, true),
+    ];
+    let mut mismatches = Vec::new();
+    for (name, image, ir, uv) in images {
+        let sum = image.resolved_scalars()?.factorized_sum();
+        let carries = |masses: [Symbol; 2]| masses.iter().any(|mass| sum.contains_symbol(*mass));
+        let carried = (
+            carries([GS.m_ir_vacuum, GS.m_ir_expansion]),
+            carries([GS.m_uv_vacuum, GS.m_uv_expansion]),
+        );
+        if carried != (ir, uv) {
+            mismatches.push(format!("{name}: (mIR, mUV) {carried:?} != {:?}", (ir, uv)));
+        }
+    }
+    assert!(
+        mismatches.is_empty(),
+        "the static-theory mass reaches the wrong U images:\n{}",
+        mismatches.join("\n")
+    );
+
+    let kinematics = LOOP_MOMENTA.map(RingKinematics::new);
+    for ir_mass in STATIC_THEORY_MASSES {
+        let points = kinematics
+            .iter()
+            .flat_map(|kinematics| {
+                PIN_MEDIA.map(|(beta, mu)| uv_ring_point(kinematics, beta, mu, ir_mass))
+            })
+            .collect::<Vec<_>>();
+        let [whole_operation, s, u_on_s, ordinary] =
+            [&u_g_h_a_f, &u_g_s_a, &u_g_u_a_s_a, &u_g_u_a_f]
+                .map(|image| spatial.values(image, &points));
+        for (index, (((whole_operation, s), u_on_s), ordinary)) in whole_operation?
+            .into_iter()
+            .zip(s?)
+            .zip(u_on_s?)
+            .zip(ordinary?)
+            .enumerate()
+        {
+            assert!(
+                ordinary.abs() > 0.0 && s.abs() > 0.0,
+                "point {index}: U_G U_A F or U_G S_A vanishes"
+            );
+            assert_close(
+                whole_operation,
+                s + ordinary - u_on_s,
+                1e-10,
+                &format!("U_G H_A F, point {index}, m_IR {ir_mass}"),
+            );
+        }
+    }
+    Ok(())
+}
+
+/// The ordinary U of a support is the UV counterterm of a static theory on a
+/// row iff the soft set of the row's outermost completed zero-mode branch
+/// lies inside the support, the soft set of a branch being the loop lines
+/// outside it. On the mixed ring the whole graph contains the soft set
+/// `{0,1,4,5}` of host A and the triangle D1 does not; so does that soft set
+/// itself, disjoint from A. A row that also holds the branch of the union
+/// host `h = {2,3,4,5}` around A is decided by h alone, whose zero-mode
+/// operation expanded A's further soft lines `{4,5}` as hard ones: the static
+/// pair `{0,1}`, disjoint from h, contains the soft set of h but not that of
+/// A. A row with the incomparable branches of A and of the bubble `{4,5}`,
+/// whose soft set `{0,1,2,3}` lies outside `{0,1,4,5}`, is an error.
+#[test]
+fn static_cograph_needs_the_whole_soft_set() -> Result<()> {
+    test_initialise()?;
+    let graph = Ring::Mixed.topology()?;
+    let loop_lines = graph.uncut_loop_lines();
+    assert_eq!(loop_lines, graph.edge_subgraph(&[0, 1, 2, 3, 4, 5]));
+    let host_a = graph.edge_subgraph(&[2, 3]);
+    let bubble_b = graph.edge_subgraph(&[4, 5]);
+    let union_h = graph.edge_subgraph(&[2, 3, 4, 5]);
+    let static_pair = graph.edge_subgraph(&[0, 1]);
+    let expands = |support: &SuBitGraph, owners: &[&SuBitGraph]| {
+        SoftBranches::new(&graph, support, Local3DDeformation::Ordinary).expands_static_cograph(
+            &owners
+                .iter()
+                .map(|owner| (*owner).clone())
+                .collect::<BTreeSet<_>>(),
+            &loop_lines,
+        )
+    };
+    assert!(expands(&loop_lines, &[&host_a])?);
+    assert!(!expands(
+        &graph.edge_subgraph(&[0, 1, 2, 3, 4]),
+        &[&host_a]
+    )?);
+    assert!(expands(&graph.edge_subgraph(&[0, 1, 4, 5]), &[&host_a])?);
+    assert!(!expands(&loop_lines, &[])?);
+    assert!(expands(&loop_lines, &[&host_a, &union_h])?);
+    assert!(!expands(&static_pair, &[&host_a])?);
+    assert!(expands(&static_pair, &[&host_a, &union_h])?);
+    let error = expands(&graph.edge_subgraph(&[0, 1, 4, 5]), &[&host_a, &bubble_b])
+        .expect_err("a U containing the soft set of one branch but not of another is refused")
+        .to_string();
+    assert!(error.contains("unsupported zero-mode forest"), "{error}");
     Ok(())
 }
 
@@ -4320,7 +4557,9 @@ fn zero_mode_chart_cancels_landau_pair_poles() -> Result<()> {
         .collect::<Vec<_>>();
     let points = kinematics
         .iter()
-        .flat_map(|kinematics| PIN_MEDIA.map(|(beta, mu)| uv_ring_point(kinematics, beta, mu)))
+        .flat_map(|kinematics| {
+            PIN_MEDIA.map(|(beta, mu)| uv_ring_point(kinematics, beta, mu, UV_MASS))
+        })
         .collect::<Vec<_>>();
     let assert_precise =
         |spatial: &SpatialRing, branches: &DirectResidueBranches, name: &str| -> Result<()> {

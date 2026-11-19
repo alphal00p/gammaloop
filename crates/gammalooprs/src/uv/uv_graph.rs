@@ -406,6 +406,34 @@ impl AsRef<HedgeGraph<Edge, Vertex, HedgeData>> for Graph {
 }
 
 impl Graph {
+    /// The graph without the left side of its initial-state cut: the subgraph
+    /// whose spinneys a cut structure classifies before it removes the lines
+    /// of each cut. It is the cut subgraph of a trivial cut structure, the only
+    /// one that zero-mode hosts live on.
+    pub(crate) fn uncut_subgraph(&self) -> SuBitGraph {
+        self.full_filter().subtract(&self.initial_state_cut.left)
+    }
+
+    /// The loop lines of `cut_subgraph`: its paired half-edges less its
+    /// bridges, which carry no loop momentum. The soft set of a hard subgraph
+    /// consists of these lines outside it.
+    pub(crate) fn loop_lines(&self, cut_subgraph: &SuBitGraph) -> SuBitGraph {
+        // A tree line is in no cycle, so dropping it keeps the loops.
+        InternalSubGraph::cleaned_filter_pessimist(
+            self.underlying.non_bridges_of(cut_subgraph),
+            self.as_ref(),
+        )
+        .filter
+    }
+
+    /// The loop lines of the trivial cut structure, the only one that
+    /// zero-mode hosts live on ([`ZeroModeHostError::NonTrivialCut`]): the
+    /// soft set Σ of a host, and of the completed zero-mode branch its `S0`
+    /// freezes, consists of these lines outside its support.
+    pub(crate) fn uncut_loop_lines(&self) -> SuBitGraph {
+        self.loop_lines(&self.uncut_subgraph())
+    }
+
     /// The UV spinneys of every cut of `cuts`, in order: the classified
     /// spinneys of its uncut subgraph, with their thermal zero-mode hosts
     /// assigned and the full observable restricted. Each cut is classified
@@ -439,10 +467,7 @@ impl Graph {
         settings: &UVgenerationSettings,
         medium: &MediumSettings,
     ) -> Result<Vec<Spinney>> {
-        let cut_subgraph = self
-            .full_filter()
-            .subtract(&self.initial_state_cut.left)
-            .subtract(&cut.union);
+        let cut_subgraph = self.uncut_subgraph().subtract(&cut.union);
         let mut spinneys = self
             .classified_spinneys(&cut_subgraph, settings, &self.loop_momentum_basis)
             .wrap_err_with(|| {

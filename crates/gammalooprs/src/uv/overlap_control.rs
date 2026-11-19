@@ -154,7 +154,14 @@ impl ExactControlPoint {
             }
             AtomView::Var(variable) => {
                 let symbol = variable.get_symbol();
-                if [GS.m_uv_vacuum, GS.m_uv_expansion].contains(&symbol) {
+                if [
+                    GS.m_uv_vacuum,
+                    GS.m_uv_expansion,
+                    GS.m_ir_vacuum,
+                    GS.m_ir_expansion,
+                ]
+                .contains(&symbol)
+                {
                     Atom::num(3)
                 } else if symbol == UFOSymbol::from("GC_1").0 {
                     // Exact SM definition in assets/models/json/sm/sm.json.

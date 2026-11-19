@@ -1,14 +1,17 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::hash_map::Entry;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::Arc;
 
 use color_eyre::Result;
 use eyre::eyre;
-use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike};
+use itertools::Itertools;
+use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps};
 use symbolica::atom::{Atom, AtomCore, AtomView};
 use symbolica::function;
 use three_dimensional_reps::{MediumMode, ThermalDistributionCall, ThermalDistributionFactor};
 
 use crate::graph::{Graph, LoopMomentumBasis};
-use crate::integrands::process::param_builder::ParamBuilderGraph;
+use crate::integrands::process::param_builder::{FnMapEntry, ParamBuilderGraph};
 use crate::utils::{GS, W_};
 use crate::uv::approx::UVCtx;
 use crate::uv::uv_graph::UVE;
@@ -106,44 +109,152 @@ impl<'a> SoftBranches<'a> {
         }
     }
 
-    /// The role of a branch tag, if `view` is one: a soft-branch mass scope,
+    /// The owner of a branch tag, if `view` is one: a soft-branch mass scope,
     /// an energy owned by a branch, or the zero-mode temperature or order tag
     /// of a completed zero-mode branch. The zero-mode temperature of a
     /// frequency class, named by its representative edge, is not yet owned by
     /// a branch.
-    pub(super) fn tag_role(&self, view: AtomView<'_>) -> Result<Option<SoftBranchRole>> {
+    fn tag_owner(&self, view: AtomView<'_>) -> Result<Option<SuBitGraph>> {
         let AtomView::Fun(call) = view else {
             return Ok(None);
         };
         let symbol = call.get_symbol();
         let n_hedges = self.graph.n_hedges();
-        let owner = if symbol == *LOCAL_3D_SOFT_SCOPE || symbol == *ZERO_MODE_ORDER {
+        if symbol == *LOCAL_3D_SOFT_SCOPE || symbol == *ZERO_MODE_ORDER {
             (call.get_nargs() == 1)
                 .then(|| component_owner(call.get(0), n_hedges))
                 .flatten()
-                .ok_or_else(|| eyre!("a thermal soft-branch tag has no valid owner: {view}"))?
+                .map(Some)
+                .ok_or_else(|| eyre!("a thermal soft-branch tag has no valid owner: {view}"))
         } else if symbol == *ZERO_MODE_TEMPERATURE {
             let owner = (call.get_nargs() == 1)
                 .then(|| call.get(0))
                 .ok_or_else(|| eyre!("a zero-mode temperature has no owner: {view}"))?;
             match component_owner(owner, n_hedges) {
-                Some(owner) => owner,
+                Some(owner) => Ok(Some(owner)),
                 // A class temperature, which no branch owns yet.
-                None if zero_mode_class_representative(self.graph, owner).is_some() => {
-                    return Ok(None);
-                }
-                None => return Err(eyre!("a zero-mode temperature has no valid owner: {view}")),
+                None if zero_mode_class_representative(self.graph, owner).is_some() => Ok(None),
+                None => Err(eyre!("a zero-mode temperature has no valid owner: {view}")),
             }
         } else if symbol == GS.on_shell_energy && call.get_nargs() == 2 {
             // Integer route owners belong to ordinary operations.
-            let Some(owner) = component_owner(call.get(0), n_hedges) else {
-                return Ok(None);
-            };
-            owner
+            Ok(component_owner(call.get(0), n_hedges))
         } else {
-            return Ok(None);
-        };
-        self.role(&owner).map(Some)
+            Ok(None)
+        }
+    }
+
+    /// The role of a branch tag, if `view` is one ([`Self::tag_owner`]).
+    pub(super) fn tag_role(&self, view: AtomView<'_>) -> Result<Option<SoftBranchRole>> {
+        self.tag_owner(view)?
+            .map(|owner| self.role(&owner))
+            .transpose()
+    }
+
+    /// The owners of the completed thermal soft branches that each residue
+    /// row of `family` depends on, in row order, through its roots or the
+    /// numerator, factor and scalar definitions it calls. The rows of a
+    /// family share most of their definitions, so each one is visited once.
+    ///
+    /// # Errors
+    ///
+    /// A branch tag without a valid owner.
+    pub(super) fn row_owners(
+        &self,
+        family: &DirectResidueBranches,
+    ) -> Result<Vec<BTreeSet<SuBitGraph>>> {
+        let mut definition_owners = HashMap::<*const FnMapEntry, BTreeSet<SuBitGraph>>::new();
+        family
+            .iter_keys()
+            .map(|(_, roots)| {
+                let mut owners = BTreeSet::new();
+                for (_, root) in roots.iter() {
+                    self.collect_owners(root.as_view(), &mut owners)?;
+                }
+                for definition in roots.numerators().iter().chain(roots.scalar_definitions()) {
+                    let shared = match definition_owners.entry(Arc::as_ptr(definition)) {
+                        Entry::Occupied(entry) => entry.into_mut(),
+                        Entry::Vacant(entry) => {
+                            let mut shared = BTreeSet::new();
+                            self.collect_owners(definition.rhs.as_view(), &mut shared)?;
+                            entry.insert(shared)
+                        }
+                    };
+                    owners.extend(shared.iter().cloned());
+                }
+                Ok(owners)
+            })
+            .collect()
+    }
+
+    /// Add the owners of the branch tags in `atom` to `owners`.
+    fn collect_owners(&self, atom: AtomView<'_>, owners: &mut BTreeSet<SuBitGraph>) -> Result<()> {
+        let mut error = None;
+        atom.visitor(&mut |view| {
+            if error.is_some() {
+                return false;
+            }
+            match self.tag_owner(view) {
+                Ok(owner) => {
+                    owners.extend(owner);
+                    true
+                }
+                Err(tag_error) => {
+                    error = Some(tag_error);
+                    false
+                }
+            }
+        });
+        error.map_or(Ok(()), Err)
+    }
+
+    /// Whether this operation's U acts on a residue row that depends on the
+    /// completed zero-mode branches `owners` as the UV counterterm of their
+    /// static theory: whether the soft set of the row's outermost branch, the
+    /// lines of `loop_lines` outside its support, lies inside this
+    /// operation's support. A branch strictly inside another one was taken
+    /// over by it, whose zero-mode operation expanded the inner branch's
+    /// further soft lines as hard ones. The U then makes every static soft
+    /// line of the row massive, so its image of the row is infrared finite on
+    /// its own and the masses it introduces there only regulate the static
+    /// theory. Otherwise the image keeps massless static lines and the U
+    /// introduces the vacuum masses. The own U of a connected host, which
+    /// cancels the soft region of its image of the unfrozen integrand and
+    /// needs the same masses there, never gets here
+    /// ([`Local3DDeformation::OrdinaryOnSoftBranch`]); a U holding part of the
+    /// soft set is not constrained in the infrared, since an enclosing host
+    /// subtracts the soft region of its image with the image's own masses.
+    ///
+    /// # Errors
+    ///
+    /// A row whose outermost branches lie both inside and outside the
+    /// operation's support in this sense. Zero-mode hosts form a chain under
+    /// inclusion, which leaves a single outermost branch per row.
+    pub(super) fn expands_static_cograph(
+        &self,
+        owners: &BTreeSet<SuBitGraph>,
+        loop_lines: &SuBitGraph,
+    ) -> Result<bool> {
+        let (inside, outside): (Vec<_>, Vec<_>) = owners
+            .iter()
+            .filter(|owner| {
+                !owners
+                    .iter()
+                    .any(|outer| outer != *owner && outer.includes(*owner))
+            })
+            .partition(|owner| self.support.includes(&loop_lines.subtract(*owner)));
+        if !inside.is_empty() && !outside.is_empty() {
+            return Err(eyre!(
+                "unsupported zero-mode forest: the U on {} contains the soft sets of the outermost \
+                 completed zero-mode branches {} but not those of {} of the same residue row, so \
+                 it is neither the UV counterterm of their static theory nor an ordinary U of the \
+                 row",
+                self.support.string_label(),
+                inside.iter().map(|owner| owner.string_label()).join(", "),
+                outside.iter().map(|owner| owner.string_label()).join(", "),
+            ));
+        }
+        Ok(!inside.is_empty())
     }
 
     /// Whether this operation multiplies the tag `view` by its Taylor
