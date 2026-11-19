@@ -270,7 +270,17 @@ impl LoweredClosure {
             let stored: Vec<Option<Atom>> = (0..settings.len())
                 .map(|i| c.load(&format!("{key}-{i}")))
                 .collect();
-            if stored.iter().all(Option::is_some) {
+            // A stored value carrying UNKNOWN(master, k) is served only to a
+            // setting that allows them (the key binds the option as well; this
+            // is the check on the returned atom, lane unknown-masters).
+            let admissible = stored.iter().zip(settings).all(|(value, setting)| {
+                value.as_ref().is_some_and(|value| {
+                    setting.allow_unknown_master_coefficients
+                        || !value
+                            .contains_symbol(crate::truncation_guard::unknown_coefficient_symbol())
+                })
+            });
+            if admissible {
                 return Ok(stored.into_iter().flatten().collect());
             }
         }
@@ -1812,6 +1822,13 @@ impl MassiveClosure {
                 &source.backend("Forcer massive closure"),
                 |master| source.describe(master),
             )?;
+            source.ensure_unknown_coefficients(
+                &result,
+                epsilon,
+                Some(target),
+                &source.backend("Forcer massive closure"),
+                settings.allow_unknown_master_coefficients,
+            )?;
             result = source.resolve_values(result, mode, settings.run_time_decimal_precision)?;
         }
         let mu = Atom::var(vk_symbol!(&settings.mu_r_sq_symbol));
@@ -2740,7 +2757,13 @@ pub(crate) fn finalisation_key(mode: RustRedMasterMode, s: &crate::VakintSetting
         s.rustred_p_uncovered,
         s.rustred_p_outside,
         s.allow_unknown_integrals,
-    )
+    ) + if s.allow_unknown_master_coefficients {
+        // Only when on, so that the keys of every existing (default) entry
+        // stay the same (lane unknown-masters).
+        "|unknown master coefficients allowed"
+    } else {
+        ""
+    }
 }
 
 /// `expression` holds an ε-dependent tag (`PG`, `PGamma`, `PMaster`,

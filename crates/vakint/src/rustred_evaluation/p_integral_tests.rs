@@ -1590,6 +1590,119 @@ mod five_loop_guards {
         }
     }
 
+    /// Lane unknown-masters, through the engine: a version-2 catalogue's
+    /// expected-but-unknown orders are refused by default (typed error naming
+    /// the master id and order and the request's backend), kept when
+    /// `allow_unknown_master_coefficients` is on, and ALARM always fails.
+    #[test]
+    fn unknown_master_coefficients_through_the_engine() {
+        use crate::p_integral::master_catalogue::tests::fixture_v2;
+        let mut engine = Vakint::new().unwrap();
+        engine.disable_default_p_master_catalogue();
+        engine.set_p_master_catalogue(
+            PMasterCatalogue::from_json("test catalogue v2", &fixture_v2().to_string()).unwrap(),
+        );
+        let e = parse("ε");
+        let reduced = residual("T910", &[1]) * e.pow(Atom::num(-2));
+        let deep = residual("T910", &[1]) * e.pow(Atom::num(-3));
+        for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
+            let mut settings = settings(mode, None);
+            settings.number_of_terms_in_epsilon_expansion = 6;
+            let run = |reduced: &Atom, allow: bool| {
+                let mut settings = settings.clone();
+                settings.allow_unknown_master_coefficients = allow;
+                let head = parse("p(1)");
+                finalize_reduced(
+                    &engine,
+                    &settings,
+                    BTreeMap::from([(
+                        (5, head.clone()),
+                        vec![ReducedPropagatorValue {
+                            scale_power: 0,
+                            reduced: reduced.clone(),
+                            spectator: None,
+                        }],
+                    )]),
+                    &BTreeMap::from([((5, head), BTreeSet::from([INTEGRAL.to_owned()]))]),
+                    mode,
+                )
+            };
+            match run(&reduced, false) {
+                Err(crate::VakintError::UnknownMasterCoefficients(unknowns)) => {
+                    let pairs: Vec<_> = unknowns
+                        .coefficients
+                        .iter()
+                        .map(|u| (u.master.as_str(), u.order))
+                        .collect();
+                    assert_eq!(pairs, [("u-m1", 1), ("u-m1", 2)]);
+                }
+                other => panic!("{mode:?}: expected unknown master coefficients, got {other:?}"),
+            }
+            let value = run(&reduced, true).unwrap();
+            assert!(
+                value.contains_symbol(crate::truncation_guard::unknown_coefficient_symbol()),
+                "{mode:?}: {value}"
+            );
+            for allow in [false, true] {
+                let missing = expect_missing_orders(run(&deep, allow).unwrap_err());
+                assert_eq!(missing.masters[0].first_missing_order, 3);
+            }
+        }
+    }
+
+    /// Lane unknown-masters: the retained-value re-finaliser applies the same
+    /// policy, and the public check lists the surviving pairs of a caller's
+    /// own result (empty after an exact cancellation; ALARM an error).
+    #[test]
+    fn unknown_master_coefficients_through_the_re_finaliser_and_the_public_check() {
+        use crate::p_integral::master_catalogue::tests::fixture_v2;
+        let mut engine = Vakint::new().unwrap();
+        engine.disable_default_p_master_catalogue();
+        engine.set_p_master_catalogue(
+            PMasterCatalogue::from_json("test catalogue v2", &fixture_v2().to_string()).unwrap(),
+        );
+        let e = parse("ε");
+        let reduced = residual("T910", &[1]) * e.pow(Atom::num(-2));
+        let retained = finalize(&engine, reduced, RustRedMasterMode::Retain, 6, 40).unwrap();
+        let mut symbolic = settings(RustRedMasterMode::Symbolic, None);
+        symbolic.number_of_terms_in_epsilon_expansion = 6;
+        match engine.refinalise_p_retained(&symbolic, retained.as_view(), 5) {
+            Err(crate::VakintError::UnknownMasterCoefficients(unknowns)) => {
+                assert_eq!(unknowns.coefficients.len(), 2, "{unknowns}");
+            }
+            other => panic!("expected unknown master coefficients, got {other:?}"),
+        }
+        symbolic.allow_unknown_master_coefficients = true;
+        let value = engine
+            .refinalise_p_retained(&symbolic, retained.as_view(), 5)
+            .unwrap();
+        let pairs: Vec<_> = engine
+            .unknown_master_coefficients(&symbolic, value.as_view(), Some(0))
+            .unwrap()
+            .into_iter()
+            .map(|u| (u.master, u.order))
+            .collect();
+        assert_eq!(pairs, [("u-m1".to_owned(), 1), ("u-m1".to_owned(), 2)]);
+        // A caller's sum where the pieces cancel exactly: nothing survives.
+        let sum = (&value - &value).expand();
+        assert!(
+            engine
+                .unknown_master_coefficients(&symbolic, sum.as_view(), Some(0))
+                .unwrap()
+                .is_empty()
+        );
+        // An ALARM tail in a caller's result is an error.
+        let alarm = crate::truncation_guard::unknown_tail(
+            vk_symbol!(&symbolic.epsilon_symbol),
+            3,
+            &parse("PMaster(u_m1)"),
+        );
+        assert!(matches!(
+            engine.unknown_master_coefficients(&symbolic, (value + alarm).as_view(), Some(0)),
+            Err(crate::VakintError::MissingMasterOrders(_))
+        ));
+    }
+
     /// Required number of coefficients (vacuum: `master_truncation_guard_tests`):
     /// through `ε^0` the known master suffices; one Laurent term more names
     /// the master, its first missing order and the five-loop request.

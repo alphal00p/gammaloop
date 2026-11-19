@@ -523,6 +523,15 @@ Built-in library (M2-V4):
   (graphica skew), and the terminals against `{1, PMaster(no), PMaster(t105)}`.
 
 p master catalogue (five-loop masters; `p_integral/master_catalogue.rs`, VK5L plan WP5):
+- Version 2 (schema `vakint.p-master-catalogue.v2`, `P_MASTER_CATALOGUE_VERSION = 2`; version 1 files are still read)
+  adds, per master, `unknown_through` (file default `unknown_through_default`; the last EXPECTED order) and
+  `placeholder` masters without coefficients: orders `known_through+1..=unknown_through` become the exact symbols
+  `UNKNOWN(symbol, k)`, ALARM (`Oep`) starts at `unknown_through + 1`. A result containing UNKNOWN symbols is the
+  typed error `UnknownMasterCoefficients` (every (master id, order) that entered it) unless the setting
+  `allow_unknown_master_coefficients` (Python keyword of the same name, default false) keeps them; ALARM is always
+  `MissingMasterOrders`. Depth bound and design: the six-loop R* beta function needs every five-loop p-integral
+  through ε^0, so a master is needed through the deepest pole of its reduction coefficients; the uniform default is
+  `unknown_through_default: 12` (largest pole seen 11, valid runs <= 9), with ALARM as the fail-closed guard beyond.
 - A catalogue file (schema `vakint.p-master-catalogue.v1`, version constant `P_MASTER_CATALOGUE_VERSION = 1`,
   normalisation `g-scheme` = the `C_G` above) lists masters (`id`, `symbol` rendered `PMaster(symbol)`, `loops`,
   `graph`, `leading_order`, exact or numerical coefficients with `significant_digits`, `unknown_from`) and the map of

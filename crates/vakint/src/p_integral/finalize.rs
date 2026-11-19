@@ -280,6 +280,13 @@ pub(crate) fn finalize_with(
             &source.backend(backend),
             |master| source.describe(master),
         )?;
+        source.ensure_unknown_coefficients(
+            &expanded,
+            epsilon,
+            Some(target),
+            &source.backend(backend),
+            settings.allow_unknown_master_coefficients,
+        )?;
         let expanded =
             source.resolve_values(expanded, mode, settings.run_time_decimal_precision)?;
         simplify_real(expanded.as_view())
@@ -385,6 +392,13 @@ pub(crate) fn refinalise_with(
         Some(target),
         &source.backend(backend),
         |master| source.describe(master),
+    )?;
+    source.ensure_unknown_coefficients(
+        &expanded,
+        epsilon,
+        Some(target),
+        &source.backend(backend),
+        settings.allow_unknown_master_coefficients,
     )?;
     let expanded = source.resolve_values(expanded, mode, settings.run_time_decimal_precision)?;
     let mut result = simplify_real(expanded.as_view());

@@ -68,8 +68,8 @@ pub use master_basis::{
     PMasterBasisRecord,
 };
 pub use master_catalogue::{
-    P_MASTER_CATALOGUE_SCHEMA, P_MASTER_CATALOGUE_VERSION, P_MASTER_NORMALISATION,
-    PMasterCatalogue, PMasterCatalogueError,
+    P_MASTER_CATALOGUE_SCHEMA, P_MASTER_CATALOGUE_SCHEMA_V1, P_MASTER_CATALOGUE_VERSION,
+    P_MASTER_NORMALISATION, PMasterCatalogue, PMasterCatalogueError,
 };
 
 pub(crate) fn invalid(detail: impl std::fmt::Display) -> VakintError {

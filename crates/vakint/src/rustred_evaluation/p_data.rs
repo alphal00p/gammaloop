@@ -1187,6 +1187,49 @@ impl Vakint {
     /// set with [`Self::set_p_master_catalogue`]; else, unless disabled, the
     /// file of `VAKINT_P_MASTER_CATALOGUE` (`off`: none), the catalogue the
     /// loaded package ships (`p-master-catalogue.json`), the built-in one.
+    /// The expected but unknown five-loop master coefficients
+    /// `UNKNOWN(master, k)` on which `expression` depends after its exact
+    /// expansion: `(master id, order k, lowest ε power it enters)` per pair,
+    /// empty when none survives. For a caller that evaluates in
+    /// `allow_unknown_master_coefficients` mode and decides on ITS final
+    /// result (the R* pole projection, the beta-function driver): vakint's own
+    /// refusal applies at each evaluate / finalise result, before such
+    /// combinations. A surviving ALARM tail (`Oep`) is the error
+    /// [`crate::MissingMasterOrders`] here too. `requested_order` only labels
+    /// that error.
+    pub fn unknown_master_coefficients(
+        &self,
+        settings: &crate::VakintSettings,
+        expression: symbolica::atom::AtomView,
+        requested_order: Option<i64>,
+    ) -> Result<Vec<crate::UnknownMasterCoefficient>, crate::VakintError> {
+        let epsilon = crate::utils::vakint_macros::vk_symbol!(&settings.epsilon_symbol);
+        let expression = symbolica::atom::AtomCore::expand(&expression.to_owned());
+        let catalogue = self.p_master_catalogue();
+        let source = crate::p_integral::master_catalogue::PMasterSource::new(
+            catalogue.as_deref(),
+            "caller result",
+        );
+        crate::truncation_guard::ensure_known_orders(
+            &expression,
+            epsilon,
+            requested_order,
+            &source.backend("caller result"),
+            |master| source.describe(master),
+        )?;
+        Ok(crate::truncation_guard::unknown_coefficients(
+            &expression,
+            epsilon,
+            |symbol| {
+                catalogue
+                    .as_deref()
+                    .and_then(|c| c.id_of_symbol(symbol))
+                    .unwrap_or(symbol)
+                    .to_owned()
+            },
+        ))
+    }
+
     pub(crate) fn p_master_catalogue(&self) -> Option<Arc<crate::p_integral::PMasterCatalogue>> {
         if let Some(catalogue) = &self.p_master_catalogue {
             return Some(Arc::clone(catalogue));

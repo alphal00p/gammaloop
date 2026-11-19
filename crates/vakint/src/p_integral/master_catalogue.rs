@@ -56,6 +56,40 @@
 //!
 //! A combination coefficient is exact in `d` (replaced by `4 - 2ε`) and may
 //! carry the tags `PG(x1,x2)`, `PGamma(m)` and Forcer masters `PMaster(name)`.
+//!
+//! Version 2 (`vakint.p-master-catalogue.v2`, version 2; lane unknown-masters,
+//! user's request 2026-11-19) separates the coefficients that are EXPECTED but
+//! not known yet from those that must never be needed. A master is
+//!
+//! ```text
+//! known orders (leading_order..=known_through)
+//!   + Σ_{k = known_through+1}^{unknown_through} UNKNOWN(symbol, k)·ε^k
+//!   + ALARM from ε^(unknown_through+1)          (the tail Oep(j, PMaster(symbol)))
+//! ```
+//!
+//! ```text
+//! { "schema": "vakint.p-master-catalogue.v2", "version": 2, ...,
+//!   "unknown_through_default": 12,     // last expected order of every master that states none
+//!   "masters": [ { "id": "ggppss_int(53)", "symbol": "ggppss_int_53", ..., "leading_order": -3,
+//!                  "known_through": 6,       // cross-check, as in version 1
+//!                  "unknown_through": 12,    // optional: overrides the default (>= known_through)
+//!                  "alarm_from": 13,         // optional cross-check: unknown_through + 1
+//!                  "coefficients": { ... } },
+//!                { "id": "X(T277:1,1,...)", "symbol": "x_t277_corner", ..., "leading_order": -7,
+//!                  "placeholder": true } ],  // no coefficients: every order UNKNOWN
+//!   "terminals": [ ... ] }                   // unchanged; a row may map onto a placeholder
+//! ```
+//!
+//! `unknown_from` is a version 1 field and refused in version 2. A master known
+//! beyond `unknown_through_default` has no UNKNOWN orders (ALARM right after
+//! its last known order). `UNKNOWN(symbol, k)` is an exact symbol through the
+//! whole expansion: it cancels only where its exact coefficient cancels. After
+//! the ALARM guard, a result that still contains one is
+//! [`crate::UnknownMasterCoefficients`] unless
+//! [`crate::VakintSettings::allow_unknown_master_coefficients`]; ALARM is always
+//! [`crate::MissingMasterOrders`]. Version 1 files are still read: every master
+//! then has `unknown_through = known_through` (no UNKNOWN orders), exactly as
+//! before.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -72,11 +106,18 @@ use crate::rustred_evaluation::RustRedMasterMode;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 use crate::{VakintError, get_integer_from_atom};
 
-/// The schema of a p master catalogue file.
-pub const P_MASTER_CATALOGUE_SCHEMA: &str = "vakint.p-master-catalogue.v1";
+/// The schema of a p master catalogue file (version 2: expected-but-unknown
+/// orders `UNKNOWN(master, k)` up to `unknown_through`, ALARM beyond).
+pub const P_MASTER_CATALOGUE_SCHEMA: &str = "vakint.p-master-catalogue.v2";
 
-/// The catalogue format version this vakint reads (simple version constant).
-pub const P_MASTER_CATALOGUE_VERSION: u32 = 1;
+/// The catalogue format version this vakint writes and reads (simple version
+/// constant). Version 1 files ([`P_MASTER_CATALOGUE_SCHEMA_V1`]) are still
+/// read: every master then has no UNKNOWN orders (ALARM right after its last
+/// known order), exactly as before version 2.
+pub const P_MASTER_CATALOGUE_VERSION: u32 = 2;
+
+/// The schema of version 1 catalogue files (still read).
+pub const P_MASTER_CATALOGUE_SCHEMA_V1: &str = "vakint.p-master-catalogue.v1";
 
 /// The normalisation of every catalogue value: vakint's `C_G` (G-scheme at
 /// `Q² = 1`, every loop divided by `εG(1,1)`, the one-loop bubble is `1/ε`),
@@ -220,6 +261,10 @@ struct CatalogueFile {
     #[serde(default)]
     #[allow(dead_code)]
     description: Option<String>,
+    /// Version 2: the last expected order `unknown_through` of every master
+    /// that does not state its own.
+    #[serde(default)]
+    unknown_through_default: Option<i64>,
     masters: Vec<MasterFile>,
     #[serde(default)]
     terminals: Vec<TerminalFile>,
@@ -235,8 +280,21 @@ struct MasterFile {
     leading_order: i64,
     #[serde(default)]
     known_through: Option<i64>,
+    /// Version 1 only: the first order of the unknown tail.
     #[serde(default)]
     unknown_from: Option<i64>,
+    /// Version 2: the last expected order; `known_through+1..=unknown_through`
+    /// are `UNKNOWN(symbol, k)`.
+    #[serde(default)]
+    unknown_through: Option<i64>,
+    /// Version 2 (cross-check): the first ALARM order, `unknown_through + 1`.
+    #[serde(default)]
+    alarm_from: Option<i64>,
+    /// Version 2: a declared master without coefficients whose orders
+    /// `leading_order..=unknown_through` are all UNKNOWN (e.g. an unmapped
+    /// terminal carried as its own master).
+    #[serde(default)]
+    placeholder: bool,
     #[serde(default)]
     significant_digits: Option<u32>,
     #[serde(default)]
@@ -316,6 +374,12 @@ pub(crate) struct PCatalogueMaster {
     /// Every order `leading_order..=known_through` has a coefficient
     /// (`leading_order - 1` if none).
     pub(crate) known_through: i64,
+    /// The last expected order: `known_through+1..=unknown_through` are
+    /// `UNKNOWN(symbol, k)`, ALARM from `unknown_through + 1` (version 1:
+    /// `unknown_through == known_through`).
+    pub(crate) unknown_through: i64,
+    /// Declared without coefficients, all orders UNKNOWN (version 2).
+    pub(crate) placeholder: bool,
     coefficients: BTreeMap<i64, PCoefficient>,
 }
 
@@ -396,6 +460,17 @@ fn p_master(symbol: &str) -> Atom {
     p_master_symbol().call(&[Atom::var(vk_symbol!(symbol))][..])
 }
 
+/// The format of the file a master comes from.
+#[derive(Clone, Copy, Debug)]
+enum CatalogueFormat {
+    /// Version 1: no UNKNOWN orders.
+    V1,
+    /// Version 2, with the file's `unknown_through_default`.
+    V2 {
+        unknown_through_default: Option<i64>,
+    },
+}
+
 /// Validate one catalogue master and insert it under its symbol (shared by
 /// [`PMasterCatalogue::from_json`] and [`PMasterCatalogue::with_masters_json`]).
 fn insert_master(
@@ -403,9 +478,32 @@ fn insert_master(
     ids: &mut BTreeMap<String, String>,
     forcer: &[&str],
     master: MasterFile,
+    format: CatalogueFormat,
     invalid: &dyn Fn(String) -> PMasterCatalogueError,
 ) -> Result<(), PMasterCatalogueError> {
     let name = format!("master {}", master.id);
+    match format {
+        CatalogueFormat::V1 => {
+            if master.unknown_through.is_some() || master.alarm_from.is_some() || master.placeholder
+            {
+                return Err(invalid(format!(
+                    "{name}: unknown_through / alarm_from / placeholder need schema {P_MASTER_CATALOGUE_SCHEMA}"
+                )));
+            }
+        }
+        CatalogueFormat::V2 { .. } => {
+            if master.unknown_from.is_some() {
+                return Err(invalid(format!(
+                    "{name}: unknown_from is a version 1 field; version 2 states unknown_through (and alarm_from)"
+                )));
+            }
+        }
+    }
+    if master.placeholder && !master.coefficients.is_empty() {
+        return Err(invalid(format!(
+            "{name}: a placeholder master has no coefficients"
+        )));
+    }
     if !plain_identifier(&master.symbol) {
         return Err(invalid(format!(
             "{name}: symbol {:?} is not a plain identifier",
@@ -445,7 +543,10 @@ fn insert_master(
         let exact = coefficient
             .exact
             .as_deref()
-            .map(|text| parse_constant(text).map_err(|detail| invalid(format!("{at}: {detail}"))))
+            .map(|text| {
+                parse_constant(text, matches!(format, CatalogueFormat::V2 { .. }))
+                    .map_err(|detail| invalid(format!("{at}: {detail}")))
+            })
             .transpose()?;
         if let Some(text) = &coefficient.numerical {
             let number = Float::parse(text, Some(64)).map_err(|error| {
@@ -494,6 +595,33 @@ fn insert_master(
             "{name}: unknown from epsilon^{unknown}, but its coefficients reach epsilon^{known_through}"
         )));
     }
+    let unknown_through = match format {
+        CatalogueFormat::V1 => known_through,
+        CatalogueFormat::V2 {
+            unknown_through_default,
+        } => match master.unknown_through.or(unknown_through_default) {
+            Some(last) if master.unknown_through.is_some() && last < known_through => {
+                return Err(invalid(format!(
+                    "{name}: unknown_through {last} below its last known order epsilon^{known_through}"
+                )));
+            }
+            Some(last) => last.max(known_through),
+            None => known_through,
+        },
+    };
+    if master.placeholder && unknown_through < master.leading_order {
+        return Err(invalid(format!(
+            "{name}: a placeholder master needs unknown_through >= its leading order {}",
+            master.leading_order
+        )));
+    }
+    if let Some(alarm) = master.alarm_from
+        && alarm != unknown_through + 1
+    {
+        return Err(invalid(format!(
+            "{name}: alarm_from {alarm}, but its expected orders end at epsilon^{unknown_through}"
+        )));
+    }
     if catalogue.masters.contains_key(&master.symbol) {
         return Err(invalid(format!(
             "{name}: symbol {} is used twice",
@@ -508,6 +636,8 @@ fn insert_master(
             graph: master.graph,
             leading_order: master.leading_order,
             known_through,
+            unknown_through,
+            placeholder: master.placeholder,
             coefficients,
         },
     );
@@ -524,19 +654,26 @@ impl PMasterCatalogue {
         };
         let file: CatalogueFile = serde_json::from_str(text)
             .map_err(|error| invalid(format!("not a catalogue: {error}")))?;
-        if file.schema != P_MASTER_CATALOGUE_SCHEMA {
-            return Err(invalid(format!(
-                "schema {}, this vakint reads {P_MASTER_CATALOGUE_SCHEMA}",
-                file.schema
-            )));
-        }
-        if file.version != P_MASTER_CATALOGUE_VERSION {
-            return Err(invalid(format!(
-                "catalogue version {}, this vakint reads version {P_MASTER_CATALOGUE_VERSION}; \
-                 regenerate it (tools/p_integral_registry/ggppss_catalogue.py)",
-                file.version
-            )));
-        }
+        let format = match (file.schema.as_str(), file.version) {
+            (P_MASTER_CATALOGUE_SCHEMA, P_MASTER_CATALOGUE_VERSION) => CatalogueFormat::V2 {
+                unknown_through_default: file.unknown_through_default,
+            },
+            (P_MASTER_CATALOGUE_SCHEMA_V1, 1) => {
+                if file.unknown_through_default.is_some() {
+                    return Err(invalid(format!(
+                        "unknown_through_default needs schema {P_MASTER_CATALOGUE_SCHEMA}"
+                    )));
+                }
+                CatalogueFormat::V1
+            }
+            (schema, version) => {
+                return Err(invalid(format!(
+                    "schema {schema} version {version}, this vakint reads {P_MASTER_CATALOGUE_SCHEMA} \
+                     version {P_MASTER_CATALOGUE_VERSION} (and {P_MASTER_CATALOGUE_SCHEMA_V1} version 1); \
+                     regenerate it (tools/p_integral_registry/ggppss_catalogue.py)"
+                )));
+            }
+        };
         if file.normalisation != P_MASTER_NORMALISATION {
             return Err(invalid(format!(
                 "normalisation {:?}, vakint's p masters are {P_MASTER_NORMALISATION:?}",
@@ -558,8 +695,9 @@ impl PMasterCatalogue {
         };
         let mut ids = BTreeMap::new();
         for master in file.masters {
-            insert_master(&mut catalogue, &mut ids, &forcer, master, &invalid)?;
+            insert_master(&mut catalogue, &mut ids, &forcer, master, format, &invalid)?;
         }
+        check_unknown_references(&catalogue, &invalid)?;
         let d = Atom::var(vk_symbol!("d"));
         let dimension = Atom::num(4) - Atom::num(2) * Atom::var(table_epsilon());
         for terminal in file.terminals {
@@ -688,6 +826,8 @@ impl PMasterCatalogue {
                     graph: format!("Forcer Master({name})"),
                     leading_order,
                     known_through: unknown_from - 1,
+                    unknown_through: unknown_from - 1,
+                    placeholder: false,
                     coefficients: (leading_order..unknown_from)
                         .map(|power| {
                             (
@@ -756,8 +896,18 @@ impl PMasterCatalogue {
             .map(|(symbol, master)| (master.id.clone(), symbol.clone()))
             .collect();
         for master in masters {
-            insert_master(&mut extended, &mut ids, &forcer, master, &invalid)?;
+            // The basis's new masters keep the format they are written in
+            // (version 1 fields: no UNKNOWN orders).
+            let format = if master.unknown_from.is_some() {
+                CatalogueFormat::V1
+            } else {
+                CatalogueFormat::V2 {
+                    unknown_through_default: None,
+                }
+            };
+            insert_master(&mut extended, &mut ids, &forcer, master, format, &invalid)?;
         }
+        check_unknown_references(&extended, &invalid)?;
         Ok(extended)
     }
 
@@ -768,6 +918,11 @@ impl PMasterCatalogue {
             .iter()
             .find(|(_, master)| master.id == id)
             .map(|(symbol, _)| symbol.as_str())
+    }
+
+    /// The catalogue id of the master with `PMaster` symbol `symbol`.
+    pub(crate) fn id_of_symbol(&self, symbol: &str) -> Option<&str> {
+        self.masters.get(symbol).map(|master| master.id.as_str())
     }
 
     /// `(symbol, id)` of every master (tests).
@@ -799,7 +954,7 @@ fn residual_label(node: &str, key: &[i64]) -> String {
 
 /// A coefficient text: rational numbers and the constants `zeta(n)`,
 /// `MZV(..)` and `π`; anything else (an undetermined symbol, `ep`) is refused.
-fn parse_constant(text: &str) -> Result<Atom, String> {
+fn parse_constant(text: &str, unknowns: bool) -> Result<Atom, String> {
     let parsed = vk_parse!(text).map_err(|error| error.to_string())?;
     let parsed = parsed
         .replace(Atom::var(vk_symbol!("pi")).to_pattern())
@@ -823,6 +978,16 @@ fn parse_constant(text: &str) -> Result<Atom, String> {
         AtomView::Fun(function) if [zeta(), vk_symbol!("MZV")].contains(&function.get_symbol()) => {
             false
         }
+        // Version 2: an expected but unknown coefficient of a catalogue master
+        // (the references are checked once every master is read).
+        AtomView::Fun(function)
+            if unknowns
+                && function.get_symbol()
+                    == crate::truncation_guard::unknown_coefficient_symbol()
+                && unknown_reference(part).is_some() =>
+        {
+            false
+        }
         AtomView::Fun(_) => {
             unknown = Some(part.to_owned());
             false
@@ -831,10 +996,71 @@ fn parse_constant(text: &str) -> Result<Atom, String> {
     });
     match unknown {
         Some(part) => Err(format!(
-            "unknown constant {part} (an undetermined coefficient belongs to the unknown tail)"
+            "unknown constant {part} (an undetermined coefficient belongs to the unknown tail, \
+             or, in version 2, is written UNKNOWN(symbol, k))"
         )),
         None => Ok(parsed.expand()),
     }
+}
+
+/// `(symbol, k)` of an `UNKNOWN(symbol, k)` atom.
+fn unknown_reference(atom: AtomView) -> Option<(String, i64)> {
+    let AtomView::Fun(function) = atom else {
+        return None;
+    };
+    if function.get_symbol() != crate::truncation_guard::unknown_coefficient_symbol() {
+        return None;
+    }
+    match function.iter().collect::<Vec<_>>().as_slice() {
+        [AtomView::Var(symbol), order] => Some((
+            symbol.get_symbol().get_stripped_name().to_owned(),
+            get_integer_from_atom(*order)?,
+        )),
+        _ => None,
+    }
+}
+
+/// Version 2: every `UNKNOWN(symbol, k)` written into a coefficient (a
+/// published or derived dependence, e.g. GGPPSS's printed relations or an
+/// identity between two masters) refers to a FREE coordinate: an order of a
+/// declared master that is itself only `UNKNOWN(symbol, k)`, either an
+/// implicit expected order (`known_through < k <= unknown_through`) or a
+/// coefficient written as exactly that symbol. So the symbols of a result are
+/// independent unknowns, and no dependence chain or cycle can hide one.
+fn check_unknown_references(
+    catalogue: &PMasterCatalogue,
+    invalid: &dyn Fn(String) -> PMasterCatalogueError,
+) -> Result<(), PMasterCatalogueError> {
+    for master in catalogue.masters.values() {
+        for (order, coefficient) in &master.coefficients {
+            let Some(exact) = &coefficient.exact else {
+                continue;
+            };
+            let mut error = None;
+            exact.visitor(&mut |part| {
+                let Some((target, k)) = unknown_reference(part) else {
+                    return error.is_none();
+                };
+                let free = catalogue.masters.get(&target).is_some_and(|t| {
+                    (t.known_through < k && k <= t.unknown_through)
+                        || t.coefficients.get(&k).and_then(|c| c.exact.as_ref())
+                            == Some(&crate::truncation_guard::unknown_coefficient(&target, k))
+                });
+                if !free && error.is_none() {
+                    error = Some(format!(
+                        "master {} coefficient epsilon^{order} refers to UNKNOWN({target}, {k}), \
+                         which is not a free expected order of a declared master",
+                        master.id
+                    ));
+                }
+                false
+            });
+            if let Some(error) = error {
+                return Err(invalid(error));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// A combination coefficient: rational in the table epsilon, times tags.
@@ -976,11 +1202,17 @@ impl<'a> PMasterSource<'a> {
             return masters::p_master_expansion(name, epsilon);
         };
         let e = Atom::var(epsilon);
+        // ALARM (`Oep`) beyond the last expected order; the expected but
+        // unpublished orders are the named symbols UNKNOWN(symbol, k).
         let mut expansion = crate::truncation_guard::unknown_tail(
             epsilon,
-            master.known_through + 1,
+            master.unknown_through + 1,
             &p_master(name),
         );
+        for order in master.known_through + 1..=master.unknown_through {
+            expansion +=
+                crate::truncation_guard::unknown_coefficient(name, order) * e.pow(Atom::num(order));
+        }
         for (&order, coefficient) in &master.coefficients {
             let value = match coefficient.exact_value() {
                 Some(exact) => exact.clone(),
@@ -989,6 +1221,32 @@ impl<'a> PMasterSource<'a> {
             expansion += value * e.pow(Atom::num(order));
         }
         Ok(expansion)
+    }
+
+    /// After the ALARM guard: the expected but unknown master coefficients
+    /// `UNKNOWN(symbol, k)` that survived in `expanded` are an error unless
+    /// `allow` (named by their catalogue ids).
+    pub(crate) fn ensure_unknown_coefficients(
+        &self,
+        expanded: &Atom,
+        epsilon: Symbol,
+        requested_order: Option<i64>,
+        backend: &str,
+        allow: bool,
+    ) -> Result<(), VakintError> {
+        crate::truncation_guard::ensure_unknown_coefficients_allowed(
+            expanded,
+            epsilon,
+            requested_order,
+            backend,
+            allow,
+            |symbol| {
+                self.catalogue
+                    .and_then(|catalogue| catalogue.masters.get(symbol))
+                    .map_or_else(|| symbol.to_owned(), |master| master.id.clone())
+            },
+        )
+        .map_err(VakintError::from)
     }
 
     /// Replace every `PResidual` by its master combination. Without a row
@@ -1097,7 +1355,7 @@ impl<'a> PMasterSource<'a> {
                 match masters::p_master_name(part) {
                     Some(name) if forcer.contains(&name.as_str()) => {}
                     Some(name) => match catalogue.masters.get(&name) {
-                        Some(master) if master.coefficients.is_empty() => {
+                        Some(master) if master.coefficients.is_empty() && !master.placeholder => {
                             empty.insert(format!(
                                 "{}: declared terminal has no computed coefficients; graph {}",
                                 master.id, master.graph

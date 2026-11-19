@@ -108,7 +108,9 @@ pub use rustred_evaluation::{
     VAKINT_CACHE_DIR_VARIABLE,
 };
 pub use rustred_evaluation::{RustRedEvaluationError, RustRedEvaluationOptions, RustRedMasterMode};
-pub use truncation_guard::{MissingMasterOrder, MissingMasterOrders};
+pub use truncation_guard::{
+    MissingMasterOrder, MissingMasterOrders, UnknownMasterCoefficient, UnknownMasterCoefficients,
+};
 
 use regex::Regex;
 use rug::float::Constant;
@@ -560,6 +562,11 @@ pub enum VakintError {
     NumericalPrecision(String),
     #[error(transparent)]
     MissingMasterOrders(#[from] truncation_guard::MissingMasterOrders),
+    /// Expected master coefficients that are not known yet
+    /// (`UNKNOWN(master, k)`) entered the result, and
+    /// [`VakintSettings::allow_unknown_master_coefficients`] is off.
+    #[error(transparent)]
+    UnknownMasterCoefficients(#[from] truncation_guard::UnknownMasterCoefficients),
     /// A guard of the p master catalogue (five-loop p masters) refused the
     /// request: no catalogue, an unmapped terminal, a master without
     /// coefficients, or coefficients without the requested digits.
@@ -2601,6 +2608,15 @@ pub struct VakintSettings {
     /// a versioned data file: [`p_integral::master_basis`]), applied to the
     /// exact result after the terminal map and before the eps expansion.
     pub p_master_basis: PMasterBasis,
+    /// Whether a p-integral result may keep expected but not yet known master
+    /// coefficients `UNKNOWN(master, k)` (the orders a master catalogue of
+    /// schema version 2 declares between a master's last known order and its
+    /// `unknown_through`). Off (default): such a result is the typed error
+    /// [`UnknownMasterCoefficients`] naming every (master, order) pair that
+    /// entered it after the exact expansion. On: the symbols stay in the
+    /// result. Orders beyond `unknown_through` (ALARM) are always the error
+    /// [`MissingMasterOrders`]. Retain mode never substitutes master values.
+    pub allow_unknown_master_coefficients: bool,
     pub tensor_reduction_method: TensorReductionMethod,
     // This quantity is typically set equal to *one plus the maximum loop count* of the UV regularisation problem considered.
     // For example when considering a 2-loop problem, then:
@@ -2948,6 +2964,7 @@ impl Default for VakintSettings {
             rustred_p_relation_cache: PRelationCacheSettings::default(),
             rustred_p_outside: RustRedPOutsideSettings::default(),
             p_master_basis: PMasterBasis::Original,
+            allow_unknown_master_coefficients: false,
             tensor_reduction_method: TensorReductionMethod::FeynKit,
             // Default to a three-loop UV subtraction problem, for which alphaLoop implementation can be used.
             number_of_terms_in_epsilon_expansion: 4,

@@ -16,6 +16,7 @@
 
 use serde_json::{Value, json};
 use symbolica::atom::{Atom, AtomCore};
+use symbolica::function;
 
 use super::super::ReducedPropagatorValue;
 use super::super::finalize::finalize_with;
@@ -35,8 +36,8 @@ const REQUEST: &str = "test request topo(T5(p(1),1,...))";
 /// p path's five-loop guard tests (`rustred_evaluation::p_integral` tests).
 pub(crate) fn fixture() -> Value {
     json!({
-        "schema": P_MASTER_CATALOGUE_SCHEMA,
-        "version": P_MASTER_CATALOGUE_VERSION,
+        "schema": P_MASTER_CATALOGUE_SCHEMA_V1,
+        "version": 1,
         "data_version": "test-5L-v1",
         "normalisation": P_MASTER_NORMALISATION,
         "masters": [
@@ -453,7 +454,7 @@ fn exact_5l_constants_stay_symbolic() {
     )
     .unwrap();
     let [coefficient] = at_unit_scale(&value, 0, 0).try_into().unwrap();
-    let expected = parse_constant("zeta(3)+pi^2-MZV(5,3)").unwrap();
+    let expected = parse_constant("zeta(3)+pi^2-MZV(5,3)", false).unwrap();
     assert!((coefficient - expected).expand().is_zero(), "{value}");
 }
 
@@ -547,8 +548,8 @@ fn malformed_catalogues_are_refused_with_the_master_and_order() {
         &["schema other.v1"],
     );
     refused(
-        &|file| file["version"] = json!(2),
-        &["catalogue version 2", "reads version 1"],
+        &|file| file["version"] = json!(3),
+        &["version 3", "reads vakint.p-master-catalogue.v2 version 2"],
     );
     refused(
         &|file| file["normalisation"] = json!("msbar"),
@@ -724,4 +725,718 @@ fn the_ggppss_catalogue_loads_when_named() {
         master.known_through + 1
     );
     assert!(missing.backend.contains("ggppss-5L-v1"), "{missing}");
+}
+
+/// Lane unknown-masters: a version-2 catalogue. `u_m1` = `1/ε + 5/2 +
+/// UNKNOWN(u_m1,1)·ε + UNKNOWN(u_m1,2)·ε² + ALARM(ε³)` (file default
+/// `unknown_through_default: 2`); `u_deep` known beyond the default (ε^0..ε^4,
+/// ALARM from ε^5); `u_own` with its own `unknown_through: 1`; `u_x` a
+/// placeholder (all orders ε^-2..ε^2 UNKNOWN), carrying the unmapped terminal
+/// T911 the way helper VH 2's `X[node:key][k]` atoms do.
+pub(crate) fn fixture_v2() -> Value {
+    json!({
+        "schema": P_MASTER_CATALOGUE_SCHEMA,
+        "version": P_MASTER_CATALOGUE_VERSION,
+        "data_version": "test-5L-v2",
+        "normalisation": P_MASTER_NORMALISATION,
+        "unknown_through_default": 2,
+        "masters": [
+            {"id": "u-m1", "symbol": "u_m1", "loops": 5, "graph": "u-graph-1",
+             "leading_order": -1, "known_through": 0, "alarm_from": 3,
+             "coefficients": {"-1": {"exact": "1"}, "0": {"exact": "5/2"}}},
+            {"id": "u-deep", "symbol": "u_deep", "loops": 5, "graph": "u-graph-2",
+             "leading_order": 0, "coefficients": {"0": {"exact": "1"}, "1": {"exact": "2"},
+             "2": {"exact": "3"}, "3": {"exact": "4"}, "4": {"exact": "5"}}},
+            {"id": "u-own", "symbol": "u_own", "loops": 5, "graph": "u-graph-3",
+             "leading_order": 0, "unknown_through": 1, "coefficients": {"0": {"exact": "7"}}},
+            {"id": "u-x", "symbol": "u_x", "loops": 5, "graph": "u-graph-4",
+             "leading_order": -2, "placeholder": true},
+            {"id": "u-dep", "symbol": "u_dep", "loops": 5, "graph": "u-graph-5",
+             "leading_order": 0, "coefficients": {"0": {"exact": "1"},
+             "1": {"exact": "2+3*UNKNOWN(u_m1,1)"}}},
+            {"id": "u-num", "symbol": "u_num", "loops": 5, "graph": "u-graph-6",
+             "leading_order": 0, "unknown_through": 1,
+             "coefficients": {"0": {"numerical": "1.25", "significant_digits": 30}}},
+            {"id": "u-self", "symbol": "u_self", "loops": 5, "graph": "u-graph-7",
+             "leading_order": 0, "coefficients": {"0": {"exact": "1"},
+             "1": {"exact": "UNKNOWN(u_self,1)"}, "2": {"exact": "4-UNKNOWN(u_self,1)"}}}
+        ],
+        "terminals": [
+            {"node": "T910", "key": [1], "status": "mapped",
+             "combination": [{"master": "u-m1", "coefficient": "1"}]},
+            {"node": "T911", "key": [1], "status": "mapped",
+             "combination": [{"master": "u-x", "coefficient": "1"}]}
+        ]
+    })
+}
+
+fn run_allowing(
+    catalogue: &PMasterCatalogue,
+    reduced: Atom,
+    mode: RustRedMasterMode,
+    allow: bool,
+) -> Result<Atom, VakintError> {
+    crate::Vakint::initialize_vakint_symbols();
+    let mut settings = settings(6, 40);
+    settings.allow_unknown_master_coefficients = allow;
+    finalize_with(
+        &[ReducedPropagatorValue {
+            scale_power: 0,
+            reduced,
+            spectator: None,
+        }],
+        5,
+        &vk_parse!("p(1)").unwrap(),
+        &settings,
+        mode,
+        "RustRed",
+        PMasterSource::new(Some(catalogue), REQUEST),
+    )
+}
+
+fn unknown(master: &str, order: i64) -> Atom {
+    crate::truncation_guard::unknown_coefficient(master, order)
+}
+
+fn expect_unknowns(error: VakintError) -> crate::UnknownMasterCoefficients {
+    match error {
+        VakintError::UnknownMasterCoefficients(unknowns) => unknowns,
+        other => panic!("expected unknown master coefficients, got: {other}"),
+    }
+}
+
+/// `(master, order, first affected result order)` of a refusal.
+fn unknown_entries(unknowns: &crate::UnknownMasterCoefficients) -> Vec<(String, i64, i64)> {
+    unknowns
+        .coefficients
+        .iter()
+        .map(|u| (u.master.clone(), u.order, u.first_affected_result_order))
+        .collect()
+}
+
+#[test]
+fn version_two_catalogues_declare_expected_unknown_orders() {
+    let catalogue = load(&fixture_v2()).unwrap();
+    let depths = |symbol: &str| {
+        let master = catalogue.master(symbol).unwrap();
+        (
+            master.known_through,
+            master.unknown_through,
+            master.placeholder,
+        )
+    };
+    assert_eq!(depths("u_m1"), (0, 2, false));
+    assert_eq!(depths("u_deep"), (4, 4, false));
+    assert_eq!(depths("u_own"), (0, 1, false));
+    assert_eq!(depths("u_x"), (-3, 2, true));
+    // The expansion: known orders, UNKNOWN(symbol, k) up to the expected
+    // depth, then the ALARM tail.
+    let source = PMasterSource::new(Some(&catalogue), REQUEST);
+    let e = vk_symbol!("ε");
+    let ep = Atom::var(e);
+    let expected = ep.pow(Atom::num(-1))
+        + Atom::num(5) / Atom::num(2)
+        + unknown("u_m1", 1) * &ep
+        + unknown("u_m1", 2) * ep.pow(Atom::num(2))
+        + crate::truncation_guard::unknown_tail(e, 3, &p_master("u_m1"));
+    assert_eq!(
+        (source.expansion("u_m1", e).unwrap() - expected).expand(),
+        Atom::Zero
+    );
+    // Version 1 files keep their meaning (no UNKNOWN orders).
+    let v1 = catalogue_v1_m1();
+    assert_eq!(
+        (v1.known_through, v1.unknown_through),
+        (0, 0),
+        "a version 1 master has no expected unknown orders"
+    );
+}
+
+fn catalogue_v1_m1() -> PCatalogueMaster {
+    catalogue().master("syn_m1").unwrap().clone()
+}
+
+/// Refused (default): a typed error naming every (master, order) that entered
+/// the result; allowed: the symbols stay, with their exact coefficients, in
+/// Symbolic and Numerical mode.
+#[test]
+fn unknown_master_coefficients_are_refused_or_kept() {
+    let catalogue = load(&fixture_v2()).unwrap();
+    // ε^-2·u_m1 through ε^0: needs u_m1 through ε^2 (both UNKNOWN orders).
+    let reduced = p_master("u_m1") * eps().pow(Atom::num(-2));
+    for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
+        let error = run_allowing(&catalogue, reduced.clone(), mode, false).unwrap_err();
+        let message = error.to_string();
+        let unknowns = expect_unknowns(error);
+        assert_eq!(
+            unknown_entries(&unknowns),
+            [("u-m1".into(), 1, -1), ("u-m1".into(), 2, 0)],
+            "{message}"
+        );
+        assert_names(&message, &["u-m1", "allow_unknown_master_coefficients"]);
+        let value = run_allowing(&catalogue, reduced.clone(), mode, true).unwrap();
+        assert!(value.contains_symbol(crate::truncation_guard::unknown_coefficient_symbol()));
+        if mode == RustRedMasterMode::Symbolic {
+            assert_eq!(
+                at_unit_scale(&value, -3, 0),
+                [
+                    Atom::num(1),
+                    Atom::num(5) / Atom::num(2),
+                    unknown("u_m1", 1),
+                    unknown("u_m1", 2)
+                ]
+            );
+        }
+    }
+    // Through the known orders only: no UNKNOWN, no error, even refused.
+    let known = run_allowing(
+        &catalogue,
+        p_master("u_m1"),
+        RustRedMasterMode::Symbolic,
+        false,
+    );
+    assert_eq!(
+        at_unit_scale(&known.unwrap(), -1, 0),
+        [Atom::num(1), Atom::num(5) / Atom::num(2)]
+    );
+}
+
+/// ALARM (beyond the expected depth) is the MissingMasterOrders error
+/// whatever the option, also for a master known beyond the default depth and
+/// for one with its own depth.
+#[test]
+fn alarm_orders_always_fail() {
+    let catalogue = load(&fixture_v2()).unwrap();
+    for (reduced, master, first) in [
+        (p_master("u_m1") * eps().pow(Atom::num(-3)), "u-m1", 3),
+        (p_master("u_deep") * eps().pow(Atom::num(-5)), "u-deep", 5),
+        (p_master("u_own") * eps().pow(Atom::num(-2)), "u-own", 2),
+    ] {
+        for allow in [false, true] {
+            let missing = expect_missing_orders(
+                run_allowing(
+                    &catalogue,
+                    reduced.clone(),
+                    RustRedMasterMode::Symbolic,
+                    allow,
+                )
+                .unwrap_err(),
+            );
+            assert_eq!(missing.masters.len(), 1, "{master}");
+            assert!(missing.masters[0].master.contains(master), "{missing:?}");
+            assert_eq!(missing.masters[0].first_missing_order, first);
+        }
+    }
+    // u_deep through its known ε^4, u_own through its UNKNOWN ε^1.
+    let deep = run_allowing(
+        &catalogue,
+        p_master("u_deep") * eps().pow(Atom::num(-4)),
+        RustRedMasterMode::Symbolic,
+        false,
+    )
+    .unwrap();
+    assert_eq!(at_unit_scale(&deep, -4, 0).last().unwrap(), &Atom::num(5));
+    let own = run_allowing(
+        &catalogue,
+        p_master("u_own") * eps().pow(Atom::num(-1)),
+        RustRedMasterMode::Symbolic,
+        true,
+    )
+    .unwrap();
+    assert_eq!(
+        at_unit_scale(&own, -1, 0),
+        [Atom::num(7), unknown("u_own", 1)]
+    );
+}
+
+/// UNKNOWN terms cancel exactly when their exact coefficients cancel (the
+/// laurent-depth cancellation pitfall): `ε^-3·(u_m1 - T910)` is zero, and
+/// `ε^-2·u_m1·(ε·PG(0,0) - 1 + ε³)` is `ε·u_m1` (only known orders), so both
+/// pass with the option off; a sum whose UNKNOWN parts do not cancel is
+/// refused with exactly the surviving pairs.
+#[test]
+fn unknown_terms_cancel_only_exactly() {
+    let catalogue = load(&fixture_v2()).unwrap();
+    let master = p_master("u_m1");
+    let pg = function!(pg_symbol(), Atom::num(0), Atom::num(0));
+    let zero = (residual("T910", &[1]) - &master) * eps().pow(Atom::num(-3));
+    let partial = (eps().pow(Atom::num(-2))
+        * &master
+        * (eps() * &pg - Atom::num(1) + eps().pow(Atom::num(3))))
+    .expand();
+    for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
+        assert!(
+            run_allowing(&catalogue, zero.clone(), mode, false)
+                .unwrap()
+                .is_zero()
+        );
+        let value = run_allowing(&catalogue, partial.clone(), mode, false).unwrap();
+        assert!(!value.contains_symbol(crate::truncation_guard::unknown_coefficient_symbol()));
+    }
+    let value = run_allowing(&catalogue, partial, RustRedMasterMode::Symbolic, false).unwrap();
+    assert_eq!(at_unit_scale(&value, -1, 0), [Atom::Zero, Atom::num(1)]);
+    // Not cancelling: ε^-2·u_m1·(ε·PG(0,0) + 1) = 2·ε^-2·u_m1.
+    let survivor = (eps().pow(Atom::num(-2)) * &master * (eps() * &pg + Atom::num(1))).expand();
+    let unknowns = expect_unknowns(
+        run_allowing(&catalogue, survivor, RustRedMasterMode::Symbolic, false).unwrap_err(),
+    );
+    assert_eq!(
+        unknown_entries(&unknowns),
+        [("u-m1".into(), 1, -1), ("u-m1".into(), 2, 0)]
+    );
+}
+
+/// A placeholder master (an unmapped terminal carried as its own master):
+/// every order of its leading..expected range is UNKNOWN.
+#[test]
+fn placeholder_masters_are_all_unknown() {
+    let catalogue = load(&fixture_v2()).unwrap();
+    let reduced = residual("T911", &[1]);
+    let unknowns = expect_unknowns(
+        run_allowing(
+            &catalogue,
+            reduced.clone(),
+            RustRedMasterMode::Symbolic,
+            false,
+        )
+        .unwrap_err(),
+    );
+    assert_eq!(
+        unknown_entries(&unknowns),
+        [
+            ("u-x".into(), -2, -2),
+            ("u-x".into(), -1, -1),
+            ("u-x".into(), 0, 0)
+        ]
+    );
+    let value = run_allowing(&catalogue, reduced, RustRedMasterMode::Symbolic, true).unwrap();
+    assert_eq!(
+        at_unit_scale(&value, -2, 0),
+        [unknown("u_x", -2), unknown("u_x", -1), unknown("u_x", 0)]
+    );
+}
+
+#[test]
+fn malformed_version_two_catalogues_are_refused() {
+    let cases: [(&dyn Fn(&mut Value), &[&str]); 5] = [
+        (
+            &|file| file["masters"][0]["unknown_from"] = json!(1),
+            &["u-m1", "unknown_from is a version 1 field"],
+        ),
+        (
+            &|file| file["masters"][1]["unknown_through"] = json!(3),
+            &["u-deep", "unknown_through 3 below its last known order"],
+        ),
+        (
+            &|file| file["masters"][0]["alarm_from"] = json!(4),
+            &["u-m1", "alarm_from 4"],
+        ),
+        (
+            &|file| file["masters"][3]["coefficients"] = json!({"-2": {"exact": "1"}}),
+            &["u-x", "a placeholder master has no coefficients"],
+        ),
+        (
+            &|file| {
+                file["schema"] = json!(P_MASTER_CATALOGUE_SCHEMA_V1);
+                file["version"] = json!(1);
+            },
+            &["unknown_through_default needs schema"],
+        ),
+    ];
+    for (edit, parts) in cases {
+        let mut file = fixture_v2();
+        edit(&mut file);
+        let message = load(&file).unwrap_err().to_string();
+        assert_names(&message, parts);
+    }
+}
+
+/// Lane unknown-masters, physical example (environment driven, skipped
+/// without it): a RustRed `p5l_library reduce-file` output of one five-loop
+/// key (`VAKINT_TEST_UNKNOWN_KEY_FILE`: lines `Unit GammaTag([(m, e), ..]) :
+/// c(d)` and `PResidual(node, [k, ..]) GammaTag(..) : c(d)`) finalized in
+/// G-scheme Symbolic mode through ε^0 with a version 1 catalogue
+/// (`VAKINT_TEST_UNKNOWN_CATALOGUE`) raised to version 2 with
+/// `unknown_through_default` 12. Refused: prints the (master, order) pairs;
+/// allowed: prints the ε^0 coefficient of every UNKNOWN symbol.
+/// `VAKINT_TEST_UNKNOWN_EXPECT="ggppss_int_53:7=-7/16;ggppss_int_74:6=7/288"`
+/// asserts those ε^0 coefficients and that no other UNKNOWN enters ε^0.
+#[test]
+fn unknown_masters_physical_key_file() {
+    let (Ok(key_file), Ok(catalogue_file)) = (
+        std::env::var("VAKINT_TEST_UNKNOWN_KEY_FILE"),
+        std::env::var("VAKINT_TEST_UNKNOWN_CATALOGUE"),
+    ) else {
+        eprintln!("unknown_masters_physical_key_file: environment unset, skipped");
+        return;
+    };
+    crate::Vakint::initialize_vakint_symbols();
+    let mut file: Value =
+        serde_json::from_str(&std::fs::read_to_string(&catalogue_file).unwrap()).unwrap();
+    file["schema"] = json!(P_MASTER_CATALOGUE_SCHEMA);
+    file["version"] = json!(P_MASTER_CATALOGUE_VERSION);
+    file["unknown_through_default"] = json!(12);
+    for master in file["masters"].as_array_mut().unwrap() {
+        master.as_object_mut().unwrap().remove("unknown_from");
+    }
+    // Optional: GGPPSS's printed dependences (helper VH 2's dependences.v1.tsv:
+    // `master order kind ... combination`, DEPENDENT rows `(a)*Int[i][j] + ..`)
+    // and extra relations `id:order=expression;...` (expressions in
+    // UNKNOWN(symbol,k)). Only the UNKNOWN parts are loaded: the known constant
+    // part of a DEPENDENT order is left out, which changes known numbers of the
+    // result, never its UNKNOWN coefficients.
+    let mut relations: Vec<(String, i64, String)> = Vec::new();
+    if let Ok(path) = std::env::var("VAKINT_TEST_UNKNOWN_DEPENDENCES") {
+        let int = regex::Regex::new(r"Int\[(\d+)\]\[(-?\d+)\]").unwrap();
+        for line in std::fs::read_to_string(path).unwrap().lines().skip(1) {
+            let fields: Vec<&str> = line.split('\t').collect();
+            if fields.len() < 6 || fields[2] != "DEPENDENT" {
+                continue;
+            }
+            let expression = int.replace_all(fields[5], "UNKNOWN(ggppss_int_$1,$2)");
+            relations.push((
+                fields[0].into(),
+                fields[1].parse().unwrap(),
+                expression.into(),
+            ));
+        }
+    }
+    if let Ok(extra) = std::env::var("VAKINT_TEST_UNKNOWN_EXTRA") {
+        for item in extra.split(';').filter(|item| !item.is_empty()) {
+            let (head, expression) = item.split_once('=').unwrap();
+            let (id, order) = head.rsplit_once(':').unwrap();
+            relations.push((id.into(), order.parse().unwrap(), expression.into()));
+        }
+    }
+    // The catalogue admits references to FREE coordinates only: resolve
+    // relations that refer to other relations (e.g. the 53 / 74 identity
+    // inside a printed dependence) by substitution, to a fixed point.
+    let symbol_of = |id: &str| {
+        file["masters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| m["id"] == json!(id))
+            .map(|m| m["symbol"].as_str().unwrap().to_owned())
+            .unwrap_or_else(|| panic!("no master {id}"))
+    };
+    let rules: Vec<(Atom, Atom)> = relations
+        .iter()
+        .map(|(id, order, expression)| {
+            (
+                unknown(&symbol_of(id), *order),
+                vk_parse!(expression).unwrap(),
+            )
+        })
+        .collect();
+    let relations: Vec<(String, i64, String)> = relations
+        .iter()
+        .zip(&rules)
+        .map(|((id, order, _), (_, expression))| {
+            let mut value = expression.clone();
+            for _ in 0..16 {
+                let mut next = value.clone();
+                for (symbol, replacement) in &rules {
+                    next = next
+                        .replace(symbol.to_pattern())
+                        .with(replacement.to_pattern());
+                }
+                let next = next.expand();
+                if next == value {
+                    break;
+                }
+                value = next;
+            }
+            (
+                id.clone(),
+                *order,
+                crate::truncation_guard::plain_name(&value),
+            )
+        })
+        .collect();
+    for (id, order, expression) in &relations {
+        let master = file["masters"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|m| m["id"] == json!(id))
+            .unwrap_or_else(|| panic!("no master {id}"));
+        let symbol = master["symbol"].as_str().unwrap().to_owned();
+        master.as_object_mut().unwrap().remove("known_through");
+        let coefficients = master["coefficients"].as_object_mut().unwrap();
+        let last = coefficients
+            .keys()
+            .map(|k| k.parse::<i64>().unwrap())
+            .max()
+            .unwrap();
+        if *order <= last {
+            eprintln!("dependence {id} order {order}: already published (through {last}), skipped");
+            continue;
+        }
+        for free in last + 1..*order {
+            coefficients.insert(
+                free.to_string(),
+                json!({"exact": format!("UNKNOWN({symbol},{free})")}),
+            );
+        }
+        coefficients.insert(order.to_string(), json!({"exact": expression}));
+    }
+    eprintln!(
+        "unknown_masters_physical_key_file: {} dependent orders loaded",
+        relations.len()
+    );
+    let catalogue = load(&file).unwrap();
+    let d = vk_symbol!("d");
+    let dimension = Atom::num(4) - Atom::num(2) * eps();
+    let mut reduced = Atom::Zero;
+    let text = std::fs::read_to_string(&key_file).unwrap();
+    let tag_pattern = regex::Regex::new(r"\((-?\d+), (-?\d+)\)").unwrap();
+    let mut lines = 0;
+    for line in text.lines() {
+        let (head, coefficient) = match line.split_once(" : ") {
+            Some(parts) if line.starts_with("Unit") || line.starts_with("PResidual(") => parts,
+            _ => continue,
+        };
+        let (terminal, tags) = head.split_once(" GammaTag(").unwrap();
+        let mut term = vk_parse!(coefficient)
+            .unwrap()
+            .replace(Atom::var(d).to_pattern())
+            .with(dimension.to_pattern());
+        for tag in tag_pattern.captures_iter(tags) {
+            let m: i64 = tag[1].parse().unwrap();
+            let e: i64 = tag[2].parse().unwrap();
+            term *= p_gamma_symbol().call(&[Atom::num(m)][..]).pow(Atom::num(e));
+        }
+        if let Some(rest) = terminal.strip_prefix("PResidual(") {
+            let (node, key) = rest.split_once(", [").unwrap();
+            let key: Vec<i64> = key
+                .trim_end_matches("])")
+                .split(", ")
+                .map(|k| k.parse().unwrap())
+                .collect();
+            term *= residual(node, &key);
+        }
+        reduced += term;
+        lines += 1;
+    }
+    eprintln!("unknown_masters_physical_key_file: {lines} reduced terms from {key_file}");
+    let started = std::time::Instant::now();
+    let refused = run_allowing(
+        &catalogue,
+        reduced.clone(),
+        RustRedMasterMode::Symbolic,
+        false,
+    );
+    match &refused {
+        Err(VakintError::UnknownMasterCoefficients(unknowns)) => {
+            eprintln!(
+                "REFUSED in {:.1} s: {unknowns}",
+                started.elapsed().as_secs_f64()
+            )
+        }
+        other => eprintln!("NOT REFUSED BY UNKNOWNS: {other:?}"),
+    }
+    let started = std::time::Instant::now();
+    let value = run_allowing(&catalogue, reduced, RustRedMasterMode::Symbolic, true).unwrap();
+    eprintln!("ALLOWED in {:.1} s", started.elapsed().as_secs_f64());
+    let finite = at_unit_scale(&value, -12, 0).pop().unwrap();
+    let unknowns: Vec<Atom> = {
+        let mut found = std::collections::BTreeSet::new();
+        finite.visitor(&mut |part| {
+            if let symbolica::atom::AtomView::Fun(f) = part
+                && f.get_symbol() == crate::truncation_guard::unknown_coefficient_symbol()
+            {
+                found.insert(part.to_owned());
+                return false;
+            }
+            true
+        });
+        found.into_iter().collect()
+    };
+    let mut coefficients = BTreeMap::new();
+    for symbol in &unknowns {
+        let coefficient = finite.coefficient(symbol.as_view()).expand();
+        eprintln!("eps^0 coefficient of {symbol}: {coefficient}");
+        coefficients.insert(crate::truncation_guard::plain_name(symbol), coefficient);
+    }
+    if let Ok(expect) = std::env::var("VAKINT_TEST_UNKNOWN_EXPECT") {
+        let mut expected = BTreeMap::new();
+        for item in expect.split(';') {
+            let (symbol, value) = item.split_once('=').unwrap();
+            let (master, order) = symbol.split_once(':').unwrap();
+            expected.insert(
+                crate::truncation_guard::plain_name(&unknown(master, order.parse().unwrap())),
+                vk_parse!(value).unwrap(),
+            );
+        }
+        assert_eq!(
+            coefficients.keys().collect::<Vec<_>>(),
+            expected.keys().collect::<Vec<_>>()
+        );
+        for (name, value) in &expected {
+            assert_eq!((&coefficients[name] - value).expand(), Atom::Zero, "{name}");
+        }
+        let refused = refused.unwrap_err().to_string();
+        for name in expected.keys() {
+            let id = name.split(['(', ',']).nth(1).unwrap();
+            eprintln!("refusal names {id}: {}", refused.contains(id));
+        }
+    }
+}
+
+/// A published or derived dependence (an expected order written in terms of
+/// free UNKNOWN coordinates and known numbers, as GGPPSS prints for some deeper
+/// orders, or an identity between masters): `u_dep` at ε^1 is
+/// `2 + 3·UNKNOWN(u_m1,1)`; `u_self` writes its free ε^1 explicitly and its
+/// ε^2 in terms of it. The result then carries only free coordinates.
+#[test]
+fn dependent_orders_carry_only_free_coordinates() {
+    let catalogue = load(&fixture_v2()).unwrap();
+    assert_eq!(catalogue.master("u_dep").unwrap().known_through, 1);
+    let value = run_allowing(
+        &catalogue,
+        p_master("u_dep") * eps().pow(Atom::num(-1)),
+        RustRedMasterMode::Symbolic,
+        true,
+    )
+    .unwrap();
+    assert_eq!(
+        at_unit_scale(&value, -1, 0),
+        [
+            Atom::num(1),
+            Atom::num(2) + Atom::num(3) * unknown("u_m1", 1)
+        ]
+    );
+    let refused = expect_unknowns(
+        run_allowing(
+            &catalogue,
+            p_master("u_dep") * eps().pow(Atom::num(-1)),
+            RustRedMasterMode::Symbolic,
+            false,
+        )
+        .unwrap_err(),
+    );
+    assert_eq!(unknown_entries(&refused), [("u-m1".into(), 1, 0)]);
+    // u_self: ε^-2·u_self through ε^0 = 1/ε² + U/ε + 4 - U: the free U.
+    let value = run_allowing(
+        &catalogue,
+        p_master("u_self") * eps().pow(Atom::num(-2)),
+        RustRedMasterMode::Symbolic,
+        true,
+    )
+    .unwrap();
+    assert_eq!(
+        at_unit_scale(&value, -2, 0),
+        [
+            Atom::num(1),
+            unknown("u_self", 1),
+            Atom::num(4) - unknown("u_self", 1)
+        ]
+    );
+    // References must be free coordinates of declared masters.
+    let cases: [(&dyn Fn(&mut Value), &[&str]); 4] = [
+        (
+            &|file| file["masters"][4]["coefficients"]["1"] = json!({"exact": "UNKNOWN(u_m1,0)"}),
+            &["u-dep", "UNKNOWN(u_m1, 0)", "not a free expected order"],
+        ),
+        (
+            &|file| file["masters"][4]["coefficients"]["1"] = json!({"exact": "UNKNOWN(u_m1,3)"}),
+            &["u-dep", "UNKNOWN(u_m1, 3)"],
+        ),
+        (
+            &|file| file["masters"][2]["coefficients"]["1"] = json!({"exact": "UNKNOWN(u_dep,1)"}),
+            &["u-own", "UNKNOWN(u_dep, 1)"],
+        ),
+        (
+            &|file| file["masters"][4]["coefficients"]["1"] = json!({"exact": "UNKNOWN(nobody,1)"}),
+            &["u-dep", "UNKNOWN(nobody, 1)"],
+        ),
+    ];
+    for (edit, parts) in cases {
+        let mut file = fixture_v2();
+        edit(&mut file);
+        let message = load(&file).unwrap_err().to_string();
+        assert_names(&message, parts);
+    }
+    // Version 1 files may not write UNKNOWN.
+    let mut v1 = fixture();
+    v1["masters"][0]["coefficients"]["0"] = json!({"exact": "UNKNOWN(syn_m1,0)"});
+    assert_names(&load(&v1).unwrap_err().to_string(), &["unknown constant"]);
+}
+
+/// Products keep products of unknowns: the finite part of (M - a)²/ε² with
+/// a = M's known part is UNKNOWN(m,1)²; with an independent second master it
+/// is the product of their two symbols; a numerical-only coefficient times two
+/// distinct UNKNOWNs keeps both symbols (Numerical mode, refusal decided on the
+/// exact dependence before rounding).
+#[test]
+fn products_of_unknowns_and_numerical_multipliers() {
+    let catalogue = load(&fixture_v2()).unwrap();
+    let ep = eps();
+    let shifted = p_master("u_m1") - ep.pow(Atom::num(-1)) - Atom::num(5) / Atom::num(2);
+    let square = (shifted.pow(Atom::num(2)) * ep.pow(Atom::num(-2))).expand();
+    let value = run_allowing(
+        &catalogue,
+        square.clone(),
+        RustRedMasterMode::Symbolic,
+        true,
+    )
+    .unwrap();
+    assert_eq!(
+        at_unit_scale(&value, 0, 0),
+        [unknown("u_m1", 1).pow(Atom::num(2))]
+    );
+    let refused = expect_unknowns(
+        run_allowing(&catalogue, square, RustRedMasterMode::Symbolic, false).unwrap_err(),
+    );
+    assert_eq!(unknown_entries(&refused), [("u-m1".into(), 1, 0)]);
+    let pair = (&shifted * (p_master("u_own") - Atom::num(7)) * ep.pow(Atom::num(-2))).expand();
+    let value = run_allowing(&catalogue, pair.clone(), RustRedMasterMode::Symbolic, true).unwrap();
+    assert_eq!(
+        at_unit_scale(&value, 0, 0),
+        [unknown("u_m1", 1) * unknown("u_own", 1)]
+    );
+    let numerical = (pair * p_master("u_num")).expand();
+    let refused = expect_unknowns(
+        run_allowing(
+            &catalogue,
+            numerical.clone(),
+            RustRedMasterMode::Numerical,
+            false,
+        )
+        .unwrap_err(),
+    );
+    assert_eq!(
+        unknown_entries(&refused),
+        [("u-m1".into(), 1, 0), ("u-own".into(), 1, 0)]
+    );
+    let value = run_allowing(&catalogue, numerical, RustRedMasterMode::Numerical, true).unwrap();
+    let product = unknown("u_m1", 1) * unknown("u_own", 1);
+    let multiplier = value.expand().coefficient(product.as_view());
+    let difference = (&multiplier - Atom::num(5) / Atom::num(4)).expand();
+    let close = match difference.as_view() {
+        symbolica::atom::AtomView::Num(_) => {
+            let x: f64 = difference.to_string().parse().unwrap_or(1.0);
+            x.abs() < 1e-25
+        }
+        _ => difference.is_zero(),
+    };
+    assert!(close, "{value}: multiplier {multiplier}");
+}
+
+/// ALARM wins over UNKNOWN: a result with both is MissingMasterOrders in
+/// both settings.
+#[test]
+fn mixed_unknown_and_alarm_is_an_alarm() {
+    let catalogue = load(&fixture_v2()).unwrap();
+    let reduced = p_master("u_m1") * (eps().pow(Atom::num(-2)) + eps().pow(Atom::num(-3)));
+    for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
+        for allow in [false, true] {
+            let missing = expect_missing_orders(
+                run_allowing(&catalogue, reduced.clone(), mode, allow).unwrap_err(),
+            );
+            assert_eq!(missing.masters[0].first_missing_order, 3);
+            assert!(missing.to_string().contains("ALARM"));
+        }
+    }
 }

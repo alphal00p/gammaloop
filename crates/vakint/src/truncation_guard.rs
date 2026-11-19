@@ -65,7 +65,10 @@ impl fmt::Display for MissingMasterOrders {
             " needs master Laurent coefficients beyond the available expansion depth \
              ({}; an unknown 𝒪(ε^k) master tail survived truncation, e.g. because a \
              reduction coefficient with an ε pole multiplies a master known only to a \
-             lower order):",
+             lower order; for a master of a version-2 p master catalogue this is its ALARM: \
+             the order lies beyond the depth the catalogue expects any request to need \
+             (unknown_through), so a real request reaching it shows that expected depth is too \
+             small):",
             self.backend
         )?;
         for missing in &self.masters {
@@ -104,6 +107,144 @@ pub(crate) fn unknown_tail_marker(first_missing_order: i64, master: &Atom) -> At
 pub(crate) fn unknown_tail(epsilon: Symbol, first_missing_order: i64, master: &Atom) -> Atom {
     Atom::var(epsilon).pow(Atom::num(first_missing_order))
         * unknown_tail_marker(first_missing_order, master)
+}
+
+/// The function symbol of an expected but not yet known master coefficient,
+/// `UNKNOWN(master, k)`: the exact `ε^k` coefficient of the catalogue master
+/// `master` (its catalogue symbol), in the catalogue's normalisation. Unlike
+/// the ALARM tail `Oep`, it is a plain coefficient: it passes the expansion
+/// exactly and may stay in a result when the settings allow it
+/// ([`crate::VakintSettings::allow_unknown_master_coefficients`]).
+pub(crate) fn unknown_coefficient_symbol() -> Symbol {
+    vk_symbol!("UNKNOWN")
+}
+
+/// `UNKNOWN(master, k)` of the catalogue master with symbol `master`.
+pub(crate) fn unknown_coefficient(master: &str, order: i64) -> Atom {
+    unknown_coefficient_symbol().call(&[Atom::var(vk_symbol!(master)), Atom::num(order)][..])
+}
+
+/// One expected but unknown master coefficient that entered a result.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UnknownMasterCoefficient {
+    /// The master (catalogue id).
+    pub master: String,
+    /// Its Laurent order `ε^k`.
+    pub order: i64,
+    /// The lowest order of the result it enters.
+    pub first_affected_result_order: i64,
+}
+
+/// The result depends on expected master coefficients that are not known
+/// yet (`UNKNOWN(master, k)`), and the settings refuse them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UnknownMasterCoefficients {
+    /// The backend (and data snapshot) that substituted the masters.
+    pub backend: String,
+    /// The highest order `ε^n` requested, when known.
+    pub requested_order: Option<i64>,
+    /// The (master, order) pairs that entered the result, sorted.
+    pub coefficients: Vec<UnknownMasterCoefficient>,
+}
+
+impl fmt::Display for UnknownMasterCoefficients {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.requested_order {
+            Some(order) => write!(f, "the result through 𝒪(ε^{order})")?,
+            None => write!(f, "the requested result")?,
+        }
+        write!(
+            f,
+            " depends on {} expected master coefficient(s) that are not known yet ({}); \
+             set allow_unknown_master_coefficients to keep them as UNKNOWN(master, k) symbols:",
+            self.coefficients.len(),
+            self.backend
+        )?;
+        for unknown in &self.coefficients {
+            write!(
+                f,
+                "\n  - master {} coefficient ε^{} (affects the result from ε^{})",
+                unknown.master, unknown.order, unknown.first_affected_result_order
+            )?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for UnknownMasterCoefficients {}
+
+/// After the ALARM guard ([`ensure_known_orders`]): the `UNKNOWN(master, k)`
+/// symbols that survived the exact expansion and truncation of `expression`.
+/// `allow` keeps them; otherwise they are an [`UnknownMasterCoefficients`]
+/// error. `describe` maps a master symbol to its catalogue id.
+pub(crate) fn ensure_unknown_coefficients_allowed(
+    expression: &Atom,
+    epsilon: Symbol,
+    requested_order: Option<i64>,
+    backend: &str,
+    allow: bool,
+    describe: impl Fn(&str) -> String,
+) -> Result<(), UnknownMasterCoefficients> {
+    if allow || !expression.contains_symbol(unknown_coefficient_symbol()) {
+        return Ok(());
+    }
+    Err(UnknownMasterCoefficients {
+        backend: backend.to_owned(),
+        requested_order,
+        coefficients: unknown_coefficients(expression, epsilon, describe),
+    })
+}
+
+/// The `UNKNOWN(master, k)` symbols of `expression` (expanded exactly first),
+/// each with the lowest power of `epsilon` it multiplies, sorted by master and
+/// order; `describe` maps a master symbol to its name in the report.
+pub(crate) fn unknown_coefficients(
+    expression: &Atom,
+    epsilon: Symbol,
+    describe: impl Fn(&str) -> String,
+) -> Vec<UnknownMasterCoefficient> {
+    if !expression.contains_symbol(unknown_coefficient_symbol()) {
+        return Vec::new();
+    }
+    let mut found = BTreeMap::<(String, i64), i64>::new();
+    let expanded = expression.expand();
+    let terms: Vec<AtomView> = match expanded.as_view() {
+        AtomView::Add(sum) => sum.iter().collect(),
+        term => vec![term],
+    };
+    for term in terms {
+        let power = epsilon_power(term, epsilon);
+        term.visitor(&mut |part| {
+            if let AtomView::Fun(function) = part
+                && function.get_symbol() == unknown_coefficient_symbol()
+            {
+                let arguments: Vec<_> = function.iter().collect();
+                let (master, order) = match arguments.as_slice() {
+                    [AtomView::Var(master), order] => (
+                        describe(master.get_symbol().get_stripped_name()),
+                        get_integer_from_atom(*order).unwrap_or(i64::MIN),
+                    ),
+                    _ => (plain_name(&part.to_owned()), i64::MIN),
+                };
+                found
+                    .entry((master, order))
+                    .and_modify(|lowest| *lowest = (*lowest).min(power))
+                    .or_insert(power);
+                return false;
+            }
+            true
+        });
+    }
+    found
+        .into_iter()
+        .map(
+            |((master, order), first_affected_result_order)| UnknownMasterCoefficient {
+                master,
+                order,
+                first_affected_result_order,
+            },
+        )
+        .collect()
 }
 
 /// Whether any unknown master tail is present.

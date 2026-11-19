@@ -1056,7 +1056,7 @@ impl VakintWrapper {
         Ok(result)
     }
 
-    #[pyo3(signature = (run_time_decimal_precision = None, evaluation_order = None, tensor_reduction_method = None, epsilon_symbol = None, mu_r_sq_symbol = None, form_exe_path = None, python_exe_path = None, verify_numerator_identification = None, integral_normalization_factor = None, allow_unknown_integrals = None, clean_tmp_dir = None, number_of_terms_in_epsilon_expansion = None, use_dot_product_notation = None, temporary_directory = None, rustred_artifact_path = None, rustred_cache_bytes = None, rustred_cache_terms = None, rustred_product_cache_bytes = None, rustred_product_cache_terms = None, rustred_scalar_max_work = None, max_process_rss_bytes = None, max_elapsed_seconds = None, n_cores = None, ordered_weight_arithmetic = None, ordered_cache = "read-write", ordered_cache_directory = None, ordered_cache_ram_bytes = None, ordered_cache_autosave = "after-evaluation", interrupt = "fine"))]
+    #[pyo3(signature = (run_time_decimal_precision = None, evaluation_order = None, tensor_reduction_method = None, epsilon_symbol = None, mu_r_sq_symbol = None, form_exe_path = None, python_exe_path = None, verify_numerator_identification = None, integral_normalization_factor = None, allow_unknown_integrals = None, clean_tmp_dir = None, number_of_terms_in_epsilon_expansion = None, use_dot_product_notation = None, temporary_directory = None, rustred_artifact_path = None, rustred_cache_bytes = None, rustred_cache_terms = None, rustred_product_cache_bytes = None, rustred_product_cache_terms = None, rustred_scalar_max_work = None, max_process_rss_bytes = None, max_elapsed_seconds = None, n_cores = None, ordered_weight_arithmetic = None, ordered_cache = "read-write", ordered_cache_directory = None, ordered_cache_ram_bytes = None, ordered_cache_autosave = "after-evaluation", interrupt = "fine", allow_unknown_master_coefficients = false))]
     #[allow(clippy::too_many_arguments, clippy::needless_update)]
     #[new]
     /// Create a new Vakint instance, specifying details of the evaluation stack. Note that the same instance can be recycled across multiple evaluations.
@@ -1197,6 +1197,12 @@ impl VakintWrapper {
     ///     checkpoints (per data file, program step and expression term), at
     ///     no cost to the native checkpoints, which "fine" makes a few percent
     ///     slower; "off" never during a call (a Ctrl-C raises once it returned).
+    /// allow_unknown_master_coefficients : bool
+    ///     Whether a p-integral result may keep the expected but not yet known
+    ///     five-loop master coefficients UNKNOWN(master, k) of a version-2 master
+    ///     catalogue. False (default): such a result raises an error naming every
+    ///     (master, order) that entered it. Orders beyond a master's expected
+    ///     depth (ALARM) always raise.
     ///     Only a call on Python's main thread, or one with a progress callback,
     ///     pays for interruptibility: other threads cannot receive Ctrl-C.
     pub fn new(
@@ -1230,6 +1236,7 @@ impl VakintWrapper {
         ordered_cache_ram_bytes: Option<usize>,
         ordered_cache_autosave: &str,
         interrupt: &str,
+        allow_unknown_master_coefficients: bool,
     ) -> PyResult<VakintWrapper> {
         let rustred_resources = resources::limits(max_process_rss_bytes, max_elapsed_seconds)?;
         let interrupt = interrupt::InterruptMode::parse(interrupt)?;
@@ -1354,6 +1361,7 @@ impl VakintWrapper {
                 rustred_product_limits,
                 rustred_resources,
                 ordered_cache,
+                allow_unknown_master_coefficients,
                 ..VakintSettings::default()
             }
         };
