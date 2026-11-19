@@ -62,7 +62,7 @@ use super::{Endpoint, FactorizedError, FactorizedKind, FactorizedNumerator, Resu
 use crate::p_integral::{DirectClosureInput, MassiveClosure};
 use crate::symbols::S;
 use crate::utils::vakint_macros::vk_symbol;
-use crate::{Vakint, VakintExpression, VakintSettings};
+use crate::{Vakint, VakintExpression, VakintSettings, VakintTerm};
 
 /// First raw index of the open ports in vakint notation (`PORT + i`).
 pub const PORT: i64 = 9001;
@@ -800,21 +800,85 @@ fn external_tensors(numerator: &Atom) -> Vec<(Atom, Atom)> {
     }
 }
 
+/// The integrand as vakint's ONE term, read off its top-level product: the
+/// entry builds it as `numerator × topo(..)`, so the topology is one factor
+/// and the numerator the product of the others (exactly the pair vakint's
+/// `split_integrals` returns, without its `coefficient_list` over the whole
+/// expanded integrand, which dominated the entry's single-core reduction:
+/// D5-HARD-KIND section 12); a bare topology is the term with numerator 1.
+/// `None` for any other shape.
+fn vacuum_term(input: &Atom) -> Result<Option<VakintTerm>> {
+    let is_topo = |view: AtomView<'_>| matches!(view, AtomView::Fun(f) if f.get_symbol() == S.topo);
+    if is_topo(input.as_view()) {
+        let numerator = Atom::num(1);
+        let vectors = VakintTerm::identify_vectors_in_numerator(numerator.as_view())
+            .map_err(|e| error(e.to_string()))?;
+        return Ok(Some(VakintTerm {
+            integral: input.clone(),
+            numerator,
+            vectors,
+        }));
+    }
+    let AtomView::Mul(product) = input.as_view() else {
+        return Ok(None);
+    };
+    let mentions_topo = |view: AtomView<'_>| {
+        let mut found = false;
+        view.visitor(&mut |part| {
+            found |= is_topo(part);
+            !found
+        });
+        found
+    };
+    let (topologies, factors): (Vec<_>, Vec<_>) = product.iter().partition(|f| is_topo(*f));
+    let [integral] = topologies.as_slice() else {
+        return Ok(None);
+    };
+    if factors.iter().any(|f| mentions_topo(*f)) {
+        return Ok(None);
+    }
+    let numerator = factors
+        .iter()
+        .fold(Atom::num(1), |product, factor| product * factor.to_owned());
+    let vectors = VakintTerm::identify_vectors_in_numerator(numerator.as_view())
+        .map_err(|e| error(e.to_string()))?;
+    Ok(Some(VakintTerm {
+        integral: integral.to_owned(),
+        numerator,
+        vectors,
+    }))
+}
+
+/// Vakint's vacuum tensor reduction (dot notation) of the integrand `input`:
+/// its one term ([`vacuum_term`]) reduced directly, else `Vakint::tensor_reduce`.
+fn reduce_vacuum(vakint: &Vakint, settings: &VakintSettings, input: &Atom) -> Result<Atom> {
+    let mut reducing = settings.clone();
+    reducing.use_dot_product_notation = true;
+    match vacuum_term(input)? {
+        Some(term) => {
+            let mut expression = VakintExpression(vec![term]);
+            expression
+                .tensor_reduce(vakint, &reducing)
+                .map_err(|e| error(e.to_string()))?;
+            Ok(expression.into())
+        }
+        None => vakint
+            .tensor_reduce(&reducing, input.as_view())
+            .map_err(|e| error(e.to_string())),
+    }
+}
+
 /// The closure back end (module documentation, step 3): vakint's vacuum
-/// tensor reduction of `input`, then every external tensor's coefficient
-/// through the massive closure of `cut`, all closures of one value in one
-/// batch.
+/// tensor reduction of `input` ([`reduce_vacuum`]), then every external
+/// tensor's coefficient through the massive closure of `cut`, all closures of
+/// one value in one batch.
 fn evaluate_closure(
     vakint: &Vakint,
     settings: &VakintSettings,
     input: &Atom,
     cut: &VacuumCut,
 ) -> Result<Atom> {
-    let mut reducing = settings.clone();
-    reducing.use_dot_product_notation = true;
-    let reduced = vakint
-        .tensor_reduce(&reducing, input.as_view())
-        .map_err(|e| error(e.to_string()))?;
+    let reduced = reduce_vacuum(vakint, settings, input)?;
     let expression = VakintExpression::try_from(reduced).map_err(|e| error(e.to_string()))?;
     let mut tensors = Vec::new();
     let mut coefficients = Vec::new();

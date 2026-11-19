@@ -641,6 +641,31 @@ fn check_closure(value: &FactorizedNumerator, tensor: &str, hand: &str, power: i
         value.label,
         got.backend
     );
+    // the closure back end reduces the integrand as ONE term read off its
+    // product (`vacuum_term`): the same term as vakint's `split_integrals` and
+    // the same reduced value as `Vakint::tensor_reduce` of the integrand
+    let term = vacuum_term(&got.input)
+        .unwrap()
+        .unwrap_or_else(|| panic!("{}: the integrand is not one term", value.label));
+    let split = VakintExpression::try_from(got.input.clone()).unwrap();
+    assert_eq!(split.0.len(), 1, "{}", value.label);
+    assert_eq!(split.0[0].integral, term.integral, "{}", value.label);
+    assert!(
+        (&split.0[0].numerator - &term.numerator).expand().is_zero(),
+        "{}",
+        value.label
+    );
+    let mut reducing = settings.clone();
+    reducing.use_dot_product_notation = true;
+    let by_vakint = vakint
+        .tensor_reduce(&reducing, got.input.as_view())
+        .unwrap();
+    let direct = reduce_vacuum(&vakint, &settings, &got.input).unwrap();
+    assert!(
+        (&by_vakint - &direct).expand().is_zero(),
+        "{}:\nVakint::tensor_reduce {by_vakint}\none term             {direct}",
+        value.label
+    );
     let reference = atom(tensor) * closure_of(hand, power);
     assert!(
         (&got.vakint_value - &reference).expand().is_zero(),
