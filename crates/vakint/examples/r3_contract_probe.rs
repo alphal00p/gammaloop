@@ -83,7 +83,10 @@ fn probe(
         } else {
             None
         };
-        eprintln!("PROBE begin graph={graph} terms={} branches={branches}", terms.len());
+        eprintln!(
+            "PROBE begin graph={graph} terms={} branches={branches}",
+            terms.len()
+        );
         let started = Instant::now();
         let numerators = direct::contract_edges(
             &diagram,
