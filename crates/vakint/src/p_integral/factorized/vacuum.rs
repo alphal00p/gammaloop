@@ -88,6 +88,8 @@ pub struct VacuumValue {
     pub backend: VacuumBackend,
     /// The size predictor of the uncontracted network ([`distributed_lorentz_monomials`]).
     pub predicted_monomials: f64,
+    /// Pieces of the streamed contraction (0: unstreamed).
+    pub pieces: usize,
     /// Wall seconds of the idenso contraction and of the vakint evaluation.
     pub contract_seconds: f64,
     pub evaluate_seconds: f64,
@@ -278,6 +280,35 @@ pub fn contract_to_vakint_vacuum(value: &FactorizedNumerator) -> Result<(Atom, f
     let started = Instant::now();
     let contracted = value.contract_naively()?;
     let seconds = started.elapsed().as_secs_f64();
+    Ok((map_to_vakint_vacuum(value, &contracted)?, seconds))
+}
+
+/// [`contract_to_vakint_vacuum`] with the contraction STREAMED in `pieces`
+/// pieces ([`contract_streamed`]): the same scalar, and the seconds and the
+/// number of pieces actually contracted.
+pub fn contract_to_vakint_vacuum_streamed(
+    settings: &VakintSettings,
+    value: &FactorizedNumerator,
+    pieces: usize,
+) -> Result<(Atom, f64, usize)> {
+    validate_vacuum(value)?;
+    let started = Instant::now();
+    let mut network = value.factor_product();
+    if let Some(projector) = &value.projector {
+        network *= &projector.tensor;
+    }
+    let (contracted, contracted_pieces) = contract_streamed(settings, &network, pieces)?;
+    let seconds = started.elapsed().as_secs_f64();
+    Ok((
+        map_to_vakint_vacuum(value, &contracted)?,
+        seconds,
+        contracted_pieces,
+    ))
+}
+
+/// Step 2 of the module documentation: an idenso-contracted network in vakint's
+/// vacuum notation.
+fn map_to_vakint_vacuum(value: &FactorizedNumerator, contracted: &Atom) -> Result<Atom> {
     let port_index = |slot: AtomView<'_>| {
         value
             .ports
@@ -353,7 +384,144 @@ pub fn contract_to_vakint_vacuum(value: &FactorizedNumerator) -> Result<(Atom, f
             "outside the vacuum scope (metrics and momenta with open indices) after idenso: {part}"
         )));
     }
-    Ok((mapped, seconds))
+    Ok(mapped)
+}
+
+/// How the vacuum entry contracts its network (D5-HARD-KIND 9.4 items 1-2).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Streaming {
+    /// One idenso contraction of the whole network (the unstreamed path).
+    Off,
+    /// The network split into (at most) this many pieces ([`split_network`]),
+    /// contracted one after another, added into one sum ([`contract_streamed`]).
+    Pieces(usize),
+    /// [`stream_pieces_for`] of the size predictor: `Off` when it gives one
+    /// piece, else that many pieces.
+    Auto,
+}
+
+/// Lorentz monomials per piece of the streaming rule.
+pub const STREAM_MONOMIALS_PER_PIECE: f64 = 1.0e5;
+/// Largest piece count of the streaming rule.
+pub const STREAM_MAX_PIECES: usize = 32;
+
+/// THE STREAMING RULE: the piece count for a network that distributes to
+/// `monomials` Lorentz monomials ([`distributed_lorentz_monomials`]): 1 up to
+/// [`STREAM_MONOMIALS_PER_PIECE`], else the smallest power of two not below
+/// `monomials / STREAM_MONOMIALS_PER_PIECE`, at most [`STREAM_MAX_PIECES`].
+/// (Measured, D5-HARD-KIND 9.3: nf0 #32's hard terms at D = 3.4e4 / 5.3e5 /
+/// 3.2e7 / 1.4e8 get 1 / 8 / 32 / 32 pieces.)
+pub fn stream_pieces_for(monomials: f64) -> usize {
+    if monomials.is_nan() || monomials <= STREAM_MONOMIALS_PER_PIECE {
+        return 1;
+    }
+    let wanted = (monomials / STREAM_MONOMIALS_PER_PIECE).ceil();
+    let mut pieces = 1;
+    while (pieces as f64) < wanted && pieces < STREAM_MAX_PIECES {
+        pieces *= 2;
+    }
+    pieces
+}
+
+/// One split: a sum into the halves of its terms; a product at its largest
+/// sum factor (by byte size, the first of equals) into the halves of that
+/// sum's terms, each times the other factors; anything else does not split.
+fn split_once(piece: &Atom) -> Option<[Atom; 2]> {
+    let halves = |terms: Vec<Atom>| {
+        let half = terms.len() / 2;
+        (half > 0).then(|| {
+            [
+                Atom::add_many(terms[..half].iter()),
+                Atom::add_many(terms[half..].iter()),
+            ]
+        })
+    };
+    match piece.as_view() {
+        AtomView::Add(sum) => halves(sum.iter().map(|t| t.to_owned()).collect()),
+        AtomView::Mul(product) => {
+            let factors = product.iter().collect::<Vec<_>>();
+            let mut largest = None::<(usize, usize)>;
+            for (i, factor) in factors.iter().enumerate() {
+                if let AtomView::Add(_) = factor {
+                    let size = factor.get_byte_size();
+                    if largest.is_none_or(|(_, best)| size > best) {
+                        largest = Some((i, size));
+                    }
+                }
+            }
+            let (at, _) = largest?;
+            let AtomView::Add(sum) = factors[at] else {
+                return None;
+            };
+            let [a, b] = halves(sum.iter().map(|t| t.to_owned()).collect())?;
+            let mut rest = Atom::num(1);
+            for (i, factor) in factors.iter().enumerate() {
+                if i != at {
+                    rest *= factor.to_owned();
+                }
+            }
+            Some([a * &rest, b * &rest])
+        }
+        _ => None,
+    }
+}
+
+/// The network as a list of pieces whose sum it is: the largest piece (by byte
+/// size, the first of equals) is split ([`split_once`]) until there are
+/// `pieces` pieces or none splits. Deterministic: Symbolica's normal form
+/// fixes the order of every sum and product.
+pub fn split_network(network: &Atom, pieces: usize) -> Vec<Atom> {
+    let mut list = vec![network.clone()];
+    while list.len() < pieces {
+        let mut largest = 0;
+        for (i, piece) in list.iter().enumerate() {
+            if piece.as_view().get_byte_size() > list[largest].as_view().get_byte_size() {
+                largest = i;
+            }
+        }
+        let Some([a, b]) = split_once(&list[largest]) else {
+            break;
+        };
+        list[largest] = a;
+        list.insert(largest + 1, b);
+    }
+    list
+}
+
+/// The STREAMED contraction (D5-HARD-KIND 9.4 items 1-2): the network split
+/// into `pieces` pieces ([`split_network`]), each contracted by idenso with the
+/// open slots kept ([`super::contract_with_idenso`]), one after another, in
+/// order, with a resource checkpoint before every piece (the caller's budget
+/// can stop the job between pieces); the contracted pieces are added into ONE
+/// expanded sum (like terms combine), so that ONE tensor reduction follows.
+/// The sum does not depend on the piece count. Returns the sum and the number
+/// of pieces contracted.
+pub fn contract_streamed(
+    settings: &VakintSettings,
+    network: &Atom,
+    pieces: usize,
+) -> Result<(Atom, usize)> {
+    let list = split_network(network, pieces.max(1));
+    let count = list.len();
+    let streamed = settings
+        .with_resource_budget(|| {
+            let mut sum = Atom::Zero;
+            for (i, piece) in list.iter().enumerate() {
+                if let Err(limit) = crate::execution::checkpoint() {
+                    return Ok(Err(error(format!(
+                        "streamed contraction, before piece {} of {count}: {limit}",
+                        i + 1
+                    ))));
+                }
+                match super::contract_with_idenso(piece, false) {
+                    Ok(closed) => sum += closed,
+                    Err(e) => return Ok(Err(e)),
+                }
+            }
+            Ok(Ok(sum.expand()))
+        })
+        .map_err(|e| error(format!("streamed contraction: {e}")))?;
+    Ok((streamed?, count))
 }
 
 /// One propagator line of the vacuum topology handed to vakint.
@@ -721,7 +889,26 @@ pub fn vakint_vacuum_input(
     value: &FactorizedNumerator,
     prefactor: &Atom,
 ) -> Result<(Atom, f64)> {
-    let (scalar, seconds) = contract_to_vakint_vacuum(value)?;
+    vakint_vacuum_input_streamed(settings, value, prefactor, Streaming::Off)
+        .map(|(input, seconds, _)| (input, seconds))
+}
+
+/// [`vakint_vacuum_input`] with the contraction streamed as `streaming` says
+/// (`Auto` reads as `Off` here: the caller resolves it); also the number of
+/// pieces contracted (0: unstreamed).
+pub fn vakint_vacuum_input_streamed(
+    settings: &VakintSettings,
+    value: &FactorizedNumerator,
+    prefactor: &Atom,
+    streaming: Streaming,
+) -> Result<(Atom, f64, usize)> {
+    let (scalar, seconds, pieces) = match streaming {
+        Streaming::Pieces(n) => contract_to_vakint_vacuum_streamed(settings, value, n)?,
+        Streaming::Off | Streaming::Auto => {
+            let (scalar, seconds) = contract_to_vakint_vacuum(value)?;
+            (scalar, seconds, 0)
+        }
+    };
     let mut topology = Atom::num(1);
     for line in vacuum_lines(value) {
         let mut momentum = Atom::Zero;
@@ -743,7 +930,7 @@ pub fn vakint_vacuum_input(
     let input = (prefactor * scalar * S.topo.call(topology))
         .replace(Atom::var(value.dimension))
         .with(in_epsilon);
-    Ok((input, seconds))
+    Ok((input, seconds, pieces))
 }
 
 /// The vakint-notation value mapped back to the caller's notation: raw port
@@ -821,6 +1008,19 @@ pub fn evaluate_factorized_vacuum(
     value: &FactorizedNumerator,
     prefactor: &Atom,
 ) -> Result<VacuumValue> {
+    evaluate_factorized_vacuum_streamed(vakint, settings, value, prefactor, Streaming::Auto)
+}
+
+/// [`evaluate_factorized_vacuum`] with the contraction streamed as `streaming`
+/// says ([`Streaming`]; the default entry uses `Auto`). The value does not
+/// depend on the choice: every piece count gives the same contracted sum.
+pub fn evaluate_factorized_vacuum_streamed(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    value: &FactorizedNumerator,
+    prefactor: &Atom,
+    streaming: Streaming,
+) -> Result<VacuumValue> {
     // the resource guard (H2): refuse, naming the predicted size, rather than
     // run into the caller's process memory budget
     let mut network = value.factor_product();
@@ -836,7 +1036,15 @@ pub fn evaluate_factorized_vacuum(
             )));
         }
     }
-    let (input, contract_seconds) = vakint_vacuum_input(settings, value, prefactor)?;
+    let streaming = match streaming {
+        Streaming::Auto => match stream_pieces_for(predicted_monomials) {
+            1 => Streaming::Off,
+            n => Streaming::Pieces(n),
+        },
+        other => other,
+    };
+    let (input, contract_seconds, pieces) =
+        vakint_vacuum_input_streamed(settings, value, prefactor, streaming)?;
     let backend = vacuum_backend(&vacuum_lines(value), value.loops())?;
     let started = Instant::now();
     let vakint_value = match &backend {
@@ -853,6 +1061,7 @@ pub fn evaluate_factorized_vacuum(
         input,
         backend,
         predicted_monomials,
+        pieces,
         contract_seconds,
         evaluate_seconds,
     })

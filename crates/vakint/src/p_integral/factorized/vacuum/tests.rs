@@ -478,6 +478,137 @@ fn the_size_predictor_and_the_resource_guard() {
     );
 }
 
+/// THE STREAMING RULE (D5-HARD-KIND 9.4): one piece up to 1e5 predicted
+/// Lorentz monomials, else the smallest power of two not below D / 1e5, at
+/// most 32; nf0 #32's hard terms at D = 3.4e4 / 5.3e5 / 3.2e7 / 1.4e8 get
+/// 1 / 8 / 32 / 32 pieces.
+#[test]
+fn the_streaming_rule() {
+    assert_eq!(stream_pieces_for(0.0), 1);
+    assert_eq!(stream_pieces_for(3.4e4), 1);
+    assert_eq!(stream_pieces_for(1.0e5), 1);
+    assert_eq!(stream_pieces_for(1.5e5), 2);
+    assert_eq!(stream_pieces_for(5.3e5), 8);
+    assert_eq!(stream_pieces_for(3.2e7), 32);
+    assert_eq!(stream_pieces_for(1.4e8), 32);
+    assert_eq!(stream_pieces_for(f64::MAX), 32);
+}
+
+/// A sunrise with sums in its numerator (two open ports, one contracted pair,
+/// an external vector): `closing` (s, t, momentum) is the massive line in
+/// the closure case, every line massive in the family case.
+fn streamed_sunrise(closure: bool) -> FactorizedNumerator {
+    let factor = format!(
+        "({}+{}+{})*({}-{})*({}+{}+2*{})*({}-{})",
+        q(1, &hedge(10)),
+        q(2, &hedge(10)),
+        q(20, &hedge(10)),
+        q(1, &hedge(11)),
+        q(2, &hedge(11)),
+        q(1, &index(1, 8)),
+        q(2, &index(1, 8)),
+        q(20, &index(1, 8)),
+        q(1, &index(1, 8)),
+        q(20, &index(1, 8))
+    );
+    let line = |id: usize, s: usize, t: usize, hedges: (usize, usize), m: &[i64], massive: bool| {
+        let e = edge(id, s, t, hedges, m, LineKind::Scalar, 1, Atom::num(1));
+        if massive { e } else { massless(e) }
+    };
+    let mut v = value(
+        vec![Some(1), Some(2)],
+        vec![Some(20)],
+        vec![
+            line(1, 1, 2, (1, 2), &[1, 0, 0], !closure),
+            line(2, 1, 2, (3, 4), &[0, 1, 0], !closure),
+            line(3, 2, 1, (5, 6), &[1, 1, 0], true),
+            leg(20, 1, 2, 1, 1),
+        ],
+        vec![vertex(1, atom(&factor))],
+        vec![atom(&hedge(10)), atom(&hedge(11))],
+    );
+    v.label = format!("2L sunrise with sums, closure={closure}");
+    v
+}
+
+/// The STREAMED contraction is exact and independent of the piece count: on
+/// both back ends (family, closure) the values with 1, 8 and 32 pieces are
+/// byte-identical, and equal to the unstreamed path; the pieces are really
+/// contracted apart; Auto keeps the unstreamed path below the rule's threshold.
+#[test]
+fn streaming_is_exact_and_independent_of_the_piece_count() {
+    let vakint = Vakint::new().unwrap();
+    let settings = no_form_settings();
+    for closure in [false, true] {
+        let v = streamed_sunrise(closure);
+        let run = |streaming: Streaming| {
+            evaluate_factorized_vacuum_streamed(&vakint, &settings, &v, &Atom::num(1), streaming)
+                .unwrap_or_else(|e| panic!("{}: {streaming:?}: {e}", v.label))
+        };
+        let off = run(Streaming::Off);
+        assert_eq!(off.pieces, 0);
+        assert!(!off.vakint_value.is_zero(), "{}", v.label);
+        let one = run(Streaming::Pieces(1));
+        let eight = run(Streaming::Pieces(8));
+        let many = run(Streaming::Pieces(32));
+        assert_eq!((one.pieces, eight.pieces), (1, 8), "{}", v.label);
+        assert!(many.pieces > 8, "{}: {} pieces", v.label, many.pieces);
+        let text = one.vakint_value.to_canonical_string();
+        assert_eq!(
+            eight.vakint_value.to_canonical_string(),
+            text,
+            "{}",
+            v.label
+        );
+        assert_eq!(many.vakint_value.to_canonical_string(), text, "{}", v.label);
+        assert!(
+            (&off.vakint_value - &one.vakint_value).expand().is_zero(),
+            "{}: unstreamed {}\nstreamed {}",
+            v.label,
+            off.vakint_value,
+            one.vakint_value
+        );
+        let auto = run(Streaming::Auto);
+        assert_eq!(auto.pieces, 0, "{}: small input, unstreamed", v.label);
+        assert_eq!(
+            auto.vakint_value.to_canonical_string(),
+            off.vakint_value.to_canonical_string()
+        );
+        eprintln!(
+            "STREAMING label=\"{}\" pieces=1/8/{} contract_s={:.4}/{:.4}/{:.4} off_s={:.4}",
+            v.label,
+            many.pieces,
+            one.contract_seconds,
+            eight.contract_seconds,
+            many.contract_seconds,
+            off.contract_seconds
+        );
+    }
+}
+
+/// The caller's budget stops a streamed contraction cleanly (an error, not a
+/// kill): here an elapsed budget of zero.
+#[test]
+fn the_streamed_contraction_fails_cleanly_under_the_budget() {
+    let vakint = Vakint::new().unwrap();
+    let mut settings = no_form_settings();
+    settings.rustred_resources = crate::ResourceLimits {
+        max_elapsed: Some(std::time::Duration::ZERO),
+        ..Default::default()
+    };
+    let v = streamed_sunrise(true);
+    let error = evaluate_factorized_vacuum_streamed(
+        &vakint,
+        &settings,
+        &v,
+        &Atom::num(1),
+        Streaming::Pieces(8),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("streamed contraction"), "{error}");
+}
+
 /// A massless line (the closure tests).
 fn massless(mut edge: FactorizedEdge) -> FactorizedEdge {
     edge.mass_squared = Atom::Zero;
