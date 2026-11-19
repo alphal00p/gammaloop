@@ -12,32 +12,25 @@ mod spin;
 pub use color::{ColorRepresentation, ColorSum, ColorSumError};
 pub use spin::{AxialReference, SpinSum, SpinSumError};
 
-use feynkit_graph::{
-    DiagramError, ExternalState, FeynmanDiagram, expressions::evaluate_overall_factor, symbols,
-};
+use feynkit_graph::expressions;
+use feynkit_graph::{DiagramError, ExternalState, FeynmanDiagram, symbols};
 use feynkit_model::{Model, ModelError, ParameterType, ParticleId};
-use idenso::{
-    CookMode, CookSettings,
-    dirac::GammaSimplifySettings,
-    representations::Bispinor,
-    tensor::{SymbolicTensor, inference::TensorInferenceError},
-};
+use idenso::dirac::GammaSimplifySettings;
+use idenso::representations::Bispinor;
+use idenso::tensor::SymbolicTensor;
+use idenso::tensor::inference::TensorInferenceError;
+use idenso::{CookMode, CookSettings};
 use linnet::half_edge::involution::HedgePair;
-use spenso::{
-    network::{library::symbolic::ETS, tags::SPENSO_TAG},
-    structure::{
-        abstract_index::AbstractIndex,
-        dimension::Dimension,
-        partial::{PartialIndex, PartialStructure, PartialStructureExt},
-        representation::{LibrarySlot, Minkowski},
-        slot::{DualSlotTo, IsAbstractSlot, ParseableAind},
-    },
-};
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
-};
-use symbolica::atom::{Atom, AtomCore, Symbol};
+use spenso::network::library::symbolic::ETS;
+use spenso::network::tags::SPENSO_TAG;
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::dimension::Dimension;
+use spenso::structure::partial::{PartialIndex, PartialStructure, PartialStructureExt};
+use spenso::structure::representation::{LibrarySlot, Minkowski};
+use spenso::structure::slot::{DualSlotTo, IsAbstractSlot, ParseableAind};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::Arc;
+use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
 use symbolica::id::{Pattern, Replacement};
 use symbolica::{function, symbol};
 use thiserror::Error;
@@ -252,7 +245,10 @@ impl Amplitude {
                 let adjoint = self.apply_reality(&adjoint)?;
                 // Physical leg labels and their declared order belong to the
                 // amplitude. The shared scheduler owns gamma/metric cleanup.
-                SymbolicTensor::from_declared_parts(adjoint.expression().clone(), interface.clone())
+                adjoint
+                    .with_produced_parts(adjoint.expression().clone(), interface.clone(), |slot| {
+                        slot
+                    })
                     .and_then(|value| {
                         value.simplify_algebra(&idenso::tensor::AlgebraSettings {
                             gamma: Some(settings),
@@ -283,18 +279,25 @@ impl Amplitude {
         };
         let adjoint = amplitude.conjugate()?;
         // Loop variables in two independent loop integrals must not be identified.
-        let loop_index = symbol!("feynkit_amplitude::loop_");
-        let args = symbol!("feynkit_amplitude::loop_args___");
         let bra = adjoint.expression()?.wrap_indices(Self::bra(), false)?;
-        let mapped = bra
-            .expression()
-            .replace(function!(symbols::loop_momentum(), loop_index, args))
-            .with(function!(
-                symbols::loop_momentum(),
-                Self::bra().call(loop_index),
-                args
-            ));
-        let bra = bra.with_checked_expression(mapped)?;
+        let bra = bra.map_produced_expression(&HashMap::new(), |node| {
+            let AtomView::Fun(function) = node else {
+                return Ok(None);
+            };
+            if function.get_symbol() != symbols::loop_momentum() {
+                return Ok(None);
+            }
+            let mut arguments = function.iter();
+            let Some(index) = arguments.next() else {
+                return Ok(None);
+            };
+            Ok::<_, TensorInferenceError>(Some(
+                FunctionBuilder::new(function.get_symbol())
+                    .add_arg(Self::bra().call(index))
+                    .add_args(arguments)
+                    .finish(),
+            ))
+        })?;
         let expression = amplitude.expression()?.multiply(&bra)?;
         Ok(SquaredAmplitude {
             amplitude,
@@ -357,7 +360,15 @@ impl Amplitude {
             Pattern::Literal(conjugate.call(&dimension)),
             Pattern::Literal(dimension),
         ));
-        Ok(expression.with_checked_expression(expression.expression().replace_multiple(rules))?)
+        Ok(if self.options.real.is_empty() {
+            expression.map_produced_expression(&HashMap::new(), |node| {
+                let rewritten = node.replace_multiple(&rules);
+                Ok::<_, TensorInferenceError>((rewritten.as_view() != node).then_some(rewritten))
+            })?
+        } else {
+            // User assumptions may name arbitrary tensor expressions.
+            expression.with_checked_expression(expression.expression().replace_multiple(rules))?
+        })
     }
 
     fn diagram_term(
@@ -454,14 +465,21 @@ impl Amplitude {
         let denominator = denominator
             .replace(function!(symbols::denominator(), a, b, c, d))
             .with(d);
-        let factor = evaluate_overall_factor(diagram.overall_factor().as_view());
-        let expression = diagram
-            .model()
-            .expand_couplings(&(factor * numerator.expression() / denominator));
-        let expression = basis
-            .route_expression(&expression)
-            .replace_multiple(momentum_rules);
-        let numerator = numerator.with_checked_expression(expression)?;
+        let factor = expressions::evaluate_overall_factor(diagram.overall_factor().as_view());
+        // Overall factors and coupling definitions come from user input.
+        let numerator = numerator.with_checked_expression(
+            diagram
+                .model()
+                .expand_couplings(&(factor * numerator.expression() / denominator)),
+        )?;
+        let numerator = basis.route_tensor(&numerator)?;
+        let numerator = numerator.map_produced_expression(&HashMap::new(), |node| {
+            if !matches!(node, AtomView::Fun(function) if function.get_symbol() == symbols::external_momentum()) {
+                return Ok(None);
+            }
+            let mapped = node.replace_multiple(&momentum_rules);
+            Ok::<_, TensorInferenceError>((mapped.as_view() != node).then_some(mapped))
+        })?;
         let legs = legs.into_values().collect::<Vec<_>>();
         let interface = PartialStructure::from_logical_slots(
             legs.iter()
@@ -469,7 +487,8 @@ impl Amplitude {
                 .map(|slot| slot.rep().slot(PartialIndex::Explicit(slot.aind))),
         );
         let numerator =
-            SymbolicTensor::from_declared_parts(numerator.expression().clone(), interface)?;
+            numerator
+                .with_produced_parts(numerator.expression().clone(), interface, |slot| slot)?;
         Ok((numerator, legs))
     }
 }
@@ -534,12 +553,33 @@ impl SquaredAmplitude {
             let column = (leg.state == ExternalState::Incoming) != particle.is_antiparticle();
             let indices = if column { [ket, bra] } else { [bra, ket] };
             // Scalars contribute one; unsupported spins still report an error.
-            let completeness = SymbolicTensor::infer(sum.expression(
+            let expression = sum.expression(
                 &leg.momentum(),
                 indices,
                 references.get(&index),
                 spin_vectors.get(&index),
-            )?)?;
+            )?;
+            let completeness =
+                if references.contains_key(&index) || spin_vectors.contains_key(&index) {
+                    // These raw user vectors have not passed tensor admission.
+                    SymbolicTensor::infer(expression)?
+                } else {
+                    let ports = leg
+                        .slots
+                        .iter()
+                        .filter(|slot| {
+                            slot.rep_name() == Bispinor {}.into()
+                                || slot.rep_name() == Minkowski {}.into()
+                        })
+                        .flat_map(|slot| {
+                            [leg.tensor_index, leg.tensor_index.scoped(Amplitude::bra())]
+                                .map(|index| slot.rep().slot(PartialIndex::Explicit(index)))
+                        });
+                    SymbolicTensor::from_produced_parts(
+                        expression,
+                        PartialStructure::from_logical_slots(ports),
+                    )?
+                };
             result.expression = result.expression.multiply(&completeness)?;
         }
         Ok(result)
@@ -567,11 +607,16 @@ impl SquaredAmplitude {
                 left.aind = leg.tensor_index;
                 let mut right = slot;
                 right.aind = leg.tensor_index.scoped(Amplitude::bra());
-                let completeness =
-                    SymbolicTensor::infer(ETS.metric(left.to_atom(), right.to_atom()))?;
+                let completeness = SymbolicTensor::from_produced_parts(
+                    ETS.metric(left.to_atom(), right.to_atom()),
+                    PartialStructure::from_logical_slots(
+                        [left, right]
+                            .map(|slot| slot.rep().slot(PartialIndex::Explicit(slot.aind))),
+                    ),
+                )?;
                 result.expression = result.expression.multiply(&completeness)?;
                 if average_initial && leg.state == ExternalState::Incoming {
-                    result.expression = result.expression.with_checked_expression(
+                    result.expression = result.expression.with_produced_expression(
                         result.expression.expression() / Atom::num(particle.color.unsigned_abs()),
                     )?;
                 }

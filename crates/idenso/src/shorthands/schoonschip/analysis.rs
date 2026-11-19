@@ -7,6 +7,10 @@ use spenso::{
 use symbolica::atom::{AtomView, Symbol};
 
 use crate::tensor::inference::InterfaceInference;
+#[cfg(all(test, debug_assertions))]
+use crate::tensor::simplification::observation::{
+    DEBUG_CANDIDATE_SCANS, DEBUG_CANDIDATE_VISITS, DebugObservation,
+};
 
 #[cfg(test)]
 std::thread_local! {
@@ -54,7 +58,19 @@ impl<const N: usize> SimplificationCandidates<N> {
             crate::reference_cases::timing::Phase::CandidateScan,
         );
         #[cfg(test)]
-        SCAN_COUNTS.with(|count| count.set(count.get() + 1));
+        {
+            #[cfg(debug_assertions)]
+            let debug = DebugObservation::is_active();
+            #[cfg(not(debug_assertions))]
+            let debug = false;
+            if !debug {
+                SCAN_COUNTS.with(|count| count.set(count.get() + 1));
+            }
+            #[cfg(debug_assertions)]
+            if debug {
+                DEBUG_CANDIDATE_SCANS.with(|count| count.set(count.get() + 1));
+            }
+        }
         let symbols = symbols.map(|symbol| symbol.get_id());
         let bracket = SPENSO_TAG.bracket.get_id();
         let rank_one = &SPENSO_TAG.rank1;
@@ -75,7 +91,19 @@ impl<const N: usize> SimplificationCandidates<N> {
         candidates.repeated_indices = expression.has_repeated_explicit_indices_with_observer(
             |node, slot| {
                 #[cfg(test)]
-                CANDIDATE_NODE_VISITS.with(|count| count.set(count.get() + 1));
+                {
+                    #[cfg(debug_assertions)]
+                    let debug = DebugObservation::is_active();
+                    #[cfg(not(debug_assertions))]
+                    let debug = false;
+                    if !debug {
+                        CANDIDATE_NODE_VISITS.with(|count| count.set(count.get() + 1));
+                    }
+                    #[cfg(debug_assertions)]
+                    if debug {
+                        DEBUG_CANDIDATE_VISITS.with(|count| count.set(count.get() + 1));
+                    }
+                }
                 if !observe(node, slot) {
                     skipped = true;
                     candidates.allow_all();

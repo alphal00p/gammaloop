@@ -1,32 +1,28 @@
+use std::sync::Arc;
 use std::sync::LazyLock;
 
-use spenso::{
-    network::{
-        library::function_lib::INBUILTS,
-        parsing::{AtomStructureExt, StrictTensorFilter},
-        tags::SPENSO_TAG as T,
-    },
-    shadowing,
-    structure::{
-        abstract_index::AbstractIndex,
-        representation::{LibraryRep, RepName},
-        slot::{IsAbstractSlot, Slot},
-    },
-};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder},
-    id::Replacement,
-};
+use crate::tensor::SymbolicTensor;
+use crate::tensor::inference::TensorInferenceError;
+use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+use spenso::structure::slot::DualSlotTo;
 
-use crate::{
-    IndexTooling, color_t, epsilon::EPSILON_SYMBOL, rep_symbols::RS,
-    representations::ColorFundamental,
-};
+use spenso::network::library::function_lib::INBUILTS;
+use spenso::network::parsing::{AtomStructureExt, StrictTensorFilter};
+use spenso::network::tags::SPENSO_TAG as T;
+use spenso::shadowing;
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::representation::{LibraryRep, RepName};
+use spenso::structure::slot::{IsAbstractSlot, Slot};
+use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder};
+use symbolica::id::Replacement;
 
-use super::{
-    CS,
-    simplify::{color_generator_adjoint_view, fundamental_chain_dimension_view},
-};
+use crate::epsilon::EPSILON_SYMBOL;
+use crate::rep_symbols::RS;
+use crate::representations::ColorFundamental;
+use crate::{IndexTooling, color_t};
+
+use super::CS;
+use super::simplify::{color_generator_adjoint_view, fundamental_chain_dimension_view};
 
 static COLOR_CONJ_GENERATOR_TRANSPOSITIONS: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
     let cof = ColorFundamental {};
@@ -67,7 +63,10 @@ struct ColorConjugator;
 
 impl ColorConjugator {
     // Adjoint a compact generator word without expanding its projectors.
-    fn run(expression: AtomView<'_>) -> Option<Atom> {
+    fn run(
+        expression: AtomView<'_>,
+        observer: &mut impl FnMut(AtomView<'_>, AtomView<'_>),
+    ) -> Option<Atom> {
         let mut scalar = true;
         expression.visitor(&mut |value| {
             if matches!(value, AtomView::Fun(fun) if fun.get_symbol().is_scalar()) {
@@ -87,13 +86,13 @@ impl ColorConjugator {
         let word = match expression {
             AtomView::Mul(product) => {
                 return product.iter().try_fold(Atom::one(), |result, factor| {
-                    Some(result * Self::run(factor)?)
+                    Some(result * Self::run(factor, observer)?)
                 });
             }
             AtomView::Add(sum) => {
-                return sum
-                    .iter()
-                    .try_fold(Atom::Zero, |result, term| Some(result + Self::run(term)?));
+                return sum.iter().try_fold(Atom::Zero, |result, term| {
+                    Some(result + Self::run(term, observer)?)
+                });
             }
             AtomView::Fun(word) => word,
             _ => return None,
@@ -126,9 +125,9 @@ impl ColorConjugator {
         let factors = factors
             .into_iter()
             .rev()
-            .map(Self::run)
+            .map(|factor| Self::run(factor, observer))
             .collect::<Option<Vec<_>>>()?;
-        Some(if word.get_symbol() == T.trace {
+        let result = if word.get_symbol() == T.trace {
             shadowing::trace(prefix[0], factors)
         } else {
             prefix
@@ -140,57 +139,199 @@ impl ColorConjugator {
                     |builder, factor| builder.add_arg(factor),
                 )
                 .finish()
-        })
+        };
+        observer(expression, result.as_view());
+        Some(result)
+    }
+
+    fn words(
+        expression: AtomView<'_>,
+        observer: &mut impl FnMut(AtomView<'_>, AtomView<'_>),
+    ) -> Atom {
+        expression
+            .replace_map(|arg, _context, out| {
+                let AtomView::Fun(conjugate) = arg else {
+                    return;
+                };
+                if conjugate.get_symbol() != INBUILTS.conj || conjugate.get_nargs() != 1 {
+                    return;
+                }
+                let Some(AtomView::Fun(word)) = conjugate.iter().next() else {
+                    return;
+                };
+                if word.get_symbol() == *EPSILON_SYMBOL && word.get_nargs() == 3 {
+                    let triplet = ColorFundamental {}.new_rep(3).cast::<LibraryRep>();
+                    let reps = word
+                        .iter()
+                        .map(|arg| {
+                            Slot::<LibraryRep, AbstractIndex>::try_from(arg).map(|slot| slot.rep())
+                        })
+                        .collect::<Result<Vec<_>, _>>();
+                    if let Ok(reps) = reps
+                        && (reps.iter().all(|rep| *rep == triplet)
+                            || reps.iter().all(|rep| *rep == triplet.dual()))
+                    {
+                        **out = word.as_view().to_owned();
+                    }
+                } else if [T.chain, T.trace].contains(&word.get_symbol())
+                    && let Some(result) = Self::run(word.as_view(), observer)
+                {
+                    **out = result;
+                }
+            })
+            .replace_map(|value, _, out| {
+                let AtomView::Fun(function) = value else {
+                    return;
+                };
+                if function.get_symbol() != CS.t || function.get_nargs() != 3 {
+                    return;
+                }
+                let result = value.replace_multiple(&*COLOR_CONJ_GENERATOR_TRANSPOSITIONS);
+                if result.as_view() != value {
+                    observer(value, result.as_view());
+                    **out = result;
+                }
+            })
     }
 }
 
 pub fn color_conj_impl(expression: AtomView<'_>) -> Atom {
-    expression
-        .replace_map(|arg, _context, out| {
-            let AtomView::Fun(conjugate) = arg else {
-                return;
-            };
-            if conjugate.get_symbol() != INBUILTS.conj || conjugate.get_nargs() != 1 {
-                return;
-            }
-            let Some(AtomView::Fun(word)) = conjugate.iter().next() else {
-                return;
-            };
-            if word.get_symbol() == *EPSILON_SYMBOL && word.get_nargs() == 3 {
-                let triplet = ColorFundamental {}.new_rep(3).cast::<LibraryRep>();
-                let reps = word
-                    .iter()
-                    .map(|arg| {
-                        Slot::<LibraryRep, AbstractIndex>::try_from(arg).map(|slot| slot.rep())
-                    })
-                    .collect::<Result<Vec<_>, _>>();
-                if let Ok(reps) = reps
-                    && (reps.iter().all(|rep| *rep == triplet)
-                        || reps.iter().all(|rep| *rep == triplet.dual()))
-                {
-                    // UFO color epsilon has real components. Only its color
-                    // slots dualize below; Lorentz epsilon keeps its convention.
-                    **out = AtomView::Fun(word).to_owned();
-                }
-            } else if [T.chain, T.trace].contains(&word.get_symbol())
-                && let Some(result) = ColorConjugator::run(AtomView::Fun(word))
-            {
-                **out = result;
-            }
-        })
-        .replace_multiple(&*COLOR_CONJ_GENERATOR_TRANSPOSITIONS)
+    ColorConjugator::words(expression, &mut |_, _| {})
         .replace_multiple(&*COLOR_CONJ_REPRESENTATION_SWAPS)
+}
+
+impl SymbolicTensor<PartialStructure> {
+    /// Conjugate the actual producer tree once while carrying each primitive's
+    /// admitted interface. Colour-word reversal and representation duality are
+    /// separate typed transformations, so newly emitted templates stay known.
+    pub(crate) fn spenso_conjugated(&self) -> Result<Self, TensorInferenceError> {
+        let (expression, mapped) = self.map_admitted_expression(
+            |value| {
+                Ok(matches!(
+                    value,
+                    AtomView::Num(_) | AtomView::Var(_) | AtomView::Fun(_)
+                )
+                .then(|| {
+                    value
+                        .conj()
+                        .replace(Atom::var(RS.a__).conj())
+                        .with(INBUILTS.conj(RS.a__))
+                }))
+            },
+            |interface| Ok(interface.clone()),
+        )?;
+        let native = Self::from_validated_parts(
+            expression,
+            self.structure.clone(),
+            Arc::clone(
+                self.proofs
+                    .occurrences
+                    .get()
+                    .expect("conjugation source carries index history"),
+            ),
+        );
+        let native = self.finish_mapped_result("native conjugation", native, mapped)?;
+        let mut failure = None;
+        let expression =
+            ColorConjugator::words(native.expression().as_view(), &mut |source, target| {
+                if let Some(interface) = native.admitted_interface(source) {
+                    native.proofs.retain_interface(target, interface);
+                }
+                if let AtomView::Fun(function) = target
+                    && function.get_symbol() == CS.t
+                    && function.get_nargs() == 3
+                    && let Err(error) = native.proofs.retain_leaf_ports(
+                        target,
+                        function.iter().map(|arg| arg.to_owned()).collect(),
+                    )
+                {
+                    failure = Some(error);
+                }
+            });
+        if let Some(error) = failure {
+            return Err(error);
+        }
+        // Transposition alone temporarily reverses base and dual positions
+        // in the generator signature. Finish duality before publishing it.
+        let words = expression;
+        let fundamental = LibraryRep::from(ColorFundamental {});
+        let dual_slot = |slot: Slot<LibraryRep, AbstractIndex>| {
+            if slot.rep_name().base() == fundamental.base() {
+                slot.dual()
+            } else {
+                slot
+            }
+        };
+        let dual_interface = |interface: &PartialStructure| {
+            Ok(PartialStructure::from_logical_slots(
+                interface.logical_slots().into_iter().map(|slot| {
+                    if slot.rep_name().base() == fundamental.base() {
+                        slot.dual()
+                    } else {
+                        slot
+                    }
+                }),
+            ))
+        };
+        let structure = dual_interface(native.structure())?;
+        let (expression, mapped) = native.map_producer_draft(
+            words.as_view(),
+            |value| {
+                if value.get_symbol().is_some_and(|head| head.is_scalar()) {
+                    return Ok(Some(value.to_owned()));
+                }
+                Ok(Slot::<LibraryRep, AbstractIndex>::try_from(value)
+                    .ok()
+                    .filter(|slot| slot.rep_name().base() == fundamental.base())
+                    .map(|slot| slot.dual().to_atom()))
+            },
+            dual_interface,
+        )?;
+        let occurrences = native
+            .explicit_index_occurrences()?
+            .mapped(|slot| Ok::<_, TensorInferenceError>(dual_slot(slot)))?;
+        let result = Self::from_validated_parts(expression, structure, Arc::new(occurrences));
+        native.finish_mapped_result("colour conjugation", result, mapped)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        IndexTooling, color::ColorSimplifier, epsilon::EpsilonSimplifier,
-        shorthands::UndoShorthands, test_support::test_initialize,
-    };
-    use spenso::{shadowing::ProjectorExpander, structure::abstract_index::AbstractIndex};
+    use crate::IndexTooling;
+    use crate::color::ColorSimplifier;
+    use crate::epsilon::EpsilonSimplifier;
+    use crate::shorthands::UndoShorthands;
+    use crate::tensor::inference::tests::INFERENCE_CALLS;
+    use crate::test_support::test_initialize;
+    use spenso::shadowing::ProjectorExpander;
+    use spenso::structure::abstract_index::AbstractIndex;
     use symbolica::parse;
+
+    #[test]
+    fn typed_colour_conjugation_retains_subregions_without_inference() {
+        test_initialize();
+        for expression in [
+            parse!(
+                "t(coad(8,a),cof(3,j),dind(cof(3,i)))",
+                default_namespace = "spenso"
+            ),
+            parse!(
+                "chain(cof(3,j),dind(cof(3,i)),t(coad(8,a),in,out),t(coad(8,b),in,out))",
+                default_namespace = "spenso"
+            ),
+        ] {
+            let expected = expression.spenso_conj();
+            let source = SymbolicTensor::infer(expression).unwrap();
+            INFERENCE_CALLS.with(|count| count.set(0));
+            let conjugated = source.spenso_conjugated().unwrap();
+            assert_eq!(conjugated.expression(), &expected);
+            let roundtrip = conjugated.spenso_conjugated().unwrap();
+            assert_eq!(roundtrip.expression(), source.expression());
+            assert_eq!(roundtrip.structure(), source.structure());
+            assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+        }
+    }
 
     #[test]
     fn color_epsilon_conjugation_dualizes_without_reversing_indices() {

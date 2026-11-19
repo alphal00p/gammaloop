@@ -1,28 +1,38 @@
 //! Signed tensor canonicalization on Spenso's symbolic network.
 //!
 //! Tensor syntax, operation grouping, and contraction topology belong to the
-//! network parser. This module only projects a parsed monomial into Graphica's
-//! incidence graph so that a negative automorphism of antisymmetric tensor
-//! slots can be detected. Symbolica still owns the final dummy-index names and
-//! expression rebuilding.
-use super::{SymbolicNet, SymbolicTensor};
-use crate::{CanonicalizationError, IndexTooling};
+//! network parser. Graphica detects negative automorphisms of antisymmetric
+//! slots, and Symbolica owns dummy labeling and expression rebuilding. Typed
+//! callers carry source leaf facts through those known dummy substitutions.
+use super::composition;
+use super::inference::{InterfaceInference, LeafInference, TensorInferenceError};
+use super::{SymbolicNet, SymbolicNetExt, SymbolicTensor, TensorProofs};
+use crate::{CanonicalizationError, IndexTooling, NetworkToolingError};
+use ahash::{AHashMap, AHashSet, AHasher};
 use linnet::half_edge::NodeIndex;
 use linnet::half_edge::involution::{Hedge, HedgePair};
 use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph};
 use linnet::half_edge::tree::SimpleTraversalTree;
 use linnet::permutation::Permutation;
 use linnet::tree::child_pointer::ParentChildStore;
+use linnet::tree::child_vec::ChildVecStore;
+use spenso::network::TensorNetworkError;
 use spenso::network::graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp};
-use spenso::network::store::NetworkStoreAccess;
+use spenso::network::library::DummyLibrary;
+use spenso::network::parsing::{LeafInterfaceCache, ParseSettings, StrictTensorFilter};
+use spenso::network::store::{NetworkStoreAccess, TensorScalarStore};
 use spenso::structure::abstract_index::AbstractIndex;
-use spenso::structure::partial::PartialStructure;
+use spenso::structure::partial::{PartialIndex, PartialStructure, PartialStructureExt};
 use spenso::structure::representation::{LibraryRep, LibrarySlot, RepName, Representation};
-use spenso::structure::slot::{AbsInd, DualSlotTo, IsAbstractSlot, ParseableAind};
+use spenso::structure::slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind, Slot};
 use spenso::structure::{HasName, OrderedStructure, TensorStructure};
-use std::collections::BTreeMap;
-use symbolica::atom::{Atom, AtomView, Symbol};
+use std::collections::{BTreeMap, BTreeSet};
+use std::hash::{Hash, Hasher};
+use std::sync::Arc;
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use symbolica::graph::{Graph, HiddenData};
+use symbolica::id::{AliasedAtom, Pattern, Replacement};
+use symbolica::symbol;
 
 impl SymbolicTensor<PartialStructure> {
     /// Canonically label internal indices while retaining the ordered external interface.
@@ -31,12 +41,563 @@ impl SymbolicTensor<PartialStructure> {
     /// tensor finisher preserves typed zeros. Debug builds check the user-normalizer
     /// free-index preservation contract.
     pub fn canonize(&self) -> Result<Self, CanonicalizationError> {
-        let expression = self
-            .expression
-            .canonize::<AbstractIndex>(AbstractIndex::Dummy)?;
-        // Canonicalization chooses new dummy identities, so this is an index
-        // construction boundary rather than scalar algebra on the old names.
-        Ok(self.with_materialized_expression("canonize", expression)?)
+        self.canonize_with(&mut AbstractIndex::Dummy)
+    }
+
+    fn canonize_with<Aind: AbsInd + ParseableAind + DummyAind>(
+        &self,
+        new_dummy: &mut dyn FnMut(usize) -> Aind,
+    ) -> Result<Self, CanonicalizationError> {
+        if self.expression.is_zero() {
+            return Ok(self.clone());
+        }
+        let (proofs, leaves) = self.producer_context();
+        let settings =
+            ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps);
+        let network =
+            SymbolicNet::<Aind>::try_from_admitted_view::<OrderedStructure<LibraryRep, Aind>, _>(
+                self.expression.as_view(),
+                &DummyLibrary::<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>>::new(),
+                &settings,
+                leaves,
+                Some(&proofs),
+            )
+            .map_err(|error| NetworkToolingError::Parse {
+                reason: error.to_string(),
+            })?;
+        let (expression, proofs) =
+            Self::canonize_parsed(network, new_dummy, Some((self.structure.clone(), proofs)))?;
+        let proofs = proofs.expect("admitted canonicalization retains its producer facts");
+        Ok(self
+            .borrowed_with_proofs(&proofs)
+            .with_materialized_expression("canonize", expression)?)
+    }
+
+    fn canonical_stage(
+        expression: Atom,
+        structure: PartialStructure,
+        proofs: &TensorProofs,
+    ) -> Self {
+        let mut stage = Self::from_validated_parts(
+            expression,
+            structure,
+            Arc::clone(
+                proofs
+                    .occurrences
+                    .get()
+                    .expect("canonical source carries index history"),
+            ),
+        );
+        stage.proofs.inherit_interfaces([proofs]);
+        stage
+    }
+
+    pub(crate) fn canonize_parsed<Aind: AbsInd + ParseableAind + DummyAind>(
+        mut net: SymbolicNet<Aind>,
+        mut new_dummy: &mut dyn FnMut(usize) -> Aind,
+        mut admission: Option<(PartialStructure, TensorProofs)>,
+    ) -> Result<(Atom, Option<TensorProofs>), CanonicalizationError> {
+        net.remove_antisymmetric_zero_terms();
+
+        // Keep duality wrappers in the expression graph. The canonicalizer
+        // follows the same base index inside dind(...), while the wrapper
+        // preserves which occurrence is covariant. Erasing that distinction
+        // can collapse opposite color metrics into an invalid tensor square.
+        let mut dummies = BTreeMap::new();
+        for (p, _, d) in net.graph.graph.iter_edges() {
+            if p.is_paired()
+                && let NetworkEdge::Slot(s) = d.data
+            {
+                let slot = if s.rep_name().is_dual() { s.dual() } else { *s };
+                dummies.insert(slot.to_atom(), slot.rep());
+            }
+        }
+
+        let external = net.graph.dangling_indices();
+        // Reconstruct the admitted operation graph, without running tensor algebra
+        // merely to hand its syntax to Symbolica's canonicalizer.
+        let tree = net.graph.expr_tree().cast::<ChildVecStore<()>>();
+        let root = net.graph.graph.node_id(net.graph.head());
+        let expr = net
+            .graph
+            .to_expression_at(&tree, root, &mut |_, node| match node {
+                NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
+                    Ok(Some(net.store.tensors[*index].expression.clone()))
+                }
+                NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => {
+                    Ok(Some(net.store.get_scalar_ref(*index).clone()))
+                }
+                NetworkNode::Op(_) => Ok(None),
+                _ => Err(TensorNetworkError::Other(eyre::eyre!(
+                    "canonicalization requires stored symbolic leaves"
+                ))),
+            })
+            .map_err(|error| CanonicalizationError::Prepare {
+                reason: error.to_string(),
+            })?;
+        if let Some((interface, proofs)) = &mut admission {
+            proofs.publish_interfaces(
+                expr.as_view(),
+                interface.clone(),
+                net.store.tensors.iter().map(|tensor| &tensor.proofs),
+            );
+        }
+        // Symbolica rejects tensor-containing negative powers even when their
+        // base is a closed scalar network. Canonicalize those independent
+        // contractions recursively, then keep them opaque during outer labeling.
+        let mut aliases = BTreeMap::new();
+        let mut used = expr.get_all_symbols(true);
+        let mut serial = 0;
+        let mut failure = None;
+        let mut alias_proofs = Vec::new();
+        let mut select_alias = |atom: AtomView<'_>| {
+            let AtomView::Pow(power) = atom else {
+                return None;
+            };
+            let (base, exponent) = power.get_base_exp();
+            if i64::try_from(exponent).is_ok_and(|n| n > 0) {
+                return None;
+            }
+            let result = if let Some((_, proofs)) = &admission {
+                proofs
+                    .admitted_interface(base)
+                    .and_then(|interface| proofs.region_with_interface(base, interface))
+                    .ok_or_else(|| CanonicalizationError::Prepare {
+                        reason: "canonical scalar scope lacks admitted metadata".into(),
+                    })
+                    .and_then(|source| {
+                        source.canonize_with(&mut new_dummy).map(|canonical| {
+                            alias_proofs.push(canonical.proofs);
+                            canonical.expression
+                        })
+                    })
+            } else {
+                base.canonize::<Aind>(&mut new_dummy as &mut dyn FnMut(usize) -> Aind)
+            };
+            let canonical = match result {
+                Ok(canonical) => canonical.pow(exponent),
+                Err(error) => {
+                    failure = Some(error);
+                    return None;
+                }
+            };
+            let alias = aliases.entry(canonical).or_insert_with(|| {
+                loop {
+                    let name = symbol!(&format!("idenso::canonical_scalar_{serial}"));
+                    serial += 1;
+                    if used.insert(name) {
+                        break Atom::var(name);
+                    }
+                }
+            });
+            Some(alias.clone())
+        };
+        let (expr, mapped) = if let Some((interface, proofs)) = &admission {
+            let stage = Self::canonical_stage(expr, interface.clone(), proofs);
+            let (expression, mapped) = stage.map_admitted_expression(
+                |atom| Ok(select_alias(atom)),
+                |interface| Ok(interface.clone()),
+            )?;
+            (expression, Some(mapped))
+        } else {
+            (
+                expr.replace_map(|atom, _, out| {
+                    if let Some(alias) = select_alias(atom) {
+                        **out = alias;
+                    }
+                }),
+                None,
+            )
+        };
+        if let Some(error) = failure {
+            return Err(error);
+        }
+        if let Some((interface, proofs)) = &mut admission {
+            proofs.publish_interfaces(expr.as_view(), interface.clone(), mapped.iter());
+        }
+        let mut templates = admission
+            .as_ref()
+            .map(|(_, proofs)| CanonicalLeafTemplates::new(proofs, dummies.keys()))
+            .transpose()?;
+        // Spenso supplies validated incidence and external slots. Symbolica
+        // canonizes the reconstructed expression, including dummy pairs inside
+        // nested sums, without distributing any products of sums.
+        let canonical =
+            expr.canonize_tensors(dummies)
+                .map_err(|error| CanonicalizationError::Indices {
+                    reason: error.to_string(),
+                })?;
+        if let Some((interface, proofs)) = &mut admission {
+            proofs.publish_interfaces(canonical.canonical_form.as_view(), interface.clone(), []);
+            templates
+                .as_ref()
+                .expect("admitted canonicalization has leaf templates")
+                .retain_output(&canonical.canonical_form, interface, proofs)?;
+        }
+
+        // Sum branches also have paired copies of genuinely external slots.
+        // Preserve those labels after Symbolica has validated their incidence.
+        let mut reserved = BTreeSet::new();
+        for slot in external {
+            let slot = if slot.rep_name().is_dual() {
+                slot.dual()
+            } else {
+                slot
+            };
+            let slot = slot.to_atom();
+            reserved.insert(slot);
+        }
+
+        let mut reps = vec![];
+        let mut typed_replacements = Vec::new();
+        let mut next_dummy = 0;
+
+        // Only relabel names that Symbolica validated as contracted indices;
+        // keep their replacements distinct from the genuine external slots.
+        // Canceled terms can leave unused names in the validated index pool.
+        for (d, r) in canonical
+            .dummy_indices
+            .into_iter()
+            .filter(|(index, _)| canonical.canonical_form.contains(index))
+        {
+            let target = loop {
+                let candidate = r.slot::<Aind, Aind>(new_dummy(next_dummy)).to_atom();
+                next_dummy += 1;
+                if reserved.insert(candidate.clone()) {
+                    break candidate;
+                }
+            };
+            if admission.is_some() {
+                let from = Slot::<LibraryRep, AbstractIndex>::try_from(d.as_view())
+                    .map_err(|error| TensorInferenceError::invalid(error.to_string()))?;
+                let to = Slot::<LibraryRep, AbstractIndex>::try_from(target.as_view())
+                    .map_err(|error| TensorInferenceError::invalid(error.to_string()))?;
+                templates
+                    .as_mut()
+                    .expect("admitted canonicalization has leaf templates")
+                    .add_slot(to);
+                typed_replacements.push((from, to));
+                typed_replacements.push((from.dual(), to.dual()));
+            }
+            reps.push(Replacement::new(
+                Pattern::Literal(d),
+                Pattern::Literal(target),
+            ));
+        }
+
+        if let Some((interface, mut proofs)) = admission {
+            proofs.publish_interfaces(canonical.canonical_form.as_view(), interface.clone(), []);
+            let atoms = typed_replacements
+                .iter()
+                .map(|(from, to)| (from.to_atom(), to.to_atom()))
+                .collect::<Vec<_>>();
+            let stage = Self::canonical_stage(canonical.canonical_form, interface.clone(), &proofs);
+            let (expression, mapped) = stage.map_admitted_expression(
+                |atom| {
+                    Ok(atoms
+                        .iter()
+                        .find(|(from, _)| from.as_view() == atom)
+                        .map(|(_, to)| to.clone()))
+                },
+                |structure| {
+                    Ok(PartialStructure::from_logical_slots(
+                        structure.logical_slots().into_iter().map(|slot| {
+                            let PartialIndex::Explicit(index) = slot.aind else {
+                                return slot;
+                            };
+                            typed_replacements
+                                .iter()
+                                .find(|(from, _)| *from == slot.rep().slot(index))
+                                .map_or(slot, |(_, to)| {
+                                    to.rep().slot(PartialIndex::Explicit(to.aind()))
+                                })
+                        }),
+                    ))
+                },
+            )?;
+            proofs.publish_interfaces(expression.as_view(), interface.clone(), [&mapped]);
+            templates
+                .as_ref()
+                .expect("admitted canonicalization has leaf templates")
+                .retain_output(&expression, &interface, &mut proofs)?;
+            let stage = Self::canonical_stage(expression, interface.clone(), &proofs);
+            let (expression, mapped) = stage.map_admitted_expression(
+                |atom| {
+                    Ok(aliases
+                        .iter()
+                        .find(|(_, alias)| alias.as_view() == atom)
+                        .map(|(original, _)| original.clone()))
+                },
+                |structure| Ok(structure.clone()),
+            )?;
+            proofs.publish_interfaces(
+                expression.as_view(),
+                interface.clone(),
+                alias_proofs.iter().chain([&mapped]),
+            );
+            templates
+                .as_ref()
+                .expect("admitted canonicalization has leaf templates")
+                .retain_output(&expression, &interface, &mut proofs)?;
+            Ok((expression, Some(proofs)))
+        } else {
+            let mut scalar_definitions = AliasedAtom::from(Atom::Zero);
+            for (original, alias) in aliases {
+                scalar_definitions.register_alias(alias, original);
+            }
+            Ok((
+                scalar_definitions
+                    .map_root(|_| canonical.canonical_form.replace_multiple(&reps))
+                    .into_inner(),
+                None,
+            ))
+        }
+    }
+}
+
+/// Source leaves may only change the dummy slots supplied to the canonicalizer.
+/// Keep the immutable source cache alive while publishing a separate output cache;
+/// matching never rebuilds a function or discovers a port from output syntax.
+struct CanonicalLeafTemplates {
+    source: LeafInterfaceCache,
+    pool: AHashMap<Atom, Representation<LibraryRep>>,
+    user_normalizers: bool,
+}
+
+impl CanonicalLeafTemplates {
+    fn new<'a>(
+        proofs: &TensorProofs,
+        dummies: impl IntoIterator<Item = &'a Atom>,
+    ) -> Result<Self, TensorInferenceError> {
+        let source = proofs.parser_leaf_interfaces();
+        let user_normalizers = source
+            .lock()
+            .expect("leaf interface cache is not poisoned")
+            .keys()
+            .any(|atom| {
+                atom.get_all_symbols(true)
+                    .into_iter()
+                    .any(|head| !InterfaceInference::intrinsic_normalization_head(head))
+            });
+        let mut result = Self {
+            source,
+            pool: AHashMap::new(),
+            user_normalizers,
+        };
+        for dummy in dummies {
+            let slot = Slot::<LibraryRep, AbstractIndex>::try_from(dummy.as_view())
+                .map_err(|error| TensorInferenceError::invalid(error.to_string()))?;
+            result.add_slot(slot);
+        }
+        Ok(result)
+    }
+
+    fn add_slot(&mut self, slot: Slot<LibraryRep, AbstractIndex>) {
+        for slot in [slot, slot.dual()] {
+            self.pool.insert(slot.to_atom(), slot.rep());
+        }
+    }
+
+    fn children(value: AtomView<'_>) -> Vec<AtomView<'_>> {
+        match value {
+            AtomView::Fun(function) => function.iter().collect(),
+            AtomView::Add(sum) => sum.iter().collect(),
+            AtomView::Mul(product) => product.iter().collect(),
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                vec![base, exponent]
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    fn fingerprint(&self, value: AtomView<'_>) -> u64 {
+        fn hash_node<'a>(
+            templates: &CanonicalLeafTemplates,
+            value: AtomView<'a>,
+            labels: &mut AHashMap<&'a [u8], usize>,
+            hash: &mut AHasher,
+        ) {
+            if let Some(rep) = templates.pool.get(value.get_data()) {
+                0_u8.hash(hash);
+                rep.hash(hash);
+                let next = labels.len();
+                labels.entry(value.get_data()).or_insert(next).hash(hash);
+                return;
+            }
+            match value {
+                AtomView::Fun(function) => {
+                    1_u8.hash(hash);
+                    function.get_symbol().hash(hash);
+                }
+                AtomView::Add(_) => 2_u8.hash(hash),
+                AtomView::Mul(_) => 3_u8.hash(hash),
+                AtomView::Pow(_) => 4_u8.hash(hash),
+                _ => {
+                    5_u8.hash(hash);
+                    value.get_data().hash(hash);
+                }
+            }
+            let children = CanonicalLeafTemplates::children(value);
+            children.len().hash(hash);
+            for child in children {
+                hash_node(templates, child, labels, hash);
+            }
+        }
+        let mut hash = AHasher::default();
+        hash_node(self, value, &mut AHashMap::new(), &mut hash);
+        hash.finish()
+    }
+
+    fn bind<'a, 'b>(
+        &self,
+        source: AtomView<'a>,
+        target: AtomView<'b>,
+        mapping: &mut AHashMap<&'a [u8], AtomView<'b>>,
+        used: &mut AHashSet<&'b [u8]>,
+    ) -> bool {
+        if let Some(rep) = self.pool.get(source.get_data()) {
+            if self.pool.get(target.get_data()) != Some(rep) {
+                return false;
+            }
+            if let Some(previous) = mapping.get(source.get_data()) {
+                return *previous == target;
+            }
+            if !used.insert(target.get_data()) {
+                return false;
+            }
+            mapping.insert(source.get_data(), target);
+            return true;
+        }
+        let same_kind = match (source, target) {
+            (AtomView::Fun(left), AtomView::Fun(right)) => left.get_symbol() == right.get_symbol(),
+            (AtomView::Add(_), AtomView::Add(_))
+            | (AtomView::Mul(_), AtomView::Mul(_))
+            | (AtomView::Pow(_), AtomView::Pow(_)) => true,
+            _ => return source == target,
+        };
+        let left = Self::children(source);
+        let right = Self::children(target);
+        same_kind
+            && left.len() == right.len()
+            && left
+                .into_iter()
+                .zip(right)
+                .all(|(left, right)| self.bind(left, right, mapping, used))
+    }
+
+    fn retain_output(
+        &self,
+        expression: &Atom,
+        interface: &PartialStructure,
+        proofs: &mut TensorProofs,
+    ) -> Result<(), TensorInferenceError> {
+        if self.user_normalizers {
+            // The kernel can invoke user code while rebuilding an indexed leaf.
+            // Observe that explicit user transformation once, without replaying it.
+            let observed = SymbolicTensor::from_observed_parts(
+                expression.clone(),
+                interface.clone(),
+                LeafInference::ObserveEncoded,
+            );
+            #[cfg(debug_assertions)]
+            assert!(
+                observed.is_ok(),
+                "normalization callback contract violated in canonize: {observed:?}"
+            );
+            proofs.inherit_interfaces([&observed?.proofs]);
+            return Ok(());
+        }
+        self.retain_matching(expression, proofs, true)
+    }
+
+    fn retain_matching(
+        &self,
+        expression: &Atom,
+        proofs: &TensorProofs,
+        require_all: bool,
+    ) -> Result<(), TensorInferenceError> {
+        let source = self
+            .source
+            .lock()
+            .expect("leaf interface cache is not poisoned");
+        let mut candidates = AHashMap::<_, Vec<_>>::new();
+        for (atom, (tensorial, ports)) in source.iter() {
+            if *tensorial && matches!(atom.as_view(), AtomView::Fun(_)) {
+                candidates
+                    .entry(self.fingerprint(atom.as_view()))
+                    .or_default()
+                    .push((atom, ports));
+            }
+        }
+        let target = proofs.parser_leaf_interfaces();
+        let mut pending = vec![expression.as_view()];
+        while let Some(value) = pending.pop() {
+            let AtomView::Fun(function) = value else {
+                pending.extend(Self::children(value));
+                continue;
+            };
+            if target
+                .lock()
+                .expect("leaf interface cache is not poisoned")
+                .get(value.get_data())
+                .is_some_and(|(tensorial, _)| *tensorial)
+            {
+                continue;
+            }
+            let mut matched = false;
+            for (template, ports) in candidates
+                .get(&self.fingerprint(value))
+                .into_iter()
+                .flatten()
+            {
+                let mut mapping = AHashMap::new();
+                if self.bind(
+                    template.as_view(),
+                    value,
+                    &mut mapping,
+                    &mut AHashSet::new(),
+                ) {
+                    proofs.retain_leaf_ports(
+                        value,
+                        ports
+                            .iter()
+                            .map(|port| {
+                                mapping
+                                    .get(port.as_view().get_data())
+                                    .map_or_else(|| port.clone(), |value| (*value).to_owned())
+                            })
+                            .collect(),
+                    )?;
+                    matched = true;
+                    break;
+                }
+            }
+            if matched {
+                continue;
+            }
+            if require_all && composition::is_tensor_leaf_head(function.get_symbol()) {
+                return Err(TensorInferenceError::invalid(
+                    "canonicalizer output has no retained source leaf template",
+                ));
+            }
+            pending.extend(function.iter());
+        }
+        Ok(())
+    }
+}
+
+impl TensorProofs {
+    /// Carry constructor roles through the dummy permutations of a local
+    /// identity. The identity supplies the slots it renamed and separately
+    /// owns any builtin constructors it creates.
+    pub(crate) fn retain_permuted_leaf_ports<'a>(
+        &self,
+        expression: &Atom,
+        slots: impl IntoIterator<Item = &'a Atom>,
+        output: &TensorProofs,
+    ) -> Result<(), TensorInferenceError> {
+        CanonicalLeafTemplates::new(self, slots)?.retain_matching(expression, output, false)
     }
 }
 
@@ -742,6 +1303,7 @@ fn generator_is_odd<Aind: AbsInd>(graph: &TensorGraph<Aind>, cycles: &[Vec<usize
 mod typed_tests {
     use super::*;
     use crate::tensor::SymbolicNetParse;
+    use crate::tensor::inference::tests::{INFERENCE_CALLS, INFERENCE_VISITS};
     use crate::test_support;
     use spenso::network::parsing::ParseSettings;
     use spenso::structure::partial::{PartialIndex, PartialStructureExt};
@@ -898,6 +1460,52 @@ mod typed_tests {
             }
             canonical = Some(result.expression().clone());
         }
+    }
+
+    #[test]
+    fn canonical_generic_leaves_retain_raw_ports_without_inference() {
+        test_support::test_initialize();
+        let rep = LibraryRep::from(Minkowski {}).new_rep(4);
+        let [a, b, internal] = [86111, 86112, 86113].map(|index| {
+            rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(index))
+                .to_atom()
+        });
+        let expression = function!(
+            tensor_symbol!("canonical_generic_loop"),
+            &b,
+            &internal,
+            &a,
+            &internal
+        );
+        let expected = expression
+            .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+            .unwrap();
+        let expected_execution = expected
+            .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap()
+            .simple_execute::<()>()
+            .unwrap();
+        let source = SymbolicTensor::infer(expression).unwrap();
+        let source_leaves = source.admitted_leaf_interfaces().lock().unwrap().clone();
+        INFERENCE_CALLS.with(|count| count.set(0));
+        INFERENCE_VISITS.with(|count| count.set(0));
+        let canonical = source.canonize().unwrap();
+        let network = canonical
+            .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+        assert_eq!(network.graph.dangling_indices().len(), source.rank());
+        let executed = network.simple_execute::<()>().unwrap();
+        let second = canonical.canonize().unwrap();
+        assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+        assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
+        assert_eq!(canonical.expression(), &expected);
+        assert_eq!(canonical.structure(), source.structure());
+        assert_eq!(executed, expected_execution);
+        assert_eq!(second, canonical);
+        assert_eq!(
+            *source.admitted_leaf_interfaces().lock().unwrap(),
+            source_leaves
+        );
     }
 
     #[test]

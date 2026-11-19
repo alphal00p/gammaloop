@@ -24,37 +24,30 @@
 //! Chain and trace materialization chooses the symbolic `in`/`out` replacements,
 //! then lets this Schoonschip helper expand compact arguments inside each factor.
 
-use symbolica::{
-    atom::{
-        Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol, representation::FunView,
-    },
-    id::MatchSettings,
-};
+use symbolica::atom::representation::FunView;
+use symbolica::atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol};
+use symbolica::id::MatchSettings;
 
 use linnet::half_edge::NodeIndex;
 use std::fmt::{Debug, Display};
 
+use super::construction::Construction;
+use super::structure_inference::TensorialSyntax;
 use super::{
     ParseSettings, ParseState, SchoonschipExpansionMode, StrictTensorFilter, StructureFromAtom,
-    TensorFromExpression, TensorLibraryFor, construction::Construction,
+    TensorFromExpression, TensorLibraryFor,
 };
-use crate::{
-    network::{
-        Network, NetworkState, TensorNetworkError,
-        library::{FunctionLibrary, symbolic::ETS},
-        store::TensorScalarStore,
-        tags::SPENSO_TAG,
-    },
-    shadowing,
-    structure::{
-        HasStructure, OrderedStructure, ScalarStructure, TensorStructure,
-        representation::{LibraryRep, Representation},
-        slot::{
-            AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind, Slot, SlotMatch,
-            SlotMatcher,
-        },
-    },
+use crate::network::library::FunctionLibrary;
+use crate::network::library::symbolic::ETS;
+use crate::network::store::TensorScalarStore;
+use crate::network::tags::SPENSO_TAG;
+use crate::network::{Network, NetworkState, TensorNetworkError};
+use crate::shadowing;
+use crate::structure::representation::{LibraryRep, Representation};
+use crate::structure::slot::{
+    AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind, Slot, SlotMatch, SlotMatcher,
 };
+use crate::structure::{HasStructure, OrderedStructure, ScalarStructure, TensorStructure};
 use eyre::eyre;
 
 struct SchoonschipMaterialization {
@@ -249,20 +242,75 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind, View> SchoonschipMaterializer
     ) -> Option<SchoonschipMaterialization> {
         let mut changed = false;
         let mut additional_factors = Vec::new();
-        let mut rebuilt = FunctionBuilder::new(fun.get_symbol());
+        let mut arguments = Vec::with_capacity(fun.get_nargs());
+        let mut source_ports = Vec::new();
+        let mut ports = Vec::new();
+        let mut direct_arguments = true;
 
         for arg in fun.iter() {
+            let direct_port = {
+                let mut matcher = self.state.matcher.borrow_mut();
+                matcher.parse::<LibraryRep, Aind>(arg).is_ok()
+                    || matcher.parse_representation::<LibraryRep>(arg).is_ok()
+            };
+            if direct_port {
+                source_ports.push(arg.to_owned());
+            }
             if let Some(materialized) = self.materialize_shorthand_arg(arg) {
                 changed = true;
-                rebuilt = rebuilt.add_arg(&materialized.current);
+                if self
+                    .state
+                    .matcher
+                    .borrow_mut()
+                    .parse::<LibraryRep, Aind>(materialized.current.as_view())
+                    .is_ok()
+                {
+                    ports.push(materialized.current.clone());
+                } else {
+                    direct_arguments &= !TensorialSyntax::is_tensorial(
+                        materialized.current.as_view(),
+                        StrictTensorFilter::ContainsReps,
+                        &self.state.matcher.borrow(),
+                    );
+                }
+                arguments.push(materialized.current);
                 additional_factors.extend(materialized.additional_factors);
             } else {
-                rebuilt = rebuilt.add_arg(arg);
+                arguments.push(arg.to_owned());
+                if direct_port {
+                    ports.push(arg.to_owned());
+                } else {
+                    direct_arguments &= !TensorialSyntax::is_tensorial(
+                        arg,
+                        StrictTensorFilter::ContainsReps,
+                        &self.state.matcher.borrow(),
+                    );
+                }
             }
         }
 
         changed.then(|| {
-            let replacement = rebuilt.finish();
+            if let Some(cache) = &self.state.leaf_interfaces
+                && let Some((true, retained)) = cache
+                    .lock()
+                    .expect("leaf interface cache is not poisoned")
+                    .get(fun.as_view().get_data())
+            {
+                // A nested bundle is not a direct constructor port. Do not
+                // replace its retained raw incidence with only visible slots.
+                direct_arguments &= *retained == source_ports;
+            }
+            let replacement = FunctionBuilder::new(fun.get_symbol())
+                .add_args(&arguments)
+                .finish();
+            if direct_arguments {
+                self.state.retain_constructor_ports(
+                    replacement.as_view(),
+                    fun.get_symbol(),
+                    &arguments,
+                    (true, ports),
+                );
+            }
             SchoonschipMaterialization {
                 current: self
                     .compact_dot_as_metric(replacement.as_view())
@@ -410,24 +458,44 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind, View> SchoonschipMaterializer
                 Some(rebuilt.finish())
             }
             AtomView::Fun(fun) => {
-                let (position, matched_rep) = self
+                let (matched, written) = self
                     .state
                     .matcher
                     .borrow_mut()
-                    .compact_tensor_rep_arg::<Aind>(fun)?;
+                    .observe_slots(|matcher| matcher.compact_tensor_rep_arg::<Aind>(fun));
+                let (position, matched_rep) = matched?;
                 if matched_rep != *rep {
                     return None;
                 }
 
-                let mut tensor = FunctionBuilder::new(fun.get_symbol());
+                let mut arguments = Vec::with_capacity(fun.get_nargs());
+                let mut ports = Vec::new();
                 for (arg_position, arg) in fun.iter().enumerate() {
                     if arg_position == position {
-                        tensor = tensor.add_arg(slot);
+                        arguments.push(slot.clone());
+                        ports.push(slot.clone());
                     } else {
-                        tensor = tensor.add_arg(arg);
+                        arguments.push(arg.to_owned());
+                        if written.iter().any(|port| port.as_view() == arg) {
+                            ports.push(arg.to_owned());
+                        }
                     }
                 }
-                Some(tensor.finish())
+                let tensor = FunctionBuilder::new(fun.get_symbol())
+                    .add_args(&arguments)
+                    .finish();
+                if let Some(cache) = &self.state.leaf_interfaces
+                    && matches!(tensor.as_view(), AtomView::Fun(output)
+                        if output.get_symbol() == fun.get_symbol()
+                            && output.get_nargs() == arguments.len()
+                            && output.iter().zip(&arguments).all(|(arg, supplied)| arg == supplied.as_view()))
+                {
+                    cache
+                        .lock()
+                        .expect("leaf interface cache is not poisoned")
+                        .insert(tensor.clone(), (true, ports));
+                }
+                Some(tensor)
             }
             AtomView::Add(add) => {
                 let mut terms = add
@@ -488,12 +556,17 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind, View> SchoonschipMaterializer
                 .parse::<LibraryRep, Aind>(*arg)
                 .is_ok()
         }) {
-            Some(
-                FunctionBuilder::new(self.state.metric)
-                    .add_arg(args[0])
-                    .add_arg(args[1])
-                    .finish(),
-            )
+            let arguments = args.iter().map(|arg| arg.to_owned()).collect::<Vec<_>>();
+            let metric = FunctionBuilder::new(self.state.metric)
+                .add_args(&arguments)
+                .finish();
+            self.state.retain_constructor_ports(
+                metric.as_view(),
+                self.state.metric,
+                &arguments,
+                (true, arguments.clone()),
+            );
+            Some(metric)
         } else {
             None
         }
@@ -710,6 +783,87 @@ impl SlotMatcher {
 }
 
 impl<Aind: AbsInd + DummyAind + ParseableAind, View> ParseState<Aind, View> {
+    /// Retain ports selected by a constructor when normalization kept exactly
+    /// its supplied arguments. Matching permits intrinsic argument permutations
+    /// without deriving either ports or their ordering from new tensor syntax.
+    fn retain_constructor_ports(
+        &self,
+        expression: AtomView<'_>,
+        head: Symbol,
+        arguments: &[Atom],
+        (tensorial, mut ports): (bool, Vec<Atom>),
+    ) {
+        let Some(cache) = &self.leaf_interfaces else {
+            return;
+        };
+        // Antisymmetric normalization can pull a sign out of the constructor.
+        let output = match expression {
+            AtomView::Fun(output) => output,
+            AtomView::Mul(product)
+                if product.get_nargs() == 2 && product.get_coefficient().is_some() =>
+            {
+                let Some(AtomView::Fun(output)) = product
+                    .iter()
+                    .find(|factor| matches!(factor, AtomView::Fun(_)))
+                else {
+                    return;
+                };
+                output
+            }
+            _ => return,
+        };
+        if output.get_symbol() != head || output.get_nargs() != arguments.len() {
+            return;
+        }
+        if output
+            .iter()
+            .eq(arguments.iter().map(AtomCore::as_atom_view))
+        {
+            cache
+                .lock()
+                .expect("leaf interface cache is not poisoned")
+                .insert(output.as_view().to_owned(), (tensorial, ports));
+            return;
+        }
+        let mut supplied = arguments
+            .iter()
+            .map(AtomCore::as_atom_view)
+            .collect::<Vec<_>>();
+        let mut written = Vec::with_capacity(ports.len());
+        for argument in output.iter() {
+            let Some(position) = supplied.iter().position(|supplied| *supplied == argument) else {
+                return;
+            };
+            supplied.swap_remove(position);
+            if let Some(position) = ports.iter().position(|port| port.as_view() == argument) {
+                written.push(ports.remove(position));
+            }
+        }
+        if ports.is_empty() {
+            cache
+                .lock()
+                .expect("leaf interface cache is not poisoned")
+                .insert(output.as_view().to_owned(), (tensorial, written));
+        }
+    }
+
+    /// Replace a trace by a chain with one fresh, closed channel.
+    /// Factor templates remain unchanged for subsequent chain materialization.
+    /// See [`Self::materialize_indexed_chain`] for opening the resulting chain.
+    pub fn materialize_indexed_trace(&self, value: FunView<'_>) -> Result<Atom, String> {
+        let mut arguments = value.iter();
+        let representation = arguments.next().ok_or("trace requires a representation")?;
+        let representation = Representation::<LibraryRep>::try_from(representation)
+            .map_err(|error| error.to_string())?;
+        let start = representation.slot::<Aind, _>(self.fresh_index());
+        let arguments = arguments.collect::<Vec<_>>();
+        Ok(FunctionBuilder::new(SPENSO_TAG.chain)
+            .add_arg(start.to_atom())
+            .add_arg(start.dual().to_atom())
+            .add_args(shadowing::trace_factor_views(&arguments))
+            .finish())
+    }
+
     fn materialize_chain_endpoint(
         &self,
         value: AtomView<'_>,
@@ -762,6 +916,17 @@ impl<Aind: AbsInd + DummyAind + ParseableAind, View> ParseState<Aind, View> {
     /// remain disjoint across separate conversions.
     /// Unrelated arithmetic and compact spectator ports stay opaque.
     pub fn materialize_indexed_chain(&self, value: FunView<'_>) -> Result<Atom, String> {
+        self.materialize_indexed_chain_with(value, &mut |_, _| {})
+    }
+
+    /// Unfold a chain and report rebuilt functions while their sources are known.
+    /// Admitted leaf ports follow the same placeholder assignments. See
+    /// [`Self::materialize_indexed_chain`] for the materialization contract.
+    pub fn materialize_indexed_chain_with(
+        &self,
+        value: FunView<'_>,
+        observer: &mut impl FnMut(FunView<'_>, AtomView<'_>),
+    ) -> Result<Atom, String> {
         // A projector groups ordered matrix factors, not one matrix with shared
         // endpoints. Expand its normalized permutations before wiring each chain.
         if let Some(expanded) = shadowing::expand_chain_like_projector(value.as_view()) {
@@ -771,7 +936,7 @@ impl<Aind: AbsInd + DummyAind + ParseableAind, View> ParseState<Aind, View> {
                 if chain.get_symbol() != SPENSO_TAG.chain {
                     return;
                 }
-                match self.materialize_indexed_chain(chain) {
+                match self.materialize_indexed_chain_with(chain, observer) {
                     Ok(indexed) => **output = indexed,
                     Err(reason) => error = Some(reason),
                 }
@@ -823,10 +988,16 @@ impl<Aind: AbsInd + DummyAind + ParseableAind, View> ParseState<Aind, View> {
             return Err("incompatible chain endpoints".into());
         }
         if arguments.len() == 0 {
+            let arguments = [start_atom, end_atom];
             let metric = FunctionBuilder::new(ETS.metric)
-                .add_arg(start_atom)
-                .add_arg(end_atom)
+                .add_args(&arguments)
                 .finish();
+            self.retain_constructor_ports(
+                metric.as_view(),
+                ETS.metric,
+                &arguments,
+                (true, arguments.to_vec()),
+            );
             return Ok(Atom::mul_many(endpoints.chain([metric])));
         }
         let count = arguments.len();
@@ -836,7 +1007,7 @@ impl<Aind: AbsInd + DummyAind + ParseableAind, View> ParseState<Aind, View> {
             } else {
                 left.rep.slot(self.fresh_index())
             };
-            let factor = ChainExpansion::replace_placeholders(
+            let factor = self.replace_chain_placeholders(
                 factor,
                 &if position == 0 {
                     start_atom.clone()
@@ -848,12 +1019,68 @@ impl<Aind: AbsInd + DummyAind + ParseableAind, View> ParseState<Aind, View> {
                 } else {
                     right.dual().to_atom()
                 },
-                &mut self.matcher.borrow_mut(),
+                observer,
             );
             left = right;
             factor
         });
         Ok(Atom::mul_many(endpoints.chain(factors)))
+    }
+
+    /// Transpose a chain factor, carrying the raw ports of each constructor
+    /// across the exchange of the two channel placeholders.
+    pub fn transpose_chain_factor(&self, factor: AtomView<'_>) -> Atom {
+        self.replace_chain_placeholders(
+            factor,
+            &Atom::var(SPENSO_TAG.chain_out),
+            &Atom::var(SPENSO_TAG.chain_in),
+            &mut |_, _| {},
+        )
+    }
+
+    fn replace_chain_placeholders(
+        &self,
+        value: AtomView<'_>,
+        chain_in: &Atom,
+        chain_out: &Atom,
+        observer: &mut impl FnMut(FunView<'_>, AtomView<'_>),
+    ) -> Atom {
+        ChainExpansion::replace_placeholders_with(
+            value,
+            chain_in,
+            chain_out,
+            &mut self.matcher.borrow_mut(),
+            &mut |source, target, arguments| {
+                if let Some(cache) = &self.leaf_interfaces {
+                    let retained = cache
+                        .lock()
+                        .expect("leaf interface cache is not poisoned")
+                        .get(source.as_view().get_data())
+                        .cloned();
+                    if let Some((tensorial, ports)) = retained {
+                        let ports = ports
+                            .into_iter()
+                            .map(|port| match port.as_view() {
+                                AtomView::Var(var) if var.get_symbol() == SPENSO_TAG.chain_in => {
+                                    chain_in.clone()
+                                }
+                                AtomView::Var(var) if var.get_symbol() == SPENSO_TAG.chain_out => {
+                                    chain_out.clone()
+                                }
+                                _ => port,
+                            })
+                            .collect();
+                        self.retain_constructor_ports(
+                            target,
+                            source.get_symbol(),
+                            arguments,
+                            (tensorial, ports),
+                        );
+                    }
+                }
+                observer(source, target);
+            },
+        )
     }
 
     /// Open only this compact inner product using the operation's reserved indices.
@@ -893,7 +1120,7 @@ where
 
     #[allow(clippy::result_large_err)]
     pub(super) fn materialize_shorthand<'node, S, Lib, FunLib>(
-        construction: &mut Construction<Str, K, Aind>,
+        construction: &mut Construction<Str, K, Aind, T::Admission>,
         value: FunView<'node>,
         state: ParseState<Aind, AtomView<'node>>,
         library: &Lib,
@@ -1011,7 +1238,7 @@ where
 
     #[allow(clippy::result_large_err)]
     fn materialize_chain_shorthand<S, Lib, FunLib>(
-        construction: &mut Construction<Str, K, Aind>,
+        construction: &mut Construction<Str, K, Aind, T::Admission>,
         value: FunView<'_>,
         state: ParseState<Aind, AtomView<'_>>,
         library: &Lib,
@@ -1069,10 +1296,16 @@ where
         }
 
         if factors.is_empty() {
+            let arguments = [start.to_atom(), end.to_atom()];
             let metric = FunctionBuilder::new(ETS.metric)
-                .add_arg(start.to_atom())
-                .add_arg(end.to_atom())
+                .add_args(&arguments)
                 .finish();
+            state.retain_constructor_ports(
+                metric.as_view(),
+                ETS.metric,
+                &arguments,
+                (true, arguments.to_vec()),
+            );
             factor_networks.extend(Self::parse_chain_like_factor_networks::<S, Lib, FunLib>(
                 construction,
                 metric,
@@ -1115,11 +1348,11 @@ where
                     "Spenso parser allocated chain shorthand link slot"
                 );
             }
-            let factor = ChainExpansion::replace_placeholders(
+            let factor = state.replace_chain_placeholders(
                 *factor,
                 &left.to_atom(),
                 &right.dual().to_atom(),
-                &mut state.matcher.borrow_mut(),
+                &mut |_, _| {},
             );
             let factor = if factor_schoonschip_mode.any() {
                 SchoonschipMaterializer::<Aind, _>::with_mode(&state, factor_schoonschip_mode)
@@ -1147,7 +1380,7 @@ where
 
     #[allow(clippy::result_large_err)]
     fn materialize_trace_shorthand<S, Lib, FunLib>(
-        construction: &mut Construction<Str, K, Aind>,
+        construction: &mut Construction<Str, K, Aind, T::Admission>,
         value: FunView<'_>,
         state: ParseState<Aind, AtomView<'_>>,
         library: &Lib,
@@ -1221,12 +1454,8 @@ where
             .map(|(position, factor)| {
                 let left = links[position].to_atom();
                 let right = links[(position + 1) % factors.len()].dual().to_atom();
-                let factor = ChainExpansion::replace_placeholders(
-                    *factor,
-                    &left,
-                    &right,
-                    &mut state.matcher.borrow_mut(),
-                );
+                let factor =
+                    state.replace_chain_placeholders(*factor, &left, &right, &mut |_, _| {});
                 if factor_schoonschip_mode.any() {
                     SchoonschipMaterializer::<Aind, _>::with_mode(&state, factor_schoonschip_mode)
                         .materialize_shorthand(factor.as_view())
@@ -1256,7 +1485,7 @@ where
 
     #[allow(clippy::result_large_err)]
     fn parse_chain_like_factor_networks<S, Lib, FunLib>(
-        construction: &mut Construction<Str, K, Aind>,
+        construction: &mut Construction<Str, K, Aind, T::Admission>,
         factor: Atom,
         state: ParseState<Aind, AtomView<'_>>,
         library: &Lib,
@@ -1335,11 +1564,22 @@ impl ChainExpansion {
     /// substitutes its selected endpoints and never allocates dummies.
     /// Explicit slots and compact representations are opaque: their index labels
     /// and dimensions never designate contextual endpoints.
+    #[cfg(test)]
     pub(super) fn replace_placeholders(
         value: AtomView<'_>,
         chain_in: &Atom,
         chain_out: &Atom,
         slots: &mut SlotMatcher,
+    ) -> Atom {
+        Self::replace_placeholders_with(value, chain_in, chain_out, slots, &mut |_, _, _| {})
+    }
+
+    fn replace_placeholders_with(
+        value: AtomView<'_>,
+        chain_in: &Atom,
+        chain_out: &Atom,
+        slots: &mut SlotMatcher,
+        observer: &mut impl FnMut(FunView<'_>, AtomView<'_>, &[Atom]),
     ) -> Atom {
         if !matches!(slots.classify(value), SlotMatch::Other) {
             return value.to_owned();
@@ -1348,22 +1588,33 @@ impl ChainExpansion {
             AtomView::Var(var) if var.get_symbol() == SPENSO_TAG.chain_in => chain_in.clone(),
             AtomView::Var(var) if var.get_symbol() == SPENSO_TAG.chain_out => chain_out.clone(),
             AtomView::Fun(fun) => {
-                let mut rebuilt = FunctionBuilder::new(fun.get_symbol());
-                for arg in fun.iter() {
-                    rebuilt = rebuilt
-                        .add_arg(Self::replace_placeholders(arg, chain_in, chain_out, slots));
+                let arguments = fun
+                    .iter()
+                    .map(|arg| {
+                        Self::replace_placeholders_with(arg, chain_in, chain_out, slots, observer)
+                    })
+                    .collect::<Vec<_>>();
+                // Unaffected scalar and tensor factors retain their normalized
+                // value and their raw facts without replaying custom callbacks.
+                if fun.iter().eq(arguments.iter().map(AtomCore::as_atom_view)) {
+                    return value.to_owned();
                 }
-                rebuilt.finish()
+                let rebuilt = FunctionBuilder::new(fun.get_symbol())
+                    .add_args(&arguments)
+                    .finish();
+                observer(fun, rebuilt.as_view(), &arguments);
+                rebuilt
             }
             AtomView::Add(add) => add.iter().fold(Atom::Zero, |sum, term| {
-                sum + Self::replace_placeholders(term, chain_in, chain_out, slots)
+                sum + Self::replace_placeholders_with(term, chain_in, chain_out, slots, observer)
             }),
             AtomView::Mul(mul) => mul.iter().fold(Atom::num(1), |product, factor| {
-                product * Self::replace_placeholders(factor, chain_in, chain_out, slots)
+                product
+                    * Self::replace_placeholders_with(factor, chain_in, chain_out, slots, observer)
             }),
             AtomView::Pow(pow) => {
                 let (base, exponent) = pow.get_base_exp();
-                Self::replace_placeholders(base, chain_in, chain_out, slots)
+                Self::replace_placeholders_with(base, chain_in, chain_out, slots, observer)
                     .pow(exponent.to_owned())
             }
             _ => value.to_owned(),

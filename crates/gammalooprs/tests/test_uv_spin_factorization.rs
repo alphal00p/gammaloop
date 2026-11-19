@@ -61,7 +61,7 @@ fn massive_fermion_bubble_matches_contracted_numerator_after_uv_integration() {
                 )
                 .unwrap();
             assert!(!result.is_zero());
-            results.push(result.expression);
+            results.push(result.into_expression());
         }
         assert_eq!(
             results[0].collect_factors(),

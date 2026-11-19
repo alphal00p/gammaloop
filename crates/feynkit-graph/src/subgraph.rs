@@ -1,6 +1,7 @@
 //! Independent diagrams obtained by opening a selected region's boundary.
 
 use idenso::tensor::SymbolicTensor;
+use spenso::structure::partial::{PartialStructure, PartialStructureExt};
 use std::collections::{BTreeMap, BTreeSet};
 
 use linnet::half_edge::{
@@ -85,7 +86,10 @@ impl FeynmanDiagram {
                     subgraph.includes(&hedge) || self.graph[self.graph[&hedge]].is_dummy
                 })
             {
-                vertex.numerator = SymbolicTensor::infer(Atom::one())?;
+                vertex.numerator = SymbolicTensor::from_produced_parts(
+                    Atom::one(),
+                    PartialStructure::from_logical_slots([]),
+                )?;
             }
             vertices.insert(node.0, builder.add_vertex(vertex).0);
             original_vertices.push(VertexId(node.0));
@@ -122,7 +126,10 @@ impl FeynmanDiagram {
                 let mut edge = data.data.clone();
                 if !keep_paired {
                     let hedge = group[0];
-                    edge.numerator = SymbolicTensor::infer(Atom::one())?;
+                    edge.numerator = SymbolicTensor::from_produced_parts(
+                        Atom::one(),
+                        PartialStructure::from_logical_slots([]),
+                    )?;
                     // Sewing preserves the amplitude half-edge particle flow,
                     // so opening a carrier retains its species and orientation.
                     if !edge.is_dummy && pair.is_paired() {

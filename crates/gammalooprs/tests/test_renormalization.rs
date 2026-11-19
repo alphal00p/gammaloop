@@ -322,7 +322,8 @@ fn scalar_pole_part() {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let color = SymbolicTensor::infer(cooking.try_cook(a.expression.as_view()).unwrap())
+        let color = a
+            .cooked_tensor()
             .unwrap()
             .simplify_algebra(&idenso::tensor::AlgebraSettings {
                 color: Some(ColorSimplifySettings::default()),
@@ -361,7 +362,7 @@ fn scalar_pole_part() {
             .unwrap();
         assert!(!poles.is_zero());
         assert!(poles.contains_symbol(GS.dim_epsilon));
-        results.push((a.expression, poles.expression));
+        results.push((a.into_expression(), poles.into_expression()));
     }
     assert!((&results[0].0 - &results[1].0).expand().is_zero());
     assert!((&results[0].1 - &results[1].1).expand().is_zero());
@@ -526,8 +527,8 @@ fn finite_part_ghost_2loop() {
         };
         let new_part = amp.renormalization_part(model, new_settings).unwrap();
         assert_eq!(
-            normalize(&new_part.expression),
-            normalize(&a.expression),
+            normalize(new_part.expression()),
+            normalize(a.expression()),
             "New renormalization for graph {} gives:\n{}\n vs old\n{}",
             amp.graph.name,
             new_part.log_print(Some(120)),

@@ -1590,28 +1590,31 @@ The persistence model is file-system based and intentionally
 human-editable for settings/run cards, mixed with binary artifacts for
 performance-heavy data.
 
-Runtime graph fragments and retained numerator definitions encode both their
-symbolic expression and logical indexed interface, including ranked zeros and
-axis order. Loading remaps symbols and validates the declared interface;
-reduction certificates, observed graphs and other transient caches are not
-serialized. This changes the positional runtime payload from the former Atom
-fields. Earlier full GammaLoop states must be regenerated; canonical FeynKit model and
-source-recipe artifacts retain their raw-expression contract. Diagram
-DOT/JSON stores expression strings with optional logical-port metadata when
-the expression cannot recover it. Full state version 22 encodes explicit slots
-for runtime numerators, including global numerator/projector interfaces, and
-rejects unresolved ports. Standalone evaluator archives contain lowered scalar programs and
-neither runtime graphs nor retained tensor definitions, so this change leaves
-their independent amplitude version 17 and cross-section version 20 unchanged.
+Runtime graph fragments and retained numerator definitions encode the symbolic
+expression, its logical indexed interface, and its index history. This preserves
+axis order and the rank of a zero tensor. The same format covers the global
+numerator and projector. Runtime numerators require fully resolved ports.
+On load, the tensor decoder remaps symbols, checks the stored metadata for
+consistency, and restores the saved regional interfaces and raw leaf ports
+without inferring them from the expression. Reduction certificates and observed
+graphs remain transient.
+
+Canonical FeynKit models and source recipes accept raw expressions. Diagram
+DOT/JSON exports pair each retained numerator expression with its logical-port
+declaration, including an empty `[]` for a scalar. Standalone evaluator archives
+store lowered scalar programs in their own formats, amplitude version 17 and
+cross-section version 20.
 
 === Persistence Compatibility Contract
 <persistence-compatibility-contract>
-- State format is versioned with `state_manifest.toml` (`version = 22` currently).
-- Version 22 combines fully indexed tensor payloads with ordered CFF/LTD
-  expressions, evaluators and denominator catalogues. Main format20 and
-  published FeynKit format21 are incompatible predecessors; both are rejected
-  before model parsing, Symbolica import or positional process decoding.
-  Regenerate those full states from their source recipes.
+- State format is versioned with `state_manifest.toml` (`version = 23` currently).
+- Version 23 stores authoritative regional interfaces and raw leaf ports in
+  Idenso tensor archive v2. The manifest check rejects full states through
+  version 22 before model parsing, Symbolica import or process decoding.
+  Regenerate those states from their source recipes.
+- Version 22 combined fully indexed tensor payloads with ordered CFF/LTD
+  expressions, evaluators and denominator catalogues. Its predecessors were
+  main format 20 and published FeynKit format 21.
 - Parameter builders persist authoritative entries, values and pair layout;
   their derived function map is rebuilt on decode and is excluded from the
   wire payload and resume fingerprints. Parameter identities use canonical

@@ -37,7 +37,8 @@ struct Subtree<Aind> {
     layout: Option<CanonicalLayout>,
 }
 
-pub(super) struct Construction<S, K, Aind> {
+pub(super) struct Construction<S, K, Aind, Admission = ()> {
+    pub(super) admission: Option<Admission>,
     builder: Option<NetworkGraphBuilder<K, Symbol, Aind>>,
     store: S,
     subtrees: Vec<Subtree<Aind>>,
@@ -45,7 +46,7 @@ pub(super) struct Construction<S, K, Aind> {
     n_hedges: usize,
 }
 
-impl<S: TensorScalarStore, K: Debug, Aind: AbsInd> Construction<S, K, Aind> {
+impl<S: TensorScalarStore, K: Debug, Aind: AbsInd, Admission> Construction<S, K, Aind, Admission> {
     pub(super) fn new() -> Self {
         Self {
             builder: Some(NetworkGraphBuilder::new()),
@@ -56,6 +57,7 @@ impl<S: TensorScalarStore, K: Debug, Aind: AbsInd> Construction<S, K, Aind> {
     /// Observe the existing parser's interface without emitting graph topology.
     pub(super) fn structure_only() -> Self {
         Self {
+            admission: None,
             builder: None,
             store: S::default(),
             subtrees: Vec::new(),

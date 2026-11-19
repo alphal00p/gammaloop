@@ -413,10 +413,12 @@ fn changed_auto_axis_order_cannot_relabel_asymmetric_components() {
     // The replacement vector has the same components, but its normalized factor
     // moves before the other vector. The encoded axes have not changed identity.
     let changed = function!(middle, slot(ends[0])) * function!(low, slot(ends[1]));
-    let (before, _) =
-        SymbolicTensor::observed_interface(&original, LeafInference::ObserveEncoded).unwrap();
-    let (after, _) =
-        SymbolicTensor::observed_interface(&changed, LeafInference::ObserveEncoded).unwrap();
+    let before = SymbolicTensor::observed_interface(&original, LeafInference::ObserveEncoded)
+        .unwrap()
+        .interface;
+    let after = SymbolicTensor::observed_interface(&changed, LeafInference::ObserveEncoded)
+        .unwrap()
+        .interface;
     assert_eq!(
         before
             .logical_slots()
@@ -453,12 +455,8 @@ fn changed_auto_axis_order_cannot_relabel_asymmetric_components() {
         component(positional.materialize_interface_ports(&bindings).unwrap()),
         Atom::num(15)
     );
-    assert!(source.with_rewritten_expression(changed.clone()).is_err());
-    assert!(source.with_algebra_result(changed.clone()).is_err());
     assert!(source.with_checked_expression(changed.clone()).is_err());
     let mixed = source.expression() + &changed;
-    assert!(source.with_rewritten_expression(mixed.clone()).is_err());
-    assert!(source.with_algebra_result(mixed.clone()).is_err());
     assert!(source.with_checked_expression(mixed).is_err());
 
     for finish in [
@@ -601,8 +599,12 @@ fn one_anonymous_axis_stays_unambiguous_across_explicit_port_movement() {
         let expression = doubled.materialize_interface_ports(&bindings).unwrap();
         assert_eq!(component(expression.clone(), [0, 1]), Atom::num(6));
         assert_eq!(component(expression, [1, 0]), Atom::num(10));
-        assert!(finish(&ambiguous, Atom::num(2) * &changed_head).is_err());
     }
+    assert!(
+        ambiguous
+            .with_checked_expression(Atom::num(2) * changed_head)
+            .is_err()
+    );
 }
 
 #[test]
@@ -677,7 +679,7 @@ fn unchanged_ordered_products_keep_raw_and_encoded_auto_ports() {
                     .collect::<Vec<_>>(),
                 [axes[1], axes[0]].map(PartialIndex::Explicit)
             );
-            assert!(source.with_rewritten_expression(reordered).is_err());
+            assert!(source.with_checked_expression(reordered).is_err());
         }
         for (positions, expected_component) in [(indices, 14), ([indices[1], indices[0]], 15)] {
             let bindings = HashMap::from([(0, positions[0]), (1, positions[1])]);

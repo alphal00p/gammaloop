@@ -2,6 +2,8 @@
 //! inventory and regional observations come from the same syntactic traversal.
 
 use super::super::SymbolicTensor;
+#[cfg(debug_assertions)]
+use crate::shorthands::schoonschip::DotNormalizer;
 use crate::{
     dirac::AGS,
     representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet},
@@ -19,11 +21,50 @@ use spenso::{
         slot::{IsAbstractSlot, SlotMatch, SlotMatcher},
     },
 };
+#[cfg(all(test, debug_assertions))]
+use std::cell::Cell;
 use std::{
     collections::HashSet,
     sync::{Arc, LazyLock, RwLock},
 };
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
+
+#[cfg(all(test, debug_assertions))]
+thread_local! {
+    static DEBUG_OBSERVATION_ACTIVE: Cell<bool> = const { Cell::new(false) };
+    pub(crate) static DEBUG_CERTIFICATE_CHECKS: Cell<usize> = const { Cell::new(0) };
+    pub(crate) static DEBUG_CANDIDATE_SCANS: Cell<usize> = const { Cell::new(0) };
+    pub(crate) static DEBUG_CANDIDATE_VISITS: Cell<usize> = const { Cell::new(0) };
+    pub(crate) static DEBUG_OBSERVED_NODES: Cell<usize> = const { Cell::new(0) };
+}
+
+/// Keep debug certificate verification distinct from production scan budgets,
+/// including when a failed assertion unwinds through a test.
+#[cfg(all(test, debug_assertions))]
+#[derive(Debug)]
+pub(crate) struct DebugObservation {
+    previous: bool,
+}
+
+#[cfg(all(test, debug_assertions))]
+impl DebugObservation {
+    fn enter() -> Self {
+        Self {
+            previous: DEBUG_OBSERVATION_ACTIVE.with(|active| active.replace(true)),
+        }
+    }
+
+    pub(crate) fn is_active() -> bool {
+        DEBUG_OBSERVATION_ACTIVE.with(Cell::get)
+    }
+}
+
+#[cfg(all(test, debug_assertions))]
+impl Drop for DebugObservation {
+    fn drop(&mut self) {
+        DEBUG_OBSERVATION_ACTIVE.with(|active| active.set(self.previous));
+    }
+}
 
 pub(crate) const HEAD_COUNT: usize = 24;
 pub(crate) static DOMAIN_HEADS: LazyLock<[Symbol; HEAD_COUNT]> = LazyLock::new(|| {
@@ -172,7 +213,19 @@ impl RegionObservation {
 
     fn observe(&mut self, node: AtomView<'_>, slot: &SlotMatch<'_>, slots: &mut SlotMatcher) {
         #[cfg(test)]
-        OBSERVED_NODES.with(|count| count.set(count.get() + 1));
+        {
+            #[cfg(debug_assertions)]
+            let debug = DebugObservation::is_active();
+            #[cfg(not(debug_assertions))]
+            let debug = false;
+            if !debug {
+                OBSERVED_NODES.with(|count| count.set(count.get() + 1));
+            }
+            #[cfg(debug_assertions)]
+            if debug {
+                DEBUG_OBSERVED_NODES.with(|count| count.set(count.get() + 1));
+            }
+        }
         match node {
             AtomView::Var(variable) => {
                 let head = variable.get_symbol();
@@ -462,6 +515,57 @@ impl DomainObservations {
         self.polynomial_form.is_some()
     }
 
+    /// Strengthening facts for unchanged syntax must retain its admitted region
+    /// inventory and scope memo, which collectors can still need later.
+    pub(crate) fn retain_regions(mut self, previous: &Self) -> Self {
+        self.regions = previous.regions.clone();
+        self.scopes = Arc::clone(&previous.scopes);
+        self
+    }
+
+    /// Verify producer claims independently without using the scan to construct
+    /// output metadata. A zero has no visible ports; its nominal interface and
+    /// conservative construction history remain owned by the tensor.
+    #[cfg(debug_assertions)]
+    pub(crate) fn assert_terminal_result(
+        &self,
+        expression: &Atom,
+        structure: &PartialStructure,
+        slots: SlotMatcher,
+    ) {
+        if !self.is_terminal_polynomial() {
+            return;
+        }
+        #[cfg(test)]
+        let _debug_observation = DebugObservation::enter();
+        #[cfg(test)]
+        DEBUG_CERTIFICATE_CHECKS.with(|count| count.set(count.get() + 1));
+        if expression.is_zero() {
+            return;
+        }
+        let observed = Self::scan_regions(expression.as_view(), None);
+        assert_eq!(
+            observed.identity_candidates(),
+            0,
+            "terminal producer retained an identity candidate: {expression}"
+        );
+        let expected = Self::terminal_polynomial(structure, self.needs_dot_normalization());
+        assert!(
+            observed.max_indices <= expected.max_indices
+                && observed
+                    .reserved_indices
+                    .is_subset(&expected.reserved_indices),
+            "terminal producer retained internal indices: {expression}"
+        );
+        if !self.needs_dot_normalization() {
+            assert_eq!(
+                DotNormalizer::notation(expression.as_view(), slots),
+                *expression,
+                "terminal producer incorrectly certified completed dot notation"
+            );
+        }
+    }
+
     fn terminal_region(&self) -> Arc<RegionObservation> {
         debug_assert!(self.is_terminal_polynomial());
         Arc::new(RegionObservation {
@@ -614,6 +718,39 @@ impl DomainObservations {
         region
             .certifies_scalar_syntax()
             .then(|| Self::closed_scalar(region.dots || region.counts[17] > 0))
+    }
+
+    /// Certify an unchanged region whose admitted interface accounts for every
+    /// incidence. The retained inventory supplies identity and notation facts;
+    /// unknown regions and ambiguous scopes remain uncertified.
+    pub(crate) fn certify_terminal_region(
+        &self,
+        expression: AtomView<'_>,
+        structure: &PartialStructure,
+    ) -> Option<Self> {
+        let region = self.region(expression)?;
+        let slots = structure.logical_slots();
+        if !region.intrinsic
+            || region.opaque
+            || region.identity_candidates() != 0
+            || region.counts[5..8].iter().any(|&count| count != 0)
+            || region.indexed_power
+            || slots
+                .iter()
+                .any(|slot| !matches!(slot.aind, PartialIndex::Explicit(_)))
+            || region.max_indices != slots.len()
+            || region.reserved_indices.iter().any(|index| {
+                !slots
+                    .iter()
+                    .any(|slot| slot.aind == PartialIndex::Explicit(*index))
+            })
+        {
+            return None;
+        }
+        Some(Self::terminal_polynomial(
+            structure,
+            region.dots || region.counts[17] > 0,
+        ))
     }
 
     fn regions(expression: AtomView<'_>) -> Vec<AtomView<'_>> {
@@ -1073,11 +1210,10 @@ impl SymbolicTensor<PartialStructure> {
 
     pub(crate) fn observe_replacement(&self, previous: &Self) {
         // Exact unchanged opaque boundaries retain their logical interfaces.
-        // A callback can invalidate these facts, so only intrinsic, admitted
-        // transformations share the cache with a new payload.
+        // Callback-generated syntax has a different key; rebuilding a sibling
+        // cannot invalidate an unchanged leaf's admitted interface.
         if self.proofs.validated.get() == Some(&true)
             && let Some(interfaces) = previous.proofs.leaf_interfaces.get()
-            && previous.normalization_is_intrinsic()
         {
             let _ = self.proofs.leaf_interfaces.set(Arc::clone(interfaces));
         }

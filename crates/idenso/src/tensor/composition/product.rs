@@ -1,8 +1,8 @@
 //! Sorted metadata products, with expression assembly independent of index history.
 
 use super::{ExplicitIndexOccurrences, PortPair, ProductPlan, TensorCompositionError};
-use crate::tensor::SymbolicTensor;
 use crate::tensor::composition;
+use crate::tensor::{SymbolicTensor, TensorProofs};
 use spenso::network::tags::SPENSO_TAG;
 use spenso::structure::abstract_index::AbstractIndex;
 use spenso::structure::partial::{PartialIndex, PartialSlot, PartialStructure};
@@ -311,6 +311,7 @@ impl SymbolicTensor<PartialStructure> {
     fn named_product_expression(
         sources: &[&Self],
         steps: &[NamedStep],
+        generated: &TensorProofs,
     ) -> Result<Atom, TensorCompositionError> {
         let mut expression = Atom::one();
         let mut pending = 0;
@@ -337,7 +338,13 @@ impl SymbolicTensor<PartialStructure> {
                         &expression,
                         step.left_slot
                             .expect("a selected contraction has a left port"),
+                        sources[..factor]
+                            .iter()
+                            .rev()
+                            .find(|source| source.expression == expression)
+                            .map(|source| &source.proofs),
                         source,
+                        generated,
                     )?;
                     pending += 1;
                 }
@@ -408,8 +415,14 @@ impl SymbolicTensor<PartialStructure> {
                     occurrences,
                     steps,
                 } = ProductPlan::merge_named(&sources)?;
-                let expression = Self::named_product_expression(&sources, &steps)?;
-                product = Self::from_validated_parts(expression, interface, Arc::new(occurrences));
+                let generated = TensorProofs::default();
+                let expression = Self::named_product_expression(&sources, &steps, &generated)?;
+                let mut result =
+                    Self::from_validated_parts(expression, interface, Arc::new(occurrences));
+                result.proofs.inherit_interfaces(
+                    iter::once(&generated).chain(sources.iter().map(|source| &source.proofs)),
+                );
+                product = result;
             } else {
                 product = product.multiply(factors[position])?;
                 position += 1;

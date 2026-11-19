@@ -162,19 +162,24 @@ impl SymbolicTensor<PartialStructure> {
             right.structure.logical_slots()[0],
             PortPair { left: 0, right: 0 },
         )?;
+        let generated = super::TensorProofs::default();
         let atom = if self.expression.is_zero() || right.expression.is_zero() {
             Atom::Zero
         } else {
-            self.compact_dot_expression(right)?
+            self.compact_dot_expression(right, &generated)?
         };
         let occurrences = ExplicitIndexOccurrences::product(&[self, right])?;
-        Self::from_validated_parts(
+        let mut result = Self::from_validated_parts(
             atom,
             PartialStructure::from_logical_slots([]),
             Arc::new(occurrences),
-        )
-        .finish_parts()?
-        .validate_rewrite("dot", &[self, right])
+        );
+        result
+            .proofs
+            .inherit_interfaces([&generated, &self.proofs, &right.proofs]);
+        result
+            .finish_parts()?
+            .validate_rewrite("dot", &[self, right])
     }
 
     /// Give one channel explicit endpoints without changing leaf arguments.

@@ -1,17 +1,19 @@
 //! Local massive UV Taylor expansion, before integration or forest subtraction.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
+use idenso::tensor::SymbolicTensor;
+use idenso::tensor::inference::TensorInferenceError;
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike, SubSetOps};
+use spenso::network::tags::SPENSO_TAG;
+use spenso::structure::partial::{PartialStructure, PartialStructureExt};
 use spenso::structure::representation::{Minkowski, RepName};
-use symbolica::{
-    atom::{Atom, AtomCore},
-    function,
-    id::Replacement,
-    symbol,
-};
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
+use symbolica::id::Replacement;
+use symbolica::{function, symbol};
 
-use crate::{DiagramError, EdgeId, FeynmanDiagram, expressions::GraphExpressions, symbols};
+use crate::expressions::GraphExpressions;
+use crate::{DiagramError, EdgeId, FeynmanDiagram, LoopMomentumBasis, symbols};
 
 impl FeynmanDiagram {
     /// Expand the selected local integrand through its UV degree of divergence.
@@ -41,6 +43,113 @@ impl FeynmanDiagram {
         numerator: Option<&Atom>,
         edge_powers: &BTreeMap<EdgeId, isize>,
     ) -> Result<Atom, DiagramError> {
+        let Some(numerator) = numerator else {
+            return Ok(self
+                .uv_expansion_tensor_of(subgraph, uv_mass, dimension, None, edge_powers)?
+                .into_expression());
+        };
+        let Some(expansion) = self.uv_expansion(subgraph, uv_mass, dimension, edge_powers)? else {
+            return Ok(Atom::Zero);
+        };
+        let routed = expansion.basis.route_expression(numerator);
+        let scaled = UvExpansion::rescale_loops(&routed, expansion.scale);
+        Ok(expansion
+            .expand(&scaled)?
+            .replace_multiple(&expansion.restore))
+    }
+
+    /// Expand an admitted numerator while retaining its tensor constructors.
+    /// Routing, loop rescaling and restoration transport the original raw ports.
+    /// Tensor constructors independent of the Taylor scale remain coefficients
+    /// of the scalar series. Scale dependence inside a tensor constructor would
+    /// require unsupported tensor derivatives and returns an explicit error.
+    ///
+    /// # Errors
+    /// Returns invalid selections, tensor transport errors, unsupported tensor
+    /// derivatives, or errors from the scalar series expansion.
+    pub fn uv_expansion_tensor_of(
+        &self,
+        subgraph: &SuBitGraph,
+        uv_mass: &Atom,
+        dimension: i32,
+        numerator: Option<&SymbolicTensor<PartialStructure>>,
+        edge_powers: &BTreeMap<EdgeId, isize>,
+    ) -> Result<SymbolicTensor<PartialStructure>, DiagramError> {
+        let Some(expansion) = self.uv_expansion(subgraph, uv_mass, dimension, edge_powers)? else {
+            return numerator
+                .map_or_else(
+                    || {
+                        SymbolicTensor::from_produced_parts(
+                            Atom::Zero,
+                            PartialStructure::from_logical_slots([]),
+                        )
+                    },
+                    |source| source.with_algebra_result(Atom::Zero),
+                )
+                .map_err(DiagramError::from);
+        };
+        let local_numerator;
+        let numerator = match numerator {
+            Some(numerator) => numerator,
+            None => {
+                local_numerator = self.numerator_of(
+                    &expansion.selected,
+                    &self.graph.empty_subgraph::<SuBitGraph>(),
+                )?;
+                &local_numerator
+            }
+        };
+        let numerator = expansion.basis.route_tensor(numerator)?;
+        let numerator = numerator.map_produced_expression(&HashMap::new(), |node| {
+            Ok::<_, TensorInferenceError>(
+                matches!(node, AtomView::Fun(function) if function.get_symbol() == symbols::loop_momentum())
+                    .then(|| node / expansion.scale),
+            )
+        })?;
+        let mut dependent_constructor = None;
+        numerator.expression().visitor(&mut |node| {
+            let AtomView::Fun(function) = node else {
+                return true;
+            };
+            if function.get_symbol().is_scalar() {
+                return false;
+            }
+            if function.get_symbol().has_tag(&SPENSO_TAG.tensor)
+                && node.get_all_symbols(true).contains(&expansion.scale)
+            {
+                dependent_constructor = Some(function.get_symbol());
+                return false;
+            }
+            dependent_constructor.is_none()
+        });
+        if let Some(head) = dependent_constructor {
+            return Err(DiagramError::UvExpansion(format!(
+                "Taylor scale occurs inside tensor constructor `{head}`; derivatives of tensor metadata are unsupported",
+            )));
+        }
+        let expanded = numerator.with_materialized_expression(
+            "UV Taylor expansion",
+            expansion.expand(numerator.expression())?,
+        )?;
+        Ok(expanded.map_produced_expression(&HashMap::new(), |node| {
+            if !matches!(node, AtomView::Fun(function)
+                if function.get_symbol() == symbols::loop_momentum()
+                    || function.get_symbol() == symbols::external_momentum())
+            {
+                return Ok(None);
+            }
+            let restored = node.replace_multiple(&expansion.restore);
+            Ok::<_, TensorInferenceError>((restored.as_view() != node).then_some(restored))
+        })?)
+    }
+
+    fn uv_expansion(
+        &self,
+        subgraph: &SuBitGraph,
+        uv_mass: &Atom,
+        dimension: i32,
+        edge_powers: &BTreeMap<EdgeId, isize>,
+    ) -> Result<Option<UvExpansion>, DiagramError> {
         if subgraph.size() != self.graph.n_hedges() || dimension <= 0 {
             return Err(DiagramError::UvExpansion(
                 "expected a selection of this graph and a positive spacetime dimension".into(),
@@ -48,29 +157,16 @@ impl FeynmanDiagram {
         }
         let selected = subgraph.intersection(&self.momentum_subgraph());
         if selected.is_empty() {
-            return Ok(Atom::Zero);
+            return Ok(None);
         }
         let basis = self.momentum_basis_of(&selected)?;
         if basis.loop_edges.is_empty() {
-            return Ok(Atom::Zero);
+            return Ok(None);
         }
         let scale = symbol!("feynkit_graph::uv_expansion_scale"; Scalar);
         let args = symbol!("feynkit_graph::uv_expansion_args___");
-        let loop_pattern = function!(symbols::loop_momentum(), args);
         let rescale = |expression: &Atom| {
-            basis
-                .route_expression(expression)
-                .replace(loop_pattern.to_pattern())
-                .with(&loop_pattern / scale)
-        };
-        let local_numerator;
-        let numerator = match numerator {
-            Some(numerator) => numerator,
-            None => {
-                local_numerator =
-                    self.numerator_of(&selected, &self.graph.empty_subgraph::<SuBitGraph>())?;
-                local_numerator.expression()
-            }
+            UvExpansion::rescale_loops(&basis.route_expression(expression), scale)
         };
         let metric = Minkowski {}.new_rep(symbols::dimension());
         let scale_squared = Atom::var(scale).pow(2);
@@ -110,16 +206,8 @@ impl FeynmanDiagram {
             },
             |edge, _| edge_powers.get(&EdgeId(edge.0)).copied().unwrap_or(1),
         )?;
-        let measured = rescale(numerator) / denominator
-            * Atom::var(scale).pow(-i64::from(dimension) * basis.loop_edges.len() as i64);
-        let expanded = measured
-            .series(scale, Atom::Zero, 0)
-            .map_err(|error| DiagramError::UvExpansion(error.to_string()))?
-            .to_atom()
-            .replace(scale)
-            .with(Atom::one());
         // Restore the edge coordinates expected by diagram tensor reduction.
-        let replacements = [
+        let restore = [
             (symbols::loop_momentum(), &basis.loop_edges),
             (symbols::external_momentum(), &basis.external_edges),
         ]
@@ -133,6 +221,39 @@ impl FeynmanDiagram {
             })
         })
         .collect::<Vec<_>>();
-        Ok(expanded.replace_multiple(&replacements))
+        let measure = Atom::var(scale).pow(-i64::from(dimension) * basis.loop_edges.len() as i64)
+            / denominator;
+        Ok(Some(UvExpansion {
+            selected,
+            basis,
+            scale,
+            measure,
+            restore,
+        }))
+    }
+}
+
+struct UvExpansion {
+    selected: SuBitGraph,
+    basis: LoopMomentumBasis,
+    scale: Symbol,
+    measure: Atom,
+    restore: Vec<Replacement>,
+}
+
+impl UvExpansion {
+    fn rescale_loops(routed: &Atom, scale: Symbol) -> Atom {
+        let args = symbol!("feynkit_graph::uv_expansion_args___");
+        let pattern = function!(symbols::loop_momentum(), args);
+        routed.replace(pattern.to_pattern()).with(&pattern / scale)
+    }
+
+    fn expand(&self, scaled_numerator: &Atom) -> Result<Atom, DiagramError> {
+        Ok((scaled_numerator * &self.measure)
+            .series(self.scale, Atom::Zero, 0)
+            .map_err(|error| DiagramError::UvExpansion(error.to_string()))?
+            .to_atom()
+            .replace(self.scale)
+            .with(Atom::one()))
     }
 }

@@ -1420,7 +1420,7 @@ impl AmplitudeGraph {
         // }
 
         // rewrite the inner_t as well
-        four_dimensional_integrand = four_dimensional_integrand.with_checked_expression(
+        four_dimensional_integrand = four_dimensional_integrand.with_produced_expression(
             four_dimensional_integrand
                 .expression()
                 .replace_multiple(&mom_reps),
@@ -1489,8 +1489,10 @@ impl AmplitudeGraph {
             numerical_evaluation.to_atom(vakint_symbol!(true_settings.epsilon_symbol.clone()))
         };
         let restored = Integrated::restore_numerator(evaluation, 0);
-        let result =
-            backend_integrand.with_checked_expression(cooking.try_cook(restored.as_view())?)?;
+        let result = backend_integrand.with_materialized_expression(
+            "amplitude backend result restoration",
+            cooking.try_cook(restored.as_view())?,
+        )?;
         if source_ports.is_empty() {
             Ok(result)
         } else {

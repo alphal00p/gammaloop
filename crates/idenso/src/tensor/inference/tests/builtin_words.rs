@@ -380,10 +380,7 @@ fn builtin_compact_ports_are_observed_without_constructing_components() {
         value.structure.logical_slots(),
         vec![slot.rep().slot(PartialIndex::Explicit(slot.aind()))]
     );
-    assert!(
-        !InterfaceInference::default()
-            .terminal_trace_preserves_interface(&expression, &value.structure)
-    );
+    assert!(!value.rewrites_preserve_interface());
     assert_eq!(calls.lock().unwrap().len(), 1);
 
     // Observing the consumed port still checks earlier scalar metadata and

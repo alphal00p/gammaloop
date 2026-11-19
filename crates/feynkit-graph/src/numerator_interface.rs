@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use idenso::tensor::SymbolicTensor;
-use idenso::tensor::inference::InterfaceInference;
+use idenso::tensor::inference::{InterfaceInference, TensorInferenceError};
 use idenso::{CookMode, CookSettings};
 use serde::de::Error as DeserializeError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -42,6 +42,11 @@ pub struct NumeratorInterface(
     /// they become the interface of a retained tensor.
     pub Vec<Atom>,
 );
+
+struct SourceIndexMap {
+    renaming: HashMap<AbstractIndex, AbstractIndex>,
+    encoded: HashMap<Symbol, Atom>,
+}
 
 impl NumeratorInterface {
     /// Decode source port declarations from their JSON string-array representation.
@@ -119,7 +124,9 @@ impl NumeratorInterface {
         )?)
     }
 
-    /// Export source notation, retaining metadata whenever syntax loses ports.
+    /// Export source notation with its authoritative logical ports.
+    /// Every export includes the port declaration, including an empty scalar
+    /// declaration, without re-admitting the already known tensor expression.
     /// See the round trip in [`NumeratorInterface`].
     pub fn export<A>(
         tensor: &SymbolicTensor<Canonicalized<OrderedStructure<LibraryRep, A>>>,
@@ -139,11 +146,6 @@ impl NumeratorInterface {
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         let expression = cooking.uncook(tensor.expression().as_view());
-        if Self::admit(expression.clone(), None)
-            .is_ok_and(|restored| restored.structure().logical_slots() == logical)
-        {
-            return (expression, None);
-        }
         let ports = logical
             .into_iter()
             .map(|slot| {
@@ -172,6 +174,112 @@ impl NumeratorInterface {
         tensor: &SymbolicTensor<PartialStructure>,
         translate: impl Fn(&Atom) -> Result<Atom, E>,
     ) -> Result<SymbolicTensor<PartialStructure>, E>
+    where
+        E: From<DiagramError>,
+    {
+        let SourceIndexMap { renaming, encoded } = Self::translated_indices(tensor, &translate)?;
+        let invalid = |message: String| {
+            E::from(DiagramError::Invariant {
+                operation: "transporting diagram indices",
+                message,
+            })
+        };
+        let original_slots = tensor.structure().logical_slots();
+        let logical = original_slots
+            .iter()
+            .copied()
+            .map(|mut slot| {
+                if let PartialIndex::Explicit(index) = slot.aind {
+                    slot.aind = PartialIndex::Explicit(renaming[&index]);
+                }
+                slot
+            })
+            .collect::<Vec<_>>();
+        let expression = translate(tensor.expression())?;
+        let expression = expression.replace_map(|node, _, output| {
+            if let AtomView::Var(variable) = node
+                && let Some(target) = encoded.get(&variable.get_symbol())
+            {
+                **output = target.clone();
+            }
+        });
+        if !tensor.structure().open_positions().is_empty() && !expression.is_zero() {
+            if logical == original_slots {
+                return Ok(tensor
+                    .with_checked_expression(expression)
+                    .map_err(DiagramError::from)?);
+            }
+            if !InterfaceInference::normalization_is_intrinsic(tensor.expression().as_view()) {
+                return Err(invalid(
+                    "cannot certify unresolved port identities while transporting explicit indices through callbacks"
+                        .into(),
+                ));
+            }
+            let replacements = original_slots
+                .iter()
+                .zip(&logical)
+                .enumerate()
+                .filter_map(|(position, (source, target))| match target.aind {
+                    PartialIndex::Explicit(index) if source.aind != target.aind => {
+                        Some((position, index))
+                    }
+                    _ => None,
+                })
+                .collect();
+            // The native positional rewrite certifies the mapped boundary.
+            // Its checked-expression guard then protects anonymous occurrences
+            // from changes to the remaining momentum and scalar heads.
+            let boundary = tensor
+                .reindex_interface_ports(&replacements)
+                .map_err(DiagramError::from)?;
+            return Ok(boundary
+                .with_checked_expression(expression)
+                .map_err(DiagramError::from)?);
+        }
+        // Check callback output before transferring authoritative index history.
+        // Rebuilding declared parts here would discard identities hidden by zero.
+        // Invalid boundaries must return typed errors in release and debug builds.
+        SymbolicTensor::validate_interface(
+            &expression,
+            &PartialStructure::from_logical_slots(logical),
+        )
+        .map_err(DiagramError::from)?;
+        Ok(tensor
+            .with_renamed_indices(expression, &renaming)
+            .map_err(DiagramError::from)?)
+    }
+    /// Bind known source-owner and scalar metadata constructors while transporting
+    /// admitted regional facts. `node_map` runs bottom-up and must implement the
+    /// same source-index mapping as `translate_index`; it must preserve tensor
+    /// heads, dimensions, and slot roles. Unchecked user closures use [`Self::translate`].
+    /// See [`NumeratorInterface`] for the retained zero/interface representation.
+    ///
+    /// # Errors
+    /// Rejects noninjective owner mappings and propagates producer mapping errors.
+    pub fn translate_produced<E>(
+        tensor: &SymbolicTensor<PartialStructure>,
+        translate_index: impl Fn(&Atom) -> Result<Atom, E>,
+        mut node_map: impl for<'a> FnMut(AtomView<'a>) -> Result<Option<Atom>, E>,
+    ) -> Result<SymbolicTensor<PartialStructure>, E>
+    where
+        E: From<DiagramError> + From<TensorInferenceError>,
+    {
+        let SourceIndexMap { renaming, encoded } =
+            Self::translated_indices(tensor, &translate_index)?;
+        tensor.map_produced_expression(&renaming, |node| {
+            if let AtomView::Var(variable) = node
+                && let Some(target) = encoded.get(&variable.get_symbol())
+            {
+                return Ok(Some(target.clone()));
+            }
+            node_map(node)
+        })
+    }
+
+    fn translated_indices<E>(
+        tensor: &SymbolicTensor<PartialStructure>,
+        translate: &impl Fn(&Atom) -> Result<Atom, E>,
+    ) -> Result<SourceIndexMap, E>
     where
         E: From<DiagramError>,
     {
@@ -276,69 +384,7 @@ impl NumeratorInterface {
                 }
             }
         }
-        let original_slots = tensor.structure().logical_slots();
-        let logical = original_slots
-            .iter()
-            .copied()
-            .map(|mut slot| {
-                if let PartialIndex::Explicit(index) = slot.aind {
-                    slot.aind = PartialIndex::Explicit(renaming[&index]);
-                }
-                slot
-            })
-            .collect::<Vec<_>>();
-        let expression = translate(tensor.expression())?;
-        let expression = expression.replace_map(|node, _, output| {
-            if let AtomView::Var(variable) = node
-                && let Some(target) = encoded.get(&variable.get_symbol())
-            {
-                **output = target.clone();
-            }
-        });
-        if !tensor.structure().open_positions().is_empty() && !expression.is_zero() {
-            if logical == original_slots {
-                return Ok(tensor
-                    .with_checked_expression(expression)
-                    .map_err(DiagramError::from)?);
-            }
-            if !InterfaceInference::normalization_is_intrinsic(tensor.expression().as_view()) {
-                return Err(invalid(
-                    "cannot certify unresolved port identities while transporting explicit indices through callbacks"
-                        .into(),
-                ));
-            }
-            let replacements = original_slots
-                .iter()
-                .zip(&logical)
-                .enumerate()
-                .filter_map(|(position, (source, target))| match target.aind {
-                    PartialIndex::Explicit(index) if source.aind != target.aind => {
-                        Some((position, index))
-                    }
-                    _ => None,
-                })
-                .collect();
-            // The native positional rewrite certifies the mapped boundary.
-            // Its checked-expression guard then protects anonymous occurrences
-            // from changes to the remaining momentum and scalar heads.
-            let boundary = tensor
-                .reindex_interface_ports(&replacements)
-                .map_err(DiagramError::from)?;
-            return Ok(boundary
-                .with_checked_expression(expression)
-                .map_err(DiagramError::from)?);
-        }
-        // Check callback output before transferring authoritative index history.
-        // Rebuilding declared parts here would discard identities hidden by zero.
-        // Invalid boundaries must return typed errors in release and debug builds.
-        SymbolicTensor::validate_interface(
-            &expression,
-            &PartialStructure::from_logical_slots(logical),
-        )
-        .map_err(DiagramError::from)?;
-        Ok(tensor
-            .with_renamed_indices(expression, &renaming)
-            .map_err(DiagramError::from)?)
+        Ok(SourceIndexMap { renaming, encoded })
     }
 }
 
@@ -375,6 +421,26 @@ mod tests {
     use symbolica::function;
     use symbolica::id::Replacement;
     use symbolica::symbol;
+
+    #[test]
+    fn exports_always_carry_the_authoritative_logical_port_declaration() {
+        let head = tensor_symbol!("feynkit_graph::export_declared_order");
+        let left = Minkowski {}.new_rep(4).to_symbolic([Atom::num(71473)]);
+        let right = Euclidean {}.new_rep(2).to_symbolic([Atom::num(71471)]);
+        for expression in [Atom::one(), function!(head, &left, &right)] {
+            let source = NumeratorInterface::admit(expression, None).unwrap();
+            let (expression, metadata) = NumeratorInterface::export(&source);
+            let metadata =
+                metadata.expect("export carries the retained declaration, even for scalars");
+            assert_eq!(metadata.0.len(), source.rank());
+            let restored = NumeratorInterface::admit(expression, Some(metadata)).unwrap();
+            assert!(restored.same_value(&source));
+            assert_eq!(
+                restored.structure().logical_slots(),
+                source.structure().logical_slots()
+            );
+        }
+    }
 
     #[test]
     fn source_codec_preserves_anonymous_axes_and_ranked_zero() {

@@ -1,9 +1,9 @@
 use self::composition::ExplicitIndexOccurrences;
-#[cfg(debug_assertions)]
-use self::inference::InterfaceInference;
-use self::inference::TensorInterface;
+use self::inference::{InterfaceInference, LeafInference, TensorInferenceError, TensorInterface};
+use self::regions::AdmittedInterfaces;
 use crate::NetworkToolingError;
 use delegate::delegate;
+use eyre::eyre;
 use linnet::half_edge::subgraph::subset::SubSet;
 use spenso::algebra::ScalarMul;
 use spenso::bracket;
@@ -13,8 +13,8 @@ use spenso::network::library::function_lib::Wrap;
 use spenso::network::library::symbolic::{ETS, ExplicitKey, TensorLibrary};
 use spenso::network::library::{DummyKey, DummyLibrary, FunctionLibrary, FunctionLibraryError};
 use spenso::network::parsing::{
-    ParseSettings, ShadowedStructure, StrictTensorFilter, StructureFromAtom, TensorFromExpression,
-    TensorLibraryFor,
+    AtomStructureExt, LeafInterfaceCache, ParseSettings, ShadowedStructure, StrictTensorFilter,
+    StructureFromAtom, TensorFromExpression, TensorLibraryFor,
 };
 use spenso::network::store::NetworkStore;
 use spenso::network::tags::SPENSO_TAG;
@@ -26,11 +26,10 @@ use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use spenso::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
 use spenso::structure::concrete_index::{ExpandedIndex, FlatIndex};
 use spenso::structure::dimension::Dimension;
-use spenso::structure::partial::PartialStructure;
+use spenso::structure::partial::{PartialIndex, PartialStructure, PartialStructureExt};
 use spenso::structure::representation::{LibraryRep, LibrarySlot, Representation};
-use spenso::structure::slot::{
-    AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind, SlotMatcher,
-};
+use spenso::structure::slot::SlotError;
+use spenso::structure::slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind, SlotMatcher};
 use spenso::structure::{
     ApplyPendingIndexPermutation, CanonicalLayout, Canonicalized, HasName, HasStructure,
     IndexedStructure, MergeInfo, NamedStructure, OrderedStructure, PendingIndexPermutation,
@@ -38,6 +37,7 @@ use spenso::structure::{
     TensorIdentity, TensorShell, TensorStructure, ToSymbolic,
 };
 use spenso::tensors::parametric::MixedTensor;
+use std::collections::{HashMap, HashSet};
 use std::ops::AddAssign;
 use std::sync::{Arc, OnceLock};
 use symbolica::atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol};
@@ -55,10 +55,13 @@ pub mod inference;
 mod network;
 #[cfg(feature = "bincode")]
 mod persistence;
+mod regions;
 mod replacement;
 pub mod simplification;
 pub use replacement::TensorRule;
 
+#[cfg(test)]
+mod network_metadata_tests;
 #[cfg(test)]
 pub mod tests;
 
@@ -83,8 +86,15 @@ impl<S: TensorInterface> FunctionLibrary<SymbolicTensor<S>, Atom> for Wrap {
                 Some(*key),
             );
         }
+        let interface = tensor
+            .proofs
+            .retained_interface(tensor.expression.as_view());
+        let mut proofs = tensor.proofs.algebra_result();
+        if let Some(interface) = interface {
+            proofs.publish_interfaces(expression.as_view(), interface, []);
+        }
         Ok(SymbolicTensor {
-            proofs: tensor.proofs.algebra_result(),
+            proofs,
             structure: tensor.structure.into_algebra_result(),
             is_composite: true,
             is_metric: false,
@@ -109,9 +119,7 @@ impl<Aind: ParseableAind + AbsInd + DummyAind> StructureFromAtom
         matcher: &mut SlotMatcher,
     ) -> Result<Canonicalized<Self>, StructureError> {
         let structure = OrderedStructure::<LibraryRep, Aind>::structure_from_atom(value, matcher)?;
-        let occurrences = ExplicitIndexOccurrences::from_atom(value, matcher);
-        occurrences
-            .validate()
+        let proofs = TensorProofs::parsed_leaf(value, &structure, None)
             .map_err(|error| StructureError::ParsingError(error.to_string()))?;
         Ok(structure.map_canonical(|structure| {
             let (is_composite, is_metric) = if let AtomView::Fun(f) = value {
@@ -120,11 +128,7 @@ impl<Aind: ParseableAind + AbsInd + DummyAind> StructureFromAtom
                 (true, false)
             };
             SymbolicTensor {
-                proofs: TensorProofs {
-                    validated: OnceLock::from(true),
-                    occurrences: OnceLock::from(Arc::new(occurrences)),
-                    ..TensorProofs::default()
-                },
+                proofs,
                 structure,
                 is_composite,
                 is_metric,
@@ -144,13 +148,87 @@ where
     Lib: TensorLibraryFor<OrderedStructure<LibraryRep, Aind>, Self, Key = K>,
     FunLib: FunctionLibrary<Self, Sc, Key = Symbol>,
 {
+    type Admission = TensorProofs;
+
+    fn admitted_structure(
+        expression: AtomView<'_>,
+        admission: &Self::Admission,
+        mut next_index: impl FnMut() -> Aind,
+    ) -> Result<Canonicalized<OrderedStructure<LibraryRep, Aind>>, StructureError> {
+        let compact_metric = matches!(expression, AtomView::Fun(function)
+            if InterfaceInference::is_compound_metric(function, &mut SlotMatcher::default()));
+        // A compact metric is a partial contraction. Its free spectator axes
+        // come from the regional interface, even if it has no direct raw slots.
+        if !compact_metric
+            && let Some(cache) = admission.leaf_interfaces.get()
+            && let Some((true, ports)) = cache.lock().unwrap().get(expression.get_data())
+        {
+            let mut matcher = SlotMatcher::default();
+            let slots = ports
+                .iter()
+                .map(|port| {
+                    matcher
+                        .parse::<LibraryRep, Aind>(port.as_view())
+                        .or_else(|_| {
+                            matcher
+                                .parse_representation::<LibraryRep>(port.as_view())
+                                .map(|representation| representation.slot(next_index()))
+                        })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            return Ok(OrderedStructure::new(slots));
+        }
+        if let AtomView::Fun(function) = expression
+            && !composition::is_composite_head(function.get_symbol(), &SPENSO_TAG)
+            && function.get_symbol() != SPENSO_TAG.dot
+            && !compact_metric
+        {
+            return Err(StructureError::ParsingError(format!(
+                "admitted tensor constructor is missing its raw parser ports for {expression}"
+            )));
+        }
+        let interface = admission.admitted_interface(expression).ok_or_else(|| {
+            StructureError::ParsingError(format!(
+                "admitted tensor is missing its parser boundary for {expression}"
+            ))
+        })?;
+        let slots = interface
+            .logical_slots()
+            .into_iter()
+            .map(|slot| {
+                let index = match slot.aind {
+                    PartialIndex::Explicit(index) => convert_parser_index::<_, Aind>(index)?,
+                    PartialIndex::Open(_) => next_index(),
+                };
+                Ok(slot.rep().slot(index))
+            })
+            .collect::<Result<Vec<_>, StructureError>>()?;
+        Ok(OrderedStructure::new(slots))
+    }
+
     fn tensor_from_expression(
         expression: AtomOrView<'src>,
         structure: Canonicalized<OrderedStructure<LibraryRep, Aind>>,
         _tensor_library: &Lib,
         _function_library: &FunLib,
-        _settings: &ParseSettings,
+        settings: &ParseSettings,
+        admission: Option<&Self::Admission>,
+        _leaf_interfaces: Option<&LeafInterfaceCache>,
     ) -> Result<Canonicalized<Self>, TensorNetworkError<K, Symbol>> {
+        let raw;
+        let admission = if admission.is_none()
+            && !matches!(expression.as_view(), AtomView::Fun(_))
+            && !TensorProofs::uses_custom_graph_indices(&structure)
+        {
+            raw = TensorProofs::raw_parser_regions(
+                expression.as_view(),
+                settings.strict_tensor_filter,
+            )
+            .map_err(|error| TensorNetworkError::Other(eyre!(error)))?;
+            Some(&raw)
+        } else {
+            admission
+        };
         <Self as TensorFromExpression<
             'src,
             OrderedStructure<LibraryRep, Aind>,
@@ -160,18 +238,16 @@ where
             Aind,
             Lib,
             FunLib,
-        >>::tensor_from_leaf(expression, structure)
+        >>::tensor_from_leaf(expression, structure, admission)
     }
 
     fn tensor_from_leaf(
         expression: AtomOrView<'src>,
         structure: Canonicalized<OrderedStructure<LibraryRep, Aind>>,
+        admission: Option<&Self::Admission>,
     ) -> Result<Canonicalized<Self>, TensorNetworkError<K, Symbol>> {
-        let occurrences =
-            ExplicitIndexOccurrences::from_atom(expression.as_view(), &mut SlotMatcher::default());
-        occurrences
-            .validate()
-            .map_err(|error| TensorNetworkError::Other(eyre::eyre!(error)))?;
+        let proofs = TensorProofs::parsed_leaf(expression.as_view(), &structure, admission)
+            .map_err(|error| TensorNetworkError::Other(eyre!(error)))?;
         let (is_composite, is_metric) = if let AtomView::Fun(fun) = expression.as_view() {
             (false, fun.get_symbol() == ETS.metric)
         } else {
@@ -182,11 +258,7 @@ where
             owned => owned.into_owned().into(),
         };
         Ok(structure.map_canonical(|structure| Self {
-            proofs: TensorProofs {
-                validated: OnceLock::from(true),
-                occurrences: OnceLock::from(Arc::new(occurrences)),
-                ..TensorProofs::default()
-            },
+            proofs,
             structure,
             expression,
             is_metric,
@@ -255,8 +327,9 @@ where
 /// rather than treating value equality as a metadata certificate.
 ///
 /// With the `bincode` feature, tensor archives are trusted GammaLoop state files.
-/// Decode trusts stored interface and index-history metadata without observing the
-/// payload again. Symbolica's Atom decoder is not safe for untrusted bytes; the
+/// Decode restores serialized interfaces, regional facts, and index history
+/// without inference or replaying normalization in the same Symbolica state.
+/// Symbolica's Atom decoder is not safe for untrusted bytes; the
 /// archive magic and version distinguish supported state files, not a security boundary.
 #[derive(Debug, Clone)]
 pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractIndex>, E = Atom> {
@@ -270,20 +343,25 @@ pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractIndex>, E = A
 /// Authoritative tensor metadata and payload-specific derived facts. Raw
 /// mutation drops both; certified algebra retains metadata and drops caches
 /// whose contents describe the previous payload.
+/// This opaque type supplies parser admission context; only tensor owners can
+/// establish or transform its internal contracts.
 #[derive(Clone, Default)]
-pub(crate) struct TensorProofs {
+pub struct TensorProofs {
     pub(super) validated: OnceLock<bool>,
     pub(super) intrinsic: OnceLock<bool>,
     /// Tensor product finishing is inert and there are no unresolved factor
     /// occurrences which ordinary multiplication could reorder or coalesce.
     pub(super) normalized_product: OnceLock<bool>,
     pub(crate) occurrences: OnceLock<Arc<ExplicitIndexOccurrences>>,
+    /// Exact admitted subexpressions keep their free interfaces across known
+    /// transformations; changed expressions cannot reuse another key's facts.
+    pub(crate) admitted_interfaces: OnceLock<Arc<AdmittedInterfaces>>,
     pub(super) algebra: OnceLock<bool>,
     pub(super) rewrite: OnceLock<bool>,
     pub(super) contracted: bool,
     pub(super) frontier: simplification::ReductionStatus,
     pub(super) shallow_graph: OnceLock<Result<std::sync::Arc<SymbolicNet<AbstractIndex>>, String>>,
-    pub(super) leaf_interfaces: OnceLock<spenso::network::parsing::LeafInterfaceCache>,
+    pub(super) leaf_interfaces: OnceLock<LeafInterfaceCache>,
     pub(super) observations:
         OnceLock<std::sync::Arc<simplification::observation::DomainObservations>>,
     pub(super) reduction: Option<simplification::ReductionRecord>,
@@ -306,7 +384,205 @@ impl std::fmt::Debug for TensorProofs {
     }
 }
 
+/// The default symbolic network already stores AbstractIndex directly. Keep
+/// its payload opaque when crossing between graph and semantic structures.
+fn convert_parser_index<From: ParseableAind + 'static, To: ParseableAind + Copy + 'static>(
+    index: From,
+) -> Result<To, SlotError> {
+    if let Some(&identity) = (&index as &dyn std::any::Any).downcast_ref::<To>() {
+        Ok(identity)
+    } else {
+        To::from_view(index.to_atom().as_view()).map_err(Into::into)
+    }
+}
+
 impl TensorProofs {
+    /// A graph can use a caller's index grammar without admitting those
+    /// identities into Idenso's independent PartialStructure representation.
+    fn uses_custom_graph_indices<Aind: AbsInd + ParseableAind>(
+        structure: &Canonicalized<OrderedStructure<LibraryRep, Aind>>,
+    ) -> bool {
+        std::any::TypeId::of::<Aind>() != std::any::TypeId::of::<AbstractIndex>()
+            && structure
+                .canonical()
+                .external_structure_iter()
+                .any(|slot| convert_parser_index::<_, AbstractIndex>(slot.aind()).is_err())
+    }
+
+    /// Raw graph parsing has its own tensor filter and logical slot layout.
+    /// Once it has accepted a leaf, that layout establishes the raw incidences,
+    /// including slots in an untagged constructor or projector.
+    fn parsed_leaf<Aind: AbsInd + ParseableAind>(
+        expression: AtomView<'_>,
+        structure: &Canonicalized<OrderedStructure<LibraryRep, Aind>>,
+        admission: Option<&Self>,
+    ) -> Result<Self, TensorInferenceError> {
+        if admission.is_some() {
+            return Self::parser_leaf(expression, structure.canonical(), admission);
+        }
+        if Self::uses_custom_graph_indices(structure) {
+            let mut proofs = Self {
+                validated: OnceLock::from(true),
+                occurrences: OnceLock::from(Arc::default()),
+                ..Self::default()
+            };
+            let raw = structure
+                .canonical()
+                .external_structure_iter()
+                .map(|slot| slot.to_atom())
+                .collect::<Vec<_>>();
+            proofs
+                .parser_leaf_interfaces()
+                .lock()
+                .expect("leaf interface cache is not poisoned")
+                .insert(
+                    expression.to_owned(),
+                    (true, structure.layout().canonical_to_logical(&raw)),
+                );
+            proofs.publish_interfaces(expression, None, []);
+            return Ok(proofs);
+        }
+        if !matches!(expression, AtomView::Fun(_)) {
+            let raw = Self::raw_parser_regions(expression, StrictTensorFilter::ContainsReps)?;
+            return Self::parser_leaf(expression, structure.canonical(), Some(&raw));
+        }
+        let supplied = Self::default();
+        let ports = structure
+            .canonical()
+            .external_structure_iter()
+            .map(|slot| slot.to_atom())
+            .collect::<Vec<_>>();
+        supplied.retain_leaf_ports(expression, structure.layout().canonical_to_logical(&ports))?;
+        Self::parser_leaf(expression, structure.canonical(), Some(&supplied))
+    }
+
+    /// A raw parser may fold arithmetic into one opaque node. Admit its nested
+    /// leaves under that parser's head filter, including legacy untagged slots.
+    fn raw_parser_regions(
+        expression: AtomView<'_>,
+        filter: StrictTensorFilter,
+    ) -> Result<Self, TensorInferenceError> {
+        #[cfg(test)]
+        network_metadata_tests::RAW_PARSER_ADMISSIONS.with(|count| count.set(count.get() + 1));
+        let supplied = Self::default();
+        let mut matcher = SlotMatcher::default();
+        let mut pending = vec![expression];
+        while let Some(node) = pending.pop() {
+            if supplied.retained_interface(node).is_some() {
+                continue;
+            }
+            let function = match node {
+                AtomView::Fun(function) => function,
+                AtomView::Add(sum) => {
+                    pending.extend(sum.iter());
+                    continue;
+                }
+                AtomView::Mul(product) => {
+                    pending.extend(product.iter());
+                    continue;
+                }
+                AtomView::Pow(power) => {
+                    let (base, exponent) = power.get_base_exp();
+                    pending.extend([base, exponent]);
+                    continue;
+                }
+                _ => continue,
+            };
+            if !node.is_tensorial(filter) {
+                supplied.retain_interface(node, PartialStructure::from_logical_slots([]));
+                continue;
+            }
+            if composition::is_composite_head(function.get_symbol(), &SPENSO_TAG)
+                || function.get_symbol() == SPENSO_TAG.dot
+            {
+                pending.extend(function.iter());
+                continue;
+            }
+            let ports = if let Some(ports) =
+                InterfaceInference::constructor_ports(function, &mut matcher, true)
+            {
+                ports
+            } else {
+                match OrderedStructure::<LibraryRep, AbstractIndex>::structure_from_atom(
+                    node,
+                    &mut matcher,
+                ) {
+                    Ok(structure) => structure.layout().canonical_to_logical(
+                        &structure
+                            .canonical()
+                            .external_structure_iter()
+                            .map(|slot| slot.to_atom())
+                            .collect::<Vec<_>>(),
+                    ),
+                    Err(StructureError::EmptyStructure(_)) => Vec::new(),
+                    Err(error) => return Err(TensorInferenceError::invalid(error.to_string())),
+                }
+            };
+            supplied.retain_leaf_ports(node, ports)?;
+        }
+        Ok(supplied)
+    }
+
+    /// Attach the parser's established ports and reuse the admission owner's
+    /// scoped facts. Only raw parser entry points admit unknown syntax here.
+    fn parser_leaf<Aind: AbsInd + ParseableAind>(
+        expression: AtomView<'_>,
+        structure: &OrderedStructure<LibraryRep, Aind>,
+        admission: Option<&Self>,
+    ) -> Result<Self, TensorInferenceError> {
+        let mut boundary = structure.clone();
+        boundary.trace_out();
+        let interface = PartialStructure::from_logical_slots(
+            boundary
+                .external_structure_iter()
+                .map(|slot| {
+                    convert_parser_index::<_, AbstractIndex>(slot.aind())
+                        .map(|index| slot.rep().slot(PartialIndex::Explicit(index)))
+                        .map_err(|error| TensorInferenceError::invalid(error.to_string()))
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        );
+        let Some(admission) = admission else {
+            return SymbolicTensor::<PartialStructure>::from_observed_parts(
+                expression.to_owned(),
+                interface,
+                LeafInference::ObserveEncoded,
+            )
+            .map(|tensor| tensor.proofs);
+        };
+        let mut proofs = admission.algebra_result();
+        if proofs.retained_interface(expression).is_none() {
+            proofs.retain_interface(expression, interface.clone());
+        }
+        let mut occurrences = InterfaceInference::produced_occurrences(
+            expression,
+            &mut SlotMatcher::default(),
+            &proofs,
+        )?;
+        if admission.owns_expression(expression)
+            && let Some(history) = admission.occurrences.get()
+        {
+            occurrences.branch_max(history);
+        }
+        let raw_interface = PartialStructure::from_logical_slots(
+            structure
+                .external_structure_iter()
+                .map(|slot| {
+                    convert_parser_index::<_, AbstractIndex>(slot.aind())
+                        .map(|index| slot.rep().slot(PartialIndex::Explicit(index)))
+                        .map_err(|error| TensorInferenceError::invalid(error.to_string()))
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        );
+        occurrences.branch_max(&ExplicitIndexOccurrences::from_interface(&raw_interface));
+        occurrences.branch_max(&ExplicitIndexOccurrences::from_interface(&interface));
+        occurrences.validate()?;
+        proofs.occurrences = OnceLock::from(Arc::new(occurrences));
+        proofs.validated = OnceLock::from(true);
+        proofs.publish_interfaces(expression, interface, []);
+        Ok(proofs)
+    }
+
     /// Retain construction metadata without reusing reduction state or a graph
     /// built for another payload. Scalar algebra does not change these ports or
     /// index identities, even when Symbolica cancels their visible factors.
@@ -315,6 +591,8 @@ impl TensorProofs {
             validated: self.validated.clone(),
             normalized_product: self.normalized_product.clone(),
             occurrences: self.occurrences.clone(),
+            admitted_interfaces: self.admitted_interfaces.clone(),
+            leaf_interfaces: self.leaf_interfaces.clone(),
             ..Self::default()
         }
     }
@@ -370,6 +648,8 @@ impl<S, E> SymbolicTensor<S, E> {
             && self.proofs.normalized_product.get() == other.proofs.normalized_product.get()
             && self.proofs.occurrences.get().map(Arc::as_ptr)
                 == other.proofs.occurrences.get().map(Arc::as_ptr)
+            && self.proofs.admitted_interfaces.get().map(Arc::as_ptr)
+                == other.proofs.admitted_interfaces.get().map(Arc::as_ptr)
             && self.proofs.algebra.get() == other.proofs.algebra.get()
             && self.proofs.rewrite.get() == other.proofs.rewrite.get()
             && self.proofs.contracted == other.proofs.contracted
@@ -396,6 +676,25 @@ impl<S, E> SymbolicTensor<S, E> {
 }
 
 impl<S, E: AtomCore + From<E::Output>> SymbolicTensor<S, E> {
+    /// A sum can collapse to a product of indexed factors while its internal
+    /// occurrences stay scoped to the original summands.
+    pub(super) fn has_indexed_power_base(&self) -> Option<bool> {
+        let history = self.proofs.occurrences.get()?;
+        let open_factor = |factor: AtomView<'_>| {
+            self.proofs
+                .retained_interface(factor)
+                .is_some_and(|interface| !interface.canonical().is_scalar())
+        };
+        Some(
+            !history.is_empty()
+                || match self.expression.as_atom_view() {
+                    AtomView::Mul(product) => product.iter().any(open_factor),
+                    AtomView::Pow(power) => open_factor(power.get_base_exp().0),
+                    _ => false,
+                },
+        )
+    }
+
     /// Protect an implicit scalar contraction when scalar arithmetic repeats it.
     /// Admitted callers provide their index metadata. Only legacy raw network
     /// storage without that metadata needs to discover its written scope.
@@ -435,7 +734,7 @@ impl<Aind: AbsInd + ParseableAind> SymbolicTensor<OrderedStructure<LibraryRep, A
     pub(crate) fn validate_rewritten_interface(
         &self,
         expression: &Atom,
-    ) -> Result<(), inference::TensorInferenceError> {
+    ) -> Result<(), TensorInferenceError> {
         use spenso::structure::partial::{PartialIndex, PartialStructure, PartialStructureExt};
 
         if expression.as_view().is_zero() {
@@ -450,19 +749,19 @@ impl<Aind: AbsInd + ParseableAind> SymbolicTensor<OrderedStructure<LibraryRep, A
                 // type. The existing observer owns parsing and callback policy.
                 let encoded = slot.aind().to_atom();
                 let index = AbstractIndex::from_view(encoded.as_view()).map_err(|error| {
-                    inference::TensorInferenceError::Invalid(format!(
+                    TensorInferenceError::Invalid(format!(
                         "cannot validate rewritten tensor index: {error}"
                     ))
                 })?;
                 if index.to_atom() != encoded {
-                    return Err(inference::TensorInferenceError::Invalid(
+                    return Err(TensorInferenceError::Invalid(
                         "rewritten tensor index does not have a lossless shared representation"
                             .into(),
                     ));
                 }
                 Ok(slot.rep().slot(PartialIndex::Explicit(index)))
             })
-            .collect::<Result<Vec<_>, inference::TensorInferenceError>>()?;
+            .collect::<Result<Vec<_>, TensorInferenceError>>()?;
         SymbolicTensor::<PartialStructure>::validate_encoded_interface(
             expression,
             &PartialStructure::from_logical_slots(slots),
@@ -495,9 +794,65 @@ impl<Aind: AbsInd> spenso::network::TensorCommonFactor<Atom>
 }
 
 impl<Aind: AbsInd> ScalarTensor for SymbolicTensor<OrderedStructure<LibraryRep, Aind>> {
+    fn scalar_power(self, exponent: i8, power: impl FnOnce(Atom) -> Atom) -> Self {
+        assert!(
+            self.structure.is_scalar(),
+            "scalar power requires a scalar tensor"
+        );
+        let occurrences = self
+            .proofs
+            .occurrences
+            .get()
+            .expect("published scalar tensor is missing construction history");
+        let expression = if exponent == 1 {
+            self.expression.clone()
+        } else {
+            Self::scalar_power_expression(self.expression.clone(), self.has_indexed_power_base())
+        };
+        let expression = power(expression);
+        let mut proofs = self.proofs.algebra_result();
+        if exponent != 1 {
+            // Every power of a scalar binds its internal contractions. Reusing
+            // the carrier must not expose those local identities to a product.
+            proofs.occurrences = OnceLock::from(Arc::new(
+                occurrences.scoped(&PartialStructure::from_logical_slots([])),
+            ));
+        }
+        proofs.publish_interfaces(
+            expression.as_view(),
+            PartialStructure::from_logical_slots([]),
+            [],
+        );
+        Self {
+            expression,
+            proofs,
+            is_composite: true,
+            is_metric: false,
+            structure: self.structure,
+        }
+    }
+
     /// # Panics
     /// Panics if the supplied scalar has invalid explicit-index multiplicities.
     fn new_scalar(scalar: Self::Scalar) -> Self {
+        if InterfaceInference::has_structured_syntax(scalar.as_view()) {
+            let raw =
+                TensorProofs::raw_parser_regions(scalar.as_view(), StrictTensorFilter::Tagged)
+                    .expect("scalar tensor intake requires valid parser ports");
+            let proofs = TensorProofs::parser_leaf(
+                scalar.as_view(),
+                &OrderedStructure::<LibraryRep, AbstractIndex>::scalar_structure(),
+                Some(&raw),
+            )
+            .expect("scalar tensor intake requires valid scalar index scopes");
+            return Self {
+                expression: scalar,
+                structure: OrderedStructure::scalar_structure(),
+                proofs,
+                is_metric: false,
+                is_composite: true,
+            };
+        }
         // This is fresh scalar intake, not a transfer of an existing carrier.
         // Structured scalar payloads can retain internal pairs even when their
         // free interface is empty; do not replace that history by an empty mask.
@@ -506,12 +861,18 @@ impl<Aind: AbsInd> ScalarTensor for SymbolicTensor<OrderedStructure<LibraryRep, 
         occurrences
             .validate()
             .expect("scalar tensor producer requires valid index multiplicities");
+        let mut proofs = TensorProofs {
+            validated: OnceLock::from(true),
+            occurrences: OnceLock::from(Arc::new(occurrences)),
+            ..TensorProofs::default()
+        };
+        proofs.publish_interfaces(
+            scalar.as_view(),
+            PartialStructure::from_logical_slots([]),
+            [],
+        );
         SymbolicTensor {
-            proofs: TensorProofs {
-                validated: OnceLock::from(true),
-                occurrences: OnceLock::from(Arc::new(occurrences)),
-                ..TensorProofs::default()
-            },
+            proofs,
             structure: OrderedStructure::scalar_structure(),
             is_metric: false,
             is_composite: false,
@@ -522,17 +883,7 @@ impl<Aind: AbsInd> ScalarTensor for SymbolicTensor<OrderedStructure<LibraryRep, 
 
 impl<Aind: AbsInd> ScalarStructure for SymbolicTensor<OrderedStructure<LibraryRep, Aind>> {
     fn scalar_structure() -> Self {
-        SymbolicTensor {
-            proofs: TensorProofs {
-                validated: OnceLock::from(true),
-                occurrences: OnceLock::from(Arc::default()),
-                ..TensorProofs::default()
-            },
-            structure: OrderedStructure::scalar_structure(),
-            is_metric: false,
-            is_composite: false,
-            expression: Atom::num(1),
-        }
+        Self::new_scalar(Atom::num(1))
     }
 }
 
@@ -552,42 +903,58 @@ impl<Aind: AbsInd + DummyAind + ParseableAind> ApplyPendingIndexPermutation
 {
     type Output = SymbolicTensor<OrderedStructure<LibraryRep, Aind>>;
 
-    fn apply_pending_index_permutation(
-        mut self,
-        pending: &PendingIndexPermutation,
-    ) -> Self::Output {
+    fn apply_pending_index_permutation(self, pending: &PendingIndexPermutation) -> Self::Output {
         if pending.is_identity() {
             return self;
         }
 
-        self.invalidate_proofs();
-        let target_slots = self.structure.external_structure();
-        let mut dummy_structure = Vec::with_capacity(target_slots.len());
-        let mut ids = Atom::one();
-        for slot in pending.apply_slice_inverse(&target_slots) {
-            let dummy = slot.to_dummy_ind();
-            dummy_structure.push(dummy);
-            ids *= Self::id(dummy.dual(), slot.to_lib()).expression;
-        }
-
-        let new_structure =
-            Canonicalized::<OrderedStructure<LibraryRep, Aind>>::from_iter(dummy_structure)
-                .into_canonical();
-
-        for (o, n) in self
-            .structure
-            .external_structure_iter()
-            .zip(new_structure.external_structure_iter())
-        {
-            self.expression = self.expression.replace(o.to_atom()).with(n.to_atom());
-        }
-
-        self.expression *= ids;
-        self
+        let indices = pending
+            .apply_slice_inverse(&self.structure.external_structure())
+            .into_iter()
+            .map(|slot| slot.aind())
+            .collect::<Vec<_>>();
+        // Symbolic coordinate order lives in the written tensor arguments.
+        // Relabel those occurrences together with their retained contracts.
+        self.reindex_storage(&indices)
+            .expect("checked index permutation must preserve tensor ports")
+            .apply()
     }
 }
 
-impl<Aind: AbsInd, E: AtomCore + From<E::Output>> TensorStructure
+impl<Aind: AbsInd + ParseableAind, E: AtomCore + From<E::Output>>
+    SymbolicTensor<OrderedStructure<LibraryRep, Aind>, E>
+{
+    /// Expose storage-axis occurrences to the existing port transformer. A
+    /// self-loop has two storage axes even though its public boundary is closed.
+    fn storage_port_tensor(
+        &self,
+    ) -> Result<SymbolicTensor<PartialStructure>, TensorInferenceError> {
+        let slots = self
+            .structure
+            .external_structure_iter()
+            .map(|slot| {
+                convert_parser_index::<_, AbstractIndex>(slot.aind())
+                    .map(|index| slot.rep().slot(PartialIndex::Explicit(index)))
+                    .map_err(|error| TensorInferenceError::invalid(error.to_string()))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let structure = PartialStructure::from_logical_slots(slots);
+        let expression = self.expression.as_atom_view().to_owned();
+        let mut proofs = self.proofs.algebra_result();
+        proofs.publish_interfaces(expression.as_view(), structure.clone(), []);
+        let source = SymbolicTensor {
+            structure,
+            expression,
+            proofs,
+            is_metric: self.is_metric,
+            is_composite: self.is_composite,
+        };
+        source.explicit_index_occurrences()?;
+        Ok(source)
+    }
+}
+
+impl<Aind: AbsInd + ParseableAind, E: AtomCore + From<E::Output>> TensorStructure
     for SymbolicTensor<OrderedStructure<LibraryRep, Aind>, E>
 {
     // type R = <T::Structure as TensorStructure>::R;
@@ -595,26 +962,119 @@ impl<Aind: AbsInd, E: AtomCore + From<E::Output>> TensorStructure
     type Slot = LibrarySlot<Aind>;
 
     fn reindex_storage(self, indices: &[Aind]) -> Result<Reindexed<Self::Indexed>, StructureError> {
-        let Self {
-            proofs: _,
-            structure,
-            is_metric,
-            is_composite,
-            expression,
-        } = self;
-        Ok(structure
-            .reindex_storage(indices)?
+        let target = self.structure.clone().reindex_storage(indices)?.apply();
+        let source = self
+            .storage_port_tensor()
+            .map_err(|error| StructureError::ParsingError(error.to_string()))?;
+        let replacements = indices
+            .iter()
+            .enumerate()
+            .map(|(position, index)| {
+                convert_parser_index::<_, AbstractIndex>(*index).map(|index| (position, index))
+            })
+            .collect::<Result<HashMap<_, _>, _>>()
+            .map_err(|error| StructureError::ParsingError(error.to_string()))?;
+        let mapped = source
+            .reindex_interface_ports(&replacements)
+            .map_err(|error| StructureError::ParsingError(error.to_string()))?;
+        let interface = InterfaceInference::merge_explicit_interface_sequence(&[mapped.structure])
+            .map_err(|error| StructureError::ParsingError(error.to_string()))?;
+        let mut proofs = mapped.proofs;
+        proofs.publish_interfaces(mapped.expression.as_view(), interface, []);
+        let expression = self.expression.atom_to_output(mapped.expression).into();
+        let target_indices = target.external_indices_iter().collect::<Vec<_>>();
+        // The expression already carries the coordinate permutation. Return
+        // an identity transition so applying Reindexed does not repeat it.
+        Ok(target
+            .reindex_storage(&target_indices)?
             .map_target(|structure| Self {
-                proofs: Default::default(),
                 structure,
-                is_metric,
-                is_composite,
                 expression,
+                proofs,
+                is_metric: self.is_metric,
+                is_composite: self.is_composite,
             }))
     }
 
     fn dual(self) -> Self {
-        self.map_same_structure(|s| s.dual())
+        let source = self
+            .storage_port_tensor()
+            .expect("dual requires an admitted symbolic tensor");
+        let ports = source
+            .structure
+            .logical_slots()
+            .into_iter()
+            .collect::<HashSet<_>>();
+        let map_interface = |interface: &PartialStructure| {
+            Ok(PartialStructure::from_logical_slots(
+                interface.logical_slots().into_iter().map(|slot| {
+                    if ports.contains(&slot) {
+                        slot.rep().dual().slot(slot.aind)
+                    } else {
+                        slot
+                    }
+                }),
+            ))
+        };
+        let mut matcher = SlotMatcher::default();
+        let (expression, mut proofs) = source
+            .map_admitted_indices(
+                |value| {
+                    Ok(matcher
+                        .parse::<LibraryRep, AbstractIndex>(value)
+                        .ok()
+                        .and_then(|slot| {
+                            ports
+                                .contains(&slot.rep().slot(PartialIndex::Explicit(slot.aind())))
+                                .then(|| {
+                                    slot.rep()
+                                        .dual()
+                                        .slot::<AbstractIndex, _>(slot.aind())
+                                        .to_atom()
+                                })
+                        }))
+                },
+                map_interface,
+            )
+            .expect("dual must preserve admitted tensor syntax");
+        let occurrences = source
+            .explicit_index_occurrences()
+            .unwrap()
+            .mapped(|slot| {
+                Ok::<_, TensorInferenceError>(
+                    if ports.contains(&slot.rep().slot(PartialIndex::Explicit(slot.aind()))) {
+                        slot.rep().dual().slot(slot.aind())
+                    } else {
+                        slot
+                    },
+                )
+            })
+            .expect("dual preserves index identities");
+        occurrences
+            .validate()
+            .expect("dual preserves valid index multiplicities");
+        proofs.occurrences = OnceLock::from(Arc::new(occurrences));
+        proofs.validated = OnceLock::from(true);
+        let interface = InterfaceInference::merge_explicit_interface_sequence(&[map_interface(
+            &source.structure,
+        )
+        .unwrap()])
+        .expect("dual preserves compatible port pairs");
+        TensorProofs::assert_normalization_preserves_interface(
+            "dual",
+            &[&source.expression],
+            &expression,
+            Ok(&interface),
+            None,
+        );
+        proofs.publish_interfaces(expression.as_view(), interface, []);
+        Self {
+            expression: self.expression.atom_to_output(expression).into(),
+            structure: self.structure.dual(),
+            proofs,
+            is_metric: self.is_metric,
+            is_composite: self.is_composite,
+        }
     }
 
     delegate! {
@@ -634,6 +1094,8 @@ impl<Aind: AbsInd, E: AtomCore + From<E::Output>> TensorStructure
 }
 
 impl<S: TensorStructure, E: AtomCore + From<E::Output>> HasStructure for SymbolicTensor<S, E> {
+    const PRESERVE_SCALAR_METADATA: bool = true;
+
     type Structure = S;
     type Scalar = E;
     type ScalarRef<'a>
@@ -699,7 +1161,7 @@ impl<S: TensorStructure, E: AtomCore + From<E::Output>> HasStructure for Symboli
     }
 
     fn scalar_power_base(self) -> Option<Self::Scalar> {
-        let indexed = self.proofs.occurrences.get().map(|usage| !usage.is_empty());
+        let indexed = self.has_indexed_power_base();
         self.scalar()
             .map(|expression| Self::scalar_power_expression(expression, indexed))
     }
@@ -713,7 +1175,9 @@ impl<S: TensorStructure, E: AtomCore + From<E::Output>> HasStructure for Symboli
     }
 }
 
-impl<Aind: AbsInd> IteratableTensor for SymbolicTensor<OrderedStructure<LibraryRep, Aind>> {
+impl<Aind: AbsInd + ParseableAind> IteratableTensor
+    for SymbolicTensor<OrderedStructure<LibraryRep, Aind>>
+{
     type Data<'a>
         = AtomView<'a>
     where
@@ -740,10 +1204,49 @@ impl<Aind: AbsInd> StructureContract for SymbolicTensor<OrderedStructure<Library
     ) -> Result<(Self, SubSet<SlotIndex>, SubSet<SlotIndex>, MergeInfo), StructureError> {
         let expression = &other.expression * &self.expression;
         let (structure, pos_self, pos_other, mergeinfo) = self.structure.merge(&other.structure)?;
+        let left = self.proofs.retained_interface(self.expression.as_view());
+        let right = other.proofs.retained_interface(other.expression.as_view());
+        let left_history = self
+            .proofs
+            .occurrences
+            .get()
+            .expect("published tensor is missing construction history");
+        let right_history = other
+            .proofs
+            .occurrences
+            .get()
+            .expect("published tensor is missing construction history");
+        // Graph edges establish the contracted pairings. An index bound by
+        // an earlier contraction must not attach to an independent later edge
+        // that uses the same label, including powers written as repeated leaves.
+        let (interface, mut occurrences) = if let (Some(left), Some(right)) = (left, right) {
+            let mut active = left_history.scoped(&left);
+            active.append(&right_history.scoped(&right));
+            let interface = InterfaceInference::merge_explicit_interface_sequence(&[left, right])
+                .map_err(|error| StructureError::ParsingError(error.to_string()))?;
+            (Some(interface), active)
+        } else {
+            (None, ExplicitIndexOccurrences::default())
+        };
+        occurrences.branch_max(left_history);
+        occurrences.branch_max(right_history);
+        occurrences
+            .validate()
+            .map_err(|error| StructureError::ParsingError(error.to_string()))?;
+        let mut proofs = TensorProofs {
+            validated: OnceLock::from(true),
+            occurrences: OnceLock::from(Arc::new(occurrences)),
+            ..TensorProofs::default()
+        };
+        proofs.publish_interfaces(
+            expression.as_view(),
+            interface,
+            [&self.proofs, &other.proofs],
+        );
 
         Ok((
             Self {
-                proofs: Default::default(),
+                proofs,
                 structure,
                 is_composite: true,
                 is_metric: false,
@@ -756,12 +1259,12 @@ impl<Aind: AbsInd> StructureContract for SymbolicTensor<OrderedStructure<Library
     }
 
     fn trace_out(&mut self) {
-        self.invalidate_proofs();
+        self.proofs = self.proofs.algebra_result();
         self.structure.trace_out();
     }
 
     fn trace(&mut self, i: usize, j: usize) {
-        self.invalidate_proofs();
+        self.proofs = self.proofs.algebra_result();
         self.structure.trace(i, j);
     }
 }
@@ -782,16 +1285,28 @@ impl<Aind: AbsInd> Trace for SymbolicTensor<OrderedStructure<LibraryRep, Aind>> 
 impl<Aind: AbsInd> SymbolicTensor<OrderedStructure<LibraryRep, Aind>> {
     pub fn from_named<N>(structure: &N) -> Option<Self>
     where
+        Aind: ParseableAind,
         N: ToSymbolic + HasName + TensorStructure<Slot = LibrarySlot<Aind>>,
         N::Name: IntoSymbol + Clone,
         N::Args: IntoArgs,
     {
         let canonicalized = Canonicalized::from(structure.external_structure());
-        let is_metric = structure.name()?.ref_into_symbol() == ETS.metric;
+        let name = structure.name()?.ref_into_symbol();
+        let expression = structure.to_symbolic(None)?;
+        let proofs = Self::constructor_proofs(
+            &expression,
+            canonicalized.canonical(),
+            name,
+            structure
+                .external_structure_iter()
+                .map(|slot| slot.to_atom())
+                .collect(),
+        )
+        .ok()?;
         Some(SymbolicTensor {
-            proofs: Default::default(),
-            expression: structure.to_symbolic(None)?,
-            is_metric,
+            proofs,
+            expression,
+            is_metric: name == ETS.metric,
             is_composite: false,
             structure: canonicalized.into_canonical(),
         })
@@ -806,14 +1321,68 @@ impl<Aind: AbsInd> SymbolicTensor<OrderedStructure<LibraryRep, Aind>> {
     {
         let canonical = structure.canonical();
         let canonicalized = Canonicalized::from(canonical.external_structure());
-        let is_metric = canonical.name()?.ref_into_symbol() == ETS.metric;
+        let name = canonical.name()?.ref_into_symbol();
+        let expression = structure.to_symbolic(None)?;
+        let logical_ports = structure.layout().canonical_to_logical(
+            &canonical
+                .external_structure_iter()
+                .map(|slot| slot.to_atom())
+                .collect::<Vec<_>>(),
+        );
+        let proofs =
+            Self::constructor_proofs(&expression, canonicalized.canonical(), name, logical_ports)
+                .ok()?;
         Some(SymbolicTensor {
-            proofs: Default::default(),
-            expression: structure.to_symbolic(None)?,
+            proofs,
+            expression,
             is_composite: false,
-            is_metric,
+            is_metric: name == ETS.metric,
             structure: canonicalized.into_canonical(),
         })
+    }
+
+    fn constructor_proofs(
+        expression: &Atom,
+        structure: &OrderedStructure<LibraryRep, Aind>,
+        head: Symbol,
+        mut ports: Vec<Atom>,
+    ) -> Result<TensorProofs, TensorInferenceError>
+    where
+        Aind: ParseableAind,
+    {
+        if !InterfaceInference::intrinsic_normalization_head(head) {
+            // A user normalizer may rewrite the leaf's internal incidences.
+            // Its free-interface contract alone does not certify raw graph ports.
+            return TensorProofs::parser_leaf(expression.as_view(), structure, None);
+        }
+        let proofs = TensorProofs::parser_leaf(
+            expression.as_view(),
+            structure,
+            Some(&TensorProofs::default()),
+        )?;
+        if let AtomView::Fun(function) = expression.as_view() {
+            let mut written = Vec::with_capacity(ports.len());
+            if let Some(first_port) = function.get_nargs().checked_sub(ports.len()) {
+                for argument in function.iter().skip(first_port) {
+                    let Some(position) = ports.iter().position(|port| port.as_view() == argument)
+                    else {
+                        break;
+                    };
+                    written.push(ports.remove(position));
+                }
+            }
+            if function.get_symbol() == head && ports.is_empty() {
+                // Intrinsic symmetries can reorder their constructor arguments;
+                // match known typed ports without decoding the emitted syntax.
+                proofs.retain_leaf_ports(expression.as_view(), written)?;
+            } else if let Some(leaves) = proofs.leaf_interfaces.get() {
+                leaves
+                    .lock()
+                    .expect("leaf interface cache is not poisoned")
+                    .remove(expression.as_view().get_data());
+            }
+        }
+        Ok(proofs)
     }
 
     pub fn to_named(&self) -> NamedStructure<Symbol, Vec<Atom>, LibraryRep, Aind> {
@@ -857,13 +1426,27 @@ impl<Aind: AbsInd> SymbolicTensor<OrderedStructure<LibraryRep, Aind>> {
     > {
         let settings =
             ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps);
-
-        Network::<
+        type ComponentNet = Network<
             NetworkStore<MixedTensor<f64, ShadowedStructure<AbstractIndex>>, Atom>,
             ExplicitKey<AbstractIndex>,
             Symbol,
             AbstractIndex,
-        >::try_from_view(self.expression.as_view(), library, &settings)
+        >;
+        if self.proofs.validated.get() == Some(&true) {
+            ComponentNet::try_from_admitted_view(
+                self.expression.as_view(),
+                library,
+                &settings,
+                self.proofs
+                    .leaf_interfaces
+                    .get()
+                    .cloned()
+                    .unwrap_or_default(),
+                None,
+            )
+        } else {
+            ComponentNet::try_from_view(self.expression.as_view(), library, &settings)
+        }
     }
 }
 
@@ -1043,14 +1626,23 @@ impl<Aind: AbsInd + ParseableAind> Concretize<SymbolicTensor<OrderedStructure<Li
     for ShadowedStructure<Aind>
 {
     fn concretize(self) -> eyre::Result<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>> {
-        let is_metric = self.name() == Some(ETS.metric);
+        let name = self
+            .name()
+            .ok_or_else(|| eyre!("symbolic tensor requires a name"))?;
+        let expression = self.to_symbolic(None).expect("the constructor has a name");
+        let proofs = SymbolicTensor::constructor_proofs(
+            &expression,
+            &self.structure,
+            name,
+            self.external_structure_iter()
+                .map(|slot| slot.to_atom())
+                .collect(),
+        )?;
         Ok(SymbolicTensor {
-            proofs: Default::default(),
-            expression: self
-                .to_symbolic(None)
-                .ok_or_else(|| eyre::eyre!("symbolic tensor requires a name"))?,
+            proofs,
+            expression,
             is_composite: false,
-            is_metric,
+            is_metric: name == ETS.metric,
             structure: self.structure,
         })
     }
@@ -1059,20 +1651,25 @@ impl<Aind: AbsInd + ParseableAind> Concretize<SymbolicTensor<OrderedStructure<Li
         self,
         layout: &CanonicalLayout,
     ) -> eyre::Result<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>> {
-        let is_metric = self.name() == Some(ETS.metric);
-        let logical_slots = layout.canonical_to_logical(&self.external_structure());
-        let expression = FunctionBuilder::new(
-            self.name()
-                .ok_or_else(|| eyre::eyre!("symbolic tensor requires a name"))?,
-        )
-        .add_args(self.args().unwrap_or_default())
-        .add_args(logical_slots.into_iter().map(|slot| slot.to_atom()))
-        .finish();
+        let name = self
+            .name()
+            .ok_or_else(|| eyre!("symbolic tensor requires a name"))?;
+        let logical_ports = layout
+            .canonical_to_logical(&self.external_structure())
+            .into_iter()
+            .map(|slot| slot.to_atom())
+            .collect::<Vec<_>>();
+        let expression = FunctionBuilder::new(name)
+            .add_args(self.args().unwrap_or_default())
+            .add_args(&logical_ports)
+            .finish();
+        let proofs =
+            SymbolicTensor::constructor_proofs(&expression, &self.structure, name, logical_ports)?;
         Ok(SymbolicTensor {
-            proofs: Default::default(),
+            proofs,
             expression,
             is_composite: false,
-            is_metric,
+            is_metric: name == ETS.metric,
             structure: self.structure,
         })
     }
@@ -1116,9 +1713,15 @@ impl<S: TensorInterface> std::ops::Neg for SymbolicTensor<S> {
     type Output = SymbolicTensor<S>;
 
     fn neg(self) -> Self::Output {
+        let interface = self.proofs.retained_interface(self.expression.as_view());
+        let expression = -self.expression;
+        let mut proofs = self.proofs.algebra_result();
+        if let Some(interface) = interface {
+            proofs.publish_interfaces(expression.as_view(), interface, []);
+        }
         Self {
-            proofs: self.proofs.algebra_result(),
-            expression: -self.expression,
+            proofs,
+            expression,
             is_composite: true,
             is_metric: self.is_metric,
             structure: self.structure.into_algebra_result(),
@@ -1130,11 +1733,7 @@ impl<Aind: AbsInd> AddAssign<SymbolicTensor<OrderedStructure<LibraryRep, Aind>>>
     for SymbolicTensor<OrderedStructure<LibraryRep, Aind>>
 {
     fn add_assign(&mut self, rhs: SymbolicTensor<OrderedStructure<LibraryRep, Aind>>) {
-        debug_assert_eq!(self.structure, rhs.structure);
-        self.invalidate_proofs();
-        self.expression += rhs.expression;
-        self.is_composite = true;
-        self.is_metric = false;
+        *self += &rhs;
     }
 }
 
@@ -1143,8 +1742,36 @@ impl<Aind: AbsInd> AddAssign<&SymbolicTensor<OrderedStructure<LibraryRep, Aind>>
 {
     fn add_assign(&mut self, rhs: &SymbolicTensor<OrderedStructure<LibraryRep, Aind>>) {
         debug_assert_eq!(self.structure, rhs.structure);
-        self.invalidate_proofs();
+        let interface = self.proofs.retained_interface(self.expression.as_view());
+        let rhs_interface = rhs.proofs.retained_interface(rhs.expression.as_view());
+        let mut occurrences = ExplicitIndexOccurrences::default();
+        if let (Some(left), Some(right)) = (&interface, &rhs_interface) {
+            occurrences = self
+                .proofs
+                .occurrences
+                .get()
+                .expect("published tensor is missing construction history")
+                .scoped(left);
+            occurrences.branch_max(
+                &rhs.proofs
+                    .occurrences
+                    .get()
+                    .expect("published tensor is missing construction history")
+                    .scoped(right),
+            );
+        }
+        let mut proofs = TensorProofs {
+            validated: OnceLock::from(true),
+            occurrences: OnceLock::from(Arc::new(occurrences)),
+            ..TensorProofs::default()
+        };
         self.expression += &rhs.expression;
+        proofs.publish_interfaces(
+            self.expression.as_view(),
+            interface,
+            [&self.proofs, &rhs.proofs],
+        );
+        self.proofs = proofs;
         self.is_composite = true;
         self.is_metric = false;
     }
@@ -1154,13 +1781,9 @@ impl<Aind: AbsInd> ScalarMul<Atom> for SymbolicTensor<OrderedStructure<LibraryRe
     type Output = Self;
 
     fn scalar_mul(&self, rhs: &Atom) -> Option<Self::Output> {
-        Some(Self {
-            proofs: Default::default(),
-            expression: rhs * &self.expression,
-            is_composite: true,
-            is_metric: false,
-            structure: self.structure.clone(),
-        })
+        self.merge(&Self::new_scalar(rhs.clone()))
+            .ok()
+            .map(|(tensor, ..)| tensor)
     }
 }
 

@@ -523,14 +523,14 @@ pub fn compatible_pairs(left: &PartialStructure, right: &PartialStructure) -> Ve
     pairs
 }
 
-fn is_structured_scalar(value: AtomView<'_>) -> bool {
+fn is_structured_scalar(value: AtomView<'_>, proofs: &TensorProofs) -> bool {
     if matches!(value, AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.dot) {
         return true;
     }
 
-    value
-        .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>()
-        .is_ok_and(|structure| structure.canonical().is_scalar())
+    proofs
+        .admitted_interface(value)
+        .is_some_and(|structure| structure.canonical().is_scalar())
 }
 
 fn port_matches(value: AtomView<'_>, expected: PartialSlot) -> bool {
@@ -564,13 +564,14 @@ fn has_transparent_chain_channel(
     value: AtomView<'_>,
     input: PartialSlot,
     output: PartialSlot,
+    proofs: &TensorProofs,
 ) -> bool {
     match value {
         AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.chain => {
             chain_endpoints_match(value, input, output)
         }
         AtomView::Fun(function) if function.get_symbol().has_tag(&SPENSO_TAG.broadcast) => {
-            matches!(function.iter().collect::<Vec<_>>().as_slice(), [argument] if has_transparent_chain_channel(*argument, input, output))
+            matches!(function.iter().collect::<Vec<_>>().as_slice(), [argument] if has_transparent_chain_channel(*argument, input, output, proofs))
         }
         AtomView::Fun(function)
             if function.get_symbol() == *shadowing::SYM
@@ -581,10 +582,10 @@ fn has_transparent_chain_channel(
                 .iter()
                 .filter(|argument| {
                     argument.is_tensorial(StrictTensorFilter::Tagged)
-                        || has_transparent_chain_channel(*argument, input, output)
+                        || has_transparent_chain_channel(*argument, input, output, proofs)
                 })
                 .collect::<Vec<_>>();
-            matches!(tensor_arguments.as_slice(), [argument] if has_transparent_chain_channel(*argument, input, output))
+            matches!(tensor_arguments.as_slice(), [argument] if has_transparent_chain_channel(*argument, input, output, proofs))
         }
         AtomView::Mul(product) => {
             let tensor_factors = product
@@ -598,17 +599,17 @@ fn has_transparent_chain_channel(
                                     || function.get_symbol() == *shadowing::ANTISYM
                                     || function.get_symbol() == *shadowing::CYCLIC
                         ))
-                        && !is_structured_scalar(*factor)
+                        && !is_structured_scalar(*factor, proofs)
                 })
                 .collect::<Vec<_>>();
-            matches!(tensor_factors.as_slice(), [factor] if has_transparent_chain_channel(*factor, input, output))
+            matches!(tensor_factors.as_slice(), [factor] if has_transparent_chain_channel(*factor, input, output, proofs))
         }
         AtomView::Add(sum) => {
             let terms = sum.iter().collect::<Vec<_>>();
             !terms.is_empty()
                 && terms
                     .into_iter()
-                    .all(|term| has_transparent_chain_channel(term, input, output))
+                    .all(|term| has_transparent_chain_channel(term, input, output, proofs))
         }
         _ => false,
     }
@@ -633,7 +634,7 @@ fn contains_chain_like(value: AtomView<'_>) -> bool {
 
 /// A scalar coefficient does not bind contextual ports. Preserve it while
 /// extending or closing the one root chain; other wrappers retain their scope.
-fn root_chain_parts(value: AtomView<'_>) -> Option<(Atom, FunView<'_>)> {
+fn root_chain_parts<'a>(value: AtomView<'a>, proofs: &TensorProofs) -> Option<(Atom, FunView<'a>)> {
     match value {
         AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.chain => {
             Some((Atom::num(1), function))
@@ -649,7 +650,7 @@ fn root_chain_parts(value: AtomView<'_>) -> Option<(Atom, FunView<'_>)> {
                     chain = Some(function);
                 } else if !contains_chain_like(factor)
                     && (!factor.is_tensorial(StrictTensorFilter::Tagged)
-                        || is_structured_scalar(factor))
+                        || is_structured_scalar(factor, proofs))
                 {
                     coefficient *= factor;
                 } else {
@@ -903,7 +904,7 @@ impl ExplicitIndexOccurrences {
     }
 
     /// Transport every retained identity with the same mapping as the free ports.
-    pub(super) fn mapped<E>(
+    pub(crate) fn mapped<E>(
         &self,
         mut map: impl FnMut(
             Slot<LibraryRep, AbstractIndex>,
@@ -1299,16 +1300,18 @@ pub fn validate_explicit_index_occurrences(atom: &Atom) -> Result<(), TensorComp
 }
 
 #[derive(Clone)]
-struct PortRewriteState {
+struct PortRewriteState<'a> {
     claimed: Vec<bool>,
     applied: Vec<bool>,
     bulk_arithmetic: bool,
     /// Admitted explicit metadata can expose copies compressed into one power.
     explicit_copies: bool,
     indices: Option<ParseState<AbstractIndex>>,
+    proofs: Option<&'a TensorProofs>,
+    produced: Option<&'a TensorProofs>,
 }
 
-impl PortRewriteState {
+impl PortRewriteState<'_> {
     fn new(rank: usize) -> Self {
         Self {
             claimed: vec![false; rank],
@@ -1316,7 +1319,22 @@ impl PortRewriteState {
             bulk_arithmetic: false,
             explicit_copies: false,
             indices: None,
+            proofs: None,
+            produced: None,
         }
+    }
+
+    fn consumed_vector_port(value: AtomView<'_>) -> Option<AtomView<'_>> {
+        let AtomView::Fun(vector) = value else {
+            return None;
+        };
+        if !vector.get_symbol().has_tag(&SPENSO_TAG.rank1) {
+            return None;
+        }
+        let mut matcher = SlotMatcher::default();
+        let port = matcher.vector_argument(vector)?;
+        matcher.parse_representation::<LibraryRep>(port).ok()?;
+        Some(port)
     }
 
     // A selected tensor outside sums follows the public logical interface.
@@ -1574,6 +1592,76 @@ fn rewrite_ports<'a>(
     replacements: &HashMap<usize, Atom>,
     state: &mut PortRewriteState,
 ) -> AtomOrView<'a> {
+    let mut claimed = state.claimed.clone();
+    let result = rewrite_ports_inner(value, slots, replacements, state);
+    if result.as_view() != value
+        && let Some(produced) = state.produced
+        && let Some(interface) = state
+            .proofs
+            .and_then(|proofs| proofs.admitted_interface(value))
+    {
+        let mapped = interface
+            .logical_slots()
+            .into_iter()
+            .map(|slot| {
+                let position = slots.iter().enumerate().position(|(position, candidate)| {
+                    !claimed[position]
+                        && slot.rep() == candidate.rep()
+                        && match (slot.aind, candidate.aind) {
+                            (PartialIndex::Explicit(source), PartialIndex::Explicit(expected)) => {
+                                source == expected
+                            }
+                            (
+                                PartialIndex::Open(_)
+                                | PartialIndex::Explicit(AbstractIndex::Open { .. }),
+                                PartialIndex::Open(_),
+                            ) => true,
+                            _ => false,
+                        }
+                });
+                let Some(position) = position else {
+                    return Some(Some(slot));
+                };
+                claimed[position] = true;
+                let Some(replacement) = replacements.get(&position) else {
+                    return Some(Some(slot));
+                };
+                if let Ok(slot) = Slot::<LibraryRep, AbstractIndex>::try_from(replacement.as_view())
+                {
+                    Some(Some(slot.rep().slot(PartialIndex::Explicit(slot.aind()))))
+                } else if let Ok(rep) =
+                    Representation::<LibraryRep>::try_from(replacement.as_view())
+                {
+                    Some(Some(rep.slot(PartialIndex::open(position))))
+                } else if let Some(port) =
+                    PortRewriteState::consumed_vector_port(replacement.as_view())
+                {
+                    produced
+                        .retain_leaf_ports(replacement.as_view(), vec![port.to_owned()])
+                        .ok()?;
+                    Some(None)
+                } else {
+                    None
+                }
+            })
+            .collect::<Option<Vec<_>>>();
+        if let Some(mapped) = mapped
+            && let Ok(interface) = InterfaceInference::merge_explicit_interface_sequence(&[
+                PartialStructure::from_logical_slots(mapped.into_iter().flatten()),
+            ])
+        {
+            produced.retain_interface(result.as_view(), interface);
+        }
+    }
+    result
+}
+
+fn rewrite_ports_inner<'a>(
+    value: AtomView<'a>,
+    slots: &[PartialSlot],
+    replacements: &HashMap<usize, Atom>,
+    state: &mut PortRewriteState,
+) -> AtomOrView<'a> {
     match value {
         AtomView::Add(add) => {
             let original = state.clone();
@@ -1582,8 +1670,9 @@ fn rewrite_ports<'a>(
                 && !value.needs_normalization()
                 && !replacements.is_empty()
             {
-                InterfaceInference::replacement_interface(value)
-                    .ok()
+                state
+                    .proofs
+                    .and_then(|proofs| proofs.admitted_interface(value))
                     .map(|interface| {
                         let mut allowed = vec![false; slots.len()];
                         let mut claimed = original.claimed.clone();
@@ -1728,7 +1817,9 @@ fn rewrite_ports<'a>(
                 && !value.needs_normalization()
                 && !replacements.is_empty()
             {
-                InterfaceInference::replacement_interface(base).ok()
+                state
+                    .proofs
+                    .and_then(|proofs| proofs.admitted_interface(base))
             } else {
                 None
             };
@@ -1945,8 +2036,66 @@ fn rewrite_ports<'a>(
                 // Rebuilding callback-bearing heads remains observable even
                 // when their arguments, or the callback result, are unchanged.
                 let result = FunctionBuilder::new(fun.get_symbol())
-                    .add_args(rewritten)
+                    .add_args(rewritten.iter().map(AtomCore::as_atom_view))
                     .finish();
+                if let Some(produced) = state.produced
+                    && let Some(previous) =
+                        state.proofs.and_then(|proofs| proofs.leaf_interfaces.get())
+                {
+                    let ports = previous
+                        .lock()
+                        .expect("leaf interface cache is not poisoned")
+                        .get(value.get_data())
+                        .cloned();
+                    if let Some((tensorial, ports)) = ports {
+                        let arguments = fun.iter().collect::<Vec<_>>();
+                        let mut claimed = vec![false; arguments.len()];
+                        let ports = ports
+                            .into_iter()
+                            .map(|port| {
+                                let position = arguments.iter().enumerate().position(
+                                    |(position, argument)| {
+                                        !claimed[position] && *argument == port.as_view()
+                                    },
+                                )?;
+                                claimed[position] = true;
+                                let replacement = rewritten[position].as_view();
+                                if let Some(port) =
+                                    PortRewriteState::consumed_vector_port(replacement)
+                                {
+                                    produced
+                                        .retain_leaf_ports(replacement, vec![port.to_owned()])
+                                        .ok()?;
+                                    // Compact vector arguments consume the old
+                                    // tensor port; the nested vector owns its
+                                    // one constructor port separately.
+                                    Some(None)
+                                } else {
+                                    Some(Some(replacement.to_owned()))
+                                }
+                            })
+                            .collect::<Option<Vec<_>>>();
+                        if let Some(ports) = ports
+                            && let Some((target, ports)) =
+                                TensorProofs::raw_ports_after_argument_permutation(
+                                    &rewritten
+                                        .iter()
+                                        .map(AtomCore::as_atom_view)
+                                        .collect::<Vec<_>>(),
+                                    result.as_view(),
+                                    &ports.into_iter().flatten().collect::<Vec<_>>(),
+                                )
+                            && target.get_symbol() == fun.get_symbol()
+                        {
+                            produced
+                                .leaf_interfaces
+                                .get_or_init(Default::default)
+                                .lock()
+                                .expect("leaf interface cache is not poisoned")
+                                .insert(target.as_view().to_owned(), (tensorial, ports));
+                        }
+                    }
+                }
                 result.into()
             }
         }
@@ -1959,8 +2108,16 @@ pub(crate) fn rewrite_interface_ports(
     replacements: &HashMap<usize, Atom>,
     indices: Option<&ParseState<AbstractIndex>>,
 ) -> Result<Atom, TensorCompositionError> {
+    rewrite_interface_parts(value, replacements, indices).map(|(expression, _)| expression)
+}
+
+pub(crate) fn rewrite_interface_parts(
+    value: &SymbolicTensor<PartialStructure>,
+    replacements: &HashMap<usize, Atom>,
+    indices: Option<&ParseState<AbstractIndex>>,
+) -> Result<(Atom, TensorProofs), TensorCompositionError> {
     if value.expression.as_view().is_zero() {
-        return Ok(Atom::Zero);
+        return Ok((Atom::Zero, value.proofs.clone()));
     }
 
     let slots = value.structure.logical_slots();
@@ -1977,9 +2134,12 @@ pub(crate) fn rewrite_interface_ports(
             .is_some()
         })
     {
-        return Ok(value.expression.clone());
+        return Ok((value.expression.clone(), value.proofs.clone()));
     }
+    let produced = TensorProofs::default();
     let mut state = PortRewriteState::new(slots.len());
+    state.proofs = Some(&value.proofs);
+    state.produced = Some(&produced);
     state.explicit_copies =
         value.proofs.validated.get() == Some(&true) && !value.structure.has_unresolved_ports();
     if replacements.values().any(|replacement| {
@@ -2010,7 +2170,7 @@ pub(crate) fn rewrite_interface_ports(
     {
         return Err(TensorCompositionError::MissingInterfacePort { position });
     }
-    Ok(atom)
+    Ok((atom, produced))
 }
 
 fn collect_interface_positions(
@@ -2435,6 +2595,11 @@ impl SymbolicTensor<PartialStructure> {
             ),
         );
         semantic.proofs = self.proofs.algebra_result();
+        semantic.proofs.publish_interfaces(
+            semantic.expression.as_view(),
+            semantic.structure.clone(),
+            [],
+        );
         let semantic = semantic.normalize_closed_root_chain()?;
         let mut retained_materialized = Self::from_validated_parts(
             materialized.expression,
@@ -2452,6 +2617,11 @@ impl SymbolicTensor<PartialStructure> {
             ),
         );
         retained_materialized.proofs = materialized.proofs.algebra_result();
+        retained_materialized.proofs.publish_interfaces(
+            retained_materialized.expression.as_view(),
+            retained_materialized.structure.clone(),
+            [],
+        );
         let retained_materialized = retained_materialized.normalize_closed_root_chain()?;
         Ok((semantic, retained_materialized))
     }
@@ -2469,11 +2639,13 @@ impl SymbolicTensor<PartialStructure> {
     }
 
     fn validate_rewrite(
-        self,
+        mut self,
         operation: &str,
         sources: &[&Self],
     ) -> Result<Self, TensorCompositionError> {
         self.explicit_index_occurrences()?.validate()?;
+        self.proofs
+            .inherit_interfaces(sources.iter().map(|source| &source.proofs));
         #[cfg(debug_assertions)]
         TensorProofs::assert_normalization_preserves_interface(
             operation,
@@ -2531,6 +2703,11 @@ impl SymbolicTensor<PartialStructure> {
             value.structure =
                 PartialStructure::from_logical_slots(axes.iter().map(|&axis| slots[axis]));
             value.proofs = self.proofs.algebra_result();
+            value.proofs.publish_interfaces(
+                value.expression.as_view(),
+                value.structure.clone(),
+                [],
+            );
             return Ok(value);
         }
         // Give unresolved occurrences identities before changing positional order.
@@ -2553,6 +2730,9 @@ impl SymbolicTensor<PartialStructure> {
         value.proofs = value.proofs.algebra_result();
         value.structure =
             PartialStructure::from_logical_slots(axes.iter().map(|&axis| slots[axis]));
+        value
+            .proofs
+            .publish_interfaces(value.expression.as_view(), value.structure.clone(), []);
         Ok(value)
     }
 
@@ -2592,6 +2772,8 @@ impl SymbolicTensor<PartialStructure> {
         if Self::interface_is_named(&self.structure) && !self.has_canonical_layout() {
             self.structure = Canonicalized::identity(self.structure.into_canonical());
             self.proofs = self.proofs.algebra_result();
+            self.proofs
+                .publish_interfaces(self.expression.as_view(), self.structure.clone(), []);
         }
         self
     }
@@ -2655,7 +2837,7 @@ impl SymbolicTensor<PartialStructure> {
     }
 
     fn root_chain_channel(&self) -> Option<MatrixChannel> {
-        let (_, function) = root_chain_parts(self.expression.as_view())?;
+        let (_, function) = root_chain_parts(self.expression.as_view(), &self.proofs)?;
         let mut arguments = function.iter();
         let input = arguments.next()?;
         let output = arguments.next()?;
@@ -2682,6 +2864,7 @@ impl SymbolicTensor<PartialStructure> {
                         self.expression.as_view(),
                         slots[input],
                         slots[output],
+                        &self.proofs,
                     )
                 {
                     return Some(MatrixChannel { input, output });
@@ -2808,7 +2991,7 @@ impl SymbolicTensor<PartialStructure> {
         {
             return Ok(self.clone());
         }
-        let atom = rewrite_interface_ports(self, &replacements, None)?;
+        let (atom, rewritten) = rewrite_interface_parts(self, &replacements, None)?;
         // Decrement every old use first, so swaps and partial relabellings of
         // repeated free indices do not create transient third occurrences.
         for &(source, _) in &mapped {
@@ -2840,6 +3023,7 @@ impl SymbolicTensor<PartialStructure> {
         }
         occurrences.validate()?;
         let mut value = Self::from_validated_parts(atom, interface, Arc::new(occurrences));
+        value.proofs.inherit_interfaces([&rewritten, &self.proofs]);
         if !explicit {
             value = value.finish_parts()?;
         }
@@ -2876,7 +3060,7 @@ impl SymbolicTensor<PartialStructure> {
     pub fn normalize_closed_root_chain(
         self,
     ) -> Result<SymbolicTensor<PartialStructure>, TensorCompositionError> {
-        let Some((_, function)) = root_chain_parts(self.expression.as_view()) else {
+        let Some((_, function)) = root_chain_parts(self.expression.as_view(), &self.proofs) else {
             return Ok(self);
         };
         let arguments = function.iter().collect::<Vec<_>>();
@@ -2912,16 +3096,17 @@ impl SymbolicTensor<PartialStructure> {
         } else {
             self.structure.clone().into_algebra_result()
         };
-        let atom =
-            if let Some((coefficient, function)) = root_chain_parts(self.expression.as_view()) {
-                coefficient
-                    * shadowing::trace(
-                        representation.to_symbolic([]),
-                        function.iter().skip(2).map(|factor| factor.to_owned()),
-                    )
-            } else {
-                self.expression.clone()
-            };
+        let atom = if let Some((coefficient, function)) =
+            root_chain_parts(self.expression.as_view(), &self.proofs)
+        {
+            coefficient
+                * shadowing::trace(
+                    representation.to_symbolic([]),
+                    function.iter().skip(2).map(|factor| factor.to_owned()),
+                )
+        } else {
+            self.expression.clone()
+        };
         let interface = if !interface.has_unresolved_ports() {
             interface
         } else {
@@ -3086,6 +3271,7 @@ impl SymbolicTensor<PartialStructure> {
             );
             (&materialized.0, &materialized.1)
         };
+        let generated = TensorProofs::default();
         let atom = if self.is_zero() || right.is_zero() {
             Atom::Zero
         } else if self.rank() == 1
@@ -3098,7 +3284,7 @@ impl SymbolicTensor<PartialStructure> {
             // Only declared vector heads choose dot notation automatically.
             // A composite with one surviving axis retains its indexed factors;
             // the structural contractor can pack them into Schoonschip notation.
-            self.compact_dot_expression(right)?
+            self.compact_dot_expression(right, &generated)?
         } else {
             SymbolicTensor::bracket_product(
                 materialized_left.expression.as_view(),
@@ -3107,25 +3293,41 @@ impl SymbolicTensor<PartialStructure> {
         };
         let occurrences =
             ExplicitIndexOccurrences::product(&[materialized_left, materialized_right])?;
-        SymbolicTensor::from_validated_parts(atom, interface, Arc::new(occurrences))
-            .validate_rewrite("contract_ports", &[materialized_left, materialized_right])
+        let mut result =
+            SymbolicTensor::from_validated_parts(atom, interface, Arc::new(occurrences));
+        result.proofs.inherit_interfaces([&generated]);
+        result.validate_rewrite("contract_ports", &[materialized_left, materialized_right])
     }
 
-    fn compact_dot_expression(&self, right: &Self) -> Result<Atom, TensorCompositionError> {
-        Self::compact_dot_parts(&self.expression, self.structure.logical_slots()[0], right)
+    fn compact_dot_expression(
+        &self,
+        right: &Self,
+        generated: &TensorProofs,
+    ) -> Result<Atom, TensorCompositionError> {
+        Self::compact_dot_parts(
+            &self.expression,
+            self.structure.logical_slots()[0],
+            Some(&self.proofs),
+            right,
+            generated,
+        )
     }
 
     /// Spell an established rank-one contraction without constructing a prefix carrier.
     pub(super) fn compact_dot_parts(
         left: &Atom,
         left_slot: PartialSlot,
+        left_proofs: Option<&TensorProofs>,
         right: &Self,
+        generated: &TensorProofs,
     ) -> Result<Atom, TensorCompositionError> {
-        let compact = |expression: &Atom, slot: PartialSlot| {
+        let compact = |expression: &Atom, slot: PartialSlot, source: Option<&TensorProofs>| {
             if expression.is_zero() {
                 return Ok(Atom::Zero);
             }
             let mut state = PortRewriteState::new(1);
+            state.proofs = source;
+            state.produced = Some(generated);
             state.explicit_copies = SymbolicTensor::index_is_named(slot.aind);
             let expression = rewrite_ports(
                 expression.as_view(),
@@ -3137,13 +3339,21 @@ impl SymbolicTensor<PartialStructure> {
             if !state.applied[0] {
                 return Err(TensorCompositionError::MissingInterfacePort { position: 0 });
             }
+            if source.is_none()
+                && matches!(expression.as_view(), AtomView::Fun(vector)
+                if vector.get_symbol().has_tag(&SPENSO_TAG.rank1))
+            {
+                generated
+                    .retain_leaf_ports(expression.as_view(), vec![slot.rep().to_symbolic([])])?;
+            }
             Ok(expression)
         };
         Ok(FunctionBuilder::new(SPENSO_TAG.dot)
-            .add_arg(compact(left, left_slot)?)
+            .add_arg(compact(left, left_slot, left_proofs)?)
             .add_arg(compact(
                 &right.expression,
                 right.structure.logical_slots()[0],
+                Some(&right.proofs),
             )?)
             .finish())
     }
@@ -3177,7 +3387,9 @@ impl SymbolicTensor<PartialStructure> {
             self.expression.validate_chain_like_nesting()?;
         }
         if root_chain_channel_is_live(self, channel) {
-            let Some((coefficient, function)) = root_chain_parts(self.expression.as_view()) else {
+            let Some((coefficient, function)) =
+                root_chain_parts(self.expression.as_view(), &self.proofs)
+            else {
                 unreachable!("a live root chain channel requires a chain function")
             };
             let factors = function
@@ -3623,12 +3835,17 @@ impl SymbolicTensor<PartialStructure> {
                 ProductPlan::Compose(..) => unreachable!(),
             };
             let occurrences = ExplicitIndexOccurrences::product(&[self, right])?;
+            let generated = TensorProofs::default();
             let expression = if compact_dot {
-                self.compact_dot_expression(right)?
+                self.compact_dot_expression(right, &generated)?
             } else {
                 &self.expression * &right.expression
             };
-            let value = Self::from_validated_parts(expression, interface, Arc::new(occurrences));
+            let mut value =
+                Self::from_validated_parts(expression, interface, Arc::new(occurrences));
+            value
+                .proofs
+                .inherit_interfaces([&generated, &self.proofs, &right.proofs]);
             let _ = value.proofs.normalized_product.set(true);
             #[cfg(debug_assertions)]
             if compact_dot {

@@ -16,7 +16,7 @@ use idenso::epsilon::EPSILON_SYMBOL;
 use idenso::representations::Bispinor;
 use idenso::tensor::SymbolicTensor;
 use idenso::tensor::composition;
-use idenso::tensor::inference::InterfaceInference;
+use idenso::tensor::inference::{InterfaceInference, TensorInferenceError};
 use idenso::{CookMode, CookSettings};
 use linnet::half_edge::involution::Flow;
 use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike};
@@ -177,6 +177,12 @@ pub enum GenerationError {
         interaction: String,
         candidates: Vec<String>,
     },
+}
+
+impl From<TensorInferenceError> for GenerationError {
+    fn from(error: TensorInferenceError) -> Self {
+        Self::Diagram(DiagramError::Tensor(error))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -374,46 +380,63 @@ impl NumeratorInstantiation<'_> {
     fn bind_template(&self, expression: &Atom) -> Result<Atom, GenerationError> {
         let mut error = None;
         let expression = expression.replace_map_bottom_up(|term, _, out| {
-            let AtomView::Fun(function) = term else {
+            if error.is_some() {
                 return;
-            };
-            let head = function.get_symbol();
-            let mut arguments = function.iter();
-            let owner = if head == symbols::hedge_index() || head == symbols::momentum() {
-                let leg = usize::try_from(
-                    arguments
-                        .next()
-                        .expect("localized template momentum and half-edge heads carry a leg ID"),
-                )
-                .expect("localized template leg IDs are nonnegative integers");
-                if head == symbols::momentum() {
-                    self.legs[leg].edge
-                } else {
-                    self.legs[leg].hedge
-                }
-            } else if head == symbols::vertex_index() || head == symbols::edge_index() {
-                arguments.next();
-                match self.owner {
-                    NumeratorOwner::Vertex(owner) | NumeratorOwner::Edge(owner) => owner,
-                }
-            } else {
-                return;
-            };
-            match i64::try_from(owner) {
-                Ok(owner) => {
-                    **out = FunctionBuilder::new(head)
-                        .add_arg(owner)
-                        .add_args(arguments)
-                        .finish();
-                }
-                Err(_) => {
-                    error = Some(GenerationError::ArithmeticOverflow(
-                        "a symbolic numerator owner",
-                    ));
-                }
+            }
+            match self.bind_template_node(term) {
+                Ok(Some(replacement)) => **out = replacement,
+                Ok(None) => {}
+                Err(failure) => error = Some(failure),
             }
         });
         error.map_or(Ok(expression), Err)
+    }
+
+    fn bind_template_node(&self, term: AtomView<'_>) -> Result<Option<Atom>, GenerationError> {
+        let AtomView::Fun(function) = term else {
+            return Ok(None);
+        };
+        let head = function.get_symbol();
+        let mut arguments = function.iter();
+        let owner = if head == symbols::hedge_index() || head == symbols::momentum() {
+            let leg = usize::try_from(
+                arguments
+                    .next()
+                    .expect("localized template momentum and half-edge heads carry a leg ID"),
+            )
+            .expect("localized template leg IDs are nonnegative integers");
+            if head == symbols::momentum() {
+                self.legs[leg].edge
+            } else {
+                self.legs[leg].hedge
+            }
+        } else if head == symbols::vertex_index() || head == symbols::edge_index() {
+            arguments.next();
+            match self.owner {
+                NumeratorOwner::Vertex(owner) | NumeratorOwner::Edge(owner) => owner,
+            }
+        } else {
+            return Ok(None);
+        };
+        let owner = i64::try_from(owner)
+            .map_err(|_| GenerationError::ArithmeticOverflow("a symbolic numerator owner"))?;
+        Ok(Some(
+            FunctionBuilder::new(head)
+                .add_arg(owner)
+                .add_args(arguments)
+                .finish(),
+        ))
+    }
+
+    fn bind_tensor(
+        &self,
+        tensor: &SymbolicTensor<PartialStructure>,
+    ) -> Result<SymbolicTensor<PartialStructure>, GenerationError> {
+        NumeratorInterface::translate_produced(
+            tensor,
+            |atom| self.bind_template(atom),
+            |node| self.bind_template_node(node),
+        )
     }
 
     // UFO `idx(shift, leg)` and `dummy(index)` values are local to one
@@ -1562,7 +1585,7 @@ impl NumeratorTemplate {
         // Complete the source metadata before the retained template is cloned.
         // The identity map keeps its established interface and collision history.
         let tensor = tensor
-            .with_renamed_indices(tensor.expression().clone(), &HashMap::new())
+            .renamed_indices(&HashMap::new())
             .map_err(DiagramError::from)?;
         Ok(Self::Admitted {
             tensor: Box::new(tensor),
@@ -1577,7 +1600,7 @@ impl NumeratorTemplate {
         let Self::Admitted { tensor, .. } = self else {
             unreachable!("dynamic rules are constructed at their actual owner")
         };
-        NumeratorInterface::translate(tensor, |atom| instantiation.bind_template(atom))
+        instantiation.bind_tensor(tensor)
     }
 }
 
@@ -3577,10 +3600,7 @@ impl Generator {
             match &*base {
                 NumeratorTemplate::Dynamic => NumeratorTemplate::Dynamic,
                 NumeratorTemplate::Admitted { tensor, labels } => {
-                    let expression = instantiation.bind_template(tensor.expression())?;
-                    let specialized = tensor
-                        .with_renamed_indices(expression, &HashMap::new())
-                        .map_err(DiagramError::from)?;
+                    let specialized = instantiation.bind_tensor(tensor)?;
                     // Momentum aliases can erase the payload. Keep the admitted
                     // rule's complete label universe for its retained metadata.
                     NumeratorTemplate::Admitted {

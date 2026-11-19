@@ -3020,10 +3020,13 @@ impl DiagramSourceMap {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use idenso::tensor::SymbolicNetParse;
+    use spenso::network::parsing::ParseSettings as TensorParseSettings;
+    use spenso::structure::abstract_index::AbstractIndex;
     use spenso::structure::representation::Euclidean;
-    use spenso::tensor_symbol;
+    use spenso::{mink, tensor_symbol};
     use std::sync::Arc;
-    use symbolica::function;
+    use symbolica::{function, symbol};
 
     fn scalar_model() -> Arc<Model> {
         Arc::new(Model::from_json(
@@ -3942,6 +3945,69 @@ mod tests {
             diagram
                 .uv_expansion_of(&selected, &mass, 0, None, &BTreeMap::new())
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn typed_uv_expansion_retains_momentum_and_generic_tensor_ports() {
+        let diagram = one_loop();
+        let selected = diagram.internal_subgraph();
+        let basis = diagram.momentum_basis_of(&selected).unwrap();
+        let edge = basis.loop_edges[0];
+        let port = mink!(4, 71461);
+        let momentum = function!(symbols::momentum(), edge.0, &port);
+        let generic = function!(tensor_symbol!("uv_retained_generic"), &port);
+        let source = SymbolicTensor::infer(momentum * generic).unwrap();
+        let mass = Atom::var(symbol!("feynkit_graph::typed_uv_mass"));
+        let expanded = diagram
+            .uv_expansion_tensor_of(&selected, &mass, 4, Some(&source), &BTreeMap::new())
+            .unwrap();
+        assert!(!expanded.is_zero());
+        assert!(expanded.is_scalar());
+        let network = expanded
+            .parse_to_symbolic_net::<AbstractIndex>(&TensorParseSettings::default())
+            .unwrap();
+        assert!(network.graph.dangling_indices().is_empty());
+        let scalar = SymbolicTensor::infer(Atom::one()).unwrap();
+        let typed_scalar = diagram
+            .uv_expansion_tensor_of(&selected, &mass, 6, Some(&scalar), &BTreeMap::new())
+            .unwrap();
+        let raw_scalar = diagram
+            .uv_expansion_of(
+                &selected,
+                &mass,
+                6,
+                Some(scalar.expression()),
+                &BTreeMap::new(),
+            )
+            .unwrap();
+        assert_eq!(typed_scalar.expression(), &raw_scalar);
+        typed_scalar
+            .parse_to_symbolic_net::<AbstractIndex>(&TensorParseSettings::default())
+            .unwrap();
+    }
+
+    #[test]
+    fn typed_uv_expansion_reports_unsupported_tensor_metadata_derivatives() {
+        let diagram = one_loop();
+        let selected = diagram.internal_subgraph();
+        let edge = diagram.momentum_basis_of(&selected).unwrap().loop_edges[0];
+        let port = mink!(4, 71463);
+        let source = SymbolicTensor::infer(function!(
+            tensor_symbol!("uv_metadata_derivative"),
+            function!(
+                symbol!("uv_owner"; Scalar),
+                function!(symbols::momentum(), edge.0)
+            ),
+            &port
+        ))
+        .unwrap();
+        let mass = Atom::var(symbol!("feynkit_graph::typed_uv_mass"));
+        let error = diagram
+            .uv_expansion_tensor_of(&selected, &mass, 4, Some(&source), &BTreeMap::new())
+            .unwrap_err();
+        assert!(
+            matches!(error, DiagramError::UvExpansion(message) if message.contains("derivatives of tensor metadata are unsupported"))
         );
     }
 
