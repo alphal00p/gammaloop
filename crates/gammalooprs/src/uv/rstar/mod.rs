@@ -21,6 +21,7 @@ mod expression;
 mod insertion_identity;
 mod insertions;
 mod integrate;
+mod ir_dirac;
 mod linearize;
 mod massive;
 #[cfg(test)]
@@ -116,6 +117,7 @@ pub use insertions::{
     PropagatorInsertionEvaluator,
 };
 pub use integrate::integrate_single_mass;
+pub use ir_dirac::{IrDiracMode, ir_dirac_mode};
 pub use massive::{
     DistributionTerm, MassiveVacuumSubdivergences, MassiveVacuumTerm, NumeratorMonomial,
     VacuumTopology, massive_vacuum_direct, massive_vacuum_settings,

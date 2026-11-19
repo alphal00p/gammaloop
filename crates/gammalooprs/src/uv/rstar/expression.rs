@@ -81,6 +81,12 @@ pub struct DiracBoundary {
     /// `1/(Tr[1] d)` (vertex) or `1/Tr[1]` (self-energy), with `Tr[1]` the
     /// dimension of the bispinor representation (idenso's trace of the unit).
     pub normalization: Atom,
+    /// The row and column spinor slots of the open line.
+    pub row: Atom,
+    pub column: Atom,
+    /// The Lorentz slot of the closure: the open slot `mu` (vertex) or the
+    /// fresh `nu` (self-energy).
+    pub index: Atom,
 }
 
 /// The fresh Minkowski index `nu` of the self-energy Dirac closure. It is
@@ -88,6 +94,68 @@ pub struct DiracBoundary {
 /// child's `Delta`; the cache wraps it as a private dummy.
 pub(super) static DIRAC_CLOSURE_INDEX: LazyLock<Symbol> =
     LazyLock::new(|| symbol!("gammalooprs::uv_dirac_closure_nu"));
+
+/// The parity of the number of gamma matrices in every term of `view` (the
+/// `Z_2` grading of the Clifford algebra, `gamma -> -gamma`): `Some(1)` odd,
+/// `Some(0)` even, `None` when terms of both parities are summed or a Dirac
+/// object other than `gamma(i, j, mu)` occurs (a chain, trace, `gamma0`,
+/// `sigma`, ...). Products add parities, a sum needs one parity.
+///
+/// Every R* operation (Taylor, tensor reduction, integration, `K`, the
+/// insertion of a UV child of a subgraph) commutes with the grading, so an
+/// R* hard part has the parity of its graph numerator. A closed loop of odd
+/// parity is a vanishing trace, so an odd total means an odd open line or a
+/// vanishing term.
+pub(super) fn gamma_parity(view: AtomView<'_>) -> Option<u8> {
+    let dirac = [
+        idenso::dirac::AGS.gamma,
+        idenso::dirac::AGS.gammaconj,
+        idenso::dirac::AGS.gammaadj,
+        idenso::dirac::AGS.gamma0,
+        idenso::dirac::AGS.projp,
+        idenso::dirac::AGS.projm,
+        idenso::dirac::AGS.gamma5,
+        idenso::dirac::AGS.charge_conjugation,
+        idenso::dirac::AGS.sigma,
+        SPENSO_TAG.chain,
+        SPENSO_TAG.trace,
+    ];
+    let has_dirac = |view: AtomView<'_>| dirac.iter().any(|symbol| view.contains_symbol(*symbol));
+    match view {
+        AtomView::Num(_) => Some(0),
+        AtomView::Var(_) => (!has_dirac(view)).then_some(0),
+        AtomView::Fun(function) => {
+            if function.get_symbol() == idenso::dirac::AGS.gamma {
+                (function.get_nargs() == 3 && !function.iter().any(has_dirac)).then_some(1)
+            } else {
+                (!has_dirac(view)).then_some(0)
+            }
+        }
+        AtomView::Mul(product) => product.iter().try_fold(0_u8, |parity, factor| {
+            Some((parity + gamma_parity(factor)?) % 2)
+        }),
+        AtomView::Add(sum) => {
+            let mut parities = sum.iter().map(gamma_parity);
+            let first = parities.next()??;
+            parities
+                .all(|parity| parity == Some(first))
+                .then_some(first)
+        }
+        AtomView::Pow(power) => {
+            let (base, exponent) = power.get_base_exp();
+            if has_dirac(exponent) {
+                return None;
+            }
+            match gamma_parity(base)? {
+                0 => Some(0),
+                _ => match exponent {
+                    AtomView::Num(_) => i64::try_from(exponent).ok().map(|n| n.rem_euclid(2) as u8),
+                    _ => None,
+                },
+            }
+        }
+    }
+}
 
 // The shared transport knows explicit edge momenta and these FeynKit basis
 // coordinates. Other live momentum conventions must keep their own occurrence.
@@ -1465,6 +1533,26 @@ impl RStarIntegrand {
         if !matches!(taylor_order, 0 | 1) {
             return Ok(None);
         }
+        Ok(
+            Self::dirac_boundary_with(graph, support, taylor_order, *DIRAC_CLOSURE_INDEX, false)?
+                .ok(),
+        )
+    }
+
+    /// [`Self::dirac_boundary`] with the decline reason, the fresh index
+    /// `nu` of the self-energy closure, and (`odd_line`) the self-energy
+    /// shape taken only when the numerator over `support` is odd in the gamma
+    /// matrices in every term (see [`gamma_parity`]): the degree-0 piece
+    /// `Tr[X] / Tr[1]` of an even line is a unit matrix the `gamma^nu` basis
+    /// misses. (A degree-0 vertex needs no such guard: an even matrix with
+    /// one Lorentz index and no vector vanishes.)
+    pub(super) fn dirac_boundary_with(
+        graph: &Graph,
+        support: &SuBitGraph,
+        taylor_order: i32,
+        fresh_index: Symbol,
+        odd_line: bool,
+    ) -> Result<std::result::Result<DiracBoundary, String>> {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
@@ -1482,7 +1570,7 @@ impl RStarIntegrand {
             .iter()
             .any(|symbol| numerator.contains_symbol(*symbol))
         {
-            return Ok(None);
+            return Ok(Err("parity_odd".into()));
         }
         let tensor = SymbolicTensor::infer(cooking.try_cook(numerator.as_view())?)?;
         let bispinor: spenso::structure::representation::LibraryRep =
@@ -1492,7 +1580,7 @@ impl RStarIntegrand {
         let mut lorentz = Vec::new();
         for slot in tensor.structure().logical_slots() {
             let spenso::structure::partial::PartialIndex::Explicit(index) = slot.aind else {
-                return Ok(None);
+                return Ok(Err("implicit_slot".into()));
             };
             let slot = slot
                 .rep()
@@ -1502,16 +1590,19 @@ impl RStarIntegrand {
             } else if slot.rep().rep == minkowski {
                 lorentz.push(slot);
             } else {
-                return Ok(None);
+                return Ok(Err(format!("slot_rep:{}", slot.rep().rep)));
             }
         }
+        if spinors.is_empty() {
+            return Ok(Err("no_spinor".into()));
+        }
         if spinors.len() != 2 || spinors[0].rep() != spinors[1].rep() {
-            return Ok(None);
+            return Ok(Err(format!("spinor_slots:{}", spinors.len())));
         }
         let kind = match (lorentz.len(), taylor_order) {
             (1, 0) => DiracKind::Vertex,
             (0, 1) => DiracKind::SelfEnergy,
-            _ => return Ok(None),
+            (slots, order) => return Ok(Err(format!("shape:mink{slots}_omega{order}"))),
         };
         let spinor_atoms = spinors
             .iter()
@@ -1545,14 +1636,21 @@ impl RStarIntegrand {
         });
         let only_gamma = (0..2).all(|k| total[k] == rows[k] + columns[k]);
         let (row, column) = if !only_gamma {
-            return Ok(None);
+            return Ok(Err("spinor_outside_gamma".into()));
         } else if rows[0] > 0 && columns[0] == 0 && columns[1] > 0 && rows[1] == 0 {
             (0, 1)
         } else if rows[1] > 0 && columns[1] == 0 && columns[0] > 0 && rows[0] == 0 {
             (1, 0)
         } else {
-            return Ok(None);
+            return Ok(Err("row_column".into()));
         };
+        if odd_line && kind == DiracKind::SelfEnergy {
+            match gamma_parity(numerator.as_view()) {
+                Some(1) => {}
+                Some(_) => return Ok(Err("gamma_parity:even".into())),
+                None => return Ok(Err("gamma_parity:mixed".into())),
+            }
+        }
         let trace_of_one = cooking.uncook(spinors[0].rep().dim.to_symbolic().as_view());
         let (index, normalization) = match kind {
             DiracKind::Vertex => (
@@ -1561,7 +1659,7 @@ impl RStarIntegrand {
             ),
             DiracKind::SelfEnergy => (
                 Minkowski {}.new_rep(GS.dim).to_symbolic([Atom::from(
-                    crate::numerator::aind::Aind::Symbol(*DIRAC_CLOSURE_INDEX),
+                    crate::numerator::aind::Aind::Symbol(fresh_index),
                 )]),
                 Atom::one() / trace_of_one,
             ),
@@ -1574,11 +1672,14 @@ impl RStarIntegrand {
                 &index
             )
         };
-        Ok(Some(DiracBoundary {
+        Ok(Ok(DiracBoundary {
             kind,
             closure: gamma(column, row),
             structure: gamma(row, column),
             normalization,
+            row: spinor_atoms[row].clone(),
+            column: spinor_atoms[column].clone(),
+            index,
         }))
     }
 
@@ -1737,6 +1838,29 @@ impl RStarIntegrand {
             graph: converter_graph,
             basis,
             soft_edges,
+            truncation: None,
+        })
+    }
+
+    /// This untruncated component with the momentum-free `factor` (an IR
+    /// Dirac closure, [`super::ir_dirac`]) multiplied into its routed
+    /// product, in the same loop basis, boundary and converter graph: its
+    /// hard coefficients are written in the same loop momenta as this
+    /// component's, which integrates them downstream.
+    pub(super) fn times_momentum_free(&self, factor: &Atom) -> Result<Self> {
+        self.ensure_untruncated("the IR Dirac closure")?;
+        ensure!(
+            self.combinations.lock().unwrap().is_empty(),
+            "the IR Dirac closure precedes every contraction"
+        );
+        Ok(Self {
+            region: self.region.clone(),
+            routed: &self.routed * factor,
+            contracted: OnceLock::new(),
+            combinations: Default::default(),
+            graph: self.graph.clone(),
+            basis: self.basis.clone(),
+            soft_edges: self.soft_edges.clone(),
             truncation: None,
         })
     }

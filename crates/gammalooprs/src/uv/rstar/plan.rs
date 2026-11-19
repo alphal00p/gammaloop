@@ -1149,6 +1149,9 @@ impl RStarPlan {
         });
         let key =
             Self::rstar_child_key(serde_json::to_string(settings)?, route, closure, truncation);
+        // GAMMALOOP_IR_DIRAC_CLOSURE (when on): the child's IR hard parts are
+        // closed, in the key as `#ir-dirac-closure={mode}`.
+        let key = super::ir_dirac::child_key(key, super::ir_dirac::ir_dirac_mode()?);
         cache.counterterm_with(graph, support, model, key, || {
             let started = Instant::now();
             let plan = Self::for_support(graph, model, support, settings)?
