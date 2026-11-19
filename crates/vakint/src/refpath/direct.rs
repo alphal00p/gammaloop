@@ -38,11 +38,14 @@ use crate::{Vakint, VakintSettings};
 
 /// Choices of R3's idenso call. DEFAULT ([`Default`] below): `compact`
 /// routing (the spanning tree of the fewest loop + root terms, routed before
-/// idenso), `Fully` + `to_dots`, EARLY zero-sector pruning in R3's reader.
+/// idenso), `AlgebraContraction::Dots` (idenso emits dot notation itself: no
+/// separate `to_dots`), EARLY zero-sector pruning in R3's reader.
 /// The edge basis (no routing) is `compact: false, routed: false`.
 #[derive(Clone, Copy, Debug)]
 pub struct DirectOptions {
-    /// `AlgebraContraction::Dots` instead of `Fully` followed by `to_dots`.
+    /// `AlgebraContraction::Dots` instead of `Fully` followed by `to_dots`:
+    /// the same polynomial, ~-20 % of R3's contraction at four loops
+    /// (measured, exact). DEFAULT true.
     pub dots: bool,
     /// Route the edge momenta into FeynKit's loop momenta BEFORE the
     /// contraction, exactly as R2 (idenso's input and output are then R2's);
@@ -70,7 +73,7 @@ pub struct DirectOptions {
 impl Default for DirectOptions {
     fn default() -> Self {
         Self {
-            dots: false,
+            dots: true,
             routed: false,
             compact: true,
             prune_early: true,
@@ -1137,6 +1140,13 @@ mod tests {
                     ..Default::default()
                 },
             ),
+            (
+                true,
+                DirectOptions {
+                    dots: false,
+                    ..Default::default()
+                },
+            ),
         ];
         let mut lowered = 0;
         for dir in fixture_dirs() {
@@ -1211,8 +1221,8 @@ mod tests {
             }
         }
         // 7 of the 10 fixtures have a non-zero metric projection (the other 3 are
-        // exact zeros on both sides), each lowered in all 6 option combinations.
-        assert_eq!(lowered, 6 * 7, "lowered projections");
+        // exact zeros on both sides), each lowered in all 7 option combinations.
+        assert_eq!(lowered, 7 * 7, "lowered projections");
     }
 
     /// The hand-over refuses (never reads silently) an unidentified vector and
