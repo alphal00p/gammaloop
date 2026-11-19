@@ -397,8 +397,9 @@ impl SymbolicTensor<PartialStructure> {
                 expand_scalar_spectators: settings.expand_scalar_spectators,
                 dot_notation: settings.contract == AlgebraContraction::Dots,
                 // Frontier-level closing travels with the structural
-                // contraction only (prerequisite contractions never close).
-                gamma_closing: settings.gamma_closing,
+                // contraction only (prerequisite contractions never close),
+                // and only under gamma settings that evaluate traces.
+                gamma_closing: crate::dirac::GammaClosing::effective(settings),
                 // The frontier order travels with the structural contraction only.
                 frontier_order: settings.frontier_order,
                 ..match &settings.contract {
@@ -520,7 +521,7 @@ impl SymbolicTensor<PartialStructure> {
                         (value, status, notation_only) = before.contract_domain(structural)?;
                         (value, status)
                     } else if operation == GAMMA
-                        && let Some(closing) = settings.gamma_closing
+                        && let Some(closing) = crate::dirac::GammaClosing::effective(settings)
                         && let Some((worded, worded_status)) =
                             match crate::dirac::closing::frontier_step(&before, &closing)? {
                                 // Frontier closing: the loop becomes one word that

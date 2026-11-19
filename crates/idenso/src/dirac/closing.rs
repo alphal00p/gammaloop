@@ -74,6 +74,23 @@ impl Default for GammaClosing {
     }
 }
 
+impl GammaClosing {
+    /// The closing a request gets: its `gamma_closing` only when its gamma
+    /// settings evaluate traces in D dimensions (`evaluate_traces`, no
+    /// four-dimensional three-gamma identity). Closed words are evaluated with
+    /// `GammaSimplifySettings::canonical()`, which then gives the scalar the
+    /// request's own settings give; without gamma settings, or with traces
+    /// left unevaluated, no trace is closed (the 6-Loop thread's review
+    /// note 2).
+    pub(crate) fn effective(settings: &crate::tensor::AlgebraSettings) -> Option<Self> {
+        settings.gamma_closing.filter(|_| {
+            settings
+                .gamma
+                .is_some_and(|gamma| gamma.evaluate_traces && !gamma.expand_three_gamma_epsilon)
+        })
+    }
+}
+
 fn budget_checkpoint() {
     if let Err(error) = symbolica::utils::resources::checkpoint() {
         panic!("resource budget exhausted while writing a Dirac word: {error}");
@@ -853,6 +870,40 @@ mod tests {
             assert!(words(input, GammaClosing::default()) > 0, "input {input}");
             assert_eq!(words(input, rule(3)), 0, "input {input}");
             assert!(words(input, rule(2)) > 0, "input {input}");
+        }
+    }
+
+    /// Closing follows the request's gamma settings: with traces left
+    /// unevaluated, or without gamma settings, a closing request gives exactly
+    /// the unclosed request's expression (no trace is closed with other
+    /// settings than the request's).
+    #[test]
+    fn closing_follows_the_requests_gamma_settings() {
+        for input in &inputs() {
+            for gamma in [
+                Some(GammaSimplifySettings::canonical().without_trace_evaluation()),
+                Some(GammaSimplifySettings::canonical().with_gamma5_epsilon_expansion()),
+                None,
+            ] {
+                let run = |closing: Option<GammaClosing>| {
+                    let settings = AlgebraSettings {
+                        gamma,
+                        epsilon: true,
+                        gamma_closing: closing,
+                        ..Default::default()
+                    };
+                    SymbolicTensor::infer(input.clone())
+                        .unwrap()
+                        .simplify_algebra(&settings)
+                        .unwrap()
+                        .into_expression()
+                };
+                assert_eq!(
+                    run(Some(GammaClosing::default())),
+                    run(None),
+                    "gamma {gamma:?}, input {input}"
+                );
+            }
         }
     }
 
