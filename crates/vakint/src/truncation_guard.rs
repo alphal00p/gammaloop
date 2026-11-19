@@ -115,7 +115,7 @@ pub(crate) fn unknown_tail(epsilon: Symbol, first_missing_order: i64, master: &A
 /// the ALARM tail `Oep`, it is a plain coefficient: it passes the expansion
 /// exactly and may stay in a result when the settings allow it
 /// ([`crate::VakintSettings::allow_unknown_master_coefficients`]).
-pub(crate) fn unknown_coefficient_symbol() -> Symbol {
+pub fn unknown_coefficient_symbol() -> Symbol {
     vk_symbol!("UNKNOWN")
 }
 

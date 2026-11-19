@@ -512,6 +512,20 @@ fn epsilon_symbol() -> Symbol {
 fn foreign_symbols(value: &Atom, epsilon: Symbol) -> Vec<String> {
     let mut out = std::collections::BTreeSet::new();
     value.visitor(&mut |part| {
+        // the ONE allowed foreign function: an unknown master coefficient
+        // `vakint::UNKNOWN(<master symbol>, k)` (user ruling 2026-11-19; WS/notes/unknown-masters.md), carried as an
+        // opaque coefficient; a malformed one is foreign
+        if let AtomView::Fun(f) = part
+            && f.get_symbol() == vakint::truncation_guard::unknown_coefficient_symbol()
+        {
+            if unknown_master(part).is_none() {
+                out.insert(format!(
+                    "malformed {}",
+                    part.to_owned().to_canonical_string()
+                ));
+            }
+            return false;
+        }
         if let AtomView::Var(v) = part {
             let symbol = v.get_symbol();
             let name = symbol.get_name();
@@ -522,6 +536,39 @@ fn foreign_symbols(value: &Atom, epsilon: Symbol) -> Vec<String> {
             {
                 out.insert(name.to_string());
             }
+        }
+        true
+    });
+    out.into_iter().collect()
+}
+
+/// `(master symbol, k)` of a well-formed `vakint::UNKNOWN(master, k)`: exactly
+/// two arguments, a variable (the catalogue master's symbol) and an integer.
+fn unknown_master(view: AtomView) -> Option<(String, i64)> {
+    let AtomView::Fun(f) = view else { return None };
+    if f.get_symbol() != vakint::truncation_guard::unknown_coefficient_symbol() {
+        return None;
+    }
+    let args: Vec<AtomView> = f.iter().collect();
+    let [master, k] = args.as_slice() else {
+        return None;
+    };
+    let AtomView::Var(m) = master else {
+        return None;
+    };
+    let AtomView::Num(_) = k else { return None };
+    let k = k.to_owned().to_canonical_string().parse::<i64>().ok()?;
+    Some((m.get_symbol().get_name().to_string(), k))
+}
+
+/// The distinct unknown master coefficients `vakint::UNKNOWN(master, k)` of a
+/// value, in canonical form (empty for a value without them).
+fn unknown_masters(value: &Atom) -> Vec<String> {
+    let mut out = std::collections::BTreeSet::new();
+    value.visitor(&mut |part| {
+        if unknown_master(part).is_some() {
+            out.insert(part.to_owned().to_canonical_string());
+            return false;
         }
         true
     });
@@ -842,6 +889,10 @@ fn evaluate(
                     "{name} {mode}: Laurent support {support:?} outside the declared window {window:?}"
                 );
                 entry["oep"] = json!(text.contains("Oep("));
+                let unknown = unknown_masters(&value);
+                if !unknown.is_empty() {
+                    entry["unknown_masters"] = json!(unknown);
+                }
                 entry["residual"] = json!(text.contains("PResidual("));
                 entry["value"] = json!(text);
             }
@@ -1017,6 +1068,10 @@ fn evaluate_r3(
                     "{name} {mode}: Laurent support {support:?} outside the declared window {window:?}"
                 );
                 entry["oep"] = json!(text.contains("Oep("));
+                let unknown = unknown_masters(&value);
+                if !unknown.is_empty() {
+                    entry["unknown_masters"] = json!(unknown);
+                }
                 entry["residual"] = json!(text.contains("PResidual("));
                 entry["value"] = json!(text);
             }
@@ -1183,17 +1238,19 @@ fn refinalise(
             support.iter().all(|k| *k >= window.0 && *k <= window.1),
             "{name} symbolic (re-finalised): Laurent support {support:?} outside the declared window {window:?}"
         );
-        modes.insert(
-            "symbolic".to_string(),
-            json!({
-                "file": file, "sha256": sha256_hex(text.as_bytes()), "bytes": text.len(),
-                "wall": wall, "cpu": cpu, "lower": 0.0, "reduce": 0.0, "finalise": wall,
-                "reductions": 0, "refinalised_from_retain_sha256": retained_sha256,
-                "laurent_tail_in_range_terms": Vakint::p_laurent_tail_in_range_terms() - tails,
-                "window": [window.0, window.1], "support": support,
-                "oep": text.contains("Oep("), "residual": text.contains("PResidual("), "value": text,
-            }),
-        );
+        let mut entry = json!({
+            "file": file, "sha256": sha256_hex(text.as_bytes()), "bytes": text.len(),
+            "wall": wall, "cpu": cpu, "lower": 0.0, "reduce": 0.0, "finalise": wall,
+            "reductions": 0, "refinalised_from_retain_sha256": retained_sha256,
+            "laurent_tail_in_range_terms": Vakint::p_laurent_tail_in_range_terms() - tails,
+            "window": [window.0, window.1], "support": support,
+            "oep": text.contains("Oep("), "residual": text.contains("PResidual("), "value": text,
+        });
+        let unknown = unknown_masters(&value);
+        if !unknown.is_empty() {
+            entry["unknown_masters"] = json!(unknown);
+        }
+        modes.insert("symbolic".to_string(), entry);
         entries.push(json!({"projection": name, "status": "VALUE", "modes": modes}));
     }
     let provenance = json!({
@@ -2118,6 +2175,41 @@ mod tests {
         assert_eq!(again["failed"], 1, "{again}");
         assert_eq!(record(&cfg)["status"], "FAILED");
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// UNKNOWN MASTER COEFFICIENTS (user ruling 2026-11-19, WS/notes/unknown-masters.md): `vakint::UNKNOWN(master, k)`
+    /// is the ONE allowed foreign function; it is carried (listed per value), its master symbol is not foreign; a
+    /// malformed UNKNOWN (wrong arity, a non-integer order, a non-symbol master) and every other foreign symbol stay errors.
+    #[test]
+    fn unknown_master_coefficients_are_carried_and_nothing_else_is_admitted() {
+        let e = epsilon_symbol();
+        let parse = |t: &str| symbolica::try_parse!(t).unwrap();
+        let ok = parse(
+            "refpath::CA*refpath::TF^4*refpath::nf^4*vakint::ε^-2 + 3/7*refpath::CA*refpath::TF^4*refpath::nf^4*vakint::UNKNOWN(vakint::ggppss_int_53,7)*vakint::ε^-1",
+        );
+        assert!(
+            foreign_symbols(&ok, e).is_empty(),
+            "{:?}",
+            foreign_symbols(&ok, e)
+        );
+        assert_eq!(
+            unknown_masters(&ok),
+            vec![parse("vakint::UNKNOWN(vakint::ggppss_int_53,7)").to_canonical_string()]
+        );
+        assert_eq!(laurent_support(&ok, e), vec![-2, -1]);
+        for bad in [
+            "vakint::UNKNOWN(vakint::ggppss_int_53,7,1)*vakint::ε^-1",
+            "vakint::UNKNOWN(vakint::ggppss_int_53,1/2)*vakint::ε^-1",
+            "vakint::UNKNOWN(3,7)*vakint::ε^-1",
+            "vakint::ggppss_int_53*vakint::ε^-1",
+            "refpath::CA*vakint::other*vakint::ε^-1",
+        ] {
+            assert!(
+                !foreign_symbols(&parse(bad), e).is_empty(),
+                "{bad} admitted"
+            );
+        }
+        assert!(unknown_masters(&parse("refpath::CA*vakint::ε^-1")).is_empty());
     }
 
     /// The driver's ε is vakint's (`vakint::ε`, as in every value), and a
