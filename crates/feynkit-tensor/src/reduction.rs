@@ -34,6 +34,7 @@
 use std::borrow::Borrow;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::mem;
+use std::sync::LazyLock;
 
 use feynkit_graph::FeynmanDiagram;
 use idenso::tensor::{ContractSettings, SymbolicTensor};
@@ -42,7 +43,7 @@ use spenso::network::{library::symbolic::ETS, tags::SPENSO_TAG};
 use spenso::structure::{
     partial::{PartialStructure, PartialStructureExt},
     representation::{BaseRepName, LibraryRep, Minkowski},
-    slot::IsAbstractSlot,
+    slot::{IsAbstractSlot, SlotMatch, SlotMatcher},
 };
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
 use symbolica::utils::resources;
@@ -52,6 +53,11 @@ use thiserror::Error;
 mod blocks;
 mod external;
 mod scalars;
+
+/// The opaque coefficient `grouped_coefficient(n)` of structure `n` in
+/// [`TensorReducer::with_structure_grouping`].
+static GROUPED: LazyLock<Symbol> =
+    LazyLock::new(|| symbolica::symbol!("feynkit_tensor::grouped_coefficient"));
 
 use crate::{
     OrthogonalWeingarten, WeingartenError,
@@ -356,6 +362,8 @@ pub struct TensorReducer {
     /// Chunks of the source's top-level terms reduced in the caller's rayon
     /// pool ([`Self::with_parallel_chunks`]); 0 or 1: one call.
     parallel_chunks: usize,
+    /// Each distinct structure reduced once ([`Self::with_structure_grouping`]).
+    structure_grouping: bool,
 }
 
 impl TensorReducer {
@@ -389,6 +397,7 @@ impl TensorReducer {
             row_mode: None,
             dispatch: None,
             parallel_chunks: 0,
+            structure_grouping: false,
         }
     }
 
@@ -509,6 +518,42 @@ impl TensorReducer {
         self.parallel_chunks
     }
 
+    /// Reduce each distinct STRUCTURE of the source once (off by default; a
+    /// vacuum reduction only: with an external vector the call is unchanged).
+    ///
+    /// The source's top-level terms are grouped by their structure: the
+    /// product of the factors that carry tensor content (an explicit slot of
+    /// any representation, a dot of an integrated vector with a spectator, and
+    /// every factor not recognised as invariant). The rest of each term is a
+    /// rotation-invariant scalar of the integrated vectors (no Minkowski
+    /// content; a dot without an integrated vector to project, such as the dot
+    /// of two integrated vectors; a function without explicit slots, such as a
+    /// propagator, which the block path also keeps whole and never projects)
+    /// and is summed per structure. The reducer then sees `SUM_S h_S S`, one
+    /// opaque scalar `h_S` per distinct structure, and `h_S` is replaced by its
+    /// sum in every output term. Exact by linearity; the output terms are
+    /// factored differently from the ungrouped call's (equal as a value). On
+    /// an expanded sum whose terms share few structures (nf0 #32's four-loop
+    /// hard terms: 50,729 terms in 386 structures, 86,164 in 488) the call
+    /// costs a small fraction of the ungrouped one.
+    ///
+    /// ```
+    /// use feynkit_tensor::TensorReducer;
+    /// use symbolica::parse;
+    ///
+    /// let reducer = TensorReducer::new(parse!("D")).with_structure_grouping(true);
+    /// assert!(reducer.structure_grouping());
+    /// ```
+    pub fn with_structure_grouping(mut self, grouping: bool) -> Self {
+        self.structure_grouping = grouping;
+        self
+    }
+
+    /// Whether [`Self::with_structure_grouping`] is on.
+    pub fn structure_grouping(&self) -> bool {
+        self.structure_grouping
+    }
+
     /// Return the process-memory and elapsed-time configuration.
     pub fn resource_limits(&self) -> ResourceLimits {
         self.resource_limits
@@ -589,6 +634,9 @@ impl TensorReducer {
         &self,
         source: &SymbolicTensor<PartialStructure>,
     ) -> Result<TensorReduction, TensorReductionError> {
+        if self.structure_grouping && self.external_vectors.is_empty() {
+            return self.reduce_grouped(source);
+        }
         if self.parallel_chunks > 1
             && let AtomView::Add(_) = source.expression().as_view()
         {
@@ -599,6 +647,164 @@ impl TensorReducer {
             resources::checkpoint()?;
             Ok(reduction)
         })
+    }
+
+    /// Whether a factor of a term is a rotation-invariant scalar of the
+    /// integrated vectors ([`Self::with_structure_grouping`]); anything not
+    /// recognised as such is structure.
+    fn is_invariant_factor(&self, factor: AtomView<'_>, matcher: &mut SlotMatcher) -> bool {
+        if !factor.contains_symbol(Minkowski::selfless_symbol()) {
+            return true;
+        }
+        let base = match factor {
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                if exponent.contains_symbol(Minkowski::selfless_symbol()) {
+                    return false;
+                }
+                base
+            }
+            other => other,
+        };
+        let AtomView::Fun(function) = base else {
+            return false;
+        };
+        let mut explicit = false;
+        base.visitor(&mut |node| {
+            if matches!(node, AtomView::Fun(_))
+                && matches!(matcher.classify(node), SlotMatch::Explicit(_))
+            {
+                explicit = true;
+            }
+            !explicit
+        });
+        if explicit {
+            return false;
+        }
+        if function.get_symbol() == SPENSO_TAG.dot {
+            return matches!(self.parse_monomial(factor), Ok(term) if term.integrated.is_empty());
+        }
+        true
+    }
+
+    /// The distinct structures of `terms` (in first-occurrence order) and,
+    /// per structure, the sum of the invariant rest of its terms
+    /// ([`Self::with_structure_grouping`]).
+    fn structure_groups(
+        &self,
+        terms: &[Atom],
+    ) -> Result<(Vec<Atom>, Vec<Atom>), TensorReductionError> {
+        let mut matcher = SlotMatcher::default();
+        // the same factors (propagators, dots) recur in thousands of terms:
+        // each distinct factor is classified once
+        let mut classified = HashMap::<Atom, bool>::new();
+        let mut index = BTreeMap::<Atom, usize>::new();
+        let mut structures = Vec::<Atom>::new();
+        let mut scalars = Vec::<Vec<Atom>>::new();
+        for (n, term) in terms.iter().enumerate() {
+            if n % 1024 == 0 {
+                resources::checkpoint()?;
+            }
+            let factors = match term.as_view() {
+                AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+                other => vec![other],
+            };
+            let (mut structure, mut scalar) = (Atom::num(1), Atom::num(1));
+            for factor in factors {
+                let factor = factor.to_owned();
+                let invariant = match classified.get(&factor) {
+                    Some(invariant) => *invariant,
+                    None => {
+                        let invariant = self.is_invariant_factor(factor.as_view(), &mut matcher);
+                        classified.insert(factor.clone(), invariant);
+                        invariant
+                    }
+                };
+                if invariant {
+                    scalar *= factor;
+                } else {
+                    structure *= factor;
+                }
+            }
+            let slot = *index.entry(structure.clone()).or_insert_with(|| {
+                structures.push(structure);
+                scalars.push(Vec::new());
+                structures.len() - 1
+            });
+            scalars[slot].push(scalar);
+        }
+        let coefficients = scalars
+            .iter()
+            .map(|scalar| Atom::add_many(scalar.iter()))
+            .collect();
+        Ok((structures, coefficients))
+    }
+
+    /// [`Self::with_structure_grouping`]: the source grouped by structure,
+    /// reduced once per structure, the summed invariant coefficients
+    /// substituted back.
+    fn reduce_grouped(
+        &self,
+        source: &SymbolicTensor<PartialStructure>,
+    ) -> Result<TensorReduction, TensorReductionError> {
+        let ungrouped = TensorReducer {
+            structure_grouping: false,
+            ..self.clone()
+        };
+        let terms = Self::source_terms(source);
+        let (structures, coefficients) =
+            ResourceBudget::new(self.resource_limits).run(|| self.structure_groups(&terms))?;
+        if structures.len() == terms.len() {
+            return ungrouped.reduce(source);
+        }
+        let grouped = structures
+            .iter()
+            .enumerate()
+            .map(|(n, structure)| {
+                FunctionBuilder::new(*GROUPED)
+                    .add_arg(Atom::num(n as i64))
+                    .finish()
+                    * structure
+            })
+            .collect::<Vec<_>>();
+        let grouped = Atom::add_many(grouped.iter());
+        // the grouped sum has the source's interface: inferred, and taken when
+        // it equals the source's slot for slot, else checked against it
+        let grouped = match SymbolicTensor::infer(grouped.clone()) {
+            Ok(inferred)
+                if inferred.structure().logical_slots() == source.structure().logical_slots() =>
+            {
+                inferred
+            }
+            _ => source.with_checked_expression(grouped)?,
+        };
+        let mut reduction = ungrouped.reduce(&grouped)?;
+        let substitute = |atom: &Atom| {
+            atom.replace_map(|value, _, out| {
+                if let AtomView::Fun(function) = value
+                    && function.get_symbol() == *GROUPED
+                    && function.get_nargs() == 1
+                    && let Some(n) = function
+                        .iter()
+                        .next()
+                        .and_then(|n| i64::try_from(n).ok())
+                        .and_then(|n| usize::try_from(n).ok())
+                    && let Some(coefficient) = coefficients.get(n)
+                {
+                    **out = coefficient.clone();
+                }
+            })
+        };
+        reduction.budget.run(|| {
+            for term in &mut reduction.terms {
+                resources::checkpoint()?;
+                term.coefficient = substitute(&term.coefficient);
+                let expression = substitute(term.tensor.expression());
+                term.tensor = term.tensor.with_checked_expression(expression)?;
+            }
+            Ok::<(), TensorReductionError>(())
+        })?;
+        Ok(reduction)
     }
 
     /// The source's top-level terms in its canonical order (the source itself
@@ -2300,6 +2506,100 @@ mod tests {
         assert_eq!(
             single.expression().to_canonical_string(),
             one_call.expression().to_canonical_string()
+        );
+    }
+
+    /// Eight top-level terms in four structures (rank two in `k(1)`, `k(2)`
+    /// with the open indices mu, nu; dots of `k` with `q`), their scalar
+    /// coefficients holding invariants: dots of two integrated vectors and a
+    /// slot-free function of them (a propagator), cooked as vakint cooks.
+    fn grouping_fixture() -> (TensorReducer, SymbolicTensor<PartialStructure>) {
+        let (k, q, _, _) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::grouping_D"));
+        let mu = Atom::var(symbol!("feynkit_tensor_test::grouping_mu"));
+        let nu = Atom::var(symbol!("feynkit_tensor_test::grouping_nu"));
+        let km = |l: i64| indexed(k, l, &dimension, &mu);
+        let kn = |l: i64| indexed(k, l, &dimension, &nu);
+        let kq = |l: i64| dot(&compact(k, l, &dimension), &compact(q, 1, &dimension));
+        let kk = |a: i64, b: i64| dot(&compact(k, a, &dimension), &compact(k, b, &dimension));
+        let propagator = FunctionBuilder::new(symbol!("feynkit_tensor_test::propagator"))
+            .add_arg(kk(1, 2) + kk(1, 1))
+            .finish();
+        let numerator = km(1) * kn(1) * kk(1, 2)
+            + Atom::num(3) * km(1) * kn(1) * kk(1, 1)
+            + km(1) * kn(1) * &propagator
+            + km(1) * kn(2) * kq(1)
+            + km(1) * kn(2) * kq(1) * kk(2, 2) * &propagator
+            + km(2) * kn(2)
+            + Atom::num(5) * km(2) * kn(2) * kk(1, 2).pow(Atom::num(2))
+            + km(1) * kn(2) * kq(1) * kq(2) * kk(1, 1);
+        let cooking = idenso::CookSettings::indices()
+            .with_mode(idenso::CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let reducer = TensorReducer::new(dimension).with_integrated_head(k);
+        let source = reducer
+            .admit(cooking.try_cook(numerator.as_view()).unwrap())
+            .unwrap();
+        (reducer, source)
+    }
+
+    /// Reducing each distinct structure once equals the ungrouped reduction as
+    /// a value, on the grouping fixture and on the chunk fixture; off by
+    /// default; a single term and an already-distinct sum fall back to the
+    /// ungrouped call (byte-identical).
+    #[test]
+    fn structure_grouping_equals_the_ungrouped_reduction() {
+        for (name, (reducer, source)) in
+            [("grouping", grouping_fixture()), ("chunk", chunk_fixture())]
+        {
+            assert!(!reducer.structure_grouping());
+            let plain = reducer.reduce(&source).unwrap().into_expression().unwrap();
+            let grouped = reducer
+                .clone()
+                .with_structure_grouping(true)
+                .reduce(&source)
+                .unwrap()
+                .into_expression()
+                .unwrap();
+            assert!(
+                (plain.expression() - grouped.expression())
+                    .expand()
+                    .is_zero(),
+                "{name}:\nungrouped {}\ngrouped   {}",
+                plain.expression(),
+                grouped.expression()
+            );
+            assert!(
+                !grouped
+                    .expression()
+                    .contains_symbol(symbol!("feynkit_tensor::grouped_coefficient")),
+                "{name}: a placeholder survived"
+            );
+        }
+        // the grouping fixture's 8 terms are 4 structures
+        let (reducer, source) = grouping_fixture();
+        let terms = TensorReducer::source_terms(&source);
+        let (structures, coefficients) = reducer.structure_groups(&terms).unwrap();
+        assert_eq!(
+            (terms.len(), structures.len(), coefficients.len()),
+            (8, 4, 4)
+        );
+        let AtomView::Add(sum) = source.expression().as_view() else {
+            panic!("the fixture is a sum")
+        };
+        let single = source
+            .with_checked_expression(sum.iter().next().unwrap().to_owned())
+            .unwrap();
+        let plain = reducer.reduce(&single).unwrap().into_expression().unwrap();
+        let grouped = reducer
+            .with_structure_grouping(true)
+            .reduce(&single)
+            .unwrap()
+            .into_expression()
+            .unwrap();
+        assert_eq!(
+            plain.expression().to_canonical_string(),
+            grouped.expression().to_canonical_string()
         );
     }
 
