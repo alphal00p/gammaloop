@@ -2290,11 +2290,7 @@ fn scalar_sunrise_inspect() -> Result<()> {
             .derived_data
             .representations
             .values()
-            .flat_map(|data| {
-                data.all_mighty_integrand
-                    .iter()
-                    .map(|(_, expression)| expression)
-            })
+            .flat_map(|data| data.all_mighty_integrand.expressions())
         {
             assert!(!expression.contains_symbol(GS.uv_integrate));
             let _ = expression.replace_map(|view, _, _| {
@@ -2797,14 +2793,18 @@ fn raised_iterated_threshold_components_match_cff_and_ltd() -> Result<()> {
         gammaloop_integration_tests::workspace_root()
             .join("tests/resources/graphs/ir_safe_thresholds/triple_dotted_bubble.dot"),
     )?
-    .replacen(
-        "digraph triple_dotted_bubble {",
-        &format!(
-            "digraph triple_dotted_bubble {{\nthreshold_counterterms = \"{}\";\n",
-            directives.replace('"', "\\\"")
-        ),
-        1,
-    );
+    .lines()
+    .map(|line| {
+        if line.trim_start().starts_with("digraph ") {
+            format!(
+                "{line}\nthreshold_counterterms = \"{}\";\n",
+                directives.replace('"', "\\\"")
+            )
+        } else {
+            format!("{line}\n")
+        }
+    })
+    .collect::<String>();
     let mut route_results = Vec::new();
     for (route, local_4d, representation) in [
         ("cff3d", false, RepresentationMode::Cff),

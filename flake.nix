@@ -19,6 +19,11 @@
       url = "github:ipetkov/crane";
     };
 
+    cargo-dyndrv = {
+      url = "github:lcnbr/cargo-dyndrv/c1935d6314ea41013aea17a330d218efa35df6c7";
+      flake = false;
+    };
+
     # Refresh deliberately with `just ci-cache-base REVISION` after a green run.
     ci-cache-base = {
       url = "github:alphal00p/gammaloop/9935a2b52d047daf5bbe6616c798fa07e364da6a";
@@ -102,6 +107,104 @@
         workspaceRoot = ./.;
         incrementalBaselineRoot = /. + builtins.unsafeDiscardStringContext self.inputs.ci-cache-base.outPath;
       };
+      requestedTestProfile = builtins.getEnv "GAMMALOOP_NIX_TEST_PROFILE";
+      notebookWasmToolchain = fenix.packages.${system}.combine [
+        ciToolchain
+        fenix.packages.${system}.targets.wasm32-unknown-emscripten.stable.rust-std
+      ];
+      notebookWasm = import ./nix/notebook-wasm.nix {
+        inherit pkgs docsPkgs craneLib workspace;
+        toolchain = notebookWasmToolchain;
+        workspaceRoot = ./.;
+      };
+      testWorkspace =
+        if requestedTestProfile == "" || requestedTestProfile == workspace.ciCargoProfile
+        then workspace
+        else
+          import ./nix/rust-workspace.nix {
+            inherit self pkgs docsPkgs craneLib wasmCraneLib ciToolchain wasmTarget system nixCiArtifactBarrier;
+            workspaceRoot = ./.;
+            testCargoProfile = requestedTestProfile;
+            incrementalBaselineRoot = /. + builtins.unsafeDiscardStringContext self.inputs.ci-cache-base.outPath;
+          };
+      development = import ./nix/development.nix {
+        inherit pkgs craneLib workspace;
+        workspaceRoot = ./.;
+      };
+      developmentTools = import ./nix/development-tools.nix {inherit pkgs;};
+      developmentDispatchPython = pkgs.python313.withPackages (ps: [ps.tomli-w]);
+      developmentDispatchTools = [
+        developmentDispatchPython
+        developmentTools
+        ciToolchain
+        pkgs.git
+        pkgs.jujutsu
+        pkgs.just
+        pkgs.gnugrep
+        pkgs.gnused
+        pkgs.shellcheck
+      ];
+      developmentPythonTools = pkgs.buildEnv {
+        name = "gammaloop-development-python-tools";
+        paths = [
+          pkgs.python313
+          pkgs.uv
+          pkgs.maturin
+          ciToolchain
+        ];
+      };
+      developmentDispatchSource = lib.fileset.toSource {
+        root = ./.;
+        fileset = lib.fileset.unions [
+          ./.config/build-profile
+          ./gammaloop
+          ./justfile
+          ./just/ci.just
+          ./just/tests.just
+          ./just/drawing.just
+          ./crates/linnet/Justfile
+          ./crates/linnet-render-py/Cargo.toml
+          ./crates/spynso3/Cargo.toml
+          ./crates/linnet-render-py/data.json
+          ./crates/linnet-render-py/fonts/STIXTwoMath-Regular.woff2
+          ./crates/linnet-render-py/fonts/STIX-Two-OFL.txt
+          ./tydenso/Justfile
+          ./scripts/develop.sh
+          ./scripts/develop_nix.sh
+          ./scripts/develop_dyndrv.sh
+          ./scripts/python_wheel.py
+          ./scripts/cache_publication.py
+          ./nix/browser-check.py
+          ./.github/scripts/observe-nix-build.sh
+          ./.github/scripts/run-nix-ci-check.sh
+          ./.github/scripts/export-test-timings.py
+          ./.github/scripts/test_export_test_timings.py
+          ./.github/workflows/nix.yml
+          ./.github/workflows/docs-pages.yml
+          ./.github/scripts/test_cache_publication.py
+          ./.github/scripts/test_develop.py
+          ./.github/scripts/test_python_wheel.py
+          ./.github/scripts/test_nix_crate_runner.py
+        ];
+      };
+      developmentDispatchCheck =
+        pkgs.runCommand "development-dispatch-check"
+        {
+          nativeBuildInputs = developmentDispatchTools;
+        }
+        ''
+          python3 ${developmentDispatchSource}/.github/scripts/test_develop.py
+          python3 ${developmentDispatchSource}/.github/scripts/test_python_wheel.py
+          python3 ${developmentDispatchSource}/.github/scripts/test_cache_publication.py
+          python3 ${developmentDispatchSource}/.github/scripts/test_nix_crate_runner.py BrowserSelectionTests
+          python3 ${developmentDispatchSource}/.github/scripts/test_export_test_timings.py
+          (
+            cd ${developmentDispatchSource}
+            shellcheck scripts/develop.sh scripts/develop_nix.sh scripts/develop_dyndrv.sh .github/scripts/run-nix-ci-check.sh .github/scripts/observe-nix-build.sh
+          )
+          test -e ${workspace.allChecks.gammaloop-guppy-workspace-graph}
+          mkdir -p "$out"
+        '';
       inherit
         (workspace)
         docsTypst
@@ -117,6 +220,7 @@
         clinnet-cli
         gammaloop-python-module
         nextestUfoPython
+        symbolicaRenderData
         nixCiConfiguration
         guppyWorkspaceGraphJson
         linnest-wasm
@@ -132,6 +236,7 @@
         craneTestDependencyOutputs
         craneTestBinaryPackageOutputs
         nextestContextualTestOutputs
+        nextestCrateChecks
         impureCheckRunnerPackages
         commonArgs
         workspaceTestSrc
@@ -173,7 +278,10 @@
           nickel
           nls
           docsTypst
-          linnetPython
+          # One environment rather than separate Python packages: their setup
+          # hook would put this Python's `_sysconfigdata` on PYTHONPATH, where
+          # any other interpreter, e.g. a uv-managed Python, would read it.
+          (linnetPython.withPackages (ps: [ps.virtualenv]))
           docsPkgs.roboto
           cargo-nextest
           pkg-config
@@ -195,7 +303,6 @@
           poppler-utils
           rust-analyzer
           maturin
-          virtualenv
         ]
         ++ lib.optionals (!pkgs.stdenv.hostPlatform.isDarwin) [
           valgrind
@@ -211,6 +318,9 @@
             # `typst.withPackages` injects this only into its executable wrapper.
             # The persistent Rust renderer and typst-py need the same package tree directly.
             TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
+            shellHook = ''
+              export SYMBOLICA_DATA_DIRECTORY="${symbolicaRenderData}''${SYMBOLICA_DATA_DIRECTORY:+:$SYMBOLICA_DATA_DIRECTORY}"
+            '';
 
             CC = nixCc;
             CXX = nixCxx;
@@ -231,7 +341,14 @@
             RUSTFLAGS = rustFlags;
           });
     in {
-      checks = allChecks;
+      lib.cachePublication =
+        (import ./nix/ci.nix {
+          inherit system;
+          workspaceGraph = builtins.fromJSON (builtins.readFile ./nix/ci-workspace-graph.json);
+        }).publication;
+      checks =
+        (builtins.removeAttrs allChecks workspace.licensedCheckNames)
+        // {gammaloop-guppy-workspace-graph = developmentDispatchCheck;};
 
       hydraJobs = hestiaChecks;
 
@@ -239,15 +356,34 @@
 
       packages =
         {
+          development-tools = developmentTools;
+          development-python-tools = developmentPythonTools;
           default = gammaloop-cli;
           clinnet = clinnet-cli;
           gammaloop = gammaloop-cli;
           inherit clinnet-cli;
           "gammaloop-python-module" = nixCiArtifactBarrier "gammaloop-python-module" gammaloop-python-module;
           "gammaloop-ufo-python-runtime" = nextestUfoPython;
+          "gammaloop-render-data" = symbolicaRenderData;
           "alphal00p-docs-cargo-artifacts" = alphal00pDocsCargoArtifacts;
           "alphal00p-docs-pages" = alphal00pDocsPages;
           "alphal00p-docs-snapshot-fixture" = alphal00pDocsSnapshotFixture;
+          "alphal00p-docs-notebooks" = workspace.alphal00pDocsNotebooks;
+          "alphal00p-docs-cells" = workspace.alphal00pDocsCells;
+          "test-documentation-cells" = workspace.alphal00pDocsCellsTest;
+          "profile-notebook-startup" = workspace.alphal00pDocsNotebookProfile;
+          "alphal00p-docs-publication" = workspace.alphal00pDocsPublication;
+          "notebook-wasm-toolchain" = notebookWasmToolchain;
+          "notebook-wasm-deps" = notebookWasm.notebookWasmDeps;
+          "notebook-wasm-wheel" = notebookWasm.notebookWasmWheel;
+          "notebook-ufo-wheel" = workspace.notebookUfoWheel;
+          "test-native-notebook-examples" = workspace.alphal00pDocsNativeNotebooks;
+          "test-notebook-examples" = import ./nix/notebook-tests.nix {
+            inherit pkgs;
+            alphal00pDocsNotebooks = workspace.alphal00pDocsNotebooks;
+            notebookWasmWheel = notebookWasm.notebookWasmWheel;
+            notebookUfoWheel = workspace.notebookUfoWheel;
+          };
           "ci-workspace-graph-json" = guppyWorkspaceGraphJson;
           "nix-ci-config" = nixCiConfiguration;
           inherit linnest-wasm;
@@ -267,6 +403,8 @@
         // craneTestDependencyOutputs
         // craneTestBinaryPackageOutputs
         // nextestContextualTestOutputs
+        // testWorkspace.nextestCrateChecks
+        // lib.mapAttrs' (name: value: lib.nameValuePair "development-${name}" value) development
         // impureCheckRunnerPackages
         // lib.optionalAttrs (!pkgs.stdenv.hostPlatform.isDarwin) {
           gammaloop-llvm-coverage = craneLib.cargoLlvmCov (commonArgs
@@ -278,6 +416,20 @@
         };
 
       apps = {
+        development-tests = flake-utils.lib.mkApp {
+          drv = pkgs.writeShellApplication {
+            name = "gammaloop-development-tests";
+            runtimeInputs = developmentDispatchTools;
+            text = ''
+              python3 .github/scripts/test_develop.py "$@"
+              python3 .github/scripts/test_python_wheel.py "$@"
+              python3 .github/scripts/test_cache_publication.py "$@"
+              python3 .github/scripts/test_nix_crate_runner.py BrowserSelectionTests "$@"
+              python3 .github/scripts/test_export_test_timings.py "$@"
+              shellcheck scripts/develop.sh scripts/develop_nix.sh scripts/develop_dyndrv.sh .github/scripts/run-nix-ci-check.sh .github/scripts/observe-nix-build.sh
+            '';
+          };
+        };
         ci-report = flake-utils.lib.mkApp {
           drv = pkgs.writeShellApplication {
             name = "ci-report";

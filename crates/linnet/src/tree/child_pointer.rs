@@ -730,7 +730,39 @@ impl<V> From<ParentChildStore<V>> for ParentPointerStore<V> {
 
 impl<V> From<ParentPointerStore<V>> for ParentChildStore<V> {
     fn from(value: ParentPointerStore<V>) -> Self {
-        ChildVecStore::from(value).into()
+        let mut nodes: Vec<_> = value
+            .nodes
+            .into_iter()
+            .enumerate()
+            .map(|(index, parent_pointer)| {
+                let id = TreeNodeId(index);
+                PCNode {
+                    parent_pointer,
+                    child: None,
+                    neighbor_left: id,
+                    neighbor_right: id,
+                }
+            })
+            .collect();
+
+        // Parent-pointer conversion orders siblings by their original node ID.
+        // Link that same cyclic list directly, without per-parent child vectors
+        // or moving the payload through an intermediate forest store.
+        for index in 0..nodes.len() {
+            if let ParentId::Node(parent) = nodes[index].parent_pointer.parent {
+                let id = TreeNodeId(index);
+                if let Some(first) = nodes[parent.0].child {
+                    let last = nodes[first.0].neighbor_left;
+                    nodes[last.0].neighbor_right = id;
+                    nodes[index].neighbor_left = last;
+                    nodes[index].neighbor_right = first;
+                    nodes[first.0].neighbor_left = id;
+                } else {
+                    nodes[parent.0].child = Some(id);
+                }
+            }
+        }
+        Self { nodes }
     }
 }
 
@@ -750,6 +782,82 @@ mod test {
     use std::collections::BTreeSet;
 
     use super::ParentChildStore;
+
+    #[test]
+    fn parent_pointer_conversion_preserves_all_node_fields() {
+        use crate::tree::parent_pointer::{PPNode, ParentId, ParentPointerStore};
+
+        // Include forward parents, cycles, self-parents, dataless nodes and
+        // pointing roots. Conversion preserves these raw fields; validation of
+        // a tree's shape remains the existing separate boundary.
+        for count in 0..=5usize {
+            let choices = count + 4;
+            for mut code in 0..choices.pow(count as u32) {
+                let source: ParentPointerStore<_> = (0..count)
+                    .map(|index| {
+                        let choice = code % choices;
+                        code /= choices;
+                        let parent = match choice.checked_sub(count) {
+                            None => ParentId::Node(TreeNodeId(choice)),
+                            Some(0) => ParentId::Root(RootId(0)),
+                            Some(1) => ParentId::Root(RootId(usize::MAX)),
+                            Some(2) => ParentId::PointingRoot(TreeNodeId(0)),
+                            _ => ParentId::PointingRoot(TreeNodeId(usize::MAX)),
+                        };
+                        PPNode {
+                            parent,
+                            data: (index % 2 == 0).then_some(index),
+                        }
+                    })
+                    .collect();
+                let expected: ParentChildStore<_> = ChildVecStore::from(source.clone()).into();
+                let actual = ParentChildStore::from(source);
+                assert_eq!(actual.nodes, expected.nodes);
+            }
+        }
+    }
+
+    #[test]
+    fn parent_pointer_conversion_preserves_nonclone_payloads_and_invalid_parent_drop() {
+        use crate::tree::parent_pointer::{PPNode, ParentId, ParentPointerStore};
+        use std::{cell::RefCell, panic::AssertUnwindSafe, rc::Rc};
+
+        struct Payload(usize, Rc<RefCell<Vec<usize>>>);
+        impl Drop for Payload {
+            fn drop(&mut self) {
+                self.1.borrow_mut().push(self.0);
+            }
+        }
+        for parent in [0, 1, 2, 3, usize::MAX] {
+            let mut results = Vec::new();
+            for direct in [false, true] {
+                let drops = Rc::new(RefCell::new(Vec::new()));
+                let source: ParentPointerStore<_> = (0..3)
+                    .map(|index| PPNode {
+                        parent: if index == 1 {
+                            ParentId::Node(TreeNodeId(parent))
+                        } else {
+                            ParentId::Root(RootId(index))
+                        },
+                        data: Some(Payload(index, drops.clone())),
+                    })
+                    .collect();
+                let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
+                    let converted: ParentChildStore<_> = if direct {
+                        ParentChildStore::from(source)
+                    } else {
+                        ChildVecStore::from(source).into()
+                    };
+                    assert!(drops.borrow().is_empty());
+                    drop(converted);
+                }));
+                results.push((outcome.is_ok(), drops.borrow().clone()));
+            }
+            assert_eq!(results[0], results[1], "parent {parent}");
+            assert_eq!(results[0].0, parent < 3);
+            assert_eq!(results[0].1, [0, 1, 2]);
+        }
+    }
 
     #[test]
     fn create() {}

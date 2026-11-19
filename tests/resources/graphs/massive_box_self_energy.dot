@@ -1,20 +1,28 @@
-digraph massive_box_self_energy {
-edge [
-    pdg=1001
-]
-ext0 [style=invis]
-ext1 [style=invis]
-ext2 [style=invis]
-ext3 [style=invis]
-ext0 -> v5:0 
-ext1 -> v6:1 
-ext2 -> v7:2 
-v8:3 -> ext3 
-v5 -> v6 
-v6 -> v9 [ lmb_id=0]
-v9 -> v10 [ lmb_id=1]
-v9 -> v10 
-v10 -> v7 
-v7 -> v8 
-v8 -> v5 
+digraph massive_box_self_energy{
+  num = "1";
+  overall_factor = "1";
+  overall_factor_evaluated = "1";
+  projector = "1";
+  v10[dod="0" int_id="V_3_SCALAR_111" num="UFO::SCALAR_COUPLING"];
+  v5[dod="0" int_id="V_3_SCALAR_111" num="UFO::SCALAR_COUPLING"];
+  v6[dod="0" int_id="V_3_SCALAR_111" num="UFO::SCALAR_COUPLING"];
+  v7[dod="0" int_id="V_3_SCALAR_111" num="UFO::SCALAR_COUPLING"];
+  v8[dod="0" int_id="V_3_SCALAR_111" num="UFO::SCALAR_COUPLING"];
+  v9[dod="0" int_id="V_3_SCALAR_111" num="UFO::SCALAR_COUPLING"];
+
+  ext0 [style=invis];
+  ext0 -> v5:0 [id=0 dir=none sink="{ufo_order:0}" dod="-2" lmb_rep="P(0,a___)" name="e0" num="1𝑖" particle="scalar_1"];
+  ext1 [style=invis];
+  ext1 -> v6:1 [id=1 dir=none sink="{ufo_order:0}" dod="-2" lmb_rep="P(1,a___)" name="e1" num="1𝑖" particle="scalar_1"];
+  ext2 [style=invis];
+  ext2 -> v7:2 [id=2 dir=none sink="{ufo_order:0}" dod="-2" lmb_rep="P(2,a___)" name="e2" num="1𝑖" particle="scalar_1"];
+  v10:4 -> v7:5 [id=3 dir=none source="{ufo_order:0}" sink="{ufo_order:1}" dod="-2" lmb_rep="K(0,a___)" name="e3" num="1𝑖" particle="scalar_1"];
+  v5:6 -> v6:7 [id=4 dir=none source="{ufo_order:1}" sink="{ufo_order:1}" dod="-2" lmb_rep="-1*P(1,a___)+K(0,a___)" name="e4" num="1𝑖" particle="scalar_1"];
+  v6:8 -> v9:9 [id=5 dir=none source="{ufo_order:2}" sink="{ufo_order:0}" dod="-2" lmb_id="0" lmb_rep="K(0,a___)" name="e5" num="1𝑖" particle="scalar_1"];
+  v7:10 -> v8:11 [id=6 dir=none source="{ufo_order:2}" sink="{ufo_order:1}" dod="-2" lmb_rep="K(0,a___)+P(2,a___)" name="e6" num="1𝑖" particle="scalar_1"];
+  v8:12 -> v5:13 [id=7 dir=none source="{ufo_order:2}" sink="{ufo_order:2}" dod="-2" lmb_rep="-1*P(0,a___)+-1*P(1,a___)+K(0,a___)" name="e7" num="1𝑖" particle="scalar_1"];
+  ext8 [style=invis];
+  v8:3 -> ext8 [id=8 dir=none source="{ufo_order:0}" dod="-2" lmb_rep="P(0,a___)+P(1,a___)+P(2,a___)" name="e8" num="1𝑖" particle="scalar_1"];
+  v9:14 -> v10:15 [id=9 dir=none source="{ufo_order:1}" sink="{ufo_order:1}" dod="-2" lmb_id="1" lmb_rep="K(1,a___)" name="e9" num="1𝑖" particle="scalar_1"];
+  v9:16 -> v10:17 [id=10 dir=none source="{ufo_order:2}" sink="{ufo_order:2}" dod="-2" lmb_rep="-1*K(1,a___)+K(0,a___)" name="e10" num="1𝑖" particle="scalar_1"];
 }

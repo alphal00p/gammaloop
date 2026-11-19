@@ -2,9 +2,9 @@
 #import "components.typ": *
 
 #let compact-authors(authors) = if authors.len() <= 8 {
-  authors.join(", ")
+  authors.join("; ")
 } else {
-  authors.slice(0, 6).join(", ") + ", et al."
+  authors.slice(0, 6).join("; ") + "; et al."
 }
 
 #let publication-type-label(kind) = (
@@ -28,14 +28,14 @@
     #publication-authors[#compact-authors(publication.authors)]
 
     #navigation("Citation links")[
-      #link(publication.url)[INSPIRE]
+      #link(publication.url)[INSPIRE #arrow()]
       #if doi != none {
         link("https://doi.org/" + doi)[DOI #arrow()]
       }
       #if arxiv != none {
         link("https://arxiv.org/abs/" + arxiv)[arXiv #arrow()]
       }
-      #link(publication.bibtex_url)[BibTeX]
+      #link(publication.bibtex_url)[BibTeX #arrow()]
     ]
   ]
 }
@@ -52,6 +52,8 @@
 #let publications = [
   #page-hero(class: "portal-page-hero-compact")[
     = Publications
+
+    Research on Local Unitarity, perturbative calculations, and the methods behind the software.
 
     #publication-provenance[
       Updated #publication-cache.updated · #link(publication-cache.api_url)[

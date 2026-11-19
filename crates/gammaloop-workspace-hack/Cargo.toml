@@ -26,6 +26,7 @@ crossterm = { version = "0.29", features = ["serde"] }
 either = { version = "1", features = ["use_std"] }
 hashbrown = { version = "0.17" }
 indexmap = { version = "2", features = ["serde"] }
+libc = { version = "0.2" }
 log = { version = "0.4", default-features = false, features = ["std"] }
 matrixmultiply = { version = "0.3", features = ["cgemm"] }
 memchr = { version = "2" }
@@ -33,19 +34,25 @@ num-bigint = { version = "0.4" }
 num-complex = { version = "0.4" }
 num-integer = { version = "0.1", features = ["i128"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
-numerica = { version = "3", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "serde"] }
 rand = { version = "0.8", features = ["small_rng"] }
-regex-automata = { version = "0.4", default-features = false, features = ["dfa-build", "dfa-onepass", "hybrid", "meta", "nfa-backtrack", "perf-inline", "perf-literal", "std", "unicode"] }
+regex = { version = "1" }
+regex-automata = { version = "0.4", default-features = false, features = ["dfa-build", "dfa-onepass", "hybrid", "meta", "nfa", "perf", "std", "unicode"] }
 regex-syntax = { version = "0.8" }
+rust-embed-utils = { version = "8", default-features = false, features = ["debug-embed", "include-exclude"] }
 serde = { version = "1", features = ["alloc", "derive"] }
-serde_core = { version = "1", default-features = false, features = ["alloc", "result", "std"] }
+serde_core = { version = "1", features = ["alloc"] }
 serde_json = { version = "1", features = ["alloc", "float_roundtrip"] }
+serde_spanned = { version = "1" }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde"] }
 smartstring = { version = "1", features = ["serde"] }
-symbolica = { version = "3", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
 time = { version = "0.3", features = ["formatting", "parsing"] }
+toml_datetime = { version = "1", features = ["serde"] }
+toml_parser = { version = "1" }
+toml_writer = { version = "1" }
 tracing = { version = "0.1", features = ["release_max_level_info"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "time"] }
+winnow-ca01ad9e24f5d932 = { package = "winnow", version = "0.7" }
+winnow-dff4ba8e3ae991db = { package = "winnow", version = "1" }
 zerocopy = { version = "0.8", default-features = false, features = ["derive", "simd"] }
 
 [build-dependencies]
@@ -57,10 +64,10 @@ clap = { version = "4", features = ["derive", "env", "unicode", "unstable-ext", 
 clap_builder = { version = "4", default-features = false, features = ["color", "env", "std", "suggestions", "unicode", "unstable-ext", "usage", "wrap_help"] }
 console = { version = "0.16" }
 crossterm = { version = "0.29", features = ["serde"] }
-derive_more-impl = { version = "2", features = ["from", "into", "is_variant"] }
 either = { version = "1", features = ["use_std"] }
 hashbrown = { version = "0.17" }
 indexmap = { version = "2", features = ["serde"] }
+libc = { version = "0.2" }
 log = { version = "0.4", default-features = false, features = ["std"] }
 matrixmultiply = { version = "0.3", features = ["cgemm"] }
 memchr = { version = "2" }
@@ -68,34 +75,44 @@ num-bigint = { version = "0.4" }
 num-complex = { version = "0.4" }
 num-integer = { version = "0.1", features = ["i128"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
-numerica = { version = "3", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "serde"] }
+proc-macro2 = { version = "1" }
+quote = { version = "1" }
 rand = { version = "0.8", features = ["small_rng"] }
-regex-automata = { version = "0.4", default-features = false, features = ["dfa-build", "dfa-onepass", "hybrid", "meta", "nfa-backtrack", "perf-inline", "perf-literal", "std", "unicode"] }
+regex = { version = "1" }
+regex-automata = { version = "0.4", default-features = false, features = ["dfa-build", "dfa-onepass", "hybrid", "meta", "nfa", "perf", "std", "unicode"] }
 regex-syntax = { version = "0.8" }
+rust-embed-utils = { version = "8", default-features = false, features = ["debug-embed", "include-exclude"] }
 serde = { version = "1", features = ["alloc", "derive"] }
-serde_core = { version = "1", default-features = false, features = ["alloc", "result", "std"] }
+serde_core = { version = "1", features = ["alloc"] }
 serde_json = { version = "1", features = ["alloc", "float_roundtrip"] }
+serde_spanned = { version = "1" }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde"] }
 smartstring = { version = "1", features = ["serde"] }
-symbolica = { version = "3", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
+syn = { version = "2", features = ["extra-traits", "fold", "full", "visit-mut"] }
 time = { version = "0.3", features = ["formatting", "parsing"] }
+toml_datetime = { version = "1", features = ["serde"] }
+toml_parser = { version = "1" }
+toml_writer = { version = "1" }
 tracing = { version = "0.1", features = ["release_max_level_info"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "time"] }
+winnow-ca01ad9e24f5d932 = { package = "winnow", version = "0.7" }
+winnow-dff4ba8e3ae991db = { package = "winnow", version = "1" }
 zerocopy = { version = "0.8", default-features = false, features = ["derive", "simd"] }
 
 [target.x86_64-unknown-linux-gnu.dependencies]
-libc = { version = "0.2", features = ["extra_traits"] }
+libc = { version = "0.2", default-features = false, features = ["extra_traits"] }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 
 [target.x86_64-unknown-linux-gnu.build-dependencies]
-libc = { version = "0.2", features = ["extra_traits"] }
+libc = { version = "0.2", default-features = false, features = ["extra_traits"] }
 rustix = { version = "1", features = ["fs", "stdio", "termios"] }
 
 ### END HAKARI SECTION
 
 # The normal gammalooprs CI graph enables arrayvec's std/default feature set
-# through Symbolica. Keep this small anchor so reusable native consumers
-# retain the same feature set outside Hakari's managed section.
+# through vakint. Vakint stays out of Hakari traversal because its optional
+# Python/stubgen features are too broad for the common cache target, so keep
+# this small feature anchor outside Hakari's managed section.
 [dependencies.arrayvec]
 version = "0.7"
 features = ["std"]
@@ -116,27 +133,20 @@ features = ["std"]
 version = "0.3"
 features = ["std"]
 
-# Documentation and tests activate these additive features on dependencies of
-# the GammaLoop libraries. Keep their native library artifacts interchangeable.
-[dependencies.figment]
-version = "0.10"
-features = ["json"]
+# Preserve native feature unification with the workspace Symbolica and
+# Numerica versions.
+[dependencies.symbolica]
+workspace = true
+features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"]
 
-[dependencies.derive_more]
-version = "2"
-features = ["add", "add_assign", "as_ref", "deref", "deref_mut", "display", "from", "index", "into", "into_iterator", "is_variant", "mul", "mul_assign"]
+[build-dependencies.symbolica]
+workspace = true
+features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"]
 
-[build-dependencies.derive_more]
-version = "2"
-features = ["add", "add_assign", "as_ref", "deref", "deref_mut", "display", "from", "index", "into", "into_iterator", "is_variant", "mul", "mul_assign"]
+[dependencies.numerica]
+workspace = true
+features = ["bincode", "float-mpfr", "integer-gmp", "serde"]
 
-[build-dependencies.syn]
-version = "2"
-features = ["extra-traits", "fold", "full", "visit", "visit-mut"]
-
-# Table formatting is target-only. Preserve the native CI feature union without
-# compiling the ANSI table stack again for the hack's build script.
-[dependencies.tabled]
-version = "0.22"
-default-features = false
-features = ["ansi", "derive", "std"]
+[build-dependencies.numerica]
+workspace = true
+features = ["bincode", "float-mpfr", "integer-gmp", "serde"]

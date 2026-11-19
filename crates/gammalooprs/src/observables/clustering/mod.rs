@@ -14,12 +14,22 @@ pub use types::{ClusteringResult, Jet};
     Debug, Clone, Copy, Default, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema,
 )]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 pub enum JetAlgorithm {
     Kt,
     CambridgeAachen,
     #[default]
     AntiKt,
+}
+
+impl From<JetAlgorithm> for feynkit_kinematics::JetAlgorithm {
+    fn from(algorithm: JetAlgorithm) -> Self {
+        match algorithm {
+            JetAlgorithm::Kt => Self::Kt,
+            JetAlgorithm::CambridgeAachen => Self::CambridgeAachen,
+            JetAlgorithm::AntiKt => Self::AntiKt,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]

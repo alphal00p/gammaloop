@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeSet,
     env,
     ffi::OsString,
     path::Path,
@@ -437,29 +438,45 @@ payload = {{
         ),
     )?;
 
-    assert_eq!(
-        payload["group_sizes"].as_array().unwrap(),
-        &vec![JsonValue::from(1_u64), JsonValue::from(2_u64)]
-    );
+    let mut group_sizes = payload["group_sizes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|size| size.as_u64().unwrap())
+        .collect::<Vec<_>>();
+    group_sizes.sort_unstable();
+    assert_eq!(group_sizes, vec![1, 2]);
     assert_eq!(payload["generated_event_count"].as_u64(), Some(3));
     assert_eq!(payload["accepted_event_count"].as_u64(), Some(3));
 
     let groups = payload["groups"].as_array().unwrap();
-    assert_eq!(groups[0][0]["graph_id"].as_u64(), Some(0));
-    assert_eq!(groups[0][0]["cut_id"].as_u64(), Some(0));
-    assert_eq!(
-        groups[0][0]["incoming_pdgs"]
-            .as_array()
-            .unwrap()
+    let mut graph_ids = BTreeSet::new();
+    for group in groups {
+        let events = group.as_array().unwrap();
+        let graph_id = events[0]["graph_id"].as_u64().unwrap();
+        graph_ids.insert(graph_id);
+        let cut_ids = events
             .iter()
-            .filter_map(|value| value.as_i64())
-            .collect::<Vec<_>>(),
-        vec![-11, 11]
-    );
-    assert_eq!(groups[1][0]["graph_id"].as_u64(), Some(1));
-    assert_eq!(groups[1][0]["cut_id"].as_u64(), Some(0));
-    assert_eq!(groups[1][1]["graph_id"].as_u64(), Some(1));
-    assert_eq!(groups[1][1]["cut_id"].as_u64(), Some(1));
+            .map(|event| {
+                assert_eq!(event["graph_id"].as_u64(), Some(graph_id));
+                assert_eq!(
+                    event["incoming_pdgs"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .filter_map(|value| value.as_i64())
+                        .collect::<Vec<_>>(),
+                    vec![-11, 11]
+                );
+                event["cut_id"].as_u64().unwrap()
+            })
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            cut_ids,
+            BTreeSet::from_iter((0..events.len()).map(|cut_id| cut_id as u64))
+        );
+    }
+    assert_eq!(graph_ids, BTreeSet::from([0, 1]));
     let formatted = payload["formatted"].as_str().unwrap();
     assert!(formatted.contains("Kinematics"));
     assert!(formatted.contains("PDG"));
@@ -784,7 +801,7 @@ payload = {{
 #[test]
 fn python_residue_map_preserves_native_affine_maps_and_saved_selection() -> Result<()> {
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
-    let graph = workspace_root().join("tests/resources/graphs/scalar_box.dot");
+    let graph = workspace_root().join("tests/resources/graphs/scalar_box_scalar_compact.dot");
     let commands = vec![
         "import model scalars-default.json".to_string(),
         "set global kv global.display_directive=warn global.generation.three_dimensional_representations='[\"ltd\",\"cff\"]' global.generation.uv.local_uv_cts_from_expanded_4d_integrands=true global.generation.uv.subtract_uv=false global.generation.uv.generate_integrated=false global.generation.threshold_subtraction.enable_thresholds=false global.generation.evaluator.compile=false global.generation.evaluator.iterative_orientation_optimization=false global.generation.tropical_subgraph_table.disable_tropical_generation=true".to_string(),
@@ -1001,7 +1018,7 @@ fn python_residue_map_keeps_raised_cross_section_denominator_structure() -> Resu
         r#"set default-runtime kv kinematics.externals='{"type":"constant","data":{"momenta":[[4.0,0.0,0.0,0.0]],"helicities":[0]}}' subtraction.disable_threshold_subtraction=true"#.to_string(),
         format!(
             "import graphs '{}' -p residue_dotted -i scalar",
-            root.join("tests/resources/graphs/dotted_bubble.dot").display()
+            root.join("tests/resources/graphs/dotted_bubble_scalar_compact.dot").display()
         ),
         "generate existing -p residue_dotted -i scalar".to_string(),
     ];
@@ -1076,7 +1093,7 @@ payload = {"native_counts": counts, "max_denominator_poles": max_poles,
 #[test]
 fn python_residue_map_preserves_thermal_weights_and_rejects_ltd() -> Result<()> {
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
-    let graph = workspace_root().join("tests/resources/graphs/scalar_box.dot");
+    let graph = workspace_root().join("tests/resources/graphs/scalar_box_scalar_compact.dot");
     let commands = vec![
         "import model scalars-default.json".to_string(),
         "set global kv global.display_directive=warn global.generation.uv.subtract_uv=false global.generation.uv.generate_integrated=false global.generation.threshold_subtraction.enable_thresholds=false global.generation.evaluator.compile=false global.generation.evaluator.iterative_orientation_optimization=false global.generation.tropical_subgraph_table.disable_tropical_generation=true".to_string(),

@@ -769,9 +769,28 @@
             "string",
             "null"
           ]
+        },
+        "tensor_reduction_method": {
+          "description": "Numerator tensor reduction: native FeynKit by default, or the FORM-based AlphaLoop projector.",
+          "$ref": "#/$defs/VakintTensorReductionMethod"
         }
       },
       "additionalProperties": false
+    },
+    "VakintTensorReductionMethod": {
+      "description": "Numerator tensor-reduction backend used by Vakint.",
+      "oneOf": [
+        {
+          "description": "Historical FORM implementation shipped with AlphaLoop.",
+          "type": "string",
+          "const": "alphaloop"
+        },
+        {
+          "description": "Native, FORM-less FeynKit tensor projector.",
+          "type": "string",
+          "const": "feynkit"
+        }
+      ]
     },
     "VectorPolarizationSumGauge": {
       "type": "string",

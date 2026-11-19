@@ -1,4 +1,8 @@
-use std::{cell::Cell, ops::Deref, sync::LazyLock};
+use std::cell::Cell;
+use std::ops::Deref;
+use std::sync::LazyLock;
+
+use symbolica::state::State;
 
 thread_local! {
     static IN_SYMBOLICA_INITIALIZER: Cell<usize> = const { Cell::new(0) };
@@ -31,7 +35,10 @@ fn is_in_symbolica_initializer() -> bool {
 
 fn ensure_symbolica_initialized() {
     if !is_in_symbolica_initializer() {
-        let _ = symbolica::state::State::is_builtin("__spenso_symbolica_init_probe__");
+        // Reentrant probes from unmarked downstream callbacks can return before
+        // global initialization completes. The pinned Symbolica has no completion
+        // query, so every public access must enter its initialization gate.
+        let _ = State::is_builtin("__spenso_symbolica_init_probe__");
     }
 }
 

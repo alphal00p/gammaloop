@@ -15,19 +15,19 @@ use super::{
 use eyre::Result;
 
 use crate::structure::SlotIndex;
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use symbolica_utils::{IntoArgs, IntoSymbol};
 
-#[cfg(not(feature = "symbolica"))]
+#[cfg(not(feature = "shadowing"))]
 use serde::{Deserialize, Serialize};
 
 /// A structure to enable smart shadowing of tensors in a tensor network contraction algorithm.
 #[derive(
     Clone, PartialEq, Eq, Debug, Hash, bincode_trait_derive::Encode, bincode_trait_derive::Decode,
 )]
-#[cfg_attr(not(feature = "symbolica"), derive(Serialize, Deserialize))]
+#[cfg_attr(not(feature = "shadowing"), derive(Serialize, Deserialize))]
 #[cfg_attr(
-feature = "symbolica",
+feature = "shadowing",
 trait_decode(trait = symbolica::state::HasStateMap),
 )]
 pub struct SmartShadowStructure<
@@ -92,7 +92,7 @@ where
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<N: IntoSymbol, A: IntoArgs, R: RepName, Aind: AbsInd> std::fmt::Display
     for SmartShadowStructure<N, A, R, Aind>
 {

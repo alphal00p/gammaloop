@@ -1,0 +1,43 @@
+version = 1
+revision = 5
+requires-python = "==3.13.*"
+
+[[package]]
+name = "gammaloop-ci-ufo-runtime"
+version = "0.0.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "symbolica" },
+    { name = "ufo-model-loader" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "symbolica", specifier = "==3.0.0" },
+    { name = "ufo-model-loader", specifier = "==1.0.1" },
+]
+
+[[package]]
+name = "symbolica"
+version = "3.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/cc/56/a2c6cb62f5b66b94b91d4a946319e7344ab327c2b8c8853b73ca86f2bc04/symbolica-3.0.0.tar.gz", hash = "sha256:f5bf56715fd3ff1017771f3f6ca9d3ee0cec335a283f679dca06d169e4200024", size = 732283, upload-time = "2026-10-02T11:34:55.192Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/91/6c/a7a4bfc317d942fb2712c6465f6aa6cd4f22c327f4c3a0982446290bb2b0/symbolica-3.0.0-cp314-abi3-pyemscripten_2026_0_wasm32.whl", hash = "sha256:8822b12d963f17131f778cb382be93f5b0e321b03d0f93d88aa1bae741e47673", size = 32340088, upload-time = "2026-10-02T11:47:19.718Z" },
+    { url = "https://files.pythonhosted.org/packages/b3/e7/7fa38476a5918994093d1af7acbd28489307ff780167dcfd3b40350c7905/symbolica-3.0.0-cp39-abi3-macosx_10_12_x86_64.whl", hash = "sha256:b2ea03b9be72a3ebc3fa950d7380b09223084cb5554aa0877c59e12d7749c2a7", size = 92946157, upload-time = "2026-10-02T11:34:41.285Z" },
+    { url = "https://files.pythonhosted.org/packages/e7/68/b019e129512b3ab21ad7912a268d4f9284b1a550edbb9cc519b9718ef792/symbolica-3.0.0-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:6b7414d8d06ac20c92460e0685c794d97afe976968b5fba5cc9562c471b2365d", size = 79234978, upload-time = "2026-10-02T11:34:45.033Z" },
+    { url = "https://files.pythonhosted.org/packages/a8/c9/c18cccc41176637463872cf0111e3d55b5a8f1a144de94fcf9c1b1d7ee86/symbolica-3.0.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a2977f78d8f40ce3206ba49850cf75f473785a32a9368e6115d059755a48d15e", size = 91636277, upload-time = "2026-10-02T11:34:48.915Z" },
+    { url = "https://files.pythonhosted.org/packages/05/8b/52026e47f6aedd150d92c02c5f3953ca0cd11ebfd7cb449ae0c99cf9b5ce/symbolica-3.0.0-cp39-abi3-win_amd64.whl", hash = "sha256:bcc3a69d4fd16e71b6d8189b9cf85bbc5724cf542a573cbdea21960ea16f9b32", size = 101959972, upload-time = "2026-10-02T11:34:52.664Z" },
+]
+
+[[package]]
+name = "ufo-model-loader"
+version = "1.0.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "symbolica" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/33/1c/85e03b60954953e18e504098d3daa3f7c6dd2d0ec5a23b0c871ae7c372b3/ufo_model_loader-1.0.1.tar.gz", hash = "sha256:9665833acaa1e099649e3e79ae4e52d8473a22d4f62133fc69db38b560bf7159", size = 109676, upload-time = "2026-10-19T13:44:02.723Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b8/d7/a1f5e88376b0d8ec17ca4f16ad0121d03c0e01b675c3f7c6604fce8dafa8/ufo_model_loader-1.0.1-py3-none-any.whl", hash = "sha256:379a2ed96e2c4db9a753b7f7e5e9801c7837059479e7135b78cc35da5f747dea", size = 128198, upload-time = "2026-10-19T13:44:01.392Z" },
+]

@@ -3,6 +3,7 @@ use std::{
     fmt::Display,
 };
 
+use crate::cff::RaisedEsurfaceId;
 use color_eyre::eyre::Result;
 use colored::Colorize;
 use eyre::eyre;
@@ -18,7 +19,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     DependentMomentaConstructor,
-    cff::esurface::{ExistingEsurfaceId, ExistingEsurfaces, GroupEsurfaceId, RaisedEsurfaceId},
+    cff::esurface::{ExistingEsurfaceId, ExistingEsurfaces, GroupEsurfaceId},
     graph::{FeynmanGraph, GraphGroupPosition, LmbError, lmb::LMBwithEdges},
     integrands::{
         evaluation::PreciseEvaluationResult,
@@ -62,14 +63,14 @@ pub struct IRProfileSetting {
 }
 
 impl AmplitudeGraphTerm {
-    fn enumerate_ir_limits(&self) -> Vec<IrLimit> {
+    fn enumerate_ir_limits(&self, model: &Model) -> Vec<IrLimit> {
         let mut limits: HashSet<IrLimit> = HashSet::new();
 
         let massless_edges: Vec<EdgeIndex> = self
             .graph
             .iter_edges_of(&!self.graph.tree_edges.clone())
             .filter_map(|(_a, b, c)| {
-                if c.data.particle.is_massless() {
+                if c.data.particle.is_massless(model) {
                     Some(b)
                 } else {
                     None
@@ -102,7 +103,7 @@ impl AmplitudeGraphTerm {
 }
 
 impl CrossSectionGraphTerm {
-    fn enumerate_ir_limits(&self) -> Vec<IrLimit> {
+    fn enumerate_ir_limits(&self, model: &Model) -> Vec<IrLimit> {
         let mut limits: HashSet<IrLimit> = HashSet::new();
         let loop_count = self.graph.loop_momentum_basis.loop_edges.len();
 
@@ -113,7 +114,7 @@ impl CrossSectionGraphTerm {
             let massless_edges_in_cut = representative_cut_esurface
                 .energies
                 .iter()
-                .filter(|edge_id| self.graph[**edge_id].particle.is_massless())
+                .filter(|edge_id| self.graph[**edge_id].particle.is_massless(model))
                 .copied()
                 .collect_vec();
 
@@ -814,7 +815,7 @@ fn run_ir_profile<I: ProcessIntegrandImpl>(
     integrand: &mut I,
     ir_profile_settings: &IRProfileSetting,
     model: &Model,
-    enumerate_limits: impl Fn(&I) -> Vec<(String, Vec<ProfileLimit>)>,
+    enumerate_limits: impl Fn(&I, &Model) -> Vec<(String, Vec<ProfileLimit>)>,
     graph_cut_definitions: impl Fn(&I, usize) -> Vec<GraphCutDefinition>,
     points_on_threshold: &[OverlapStructureWithKinematics<ArbPrec>],
     mut test_single_limit: impl FnMut(
@@ -832,7 +833,7 @@ fn run_ir_profile<I: ProcessIntegrandImpl>(
         if let Some(select_limits_and_graphs) = &ir_profile_settings.select_limits_and_graphs {
             parse_select_limits_and_graphs(integrand, select_limits_and_graphs)?
         } else {
-            enumerate_limits(integrand)
+            enumerate_limits(integrand, model)
         };
 
     let mut result = IrLimitTestReport {
@@ -881,8 +882,8 @@ fn run_ir_profile<I: ProcessIntegrandImpl>(
 }
 
 impl AmplitudeIntegrand {
-    pub fn ir_profile_completion_entries(&self) -> Vec<(String, Vec<String>)> {
-        ir_profile_completion_entries(self.enumerate_ir_limits())
+    pub fn ir_profile_completion_entries(&self, model: &Model) -> Vec<(String, Vec<String>)> {
+        ir_profile_completion_entries(self.enumerate_ir_limits(model))
     }
 
     pub fn test_ir(
@@ -963,14 +964,14 @@ impl AmplitudeIntegrand {
         result
     }
 
-    fn enumerate_ir_limits(&self) -> Vec<(String, Vec<ProfileLimit>)> {
+    fn enumerate_ir_limits(&self, model: &Model) -> Vec<(String, Vec<ProfileLimit>)> {
         self.data
             .graph_terms
             .iter()
             .map(|term| {
                 let graph_name = term.graph.name.clone();
                 let mut limits = term
-                    .enumerate_ir_limits()
+                    .enumerate_ir_limits(model)
                     .into_iter()
                     .map(ProfileLimit::Ir)
                     .collect_vec();
@@ -1215,8 +1216,8 @@ impl AmplitudeIntegrand {
 }
 
 impl CrossSectionIntegrand {
-    pub fn ir_profile_completion_entries(&self) -> Vec<(String, Vec<String>)> {
-        ir_profile_completion_entries(self.enumerate_ir_limits())
+    pub fn ir_profile_completion_entries(&self, model: &Model) -> Vec<(String, Vec<String>)> {
+        ir_profile_completion_entries(self.enumerate_ir_limits(model))
     }
 
     pub fn test_ir(
@@ -1265,14 +1266,14 @@ impl CrossSectionIntegrand {
         result
     }
 
-    fn enumerate_ir_limits(&self) -> Vec<(String, Vec<ProfileLimit>)> {
+    fn enumerate_ir_limits(&self, model: &Model) -> Vec<(String, Vec<ProfileLimit>)> {
         self.data
             .graph_terms
             .iter()
             .map(|term| {
                 let graph_name = term.graph.name.clone();
                 let limits = term
-                    .enumerate_ir_limits()
+                    .enumerate_ir_limits(model)
                     .into_iter()
                     .map(ProfileLimit::Ir)
                     .collect();

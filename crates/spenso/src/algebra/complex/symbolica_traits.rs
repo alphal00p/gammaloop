@@ -273,6 +273,12 @@ where
         self.im.set_from(&other.im);
     }
 
+    #[inline]
+    fn set_precision(&mut self, precision: u32) {
+        self.re.set_precision(precision);
+        self.im.set_precision(precision);
+    }
+
     #[inline(always)]
     fn is_fully_zero(&self) -> bool {
         self.re.is_fully_zero() && self.im.is_fully_zero()
@@ -345,12 +351,6 @@ where
     }
 
     #[inline(always)]
-    fn set_precision(&mut self, precision: u32) {
-        self.re.set_precision(precision);
-        self.im.set_precision(precision);
-    }
-
-    #[inline(always)]
     fn get_epsilon(&self) -> f64 {
         (2.0f64).powi(-(self.get_precision() as i32))
     }
@@ -368,7 +368,7 @@ where
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<T: Real> Real for Complex<T>
 where
     T: for<'a> RefMul<&'a T, Output = T>

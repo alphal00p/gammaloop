@@ -5192,7 +5192,7 @@ mod tests {
                 },
                 ModelParameterCompletionEntry {
                     name: "beta".to_string(),
-                    parameter_type: ParameterType::Imaginary,
+                    parameter_type: ParameterType::Complex,
                 },
             ],
             ..CompletionState::default()
@@ -5239,7 +5239,7 @@ mod tests {
                 },
                 ModelParameterCompletionEntry {
                     name: "gamma".to_string(),
-                    parameter_type: ParameterType::Imaginary,
+                    parameter_type: ParameterType::Complex,
                 },
             ],
             ..CompletionState::default()
@@ -5278,7 +5278,7 @@ mod tests {
             &CompletionState {
                 model_parameter_entries: vec![ModelParameterCompletionEntry {
                     name: "beta".to_string(),
-                    parameter_type: ParameterType::Imaginary,
+                    parameter_type: ParameterType::Complex,
                 }],
                 ..CompletionState::default()
             },
@@ -6238,8 +6238,8 @@ mod tests {
         );
 
         assert!(values.contains(&"no_grouping".to_string()));
-        assert!(values.contains(&"only_detect_zeroes".to_string()));
         assert!(values.contains(&"group_identical_graphs_up_to_sign".to_string()));
+        assert!(values.contains(&"group_identical_graphs_up_to_scalar_rescaling".to_string()));
     }
 
     #[test]

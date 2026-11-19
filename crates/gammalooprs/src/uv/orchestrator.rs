@@ -2,11 +2,7 @@ use std::{collections::BTreeMap, time::Instant};
 
 use color_eyre::Result;
 use eyre::{WrapErr, eyre};
-use idenso::{
-    IndexTooling,
-    color::ColorSimplifier,
-    shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
-};
+use idenso::{CookMode, CookSettings, IndexTooling, tensor::SymbolicTensor};
 use linnet::half_edge::subgraph::{Inclusion, SubSetLike, SubSetOps};
 use symbolica::atom::{Atom, AtomCore};
 use three_dimensional_reps::RepresentationMode;
@@ -14,6 +10,7 @@ use vakint::Vakint;
 
 use crate::{
     graph::{Graph, cuts::CutSet, feynman_graph::FeynmanGraph},
+    model::Model,
     numerator::aind::Aind,
     processes::GraphGenerationStats,
     settings::global::GenerationSettings,
@@ -31,16 +28,17 @@ use crate::{
     },
 };
 
-impl UVOrchestrator {
+impl Graph {
     pub(crate) fn parametric_integrands(
-        self,
-        graph: &mut Graph,
+        &mut self,
+        model: &Model,
         cut_structure: CutStructure,
         vakint: &Vakint,
         orientations: &[OrientationProjection<'_>],
         settings: &GenerationSettings,
         stats: &mut GraphGenerationStats,
     ) -> Result<BTreeMap<RepresentationMode, Vec<ParametricIntegrands>>> {
+        let graph = self;
         if !matches!(settings.uv.final_integrand, FinalIntegrandDimension::ThreeD) {
             return Err(eyre!(
                 "4D parametric UV integrands are not supported yet; this mode is planned for a future implementation"
@@ -50,25 +48,28 @@ impl UVOrchestrator {
 
         settings.validate_medium_uv_compatibility()?;
 
-        let result = match self {
-            Self::LegacyDagForest => legacy_parametric_integrands(
+        let result = match settings.uv.orchestrator {
+            UVOrchestrator::LegacyDagForest => legacy_parametric_integrands(
                 graph,
+                model,
                 cut_structure,
                 vakint,
                 orientations,
                 settings,
                 stats,
             ),
-            Self::HedgePoset => hedge_poset_parametric_integrands(
+            UVOrchestrator::HedgePoset => hedge_poset_parametric_integrands(
                 graph,
+                model,
                 cut_structure,
                 vakint,
                 orientations,
                 settings,
                 stats,
             ),
-            Self::Compare => compare_parametric_integrands(
+            UVOrchestrator::Compare => compare_parametric_integrands(
                 graph,
+                model,
                 cut_structure,
                 vakint,
                 orientations,
@@ -90,10 +91,13 @@ impl UVOrchestrator {
             })
             .collect()
     }
+}
 
+impl UVOrchestrator {
     pub(crate) fn renormalization_part(
         self,
         graph: &mut Graph,
+        model: &Model,
         orientation: OrientationProjection<'_>,
         settings: &UVgenerationSettings,
     ) -> Result<RenormalizationPart> {
@@ -103,9 +107,11 @@ impl UVOrchestrator {
         };
         validate_local_counterterm_schemes(graph, &CutStructure::empty(graph), &settings)?;
         let mut result = match self {
-            Self::LegacyDagForest => legacy_renormalization_part(graph, orientation, &settings),
-            Self::HedgePoset => hedge_poset_renormalization_part(graph, &settings),
-            Self::Compare => compare_renormalization_part(graph, orientation, &settings),
+            Self::LegacyDagForest => {
+                legacy_renormalization_part(graph, model, orientation, &settings)
+            }
+            Self::HedgePoset => hedge_poset_renormalization_part(graph, model, &settings),
+            Self::Compare => compare_renormalization_part(graph, model, orientation, &settings),
         }?;
         result.expression = UvMarker::new(&settings).finish(&result.expression);
         Ok(result)
@@ -126,7 +132,12 @@ pub(crate) fn validate_local_counterterm_schemes(
     for (cut_index, cut) in cuts.cuts.iter().enumerate() {
         let subgraph = uncut.subtract(&cut.union);
         let spinneys = graph
-            .classified_spinneys(&subgraph, settings, &graph.loop_momentum_basis)
+            .classified_spinneys(
+                &subgraph,
+                &graph.model,
+                settings,
+                &graph.loop_momentum_basis,
+            )
             .wrap_err_with(|| {
                 format!(
                     "graph '{}' cut {cut_index}: failed to classify UV counterterm components",
@@ -206,13 +217,14 @@ pub(crate) fn validate_local_counterterm_schemes(
 
 fn legacy_parametric_integrands(
     graph: &mut Graph,
+    model: &Model,
     cut_structure: CutStructure,
     vakint: &Vakint,
     orientations: &[OrientationProjection<'_>],
     settings: &GenerationSettings,
     stats: &mut GraphGenerationStats,
 ) -> Result<BTreeMap<RepresentationMode, Vec<ParametricIntegrands>>> {
-    let cut_woods = CutWoods::new(cut_structure, graph, settings)?;
+    let cut_woods = CutWoods::new(cut_structure, graph, model, settings)?;
     let mut cut_forests = cut_woods.unfold(graph);
     let mut projection_context = Local4dProjectionContext::default();
     orientations
@@ -239,13 +251,14 @@ fn legacy_parametric_integrands(
 
 fn hedge_poset_parametric_integrands(
     graph: &mut Graph,
+    model: &Model,
     cut_structure: CutStructure,
     vakint: &Vakint,
     orientations: &[OrientationProjection<'_>],
     settings: &GenerationSettings,
     stats: &mut GraphGenerationStats,
 ) -> Result<BTreeMap<RepresentationMode, Vec<ParametricIntegrands>>> {
-    let wood = HedgePosetWood::new(cut_structure, graph, settings)?;
+    let wood = HedgePosetWood::new(cut_structure, graph, model, settings)?;
     let mut forests = wood.unfold();
     let mut projection_context = Local4dProjectionContext::default();
     orientations
@@ -253,14 +266,18 @@ fn hedge_poset_parametric_integrands(
         .enumerate()
         .map(|(index, &orientation)| {
             let started = Instant::now();
-            let shared = forests.compute(
-                graph,
-                vakint,
-                orientation,
-                &settings.uv,
-                index == 0,
-                &mut projection_context,
-            )?;
+            let shared_before = projection_context.shared_preparation_time;
+            if index == 0 {
+                forests.prepare_four_d(
+                    graph,
+                    model,
+                    vakint,
+                    &settings.uv,
+                    &mut projection_context,
+                )?;
+            }
+            forests.compute(graph, orientation, &settings.uv, &mut projection_context)?;
+            let shared = projection_context.shared_preparation_time - shared_before;
             let integrands = forests.orientation_parametric_exprs(graph, &settings.uv)?;
             let representation = orientation.cff_options()?.representation;
             stats.representation_mut(representation).total_time +=
@@ -272,6 +289,7 @@ fn hedge_poset_parametric_integrands(
 
 fn compare_parametric_integrands(
     graph: &mut Graph,
+    model: &Model,
     cut_structure: CutStructure,
     vakint: &Vakint,
     orientations: &[OrientationProjection<'_>],
@@ -281,6 +299,7 @@ fn compare_parametric_integrands(
     let mut hedge_graph = graph.clone();
     let legacy = legacy_parametric_integrands(
         graph,
+        model,
         cut_structure.clone(),
         vakint,
         orientations,
@@ -289,6 +308,7 @@ fn compare_parametric_integrands(
     )?;
     let hedge = hedge_poset_parametric_integrands(
         &mut hedge_graph,
+        model,
         cut_structure,
         vakint,
         orientations,
@@ -310,6 +330,7 @@ fn compare_parametric_integrands(
 
 fn legacy_renormalization_part(
     graph: &mut Graph,
+    model: &Model,
     orientation: OrientationProjection<'_>,
     settings: &UVgenerationSettings,
 ) -> Result<RenormalizationPart> {
@@ -317,7 +338,12 @@ fn legacy_renormalization_part(
     vk_settings.project_onto_tensor_integrals =
         settings.project_integrated_uv_cts_onto_tensor_integrals;
     let wood = graph
-        .wood_with_settings(&graph.no_dummy(), settings, &graph.loop_momentum_basis)
+        .wood_with_settings(
+            &graph.no_dummy(),
+            model,
+            settings,
+            &graph.loop_momentum_basis,
+        )
         .wrap_err_with(|| {
             format!(
                 "graph '{}': failed to classify uncut UV counterterm components",
@@ -345,6 +371,7 @@ fn legacy_renormalization_part(
 
 fn hedge_poset_renormalization_part(
     graph: &mut Graph,
+    model: &Model,
     settings: &UVgenerationSettings,
 ) -> Result<RenormalizationPart> {
     let cuts = CutStructure::empty(graph);
@@ -352,20 +379,21 @@ fn hedge_poset_renormalization_part(
         uv: settings.clone(),
         ..GenerationSettings::default()
     };
-    let wood = HedgePosetWood::new(cuts, graph, &generation_settings)?;
+    let wood = HedgePosetWood::new(cuts, graph, model, &generation_settings)?;
     let mut forest = wood.unfold();
-    forest.integrate(graph, crate::utils::vakint()?, settings)?;
+    forest.integrate(graph, model, crate::utils::vakint()?, settings)?;
     forest.renormalization_part_of_ends(graph, settings)
 }
 
 fn compare_renormalization_part(
     graph: &mut Graph,
+    model: &Model,
     orientation: OrientationProjection<'_>,
     settings: &UVgenerationSettings,
 ) -> Result<RenormalizationPart> {
     let mut hedge_graph = graph.clone();
-    let legacy = legacy_renormalization_part(graph, orientation, settings)?;
-    let hedge = hedge_poset_renormalization_part(&mut hedge_graph, settings)?;
+    let legacy = legacy_renormalization_part(graph, model, orientation, settings)?;
+    let hedge = hedge_poset_renormalization_part(&mut hedge_graph, model, settings)?;
 
     RenormalizationComparison {
         legacy: &legacy,
@@ -478,8 +506,8 @@ impl<'a> ComparableExpr<'a> {
     }
 
     fn equivalent_to(&self, other: &Self) -> Result<bool> {
-        let left = self.normalized();
-        let right = other.normalized();
+        let left = self.normalized()?;
+        let right = other.normalized()?;
 
         // Backend-local topology labels may differ on contracted indices.
         if left.collect_factors() == right.collect_factors() {
@@ -490,13 +518,23 @@ impl<'a> ComparableExpr<'a> {
             == right.canonize(Aind::Dummy)?.collect_factors())
     }
 
-    fn normalized(&self) -> Atom {
-        self.atom
-            .replace(crate::utils::GS.dim)
-            .with(4)
-            .simplify_metrics()
-            .to_dots()
-            .simplify_color()
+    fn normalized(&self) -> Result<Atom> {
+        let input = self.atom.replace(crate::utils::GS.dim).with(4);
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let normalized = SymbolicTensor::infer_indexed(cooking.try_cook(input.as_view())?)?
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                color: Some(Default::default()),
+                ..Default::default()
+            })?
+            .contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?
+            .to_dots()?;
+        Ok(cooking.uncook(normalized.expression().as_view()))
     }
 }
 
@@ -504,15 +542,14 @@ impl<'a> ComparableExpr<'a> {
 mod tests {
     use super::*;
     use crate::{
-        dot,
-        graph::parse::IntoGraph,
+        finalized_runtime_dot,
         initialisation::test_initialise,
         utils::load_generic_model,
         uv::{ApproximationType, CTRenormalizationRule, RenormalizationPrescriptionSettings},
     };
     use idenso::{bis, gamma};
-    use linnet::half_edge::subgraph::SubSetLike;
-    use spenso::{chain, mink, p};
+    use linnet::half_edge::{involution::EdgeIndex, subgraph::SubSetLike};
+    use spenso::{chain, mink};
     use std::collections::BTreeSet;
     use symbolica::symbol;
 
@@ -529,24 +566,26 @@ mod tests {
             let term = |index: Atom| {
                 common.clone()
                     * chain!(start.clone(), end.clone(), gamma!(index.clone()))
-                    * p!(index)
+                    * crate::utils::GS.emr_vec(EdgeIndex::from(0), index)
             };
             term(contracted) + term(fixed)
         };
         let legacy = expression(1);
         let hedge = expression(0);
+        assert_ne!(legacy, hedge, "the source dummy-index charts must differ");
         let legacy = ComparableExpr::new(&legacy);
         let hedge = ComparableExpr::new(&hedge);
 
-        assert_ne!(legacy.normalized(), hedge.normalized());
+        // Shared tensor reduction now contracts these indices during normalization.
+        assert_eq!(legacy.normalized().unwrap(), hedge.normalized().unwrap());
         for expression in [&legacy, &hedge] {
-            assert!(
-                expression
-                    .normalized()
-                    .pattern_match(&spectator.to_pattern(), None, None)
-                    .next()
-                    .is_some()
-            );
+            let normalized = expression.normalized().unwrap();
+            for factor in [
+                symbolica::parse!("compare_a+compare_b"),
+                symbolica::parse!("compare_c+compare_d"),
+            ] {
+                assert!(normalized.contains(&factor), "lost scalar factor {factor}");
+            }
         }
         assert!(
             legacy
@@ -559,10 +598,15 @@ mod tests {
     fn integrated_soft_scheme_is_allowed_before_forest_generation() {
         test_initialise().unwrap();
         let model = load_generic_model("scalars");
-        let graph: Graph =
-            include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot")
-                .into_graph(&model)
-                .unwrap();
+        let graph: Graph = Graph::import_dot(
+            include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot"),
+            &model,
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1, "one fixture graph expected");
+            graphs.remove(0)
+        })
+        .unwrap();
         let settings = UVgenerationSettings {
             generate_integrated: true,
             renormalization_prescription: RenormalizationPrescriptionSettings {
@@ -582,10 +626,15 @@ mod tests {
     fn incompatible_selected_spinney_route_is_reported_with_context() {
         test_initialise().unwrap();
         let model = load_generic_model("scalars");
-        let mut graph: Graph =
-            include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot")
-                .into_graph(&model)
-                .unwrap();
+        let mut graph: Graph = Graph::import_dot(
+            include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot"),
+            &model,
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1, "one fixture graph expected");
+            graphs.remove(0)
+        })
+        .unwrap();
         let settings = UVgenerationSettings {
             generate_integrated: false,
             renormalization_prescription: RenormalizationPrescriptionSettings {
@@ -611,7 +660,7 @@ mod tests {
         let component_label = component.string_label();
         let dod = graph.compute_dod(&component.filter);
         assert_eq!(
-            graph.approximation_scheme(&component.filter, &settings, dod),
+            graph.approximation_scheme(&component.filter, &graph.model, &settings, dod),
             ApproximationType::IR
         );
 
@@ -637,10 +686,15 @@ mod tests {
     fn integrated_on_shell_scheme_is_rejected_before_forest_generation() {
         test_initialise().unwrap();
         let model = load_generic_model("scalars");
-        let graph: Graph =
-            include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot")
-                .into_graph(&model)
-                .unwrap();
+        let graph: Graph = Graph::import_dot(
+            include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot"),
+            &model,
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1, "one fixture graph expected");
+            graphs.remove(0)
+        })
+        .unwrap();
         let settings = UVgenerationSettings {
             generate_integrated: true,
             renormalization_prescription: RenormalizationPrescriptionSettings {
@@ -663,28 +717,30 @@ mod tests {
     #[test]
     fn soft_child_rejects_positive_degree_muv_parent() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(
-            digraph nested_positive_degree_hu {
+        let graph: Graph = finalized_runtime_dot!(digraph nested_positive_degree_hu { graph [projector=1]
                 edge [particle=scalar_1 num=1]
                 node [num=1]
                 ext [style=invis]
-                ext -> v1:0 [id=0]
-                v4:1 -> ext [id=1]
-                v1 -> v2 [id=2 lmb_id=1 num="Q(2,spenso::cind(0))^2"]
-                v2 -> v3 [id=3 particle=scalar_2 lmb_id=0 num="Q(3,spenso::cind(0))"]
-                v2 -> v3 [id=4 particle=scalar_2]
-                v3 -> v4 [id=5]
-                v1 -> v4 [id=6]
-            },
-            "scalars"
-        )
+                ext -> v1:0 [id=0 sink="{ufo_order:0}"]
+                v4:1 -> ext [id=1 source="{ufo_order:0}"]
+                v1 -> v2 [id=2 lmb_id=1 num="Q(2,spenso::cind(0))^2" source="{ufo_order:1}" sink="{ufo_order:0}"]
+                v2 -> v3 [id=3 particle=scalar_2 lmb_id=0 num="Q(3,spenso::cind(0))" source="{ufo_order:1}" sink="{ufo_order:0}"]
+                v2 -> v3 [id=4 particle=scalar_2 source="{ufo_order:2}" sink="{ufo_order:1}"]
+                v3 -> v4 [id=5 source="{ufo_order:2}" sink="{ufo_order:1}"]
+                v1 -> v4 [id=6 source="{ufo_order:2}" sink="{ufo_order:2}"]
+            }, "scalars")
         .unwrap();
         let baseline = UVgenerationSettings {
             generate_integrated: false,
             ..Default::default()
         };
         let spinneys = graph
-            .classified_spinneys(&graph.full_filter(), &baseline, &graph.loop_momentum_basis)
+            .classified_spinneys(
+                &graph.full_filter(),
+                &graph.model,
+                &baseline,
+                &graph.loop_momentum_basis,
+            )
             .unwrap();
         let (child, parent) = spinneys
             .iter()
@@ -705,15 +761,15 @@ mod tests {
             })
             .expect("the fixture must contain a positive-degree child and parent");
         assert_ne!(
-            graph.ct_identifier(child.filter()),
-            graph.ct_identifier(parent.filter()),
+            graph.ct_identifier(child.filter(), &graph.model),
+            graph.ct_identifier(parent.filter(), &graph.model),
             "the fixture must allow the child and parent schemes to be selected independently"
         );
         let settings = UVgenerationSettings {
             generate_integrated: false,
             renormalization_prescription: RenormalizationPrescriptionSettings {
                 overrides: vec![CTRenormalizationRule::new(
-                    graph.ct_identifier(child.filter()),
+                    graph.ct_identifier(child.filter(), &graph.model),
                     ApproximationType::IR,
                 )],
                 ..Default::default()
@@ -721,7 +777,12 @@ mod tests {
             ..Default::default()
         };
         let classified = graph
-            .classified_spinneys(&graph.full_filter(), &settings, &graph.loop_momentum_basis)
+            .classified_spinneys(
+                &graph.full_filter(),
+                &graph.model,
+                &settings,
+                &graph.loop_momentum_basis,
+            )
             .unwrap();
         assert!(classified.iter().any(|spinney| {
             spinney.filter() == child.filter()
@@ -752,9 +813,15 @@ mod tests {
     fn soft_and_pole_part_components_cannot_share_a_wood() {
         test_initialise().unwrap();
         let model = load_generic_model("sm");
-        let graph: Graph = include_str!("../../../../tests/resources/graphs/dgse.dot")
-            .into_graph(&model)
-            .unwrap();
+        let graph: Graph = Graph::import_dot(
+            include_str!("../../../../tests/resources/graphs/dgse.dot"),
+            &model,
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1, "one fixture graph expected");
+            graphs.remove(0)
+        })
+        .unwrap();
         let identifiers = graph
             .spinneys(&graph.full_filter())
             .into_iter()
@@ -762,7 +829,7 @@ mod tests {
                 graph.compute_dod(&spinney.filter) >= 0
                     && graph.underlying.connected_components(spinney).len() == 1
             })
-            .map(|spinney| graph.ct_identifier(&spinney.filter))
+            .map(|spinney| graph.ct_identifier(&spinney.filter, &graph.model))
             .collect::<BTreeSet<_>>();
         assert!(
             identifiers.len() >= 2,
@@ -794,8 +861,8 @@ mod tests {
     #[test]
     fn disjoint_soft_and_pole_part_components_cannot_share_a_wood() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(
-            digraph asymmetric_scalar_spectacles {
+        let graph: Graph = Graph::import_dot(
+            stringify!(digraph asymmetric_scalar_spectacles {
                 num = "-1𝑖/2"
                 node [num = "1"]
                 edge [particle = scalar_1]
@@ -815,9 +882,13 @@ mod tests {
                     num = "Q(3,spenso::cind(1))^2+Q(3,spenso::cind(2))^2+Q(3,spenso::cind(3))^2"
                 ]
                 c -> d [id = 4 particle = scalar_2]
-            },
-            "scalars"
+            }),
+            &crate::utils::load_generic_model("scalars"),
         )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1, "one fixture graph expected");
+            graphs.remove(0)
+        })
         .unwrap();
         let edge_ids = |filter: &linnet::half_edge::subgraph::SuBitGraph| {
             filter
@@ -850,8 +921,8 @@ mod tests {
         );
         assert_eq!(union.filter, left.union(right));
 
-        let left_identifier = graph.ct_identifier(left);
-        let right_identifier = graph.ct_identifier(right);
+        let left_identifier = graph.ct_identifier(left, &graph.model);
+        let right_identifier = graph.ct_identifier(right, &graph.model);
         assert_ne!(
             left_identifier, right_identifier,
             "different internal scalar species must make the two component rules independent"
@@ -870,7 +941,12 @@ mod tests {
             ..Default::default()
         };
         let classified = graph
-            .classified_spinneys(&graph.full_filter(), &settings, &graph.loop_momentum_basis)
+            .classified_spinneys(
+                &graph.full_filter(),
+                &graph.model,
+                &settings,
+                &graph.loop_momentum_basis,
+            )
             .unwrap();
         assert_eq!(
             classified.len(),

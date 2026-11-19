@@ -1,11 +1,9 @@
 use eyre::Context;
+use feynkit_graph::{NumeratorInterface, expressions::evaluate_overall_factor};
 use linnet::parser::GlobalData;
 use symbolica::atom::Atom;
 
-use crate::{
-    feyngen::diagram_generator::evaluate_overall_factor,
-    graph::{GroupId, threshold_counterterms::ThresholdCountertermSpec},
-};
+use crate::graph::{GroupId, threshold_counterterms::ThresholdCountertermSpec};
 
 use super::{
     Graph,
@@ -18,6 +16,8 @@ pub struct ParseData {
     pub overall_factor: Atom,
     pub projectors: Option<Atom>,
     pub num: Atom,
+    pub(crate) num_interface: Option<NumeratorInterface>,
+    pub(crate) projector_interface: Option<NumeratorInterface>,
     pub parameters: Vec<Atom>,
     pub group_id: Option<GroupId>,
     pub is_group_master: bool,
@@ -32,6 +32,8 @@ impl Default for ParseData {
             projectors: None,
             parameters: Vec::new(),
             num: Atom::one(),
+            num_interface: None,
+            projector_interface: None,
             group_id: None,
             is_group_master: false,
             threshold_counterterms: None,
@@ -40,43 +42,21 @@ impl Default for ParseData {
 }
 
 impl ParseData {
-    pub(crate) fn with_overall_factor(self, overall_factor: Atom) -> Self {
-        ParseData {
-            name: self.name,
-            overall_factor,
-            projectors: self.projectors,
-            num: self.num,
-            parameters: self.parameters,
-            group_id: self.group_id,
-            is_group_master: self.is_group_master,
-            threshold_counterterms: self.threshold_counterterms,
-        }
+    pub(crate) fn with_overall_factor(mut self, overall_factor: Atom) -> Self {
+        self.overall_factor = overall_factor;
+        self
     }
 
-    pub(crate) fn with_projectors(self, polarizations: Atom) -> Self {
-        ParseData {
-            name: self.name,
-            overall_factor: self.overall_factor,
-            projectors: Some(polarizations),
-            num: self.num,
-            parameters: self.parameters,
-            group_id: self.group_id,
-            is_group_master: self.is_group_master,
-            threshold_counterterms: self.threshold_counterterms,
-        }
+    pub(crate) fn with_projectors(mut self, polarizations: Atom) -> Self {
+        self.projectors = Some(polarizations);
+        self.projector_interface = None;
+        self
     }
 
-    pub(crate) fn with_num(self, num: Atom) -> Self {
-        ParseData {
-            name: self.name,
-            overall_factor: self.overall_factor,
-            projectors: self.projectors,
-            num,
-            parameters: self.parameters,
-            group_id: self.group_id,
-            is_group_master: self.is_group_master,
-            threshold_counterterms: self.threshold_counterterms,
-        }
+    pub(crate) fn with_num(mut self, num: Atom) -> Self {
+        self.num = num;
+        self.num_interface = None;
+        self
     }
 }
 
@@ -101,6 +81,12 @@ impl TryFrom<linnet::parser::GlobalData> for ParseData {
 
         if let Some(factor) = value.statements.get("num") {
             parse_data = parse_data.with_num(factor.strip_parse().context("num").unwrap());
+        }
+        if let Some(interface) = value.statements.get("numerator_prefactor_interface") {
+            parse_data.num_interface = Some(NumeratorInterface::parse(interface)?);
+        }
+        if let Some(interface) = value.statements.get("projector_interface") {
+            parse_data.projector_interface = Some(NumeratorInterface::parse(interface)?);
         }
 
         if let Some(is_group_master) = value.statements.get("is_group_master") {
@@ -149,14 +135,26 @@ impl Graph {
 
         // println!("Name: {}", self.name);
         g.add_name(self.name.clone());
+        g.statements
+            .insert("gammaloop_runtime".to_owned(), "1".to_owned());
+
+        let (num, num_interface) = NumeratorInterface::export(&self.global_prefactor.num);
+        let (projector, projector_interface) =
+            NumeratorInterface::export(&self.global_prefactor.projector);
+        g.statements.insert("num".to_string(), num.to_quoted());
+        if let Some(interface) = num_interface {
+            g.statements.insert(
+                "numerator_prefactor_interface".to_owned(),
+                interface.to_json(),
+            );
+        }
+        if let Some(interface) = projector_interface {
+            g.statements
+                .insert("projector_interface".to_owned(), interface.to_json());
+        }
 
         g.statements
-            .insert("num".to_string(), self.global_prefactor.num.to_quoted());
-
-        g.statements.insert(
-            "projector".to_string(),
-            self.global_prefactor.projector.to_quoted(),
-        );
+            .insert("projector".to_string(), projector.to_quoted());
         // g.statements.insert(
         //     "overall_factor".to_string(),
         //     self.global_prefactor.color.to_canonical_string(),
@@ -170,6 +168,19 @@ impl Graph {
             "overall_factor_evaluated".to_string(),
             evaluate_overall_factor(self.overall_factor.as_view()).to_quoted(),
         );
+
+        if !self.finalized_cuts.is_empty()
+            || !self.finalized_topology_threshold_candidates.is_empty()
+        {
+            // Runtime DOT intentionally does not serialize canonical physical
+            // cuts or topology-threshold candidates. Cross-section artifacts
+            // must round-trip through FeynmanDiagram DOT, which owns both
+            // typed partition inventories.
+            g.statements.insert(
+                "canonical_cuts_required".to_owned(),
+                "feynkit_diagram_dot".to_owned(),
+            );
+        }
 
         if !self.param_builder.pairs.additional_params.params.is_empty() {
             let params = self
@@ -214,6 +225,16 @@ impl ParseGraph {
 
         g.statements
             .insert("num".to_string(), self.global_data.num.to_quoted());
+        if let Some(interface) = &self.global_data.num_interface {
+            g.statements.insert(
+                "numerator_prefactor_interface".to_owned(),
+                interface.to_json(),
+            );
+        }
+        if let Some(interface) = &self.global_data.projector_interface {
+            g.statements
+                .insert("projector_interface".to_owned(), interface.to_json());
+        }
         if let Some(proj) = &self.global_data.projectors {
             g.statements
                 .insert("projector".to_string(), proj.to_quoted());
@@ -259,31 +280,50 @@ mod tests {
         half_edge::nodestore::NodeStorageVec,
         parser::{DotGraph, DotVertexData},
     };
+    use symbolica::{atom::Atom, parser::ParseSettings};
+
+    use super::evaluate_overall_factor;
 
     use crate::{
-        dot,
-        graph::{Graph, parse::IntoGraph},
-        initialisation::test_initialise,
+        finalized_runtime_dot, graph::Graph, initialisation::test_initialise,
         processes::DotExportSettings,
     };
 
     #[test]
+    fn evaluates_canonical_feynkit_factor_namespace() {
+        test_initialise().unwrap();
+        let factor = Atom::parse(
+            "InternalFermionLoopSign(-1)*CouplingsMultiplicity(2)/AutG(4)\
+             +NumeratorDependentGrouping(7,2,3)",
+            "feynkit_generator_factor",
+            ParseSettings::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            evaluate_overall_factor(factor.as_view()),
+            Atom::parse("11/2", "factor_expected", ParseSettings::default()).unwrap()
+        );
+    }
+
+    #[test]
     fn params_roundtrip_in_global_data() {
         test_initialise().unwrap();
-        match dot!(digraph params_roundtrip {
+        match finalized_runtime_dot!(digraph params_roundtrip {
             graph [
                 overall_factor = 1;
                 multiplicity_factor = 1;
                 params = "a;b;c";
+                projector = 1;
             ]
-            edge [pdg=1000]
+            edge [pdg=1000 num=1]
+            node [num=1]
             ext [style=invis]
-            ext -> v4
-            ext -> v5
-            v6 -> ext
-            v5 -> v4 [lmb_index=0];
-            v6 -> v5;
-            v4 -> v6;
+            ext -> v4 [sink="{ufo_order:0}"]
+            ext -> v5 [sink="{ufo_order:0}"]
+            v6 -> ext [source="{ufo_order:0}"]
+            v5 -> v4 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
+            v6 -> v5 [source="{ufo_order:1}" sink="{ufo_order:2}"];
+            v4 -> v6 [source="{ufo_order:2}" sink="{ufo_order:2}"];
         },"scalars")
         {
             Ok(g) => {

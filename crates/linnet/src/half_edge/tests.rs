@@ -1764,3 +1764,95 @@ fn extract_nodes() {
     //     .unwrap();
     println!("{}", a.base_dot());
 }
+
+#[cfg(feature = "symbolica")]
+#[test]
+fn concurrent_subset_symbol_registration_preserves_identity_and_formatting() {
+    use std::sync::{Arc, Barrier};
+
+    use symbolica::{atom::AtomCore, function, printer::PrintOptions};
+    use symbolica_utils::{PrintSettingsExt, TypstMode};
+
+    use super::subgraph::{subset::SubSet, SubSetLike};
+
+    for round in 0..32 {
+        let label = format!("subset_symbol_concurrent_{}_{round}", std::process::id());
+        let start = Arc::new(Barrier::new(8));
+        // Join the entire round before asserting: a regressed registration must
+        // fail promptly instead of stranding other workers at a later barrier.
+        let results = std::thread::scope(|scope| {
+            (0..8)
+                .map(|worker| {
+                    let start = Arc::clone(&start);
+                    let label = label.clone();
+                    scope.spawn(move || {
+                        start.wait();
+                        if worker % 2 == 0 {
+                            <SubSet<Hedge> as SubSetLike<Hedge>>::symbol_from_label(label)
+                        } else {
+                            <SubSet<EdgeIndex> as SubSetLike<EdgeIndex>>::symbol_from_label(label)
+                        }
+                    })
+                })
+                .collect::<Vec<_>>()
+                .into_iter()
+                .map(|worker| worker.join())
+                .collect::<Vec<_>>()
+        });
+        let symbols = results
+            .into_iter()
+            .map(|result| result.expect("concurrent subset symbol registration panicked"))
+            .collect::<Vec<_>>();
+        assert!(symbols.iter().all(|symbol| *symbol == symbols[0]));
+        assert_eq!(
+            <SubSet<Hedge> as SubSetLike<Hedge>>::symbol_from_label(label.clone()),
+            symbols[0]
+        );
+        assert_eq!(
+            <SubSet<EdgeIndex> as SubSetLike<EdgeIndex>>::symbol_from_label(label.clone()),
+            symbols[0]
+        );
+        assert!(symbols[0].get_print_function().is_some());
+        for (mode, prefix) in [
+            (TypstMode::Math, "#S"),
+            (TypstMode::Markup, "#S"),
+            (TypstMode::Code, "S"),
+        ] {
+            let mut options = PrintOptions::typst();
+            options.set_typst_mode(mode);
+            assert_eq!(
+                symbols[0].to_atom().printer(options.clone()).to_string(),
+                format!("{prefix}(g,\"{label}\")")
+            );
+            assert_eq!(
+                function!(symbols[0], 7).printer(options).to_string(),
+                format!("{prefix}(g,\"{label}\",7)")
+            );
+        }
+    }
+}
+
+#[cfg(feature = "symbolica")]
+#[test]
+fn invalid_subset_symbol_label_does_not_poison_registration() {
+    use super::subgraph::{subset::SubSet, SubSetLike};
+
+    let error = std::panic::catch_unwind(|| {
+        <SubSet<Hedge> as SubSetLike<Hedge>>::symbol_from_label("subset symbol invalid".to_owned())
+    })
+    .expect_err("spaces are rejected by the native symbol-name validator");
+    let message = error
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .or_else(|| error.downcast_ref::<&str>().copied())
+        .expect("symbol registration reports its validation error");
+    assert!(message.contains("Invalid character ' '"), "{message}");
+
+    let label = format!("subset_symbol_after_error_{}", std::process::id());
+    let symbol = <SubSet<EdgeIndex> as SubSetLike<EdgeIndex>>::symbol_from_label(label.clone());
+    assert_eq!(
+        <SubSet<Hedge> as SubSetLike<Hedge>>::symbol_from_label(label),
+        symbol
+    );
+    assert!(symbol.get_print_function().is_some());
+}

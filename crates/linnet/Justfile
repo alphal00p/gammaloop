@@ -1,3 +1,6 @@
+# Modules do not inherit the root backend variable; native recipes select auto.
+develop := source_directory() / "../../scripts/develop.sh"
+
 # Aliases for common commands
 
 alias b := build
@@ -16,68 +19,71 @@ wasm:
     cd "{{ justfile_directory() }}/../.." && nix build .#linnest-wasm --print-build-logs
 
 prepare-templates:
-    cd "{{ justfile_directory() }}/../.." && just sync-drawing-assets
+    cd {{ quote(source_directory() / "../..") }} && just sync-drawing-assets
 
-# Build all packages
+# Build all workspace packages. Native builds embed existing Typst assets;
+# refresh them explicitly with prepare-templates when needed.
 build:
-    just prepare-templates
-    cargo build --all
+    bash {{ quote(develop) }} --backend auto build --workspace
 
 build-clinnet:
-    just prepare-templates
-    cargo build -p clinnet
+    bash {{ quote(develop) }} --backend auto build -p clinnet
 
 # Build release version
 build-release:
-    cargo build --release --all --features serde
+    bash {{ quote(develop) }} --backend auto build --workspace --profile release --features serde
 
 # Run tests for linnet package (default)
-test:
-    cargo test -p linnet --features serde
+[positional-arguments]
+test *args:
+    bash {{ quote(develop) }} --backend auto test --package linnet --features serde "$@"
 
 # Run tests for linnest package only
-test-linnest:
-    cargo test -p linnest
+[positional-arguments]
+test-linnest *args:
+    bash {{ quote(develop) }} --backend auto test --package linnest "$@"
 
-# Run all tests with features
-test-all:
-    cargo test --all --features serde
+# Run all workspace tests with the recorded CI features
+[positional-arguments]
+test-all *args:
+    bash {{ quote(develop) }} --backend auto test --workspace --features linnet/serde "$@"
 
 # Quick check compilation for linnet (default)
 check:
-    cargo check -p linnet --features serde
+    bash {{ quote(develop) }} --backend auto check -p linnet --features serde
 
 # Check linnest package
 check-linnest:
-    cargo check -p linnest
+    bash {{ quote(develop) }} --backend auto check -p linnest
 
 # Check all packages with features
 check-all:
-    cargo check --all --features serde
+    bash {{ quote(develop) }} --backend auto check --workspace --features serde
 
 # Run binary with arguments
+[positional-arguments]
 run *args:
-    cargo run --bin linnet-cli -- {{ args }}
+    bash {{ quote(develop) }} --backend auto run -p clinnet --bin linnet -- "$@"
 
 # Format all code
 fmt:
-    cargo fmt --all
+    bash {{ quote(develop) }} --backend auto fmt
 
 # Run clippy linter with strict warnings
 clippy:
-    cargo clippy --all --features serde -- -D warnings
+    bash {{ quote(develop) }} --backend auto clippy --workspace --features serde -- -D warnings
 
 # Clean build artifacts
 clean:
-    cargo clean
+    bash {{ quote(develop) }} --backend auto clean
 
 # Build and open documentation
 docs:
-    cargo doc --all --features serde --open
+    bash {{ quote(develop) }} --backend auto doc --workspace --features serde --open
 
 # Check documentation builds without warnings
 check-docs:
-    cargo doc --all --features serde --no-deps
+    bash {{ quote(develop) }} --backend auto doc --workspace --features serde --no-deps
 
 # Run benchmarks (default)
 bench:

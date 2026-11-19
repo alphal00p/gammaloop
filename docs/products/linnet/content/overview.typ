@@ -1,7 +1,11 @@
 #import "../../shared.typ": callout, boundary, developer-link, product-link
 
 #let overview = [
-= Overview
+#context if target() == "html" {
+  html.elem("span", attrs: (id: "overview"))[]
+} else {
+  heading(level: 1)[Overview]
+}
 
 Linnet is a graph library for tensor networks, Feynman diagrams, and other workflows where
 the boundary of a subgraph matters. Its central representation is a half-edge graph. An

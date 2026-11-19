@@ -3,7 +3,7 @@
 import unittest
 from dataclasses import dataclass
 
-import linnet_py as lp
+from symbolica.community import graph as lp
 
 DOT = r"""digraph browser {
   0;
@@ -112,17 +112,10 @@ def wasm_runtime_smoke() -> None:
 
     def half_edge_drawing(half_edge: lp.HalfEdge) -> lp.HalfEdgeDrawing:
         selected_half_edges.append(half_edge.index)
-        return lp.HalfEdgeDrawing(
-            style={
-                "stroke": lp.Stroke(
-                    paint=lp.Color("black"),
-                    thickness=lp.Length.pt(0.5),
-                )
-            }
-        )
+        return lp.HalfEdgeDrawing()
 
-    graph.render_config = lp.RenderConfig(
-        layouts=lp.LayoutOptions(
+    graph.render_config = lp.RenderSettings(
+        layouts=lp.LayoutSettings(
             algorithm=lp.LayoutAlgorithm.Force,
             direction=lp.LayoutDirection.Right,
             seed=7,
@@ -136,21 +129,33 @@ def wasm_runtime_smoke() -> None:
             source=half_edge_drawing,
             sink=half_edge_drawing,
         ),
-        drawing=lp.DrawOptions(show_half_edge_ids=True),
     )
 
-    prepared = graph.prepare_render()
+    prepared = graph.render()
     assert selected_nodes == list(range(graph.n_nodes))
     assert selected_edges == list(range(graph.n_edges))
     assert selected_half_edges == list(range(graph.n_half_edges))
-    assert "_linnet_template.render" in prepared.typst_source
-    assert "graph-spec-path" in prepared.typst_source
+    assert not hasattr(prepared, "typst_source")
 
-    svg = prepared.to_svg()
+    # EXTERNAL METRICS FIXTURE in points; the browser roundtrip is tested separately.
+    request = prepared.measurement_request()
+    snapshot = prepared.measured(
+        measurements={
+            "id": request["id"],
+            "metrics": [
+                {"id": label["id"], "width": 24.0, "height": 12.0, "baseline": 9.0}
+                for label in request["labels"]
+            ],
+        }
+    )
+    svg = snapshot.to_svg()
+    assert selected_nodes == list(range(graph.n_nodes))
+    assert selected_edges == list(range(graph.n_edges))
+    assert selected_half_edges == list(range(graph.n_half_edges))
     assert svg.lstrip().startswith("<svg")
     assert svg.rstrip().endswith("</svg>")
 
 
 class WasmRuntimeTests(unittest.TestCase):
-    def test_dot_selectors_and_typst_render(self) -> None:
+    def test_dot_selectors_and_measured_render(self) -> None:
         wasm_runtime_smoke()

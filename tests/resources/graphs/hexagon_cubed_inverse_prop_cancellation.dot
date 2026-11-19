@@ -1,4 +1,4 @@
-digraph oracle {
+digraph oracle { graph [projector=1]
     graph [
         num = 1;
         overall_factor = 1;
@@ -10,15 +10,15 @@ digraph oracle {
     ]
     node [num=1]
     ext [style=invis]
-    ext -> v1 [id=0]
-    ext -> v2 [id=1]
-    v3 -> ext [id=2]
-    v1 -> v2 [id=3, lmb_id=0]
-    v2 -> v3 [id=4]
-    v3 -> v1 [id=5]
+    ext -> v1 [id=0 sink="{ufo_order:0}"]
+    ext -> v2 [id=1 sink="{ufo_order:0}"]
+    v3 -> ext [id=2 source="{ufo_order:1}"]
+    v1 -> v2 [id=3, lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
+    v2 -> v3 [id=4 source="{ufo_order:2}" sink="{ufo_order:0}"]
+    v3 -> v1 [id=5 sink="{ufo_order:2}" source="{ufo_order:2}"]
 }
 
-digraph hexagon_with_cubed_inverse_propagator {
+digraph hexagon_with_cubed_inverse_propagator { graph [projector=1]
     graph [
         num = 1;
         overall_factor = -1;
@@ -30,13 +30,13 @@ digraph hexagon_with_cubed_inverse_propagator {
     ]
     node [num=1]
     ext [style=invis]
-    ext -> v1 [id=0]
-    ext -> v5 [id=1]
-    v6 -> ext [id=2]
-    v1 -> v2 [id=3, num="(Q(3,spenso::mink(4,edge(3,1)))*Q(3,spenso::mink(4,edge(3,1)))-UFO::mass_scalar_1^2)^3"]
-    v2 -> v3 [id=4]
-    v3 -> v4 [id=5]
-    v4 -> v5 [id=6, lmb_id=0]
-    v5 -> v6 [id=7]
-    v6 -> v1 [id=8]
+    ext -> v1 [id=0 sink="{ufo_order:0}"]
+    ext -> v5 [id=1 sink="{ufo_order:0}"]
+    v6 -> ext [id=2 source="{ufo_order:1}"]
+    v1 -> v2 [id=3, num="(Q(3,spenso::mink(4,edge(3,1)))*Q(3,spenso::mink(4,edge(3,1)))-UFO::mass_scalar_1^2)^3" source="{ufo_order:1}" sink="{ufo_order:0}"]
+    v2 -> v3 [id=4 source="{ufo_order:1}" sink="{ufo_order:0}"]
+    v3 -> v4 [id=5 source="{ufo_order:1}" sink="{ufo_order:0}"]
+    v4 -> v5 [id=6, lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
+    v5 -> v6 [id=7 source="{ufo_order:2}" sink="{ufo_order:0}"]
+    v6 -> v1 [id=8 sink="{ufo_order:2}" source="{ufo_order:2}"]
 }

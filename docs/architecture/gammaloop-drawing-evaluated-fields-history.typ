@@ -1,4 +1,4 @@
-= GammaLoop Evaluated-Field Proposal
+= GammaLoop evaluated-field proposal
 
 #quote(block: true)[
 #strong[Status:] Archived proposal; superseded by the direct callback interface

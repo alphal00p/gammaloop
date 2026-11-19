@@ -17,17 +17,18 @@ use std::{
     hash::{Hash, Hasher},
     sync::{LazyLock, RwLock},
 };
+use symbolica_notation::{IndexDisplay, IndexDisplayError};
 
 use bincode::{Decode, Encode};
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use crate::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
     self_dual_symbol,
     structure::slot::SlotError,
 };
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use symbolica::{
     atom::{
         Atom, AtomOrView, AtomView, FunctionBuilder, NamespacedSymbol, Symbol, SymbolBuilder,
@@ -39,6 +40,9 @@ use symbolica::{
     symbol,
 };
 
+#[cfg(feature = "shadowing")]
+use crate::network::tags::mathml;
+
 use thiserror::Error;
 
 use eyre::Result;
@@ -48,7 +52,7 @@ pub trait BaseRepName: RepName<Dual: RepName> + Default {
     // fn selfless_name() -> String;
     fn selfless_base() -> Self::Base;
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     fn selfless_symbol() -> Symbol {
         symbol!(Self::NAME)
     }
@@ -63,7 +67,7 @@ pub trait BaseRepName: RepName<Dual: RepName> + Default {
         }
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     fn pattern(symbol: Symbol) -> Atom {
         Self::default().to_symbolic([Atom::var(symbol)])
     }
@@ -79,7 +83,7 @@ pub trait BaseRepName: RepName<Dual: RepName> + Default {
         }
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     fn new_slot_from(
         sym: Symbol,
         dim: Dimension,
@@ -101,16 +105,16 @@ pub trait BaseRepName: RepName<Dual: RepName> + Default {
 
 #[derive(Error, Debug)]
 pub enum RepresentationError {
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     #[error("Symbol {0} isn't one of [sind,uind,dind]")]
     SymbolError(Symbol),
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     #[error("Expected dual state: {0} but got {1}")]
     ExpectedDualStateError(Symbol, Symbol),
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     #[error("{0} is not a possible Representation")]
     NotRepresentationError(Symbol),
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     #[error(
         "inline-metric representation {0} must be registered locally because its metric function is not portable"
     )]
@@ -154,11 +158,11 @@ pub trait RepName:
         Ordering::Equal
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     fn try_from_symbol(sym: Symbol, aind: Symbol) -> Result<Self, RepresentationError> {
         Self::from_library_rep(LibraryRep::try_from_symbol(sym, aind)?)
     }
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     fn try_from_symbol_coerced(sym: Symbol) -> Result<Self, RepresentationError> {
         Self::from_library_rep(LibraryRep::try_from_symbol_coerced(sym)?)
     }
@@ -174,7 +178,7 @@ pub trait RepName:
     }
 
     #[allow(clippy::cast_possible_wrap)]
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     /// yields a function builder for the representation, adding a first variable: the dimension.
     ///
     fn to_symbolic<'a, It: Into<AtomOrView<'a>>>(
@@ -186,7 +190,7 @@ pub trait RepName:
         librep.to_symbolic(args)
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     /// An atom representing the identity function for that representation.
     /// a is dualized
     /// b is not
@@ -204,7 +208,7 @@ pub trait RepName:
     }
 
     #[allow(clippy::cast_possible_wrap)]
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     /// yields a function builder for the representation, adding a first variable: the dimension.
     ///
     fn metric_atom<'a, It: Into<AtomOrView<'a>>>(
@@ -469,7 +473,7 @@ impl BaseRepName for Dummy {
     // bincode_trait_derive::BorrowDecodeFromDecode,
 )]
 #[cfg_attr(
-    feature = "symbolica",
+    feature = "shadowing",
     trait_decode(trait = symbolica::state::HasStateMap),
 )]
 pub struct Representation<T: RepName> {
@@ -479,11 +483,7 @@ pub struct Representation<T: RepName> {
 
 impl<T: RepName> Ord for Representation<T> {
     fn cmp(&self, other: &Self) -> Ordering {
-        if self.rep.is_dummy() && other.rep.is_dummy() {
-            Ordering::Equal
-        } else {
-            self.rep.cmp(&other.rep).then(self.dim.cmp(&other.dim))
-        }
+        self.rep.cmp(&other.rep).then(self.dim.cmp(&other.dim))
     }
 }
 
@@ -510,7 +510,7 @@ impl<T: RepName> Eq for Representation<T> {}
 
 impl<T: RepName> Representation<T> {
     #[allow(clippy::cast_possible_wrap)]
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     /// An atom representing the identity tensor with aind a, and b.
     /// a is dualized, b is not.
     ///
@@ -521,7 +521,7 @@ impl<T: RepName> Representation<T> {
     }
 
     // [allow(clippy::cast_possible_wrap)]
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     /// Construct compact `dot(a(rep), b(rep))` notation from unrepresented
     /// vector function heads (or vector symbols).
     ///
@@ -529,28 +529,32 @@ impl<T: RepName> Representation<T> {
     /// carry a representation or explicit index do not satisfy the precondition;
     /// applying this method to them would append a second structure argument.
     pub fn inner_product<'a, It: Into<AtomOrView<'a>>>(&self, a: It, b: It) -> Atom {
-        fn with_rep(value: AtomView<'_>, rep: &Atom) -> Atom {
-            match value {
-                AtomView::Fun(fun) => {
-                    let mut rebuilt = FunctionBuilder::new(fun.get_symbol());
-                    for arg in fun.iter() {
-                        rebuilt = rebuilt.add_arg(arg);
-                    }
-                    rebuilt.add_arg(rep).finish()
-                }
-                AtomView::Var(var) => FunctionBuilder::new(var.get_symbol()).add_arg(rep).finish(),
-                _ => value.to_owned(),
-            }
-        }
-
         let a: AtomOrView<'a> = a.into();
         let b: AtomOrView<'a> = b.into();
-        let rep = self.to_symbolic([]);
         function!(
             SPENSO_TAG.dot,
-            with_rep(a.as_view(), &rep),
-            with_rep(b.as_view(), &rep)
+            self.vector(a.as_view(), []),
+            self.vector(b.as_view(), [])
         )
+    }
+
+    /// Attach this representation, optionally with an index, to a vector name.
+    ///
+    /// For example, `p` becomes `p(mink(D,mu))`, while `Q(1)` becomes
+    /// `Q(1,mink(D,mu))`. An empty index list produces the compact vector used
+    /// by scalar products and Dirac slashes. Non-function expressions are
+    /// retained, matching the scalar-product convention.
+    #[cfg(feature = "shadowing")]
+    pub fn vector(&self, value: AtomView<'_>, indices: impl IntoIterator<Item = Atom>) -> Atom {
+        let rep = self.to_symbolic(indices);
+        match value {
+            AtomView::Fun(fun) => FunctionBuilder::new(fun.get_symbol())
+                .add_args(fun.iter())
+                .add_arg(rep)
+                .finish(),
+            AtomView::Var(var) => FunctionBuilder::new(var.get_symbol()).add_arg(rep).finish(),
+            _ => value.to_owned(),
+        }
     }
 
     pub fn base(self) -> Representation<T::Base> {
@@ -561,14 +565,14 @@ impl<T: RepName> Representation<T> {
     }
 
     #[allow(clippy::cast_possible_wrap)]
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     /// An atom representing the metric tensor with aind a, and b.
     pub fn g<'a, It: Into<AtomOrView<'a>>>(&self, a: It, b: It) -> Atom {
         let a: AtomOrView<'a> = a.into();
         let b: AtomOrView<'a> = b.into();
         function!(ETS.metric, self.pattern(a), self.pattern(b))
     }
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     /// An atom representing the musical isomorphism tensor with aind a, and b.
     pub fn flat<'a, It: Into<AtomOrView<'a>>>(&self, a: It, b: It) -> Atom {
         let a: AtomOrView<'a> = a.into();
@@ -595,14 +599,14 @@ impl<T: RepName> Representation<T> {
         )
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     pub fn pattern<'a, A: Into<AtomOrView<'a>>>(&self, aind: A) -> Atom {
         let dim = AtomOrView::Atom(self.dim.to_symbolic());
         let a = aind.into();
         self.rep.to_symbolic([dim, a])
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     pub fn to_pattern_wrapped(&self, aind: Symbol) -> Atom {
         self.rep.to_symbolic([
             self.dim.to_symbolic(),
@@ -693,12 +697,12 @@ impl PartialOrd for LibraryRep {
 
 pub type LibrarySlot<Aind> = Slot<LibraryRep, Aind>;
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 crate::symbolica_init_lazy_static! {
     pub(crate) static REPS, REPS_INNER: RwLock<ExtendibleReps> =
         || RwLock::new(ExtendibleReps::new());
 }
-#[cfg(not(feature = "symbolica"))]
+#[cfg(not(feature = "shadowing"))]
 pub(crate) static REPS: LazyLock<RwLock<ExtendibleReps>> =
     LazyLock::new(|| RwLock::new(ExtendibleReps::new()));
 pub(crate) static SELF_DUAL: AppendOnlyVec<(LibraryRep, RepData)> = AppendOnlyVec::new();
@@ -752,12 +756,12 @@ fn canonical_representation_name(name: &str) -> String {
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 fn representation_label_name(name: &str) -> &str {
     name.rsplit("::").next().unwrap_or(name)
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 fn default_index_row(name: &str) -> IndexRow {
     // Idenso's canonical self-dual bispinor indices conventionally sit below
     // the tensor head. A same-named representation in another namespace is a
@@ -769,7 +773,7 @@ fn default_index_row(name: &str) -> IndexRow {
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 fn default_index_palette(name: &str) -> IndexPalette {
     let labels: &[&str] = match canonical_representation_name(name).as_str() {
         "spenso::mink" | "spenso::lor" => &["mu", "nu", "rho", "sigma"],
@@ -790,509 +794,12 @@ fn default_index_palette(name: &str) -> IndexPalette {
     .expect("the built-in representation palettes are non-empty and valid")
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 fn representation_typst_body(label: &IndexDisplay) -> String {
     format!(
         "(dim, ind ) = (content: $ {}^#dim _#ind $, upper:true)",
         label.to_typst_source()
     )
-}
-
-/// A safe, printer-neutral description of one mathematical index label.
-///
-/// The tree is deliberately small: plugins may deserialize it from Symbolica
-/// symbol metadata and turn it into Typst source without evaluating arbitrary
-/// source supplied by an Atom payload.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum IndexDisplay {
-    Symbol(String),
-    /// Upright text embedded in a mathematical label.
-    Text(String),
-    Number(i64),
-    Sequence(Vec<IndexDisplay>),
-    /// A nested argument/row list. Unlike `Sequence`, entries retain their
-    /// comma/row boundary when used by a safe mathematical display node.
-    List(Vec<IndexDisplay>),
-    /// A validated mathematical display node.
-    ///
-    /// `head` is never emitted directly. Rendering dispatches through a fixed
-    /// allowlist, so imported symbol metadata cannot inject Typst source.
-    Math {
-        head: String,
-        arguments: Vec<IndexDisplay>,
-    },
-    Attach {
-        base: Box<IndexDisplay>,
-        top: Option<Box<IndexDisplay>>,
-        bottom: Option<Box<IndexDisplay>>,
-    },
-}
-
-impl IndexDisplay {
-    pub fn symbol(name: impl Into<String>) -> Result<Self, RepLibraryError> {
-        let name = name.into();
-        if name.is_empty() {
-            return Err(RepLibraryError::InvalidIndexDisplay(
-                "an index label cannot be empty".to_owned(),
-            ));
-        }
-        if name.chars().count() > 128 || name.chars().any(char::is_control) {
-            return Err(RepLibraryError::InvalidIndexDisplay(
-                "an index label must contain at most 128 non-control characters".to_owned(),
-            ));
-        }
-        Ok(Self::Symbol(name))
-    }
-
-    pub fn with_bottom(self, bottom: IndexDisplay) -> Self {
-        match self {
-            Self::Attach {
-                base,
-                top,
-                bottom: None,
-            } => Self::Attach {
-                base,
-                top,
-                bottom: Some(Box::new(bottom)),
-            },
-            display => Self::Attach {
-                base: Box::new(display),
-                top: None,
-                bottom: Some(Box::new(bottom)),
-            },
-        }
-    }
-
-    pub fn with_top(self, top: IndexDisplay) -> Self {
-        match self {
-            Self::Attach {
-                base,
-                top: None,
-                bottom,
-            } => Self::Attach {
-                base,
-                top: Some(Box::new(top)),
-                bottom,
-            },
-            display => Self::Attach {
-                base: Box::new(display),
-                top: Some(Box::new(top)),
-                bottom: None,
-            },
-        }
-    }
-
-    pub fn text(value: impl Into<String>) -> Result<Self, RepLibraryError> {
-        let value = value.into();
-        if value.chars().count() > 1024 || value.chars().any(char::is_control) {
-            return Err(RepLibraryError::InvalidIndexDisplay(
-                "display text must contain at most 1024 non-control characters".to_owned(),
-            ));
-        }
-        Ok(Self::Text(value))
-    }
-
-    pub fn math(
-        head: impl Into<String>,
-        arguments: Vec<IndexDisplay>,
-    ) -> Result<Self, RepLibraryError> {
-        let head = head.into();
-        if !matches!(
-            head.as_str(),
-            "arg"
-                | "add"
-                | "sub"
-                | "plus"
-                | "neg"
-                | "times"
-                | "dot"
-                | "factorial"
-                | "mul"
-                | "()"
-                | "group"
-                | "lr"
-                | "pow"
-                | "frac"
-                | "root"
-                | "call"
-                | "op-call"
-                | "op"
-                | "accent"
-                | "underline"
-                | "overline"
-                | "underbrace"
-                | "overbrace"
-                | "underbracket"
-                | "overbracket"
-                | "underparen"
-                | "overparen"
-                | "undershell"
-                | "overshell"
-                | "cancel"
-                | "vec"
-                | "mat"
-                | "cases"
-                | "class"
-                | "mid"
-                | "scripts"
-                | "limits"
-                | "stretch"
-        ) {
-            return Err(RepLibraryError::InvalidIndexDisplay(format!(
-                "unsupported mathematical display node {head:?}"
-            )));
-        }
-        if arguments.len() > 64 {
-            return Err(RepLibraryError::InvalidIndexDisplay(
-                "a mathematical display node cannot contain more than 64 arguments".to_owned(),
-            ));
-        }
-        Ok(Self::Math { head, arguments })
-    }
-
-    fn escaped_typst_string(value: &str) -> String {
-        value
-            .replace('\\', "\\\\")
-            .replace('"', "\\\"")
-            .replace('\n', "\\n")
-            .replace('\r', "\\r")
-    }
-
-    fn literal_text(&self) -> Option<&str> {
-        match self {
-            Self::Symbol(value) | Self::Text(value) => Some(value),
-            _ => None,
-        }
-    }
-
-    fn typst_math_source(head: &str, arguments: &[Self]) -> String {
-        let sources = arguments
-            .iter()
-            .map(Self::to_typst_source)
-            .collect::<Vec<_>>();
-        let joined = |separator: &str| sources.join(separator);
-        let unary = |prefix: &str, suffix: &str| {
-            sources
-                .first()
-                .map(|body| format!("{prefix}{body}{suffix}"))
-                .unwrap_or_else(|| r#"upright("?")"#.to_owned())
-        };
-        let call = |name: &str| format!("{name}({})", joined(","));
-
-        match head {
-            "arg" => joined(","),
-            "add" => joined(" + "),
-            "sub" => joined(" - "),
-            "plus" => unary("+", ""),
-            "neg" => unary("-", ""),
-            "times" => joined(" times "),
-            "dot" => joined(" dot "),
-            "factorial" => unary("", "!"),
-            "mul" => joined(" "),
-            "()" | "group" | "lr" => unary("lr((", "))"),
-            "pow" if sources.len() == 2 => {
-                format!("attach({},t:{})", sources[0], sources[1])
-            }
-            "frac" if sources.len() == 2 => format!("frac({},{})", sources[0], sources[1]),
-            "root" if sources.len() == 1 => format!("root({})", sources[0]),
-            "root" if sources.len() == 2 => {
-                format!("root({},{})", sources[0], sources[1])
-            }
-            "call" | "op-call" if !sources.is_empty() => {
-                let body = sources[1..].join(",");
-                format!("{}({body})", sources[0])
-            }
-            "op" if arguments.len() == 1 => {
-                let text = arguments[0].literal_text().unwrap_or("?");
-                format!(r#"op("{}")"#, Self::escaped_typst_string(text))
-            }
-            "accent" if arguments.len() == 2 => {
-                let accent = arguments[1].literal_text().unwrap_or("?");
-                format!(
-                    r#"accent({},"{}")"#,
-                    sources[0],
-                    Self::escaped_typst_string(accent)
-                )
-            }
-            "underline" | "overline" | "cancel" | "mid" | "scripts" | "limits" | "stretch"
-                if sources.len() == 1 =>
-            {
-                call(head)
-            }
-            "underbrace" | "overbrace" | "underbracket" | "overbracket" | "underparen"
-            | "overparen" | "undershell" | "overshell"
-                if (1..=2).contains(&sources.len()) =>
-            {
-                call(head)
-            }
-            "vec" => call("vec"),
-            "mat" => {
-                let rows = arguments
-                    .iter()
-                    .map(|row| match row {
-                        Self::List(entries) => entries
-                            .iter()
-                            .map(Self::to_typst_source)
-                            .collect::<Vec<_>>()
-                            .join(","),
-                        value => value.to_typst_source(),
-                    })
-                    .collect::<Vec<_>>()
-                    .join(";");
-                format!("mat({rows})")
-            }
-            "cases" => call("cases"),
-            "class" if arguments.len() == 2 => {
-                let class = arguments[0].literal_text().unwrap_or("normal");
-                format!(
-                    r#"class("{}",{})"#,
-                    Self::escaped_typst_string(class),
-                    sources[1]
-                )
-            }
-            // The constructor rejects unknown nodes. This fixed fallback also
-            // keeps forged/imported user data from becoming executable source.
-            _ => r#"upright("?")"#.to_owned(),
-        }
-    }
-
-    fn is_typst_math_name(name: &str) -> bool {
-        matches!(
-            name,
-            "alpha"
-                | "beta"
-                | "gamma"
-                | "delta"
-                | "epsilon"
-                | "zeta"
-                | "eta"
-                | "theta"
-                | "iota"
-                | "kappa"
-                | "lambda"
-                | "mu"
-                | "nu"
-                | "xi"
-                | "omicron"
-                | "pi"
-                | "rho"
-                | "sigma"
-                | "tau"
-                | "upsilon"
-                | "phi"
-                | "chi"
-                | "psi"
-                | "omega"
-        )
-    }
-
-    pub fn to_typst_source(&self) -> String {
-        match self {
-            Self::Symbol(name)
-                if name.chars().count() == 1
-                    && name
-                        .chars()
-                        .next()
-                        .is_some_and(|character| character.is_alphanumeric()) =>
-            {
-                name.clone()
-            }
-            Self::Symbol(name) if Self::is_typst_math_name(name) => name.clone(),
-            Self::Symbol(name) => {
-                format!(r#"italic("{}")"#, Self::escaped_typst_string(name))
-            }
-            Self::Text(value) => {
-                format!(r#"upright("{}")"#, Self::escaped_typst_string(value))
-            }
-            Self::Number(number) => number.to_string(),
-            Self::Sequence(items) => items
-                .iter()
-                .map(Self::to_typst_source)
-                .collect::<Vec<_>>()
-                .join(" "),
-            Self::List(items) => items
-                .iter()
-                .map(Self::to_typst_source)
-                .collect::<Vec<_>>()
-                .join(","),
-            Self::Math { head, arguments } => Self::typst_math_source(head, arguments),
-            Self::Attach { base, top, bottom } => {
-                let mut source = format!("attach({}", base.to_typst_source());
-                if let Some(top) = top {
-                    source.push_str(",t:");
-                    source.push_str(&top.to_typst_source());
-                }
-                if let Some(bottom) = bottom {
-                    source.push_str(",b:");
-                    source.push_str(&bottom.to_typst_source());
-                }
-                source.push(')');
-                source
-            }
-        }
-    }
-
-    pub fn to_native_string(&self) -> String {
-        match self {
-            Self::Symbol(name) => name.clone(),
-            Self::Text(value) => value.clone(),
-            Self::Number(number) => number.to_string(),
-            Self::Sequence(items) => items
-                .iter()
-                .map(Self::to_native_string)
-                .collect::<Vec<_>>()
-                .join(" "),
-            Self::List(items) => items
-                .iter()
-                .map(Self::to_native_string)
-                .collect::<Vec<_>>()
-                .join(","),
-            Self::Math { .. } => self.to_typst_source(),
-            Self::Attach { base, top, bottom } => {
-                let mut output = base.to_native_string();
-                if let Some(top) = top {
-                    output.push_str("^(");
-                    output.push_str(&top.to_native_string());
-                    output.push(')');
-                }
-                if let Some(bottom) = bottom {
-                    output.push_str("_(");
-                    output.push_str(&bottom.to_native_string());
-                    output.push(')');
-                }
-                output
-            }
-        }
-    }
-
-    #[cfg(feature = "symbolica")]
-    fn node_user_data(&self) -> UserData {
-        match self {
-            Self::Symbol(name) => UserData::List(vec![
-                UserData::String("symbol".to_owned()),
-                UserData::String(name.clone()),
-            ]),
-            Self::Text(value) => UserData::List(vec![
-                UserData::String("text".to_owned()),
-                UserData::String(value.clone()),
-            ]),
-            Self::Number(number) => UserData::List(vec![
-                UserData::String("number".to_owned()),
-                UserData::Integer(*number),
-            ]),
-            Self::Sequence(items) => UserData::List(vec![
-                UserData::String("sequence".to_owned()),
-                UserData::List(items.iter().map(Self::node_user_data).collect()),
-            ]),
-            Self::List(items) => UserData::List(vec![
-                UserData::String("list".to_owned()),
-                UserData::List(items.iter().map(Self::node_user_data).collect()),
-            ]),
-            Self::Math { head, arguments } => UserData::List(vec![
-                UserData::String("math".to_owned()),
-                UserData::String(head.clone()),
-                UserData::List(arguments.iter().map(Self::node_user_data).collect()),
-            ]),
-            Self::Attach { base, top, bottom } => UserData::List(vec![
-                UserData::String("attach".to_owned()),
-                base.node_user_data(),
-                top.as_deref()
-                    .map(Self::node_user_data)
-                    .unwrap_or(UserData::None),
-                bottom
-                    .as_deref()
-                    .map(Self::node_user_data)
-                    .unwrap_or(UserData::None),
-            ]),
-        }
-    }
-
-    #[cfg(feature = "symbolica")]
-    fn from_node_user_data(data: &UserData, depth: usize) -> Option<Self> {
-        if depth > 16 {
-            return None;
-        }
-        let UserData::List(fields) = data else {
-            return None;
-        };
-        match fields.as_slice() {
-            [UserData::String(kind), UserData::String(name)] if kind == "symbol" => {
-                Self::symbol(name.clone()).ok()
-            }
-            [UserData::String(kind), UserData::String(value)] if kind == "text" => {
-                Self::text(value.clone()).ok()
-            }
-            [UserData::String(kind), UserData::Integer(number)] if kind == "number" => {
-                Some(Self::Number(*number))
-            }
-            [UserData::String(kind), UserData::List(items)] if kind == "sequence" => {
-                if items.len() > 64 {
-                    return None;
-                }
-                Some(Self::Sequence(
-                    items
-                        .iter()
-                        .map(|item| Self::from_node_user_data(item, depth + 1))
-                        .collect::<Option<Vec<_>>>()?,
-                ))
-            }
-            [UserData::String(kind), UserData::List(items)] if kind == "list" => {
-                if items.len() > 64 {
-                    return None;
-                }
-                Some(Self::List(
-                    items
-                        .iter()
-                        .map(|item| Self::from_node_user_data(item, depth + 1))
-                        .collect::<Option<Vec<_>>>()?,
-                ))
-            }
-            [
-                UserData::String(kind),
-                UserData::String(head),
-                UserData::List(arguments),
-            ] if kind == "math" => {
-                let arguments = arguments
-                    .iter()
-                    .map(|argument| Self::from_node_user_data(argument, depth + 1))
-                    .collect::<Option<Vec<_>>>()?;
-                Self::math(head.clone(), arguments).ok()
-            }
-            [UserData::String(kind), base, top, bottom] if kind == "attach" => Some(Self::Attach {
-                base: Box::new(Self::from_node_user_data(base, depth + 1)?),
-                top: match top {
-                    UserData::None => None,
-                    value => Some(Box::new(Self::from_node_user_data(value, depth + 1)?)),
-                },
-                bottom: match bottom {
-                    UserData::None => None,
-                    value => Some(Box::new(Self::from_node_user_data(value, depth + 1)?)),
-                },
-            }),
-            _ => None,
-        }
-    }
-
-    #[cfg(feature = "symbolica")]
-    pub fn symbol_user_data(&self) -> UserData {
-        UserData::List(vec![
-            UserData::String("spenso::index-display-v1".to_owned()),
-            self.node_user_data(),
-        ])
-    }
-
-    #[cfg(feature = "symbolica")]
-    pub fn from_symbol(symbol: Symbol) -> Option<Self> {
-        match symbol.get_data() {
-            UserData::List(fields) => match fields.as_slice() {
-                [UserData::String(kind), display] if kind == "spenso::index-display-v1" => {
-                    Self::from_node_user_data(display, 0)
-                }
-                _ => None,
-            },
-            _ => None,
-        }
-    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -1343,7 +850,7 @@ impl IndexPalette {
         }
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     fn to_user_data(&self) -> UserData {
         match self {
             Self::Numeric => UserData::List(vec![UserData::String("numeric".to_owned())]),
@@ -1355,7 +862,7 @@ impl IndexPalette {
         }
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     fn from_user_data(data: &UserData) -> Option<Self> {
         let UserData::List(fields) = data else {
             return None;
@@ -1414,7 +921,7 @@ impl IndexRow {
         }
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     fn from_str(value: &str) -> Option<Self> {
         match value {
             "top" => Some(Self::Top),
@@ -1432,7 +939,7 @@ pub struct RepresentationMetadata {
     pub index_row: IndexRow,
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl RepresentationMetadata {
     pub fn to_user_data(&self) -> UserData {
         let class = match self.class {
@@ -1499,7 +1006,7 @@ impl RepresentationMetadata {
 }
 
 impl LibraryRep {
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     pub fn new_symbol(
         &self,
         name: &str,
@@ -1508,7 +1015,7 @@ impl LibraryRep {
         self.new_symbol_with_index_row(name, index_palette, default_index_row(name))
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     fn new_symbol_with_index_row(
         &self,
         name: &str,
@@ -1580,11 +1087,13 @@ impl LibraryRep {
             return Ok(existing);
         }
 
-        let print_name = name.to_owned();
         SymbolBuilder::new(namespaced)
             .with_tags(tags)
             .with_user_data(metadata.to_user_data())
-            .with_print_function(move |a, opt, _state| {
+            .with_print_function(move |a, opt, state| {
+                if opt.mode.is_mathml() {
+                    return mathml::render(a, opt, state, &|_, _| None);
+                }
                 if matches!(
                     opt.custom_print_mode.get("typst"),
                     Some(PrintUserData::Integer(1))
@@ -1650,8 +1159,14 @@ impl LibraryRep {
                         };
                         let palette = RepresentationMetadata::from_symbol(f.get_symbol())
                             .map(|metadata| metadata.index_palette);
-                        if let Some(display) =
-                            palette_index.and_then(|index| palette.as_ref()?.resolve(index))
+                        if let Some(display) = palette_index
+                            .and_then(|index| palette.as_ref()?.resolve(index))
+                            .or_else(|| match ind {
+                                AtomView::Var(variable) => {
+                                    IndexDisplay::from_symbol(variable.get_symbol())
+                                }
+                                _ => None,
+                            })
                         {
                             out.push_str(&display.to_native_string());
                         } else {
@@ -1667,28 +1182,9 @@ impl LibraryRep {
                     return None;
                 }
 
-                let AtomView::Fun(f) = a else {
-                    return None;
-                };
-
-                let mut out = if opt.color_builtin_symbols {
-                    nu_ansi_term::Color::DarkGray.paint(&print_name).to_string()
-                } else {
-                    return None;
-                };
-
-                out.push('(');
-                let mut first = true;
-                for arg in f.iter() {
-                    if !first {
-                        out.push_str(", ");
-                    } else {
-                        first = false;
-                    }
-                    out.push_str(&arg.to_string());
-                }
-                out.push(')');
-                Some(out)
+                // Ordinary expressions use Symbolica's namespace, bracket,
+                // and color handling, including the current nested print state.
+                None
             })
             .build()
             .map_err(|error| RepLibraryError::SymbolRegistration {
@@ -1701,7 +1197,7 @@ impl LibraryRep {
         REPS.write().unwrap().new_dual_impl(name)
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     pub fn new_dual_with_index_palette(
         name: &str,
         index_palette: IndexPalette,
@@ -1711,7 +1207,7 @@ impl LibraryRep {
             .new_dual_impl_with_index_palette(name, index_palette)
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     pub fn new_dual_with_index_palette_and_row(
         name: &str,
         index_palette: IndexPalette,
@@ -1722,7 +1218,7 @@ impl LibraryRep {
             .new_dual_impl_with_index_palette_and_row(name, index_palette, index_row)
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     pub fn symbol(&self) -> Symbol {
         REPS.read().unwrap()[*self].symbol
     }
@@ -1731,12 +1227,12 @@ impl LibraryRep {
         REPS.read().unwrap()[*self].name.clone()
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     pub fn metadata(&self) -> Option<RepresentationMetadata> {
         RepresentationMetadata::from_symbol(self.symbol())
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     fn from_registered_or_portable_symbol(symbol: Symbol) -> Result<Self, RepresentationError> {
         let registered = { REPS.read().unwrap().find_symbol(symbol) };
         if let Some(representation) = registered {
@@ -1780,7 +1276,7 @@ impl LibraryRep {
         REPS.write().unwrap().new_self_dual(name)
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     pub fn new_self_dual_with_index_palette(
         name: &str,
         index_palette: IndexPalette,
@@ -1790,7 +1286,7 @@ impl LibraryRep {
             .new_self_dual_with_index_palette(name, index_palette)
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     pub fn new_self_dual_with_index_palette_and_row(
         name: &str,
         index_palette: IndexPalette,
@@ -1828,30 +1324,30 @@ pub struct MetricRepData {
 pub struct RepData {
     // metric_data: Fn(Dimension)->SparseTensor<i8,IndexLess>
     name: String,
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     symbol: Symbol,
 }
 
 static DUMMY_REP_DATA: LazyLock<RepData> = LazyLock::new(|| RepData {
     name: "Dummy".to_string(),
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     symbol: self_dual_symbol!("Dummy"),
 });
 
 pub struct ExtendibleReps {
     name_map: AHashMap<String, LibraryRep>,
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     symbol_map: AHashMap<Symbol, LibraryRep>,
 }
 
 #[derive(Debug, Error)]
 pub enum RepLibraryError {
+    #[error(transparent)]
+    IndexDisplay(#[from] IndexDisplayError),
     #[error("{0} Already exists and is of different type")]
     AlreadyExistsDifferentType(String),
     #[error("{0} Already exists and has different metric function")]
     AlreadyExistsDifferentMetric(String),
-    #[error("invalid index display: {0}")]
-    InvalidIndexDisplay(String),
     #[error("invalid index palette: {0}")]
     InvalidIndexPalette(String),
     #[error("{0} already exists with different representation metadata")]
@@ -1869,7 +1365,7 @@ impl ExtendibleReps {
         self.new_dual_impl_with_metadata_request(name, None, None)
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     pub fn new_dual_impl_with_index_palette(
         &mut self,
         name: &str,
@@ -1878,7 +1374,7 @@ impl ExtendibleReps {
         self.new_dual_impl_with_metadata_request(name, Some(index_palette), None)
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     pub fn new_dual_impl_with_index_palette_and_row(
         &mut self,
         name: &str,
@@ -1888,7 +1384,7 @@ impl ExtendibleReps {
         self.new_dual_impl_with_metadata_request(name, Some(index_palette), Some(index_row))
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     fn new_dual_impl_with_metadata_request(
         &mut self,
         name: &str,
@@ -1928,14 +1424,14 @@ impl ExtendibleReps {
             rep,
             RepData {
                 name: name.to_string(),
-                #[cfg(feature = "symbolica")]
+                #[cfg(feature = "shadowing")]
                 symbol,
             },
         ));
         Ok(rep)
     }
 
-    #[cfg(not(feature = "symbolica"))]
+    #[cfg(not(feature = "shadowing"))]
     fn new_dual_impl_with_metadata_request(
         &mut self,
         name: &str,
@@ -1969,7 +1465,7 @@ impl ExtendibleReps {
         self.new_self_dual_impl(name, None, None)
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     pub fn new_self_dual_with_index_palette(
         &mut self,
         name: &str,
@@ -1978,7 +1474,7 @@ impl ExtendibleReps {
         self.new_self_dual_impl(name, Some(index_palette), None)
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     pub fn new_self_dual_with_index_palette_and_row(
         &mut self,
         name: &str,
@@ -1999,14 +1495,14 @@ impl ExtendibleReps {
             if let LibraryRep::Dualizable(_) = rep {
                 return Err(RepLibraryError::AlreadyExistsDifferentType(name.into()));
             }
-            #[cfg(feature = "symbolica")]
+            #[cfg(feature = "shadowing")]
             if let Some(index_palette) = &index_palette
                 && RepresentationMetadata::from_symbol(self[*rep].symbol)
                     .is_none_or(|metadata| metadata.index_palette != *index_palette)
             {
                 return Err(RepLibraryError::AlreadyExistsDifferentMetadata(name.into()));
             }
-            #[cfg(feature = "symbolica")]
+            #[cfg(feature = "shadowing")]
             if let Some(index_row) = index_row
                 && RepresentationMetadata::from_symbol(self[*rep].symbol)
                     .is_none_or(|metadata| metadata.index_row != index_row)
@@ -2018,23 +1514,23 @@ impl ExtendibleReps {
 
         let rep = LibraryRep::SelfDual(SELF_DUAL.len() as u16);
 
-        #[cfg(feature = "symbolica")]
+        #[cfg(feature = "shadowing")]
         let symbol = rep.new_symbol_with_index_row(
             &canonical_name,
             index_palette.unwrap_or_else(|| default_index_palette(&canonical_name)),
             index_row.unwrap_or_else(|| default_index_row(&canonical_name)),
         )?;
-        #[cfg(not(feature = "symbolica"))]
+        #[cfg(not(feature = "shadowing"))]
         let _ = (index_palette, index_row);
         self.name_map.insert(canonical_name, rep);
-        #[cfg(feature = "symbolica")]
+        #[cfg(feature = "shadowing")]
         self.symbol_map.insert(symbol, rep);
 
         SELF_DUAL.push((
             rep,
             RepData {
                 name: name.to_string(),
-                #[cfg(feature = "symbolica")]
+                #[cfg(feature = "shadowing")]
                 symbol,
             },
         ));
@@ -2055,7 +1551,7 @@ impl ExtendibleReps {
                 }
                 LibraryRep::InlineMetric(a) => {
                     if INLINE_METRIC[*a as usize].1.metric_data == metric_fn {
-                        #[cfg(feature = "symbolica")]
+                        #[cfg(feature = "shadowing")]
                         if RepresentationMetadata::from_symbol(self[*rep].symbol).is_none_or(
                             |metadata| {
                                 metadata.index_palette != default_index_palette(&canonical_name)
@@ -2076,10 +1572,10 @@ impl ExtendibleReps {
         }
 
         let rep = LibraryRep::InlineMetric(INLINE_METRIC.len() as u16);
-        #[cfg(feature = "symbolica")]
+        #[cfg(feature = "shadowing")]
         let symbol = rep.new_symbol(&canonical_name, default_index_palette(&canonical_name))?;
         self.name_map.insert(canonical_name, rep);
-        #[cfg(feature = "symbolica")]
+        #[cfg(feature = "shadowing")]
         self.symbol_map.insert(symbol, rep);
 
         INLINE_METRIC.push((
@@ -2088,7 +1584,7 @@ impl ExtendibleReps {
                 metric_data: metric_fn,
                 rep_data: RepData {
                     name: name.to_string(),
-                    #[cfg(feature = "symbolica")]
+                    #[cfg(feature = "shadowing")]
                     symbol,
                 },
             },
@@ -2119,11 +1615,11 @@ impl ExtendibleReps {
     pub fn new() -> Self {
         let mut new = Self {
             name_map: AHashMap::new(),
-            #[cfg(feature = "symbolica")]
+            #[cfg(feature = "shadowing")]
             symbol_map: AHashMap::new(),
         };
 
-        // #[cfg(feature = "symbolica")]
+        // #[cfg(feature = "shadowing")]
         // let _ = AIND_SYMBOLS.aind;
         new.new_self_dual(Euclidean::NAME).unwrap();
         fn mink_is_neg(id: ConcreteIndex) -> bool {
@@ -2136,7 +1632,7 @@ impl ExtendibleReps {
         new
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     pub fn find_symbol(&self, symbol: Symbol) -> Option<LibraryRep> {
         self.symbol_map.get(&symbol).cloned()
     }
@@ -2167,7 +1663,7 @@ impl Display for LibraryRep {
 
 pub fn initialize() {
     let _ = LibraryRep::from(Minkowski {}).to_string();
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     let _ = ETS.metric;
 }
 
@@ -2249,7 +1745,7 @@ impl RepName for LibraryRep {
         }
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     fn try_from_symbol(sym: Symbol, aind: Symbol) -> Result<Self, RepresentationError> {
         use super::abstract_index::AIND_SYMBOLS;
 
@@ -2285,7 +1781,7 @@ impl RepName for LibraryRep {
         }
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     fn try_from_symbol_coerced(sym: Symbol) -> Result<Self, RepresentationError> {
         Self::from_registered_or_portable_symbol(sym)
     }
@@ -2302,7 +1798,7 @@ impl RepName for LibraryRep {
         matches!(self, LibraryRep::Dummy)
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     /// yields a function builder for the representation
     fn to_symbolic<'a, It: Into<AtomOrView<'a>>>(
         &self,
@@ -2397,7 +1893,7 @@ impl<T: RepName> Representation<T> {
             .then(self.rep.match_cmp(&other.rep))
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     /// yields a function builder for the representation, adding a first variable: the dimension.
     ///
     pub fn to_symbolic(&self, args: impl IntoIterator<Item = Atom>) -> Atom {
@@ -2457,7 +1953,7 @@ fn test_negative() {
     assert!(agree);
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 /// Can construct a `Representation` from an `AtomView` of the form
 /// `<representation>(<dimension>)`.
 ///
@@ -2465,18 +1961,33 @@ impl<'a, T: RepName> TryFrom<AtomView<'a>> for Representation<T> {
     type Error = SlotError;
 
     fn try_from(value: AtomView<'a>) -> Result<Self, Self::Error> {
+        Self::parse_with(value, |head, wrapper| match wrapper {
+            Some(wrapper) => T::try_from_symbol(head, wrapper),
+            None => T::try_from_symbol_coerced(head),
+        })
+    }
+}
+
+#[cfg(feature = "shadowing")]
+impl<T: RepName> Representation<T> {
+    /// Read the existing representation-prefix grammar with a caller-owned
+    /// resolver. Dimension validation and acceptance of trailing arguments stay
+    /// identical for direct conversion and operation-scoped cached recognition.
+    pub(crate) fn parse_with(
+        value: AtomView<'_>,
+        mut resolve: impl FnMut(Symbol, Option<Symbol>) -> Result<T, RepresentationError>,
+    ) -> Result<Self, SlotError> {
         let (rep, mut iter) = if let AtomView::Fun(f) = value {
             let name = f.get_symbol();
 
             let innerf = f.iter().next().ok_or(SlotError::Composite)?;
 
             if let AtomView::Fun(innerf) = innerf {
-                let rep =
-                    T::try_from_symbol(innerf.get_symbol(), name).map_err(SlotError::RepError)?;
+                let rep = resolve(innerf.get_symbol(), Some(name)).map_err(SlotError::RepError)?;
 
                 (rep, innerf.iter())
             } else {
-                let rep = T::try_from_symbol_coerced(name).map_err(SlotError::RepError)?;
+                let rep = resolve(name, None).map_err(SlotError::RepError)?;
                 (rep, f.iter())
             }
         } else {
@@ -2530,10 +2041,80 @@ impl<'a, T: RepName> FromIterator<&'a Representation<T>> for Vec<Dimension> {
 #[cfg(test)]
 mod test {
     use linnet::permutation::Permutation;
+    use std::cmp::Ordering;
 
+    #[cfg(feature = "shadowing")]
+    use symbolica::symbol;
+
+    use crate::structure::dimension::Dimension;
     use crate::structure::representation::{RepName, Representation};
 
-    use super::{Euclidean, LibraryRep, Lorentz, Minkowski};
+    use super::{Dummy, Euclidean, LibraryRep, Lorentz, Minkowski};
+
+    #[test]
+    fn representation_order_is_total_and_consistent_with_equality() {
+        let dimensions = [
+            Dimension::Concrete(0),
+            Dimension::Concrete(1),
+            Dimension::Concrete(4),
+            #[cfg(feature = "shadowing")]
+            Dimension::from(symbol!("representation_order_a")),
+            #[cfg(feature = "shadowing")]
+            Dimension::from(symbol!("representation_order_b")),
+        ];
+        let kinds = [
+            LibraryRep::Dummy,
+            Euclidean {}.into(),
+            Minkowski {}.into(),
+            Lorentz {}.into(),
+            Lorentz {}.dual().into(),
+        ];
+        let representations: Vec<_> = kinds
+            .into_iter()
+            .flat_map(|rep| dimensions.map(|dim| Representation { rep, dim }))
+            .collect();
+
+        for left in &representations {
+            for right in &representations {
+                assert_eq!(left.cmp(right) == Ordering::Equal, left == right);
+                assert_eq!(left.partial_cmp(right), Some(left.cmp(right)));
+                assert_eq!(left.cmp(right), right.cmp(left).reverse());
+                for third in &representations {
+                    if left <= right && right <= third {
+                        assert!(left <= third, "{left:?} <= {right:?} <= {third:?}");
+                    }
+                }
+            }
+        }
+
+        let small = Dummy {}.new_rep(1);
+        let large = Dummy {}.new_rep(4);
+        assert!(small < large);
+        assert!(small.cast::<LibraryRep>() < large.cast::<LibraryRep>());
+    }
+
+    #[test]
+    fn sorting_respects_kind_orientation_and_dimension_including_dummy() {
+        let expected = [
+            LibraryRep::Dummy.new_rep(0),
+            LibraryRep::Dummy.new_rep(4),
+            Euclidean {}.new_rep(0).cast(),
+            Euclidean {}.new_rep(4).cast(),
+            Minkowski {}.new_rep(2).cast(),
+            Lorentz {}.new_rep(1).cast(),
+            Lorentz {}.new_rep(4).cast(),
+            Lorentz {}.dual().new_rep(1).cast(),
+            Lorentz {}.dual().new_rep(4).cast(),
+        ];
+        assert!(Permutation::sort(expected).is_identity());
+        for rotation in 0..expected.len() {
+            let mut input = expected;
+            input.reverse();
+            input.rotate_left(rotation);
+            input.sort();
+            assert_eq!(input, expected);
+        }
+    }
 
     #[test]
     fn ordering() {
@@ -2556,14 +2137,15 @@ mod test {
 }
 
 #[cfg(test)]
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 mod shadowing_tests {
     use symbolica::atom::{Atom, AtomView, NamespacedSymbol, Symbol, SymbolBuilder};
+    use symbolica_notation::IndexDisplay;
 
     use crate::network::tags::SPENSO_TAG;
 
     use super::{
-        IndexDisplay, IndexPalette, IndexRow, LibraryRep, Minkowski, RepLibraryError, RepName,
+        IndexPalette, IndexRow, LibraryRep, Minkowski, RepLibraryError, RepName,
         RepresentationClass, RepresentationError, RepresentationMetadata,
         representation_typst_body,
     };
@@ -2821,44 +2403,48 @@ mod shadowing_tests {
     }
 
     #[test]
-    fn mathematical_display_nodes_render_and_round_trip_as_safe_user_data() {
-        let display = IndexDisplay::math(
-            "add",
-            vec![
-                IndexDisplay::math(
-                    "accent",
-                    vec![
-                        IndexDisplay::symbol("p").unwrap(),
-                        IndexDisplay::symbol("⃗").unwrap(),
-                    ],
-                )
-                .unwrap(),
-                IndexDisplay::math(
-                    "frac",
-                    vec![IndexDisplay::symbol("q").unwrap(), IndexDisplay::Number(2)],
-                )
-                .unwrap(),
-                IndexDisplay::text("soft").unwrap(),
-            ],
-        )
-        .unwrap();
+    fn ordinary_representation_calls_reuse_symbolica_namespace_and_color_handling() {
+        use symbolica::{
+            atom::AtomCore,
+            function,
+            printer::{ColorMode, PrintOptions},
+            symbol,
+        };
 
-        assert_eq!(
-            display.to_typst_source(),
-            r#"accent(p,"⃗") + frac(q,2) + upright("soft")"#
+        let dimension = function!(
+            symbol!("representation_print_test::dim"),
+            symbol!("representation_print_test::D")
         );
-        let symbol = SymbolBuilder::new(NamespacedSymbol::parse(
-            "spenso_rep_metadata_tests::MathDisplayRoundTrip",
-        ))
-        .with_user_data(display.symbol_user_data())
-        .build()
-        .unwrap();
-        assert_eq!(IndexDisplay::from_symbol(symbol), Some(display));
-    }
+        let representation = LibraryRep::from(Minkowski {}).to_symbolic([dimension.clone()]);
+        let ordinary = function!(symbol!("representation_print_control::mink"), dimension);
+        let outer = symbol!("representation_print_test::P");
+        let actual = function!(outer, representation);
+        let control = function!(outer, ordinary);
+        let canonical = actual.to_canonical_string();
 
-    #[test]
-    fn unknown_math_display_heads_cannot_be_constructed() {
-        assert!(IndexDisplay::math("raw-code", vec![]).is_err());
+        for brackets in [('(', ')'), ('[', ']')] {
+            let options = PrintOptions {
+                function_brackets: brackets,
+                hide_all_namespaces: true,
+                color_mode: ColorMode::Always,
+                ..PrintOptions::new()
+            };
+            let actual_text = actual.printer(options.clone()).to_string();
+            let expected_text = control.printer(options).to_string();
+            assert!(!actual_text.contains("::"));
+            assert!(actual_text.contains("\x1b["));
+            assert_eq!(actual_text, expected_text);
+        }
+        let explicit = actual
+            .printer(PrintOptions {
+                hide_all_namespaces: false,
+                color_mode: ColorMode::Never,
+                ..PrintOptions::new()
+            })
+            .to_string();
+        assert!(explicit.contains("spenso::mink("));
+        assert!(explicit.contains("representation_print_test::D"));
+        assert_eq!(actual.to_canonical_string(), canonical);
     }
 
     #[test]

@@ -1,28 +1,25 @@
 use std::ffi::CString;
 
-use pyo3::{
-    prelude::*,
-    types::{PyCFunction, PyDict, PyList, PyModule},
+use pyo3::types::{PyAnyMethods, PyDictMethods, PyModuleMethods};
+use pyo3::types::{PyCFunction, PyDict, PyList, PyModule};
+use pyo3::{Bound, PyResult, Python};
+use spenso::portable_payload;
+use spenso::portable_payload::{
+    MATH_DISPLAY_ATTACHMENT_SCHEMA, MathDisplayDeclaration, MathDisplayDeclarations,
+    PortableRepresentationClass, REPRESENTATION_ATTACHMENT_SCHEMA, RepresentationDeclaration,
+    RepresentationDeclarations,
 };
-use spenso::{
-    portable_payload::{
-        MATH_DISPLAY_ATTACHMENT_SCHEMA, MathDisplayDeclaration, MathDisplayDeclarations,
-        PortableRepresentationClass, REPRESENTATION_ATTACHMENT_SCHEMA, RepresentationDeclaration,
-        RepresentationDeclarations, attachments_for_atom, canonical_math_display_symbol_name,
-        register_math_display_symbol,
-    },
-    structure::representation::{IndexDisplay, IndexPalette, IndexRow, LibraryRep},
-};
+use spenso::structure::representation::{IndexPalette, IndexRow, LibraryRep};
 use spynso3::SpensoModule;
-use symbolica::{
-    api::python::{SymbolicaCommunityModule, create_symbolica_module},
-    atom::{Atom, FunctionBuilder, NamespacedSymbol, SymbolBuilder},
-    parse,
-};
-use symbolica_typst_atom_payload::{encode_atom_from_set, parse_payload};
+use symbolica::api::python;
+use symbolica::api::python::SymbolicaCommunityModule;
+use symbolica::atom::{Atom, FunctionBuilder, NamespacedSymbol, SymbolBuilder};
+use symbolica::parse;
+use symbolica_notation::IndexDisplay;
+use symbolica_typst_plugin::payload;
 
 const SPENSO_WRAPPER: &str = r#"
-from ..spenso_native import *
+from ..tensor_native import *
 
 initialize_module()
 "#;
@@ -39,7 +36,9 @@ fn install_package<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyMo
 
 fn register_spenso<'py>(core: &Bound<'py, PyModule>) -> PyResult<Bound<'py, PyModule>> {
     let py = core.py();
-    let native = PyModule::new(py, "spenso_native")?;
+    assert_eq!(SpensoModule::get_name(), "tensor");
+    let native_name = format!("{}_native", SpensoModule::get_name());
+    let native = PyModule::new(py, &native_name)?;
     let initialize_module =
         PyCFunction::new_closure(py, Some(c"initialize_module"), None, |args, _kwargs| {
             SpensoModule::initialize(args.py())
@@ -49,7 +48,7 @@ fn register_spenso<'py>(core: &Bound<'py, PyModule>) -> PyResult<Bound<'py, PyMo
     core.add_submodule(&native)?;
     py.import("sys")?
         .getattr("modules")?
-        .set_item("symbolica.community.spenso_native", &native)?;
+        .set_item(format!("symbolica.community.{native_name}"), &native)?;
     Ok(native)
 }
 
@@ -57,7 +56,7 @@ fn import_spenso_wrapper<'py>(
     py: Python<'py>,
     community: &Bound<'py, PyModule>,
 ) -> PyResult<Bound<'py, PyModule>> {
-    let name = "symbolica.community.spenso";
+    let name = "symbolica.community.tensor";
     let wrapper = PyModule::new(py, name)?;
     wrapper.setattr("__package__", name)?;
     wrapper.setattr("__path__", PyList::empty(py))?;
@@ -66,7 +65,7 @@ fn import_spenso_wrapper<'py>(
         .set_item(name, &wrapper)?;
     let source = CString::new(SPENSO_WRAPPER).expect("Spenso wrapper contains a null byte");
     py.run(&source, Some(&wrapper.dict()), Some(&wrapper.dict()))?;
-    community.add("spenso", &wrapper)?;
+    community.add("tensor", &wrapper)?;
     PyModule::import(py, name)
 }
 
@@ -76,7 +75,7 @@ fn combined_core_exposes_rich_display_with_one_expression_type() {
     Python::attach(|py| -> PyResult<()> {
         let symbolica = install_package(py, "symbolica")?;
         let core = PyModule::new(py, "symbolica.core")?;
-        create_symbolica_module(&core)?;
+        python::create_symbolica_module(&core)?;
         py.import("sys")?
             .getattr("modules")?
             .set_item("symbolica.core", &core)?;
@@ -86,6 +85,16 @@ fn combined_core_exposes_rich_display_with_one_expression_type() {
         symbolica.add("community", &community)?;
         register_spenso(&core)?;
         let spenso = import_spenso_wrapper(py, &community)?;
+        assert!(!community.hasattr("spenso")?);
+        for name in ["Tensor", "TensorExpression", "Representation"] {
+            assert_eq!(
+                spenso
+                    .getattr(name)?
+                    .getattr("__module__")?
+                    .extract::<String>()?,
+                "symbolica.community.tensor"
+            );
+        }
 
         let locals = PyDict::new(py);
         locals.set_item("core", &core)?;
@@ -118,82 +127,93 @@ assert type(spenso.formatted(expression, True)) is core.FormattedOutput
 for name in ("formatted", "to_html", "to_svg", "to_typst"):
     assert hasattr(tensor, name), name
 
-# Explicit rendering reports the optional dependency, while notebook and
-# FormattedOutput paths silently retain their existing LaTeX/text fallback.
+# Default HTML and project exports are independent of optional renderers.
+# Explicit SVG compilation uses typst-py only after the import block is restored.
 import builtins
 import sys
+import xml.etree.ElementTree as ET
 
-previous_typst = sys.modules.pop("typst", None)
 original_import = builtins.__import__
-
-def import_without_typst(name, globals=None, locals=None, fromlist=(), level=0):
-    if name == "typst":
-        raise ImportError("typst deliberately unavailable in this test")
+def import_without_renderers(name, globals=None, locals=None, fromlist=(), level=0):
+    if name in ("typst", "linnet"):
+        raise ImportError(f"{name} deliberately unavailable in this test")
     return original_import(name, globals, locals, fromlist, level)
 
-builtins.__import__ = import_without_typst
+custom_notation = '#panic("trusted-notation-sentinel")'
+svg_renderers = (
+    lambda **kwargs: tensor.to_svg(**kwargs),
+    lambda **kwargs: spenso.to_svg(expression, **kwargs),
+)
+builtins.__import__ = import_without_renderers
 try:
-    try:
-        spenso.to_html(expression)
-    except ImportError as error:
-        assert "gammaloop[typst-display]" in str(error)
-    else:
-        raise AssertionError("explicit HTML rendering must require typst-display")
-
-    assert tensor._repr_html_() is None
+    html = spenso.to_html(expression)
+    assert "<math" in html
+    assert "data:font" not in html
+    assert len(html.encode()) < 10_000
+    assert "<math" in tensor._repr_html_()
     assert type(spenso.formatted(expression, True)) is core.FormattedOutput
+    for project in (
+        tensor.to_typst_project(notation_source=custom_notation),
+        spenso.to_typst_project(expression, notation_source=custom_notation),
+    ):
+        assert {"main.typ", "render.typ", "notation.typ", "tree.cbor"} <= project.keys()
+        assert all(isinstance(value, bytes) and value for value in project.values())
+        assert project["notation.typ"] == custom_notation.encode()
+        assert b'"notation.typ"' in project["main.typ"]
+    # HTML rejects compiler-specific notation before attempting any import.
+    for render in (lambda **kwargs: tensor.to_html(**kwargs),
+                   lambda **kwargs: spenso.to_html(expression, **kwargs)):
+        try:
+            render(notation_source=custom_notation)
+        except ValueError as error:
+            assert "direct MathML" in str(error) and "notation_source" in str(error)
+        else:
+            raise AssertionError("HTML accepted compiler-specific notation")
+    for render in svg_renderers:
+        for keywords in ({}, {"notation_source": custom_notation}):
+            try:
+                render(**keywords)
+            except ImportError as error:
+                assert "optional Python package 'typst'" in str(error), str(error)
+            else:
+                raise AssertionError("SVG compilation bypassed the blocked optional compiler")
 finally:
     builtins.__import__ = original_import
-    if previous_typst is not None:
-        sys.modules["typst"] = previous_typst
 
-# A fake compiler lets this test verify the trusted notation source and
-# temporary project routing without installing typst-py or pretending to test
-# its compiler.
-import pathlib
-import types
+try:
+    import typst
+except ImportError:
+    pass
+else:
+    # The optional integration environment supplies the real Python compiler.
+    assert callable(typst.compile)
+    for render in svg_renderers:
+        svg = render()
+        assert svg.startswith("<svg")
+        assert ET.fromstring(svg).tag == "{http://www.w3.org/2000/svg}svg"
+        try:
+            render(notation_source=custom_notation)
+        except RuntimeError as error:
+            assert "trusted-notation-sentinel" in str(error), str(error)
+        else:
+            raise AssertionError("custom notation was not compiled")
 
-typst = types.ModuleType("typst")
-typst.calls = []
-
-def compile_typst(input, *, root, format, pretty):
-    root = pathlib.Path(root)
-    assert pathlib.Path(input) == root / "main.typ"
-    files = {path.name: path.read_bytes() for path in root.iterdir()}
-    typst.calls.append((files, format, pretty))
-    if format == "html":
-        return b"<html><head><style>.math{}</style></head><body><math><mi>T</mi></math></body></html>"
-    if format == "svg":
-        return b"<svg xmlns='http://www.w3.org/2000/svg'></svg>"
-    raise AssertionError(format)
-
-typst.compile = compile_typst
-sys.modules["typst"] = typst
-notation_source = "#let trusted-notation-sentinel = 42"
-
-html = spenso.to_html(expression, notation_source=notation_source)
-assert "<math" in html
-files, format, pretty = typst.calls[-1]
-assert files["notation.typ"] == notation_source.encode()
-assert files["render.typ"]
-assert files["tree.cbor"]
-assert format == "html"
-assert pretty is True
-
-svg = tensor.to_svg(notation_source=notation_source)
-assert svg.startswith("<svg")
-files, format, pretty = typst.calls[-1]
-assert files["notation.typ"] == notation_source.encode()
-assert format == "svg"
-assert pretty is True
-
-del sys.modules["typst"]
-if previous_typst is not None:
-    sys.modules["typst"] = previous_typst
 "##,
         )
         .expect("Python assertions contain a null byte");
-        py.run(&assertions, Some(&locals), Some(&locals))
+        py.run(&assertions, Some(&locals), Some(&locals))?;
+        for name in ["E", "FormattedOutput", "PrintMode"] {
+            symbolica.add(name, core.getattr(name)?)?;
+        }
+        locals.set_item("__name__", "symbolic_preview_tests")?;
+        let preview_tests = CString::new(include_str!("installed_symbolic_preview.py"))
+            .expect("symbolic preview fixture contains no null bytes");
+        py.run(&preview_tests, Some(&locals), Some(&locals))?;
+        py.run(
+            c"assert unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromTestCase(SymbolicDisplayTests)).wasSuccessful()",
+            Some(&locals),
+            Some(&locals),
+        )
     })
     .unwrap();
 }
@@ -226,8 +246,10 @@ fn native_payload_round_trip_preserves_nested_calls_and_spenso_attachments() {
         .unwrap()
         .with_bottom(IndexDisplay::Number(2));
     let math_display_declaration = MathDisplayDeclaration::new(manual_display.clone()).unwrap();
-    let display_name = canonical_math_display_symbol_name(&manual_display, namespace).unwrap();
-    let display_symbol = register_math_display_symbol(&manual_display, namespace).unwrap();
+    let display_name =
+        portable_payload::canonical_math_display_symbol_name(&manual_display, namespace).unwrap();
+    let display_symbol =
+        portable_payload::register_math_display_symbol(&manual_display, namespace).unwrap();
 
     let nested = parse!("f(2*g(r-x))");
     let envelope_name = format!("{namespace}::payload");
@@ -240,7 +262,7 @@ fn native_payload_round_trip_preserves_nested_calls_and_spenso_attachments() {
         .add_arg(Atom::var(display_symbol))
         .finish();
 
-    let attachments = attachments_for_atom(&atom).unwrap();
+    let attachments = portable_payload::attachments_for_atom(&atom).unwrap();
     assert_eq!(attachments.len(), 2);
     assert!(
         attachments
@@ -253,8 +275,8 @@ fn native_payload_round_trip_preserves_nested_calls_and_spenso_attachments() {
             .any(|attachment| attachment.schema() == MATH_DISPLAY_ATTACHMENT_SCHEMA)
     );
 
-    let payload = encode_atom_from_set(&atom, &attachments).unwrap();
-    let parsed = parse_payload(&payload).unwrap();
+    let payload = payload::encode_atom_from_set(&atom, &attachments).unwrap();
+    let parsed = payload::parse_payload(&payload).unwrap();
     let imported_attachments = parsed.attachment_set();
     assert_eq!(imported_attachments, attachments);
     let representations =
@@ -277,5 +299,8 @@ fn native_payload_round_trip_preserves_nested_calls_and_spenso_attachments() {
 
     let imported = parsed.import_atom().unwrap();
     assert_eq!(imported, atom);
-    assert_eq!(attachments_for_atom(&imported).unwrap(), attachments);
+    assert_eq!(
+        portable_payload::attachments_for_atom(&imported).unwrap(),
+        attachments
+    );
 }

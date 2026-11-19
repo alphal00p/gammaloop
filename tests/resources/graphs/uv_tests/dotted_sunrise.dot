@@ -1,14 +1,20 @@
 digraph sunrise{
-    node [num = "1" ]
-    edge [num = "1" particle=scalar_1]
-    e        [style=invis]
+  num = "1";
+  overall_factor = "1";
+  overall_factor_evaluated = "1";
+  projector = "1";
+  A[dod="0" num="1"];
+  B[dod="0" num="1"];
+  C[dod="0" num="1"];
 
-    e -> A:0   [ id=3]
-    B:1 -> e   [ id=4]
-
-    A -> C    [ id=0 lmb_id=0]
-    C -> e    [ id=5]
-    C -> B    [ id=6]
-    A -> B    [ id=1 lmb_id=1]
-    A -> B    [ id=2]
+  A:6	-> C:7	 [id=0 dir=none source="{ufo_order:3}" sink="{ufo_order:0}"  dod="-2" lmb_id="0" lmb_rep="K(0,a___)" name="e0" num="1" particle="scalar_1"];
+  A:2	-> B:3	 [id=1 dir=none source="{ufo_order:1}" sink="{ufo_order:1}"  dod="-2" lmb_id="1" lmb_rep="K(1,a___)" name="e1" num="1" particle="scalar_1"];
+  A:4	-> B:5	 [id=2 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="-2" lmb_rep="-1*K(0,a___)+-1*K(1,a___)+P(0,a___)" name="e2" num="1" particle="scalar_1"];
+  ext3	 [style=invis];
+  ext3	-> A:0	 [id=3 dir=none sink="{ufo_order:0}" dod="-2" lmb_rep="P(0,a___)" name="e3" num="1" particle="scalar_1"];
+  ext4	 [style=invis];
+  B:1	-> ext4	 [id=4 dir=none source="{ufo_order:0}" dod="-2" lmb_rep="P(1,a___)" name="e4" num="1" particle="scalar_1"];
+  ext5	 [style=invis];
+  C:10	-> ext5	 [id=5 dir=none source="{ufo_order:2}" dod="-2" lmb_rep="-1*P(1,a___)+P(0,a___)" name="e5" num="1" particle="scalar_1"];
+  C:8	-> B:9	 [id=6 dir=none source="{ufo_order:1}" sink="{ufo_order:3}"  dod="-2" lmb_rep="-1*P(0,a___)+K(0,a___)+P(1,a___)" name="e6" num="1" particle="scalar_1"];
 }

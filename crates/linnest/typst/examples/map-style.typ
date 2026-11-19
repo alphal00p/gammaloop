@@ -39,8 +39,11 @@
   stroke: edge-stroke,
   pattern: "coil",
   pattern-amplitude: 0.15,
-  pattern-wavelength: 0.60,
-  pattern-coil-longitudinal-scale: 1.60,
+  pattern-wavelength: 0.45,
+  pattern-fit: true,
+  pattern-phase: calc.pi / 2,
+  pattern-natural-endpoints: true,
+  pattern-coil-longitudinal-scale:1.4,
 )
 #let scalar = (
   stroke: edge-stroke + (thickness: massive, dash: (0.1em, 0.45em)),
@@ -64,8 +67,8 @@
   )
   let fields = (:)
   for (kind, options, keys) in (
-    ("arrow", arrow.named(), ("side", "offset", "length", "shift")),
-    ("label", label, ("gap", "shift", "anchor")),
+    ("arrow", arrow.named(), ("side", "offset", "length", "ratio", "shift")),
+    ("label", label, ("gap", "shift", "anchor", "slide", "side")),
   ) {
     for (key, value) in options {
       assert(
@@ -124,7 +127,11 @@
   let shift = _number(edge, "momentum-arrow-shift", 0)
   let label-shift = _number(edge, "momentum-label-shift", shift)
   let anchor = _value(edge, "momentum-label-anchor", auto)
-  let offset = _number(edge, "momentum-arrow-offset", 0.62)
+  let offset = _number(edge, "momentum-arrow-offset", 0.35)
+  let ratio = _value(edge, "momentum-arrow-ratio", 0.5)
+  let ratio = if ratio == none or str(ratio).trim("\"") == "none" { none } else {
+    _number(edge, "momentum-arrow-ratio", 0.5)
+  }
   let side = _value(edge, "momentum-arrow-side", auto)
   let side = if side == auto { "auto" } else { str(side).trim("\"") }
   assert(
@@ -150,10 +157,10 @@
   let arrow = (
     geometry
       + (
-        length: _number(edge, "momentum-arrow-length", 1.0),
+        length: _number(edge, "momentum-arrow-length", 1.4),
         shift: shift,
-        ratio: none,
-        resolve-length: "length",
+        ratio: ratio,
+        resolve-length: if ratio == none { "length" } else { "min" },
         stroke: config.at("momentum-stroke", default: (
           paint: black,
           thickness: 0.4pt,
@@ -165,12 +172,18 @@
       )
   )
   // Auto clears the complete label box; explicit anchors use only the gap.
-  // The label defaults to the requested arrow shift, but follows a point on the
-  // full invisible path, so its endpoint clamps never depend on arrow length.
+  // Arrow and text share one full carrier, preserving their relative shift
+  // while collision placement chooses an arc position and automatic side.
+  let label-side = _value(edge, "momentum-label-side", if side == "auto" { auto } else { side })
   (
-    arrow,
     geometry
       + (
+        offset: 0,
+        offset-side: none,
+        label-only: true,
+        label-path: arrow,
+        label-slide: _enabled(edge, "momentum-label-slide", default: true),
+        label-side: if label-side in ("auto", auto) { auto } else { str(label-side).trim("\"") },
         length: none,
         ratio: none,
         resolve-length: "none",
@@ -197,7 +210,7 @@
     .at("feynman", default: (:))
     .at(
       "node-style",
-      default: (radius: 0.18, fill: white, stroke: edge-stroke),
+      default: (radius: 0.08, fill: black, stroke: edge-stroke),
     )
 }
 
@@ -206,7 +219,7 @@
 #let graph-style(
   unit: 1.35,
   line-width: massless,
-  node-radius: 0.18,
+  node-radius: 0.08,
   node-line-width: auto,
   massive-line-width: auto,
   fermion-arrow-line-width: auto,
@@ -239,7 +252,7 @@
       feynman: (
         node-style: (
           radius: node-radius,
-          fill: white,
+          fill: black,
           stroke: stroke + (thickness: node-line-width),
         ),
         fermion: fermion,

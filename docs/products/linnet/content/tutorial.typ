@@ -1,7 +1,7 @@
 #import "../../shared.typ": callout
 
 #let tutorial = [
-= Tutorial
+= Build and explore a graph
 
 In this tutorial, you will construct a half-edge graph in Rust, validate its invariants, find
 its one independent cycle inside an explicitly selected subgraph, and print DOT. The builder
@@ -65,9 +65,9 @@ Run it with `cargo run`. Success means the assertion passes and stdout contains 
 `digraph` with nodes `a`, `b`, and `c`, three paired internal edges, and two dangling boundary
 edges. The external edges do not add a cycle, so the triangle's cycle-basis rank remains one.
 
-#callout("Verification scope and cost", [
-  The docs harness compiles and runs this Rust program; it syntax-checks the setup commands
-  without creating a project or using the network. Success requires `graph.check()` and the
+#callout("Running locally and cost", [
+  Run the setup commands and Rust program locally; this Rust example cannot run in the browser.
+  Success requires `graph.check()` and the
   subgraph cycle-rank assertion to pass. The run is small; a clean external Cargo build is
   dependency-dominated and can take minutes, while the graph operation itself should finish in
   well under a second.

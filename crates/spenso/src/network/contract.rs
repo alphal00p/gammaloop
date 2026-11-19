@@ -407,25 +407,6 @@ pub struct SingleSmallestDegree<const D: bool, CStrat = (), COpt = ()> {
     phantom: std::marker::PhantomData<(CStrat, COpt)>,
 }
 
-/// Incremental policy that contracts one maximum-degree pair per invocation.
-///
-/// `D` enables pair diagnostics on the legacy owned-product path.
-pub struct SingleLargestDegree<const D: bool, CStrat = (), COpt = ()> {
-    phantom: std::marker::PhantomData<(CStrat, COpt)>,
-}
-
-/// Names the two complete built-in pair-selection families.
-///
-/// [`Network::execute`](super::Network::execute) selects a concrete strategy by
-/// generic type; this descriptive enum is not itself passed to that method and
-/// does not contain a stored plan.
-pub enum ContractionMode {
-    /// Minimize the number of matched slots contracted in the next pair.
-    SmallestDegree,
-    /// Minimize the configured result-rank score.
-    MinResultRank,
-}
-
 /// Selects and evaluates tensor pairs inside one ready product operation.
 ///
 /// The execution strategy owns graph scheduling. A contraction strategy sees
@@ -2922,83 +2903,6 @@ where
     {
         let mut product = ProductContraction::from_operation(graph, operation)?;
         product.contract_one_by_degree_in_place::<D, false, LT, T, L, Sc, CStrat, COpt, FK, Store>(
-            executor, graph, lib, ignored,
-        )
-    }
-}
-
-impl<
-    CStrat,
-    COpt,
-    LT: LibraryTensor + Clone,
-    T: HasStructure
-        + TensorStructure
-        + Clone
-        + Contract<T, CStrat, LCM = T>
-        + AtomComponentOptimizable<COpt>
-        + ScalarMul<Sc, Output = T>
-        + Contract<LT::WithIndices, LCM = T>
-        + From<LT::WithIndices>
-        + Ref
-        + FastTensorSum
-        + FastTensorSumContractible<Sc>
-        + TensorCommonFactor<Sc>
-        + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
-    L: Library<T::Structure, Key = K, Value = Canonicalized<LT>>,
-    Sc: for<'a> MulAssign<Sc::Ref<'a>>
-        + Clone
-        + for<'a> MulAssign<T::ScalarRef<'a>>
-        + From<T::Scalar>
-        + Ref,
-    Store: NetworkStoreAccess<Tensor = T, Scalar = Sc>,
-    K: Display + Debug + Clone,
-    FK: Display + Debug + Clone,
-    Aind: AbsInd,
-    const D: bool,
-> ContractionStrategy<Store, L, K, FK, Aind> for SingleLargestDegree<D, CStrat, COpt>
-where
-    LT::WithIndices: Contract<LT::WithIndices, LCM = T>
-        + ScalarMul<Sc, Output = T>
-        + ApplyPendingIndexPermutation<Output = LT::WithIndices>,
-    <LT::WithIndices as HasStructure>::Structure: Display,
-    T::Structure: Display,
-    <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
-        IsAbstractSlot<Aind = Aind>,
-{
-    const SUPPORTS_PARTIAL_GRAPH_REWRITE: bool = true;
-
-    fn contract(
-        executor: &mut Store,
-        graph: &NetworkGraph<K, FK, Aind>,
-        operation: &NetworkOperation<FK>,
-        lib: &L,
-    ) -> Result<NetworkLeaf<K, Aind>, TensorNetworkError<K, FK>>
-    where
-        K: Display,
-        FK: Display,
-    {
-        let mut product = ProductContraction::from_operation(graph, operation)?;
-        product.contract_scalars::<LT, T, L, Sc, FK, Store>(executor, graph, lib)?;
-        product.contract_one_by_degree::<D, true, LT, T, L, Sc, CStrat, COpt, FK, Store>(
-            executor, graph, lib,
-        )?;
-        product.finish::<LT, T, L, Sc, FK, Store>(executor, graph, lib)
-    }
-
-    fn contract_product_in_place(
-        executor: &mut Store,
-        graph: &mut NetworkGraph<K, FK, Aind>,
-        operation: &NetworkOperation<FK>,
-        lib: &L,
-        ignored: &mut SuBitGraph,
-    ) -> Result<bool, TensorNetworkError<K, FK>>
-    where
-        K: Display + Debug,
-        FK: Display + Debug,
-        Aind: AbsInd,
-    {
-        let mut product = ProductContraction::from_operation(graph, operation)?;
-        product.contract_one_by_degree_in_place::<D, true, LT, T, L, Sc, CStrat, COpt, FK, Store>(
             executor, graph, lib, ignored,
         )
     }

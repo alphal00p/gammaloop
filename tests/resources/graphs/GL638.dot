@@ -1,4 +1,5 @@
 digraph GL638{
+    final_state = "H,t,t~|H,t,t~,g|H,t,t~,g,g";
     num = "1";
     overall_factor = "NumeratorDependentGrouping(638,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1)*NumeratorIndependentSymmetryGrouping(2))+NumeratorDependentGrouping(639,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1)*NumeratorIndependentSymmetryGrouping(2))";
     overall_factor_evaluated = "-4";
