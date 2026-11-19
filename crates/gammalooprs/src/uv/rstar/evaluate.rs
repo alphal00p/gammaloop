@@ -31,10 +31,23 @@ use super::{
     UvChildrenRoute, UvPreparationTerm,
     boundary::{self, BoundaryMode, BoundaryRequest, Built, ClosedRootNormalization},
     expression::{DiracBoundary, DiracKind, IntegrationTimings, RStarIntegrand, RootProjector},
+    ir_dirac::IrDiracMode,
     moments::hard_moments,
     physical::PreparedPhysicalUvTerm,
     top_mass::{self, RStarTerms, TopMassTerms},
 };
+
+/// The `(coefficient, insertion)` moments of one IR correction term's hard
+/// part, whether the closed path computed them, and the cost of today's
+/// path (`IR_CLOSED`, `IR_HARD_COST`).
+struct TermMoments {
+    moments: Vec<(Atom, Atom)>,
+    use_closed: bool,
+    taylor_seconds: f64,
+    taylor_bytes: usize,
+    project_seconds: f64,
+    project_bytes: usize,
+}
 
 /// `GAMMALOOP_IR_HARD_KEYS` (any value): log the canonical identities of the
 /// IR hard components (`IR_HARD`, `IR_HARD_PLAN`) and their costs
@@ -726,6 +739,11 @@ struct Evaluation<'a> {
     rstar_terms: RStarTerms,
     /// Root terms skipped by `rstar_terms` (logged when nonzero).
     skipped_terms: usize,
+    /// `GAMMALOOP_IR_DIRAC_CLOSURE`, read when the evaluation starts.
+    ir_dirac: IrDiracMode,
+    /// The IR Dirac closure of each IR correction (or its decline reason),
+    /// computed on first use when `ir_dirac` is on.
+    ir_dirac_boundaries: BTreeMap<usize, std::result::Result<DiracBoundary, String>>,
 }
 
 impl<'a> Evaluation<'a> {
@@ -790,6 +808,7 @@ impl<'a> Evaluation<'a> {
                 "R* currently requires a massless input graph"
             );
         }
+        let ir_dirac = super::ir_dirac::ir_dirac_mode()?;
         let settings = uv_settings.vakint.true_settings();
         let epsilon = parse!(&settings.epsilon_symbol)
             .get_symbol()
@@ -872,6 +891,8 @@ impl<'a> Evaluation<'a> {
             top_mass,
             rstar_terms,
             skipped_terms: 0,
+            ir_dirac,
+            ir_dirac_boundaries: BTreeMap::new(),
         })
     }
 
@@ -1000,6 +1021,124 @@ impl<'a> Evaluation<'a> {
         // keeps its open root slots, closed after the quotient below.
         let hard = self.open_remainder(term)?;
         let order = usize::try_from(correction.taylor_order)?;
+        // GAMMALOOP_IR_DIRAC_CLOSURE=on|check: the moments of the hard part
+        // with its open Dirac line closed into a trace, reassembled.
+        let (hard, today) = if self.ir_dirac == IrDiracMode::Off {
+            let today =
+                self.ir_term_moments(correction_index, correction, term_index, term, &hard, order)?;
+            (hard, today)
+        } else {
+            self.ir_term_dirac(correction_index, correction, term_index, term, hard, order)?
+        };
+        let TermMoments {
+            moments,
+            use_closed,
+            taylor_seconds,
+            taylor_bytes,
+            project_seconds,
+            project_bytes,
+        } = today;
+        let downstream_started = Instant::now();
+        let quotient_before = self.quotient_elapsed;
+        let integration_before = self.integration_elapsed;
+        // GAMMALOOP_IR_OUTER (any R* root; closed moments only).
+        let outer = top_mass::ir_outer()?;
+        let analytic = if outer == top_mass::IrOuter::Analytic || outer == top_mass::IrOuter::Check
+        {
+            let started = Instant::now();
+            let outcome = if !use_closed {
+                Err("not_closed".to_owned())
+            } else {
+                self.ir_outer_analytic(&hard, &correction.forest, &moments)?
+            };
+            Some((outcome, started.elapsed().as_secs_f64()))
+        } else {
+            None
+        };
+        let generic_started = Instant::now();
+        let analytic_value = match &analytic {
+            Some((Ok((value, _)), _)) if outer == top_mass::IrOuter::Analytic => {
+                Some(value.clone())
+            }
+            _ => None,
+        };
+        let generic_value = if let Some(value) = analytic_value {
+            prepared += value;
+            None
+        } else {
+            let mut generic = Atom::Zero;
+            for forest in &correction.forest {
+                let mut expression = Atom::Zero;
+                for (coefficient, insertion) in &moments {
+                    expression += coefficient * self.ir_forest(forest, insertion)?;
+                }
+                if !expression.is_zero() {
+                    if let Some(closure) = &self.root_closure {
+                        expression *= closure;
+                    }
+                    generic += self.integrate(&hard, &expression)?;
+                }
+            }
+            prepared += &generic;
+            Some(generic)
+        };
+        let generic_seconds = generic_started.elapsed().as_secs_f64();
+        if outer != top_mass::IrOuter::Unset {
+            let (outcome, stats, analytic_seconds) = match &analytic {
+                None => ("generic".to_owned(), String::new(), 0.0),
+                Some((Ok((_, stats)), seconds)) => ("analytic".to_owned(), stats.clone(), *seconds),
+                Some((Err(reason), seconds)) => {
+                    (format!("declined:{reason}"), String::new(), *seconds)
+                }
+            };
+            let check = match (&analytic, &generic_value) {
+                (Some((Ok((value, _)), _)), Some(generic)) if outer == top_mass::IrOuter::Check => {
+                    let difference = self.poles(&(generic - value))?;
+                    let equal = difference.is_zero();
+                    ensure!(
+                        equal,
+                        "GAMMALOOP_IR_OUTER=check: the analytic IR outer Taylor differs for {} corr={correction_index} term={term_index}: poles {difference}",
+                        self.graph.name
+                    );
+                    " check=equal"
+                }
+                _ => "",
+            };
+            eprintln!(
+                "IR_OUTER graph={} corr={correction_index} term={term_index} rem_loops={} order={order} moments={} forests={} outcome={outcome}{stats}{check} analytic_s={analytic_seconds:.3} generic_s={generic_seconds:.3}",
+                self.graph.name,
+                term.remainder.loops,
+                moments.len(),
+                correction.forest.len(),
+            );
+        }
+        if ir_hard_keys() {
+            eprintln!(
+                "IR_HARD_COST graph={} corr={correction_index} term={term_index} rem_loops={} taylor_s={taylor_seconds:.3} taylor_bytes={taylor_bytes} project_s={project_seconds:.3} project_bytes={project_bytes} moments={} quotient_s={:.3} integrate_s={:.3} downstream_s={:.3}",
+                self.graph.name,
+                term.remainder.loops,
+                moments.len(),
+                (self.quotient_elapsed - quotient_before).as_secs_f64(),
+                (self.integration_elapsed - integration_before).as_secs_f64(),
+                downstream_started.elapsed().as_secs_f64(),
+            );
+        }
+        Ok(prepared)
+    }
+
+    /// The `(coefficient, insertion)` moments of the hard part `hard` of one
+    /// IR correction term at Taylor order `order`: closed
+    /// (`GAMMALOOP_IR_HARD=closed|child`), else projected (today's path), with
+    /// the `IR_CLOSED` line when the closed path is on.
+    fn ir_term_moments(
+        &self,
+        correction_index: usize,
+        correction: &IrCorrection,
+        term_index: usize,
+        term: &UvPreparationTerm,
+        hard: &RStarIntegrand,
+        order: usize,
+    ) -> Result<TermMoments> {
         // GAMMALOOP_IR_HARD=closed|check (prototype, default off).
         let mode = super::closed::closed_mode();
         let mut closed_stats = super::closed::ClosedStats::default();
@@ -1101,92 +1240,220 @@ impl<'a> Evaluation<'a> {
             (None, Some(Ok(closed))) => closed,
             _ => unreachable!("the closed path runs only when it succeeded"),
         };
-        let downstream_started = Instant::now();
-        let quotient_before = self.quotient_elapsed;
-        let integration_before = self.integration_elapsed;
-        // GAMMALOOP_IR_OUTER (any R* root; closed moments only).
-        let outer = top_mass::ir_outer()?;
-        let analytic = if outer == top_mass::IrOuter::Analytic || outer == top_mass::IrOuter::Check
-        {
-            let started = Instant::now();
-            let outcome = if !use_closed {
-                Err("not_closed".to_owned())
-            } else {
-                self.ir_outer_analytic(&hard, &correction.forest, &moments)?
-            };
-            Some((outcome, started.elapsed().as_secs_f64()))
+        Ok(TermMoments {
+            moments,
+            use_closed,
+            taylor_seconds,
+            taylor_bytes,
+            project_seconds,
+            project_bytes,
+        })
+    }
+
+    /// The IR Dirac closure of an IR correction (cached per correction): the
+    /// closure of its hard part's open Dirac line, or the decline reason. An
+    /// error while reading the shape declines too (fail closed).
+    fn ir_dirac_boundary(
+        &mut self,
+        correction_index: usize,
+        correction: &IrCorrection,
+    ) -> std::result::Result<DiracBoundary, String> {
+        if let Some(boundary) = self.ir_dirac_boundaries.get(&correction_index) {
+            return boundary.clone();
+        }
+        let boundary =
+            super::ir_dirac::boundary(self.graph, &correction.hard, correction.taylor_order)
+                .unwrap_or_else(|error| {
+                    Err(format!("error:{error}")
+                        .chars()
+                        .map(|c| if c.is_whitespace() { '_' } else { c })
+                        .take(160)
+                        .collect())
+                });
+        self.ir_dirac_boundaries
+            .insert(correction_index, boundary.clone());
+        boundary
+    }
+
+    /// One `IR_DIRAC` line (`GAMMALOOP_IR_DIRAC_CLOSURE=on|check`).
+    #[allow(clippy::too_many_arguments)]
+    fn log_ir_dirac(
+        &self,
+        correction_index: usize,
+        correction: &IrCorrection,
+        term: &str,
+        path: &str,
+        rem_loops: usize,
+        boundary: Option<&DiracBoundary>,
+        outcome: &str,
+        seconds: f64,
+        today_seconds: Option<f64>,
+    ) {
+        #[cfg(test)]
+        super::ir_dirac::count(format!(
+            "{path}:{}:{}",
+            super::ir_dirac::kind_label(boundary),
+            outcome.split(':').take(2).collect::<Vec<_>>().join(":")
+        ));
+        eprintln!(
+            "IR_DIRAC graph={} corr={correction_index} term={term} path={path} hard_loops={} rem_loops={rem_loops} omega={} kind={} outcome={outcome} seconds={seconds:.3}{}",
+            self.graph.name,
+            self.graph.n_loops(&correction.hard),
+            correction.taylor_order,
+            super::ir_dirac::kind_label(boundary),
+            today_seconds.map_or_else(String::new, |seconds| format!(" today_s={seconds:.3}")),
+        );
+    }
+
+    /// `GAMMALOOP_IR_DIRAC_CLOSURE=on|check` for one IR correction term on
+    /// today's path: the moments of the hard part closed by its Dirac closure
+    /// (`open` times the closure, in `open`'s loop basis) and reassembled
+    /// ([`super::ir_dirac::reassemble`]), with that closed hard part for the
+    /// downstream integration; on a decline, `open` and its moments. In
+    /// `check` the open moments are computed too and must agree
+    /// (`IR_DIRAC_CHECK`, an error otherwise). One `IR_DIRAC` line.
+    fn ir_term_dirac(
+        &mut self,
+        correction_index: usize,
+        correction: &IrCorrection,
+        term_index: usize,
+        term: &UvPreparationTerm,
+        open: RStarIntegrand,
+        order: usize,
+    ) -> Result<(RStarIntegrand, TermMoments)> {
+        let started = Instant::now();
+        let label = term_index.to_string();
+        let rem_loops = term.remainder.loops;
+        let boundary = match self.ir_dirac_boundary(correction_index, correction) {
+            Ok(boundary) => boundary,
+            Err(reason) => {
+                let today = self.ir_term_moments(
+                    correction_index,
+                    correction,
+                    term_index,
+                    term,
+                    &open,
+                    order,
+                )?;
+                self.log_ir_dirac(
+                    correction_index,
+                    correction,
+                    &label,
+                    "today",
+                    rem_loops,
+                    None,
+                    &format!("declined:{reason}"),
+                    started.elapsed().as_secs_f64(),
+                    None,
+                );
+                return Ok((open, today));
+            }
+        };
+        let hard = open.times_momentum_free(&boundary.closure)?;
+        let closed =
+            self.ir_term_moments(correction_index, correction, term_index, term, &hard, order)?;
+        let rows = match super::ir_dirac::reassemble(&closed.moments, &boundary) {
+            Ok(rows) => rows,
+            Err(reason) => {
+                drop(hard);
+                let today = self.ir_term_moments(
+                    correction_index,
+                    correction,
+                    term_index,
+                    term,
+                    &open,
+                    order,
+                )?;
+                self.log_ir_dirac(
+                    correction_index,
+                    correction,
+                    &label,
+                    "today",
+                    rem_loops,
+                    Some(&boundary),
+                    &format!("declined:{reason}"),
+                    started.elapsed().as_secs_f64(),
+                    None,
+                );
+                return Ok((open, today));
+            }
+        };
+        let closed_seconds = started.elapsed().as_secs_f64();
+        let today_seconds = if self.ir_dirac == IrDiracMode::Check {
+            let open_started = Instant::now();
+            let reference =
+                self.ir_term_moments(correction_index, correction, term_index, term, &open, order)?;
+            let open_seconds = open_started.elapsed().as_secs_f64();
+            let agreement =
+                super::ir_dirac::agree(&closed.moments, &rows, &reference.moments, &boundary)?;
+            self.log_ir_dirac_check(
+                correction_index,
+                correction,
+                &label,
+                "today",
+                &boundary,
+                agreement,
+                closed_seconds,
+                open_seconds,
+            )?;
+            Some(open_seconds)
         } else {
             None
         };
-        let generic_started = Instant::now();
-        let analytic_value = match &analytic {
-            Some((Ok((value, _)), _)) if outer == top_mass::IrOuter::Analytic => {
-                Some(value.clone())
-            }
-            _ => None,
-        };
-        let generic_value = if let Some(value) = analytic_value {
-            prepared += value;
-            None
-        } else {
-            let mut generic = Atom::Zero;
-            for forest in &correction.forest {
-                let mut expression = Atom::Zero;
-                for (coefficient, insertion) in &moments {
-                    expression += coefficient * self.ir_forest(forest, insertion)?;
-                }
-                if !expression.is_zero() {
-                    if let Some(closure) = &self.root_closure {
-                        expression *= closure;
-                    }
-                    generic += self.integrate(&hard, &expression)?;
-                }
-            }
-            prepared += &generic;
-            Some(generic)
-        };
-        let generic_seconds = generic_started.elapsed().as_secs_f64();
-        if outer != top_mass::IrOuter::Unset {
-            let (outcome, stats, analytic_seconds) = match &analytic {
-                None => ("generic".to_owned(), String::new(), 0.0),
-                Some((Ok((_, stats)), seconds)) => ("analytic".to_owned(), stats.clone(), *seconds),
-                Some((Err(reason), seconds)) => {
-                    (format!("declined:{reason}"), String::new(), *seconds)
-                }
-            };
-            let check = match (&analytic, &generic_value) {
-                (Some((Ok((value, _)), _)), Some(generic)) if outer == top_mass::IrOuter::Check => {
-                    let difference = self.poles(&(generic - value))?;
-                    let equal = difference.is_zero();
-                    ensure!(
-                        equal,
-                        "GAMMALOOP_IR_OUTER=check: the analytic IR outer Taylor differs for {} corr={correction_index} term={term_index}: poles {difference}",
-                        self.graph.name
-                    );
-                    " check=equal"
-                }
-                _ => "",
-            };
-            eprintln!(
-                "IR_OUTER graph={} corr={correction_index} term={term_index} rem_loops={} order={order} moments={} forests={} outcome={outcome}{stats}{check} analytic_s={analytic_seconds:.3} generic_s={generic_seconds:.3}",
-                self.graph.name,
-                term.remainder.loops,
-                moments.len(),
-                correction.forest.len(),
-            );
-        }
-        if ir_hard_keys() {
-            eprintln!(
-                "IR_HARD_COST graph={} corr={correction_index} term={term_index} rem_loops={} taylor_s={taylor_seconds:.3} taylor_bytes={taylor_bytes} project_s={project_seconds:.3} project_bytes={project_bytes} moments={} quotient_s={:.3} integrate_s={:.3} downstream_s={:.3}",
-                self.graph.name,
-                term.remainder.loops,
-                moments.len(),
-                (self.quotient_elapsed - quotient_before).as_secs_f64(),
-                (self.integration_elapsed - integration_before).as_secs_f64(),
-                downstream_started.elapsed().as_secs_f64(),
-            );
-        }
-        Ok(prepared)
+        drop(open);
+        self.log_ir_dirac(
+            correction_index,
+            correction,
+            &label,
+            "today",
+            rem_loops,
+            Some(&boundary),
+            "closed",
+            closed_seconds,
+            today_seconds,
+        );
+        Ok((
+            hard,
+            TermMoments {
+                moments: rows,
+                ..closed
+            },
+        ))
+    }
+
+    /// One `IR_DIRAC_CHECK` line; an error when the closed moments differ
+    /// from the open ones.
+    #[allow(clippy::too_many_arguments)]
+    fn log_ir_dirac_check(
+        &self,
+        correction_index: usize,
+        correction: &IrCorrection,
+        term: &str,
+        path: &str,
+        boundary: &DiracBoundary,
+        agreement: super::ir_dirac::Agreement,
+        closed_seconds: f64,
+        open_seconds: f64,
+    ) -> Result<()> {
+        #[cfg(test)]
+        super::ir_dirac::count_check(agreement);
+        eprintln!(
+            "IR_DIRAC_CHECK graph={} corr={correction_index} term={term} path={path} hard_loops={} omega={} kind={} identical={} equal={} structure={} coefficients={} closed_s={closed_seconds:.3} open_s={open_seconds:.3}",
+            self.graph.name,
+            self.graph.n_loops(&correction.hard),
+            correction.taylor_order,
+            super::ir_dirac::kind_label(Some(boundary)),
+            agreement.identical,
+            agreement.equal(),
+            agreement.structure,
+            agreement.coefficients,
+        );
+        ensure!(
+            agreement.equal(),
+            "IR_DIRAC_CHECK: the Dirac-closed IR hard part of {} corr={correction_index} term={term} ({path}) differs from the open one: {agreement:?}",
+            self.graph.name
+        );
+        Ok(())
     }
 
     /// `GAMMALOOP_IR_HARD=child|child-check` for one IR correction: its
@@ -1375,12 +1642,27 @@ impl<'a> Evaluation<'a> {
         // (the pole bound of Z̃_F(G/γ)), raised when the quotient factors
         // actually carry more poles (an inserted pole part outside γ, as in
         // a propagator-insertion surrogate); then H is computed again.
+        // GAMMALOOP_IR_DIRAC_CLOSURE=on|check: every remainder of H(γ) closed
+        // by the hard part's Dirac closure, the moments reassembled.
+        let dirac = if self.ir_dirac == IrDiracMode::Off {
+            None
+        } else {
+            Some(self.ir_dirac_boundary(correction_index, correction))
+        };
+        let closure = dirac
+            .as_ref()
+            .and_then(|boundary| boundary.as_ref().ok())
+            .cloned();
+        let dirac_check = closure.is_some() && self.ir_dirac == IrDiracMode::Check;
         let mut extra = quotient_loops;
         let mut attempts = 0_usize;
         loop {
             attempts += 1;
             let started = Instant::now();
             let mut groups = BTreeMap::<usize, Atom>::new();
+            // The open H(γ) per loop count and the times (IR_DIRAC_CHECK).
+            let mut open_groups = BTreeMap::<usize, Atom>::new();
+            let (mut closed_seconds, mut open_seconds) = (0.0, 0.0);
             let mut representative = None;
             let mut soft = Vec::new();
             let mut terms = 0_usize;
@@ -1395,6 +1677,13 @@ impl<'a> Evaluation<'a> {
                 let (closures, _) = super::integrate::single_mass_counts();
                 let remainder = self.open_remainder(term)?;
                 soft = remainder.soft_edges().to_vec();
+                let (remainder, open) = match &closure {
+                    Some(boundary) => {
+                        let closed = remainder.times_momentum_free(&boundary.closure)?;
+                        (closed, dirac_check.then_some(remainder))
+                    }
+                    None => (remainder, None),
+                };
                 let remainder = remainder.with_ir_hard_truncation(&soft, omega)?;
                 let routed_bytes = remainder.routed_bytes();
                 let value = self
@@ -1415,6 +1704,46 @@ impl<'a> Evaluation<'a> {
                     super::integrate::single_mass_counts().0 - closures,
                     term_started.elapsed().as_secs_f64(),
                 );
+                let term_seconds = term_started.elapsed().as_secs_f64();
+                closed_seconds += term_seconds;
+                let open_term_seconds = match open {
+                    Some(open) => {
+                        let open_started = Instant::now();
+                        let open = open.with_ir_hard_truncation(&soft, omega)?;
+                        let open_value = self
+                            .integrate_ir_hard_term(&open, &soft, degree, extra, edge_basis)
+                            .wrap_err_with(|| {
+                                format!(
+                                    "while integrating the open IR hard part corr={correction_index} term={term_index} of {} (IR_DIRAC_CHECK)",
+                                    self.graph.name
+                                )
+                            })?;
+                        *open_groups
+                            .entry(term.remainder.loops)
+                            .or_insert(Atom::Zero) += open_value;
+                        let seconds = open_started.elapsed().as_secs_f64();
+                        open_seconds += seconds;
+                        Some(seconds)
+                    }
+                    None => None,
+                };
+                if let Some(boundary) = &dirac {
+                    let outcome = match boundary {
+                        Ok(_) => "closed".to_owned(),
+                        Err(reason) => format!("declined:{reason}"),
+                    };
+                    self.log_ir_dirac(
+                        correction_index,
+                        correction,
+                        &term_index.to_string(),
+                        "child",
+                        term.remainder.loops,
+                        closure.as_ref(),
+                        &outcome,
+                        term_seconds,
+                        open_term_seconds,
+                    );
+                }
                 representative.get_or_insert(term_index);
                 *groups.entry(term.remainder.loops).or_insert(Atom::Zero) += value;
                 terms += 1;
@@ -1426,6 +1755,9 @@ impl<'a> Evaluation<'a> {
             };
             let mut rows = Vec::new();
             let mut h_bytes = 0;
+            // Per loop count: the closed moments and their reassembly.
+            let mut closed_moments =
+                BTreeMap::<usize, (Vec<(Atom, Atom)>, Vec<(Atom, Atom)>)>::new();
             for (loops, h) in &groups {
                 h_bytes += h.as_view().get_byte_size();
                 if h.is_zero() {
@@ -1442,11 +1774,70 @@ impl<'a> Evaluation<'a> {
                         return Ok(Err(format!("moments:{reason}")));
                     }
                 };
+                let moments = match &closure {
+                    Some(boundary) => match super::ir_dirac::reassemble(&moments, boundary) {
+                        Ok(reassembled) => {
+                            closed_moments.insert(*loops, (moments, reassembled.clone()));
+                            reassembled
+                        }
+                        Err(reason) => {
+                            // The closed H(γ) is not of the assumed form: the
+                            // correction declines to today's terms.
+                            self.log_ir_dirac(
+                                correction_index,
+                                correction,
+                                "all",
+                                "child",
+                                *loops,
+                                Some(boundary),
+                                &format!("declined:{reason}"),
+                                h_seconds,
+                                None,
+                            );
+                            return Ok(Err(format!("dirac_{reason}")));
+                        }
+                    },
+                    None => moments,
+                };
                 rows.extend(
                     moments
                         .into_iter()
                         .map(|(h, insertion)| (h, insertion, *loops)),
                 );
+            }
+            if let (true, Some(boundary)) = (dirac_check, &closure) {
+                let mut all_loops = groups
+                    .keys()
+                    .copied()
+                    .collect::<std::collections::BTreeSet<_>>();
+                all_loops.extend(open_groups.keys().copied());
+                for loops in all_loops {
+                    let (closed_rows, reassembled) =
+                        closed_moments.remove(&loops).unwrap_or_default();
+                    let open = open_groups.remove(&loops).unwrap_or_default();
+                    let open_rows = if open.is_zero() {
+                        Vec::new()
+                    } else {
+                        hard_moments(&open, &soft).wrap_err_with(|| {
+                            format!(
+                                "IR_DIRAC_CHECK: the open moments of {} corr={correction_index} loops={loops}",
+                                self.graph.name
+                            )
+                        })?
+                    };
+                    let agreement =
+                        super::ir_dirac::agree(&closed_rows, &reassembled, &open_rows, boundary)?;
+                    self.log_ir_dirac_check(
+                        correction_index,
+                        correction,
+                        &format!("all_rem{loops}"),
+                        "child",
+                        boundary,
+                        agreement,
+                        closed_seconds,
+                        open_seconds,
+                    )?;
+                }
             }
             let hard = self.open_remainder(&correction.preparation[representative])?;
             let outer_started = Instant::now();

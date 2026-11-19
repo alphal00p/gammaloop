@@ -21,6 +21,7 @@ mod expression;
 mod insertion_identity;
 mod insertions;
 mod integrate;
+mod ir_dirac;
 mod linearize;
 #[cfg(test)]
 mod master_tests;
@@ -111,6 +112,7 @@ pub use insertions::{
     PropagatorInsertionEvaluator,
 };
 pub use integrate::integrate_single_mass;
+pub use ir_dirac::{IrDiracMode, ir_dirac_mode};
 pub use physical::{PhysicalUvGroup, PhysicalUvKey, PreparedPhysicalUvTerm};
 pub use plan::*;
 pub use propagator::integrate_propagator;
