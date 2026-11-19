@@ -43,6 +43,72 @@ use super::{
 
 type CachedIntegral = Arc<OnceLock<Result<Atom, String>>>;
 
+/// Every slashed momentum `gamma(i, j, Q(e, R(D)))` of an insertion
+/// coefficient (idenso's canonical form, e.g. a quark self-energy `c slash(p)`)
+/// written as `gamma(i, j, R(D, nu_k)) Q(e, R(D, nu_k))` with a contracted index
+/// `nu_k`, renamed fresh by [`freshen_insertion_indices`]. The momentum then
+/// reaches the surrogate's coefficient vertex only through `Q`, as in the
+/// Feynman rules, so the UV-child degree truncation can grade it
+/// (`polynomial_in_roots`); a function of the momentum declines it. Chains
+/// are undone first, so no product lands inside a chain. Exact: the same tensor.
+pub(super) fn open_slashes(coefficient: &Atom) -> Atom {
+    let is_slash = |view: AtomView<'_>| {
+        matches!(view, AtomView::Fun(gamma) if gamma.get_symbol() == idenso::dirac::AGS.gamma
+            && gamma.get_nargs() == 3
+            && matches!(gamma.get(2), AtomView::Fun(momentum) if momentum.get_symbol() == GS.emr_mom
+                && momentum.get_nargs() == 2
+                && matches!(momentum.get(1), AtomView::Fun(_))))
+    };
+    let mut found = false;
+    coefficient.visitor(&mut |view| {
+        found |= is_slash(view);
+        !found
+    });
+    if !found {
+        return coefficient.clone();
+    }
+    let unchained = if coefficient.contains_symbol(spenso::network::tags::SPENSO_TAG.chain) {
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        match cooking
+            .try_cook(coefficient.as_view())
+            .map_err(|error| eyre!("{error}"))
+            .and_then(|cooked| Ok(SymbolicTensor::infer_indexed(cooked)?.undo_chain()?))
+        {
+            Ok(tensor) => cooking.uncook(tensor.expression().as_view()),
+            // Not representable as a tensor: leave it, the truncation declines.
+            Err(_) => return coefficient.clone(),
+        }
+    } else {
+        coefficient.clone()
+    };
+    let mut next = 0_usize;
+    unchained.replace_map(|view, _, out| {
+        if !is_slash(view) {
+            return;
+        }
+        let AtomView::Fun(gamma) = view else { return };
+        let AtomView::Fun(momentum) = gamma.get(2) else {
+            return;
+        };
+        let AtomView::Fun(bare) = momentum.get(1) else {
+            return;
+        };
+        let index = Atom::from(Aind::Symbol(symbol!(&format!(
+            "gammalooprs::insertion_slash_{next}"
+        ))));
+        next += 1;
+        let mut slot = symbolica::atom::FunctionBuilder::new(bare.get_symbol());
+        for argument in bare.iter() {
+            slot = slot.add_arg(argument);
+        }
+        let slot = slot.add_arg(&index).finish();
+        **out = function!(idenso::dirac::AGS.gamma, gamma.get(0), gamma.get(1), &slot)
+            * function!(GS.emr_mom, momentum.get(0), &slot);
+    })
+}
+
 /// Cached open tensors share integration-local names. Freshen only contracted
 /// indices on each use, preserving their established public boundary ports.
 fn freshen_insertion_indices(coefficient: &Atom, reservation_context: &[Atom]) -> Result<Atom> {
@@ -567,7 +633,7 @@ impl PropagatorInsertionEvaluator {
             polynomial,
             "normalized insertion is not polynomial in its external momentum"
         );
-        Ok(coefficient)
+        Ok(open_slashes(&coefficient))
     }
 
     fn integrate_cached(
@@ -700,6 +766,66 @@ mod tests {
         },
     };
     use std::collections::HashSet;
+
+    /// A quark self-energy coefficient `c slash(Q_7)` (idenso's slashed form)
+    /// declines the UV-child truncation; [`open_slashes`] gives the same
+    /// tensor with the momentum only in `Q`, which the truncation grades.
+    #[test]
+    fn open_slashes_make_a_slashed_insertion_coefficient_polynomial() -> Result<()> {
+        test_initialise()?;
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let spin = Bispinor {}.new_rep(4);
+        let i = spin.to_symbolic([Atom::from(Aind::Hedge(8, 0))]);
+        let j = spin.to_symbolic([Atom::from(Aind::Hedge(9, 0))]);
+        let slash = |edge: i64| {
+            function!(
+                idenso::dirac::AGS.gamma,
+                &i,
+                &j,
+                function!(GS.emr_mom, edge, mink.to_symbolic([]))
+            )
+        };
+        let c = Atom::var(symbol!("c_open_slashes"));
+        let coefficient = (&c * slash(7) + Atom::num(3) * slash(7)).expand();
+        let roots = BTreeSet::from([7_usize]);
+        assert!(!super::super::expression::polynomial_in_roots(
+            coefficient.as_view(),
+            &roots
+        ));
+        let opened = open_slashes(&coefficient);
+        assert!(super::super::expression::polynomial_in_roots(
+            opened.as_view(),
+            &roots
+        ));
+        let mut slashed = false;
+        opened.visitor(&mut |view| {
+            if let AtomView::Fun(gamma) = view
+                && gamma.get_symbol() == idenso::dirac::AGS.gamma
+                && matches!(gamma.get(2), AtomView::Fun(momentum) if momentum.get_symbol() == GS.emr_mom)
+            {
+                slashed = true;
+            }
+            !slashed
+        });
+        assert!(!slashed, "a slash survived: {opened}");
+        // Contracting the opened index restores the slashed tensor.
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let contract = |atom: &Atom| -> Result<Atom> {
+            let tensor = SymbolicTensor::infer_indexed(cooking.try_cook(atom.as_view())?)?
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                    gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                    ..Default::default()
+                })?
+                .to_dots()?;
+            Ok(cooking.uncook(tensor.expression().as_view()).expand())
+        };
+        assert_eq!(contract(&opened)?, contract(&coefficient)?);
+        // Without a slash the coefficient is unchanged.
+        assert_eq!(open_slashes(&c), c);
+        Ok(())
+    }
 
     #[test]
     fn cached_open_dirac_and_color_tensors_get_independent_dummy_indices() -> Result<()> {
