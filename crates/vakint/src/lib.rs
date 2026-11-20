@@ -4,14 +4,18 @@ pub mod stage_timing;
 pub mod timing;
 
 /// M5 batch 2: mimalloc serves the Rust allocations of every binary linking vakint
-/// (default feature `mimalloc`; see Cargo.toml).
-/// Wrapped in [`alloc_account::Counting`]: per-job live-byte accounting for the
-/// driver's RSS guard (one relaxed atomic add per allocation on registered job
-/// threads, nothing elsewhere).
-#[cfg(feature = "mimalloc")]
+/// (default feature `mimalloc`; see Cargo.toml). A binary that installs its own
+/// global allocator enables `external-global-allocator`, which leaves this one
+/// out (qcd-background-beta installs [`alloc_account::Counting`] around
+/// [`mimalloc::MiMalloc`]).
+#[cfg(all(feature = "mimalloc", not(feature = "external-global-allocator")))]
 #[global_allocator]
-static VAKINT_GLOBAL_ALLOCATOR: alloc_account::Counting<mimalloc::MiMalloc> =
-    alloc_account::Counting(mimalloc::MiMalloc);
+static VAKINT_GLOBAL_ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+/// The mimalloc of vakint, for a binary that wraps it in a global allocator of
+/// its own (feature `external-global-allocator`): one mimalloc in the graph.
+#[cfg(feature = "mimalloc")]
+pub use mimalloc;
 
 pub mod alloc_account;
 

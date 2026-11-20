@@ -81,9 +81,20 @@ default = ["mimalloc"]
 # Rust allocations only: vakint is also a Python extension module, so the C
 # malloc family is not replaced by default (`mimalloc-override` does that for
 # standalone binaries). Conflicts with Symbolica's own `faster_alloc` (one
-# global allocator per binary): build with `--no-default-features` there.
+# global allocator per binary): build with `--no-default-features` there, or
+# enable `external-global-allocator`.
 mimalloc = ["dep:mimalloc"]
 mimalloc-override = ["mimalloc", "mimalloc/override"]
+# For a binary that installs its own `#[global_allocator]`: vakint then installs
+# none (with `mimalloc` on it still re-exports `vakint::mimalloc`, so the binary
+# can wrap the same mimalloc). qcd-background-beta installs
+# `vakint::alloc_account::Counting<vakint::mimalloc::MiMalloc>` this way. The
+# feature suppresses instead of being a default-off `mimalloc`, because Cargo
+# unifies features: gammalooprs depends on vakint with default features, so
+# `default-features = false` on the binary's own vakint dependency cannot turn
+# `mimalloc` off in its graph. Every binary that does not enable it keeps plain
+# mimalloc.
+external-global-allocator = []
 progress-tui = ["dep:ratatui", "dep:crossterm", "rustix/termios", "rustix/process"]
 feynkit-ingress = []
 # helper VH lane idenso-audit: idenso's own phase clocks (idenso/reference-cases) for examples/idenso_prof.rs; profiling only, off by default.
