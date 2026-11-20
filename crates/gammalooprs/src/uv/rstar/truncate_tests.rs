@@ -147,7 +147,8 @@ fn truncation_degree_follows_the_mode_the_scope_and_the_order() {
 #[test]
 fn the_switch_accepts_only_its_modes() {
     use ChildTruncate::*;
-    assert_eq!(ChildTruncate::parse(None), Ok(Off));
+    // Unset is the production default, `graded`; `0` and empty are off.
+    assert_eq!(ChildTruncate::parse(None), Ok(Graded));
     for (value, mode) in [
         ("", Off),
         ("  ", Off),
@@ -246,7 +247,7 @@ fn cache_key_suffix_is_present_only_when_on() {
     );
     let keys = [on(Off, 0), on(DegreeZero, 0), on(Graded, 0), on(Graded, 1)];
     assert_eq!(keys.iter().collect::<BTreeSet<_>>().len(), keys.len());
-    // The process mode: unset means no suffix and no degree computed.
+    // The process mode: off (`0`) means no suffix and no degree computed.
     let mut called = false;
     let suffix = uv_child_truncation_key(|| {
         called = true;

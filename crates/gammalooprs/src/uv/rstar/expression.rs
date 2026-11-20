@@ -458,13 +458,15 @@ enum ChildEdgeRemainder {
     All,
 }
 
+/// `GAMMALOOP_UV_CHILD_EDGE_REMAINDER`: unset is `1` (production since r5);
+/// `all`; any other value (`0`, `off`, empty) is off.
 static UV_CHILD_EDGE_REMAINDER: LazyLock<ChildEdgeRemainder> =
     LazyLock::new(|| {
         match std::env::var("GAMMALOOP_UV_CHILD_EDGE_REMAINDER")
             .as_deref()
             .map(str::trim)
         {
-            Ok("1") => ChildEdgeRemainder::DegreeZero,
+            Err(std::env::VarError::NotPresent) | Ok("1") => ChildEdgeRemainder::DegreeZero,
             Ok("all") => ChildEdgeRemainder::All,
             _ => ChildEdgeRemainder::Off,
         }
@@ -517,18 +519,18 @@ fn uv_child_scope_is_restored_when_the_child_panics() {
     UV_CHILD_SCOPE.with(|scope| scope.set(false));
 }
 
-/// `GAMMALOOP_UV_CHILD_EDGE_REMAINDER=1|all` (opt-in): inside an R* child of
-/// Taylor order 0 (`1`) or inside every R* child (`all`), the ordinary
+/// `GAMMALOOP_UV_CHILD_EDGE_REMAINDER=1|all` (unset: `1`): inside an R* child
+/// of Taylor order 0 (`1`) or inside every R* child (`all`), the ordinary
 /// remainders are contracted in the edge basis, exactly as
 /// `GAMMALOOP_EDGE_CONTRACTION=remainder` does everywhere. A child keeps its
 /// boundary slots open, and the edge-basis contraction of those open-index
 /// remainders is much cheaper; the closed root keeps the loop basis, where
-/// the edge basis is slower. Any other value or unset: unchanged.
+/// the edge basis is slower. Any other value (`0`, `off`): the loop basis.
 fn uv_child_edge_remainder() -> bool {
     UV_CHILD_SCOPE.with(|scope| scope.get())
 }
 
-/// `GAMMALOOP_UV_CHILD_TRUNCATE=0|1|graded` (default off): truncate the routed
+/// `GAMMALOOP_UV_CHILD_TRUNCATE=0|1|graded` (default `graded`): truncate the routed
 /// ordinary remainder of a UV child evaluated as its own R* root (a support
 /// root) to root-momentum grade at most its Taylor order `d`, before the
 /// contraction ([`RStarIntegrand::with_root_truncation`]).
@@ -538,10 +540,10 @@ fn uv_child_edge_remainder() -> bool {
 /// so a term with more than `d` root momenta never survives it, and the
 /// contraction commutes with the grading (results/uv-degree-truncation).
 ///
-/// - unset, empty or `0`: off; nothing changes, the cache keys, the logs and
-///   the pint6 closure records included;
+/// - empty or `0`: off; nothing changes, the cache keys, the logs and the
+///   pint6 closure records included (the path before the production default);
 /// - `1`: only children of Taylor order 0, whose root momenta are zeroed;
-/// - `graded`: every degree, a child of degree `d >= 1` as the graded parts
+/// - `graded` (also unset): every degree, a child of degree `d >= 1` as the graded parts
 ///   `Π_i f_i^(g_i)` (`Σ g_i <= d`) of its dependent factors, at most
 ///   `GAMMALOOP_UV_CHILD_TRUNCATE_MAX_PARTS` (default 32) of them.
 ///
@@ -559,9 +561,9 @@ impl ChildTruncate {
     /// The mode of a `GAMMALOOP_UV_CHILD_TRUNCATE` value (`None`: unset).
     fn parse(value: Option<&str>) -> std::result::Result<Self, String> {
         match value.map(str::trim) {
-            None | Some("" | "0") => Ok(Self::Off),
+            Some("" | "0") => Ok(Self::Off),
             Some("1") => Ok(Self::DegreeZero),
-            Some("graded") => Ok(Self::Graded),
+            None | Some("graded") => Ok(Self::Graded),
             Some(other) => Err(format!(
                 "GAMMALOOP_UV_CHILD_TRUNCATE={other:?} is not a mode: expected unset, \"\", \"0\", \"1\" or \"graded\""
             )),
@@ -903,12 +905,12 @@ fn truncate_routed(
     }))
 }
 
-/// `GAMMALOOP_UV_STREAM=off|on|auto` (default off): how the edge-basis
+/// `GAMMALOOP_UV_STREAM=off|on|auto` (default `auto`): how the edge-basis
 /// remainder of a degree-0 UV child (`GAMMALOOP_UV_CHILD_EDGE_REMAINDER=1`) is
 /// integrated.
 ///
-/// - `off`: contract the whole remainder, substitute the edge combinations
-///   back, integrate the result (today's path);
+/// - `off` (or any other value): contract the whole remainder, substitute the edge combinations
+///   back, integrate the result (the path before the production default);
 /// - `on`: stream it ([`RStarIntegrand::stream_contracted`]): split the input
 ///   product into pieces, then contract, substitute and integrate one piece at
 ///   a time and add up only the integrated results;
@@ -937,7 +939,7 @@ pub(super) fn uv_stream() -> UvStream {
             .map(str::trim)
         {
             Ok("on") | Ok("1") => UvStream::On,
-            Ok("auto") => UvStream::Auto,
+            Err(std::env::VarError::NotPresent) | Ok("auto") => UvStream::Auto,
             _ => UvStream::Off,
         }
     });
@@ -987,10 +989,12 @@ fn keeps_remainder() -> bool {
         || (edge_contraction("auto") && DRESSED_SCOPE.with(|scope| scope.get()))
 }
 
-/// `GAMMALOOP_EDGE_PROJECT_LOG=1`: one stderr line before and after each hard projection.
+/// `GAMMALOOP_EDGE_PROJECT_LOG` (default on; `0`, `off` or `false` turn it off):
+/// one stderr line before and after each hard projection (the timing split
+/// reads them).
 fn edge_project_log() -> bool {
     static LOG: LazyLock<bool> =
-        LazyLock::new(|| std::env::var_os("GAMMALOOP_EDGE_PROJECT_LOG").is_some());
+        LazyLock::new(|| super::plan::log_switch("GAMMALOOP_EDGE_PROJECT_LOG"));
     *LOG
 }
 

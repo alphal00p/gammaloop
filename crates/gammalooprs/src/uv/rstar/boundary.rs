@@ -1,4 +1,5 @@
-//! The opt-in remainder-boundary producer (`GAMMALOOP_REMAINDER_BOUNDARY=1|check`).
+//! The remainder-boundary producer (`GAMMALOOP_REMAINDER_BOUNDARY=1|check`; on by
+//! default, `0`/`off` restores the expanded path).
 //!
 //! Today one root-scope R* remainder reaches vakint as the expanded
 //! `Σ_{i+j≤deg} P_i D_j`: the contracted numerator times the Taylor
@@ -67,8 +68,10 @@ use super::{
 // Switches
 // ---------------------------------------------------------------------------
 
-/// `GAMMALOOP_REMAINDER_BOUNDARY`: today's path (`Off`), the boundary for
-/// every admitted remainder (`On`), or both compared (`Check`).
+/// `GAMMALOOP_REMAINDER_BOUNDARY`: the expanded path (`Off`: an explicit `0`,
+/// `off` or empty value), the boundary for every admitted remainder (`On`:
+/// `1`, `on`, or unset, the production setting since r5), or both compared
+/// (`Check`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BoundaryMode {
     Off,
@@ -88,8 +91,8 @@ impl BoundaryMode {
 
 fn parse_mode(value: Option<&str>) -> std::result::Result<BoundaryMode, String> {
     match value {
-        None | Some("" | "0" | "off") => Ok(BoundaryMode::Off),
-        Some("1" | "on") => Ok(BoundaryMode::On),
+        Some("" | "0" | "off") => Ok(BoundaryMode::Off),
+        None | Some("1" | "on") => Ok(BoundaryMode::On),
         Some("check") => Ok(BoundaryMode::Check),
         Some(other) => Err(format!(
             "GAMMALOOP_REMAINDER_BOUNDARY={other:?}: expected unset, 0, off, 1, on or check"
