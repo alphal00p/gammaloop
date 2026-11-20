@@ -838,7 +838,8 @@ impl FactorizedNumerator {
             .edges
             .iter()
             .map(|e| &e.factor)
-            .chain(self.vertices.iter().map(|v| &v.factor));
+            .chain(self.vertices.iter().map(|v| &v.factor))
+            .chain(self.insertions.iter().map(|i| &i.factor));
         for factor in factors {
             factor.visitor(&mut |part| {
                 if let Some(slot) = super::as_slot(part)

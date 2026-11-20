@@ -362,6 +362,18 @@ pub fn vakint_input(
     }
     value.validate()?;
     check_open_ports(value)?;
+    value.check_insertion_epsilon(vk_symbol!(&settings.epsilon_symbol).get_name())?;
+    vakint_input_unchecked(settings, value, prefactor)
+}
+
+/// [`vakint_input`] without the contract checks (the reference of the tests:
+/// a numerator contracted into one vertex factor by hand, as a caller's
+/// contracted path holds it).
+pub(crate) fn vakint_input_unchecked(
+    settings: &VakintSettings,
+    value: &FactorizedNumerator,
+    prefactor: &Atom,
+) -> Result<(Atom, f64)> {
     let (momenta, head) = vakint_momenta(value)?;
     let (scalar, seconds) = contract_to_vakint_dots(value)?;
     let mut topology = Atom::num(1);

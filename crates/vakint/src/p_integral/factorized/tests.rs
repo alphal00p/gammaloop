@@ -250,19 +250,23 @@ fn four_dimensional_slots_and_signs_are_rejected() {
 
 #[test]
 fn the_reserved_extensions_are_rejected() {
+    // Insertions are accepted (insertion_tests.rs); one on a vertex that
+    // keeps its own factor is refused (the factor is stated once).
     let mut value = read(GLUON);
+    let hedges = value
+        .local_hedges(Location::Vertex(0))
+        .into_iter()
+        .collect();
     value.insertions.push(Insertion {
         vertex: 0,
+        hedges,
+        cycles: (0, 0),
         coefficient: Atom::num(1),
         factor: Atom::num(1),
     });
     assert!(matches!(
         value.validate(),
-        Err(FactorizedError::Reserved { .. })
-    ));
-    assert!(matches!(
-        value.to_text(),
-        Err(FactorizedError::Reserved { .. })
+        Err(FactorizedError::Insertion { vertex: 0, .. })
     ));
     let mut value = read(GLUON);
     value.kind = FactorizedKind::Closure(ClosureSpec {
@@ -291,7 +295,7 @@ fn the_reserved_extensions_are_rejected() {
     let insertions = GLUON.replace("insertions\t0", "insertions\t1");
     assert!(matches!(
         FactorizedNumerator::parse_text(&insertions),
-        Err(FactorizedError::Reserved { .. })
+        Err(FactorizedError::TextSectionCount { .. })
     ));
 }
 
