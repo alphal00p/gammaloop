@@ -161,6 +161,46 @@ pub fn surrogate_closed_root() -> bool {
     *MODE
 }
 
+/// `GAMMALOOP_INSERTION_CLOSURE=off|on|check` (default off): how each excised
+/// self-energy insertion is integrated in [`PropagatorInsertionEvaluator::prepare`].
+/// `off` integrates the open tensor (today's path, byte-identical). `on`
+/// integrates its closed form factors and rebuilds the open tensor exactly
+/// ([`super::propagator::integrate_propagator_closed`]: quark `A slash(p)`,
+/// gluon `a g + b p p` as one integral with channel markers); a ghost or
+/// scalar insertion is already closed and an unrecognized shape declines to
+/// the open path. `check` computes both and requires equal normalised
+/// coefficients (`INSERTION_CLOSURE_CHECK` lines, an error otherwise),
+/// returning the closed one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InsertionClosure {
+    Off,
+    On,
+    Check,
+}
+
+impl InsertionClosure {
+    pub fn parse(value: &str) -> Result<Self> {
+        match value.trim() {
+            "" | "off" | "0" => Ok(Self::Off),
+            "on" | "1" => Ok(Self::On),
+            "check" => Ok(Self::Check),
+            other => Err(eyre!(
+                "GAMMALOOP_INSERTION_CLOSURE must be off, on or check, not `{other}`"
+            )),
+        }
+    }
+
+    pub fn from_environment() -> Self {
+        static MODE: LazyLock<InsertionClosure> = LazyLock::new(|| {
+            InsertionClosure::parse(
+                &std::env::var("GAMMALOOP_INSERTION_CLOSURE").unwrap_or_default(),
+            )
+            .unwrap_or_else(|error| panic!("{error:#}"))
+        });
+        *MODE
+    }
+}
+
 /// The bare poles of the original graph, without its overall factor or projector.
 pub struct InsertionPoleResult {
     pub poles: Atom,
@@ -285,6 +325,7 @@ pub struct PropagatorInsertionEvaluator {
     counterterm_cache: Option<Arc<CountertermCache>>,
     timings: CacheTimings,
     context: Arc<()>,
+    closure: InsertionClosure,
 }
 
 impl PropagatorInsertionEvaluator {
@@ -295,7 +336,15 @@ impl PropagatorInsertionEvaluator {
             counterterm_cache: None,
             timings: CacheTimings::default(),
             context: Arc::new(()),
+            closure: InsertionClosure::from_environment(),
         }
+    }
+
+    /// Override the insertion closure ([`InsertionClosure`]) taken from
+    /// `GAMMALOOP_INSERTION_CLOSURE`.
+    pub fn with_insertion_closure(mut self, closure: InsertionClosure) -> Self {
+        self.closure = closure;
+        self
     }
 
     /// Enable optional cache-phase accounting without changing cached values.
@@ -383,7 +432,8 @@ impl PropagatorInsertionEvaluator {
         let mut holes: Vec<PreparedInsertionHole> = Vec::new();
         for insertion in &selected {
             let excised = diagram.excise_with_mapping(&insertion.support, &[])?;
-            let coefficient = self.normalized_insertion(&excised.diagram, vakint, loops)?;
+            let coefficient =
+                self.normalized_insertion(&excised.diagram, vakint, loops, diagram.name())?;
             let vanishes = coefficient.is_zero();
             // Slashes are opened after the freshening, with process-unique
             // symbol indices: freshened `dummy(N)` indices are not Spenso indices.
@@ -673,12 +723,76 @@ impl PropagatorInsertionEvaluator {
         insertion: &FeynmanDiagram,
         vakint: &Vakint,
         parent_loops: usize,
+        parent: &str,
+    ) -> Result<Atom> {
+        let loops = insertion.loop_count();
+        // GAMMALOOP_INSERTION_CLOSURE: the closed form factors, when the
+        // insertion has an open Lorentz or spinor structure to close.
+        let shape = match self.closure {
+            InsertionClosure::Off => None,
+            InsertionClosure::On | InsertionClosure::Check => {
+                let graph = insertion.to_gamma_loop_graph(None, true)?;
+                match super::propagator::insertion_shape(&graph)? {
+                    Ok(super::propagator::InsertionShape::Scalar) => {
+                        eprintln!(
+                            "INSERTION_CLOSURE graph={parent} kind=scalar loops={loops} closure=none"
+                        );
+                        None
+                    }
+                    Ok(shape) => Some(shape),
+                    Err(reason) => {
+                        eprintln!(
+                            "INSERTION_CLOSURE graph={parent} kind=open loops={loops} closure=declined reason={reason}"
+                        );
+                        None
+                    }
+                }
+            }
+        };
+        let Some(shape) = shape else {
+            return self.normalized_insertion_with(insertion, vakint, parent_loops, false, parent);
+        };
+        let started = Instant::now();
+        let closed =
+            self.normalized_insertion_with(insertion, vakint, parent_loops, true, parent)?;
+        if self.closure != InsertionClosure::Check {
+            return Ok(closed);
+        }
+        let closed_seconds = started.elapsed().as_secs_f64();
+        let started = Instant::now();
+        let open =
+            self.normalized_insertion_with(insertion, vakint, parent_loops, false, parent)?;
+        let open_seconds = started.elapsed().as_secs_f64();
+        let (identical, equal) = insertion_coefficients_agree(&closed, &open)?;
+        eprintln!(
+            "INSERTION_CLOSURE_CHECK graph={parent} kind={} loops={loops} terms={parent_loops} identical={identical} equal={equal} zero={} closed_seconds={closed_seconds:.3} open_seconds={open_seconds:.3}",
+            shape.kind(),
+            open.is_zero(),
+        );
+        ensure!(
+            equal,
+            "INSERTION_CLOSURE_CHECK: the closed {loops}-loop {} insertion of {parent} differs from the open tensor\nclosed: {closed}\nopen: {open}",
+            shape.kind()
+        );
+        Ok(closed)
+    }
+
+    /// The normalised coefficient of one insertion, its integral open
+    /// (`closed` false) or through its closed form factors.
+    fn normalized_insertion_with(
+        &self,
+        insertion: &FeynmanDiagram,
+        vakint: &Vakint,
+        parent_loops: usize,
+        closed: bool,
+        parent: &str,
     ) -> Result<Atom> {
         let loops = insertion.loop_count();
         // An N-loop surrogate has at most N poles. Its regular coefficient is
         // therefore needed through eps^(N-1), requiring the L-loop insertion
         // through eps^(N-L-1): precisely N terms in Vakint's convention.
-        let integral = self.integrate_cached(insertion, vakint, parent_loops)?;
+        let integral =
+            self.integrate_cached_with(insertion, vakint, parent_loops, closed, parent)?;
         if integral.is_zero() {
             return Ok(Atom::Zero);
         }
@@ -735,6 +849,21 @@ impl PropagatorInsertionEvaluator {
         vakint: &Vakint,
         terms: usize,
     ) -> Result<Atom> {
+        self.integrate_cached_with(diagram, vakint, terms, false, "")
+    }
+
+    /// [`Self::integrate_cached`]; with `closed`, the open tensor is rebuilt
+    /// from its closed form factors
+    /// ([`super::propagator::integrate_propagator_closed`]), in its own cache
+    /// entries. An unrecognized shape falls back to the open integral.
+    fn integrate_cached_with(
+        &self,
+        diagram: &FeynmanDiagram,
+        vakint: &Vakint,
+        terms: usize,
+        closed: bool,
+        parent: &str,
+    ) -> Result<Atom> {
         let mut timing = self.timings.start();
         let graph = diagram.to_gamma_loop_graph(None, true)?;
         let boundary = graph.external_filter::<SuBitGraph>();
@@ -742,8 +871,13 @@ impl PropagatorInsertionEvaluator {
         let identity = CountertermIdentity::new(&graph, &support, diagram.model())?;
         // The complete bare tensor is stored, not just its poles. Expansion
         // depth belongs to the key; lower-loop finite terms enter parent poles.
+        let fingerprint = format!("{:?}", diagram.model().fingerprint());
         let key = (
-            format!("{:?}", diagram.model().fingerprint()),
+            if closed {
+                format!("{fingerprint}#insertion-closure")
+            } else {
+                fingerprint
+            },
             terms,
             identity.key.clone(),
         );
@@ -762,13 +896,49 @@ impl PropagatorInsertionEvaluator {
         let canonical = timing
             .resolve(&entry, |timing| {
                 let started = Instant::now();
-                let integral = integrate_propagator(
-                    &graph,
-                    diagram.model(),
-                    vakint,
-                    &self.settings,
-                    terms as i64,
-                );
+                let integral = if closed {
+                    let counted = vakint::timing::Snapshot::now();
+                    super::propagator::integrate_propagator_closed(
+                        &graph,
+                        diagram.model(),
+                        vakint,
+                        &self.settings,
+                        terms as i64,
+                    )
+                    .and_then(|closed| match closed {
+                        Ok((integral, shape)) => {
+                            eprintln!(
+                                "INSERTION_CLOSURE graph={parent} kind={} loops={} terms={terms} closure=closed seconds={:.3}{}",
+                                shape.kind(),
+                                diagram.loop_count(),
+                                started.elapsed().as_secs_f64(),
+                                counted.elapsed().fields()
+                            );
+                            Ok(integral)
+                        }
+                        Err(reason) => {
+                            eprintln!(
+                                "INSERTION_CLOSURE graph={parent} kind=open loops={} terms={terms} closure=declined reason={reason}",
+                                diagram.loop_count()
+                            );
+                            integrate_propagator(
+                                &graph,
+                                diagram.model(),
+                                vakint,
+                                &self.settings,
+                                terms as i64,
+                            )
+                        }
+                    })
+                } else {
+                    integrate_propagator(
+                        &graph,
+                        diagram.model(),
+                        vakint,
+                        &self.settings,
+                        terms as i64,
+                    )
+                };
                 timing.lap(CacheTimingPhase::Initializer);
                 let result = integral
                     .and_then(|integral| identity.canonicalize_delta(&integral))
@@ -804,6 +974,41 @@ impl PropagatorInsertionEvaluator {
         timing.lap(CacheTimingPhase::Restore);
         result
     }
+}
+
+/// Whether two normalised insertion coefficients in the same caller frame
+/// agree: `identical` as expressions, `equal` after gamma and colour
+/// simplification and canonical dummy relabelling of their difference.
+fn insertion_coefficients_agree(closed: &Atom, open: &Atom) -> Result<(bool, bool)> {
+    use idenso::{
+        color::ColorSimplifySettings, dirac::GammaSimplifySettings, tensor::AlgebraSettings,
+    };
+    let difference = (closed - open).expand();
+    if difference.is_zero() {
+        return Ok((true, true));
+    }
+    if difference.together().is_zero() {
+        return Ok((false, true));
+    }
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let tensor = SymbolicTensor::infer_indexed(cooking.try_cook(difference.as_view())?)?
+        .undo_trace()?
+        .undo_chain()?
+        .simplify_algebra(&AlgebraSettings {
+            gamma: Some(GammaSimplifySettings::default()),
+            color: Some(ColorSimplifySettings::default()),
+            ..Default::default()
+        })?
+        .to_dots()?;
+    let reduced = cooking.uncook(tensor.expression().as_view()).expand();
+    if reduced.is_zero() {
+        return Ok((false, true));
+    }
+    let canonical = SymbolicTensor::infer(cooking.try_cook(reduced.as_view())?)?.canonize()?;
+    let canonical = cooking.uncook(canonical.expression().as_view()).expand();
+    Ok((false, canonical.together().is_zero()))
 }
 
 fn scalar_bubble(source: &FeynmanDiagram) -> Result<FeynmanDiagram> {

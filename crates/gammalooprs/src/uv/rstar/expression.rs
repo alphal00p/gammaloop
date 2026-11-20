@@ -1408,6 +1408,9 @@ pub(super) struct RStarIntegrand {
 }
 
 impl RStarIntegrand {
+    /// The integrand without a closure (tests; the library builds through
+    /// [`Self::new_with_closure`]).
+    #[cfg(test)]
     pub fn new(
         graph: &Graph,
         model: &Model,
