@@ -657,6 +657,52 @@ pub(crate) fn as_slot(view: AtomView<'_>) -> Option<Slot> {
     })
 }
 
+/// Rule R4 of the record format: the COMPACT slash `gamma(a, b, Q(x,
+/// mink(D)))` (a gamma matrix contracted with a momentum, as the R* sites
+/// write the quark closure) written out as `gamma(a, b, mink(D, s)) Q(x,
+/// mink(D, s))` with a fresh dummy index `s = vakint::slash(scope, n)`, `n =
+/// 0, 1, ..` in the order of the expression tree. `scope` keeps the dummies
+/// of different factors apart (the contract wants a dummy local to one
+/// factor): the projector uses -1, an insertion factor its vertex id.
+/// Everything else is returned unchanged. A substitution, no algebra.
+pub fn expand_compact_slash(expression: &Atom, scope: i64) -> Atom {
+    let counter = std::cell::Cell::new(0_i64);
+    let slash = symbolica::symbol!("vakint::slash");
+    expression.replace_map(|part, _, out| {
+        let AtomView::Fun(gamma) = part else {
+            return;
+        };
+        if gamma.get_symbol().get_name() != names::GAMMA || gamma.get_nargs() != 3 {
+            return;
+        }
+        let args = gamma.iter().collect::<Vec<_>>();
+        let AtomView::Fun(momentum) = args[2] else {
+            return;
+        };
+        if momentum.get_symbol().get_name() != names::MOMENTUM || momentum.get_nargs() != 2 {
+            return;
+        }
+        let margs = momentum.iter().collect::<Vec<_>>();
+        let AtomView::Fun(rep) = margs[1] else {
+            return;
+        };
+        if rep.get_symbol().get_name() != names::MINK || rep.get_nargs() != 1 {
+            return;
+        }
+        let n = counter.get();
+        counter.set(n + 1);
+        let dimension = rep.iter().next().unwrap().to_owned();
+        let index = symbolica::function!(slash, Atom::num(scope), Atom::num(n));
+        let slot = symbolica::function!(rep.get_symbol(), dimension, index);
+        **out = symbolica::function!(
+            gamma.get_symbol(),
+            args[0].to_owned(),
+            args[1].to_owned(),
+            &slot
+        ) * symbolica::function!(momentum.get_symbol(), margs[0].to_owned(), &slot);
+    })
+}
+
 /// Whether `view` contains a representation slot `rep(dim, index)` or a
 /// momentum `Q(..)` anywhere.
 pub(crate) fn contains_tensor_content(view: AtomView<'_>) -> bool {
@@ -1068,6 +1114,8 @@ impl FactorizedNumerator {
             colour_branch: None,
             insertions: Vec::new(),
         };
+        let mut value = value;
+        value.expand_compact_slashes()?;
         value.validate()?;
         Ok(value)
     }
@@ -1748,14 +1796,46 @@ impl FactorizedNumerator {
 
     /// Read one record of the text form and [`Self::validate`] it.
     pub fn from_text(input: &str) -> Result<Self> {
-        let value = text::parse_record(input)?;
+        let value = Self::parse_text(input)?;
         value.validate()?;
         Ok(value)
     }
 
-    /// Read one record of the text form without validating it.
+    /// Read one record of the text form without validating it (compact
+    /// slashes in the projector are written out on read:
+    /// [`Self::expand_compact_slashes`]).
     pub fn parse_text(input: &str) -> Result<Self> {
-        text::parse_record(input)
+        let mut value = text::parse_record(input)?;
+        value.expand_compact_slashes()?;
+        Ok(value)
+    }
+
+    /// Rule R4 of the record format for the projector: every COMPACT slash
+    /// `gamma(a, b, Q(x, mink(D)))` is written out by [`expand_compact_slash`]
+    /// (scope -1). Refused under a Taylor step (a compact slash of an external
+    /// momentum in the projector of a closure record with an unapplied Taylor
+    /// specification). Idempotent; a value without compact slash is unchanged.
+    pub fn expand_compact_slashes(&mut self) -> Result<()> {
+        let Some(projector) = &self.projector else {
+            return Ok(());
+        };
+        let expanded = expand_compact_slash(&projector.tensor, -1);
+        if expanded == projector.tensor {
+            return Ok(());
+        }
+        if let FactorizedKind::Closure(spec) = &self.kind
+            && spec.taylor.is_some()
+        {
+            return Err(FactorizedError::Ports {
+                detail: "a compact slash gamma(a, b, Q(x, mink(D))) in the projector of a record \
+                         with a Taylor step (write it out, or close after the Taylor step)"
+                    .into(),
+            });
+        }
+        if let Some(projector) = &mut self.projector {
+            projector.tensor = expanded;
+        }
+        Ok(())
     }
 }
 
