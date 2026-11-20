@@ -85,7 +85,7 @@ impl TopMassTerms {
         match self {
             TopMassTerms::Keep => true,
             TopMassTerms::Drop => order >= 1,
-            TopMassTerms::DropOdd => order >= 1 && order % 2 == 0,
+            TopMassTerms::DropOdd => order >= 1 && order.is_multiple_of(2),
         }
     }
 
@@ -430,7 +430,7 @@ pub(super) fn compensation_factor(
     while order + 2 * k <= degree {
         if mode.keeps_order(order + 2 * k) && (k == 0 || mode.compensates()) {
             let sign = if k % 2 == 0 { 1 } else { -1 };
-            sum = sum + Atom::num(sign) * &binomial;
+            sum += Atom::num(sign) * &binomial;
         }
         // binom(x, k+1) = binom(x, k) (x-k)/(k+1)
         binomial = binomial * (&x - Atom::num(k as i64)) / Atom::num(k as i64 + 1);
