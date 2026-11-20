@@ -1760,8 +1760,8 @@ impl<'a> Evaluation<'a> {
                 today += self.ir_term_today(correction_index, correction, term_index, term)?;
             }
             let difference = self.poles(&(&today - &value))?;
-            // A massive-route quotient Z̃ (GAMMALOOP_IR_QUOTIENT unset or
-            // massive) carries non-local log(mUV) pieces that cancel only in
+            // A massive-route quotient Z̃ (GAMMALOOP_IR_QUOTIENT massive or
+            // off) carries non-local log(mUV) pieces that cancel only in
             // the complete sum; they depend on how the insertion is written
             // (its boundary momenta), so the two routes may differ there
             // alone. Classified, never accepted silently: `equal_mod_log_mUV`.
@@ -3012,8 +3012,9 @@ impl<'a> Evaluation<'a> {
         }
         let started = Instant::now();
         let counted = vakint::timing::Snapshot::now();
-        // GAMMALOOP_IR_QUOTIENT: the massive R operation (default) or R* on
-        // the same decorated graph.
+        // GAMMALOOP_IR_QUOTIENT: R* on the decorated graph (default `rstar`,
+        // production since r5k-nf1) or the massive R operation (`massive`,
+        // `off`).
         let mode = top_mass::ir_quotient()?;
         let massive = |this: &Self| -> Result<Atom> {
             this.uv
@@ -3083,7 +3084,7 @@ impl<'a> Evaluation<'a> {
             },
             _ => (massive(self)?, "massive"),
         };
-        if mode != top_mass::IrQuotient::Unset && mode != top_mass::IrQuotient::Check {
+        if mode != top_mass::IrQuotient::Off && mode != top_mass::IrQuotient::Check {
             eprintln!(
                 "IR_QUOTIENT graph={} loops={} route={route} seconds={:.3}{} edges={}",
                 self.graph.name,
@@ -3098,10 +3099,10 @@ impl<'a> Evaluation<'a> {
         Ok(result)
     }
 
-    /// `GAMMALOOP_IR_QUOTIENT=rstar|auto|check`: the decorated quotient
-    /// counterterm by R* on the decorated graph the massive route builds
-    /// (the contracted hard part is one vertex carrying the insertion
-    /// polynomial), through [`RStarPlan::rstar_child_counterterm`] (automatic
+    /// `GAMMALOOP_IR_QUOTIENT=rstar|auto|check` (unset: `rstar`): the
+    /// decorated quotient counterterm by R* on the decorated graph the massive
+    /// route builds (the contracted hard part is one vertex carrying the
+    /// insertion polynomial), through [`RStarPlan::rstar_child_counterterm`] (automatic
     /// marked line, recursive R* children, Δ-cache under the R* route's key).
     /// `Err(reason)` when the quotient is not an admissible R* support root.
     fn quotient_rstar(

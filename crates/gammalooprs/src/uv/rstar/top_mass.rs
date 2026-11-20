@@ -324,26 +324,31 @@ pub(super) fn compensate_where(
     })
 }
 
-/// `GAMMALOOP_IR_QUOTIENT=massive|rstar|auto|check` (unset: massive). The
-/// decorated IR quotient counterterm `Z̃_F(G/γ; E)`: by the massive R
-/// operation (mUV tadpoles, at most four loops), or by R* on the same
-/// decorated graph (the recursive-R* children's route: massless p-integrals),
+/// `GAMMALOOP_IR_QUOTIENT=rstar|massive|off|auto|check` (unset or empty:
+/// `rstar`, production since r5k-nf1). The decorated IR quotient
+/// counterterm `Z̃_F(G/γ; E)`: by R* on the same decorated graph as the
+/// massive route (the recursive-R* children's route: massless p-integrals),
+/// or by the massive R operation (mUV tadpoles, at most four loops):
+/// `massive`, and `off` (the massive route without the per-quotient
+/// `IR_QUOTIENT` log line, the behaviour before the production default);
 /// `auto` = R* only above four loops; `check` computes both, compares them
 /// and uses the massive value.
 ///
-/// Production runs `rstar`, but it is not the default. The R* route writes
-/// a quotient's external momentum through one leg (`Q(1)·Q(1)` where the
-/// massive route has `Q(0)·Q(1)`); on two-point kinematics (`Q(0) = Q(1)`,
-/// imposed by the beta projection) every quotient checked equals the massive
-/// one (results/ir-quotient-rstar).
-/// The uv::rstar test `four_loop_nested_ghost_hard_taylor_is_hard_line_independent`
-/// therefore compares on those kinematics: before them, its marked line 2
-/// carries `log(rstar_mass_squared)` terms, all proportional to
-/// `(Q(0) - Q(1))·Q(1)`.
+/// The R* route writes a quotient's external momentum through one leg
+/// (`Q(1)·Q(1)` where the massive route has `Q(0)·Q(1)`); on two-point
+/// kinematics (`Q(0) = Q(1)`, imposed by the root closure and the beta
+/// projection) every quotient checked equals the massive one
+/// (results/ir-quotient-rstar). The uv::rstar test
+/// `four_loop_nested_ghost_hard_taylor_is_hard_line_independent` therefore
+/// compares on those kinematics: before them, its marked line 2 carries
+/// `log(rstar_mass_squared)` terms, all proportional to `(Q(0) - Q(1))·Q(1)`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IrQuotient {
-    Unset,
+    /// `off`: the massive route, unlogged (the unset behaviour before the
+    /// production default).
+    Off,
     Massive,
+    /// `rstar`, unset or empty.
     Rstar,
     Auto,
     Check,
@@ -354,11 +359,12 @@ static IR_QUOTIENT: LazyLock<std::result::Result<IrQuotient, String>> = LazyLock
         "GAMMALOOP_IR_QUOTIENT",
         &[
             ("massive", IrQuotient::Massive),
+            ("off", IrQuotient::Off),
             ("rstar", IrQuotient::Rstar),
             ("auto", IrQuotient::Auto),
             ("check", IrQuotient::Check),
         ],
-        IrQuotient::Unset,
+        IrQuotient::Rstar,
     )
 });
 
