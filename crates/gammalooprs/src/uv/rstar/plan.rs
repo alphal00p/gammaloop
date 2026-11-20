@@ -279,7 +279,7 @@ pub(super) fn uv_children_log() -> bool {
 /// The internal (paired) edge ids of `support`, sorted. Edge ids are the
 /// graph's `EdgeIndex`, which a DOT-parsed graph orders by the DOT edges'
 /// explicit `id`; a child's own R* run and the decorated UV quotient keep them.
-fn uv_child_edge_ids(graph: &Graph, support: &SuBitGraph) -> Vec<usize> {
+pub(super) fn uv_child_edge_ids(graph: &Graph, support: &SuBitGraph) -> Vec<usize> {
     let mut ids = graph
         .underlying
         .iter_edges_of(support)
@@ -291,7 +291,7 @@ fn uv_child_edge_ids(graph: &Graph, support: &SuBitGraph) -> Vec<usize> {
     ids
 }
 
-fn join_edge_ids(ids: &[usize]) -> String {
+pub(super) fn join_edge_ids(ids: &[usize]) -> String {
     ids.iter()
         .map(usize::to_string)
         .collect::<Vec<_>>()

@@ -898,6 +898,13 @@ struct Evaluation<'a> {
 }
 
 impl<'a> Evaluation<'a> {
+    /// The internal edge ids of `support` (an IR hard part, or a decorated
+    /// quotient's remaining support) as a comma list, numbered as the
+    /// `UV_CHILD` line's `edges=` (the graph's `EdgeIndex`); log only.
+    fn edges(&self, support: &SuBitGraph) -> String {
+        super::plan::join_edge_ids(&super::plan::uv_child_edge_ids(self.graph, support))
+    }
+
     fn new(
         plan: &'a RStarPlan,
         graph: &'a Graph,
@@ -1376,7 +1383,7 @@ impl<'a> Evaluation<'a> {
                 }
             };
             eprintln!(
-                "IR_CLOSED graph={} corr={correction_index} term={term_index} hard_loops={} rem_loops={} order={order} outcome={outcome}{check} slots={} sectors={} odd={} closures={} seconds={closed_seconds:.3}{closed_reduction} taylor_s={:.3} polarize_s={:.3} close_s={:.3} taylor_bytes={} closed_bytes={} certified={} uncertified={} dropped_zero={} zero_test_skipped={} today_taylor_s={taylor_seconds:.3} today_project_s={project_seconds:.3} today_taylor_bytes={taylor_bytes} today_project_bytes={project_bytes}",
+                "IR_CLOSED graph={} corr={correction_index} term={term_index} hard_loops={} rem_loops={} order={order} outcome={outcome}{check} slots={} sectors={} odd={} closures={} seconds={closed_seconds:.3}{closed_reduction} taylor_s={:.3} polarize_s={:.3} close_s={:.3} taylor_bytes={} closed_bytes={} certified={} uncertified={} dropped_zero={} zero_test_skipped={} today_taylor_s={taylor_seconds:.3} today_project_s={project_seconds:.3} today_taylor_bytes={taylor_bytes} today_project_bytes={project_bytes} edges={}",
                 self.graph.name,
                 self.graph.n_loops(&correction.hard),
                 term.remainder.loops,
@@ -1393,6 +1400,7 @@ impl<'a> Evaluation<'a> {
                 closed_stats.uncertified,
                 closed_stats.dropped_zero,
                 closed_stats.zero_test_skipped,
+                self.edges(&correction.hard),
             );
         }
         let moments = match (today, closed) {
@@ -1456,12 +1464,13 @@ impl<'a> Evaluation<'a> {
             outcome.split(':').take(2).collect::<Vec<_>>().join(":")
         ));
         eprintln!(
-            "IR_DIRAC graph={} corr={correction_index} term={term} path={path} hard_loops={} rem_loops={rem_loops} omega={} kind={} outcome={outcome} seconds={seconds:.3}{}",
+            "IR_DIRAC graph={} corr={correction_index} term={term} path={path} hard_loops={} rem_loops={rem_loops} omega={} kind={} outcome={outcome} seconds={seconds:.3}{} edges={}",
             self.graph.name,
             self.graph.n_loops(&correction.hard),
             correction.taylor_order,
             super::ir_dirac::kind_label(boundary),
             today_seconds.map_or_else(String::new, |seconds| format!(" today_s={seconds:.3}")),
+            self.edges(&correction.hard),
         );
     }
 
@@ -1672,10 +1681,11 @@ impl<'a> Evaluation<'a> {
                     .is_some_and(|slots| slots.iter().any(|(rep, _)| !rep.contains("mink")));
             if !spinor {
                 eprintln!(
-                    "IR_HARD_CHILD graph={} corr={correction_index} hard_loops={} omega={} outcome=skipped:select seconds=0.000 reduce_s=0.000 lower_s=0.000",
+                    "IR_HARD_CHILD graph={} corr={correction_index} hard_loops={} omega={} outcome=skipped:select seconds=0.000 reduce_s=0.000 lower_s=0.000 edges={}",
                     self.graph.name,
                     self.graph.n_loops(&correction.hard),
                     correction.taylor_order,
+                    self.edges(&correction.hard),
                 );
                 return Ok(None);
             }
@@ -1698,10 +1708,11 @@ impl<'a> Evaluation<'a> {
             Ok(outcome) => outcome,
             Err(reason) => {
                 eprintln!(
-                    "IR_HARD_CHILD graph={} corr={correction_index} hard_loops={} omega={} outcome=declined:{reason} seconds={seconds:.3}{reduction}",
+                    "IR_HARD_CHILD graph={} corr={correction_index} hard_loops={} omega={} outcome=declined:{reason} seconds={seconds:.3}{reduction} edges={}",
                     self.graph.name,
                     self.graph.n_loops(&correction.hard),
                     correction.taylor_order,
+                    self.edges(&correction.hard),
                 );
                 return Ok(None);
             }
@@ -1757,10 +1768,11 @@ impl<'a> Evaluation<'a> {
             (value, String::new())
         };
         eprintln!(
-            "IR_HARD_CHILD graph={} corr={correction_index} hard_loops={} omega={} outcome=child{stats}{check} seconds={seconds:.3}{reduction}",
+            "IR_HARD_CHILD graph={} corr={correction_index} hard_loops={} omega={} outcome=child{stats}{check} seconds={seconds:.3}{reduction} edges={}",
             self.graph.name,
             self.graph.n_loops(&correction.hard),
             correction.taylor_order,
+            self.edges(&correction.hard),
         );
         Ok(Some(value))
     }
@@ -1859,7 +1871,7 @@ impl<'a> Evaluation<'a> {
                     })?;
                 drop(remainder);
                 eprintln!(
-                    "IR_HARD_CHILD_TERM graph={} corr={correction_index} term={term_index} attempt={attempts} hard_loops={hard_loops} rem_loops={} children={} omega={omega} edge={edge_basis} extra_depth={extra} routed_bytes={routed_bytes} h_bytes={} closures={} seconds={:.3}{}",
+                    "IR_HARD_CHILD_TERM graph={} corr={correction_index} term={term_index} attempt={attempts} hard_loops={hard_loops} rem_loops={} children={} omega={omega} edge={edge_basis} extra_depth={extra} routed_bytes={routed_bytes} h_bytes={} closures={} seconds={:.3}{} edges={}",
                     self.graph.name,
                     term.remainder.loops,
                     term.counterterms.len(),
@@ -1867,6 +1879,7 @@ impl<'a> Evaluation<'a> {
                     super::integrate::single_mass_counts().0 - closures,
                     term_started.elapsed().as_secs_f64(),
                     term_counted.elapsed().fields(),
+                    self.edges(&correction.hard),
                 );
                 let term_seconds = term_started.elapsed().as_secs_f64();
                 closed_seconds += term_seconds;
@@ -3003,8 +3016,10 @@ impl<'a> Evaluation<'a> {
                 Ok(value) => (value, "rstar"),
                 Err(reason) => {
                     eprintln!(
-                        "IR_QUOTIENT graph={} loops={} declined={reason}",
-                        self.graph.name, call.argument.loops
+                        "IR_QUOTIENT graph={} loops={} declined={reason} edges={}",
+                        self.graph.name,
+                        call.argument.loops,
+                        self.edges(&call.argument.remaining)
                     );
                     (massive(self)?, "massive_declined")
                 }
@@ -3013,11 +3028,12 @@ impl<'a> Evaluation<'a> {
         };
         if mode != top_mass::IrQuotient::Unset && mode != top_mass::IrQuotient::Check {
             eprintln!(
-                "IR_QUOTIENT graph={} loops={} route={route} seconds={:.3}{}",
+                "IR_QUOTIENT graph={} loops={} route={route} seconds={:.3}{} edges={}",
                 self.graph.name,
                 call.argument.loops,
                 started.elapsed().as_secs_f64(),
-                counted.elapsed().fields()
+                counted.elapsed().fields(),
+                self.edges(&call.argument.remaining)
             );
         }
         self.quotient_elapsed += started.elapsed();
