@@ -218,9 +218,10 @@ fn validate_vacuum(value: &FactorizedNumerator) -> Result<()> {
         });
     }
     if !value.insertions.is_empty() {
-        return Err(FactorizedError::Reserved {
-            feature: "insertions".into(),
-        });
+        // The insertion rules (`Insertion`); the vacuum mode does not run the
+        // whole contract (hard parts keep half-edges of a larger graph).
+        let edges = value.edges.iter().map(|e| (e.id, e)).collect();
+        value.check_insertions(&edges)?;
     }
     let loops = value.loops();
     if loops == 0 {
@@ -1008,6 +1009,7 @@ pub fn vakint_vacuum_input_streamed(
     prefactor: &Atom,
     streaming: Streaming,
 ) -> Result<(Atom, f64, usize)> {
+    value.check_insertion_epsilon(vk_symbol!(&settings.epsilon_symbol).get_name())?;
     let (scalar, seconds, pieces) = match streaming {
         Streaming::Pieces(n) => contract_to_vakint_vacuum_streamed(settings, value, n)?,
         Streaming::Off | Streaming::Auto => {

@@ -13,7 +13,7 @@
 use super::{
     ClosureSpec, ColourBranchInfo, DirectRecord, Endpoint, FACTORIZED_SCHEMA, FACTORIZED_SCHEMA_V3,
     FactorizedEdge, FactorizedError, FactorizedKind, FactorizedNumerator, FactorizedVertex,
-    LineKind, Prefactor, Projector, Result, SoftLeg, TaylorOrders, TaylorSpec,
+    Insertion, LineKind, Prefactor, Projector, Result, SoftLeg, TaylorOrders, TaylorSpec,
 };
 use symbolica::atom::{Atom, AtomCore, AtomView};
 
@@ -74,17 +74,11 @@ fn open_slots(value: &FactorizedNumerator) -> Result<Vec<String>> {
 }
 
 /// Write one record: v1 for kind direct (unchanged), v3 for kind closure.
-/// Fails on insertions, which neither carries yet.
 pub(super) fn write_record(value: &FactorizedNumerator) -> Result<String> {
     let closure = match &value.kind {
         FactorizedKind::Closure(spec) => Some(spec),
         FactorizedKind::Direct => None,
     };
-    if !value.insertions.is_empty() {
-        return Err(FactorizedError::Reserved {
-            feature: "insertion vertices (child counterterms)".into(),
-        });
-    }
     if value.label.contains(['\n', '\r', '\t']) {
         return Err(FactorizedError::TextSyntax {
             line: 0,
@@ -221,7 +215,24 @@ pub(super) fn write_record(value: &FactorizedNumerator) -> Result<String> {
     if let Some(spec) = closure {
         write_closure_section(spec, value, &mut lines)?;
     }
-    lines.push("insertions\t0".into());
+    let mut insertions = value.insertions.iter().collect::<Vec<_>>();
+    insertions.sort_by_key(|i| i.vertex);
+    lines.push(format!("insertions\t{}", insertions.len()));
+    for insertion in insertions {
+        lines.push(format!(
+            "insertion\t{}\thedges={}\tcycles={},{}\t{}",
+            insertion.vertex,
+            list(&insertion.hedges),
+            insertion.cycles.0,
+            insertion.cycles.1,
+            one_atom(&insertion.coefficient, "insertion coefficient")?
+        ));
+        lines.push(format!(
+            "insertion_factor\t{}\t{}",
+            insertion.vertex,
+            one_atom(&insertion.factor, "insertion factor")?
+        ));
+    }
     lines.push(format!("lines\t{}", lines.len() + 1));
     lines.push("end".into());
     let mut text = lines.join("\n");
@@ -856,12 +867,54 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
     } else {
         None
     };
-    let insertions = reader.expect("insertions")?;
-    if insertions.fields.as_slice() != ["0"] {
-        return Err(FactorizedError::Reserved {
-            feature: "insertion vertices (child counterterms)".into(),
+    let (insertions_line, n_insertions) = count_section(reader, "insertions")?;
+    let mut insertions = Vec::with_capacity(n_insertions);
+    while reader.peek_key() == Some("insertion") {
+        let line = reader.expect("insertion")?;
+        let vertex: usize = number(
+            line.number,
+            line.fields.first().copied().unwrap_or(""),
+            "insertion vertex",
+        )?;
+        let hedges = integers(line.number, field(&line, "hedges")?, "half-edge")?;
+        let cycles = field(&line, "cycles")?;
+        let (fermion, ghost) = cycles
+            .split_once(',')
+            .ok_or_else(|| reader.syntax(line.number, "cycles=<fermion>,<ghost>"))?;
+        let coefficient = last_atom(&line, 3)?;
+        let factor_line = reader.expect("insertion_factor")?;
+        let fv: usize = number(
+            factor_line.number,
+            factor_line.fields.first().copied().unwrap_or(""),
+            "insertion vertex",
+        )?;
+        if fv != vertex {
+            return Err(reader.syntax(
+                factor_line.number,
+                format!("insertion_factor {fv} after insertion {vertex}"),
+            ));
+        }
+        insertions.push(Insertion {
+            vertex,
+            hedges,
+            cycles: (
+                number(line.number, fermion, "fermion cycles")?,
+                number(line.number, ghost, "ghost cycles")?,
+            ),
+            coefficient,
+            factor: last_atom(&factor_line, 1)?,
         });
     }
+    if insertions.len() != n_insertions {
+        return Err(FactorizedError::TextSectionCount {
+            line: insertions_line,
+            section: "insertions".into(),
+            declared: n_insertions,
+            found: insertions.len(),
+        });
+    }
+    // The order of the insertion lines is free (the writer sorts by vertex).
+    insertions.sort_by_key(|i| i.vertex);
     if let Some(key) = reader.peek_key()
         && key != "lines"
     {
@@ -907,7 +960,7 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
             colour,
         },
         colour_branch,
-        insertions: Vec::new(),
+        insertions,
         record,
     };
     // rule R4: compact slashes in the projector are written out on read,

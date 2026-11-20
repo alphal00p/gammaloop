@@ -110,6 +110,8 @@ pub(crate) mod names {
     pub const STRUCTURE_F: &str = "spenso::f";
     pub const GENERATOR_T: &str = "spenso::t";
     pub const MOMENTUM: &str = "gammalooprs::Q";
+    /// idenso's scalar product of two compact momenta `dot(Q(e, mink(D)), Q(f, mink(D)))`.
+    pub const DOT: &str = "spenso::dot";
     pub const HEDGE: &str = "gammalooprs::hedge";
     /// The default `D` of [`super::FactorizedNumerator::dimension`]
     /// (gammaloop's `GS.dim`, what `Numerator::to_d_dim` maps `mink(4)` to).
@@ -232,12 +234,38 @@ pub struct SoftLeg {
     pub root: bool,
 }
 
-/// RESERVED (Phase 4): a contracted child counterterm acting as an extra
-/// local vertex with open boundary slots, times its coefficient. Not accepted
-/// by v1 (a non-empty [`FactorizedNumerator::insertions`] is rejected).
+/// A counterterm INSERTION: an integrated subgraph acting as a local tensor
+/// at one spot of the graph, `coefficient × factor`, multiplied into the
+/// product of factors like any vertex factor (its boundary slots contracted
+/// with the adjacent edges' slots by idenso).
+///
+/// Two producers have this shape: an R* child counterterm Δ on the vertex its
+/// support was contracted to (vertex rule `ct:<label>`; `hedges` = exactly the
+/// vertex's incident half-edges), and the coefficient vertex of an
+/// insertion surrogate (a proper two-point region replaced by a chain of
+/// scalar bubbles; `hedges` = the two inner boundary half-edges, one at each
+/// end of the chain, so the factor's slots may sit at two vertices).
+///
+/// Rules ([`FactorizedNumerator::validate`]): the vertex exists, carries at
+/// most one insertion and has vertex factor `1` (the factor is stated once,
+/// here); `hedges` are distinct half-edges of the graph, at least one at the
+/// vertex; every free slot of `factor` is a slot of one of `hedges`; every
+/// momentum `Q(e, ..)` in it belongs to an edge owning one of `hedges` (or is
+/// a constant external vector absent from the graph); `coefficient` is a
+/// scalar; neither contains colour objects, a flavour symbol (`…::nf`) or
+/// `mUVexp`. Both may depend on the dimension, on the evaluation's ε symbol
+/// and on any other scalar (couplings, the reference mass squared). For the
+/// closed-loop weights the vertices owning `hedges` are one node (a fermion
+/// line passes through a surrogate) and `cycles` (closed fermion, closed
+/// ghost cycles INSIDE the inserted region) add to those of the carried
+/// graph: `loop_sign` / `nf_power` are the whole original diagram's.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Insertion {
     pub vertex: usize,
+    /// Boundary half-edges whose slots the factor carries, sorted.
+    pub hedges: Vec<usize>,
+    /// (closed fermion cycles, closed ghost cycles) inside the inserted region.
+    pub cycles: (u32, u32),
     pub coefficient: Atom,
     pub factor: Atom,
 }
@@ -554,6 +582,8 @@ pub enum FactorizedError {
     NfPower { found: u32, loops: usize },
     #[error("edge {edge}: power {power} (v1 needs >= 1 on internal edges)")]
     Power { edge: usize, power: i64 },
+    #[error("insertion at vertex {vertex}: {detail}")]
+    Insertion { vertex: usize, detail: String },
     #[error("{feature} is reserved for the R* path and not accepted by v1")]
     Reserved { feature: String },
     #[error("closure: {detail}")]
@@ -594,6 +624,8 @@ type Result<T> = std::result::Result<T, FactorizedError>;
 pub(crate) enum Location {
     Edge(usize),
     Vertex(usize),
+    /// The factor of the insertion at this vertex.
+    Insertion(usize),
     Projector,
 }
 
@@ -602,6 +634,7 @@ impl std::fmt::Display for Location {
         match self {
             Self::Edge(id) => write!(f, "edge {id}"),
             Self::Vertex(id) => write!(f, "vertex {id}"),
+            Self::Insertion(id) => write!(f, "insertion at vertex {id}"),
             Self::Projector => write!(f, "projector"),
         }
     }
@@ -765,6 +798,75 @@ pub(crate) fn contains_colour_slot(view: AtomView<'_>) -> bool {
     found
 }
 
+/// Limits of an insertion factor (R* child counterterms of QCD: at most four
+/// boundary slots, degree at most two in the boundary momenta).
+pub const INSERTION_MAX_SLOTS: usize = 4;
+pub const INSERTION_MAX_DEGREE: u64 = 2;
+
+/// An upper bound of the degree of `view` in the momenta `Q(..)`: the largest
+/// number of momentum factors of a term (a sum takes the maximum, a product
+/// the sum, an integer power multiplies). Not expanded: cancellations are not
+/// seen, so the bound may only be too large for a polynomial written with
+/// cancelling terms.
+fn momentum_degree(view: AtomView<'_>) -> u64 {
+    match view {
+        AtomView::Fun(f) if f.get_symbol().get_name() == names::MOMENTUM => 1,
+        AtomView::Fun(f) if f.get_symbol().get_name() == names::DOT => {
+            f.iter().map(momentum_degree).fold(0, u64::saturating_add)
+        }
+        AtomView::Add(a) => a.iter().map(momentum_degree).max().unwrap_or(0),
+        AtomView::Mul(m) => m.iter().map(momentum_degree).fold(0, u64::saturating_add),
+        AtomView::Pow(p) => {
+            let (base, exponent) = p.get_base_exp();
+            let degree = momentum_degree(base);
+            match i64::try_from(exponent) {
+                Ok(n) if n >= 0 => degree.saturating_mul(n as u64),
+                _ if degree == 0 => 0,
+                _ => u64::MAX,
+            }
+        }
+        _ => 0,
+    }
+}
+
+/// What an insertion's coefficient or factor may not contain: a colour
+/// object, a flavour symbol (`…::nf`) or the auxiliary `mUVexp`; the first
+/// one found, by name.
+fn forbidden_in_insertion(view: AtomView<'_>) -> Option<String> {
+    let mut found = None;
+    view.visitor(&mut |part| {
+        if found.is_some() {
+            return false;
+        }
+        let symbol = match part {
+            AtomView::Fun(f) => f.get_symbol(),
+            AtomView::Var(v) => v.get_symbol(),
+            _ => return true,
+        };
+        let name = symbol.get_name();
+        if matches!(
+            name,
+            names::COAD
+                | names::COF
+                | names::COS
+                | names::DIND
+                | names::STRUCTURE_F
+                | names::GENERATOR_T
+        ) {
+            found = Some(format!(
+                "the colour object {}",
+                part.to_owned().to_canonical_string()
+            ));
+        } else if name == "nf" || name.ends_with("::nf") {
+            found = Some(format!("the flavour symbol {name}"));
+        } else if name.contains("mUVexp") {
+            found = Some(format!("the auxiliary mass symbol {name}"));
+        }
+        found.is_none()
+    });
+    found
+}
+
 fn check_exact_numbers(view: AtomView<'_>, location: &str) -> Result<()> {
     let mut bad = None;
     view.visitor(&mut |part| {
@@ -825,6 +927,9 @@ struct FactorRules<'a> {
     location: Location,
     dimension: Symbol,
     edges: &'a BTreeMap<usize, &'a FactorizedEdge>,
+    /// For an insertion factor: the edges owning one of its boundary
+    /// half-edges (its momenta must be theirs).
+    boundary: Option<BTreeSet<usize>>,
 }
 
 impl FactorRules<'_> {
@@ -952,6 +1057,14 @@ impl FactorRules<'_> {
                 let Some(known) = self.edges.get(&edge) else {
                     return Ok(slots);
                 };
+                if let Some(boundary) = &self.boundary
+                    && !boundary.contains(&edge)
+                {
+                    return Err(FactorizedError::UnsupportedTensor {
+                        location: self.loc(),
+                        tensor: format!("{} (not a boundary momentum of the insertion)", text()),
+                    });
+                }
                 if self.location == Location::Projector && !known.is_external() {
                     return Err(FactorizedError::UnsupportedTensor {
                         location: self.loc(),
@@ -959,6 +1072,58 @@ impl FactorRules<'_> {
                     });
                 }
                 Ok(slots)
+            }
+            names::DOT => {
+                // A scalar product of two compact momenta `Q(e, mink(D))`
+                // (the beta's insertion factors write p² so); no slot.
+                if args.len() != 2 {
+                    return Err(unsupported());
+                }
+                for arg in &args {
+                    let AtomView::Fun(q) = arg else {
+                        return Err(unsupported());
+                    };
+                    let parts = q.iter().collect::<Vec<_>>();
+                    let compact = q.get_symbol().get_name() == names::MOMENTUM
+                        && parts.len() == 2
+                        && matches!(parts[1], AtomView::Fun(rep)
+                            if rep.get_symbol().get_name() == names::MINK
+                                && rep.get_nargs() == 1
+                                && rep.iter().next() == Some(Atom::var(self.dimension).as_view()));
+                    if !compact {
+                        return Err(unsupported());
+                    }
+                    let Some(edge) = i64::try_from(parts[0])
+                        .ok()
+                        .and_then(|e| usize::try_from(e).ok())
+                    else {
+                        return Err(FactorizedError::UnknownEdge {
+                            location: self.loc(),
+                            edge: parts[0].to_owned().to_canonical_string(),
+                        });
+                    };
+                    let Some(known) = self.edges.get(&edge) else {
+                        continue;
+                    };
+                    if let Some(boundary) = &self.boundary
+                        && !boundary.contains(&edge)
+                    {
+                        return Err(FactorizedError::UnsupportedTensor {
+                            location: self.loc(),
+                            tensor: format!(
+                                "{} (not a boundary momentum of the insertion)",
+                                text()
+                            ),
+                        });
+                    }
+                    if self.location == Location::Projector && !known.is_external() {
+                        return Err(FactorizedError::UnsupportedTensor {
+                            location: self.loc(),
+                            tensor: format!("{} (loop momentum in the projector)", text()),
+                        });
+                    }
+                }
+                Ok(Vec::new())
             }
             _ => {
                 if contains_tensor_content(view) {
@@ -1179,6 +1344,7 @@ impl FactorizedNumerator {
             location: Location::Projector,
             dimension: self.dimension,
             edges: &edges,
+            boundary: None,
         };
         let (sets, _) = rules.analyse(&projector.tensor)?;
         let ports = self
@@ -1208,6 +1374,10 @@ impl FactorizedNumerator {
         for vertex in &self.vertices {
             product *= &vertex.factor;
         }
+        for insertion in &self.insertions {
+            product *= &insertion.coefficient;
+            product *= &insertion.factor;
+        }
         product
     }
 
@@ -1226,11 +1396,6 @@ impl FactorizedNumerator {
     /// momentum conservation on the first `conserved` momentum components
     /// only, and no graph-derived loop-sign / n_f rule (its own rule).
     pub(crate) fn validate_contract(&self, closure: Option<usize>) -> Result<()> {
-        if !self.insertions.is_empty() {
-            return Err(FactorizedError::Reserved {
-                feature: "insertion vertices (child counterterms)".into(),
-            });
-        }
         if self.label.contains(['\t', '\n', '\r']) {
             return Err(FactorizedError::Graph {
                 detail: "the label contains a TAB or a newline".into(),
@@ -1245,6 +1410,7 @@ impl FactorizedNumerator {
                 location: Location::Edge(edge.id),
                 dimension: self.dimension,
                 edges: &edges,
+                boundary: None,
             };
             let (sets, elements) = rules.analyse(&edge.factor)?;
             analysed.push((rules.location, sets, elements));
@@ -1254,15 +1420,18 @@ impl FactorizedNumerator {
                 location: Location::Vertex(vertex.id),
                 dimension: self.dimension,
                 edges: &edges,
+                boundary: None,
             };
             let (sets, elements) = rules.analyse(&vertex.factor)?;
             analysed.push((rules.location, sets, elements));
         }
+        analysed.extend(self.check_insertions(&edges)?);
         if let Some(projector) = &self.projector {
             let rules = FactorRules {
                 location: Location::Projector,
                 dimension: self.dimension,
                 edges: &edges,
+                boundary: None,
             };
             let (sets, elements) = rules.analyse(&projector.tensor)?;
             analysed.push((rules.location, sets, elements));
@@ -1291,8 +1460,14 @@ impl FactorizedNumerator {
             return Ok(());
         }
         let loops = self.closed_loops()?;
-        let n_loops = loops.len();
-        let n_fermion = loops.iter().filter(|l| l.line == LineKind::Fermion).count();
+        // Cycles inside insertions are the original diagram's too.
+        let (inner_fermion, inner_ghost) =
+            self.insertions.iter().fold((0usize, 0usize), |(f, g), i| {
+                (f + i.cycles.0 as usize, g + i.cycles.1 as usize)
+            });
+        let n_loops = loops.len() + inner_fermion + inner_ghost;
+        let n_fermion =
+            loops.iter().filter(|l| l.line == LineKind::Fermion).count() + inner_fermion;
         // a v3 direct record with `original_cycles`: the weights are the
         // caller's (R2): loop_sign 1, nf_power 0, overall 1, and the carried
         // closed cycles do not exceed the original graph's
@@ -1313,7 +1488,7 @@ impl FactorizedNumerator {
             if n_fermion > *fermion as usize || n_ghost > *ghost as usize {
                 return Err(FactorizedError::Graph {
                     detail: format!(
-                        "the record carries {n_fermion} fermion / {n_ghost} ghost cycles, more than \
+                        "the record and its insertions carry {n_fermion} fermion / {n_ghost} ghost cycles, more than \
                          original_cycles fermion={fermion} ghost={ghost}"
                     ),
                 });
@@ -1334,6 +1509,284 @@ impl FactorizedNumerator {
             });
         }
         Ok(())
+    }
+
+    /// The insertion at vertex `v`, if any.
+    pub fn insertion(&self, vertex: usize) -> Option<&Insertion> {
+        self.insertions.iter().find(|i| i.vertex == vertex)
+    }
+
+    /// The edges owning one of `hedges` (at either end).
+    fn edges_owning(&self, hedges: &[usize]) -> BTreeSet<usize> {
+        self.edges
+            .iter()
+            .filter(|e| {
+                e.source_hedge.is_some_and(|h| hedges.contains(&h))
+                    || e.target_hedge.is_some_and(|h| hedges.contains(&h))
+            })
+            .map(|e| e.id)
+            .collect()
+    }
+
+    /// The vertex at which half-edge `h` sits.
+    fn hedge_vertex(&self, h: usize) -> Option<usize> {
+        self.edges.iter().find_map(|e| match (e.source, e.target) {
+            (Endpoint::Vertex(v), _) if e.source_hedge == Some(h) => Some(v),
+            (_, Endpoint::Vertex(v)) if e.target_hedge == Some(h) => Some(v),
+            _ => None,
+        })
+    }
+
+    /// The structural rules of the insertions ([`Insertion`]) and the index
+    /// analysis of their factors (for the locality, contraction and
+    /// orientation checks of the whole value).
+    pub(crate) fn check_insertions(
+        &self,
+        edges: &BTreeMap<usize, &FactorizedEdge>,
+    ) -> Result<Vec<(Location, IndexSets, Elements)>> {
+        let mut analysed = Vec::new();
+        let present = self.hedges();
+        for window in self.insertions.windows(2) {
+            if window[0].vertex >= window[1].vertex {
+                return Err(FactorizedError::Insertion {
+                    vertex: window[1].vertex,
+                    detail: "insertions are not sorted by vertex, or two share a vertex".into(),
+                });
+            }
+        }
+        for insertion in &self.insertions {
+            let v = insertion.vertex;
+            let error = |detail: String| FactorizedError::Insertion { vertex: v, detail };
+            let Some(vertex) = self.vertex(v) else {
+                return Err(error("the vertex does not exist".into()));
+            };
+            if vertex.factor != Atom::num(1) {
+                return Err(error(format!(
+                    "the vertex factor must be 1 (the insertion's factor is stated once), found {}",
+                    vertex.factor.to_canonical_string()
+                )));
+            }
+            if insertion.hedges.is_empty() || insertion.hedges.windows(2).any(|w| w[0] >= w[1]) {
+                return Err(error(
+                    "hedges must be non-empty, sorted and distinct".into(),
+                ));
+            }
+            if let Some(h) = insertion.hedges.iter().find(|h| !present.contains(h)) {
+                return Err(error(format!("half-edge {h} is not in the graph")));
+            }
+            let at_vertex = self.local_hedges(Location::Vertex(v));
+            if !insertion.hedges.iter().any(|h| at_vertex.contains(h)) {
+                return Err(error("no boundary half-edge sits at the vertex".into()));
+            }
+            if vertex.rule.starts_with("ct:") {
+                if insertion.hedges.iter().copied().collect::<BTreeSet<_>>() != at_vertex {
+                    return Err(error(format!(
+                        "a contracted vertex (rule {}) has hedges {:?}, its incident half-edges are {:?}",
+                        vertex.rule, insertion.hedges, at_vertex
+                    )));
+                }
+            } else if !vertex.rule.starts_with("ins:") {
+                return Err(error(format!(
+                    "the vertex rule {} is neither `ct:<label>` (a contracted child) nor `ins:<label>` (a surrogate's coefficient vertex)",
+                    vertex.rule
+                )));
+            }
+            for (what, atom) in [
+                ("coefficient", &insertion.coefficient),
+                ("factor", &insertion.factor),
+            ] {
+                if let Some(found) = forbidden_in_insertion(atom.as_view()) {
+                    return Err(error(format!("{what} contains {found}")));
+                }
+            }
+            if let Some(name) = self
+                .mass_symbol_in(&insertion.coefficient)
+                .or_else(|| self.mass_symbol_in(&insertion.factor))
+            {
+                return Err(error(format!(
+                    "contains the reference / closing mass symbol {name}: the counterterm of a child on the massive-reference-mass route stays on the caller's contracted path"
+                )));
+            }
+            check_scalar(
+                insertion.coefficient.as_view(),
+                &format!("insertion at vertex {v} coefficient"),
+            )?;
+            let rules = FactorRules {
+                location: Location::Insertion(v),
+                dimension: self.dimension,
+                edges,
+                boundary: Some(self.edges_owning(&insertion.hedges)),
+            };
+            let (sets, elements) = rules.analyse(&insertion.factor)?;
+            // Locality: every free slot is one of the boundary half-edges'
+            // (or an open port of a half-edge the graph does not have).
+            for (key, slot) in &sets.free {
+                let local = slot.hedge().is_some_and(|h| insertion.hedges.contains(&h));
+                let absent_port = slot.hedge().is_some_and(|h| !present.contains(&h))
+                    && self.ports.iter().any(|p| p.to_canonical_string() == *key);
+                if !local && !absent_port {
+                    return Err(FactorizedError::IndexNotLocal {
+                        slot: key.clone(),
+                        location: Location::Insertion(v).to_string(),
+                    });
+                }
+            }
+            if sets.free.len() > INSERTION_MAX_SLOTS {
+                return Err(error(format!(
+                    "the factor has {} open slots, at most {INSERTION_MAX_SLOTS} are supported",
+                    sets.free.len()
+                )));
+            }
+            let degree = momentum_degree(insertion.factor.as_view());
+            if degree > INSERTION_MAX_DEGREE {
+                return Err(error(format!(
+                    "the factor has degree {degree} in the boundary momenta, at most {INSERTION_MAX_DEGREE} is supported"
+                )));
+            }
+            analysed.push((rules.location, sets, elements));
+        }
+        Ok(analysed)
+    }
+
+    /// An insertion may depend on the evaluation's ε (`epsilon`, the full
+    /// name of the settings' symbol) but on no other symbol named `ε` /
+    /// `…::ε` (a second ε would be silently constant).
+    pub(crate) fn check_insertion_epsilon(&self, epsilon: &str) -> Result<()> {
+        for insertion in &self.insertions {
+            let mut other = None;
+            for atom in [&insertion.coefficient, &insertion.factor] {
+                atom.visitor(&mut |part| {
+                    if let AtomView::Var(v) = part {
+                        let symbol = v.get_symbol();
+                        let name = symbol.get_name();
+                        if (name == "ε" || name.ends_with("::ε")) && name != epsilon {
+                            other = Some(name.to_string());
+                        }
+                    }
+                    other.is_none()
+                });
+            }
+            if let Some(name) = other {
+                return Err(FactorizedError::Insertion {
+                    vertex: insertion.vertex,
+                    detail: format!("the symbol {name} is not the evaluation's epsilon {epsilon}"),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// The first mass symbol occurring in `atom`: a symbol of an edge's mass,
+    /// or R*'s reference / auxiliary mass symbols by name.
+    fn mass_symbol_in(&self, atom: &Atom) -> Option<String> {
+        let mut masses = BTreeSet::new();
+        for edge in &self.edges {
+            edge.mass_squared.visitor(&mut |part| {
+                if let AtomView::Var(v) = part {
+                    masses.insert(v.get_symbol().get_name().to_string());
+                }
+                true
+            });
+        }
+        let mut found = None;
+        atom.visitor(&mut |part| {
+            if let AtomView::Var(v) = part {
+                let symbol = v.get_symbol();
+                let name = symbol.get_name();
+                if masses.contains(name)
+                    || name.ends_with("::rstar_reference_mass_squared")
+                    || name.ends_with("::rstar_mass_squared")
+                {
+                    found = Some(name.to_string());
+                }
+            }
+            found.is_none()
+        });
+        found
+    }
+
+    /// The POLE ORDER of the insertions: the largest `−v` over the
+    /// insertions, `v` the trailing power of `epsilon` of `coefficient ×
+    /// factor` (the dimension `D → 4 − 2 ε` first; tensors are constants in
+    /// ε); 0 when no insertion has a pole. An entry that integrates the rest
+    /// of the record separately and multiplies the insertions afterwards must
+    /// raise the integral's ε depth by it (a pole promotes higher orders of
+    /// the integral); one that hands the insertions to vakint inside the
+    /// integrand (the direct and vacuum entries) needs nothing.
+    pub fn insertion_pole_order(&self, epsilon: Symbol) -> Result<u64> {
+        use symbolica::poly::series::SeriesDepth;
+        let in_epsilon = Atom::num(4) - Atom::num(2) * Atom::var(epsilon);
+        let mut order = 0u64;
+        for insertion in &self.insertions {
+            let product = (&insertion.coefficient * &insertion.factor)
+                .replace(Atom::var(self.dimension))
+                .with(in_epsilon.clone())
+                .expand();
+            if product.is_zero() {
+                continue;
+            }
+            let failure = |detail: String| FactorizedError::Insertion {
+                vertex: insertion.vertex,
+                detail,
+            };
+            let series = product
+                .series(epsilon, Atom::Zero.as_view(), SeriesDepth::relative(1))
+                .map_err(|e| failure(format!("no Laurent series in ε: {e}")))?;
+            if series.is_zero() {
+                continue;
+            }
+            let exponent = series.get_trailing_exponent();
+            if !exponent.is_integer() {
+                return Err(failure("a fractional power of ε".into()));
+            }
+            let v = exponent
+                .numerator()
+                .to_i64()
+                .ok_or_else(|| failure("an ε power out of range".into()))?;
+            if v < 0 {
+                order = order.max(v.unsigned_abs());
+            }
+        }
+        Ok(order)
+    }
+
+    /// The node of every vertex for the closed-loop flow: the vertices that
+    /// own the boundary half-edges of one insertion (and its vertex) are one
+    /// node; every other vertex is its own.
+    fn flow_nodes(&self) -> BTreeMap<usize, usize> {
+        let mut node = self
+            .vertices
+            .iter()
+            .map(|v| (v.id, v.id))
+            .collect::<BTreeMap<_, _>>();
+        fn find(node: &BTreeMap<usize, usize>, mut v: usize) -> usize {
+            while let Some(&parent) = node.get(&v) {
+                if parent == v {
+                    break;
+                }
+                v = parent;
+            }
+            v
+        }
+        for insertion in &self.insertions {
+            let members = std::iter::once(insertion.vertex)
+                .chain(
+                    insertion
+                        .hedges
+                        .iter()
+                        .filter_map(|h| self.hedge_vertex(*h)),
+                )
+                .collect::<Vec<_>>();
+            for member in members {
+                let (a, b) = (find(&node, insertion.vertex), find(&node, member));
+                if a != b {
+                    let (low, high) = (a.min(b), a.max(b));
+                    node.insert(high, low);
+                }
+            }
+        }
+        let ids = node.keys().copied().collect::<Vec<_>>();
+        ids.into_iter().map(|v| (v, find(&node, v))).collect()
     }
 
     /// Ids unique, endpoints and half-edges consistent, powers; returns the
@@ -1492,6 +1945,7 @@ impl FactorizedNumerator {
             .iter()
             .map(|e| &e.factor)
             .chain(self.vertices.iter().map(|v| &v.factor))
+            .chain(self.insertions.iter().map(|i| &i.factor))
             .chain(self.projector.iter().map(|p| &p.tensor));
         for factor in factors {
             factor.visitor(&mut |part| {
@@ -1529,6 +1983,10 @@ impl FactorizedNumerator {
                     s.into_iter().chain(t).flatten()
                 })
                 .collect(),
+            Location::Insertion(v) => self
+                .insertion(v)
+                .map(|i| i.hedges.iter().copied().collect())
+                .unwrap_or_default(),
             Location::Projector => BTreeSet::new(),
         }
     }
@@ -1742,6 +2200,18 @@ impl FactorizedNumerator {
                     }
                     (rows, columns)
                 }
+                Location::Insertion(v) => {
+                    // The boundary half-edges of the insertion: rows on the
+                    // outgoing, columns on the incoming fermion lines.
+                    let hedges = self.local_hedges(Location::Insertion(*v));
+                    let mut rows = BTreeSet::new();
+                    let mut columns = BTreeSet::new();
+                    for e in self.edges.iter().filter(|e| e.line == LineKind::Fermion) {
+                        rows.extend(e.source_hedge.filter(|h| hedges.contains(h)));
+                        columns.extend(e.target_hedge.filter(|h| hedges.contains(h)));
+                    }
+                    (rows, columns)
+                }
                 Location::Projector => continue,
             };
             let local = self.local_hedges(*location);
@@ -1783,6 +2253,7 @@ impl FactorizedNumerator {
         } else {
             self.ports.clone()
         };
+        let nodes = self.flow_nodes();
         for line in [LineKind::Fermion, LineKind::Ghost] {
             let lines = self
                 .edges
@@ -1822,18 +2293,23 @@ impl FactorizedNumerator {
                     });
                 }
             }
-            for vertex in &self.vertices {
+            let node_of = |end: Endpoint| match end {
+                Endpoint::Vertex(v) => Endpoint::Vertex(nodes.get(&v).copied().unwrap_or(v)),
+                Endpoint::External => Endpoint::External,
+            };
+            let node_ids = nodes.values().copied().collect::<BTreeSet<_>>();
+            for node in node_ids {
                 let incoming = lines
                     .iter()
-                    .filter(|e| e.target == Endpoint::Vertex(vertex.id))
+                    .filter(|e| node_of(e.target) == Endpoint::Vertex(node))
                     .count();
                 let outgoing = lines
                     .iter()
-                    .filter(|e| e.source == Endpoint::Vertex(vertex.id))
+                    .filter(|e| node_of(e.source) == Endpoint::Vertex(node))
                     .count();
                 if incoming != outgoing || incoming > 1 {
                     return Err(FactorizedError::FlowNotConserved {
-                        vertex: vertex.id,
+                        vertex: node,
                         line: line.as_str().into(),
                         incoming,
                         outgoing,
@@ -1847,7 +2323,7 @@ impl FactorizedNumerator {
                 loop {
                     let next = lines
                         .iter()
-                        .find(|e| e.source == current.target)
+                        .find(|e| node_of(e.source) == node_of(current.target))
                         .expect("conserved flow");
                     if next.id == start {
                         break;
@@ -1920,5 +2396,7 @@ impl FactorizedNumerator {
     }
 }
 
+#[cfg(test)]
+mod insertion_tests;
 #[cfg(test)]
 mod tests;
