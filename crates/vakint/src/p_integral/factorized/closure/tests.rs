@@ -26,6 +26,7 @@ use super::super::{
     contract_with_idenso,
 };
 use super::*;
+use crate::p_integral::MassiveClosure;
 use crate::utils::vakint_macros::vk_parse;
 use crate::{
     EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, RustRedEvaluationOptions,
@@ -517,12 +518,12 @@ fn reference(value: &FactorizedNumerator, routing: &[(&str, &str)]) -> Atom {
         }
         integrand *= den.pow(Atom::num(-edge.power));
     }
-    let integrand = if spec.taylor.is_some() {
+    let integrand = if let Some(taylor) = &spec.taylor {
         let series = integrand
             .series(symbolica::symbol!("reference_lambda"), 0, w)
             .unwrap();
         let mut kept = Atom::Zero;
-        let orders = spec.taylor.as_ref().unwrap().orders;
+        let orders = taylor.orders;
         for (power, coefficient) in series.terms() {
             let n = power.numerator().to_i64().unwrap();
             assert!(power.is_integer() && n >= 0);

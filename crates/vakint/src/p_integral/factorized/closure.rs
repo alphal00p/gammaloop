@@ -58,7 +58,7 @@ use super::vacuum::{
 use super::{
     ClosureSpec, FactorizedError, FactorizedKind, FactorizedNumerator, Result, TaylorSpec, names,
 };
-use crate::p_integral::{BoundaryOptions, BoundaryPattern, MassiveClosure, RemainderBoundary};
+use crate::p_integral::{BoundaryOptions, BoundaryPattern, RemainderBoundary};
 use crate::symbols::S;
 use crate::utils::vakint_macros::vk_symbol;
 use crate::{Vakint, VakintSettings};
@@ -85,8 +85,8 @@ fn mentions(view: AtomView<'_>, test: &dyn Fn(&str) -> bool) -> bool {
     let mut found = false;
     view.visitor(&mut |part| {
         match part {
-            AtomView::Var(v) => found |= test(&v.get_symbol().get_name()),
-            AtomView::Fun(f) => found |= test(&f.get_symbol().get_name()),
+            AtomView::Var(v) => found |= test(v.get_symbol().get_name()),
+            AtomView::Fun(f) => found |= test(f.get_symbol().get_name()),
             _ => {}
         }
         !found
@@ -584,10 +584,10 @@ fn denominator_terms(
                 // B^0 = C^0 = 1 (also where B or C vanishes: no 0^0)
                 let mut coefficient = Atom::num(number);
                 if a_power > 0 {
-                    coefficient = coefficient * b.pow(Atom::num(a_power));
+                    coefficient *= b.pow(Atom::num(a_power));
                 }
                 if b_power > 0 {
-                    coefficient = coefficient * c.pow(Atom::num(b_power));
+                    coefficient *= c.pow(Atom::num(b_power));
                 }
                 own.push((m, (a_power + 2 * b_power) as u32, coefficient));
             }

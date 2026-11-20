@@ -903,12 +903,15 @@ fn evaluate_closure(
 /// The first half of [`evaluate_closure`]: vakint's vacuum tensor reduction of
 /// `input` ([`reduce_vacuum`]) and, per external tensor, the tensor and the
 /// massive closure of its scalar coefficient through `cut` (not evaluated).
+pub(super) type TensorClosures = (Vec<Atom>, Vec<(MassiveClosure, DirectClosureInput)>);
+
+/// See [`TensorClosures`]: the external tensors and their closure inputs.
 pub(super) fn closure_inputs(
     vakint: &Vakint,
     settings: &VakintSettings,
     input: &Atom,
     cut: &VacuumCut,
-) -> Result<(Vec<Atom>, Vec<(MassiveClosure, DirectClosureInput)>)> {
+) -> Result<TensorClosures> {
     let reduced = reduce_vacuum(vakint, settings, input)?;
     let expression = VakintExpression::try_from(reduced).map_err(|e| error(e.to_string()))?;
     let mut tensors = Vec::new();

@@ -197,7 +197,7 @@ impl TaylorOrders {
         match self {
             Self::All => true,
             Self::DropZero => n >= 1,
-            Self::DropZeroOdd => n >= 2 && n % 2 == 0,
+            Self::DropZeroOdd => n >= 2 && n.is_multiple_of(2),
         }
     }
 
