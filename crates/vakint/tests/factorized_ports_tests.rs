@@ -296,7 +296,10 @@ fn hard_as_vacuum(text: &str) -> FactorizedNumerator {
                         if f.starts_with("momentum=") {
                             format!(
                                 "momentum={}",
-                                v.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(",")
+                                v.iter()
+                                    .map(|c| c.to_string())
+                                    .collect::<Vec<_>>()
+                                    .join(",")
                             )
                         } else {
                             f.to_string()
@@ -313,8 +316,7 @@ fn hard_as_vacuum(text: &str) -> FactorizedNumerator {
     let mut v1 = out.join("\n");
     v1.push('\n');
     init();
-    let mut value =
-        FactorizedNumerator::parse_text(&v1).unwrap_or_else(|e| panic!("{e}\n{v1}"));
+    let mut value = FactorizedNumerator::parse_text(&v1).unwrap_or_else(|e| panic!("{e}\n{v1}"));
     // the loop edges b_i; the crown vectors become constant vectors 10000 + x
     let loop_edges = value
         .loop_edges
@@ -370,10 +372,17 @@ fn hard_as_vacuum(text: &str) -> FactorizedNumerator {
     }
     // the carried graph's weights for the v1 validator (the value does not use
     // the prefactor fields: the prefactor is passed explicitly)
-    let closed = value.closed_loops().unwrap_or_else(|e| panic!("{}: {e}", value.label));
+    let closed = value
+        .closed_loops()
+        .unwrap_or_else(|e| panic!("{}: {e}", value.label));
     value.prefactor.loop_sign = if closed.len() % 2 == 0 { 1 } else { -1 };
-    value.prefactor.nf_power = closed.iter().filter(|l| l.line == LineKind::Fermion).count() as u32;
-    value.validate().unwrap_or_else(|e| panic!("{}: {e}", value.label));
+    value.prefactor.nf_power = closed
+        .iter()
+        .filter(|l| l.line == LineKind::Fermion)
+        .count() as u32;
+    value
+        .validate()
+        .unwrap_or_else(|e| panic!("{}: {e}", value.label));
     value
 }
 
@@ -408,7 +417,7 @@ fn open_hard_part_slots_close_to_the_contracted_route() {
         "hard-L3-008385.txt", // 2 loops, 3 crown vectors, 3 slots, Taylor sector 4
         "hard-L3-012034.txt", // 2 loops, 3 crown vectors, 4 slots
         "hard-L3-000993.txt", // 1 loop, 4 crown vectors, 4 slots
-        "k3-hs.input.txt",    // the beta's k3-hs record (L3 #36), its shape: 1 loop, 3 vectors, 3 slots
+        "k3-hs.input.txt", // the beta's k3-hs record (L3 #36), its shape: 1 loop, 3 vectors, 3 slots
         "k3-dirac.input.txt", // k3-dirac (L4 #4966): bispinor pair closed by gamma, fresh nu open
     ] {
         let text = std::fs::read_to_string(fixtures().join(name)).unwrap();
@@ -464,7 +473,10 @@ fn open_hard_part_slots_close_to_the_contracted_route() {
         if contracted.vakint_value.expand().is_zero() {
             // both routes must then give exactly zero
             let closed = open_indices::close_indices(&(&open.vakint_value * &closing), eps);
-            assert!(closed.expand().is_zero(), "{name}: contracted 0, open closed {closed}");
+            assert!(
+                closed.expand().is_zero(),
+                "{name}: contracted 0, open closed {closed}"
+            );
             zero += 1;
         } else {
             assert_closes(
@@ -487,7 +499,10 @@ fn open_hard_part_slots_close_to_the_contracted_route() {
         checked += 1;
     }
     assert_eq!(checked, 6);
-    assert!(checked - zero >= 4, "{zero} of {checked} fixtures are exactly zero");
+    assert!(
+        checked - zero >= 4,
+        "{zero} of {checked} fixtures are exactly zero"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -633,7 +648,8 @@ fn check_direct(vakint: &Vakint, value: &FactorizedNumerator) -> usize {
         let name = symbol.get_name();
         if name == MOMENTUM && args.len() == 2 {
             assert_eq!(i64::try_from(args[0]).unwrap(), x as i64);
-            **out = Atom::num(xi) * symbolica::function!(S.p, 1, index_of_slot(&args[1].to_owned()));
+            **out =
+                Atom::num(xi) * symbolica::function!(S.p, 1, index_of_slot(&args[1].to_owned()));
         } else if name == "spenso::dot" && args.len() == 2 {
             **out = symbolica::function!(S.dot, &head, &head);
         } else if name == METRIC && args.len() == 2 {
@@ -649,12 +665,10 @@ fn check_direct(vakint: &Vakint, value: &FactorizedNumerator) -> usize {
         .iter()
         .map(|s| (s.clone(), index_of_slot(s)))
         .collect::<Vec<_>>();
-    let (caller, closing, count) = generic_closing(
-        &slots,
-        1,
-        &|_, slot| q(x as i64, slot),
-        &|_, index| Atom::num(xi) * symbolica::function!(S.p, 1, index),
-    );
+    let (caller, closing, count) =
+        generic_closing(&slots, 1, &|_, slot| q(x as i64, slot), &|_, index| {
+            Atom::num(xi) * symbolica::function!(S.p, 1, index)
+        });
     let mut contracted_value = value.clone();
     contracted_value.projector = Some(match &value.projector {
         // a partial projector: the generic tensor closes what it leaves open
@@ -894,7 +908,10 @@ fn port_refusals_are_precise() {
         ),
         p2_power: 0,
     });
-    assert!(matches!(stray.validate(), Err(FactorizedError::Ports { .. })));
+    assert!(matches!(
+        stray.validate(),
+        Err(FactorizedError::Ports { .. })
+    ));
 }
 
 /// A projector closing SOME ports: the others stay open, and a fresh slot of
@@ -982,15 +999,13 @@ fn scalars_inside_factors_are_accepted() {
     let value = hard_as_vacuum(&text);
     // zeta(3) and pi are legal scalars too (WH-OQ-ANSWERS addendum, OQ-23)
     let zeta3 = symbolica::try_parse!("symbolica::{}::zeta(3)*𝜋^(-2)").unwrap();
-    let couplings = Atom::i()
-        * Atom::var(sym("UFO::gs_minus"))
-        * Atom::var(sym("UFO::gs2_i"))
-        * &zeta3;
+    let couplings =
+        Atom::i() * Atom::var(sym("UFO::gs_minus")) * Atom::var(sym("UFO::gs2_i")) * &zeta3;
     let mut inside = value.clone();
-    inside.vertices[0].factor = &inside.vertices[0].factor * Atom::i() * Atom::var(sym("UFO::gs_minus"));
+    inside.vertices[0].factor =
+        &inside.vertices[0].factor * Atom::i() * Atom::var(sym("UFO::gs_minus"));
     let last = inside.edges.len() - 1;
-    inside.edges[last].factor =
-        &inside.edges[last].factor * Atom::var(sym("UFO::gs2_i")) * &zeta3;
+    inside.edges[last].factor = &inside.edges[last].factor * Atom::var(sym("UFO::gs2_i")) * &zeta3;
     inside.validate().unwrap();
     let got = evaluate_factorized_vacuum(&vakint, &settings, &inside, &Atom::num(1)).unwrap();
     let reference = evaluate_factorized_vacuum(&vakint, &settings, &value, &couplings).unwrap();
@@ -1061,7 +1076,12 @@ fn assert_equal_through(got: &Atom, expected: &Atom, order: i64, what: &str) {
     let eps = sym("gammalooprs::ε");
     let got = open_indices::epsilon_coefficients(got, eps);
     let expected = open_indices::epsilon_coefficients(expected, eps);
-    let first = got.keys().chain(expected.keys()).copied().min().unwrap_or(0);
+    let first = got
+        .keys()
+        .chain(expected.keys())
+        .copied()
+        .min()
+        .unwrap_or(0);
     for n in first..=order {
         let g = got.get(&n).cloned().unwrap_or(Atom::Zero);
         let e = expected.get(&n).cloned().unwrap_or(Atom::Zero);
@@ -1071,7 +1091,10 @@ fn assert_equal_through(got: &Atom, expected: &Atom, order: i64, what: &str) {
             "{what}: eps^{n}: entry {g}\nbeta  {e}\ndifference {difference}"
         );
     }
-    assert!(expected.keys().any(|n| *n <= order), "{what}: the reference is zero through eps^{order}");
+    assert!(
+        expected.keys().any(|n| *n <= order),
+        "{what}: the reference is zero through eps^{order}"
+    );
 }
 
 /// K6 (f): each VERIFIED record (read as written: schema v3, kind direct)
@@ -1085,8 +1108,10 @@ fn assert_equal_through(got: &Atom, expected: &Atom, order: i64, what: &str) {
 fn the_beta_k6_records_equal_their_contracted_values() {
     let vakint = engine();
     for name in ["quark", "gluon", "gluon-qloop", "bubble"] {
-        let input = std::fs::read_to_string(fixtures().join(format!("k6-{name}.input.txt"))).unwrap();
-        let reference = std::fs::read_to_string(fixtures().join(format!("k6-{name}.value.txt"))).unwrap();
+        let input =
+            std::fs::read_to_string(fixtures().join(format!("k6-{name}.input.txt"))).unwrap();
+        let reference =
+            std::fs::read_to_string(fixtures().join(format!("k6-{name}.value.txt"))).unwrap();
         let (value, depth) = direct_v3(&input);
         // the comparison point: the return of the site's
         // integrate_propagator_with (no 1/p^2, no 1/Tr[1], no channel solve:
@@ -1094,10 +1119,14 @@ fn the_beta_k6_records_equal_their_contracted_values() {
         assert_eq!(value.projector.as_ref().map_or(0, |p| p.p2_power), 0);
         let (expected, through) = fixture_value(&reference);
         let settings = rstar_site_settings(depth);
-        let prefactor = &value.prefactor.scalars * &value.prefactor.colour * &value.prefactor.overall;
+        let prefactor =
+            &value.prefactor.scalars * &value.prefactor.colour * &value.prefactor.overall;
         let got = evaluate_factorized_ports(&vakint, &settings, &value, &prefactor)
             .unwrap_or_else(|e| panic!("{name}: {e}"));
-        eprintln!("K6 {name} entry {}\nK6 {name} beta  {}", got.value, expected);
+        eprintln!(
+            "K6 {name} entry {}\nK6 {name} beta  {}",
+            got.value, expected
+        );
         assert_equal_through(&got.value, &expected, through, name);
         eprintln!(
             "WH_PORTS_K6 record={name} identical_through=eps^{through} contract_s={:.3} evaluate_s={:.3}",
@@ -1113,8 +1142,16 @@ fn the_compact_slash_is_written_out_on_read() {
     init();
     let input = std::fs::read_to_string(fixtures().join("k6-quark.input.txt")).unwrap();
     let (value, _) = direct_v3(&input);
-    let tensor = value.projector.as_ref().unwrap().tensor.to_canonical_string();
-    assert!(tensor.contains("vakint::{}::slash(-1,0)") || tensor.contains("slash(-1,0)"), "{tensor}");
+    let tensor = value
+        .projector
+        .as_ref()
+        .unwrap()
+        .tensor
+        .to_canonical_string();
+    assert!(
+        tensor.contains("vakint::{}::slash(-1,0)") || tensor.contains("slash(-1,0)"),
+        "{tensor}"
+    );
     let mut again = value.clone();
     again.expand_compact_slashes().unwrap();
     assert_eq!(again, value);
@@ -1127,7 +1164,10 @@ fn the_compact_slash_is_written_out_on_read() {
         .with(symbolica::try_parse!("gammalooprs::{spenso::index}::hedge(5,1)").unwrap());
     let written = vakint::p_integral::factorized::expand_compact_slash(&(&compact * &other), 7);
     let text = written.to_canonical_string();
-    assert!(text.contains("slash(7,0)") && text.contains("slash(7,1)"), "{text}");
+    assert!(
+        text.contains("slash(7,0)") && text.contains("slash(7,1)"),
+        "{text}"
+    );
     // under a Taylor step: refused (the beta's k3-hs closure record, degree 1)
     let k3 = std::fs::read_to_string(fixtures().join("k3-hs.input.txt")).unwrap();
     let mut taylor = FactorizedNumerator::parse_text(&k3).unwrap();

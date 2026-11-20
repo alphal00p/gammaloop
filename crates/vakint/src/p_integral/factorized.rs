@@ -1623,9 +1623,10 @@ impl FactorizedNumerator {
         // (`open_slots`). Ports it does not close stay open too.
         if let Some(projector_free) = &projector_free {
             for key in projector_free.difference(&ports) {
-                if free.get(key).is_some_and(|locations| {
-                    locations.iter().any(|l| *l != Location::Projector)
-                }) {
+                if free
+                    .get(key)
+                    .is_some_and(|locations| locations.iter().any(|l| *l != Location::Projector))
+                {
                     return Err(FactorizedError::Ports {
                         detail: format!(
                             "the projector's free index {key} occurs in the factors but is not a \
@@ -1809,7 +1810,10 @@ impl FactorizedNumerator {
                     })
             };
             let legs = lines.iter().filter(|e| e.is_external()).collect::<Vec<_>>();
-            let incoming = legs.iter().filter(|e| e.source == Endpoint::External).count();
+            let incoming = legs
+                .iter()
+                .filter(|e| e.source == Endpoint::External)
+                .count();
             for edge in &legs {
                 if !closed_by_projector(edge) || legs.len() != 2 || incoming != 1 {
                     return Err(FactorizedError::OpenLine {

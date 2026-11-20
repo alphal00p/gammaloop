@@ -1030,9 +1030,7 @@ pub fn vakint_vacuum_input_streamed(
 /// graph); an external vector without either stays `p(j)`.
 pub fn to_caller_notation(value: &FactorizedNumerator, vakint_value: &Atom) -> Atom {
     let q = symbolica::symbol!(names::MOMENTUM);
-    let open = value
-        .open_slots()
-        .unwrap_or_else(|_| value.ports.clone());
+    let open = value.open_slots().unwrap_or_else(|_| value.ports.clone());
     let rep = open.first().and_then(|port| match port.as_view() {
         AtomView::Fun(f) => Some(function!(
             f.get_symbol(),
