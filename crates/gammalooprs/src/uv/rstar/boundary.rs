@@ -801,7 +801,7 @@ impl Grammar {
     /// checkpoint, whose failure is a hard error.
     fn tick(&mut self) -> std::result::Result<(), Fail> {
         self.work += 1;
-        if self.work % CHECKPOINT_STEPS == 0 {
+        if self.work.is_multiple_of(CHECKPOINT_STEPS) {
             checkpoint("collect").map_err(Fail::Error)?;
         }
         Ok(())
