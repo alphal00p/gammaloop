@@ -104,43 +104,6 @@ pub(super) fn contains_atom(hay: AtomView<'_>, needle: AtomView<'_>) -> bool {
     found
 }
 
-/// The slots that stay OPEN in a closure record's value: the ports its
-/// projector does not close, then the projector's own free slots that are not
-/// ports (WH-RECORD-FORMAT `open`), in that order.
-pub(super) fn open_slot_atoms(value: &FactorizedNumerator) -> Vec<Atom> {
-    let Some(projector) = &value.projector else {
-        return value.ports.clone();
-    };
-    let mut open = value
-        .ports
-        .iter()
-        .filter(|port| !contains_atom(projector.tensor.as_view(), port.as_view()))
-        .cloned()
-        .collect::<Vec<_>>();
-    // free slots of the projector: once in (the first term of) its tensor
-    let term = match projector.tensor.as_view() {
-        AtomView::Add(sum) => sum.iter().next().unwrap().to_owned(),
-        _ => projector.tensor.clone(),
-    };
-    let mut counts = Vec::<(Atom, usize)>::new();
-    term.as_view().visitor(&mut |part| {
-        if let Some(slot) = super::as_slot(part) {
-            match counts.iter_mut().find(|(a, _)| *a == slot.atom) {
-                Some((_, n)) => *n += 1,
-                None => counts.push((slot.atom, 1)),
-            }
-            return false;
-        }
-        true
-    });
-    for (slot, n) in counts {
-        if n == 1 && !value.ports.contains(&slot) {
-            open.push(slot);
-        }
-    }
-    open
-}
-
 /// `(fermion, ghost)` closed cycles of the carried graph; a line through
 /// external legs (an open quark line of a hard part) is not a cycle.
 fn carried_cycles(value: &FactorizedNumerator) -> (u32, u32) {
@@ -185,12 +148,15 @@ fn carried_cycles(value: &FactorizedNumerator) -> (u32, u32) {
     (out[0], out[1])
 }
 
-/// The record with its open slots as its ports (the vakint notation's raw
-/// port indices `PORT + i` and the caller notation follow them).
-fn opened(value: &FactorizedNumerator) -> FactorizedNumerator {
+/// The record with its open slots ([`FactorizedNumerator::open_slots`]) as
+/// its ports and no projector (the vakint notation's raw port indices `PORT +
+/// i` and the caller notation follow them; the projector is contracted
+/// already when this view is used).
+fn opened(value: &FactorizedNumerator) -> Result<FactorizedNumerator> {
     let mut opened = value.clone();
-    opened.ports = open_slot_atoms(value);
-    opened
+    opened.ports = value.open_slots()?;
+    opened.projector = None;
+    Ok(opened)
 }
 
 /// The edge ids `Q(e, ..)` in `view`.
@@ -367,7 +333,7 @@ impl FactorizedNumerator {
         }
         // open slots (ports the projector does not close, the projector's own
         // free slots): Lorentz only
-        for slot in open_slot_atoms(self) {
+        for slot in self.open_slots()? {
             let lorentz = matches!(slot.as_view(), AtomView::Fun(f) if f.get_symbol().get_name() == names::MINK);
             if !lorentz {
                 return Err(refuse(format!(
@@ -912,8 +878,8 @@ fn lambda_power(view: AtomView<'_>, lambda: Symbol) -> u32 {
 /// The record for the mapping to vakint notation after a routed contraction:
 /// its open slots as ports and the loop-momentum vectors of loops without a loop edge as
 /// edges carrying `k(i+1)` (external, so that they are never lines).
-fn mapping_view(value: &FactorizedNumerator) -> FactorizedNumerator {
-    let mut view = opened(value);
+fn mapping_view(value: &FactorizedNumerator) -> Result<FactorizedNumerator> {
+    let mut view = opened(value)?;
     let n = value.loops() + value.externals();
     for i in (0..value.loops()).filter(|i| value.loop_edges[*i].is_none()) {
         let mut momentum = vec![0; n];
@@ -932,7 +898,7 @@ fn mapping_view(value: &FactorizedNumerator) -> FactorizedNumerator {
             factor: Atom::num(1),
         });
     }
-    view
+    Ok(view)
 }
 
 fn prepare(
@@ -1007,7 +973,7 @@ fn prepare(
     let idenso_seconds = started.elapsed().as_secs_f64();
     // the dimension is substituted per block after the split (no expansion of
     // the D-dependent coefficients into epsilon terms)
-    let scalar = map_to_vakint_vacuum(&mapping_view(value), &contracted)?;
+    let scalar = map_to_vakint_vacuum(&mapping_view(value)?, &contracted)?;
     let contract_seconds = started.elapsed().as_secs_f64();
     if std::env::var("VAKINT_CLOSURE_PROFILE").is_ok() {
         eprintln!(
@@ -1331,7 +1297,7 @@ pub fn evaluate_factorized_closure(
         // the caller's notation; with no open slot, scalar products of the
         // external momenta still come back as spenso::dot(Q(x, mink(D)), ..):
         // the representation is taken from a placeholder slot
-        let mut caller_view = opened(value);
+        let mut caller_view = opened(value)?;
         if caller_view.ports.is_empty() {
             caller_view.ports.push(function!(
                 symbolica::symbol!(names::MINK),
