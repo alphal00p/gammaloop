@@ -1201,7 +1201,14 @@ fn closure_kind_timing() {
         v.sort_by(|a, b| a.partial_cmp(b).unwrap());
         v[v.len() / 2]
     };
+    let only = std::env::var("VAKINT_CLOSURE_TIMING_ONLY").ok();
     for (value, routing) in &cases {
+        if only
+            .as_ref()
+            .is_some_and(|o| !value.label.contains(o.as_str()))
+        {
+            continue;
+        }
         let routing = routing
             .iter()
             .map(|(a, b)| (a.as_str(), b.as_str()))
