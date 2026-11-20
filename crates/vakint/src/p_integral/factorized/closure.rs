@@ -1095,7 +1095,18 @@ pub fn evaluate_factorized_closure(
         }
         let vakint_value = vakint_value.expand();
         let evaluate_seconds = started.elapsed().as_secs_f64();
-        let caller = vacuum::to_caller_notation(&opened(value), &vakint_value);
+        // the caller's notation; with no open slot, scalar products of the
+        // external momenta still come back as spenso::dot(Q(x, mink(D)), ..):
+        // the representation is taken from a placeholder slot
+        let mut caller_view = opened(value);
+        if caller_view.ports.is_empty() {
+            caller_view.ports.push(function!(
+                symbolica::symbol!(names::MINK),
+                Atom::var(value.dimension),
+                Atom::num(0)
+            ));
+        }
+        let caller = vacuum::to_caller_notation(&caller_view, &vakint_value);
         out.value += &caller;
         out.vakint_value += &vakint_value;
         out.records.push(ClosureRecordValue {
