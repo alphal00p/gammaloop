@@ -84,9 +84,10 @@ fn vakint_momenta(value: &FactorizedNumerator) -> Result<(Vec<(usize, Atom)>, At
 /// leg (by edge id) that carries the external momentum; a leg whose momentum
 /// vector is all zero is a SOFT leg (e.g. the zero-momentum legs of an R*
 /// child made propagator-type) and is skipped.
-fn vakint_momenta_oriented(
-    value: &FactorizedNumerator,
-) -> Result<(Vec<(usize, Atom)>, Atom, Orientation)> {
+/// Every edge's vakint momentum, vakint's `p(1)` and its orientation.
+type OrientedMomenta = (Vec<(usize, Atom)>, Atom, Orientation);
+
+fn vakint_momenta_oriented(value: &FactorizedNumerator) -> Result<OrientedMomenta> {
     let loops = value.loops();
     if value.externals() != 1 {
         return Err(evaluation(format!(
