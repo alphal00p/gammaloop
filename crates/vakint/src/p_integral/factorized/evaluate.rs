@@ -496,7 +496,9 @@ pub fn to_caller_notation_p(value: &FactorizedNumerator, vakint_value: &Atom) ->
         .ok_or_else(|| evaluation(format!("the external leg {x} of p(1) is not an edge")))?;
     let xi = leg.momentum[loops];
     if (xi != 1 && xi != -1) || leg.momentum[..loops].iter().any(|c| *c != 0) {
-        return Err(evaluation(format!("the leg {x} of p(1) does not carry ±p(1)")));
+        return Err(evaluation(format!(
+            "the leg {x} of p(1) does not carry ±p(1)"
+        )));
     }
     // p_vakint(1) = into p_value(1) = into xi Q(x).
     let sigma = Atom::num(orientation.into * xi);
@@ -504,9 +506,7 @@ pub fn to_caller_notation_p(value: &FactorizedNumerator, vakint_value: &Atom) ->
     let open = value.open_slots()?;
     let slot_of = |index: AtomView<'_>| {
         open.iter()
-            .find(|slot| {
-                super::as_slot(slot.as_view()).is_some_and(|s| s.index.as_view() == index)
-            })
+            .find(|slot| super::as_slot(slot.as_view()).is_some_and(|s| s.index.as_view() == index))
             .cloned()
     };
     let mink = symbolica::function!(symbolica::symbol!(names::MINK), Atom::var(value.dimension));
@@ -531,7 +531,10 @@ pub fn to_caller_notation_p(value: &FactorizedNumerator, vakint_value: &Atom) ->
             {
                 **out = &sigma * symbolica::function!(q, Atom::num(x as i64), slot);
             }
-        } else if function.get_symbol() == S.dot && args.len() == 2 && head(args[0]) && head(args[1])
+        } else if function.get_symbol() == S.dot
+            && args.len() == 2
+            && head(args[0])
+            && head(args[1])
         {
             let vector = symbolica::function!(q, Atom::num(x as i64), &mink);
             **out = symbolica::function!(SPENSO_TAG.dot, &vector, &vector);
