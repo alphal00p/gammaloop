@@ -629,6 +629,8 @@ impl RStarPlan {
         vakint: &Vakint,
         uv_settings: &UVgenerationSettings,
     ) -> Result<Atom> {
+        let started = Instant::now();
+        let counted = vakint::timing::Snapshot::now();
         let (_, external_routing) = RStarIntegrand::physical_external_routing(
             graph,
             &graph.external_filter::<SuBitGraph>(),
@@ -644,6 +646,16 @@ impl RStarPlan {
             ChildMass::Reference,
         )?;
         let result = -evaluation.counterterm()? - evaluation.physical_uv_preparation()?;
+        if super::plan::uv_children_log() {
+            // The whole root pole part: its evaluation (BOUNDARY_SUMMARY eval_*)
+            // and the physical UV preparation that follows it.
+            eprintln!(
+                "RSTAR_POLE_PART graph={} seconds={:.3}{}",
+                graph.name,
+                started.elapsed().as_secs_f64(),
+                counted.elapsed().fields()
+            );
+        }
         evaluation.poles(&super::linearize::linearize(
             result.replace_multiple(&external_routing),
         ))
