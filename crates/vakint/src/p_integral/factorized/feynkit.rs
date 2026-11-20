@@ -787,6 +787,7 @@ impl FactorizedNumerator {
                     rows: choice,
                 }),
                 insertions: Vec::new(),
+                record: None,
             };
             value.ports = value.open_lorentz_ports();
             value.projector = value.projector_for(options.projector)?;

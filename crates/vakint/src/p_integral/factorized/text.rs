@@ -11,7 +11,7 @@
 //! carries at most one atom, always as its last field.
 
 use super::{
-    ClosureSpec, ColourBranchInfo, Endpoint, FACTORIZED_SCHEMA, FACTORIZED_SCHEMA_V3,
+    ClosureSpec, ColourBranchInfo, DirectRecord, Endpoint, FACTORIZED_SCHEMA, FACTORIZED_SCHEMA_V3,
     FactorizedEdge, FactorizedError, FactorizedKind, FactorizedNumerator, FactorizedVertex,
     LineKind, Prefactor, Projector, Result, SoftLeg, TaylorOrders, TaylorSpec,
 };
@@ -93,6 +93,11 @@ pub(super) fn write_record(value: &FactorizedNumerator) -> Result<String> {
     }
     let mut lines = Vec::<String>::new();
     match closure {
+        None if value.record.is_some() => {
+            lines.push(format!("schema\t{FACTORIZED_SCHEMA_V3}"));
+            lines.push(format!("label\t{}", value.label));
+            lines.push("kind\tdirect\texternals=conserved".into());
+        }
         None => {
             lines.push(format!("schema\t{FACTORIZED_SCHEMA}"));
             lines.push(format!("label\t{}", value.label));
@@ -177,7 +182,7 @@ pub(super) fn write_record(value: &FactorizedNumerator) -> Result<String> {
             one_atom(&projector.tensor, "projector")?
         )),
     }
-    if closure.is_some() {
+    if closure.is_some() || value.record.is_some() {
         let open = open_slots(value)?;
         lines.push(format!("open\t{}", open.len()));
         for slot in open {
@@ -210,6 +215,9 @@ pub(super) fn write_record(value: &FactorizedNumerator) -> Result<String> {
             list(&info.rows)
         )),
     }
+    if let (None, Some(record)) = (closure, &value.record) {
+        write_direct_section(record, &mut lines)?;
+    }
     if let Some(spec) = closure {
         write_closure_section(spec, value, &mut lines)?;
     }
@@ -219,6 +227,88 @@ pub(super) fn write_record(value: &FactorizedNumerator) -> Result<String> {
     let mut text = lines.join("\n");
     text.push('\n');
     Ok(text)
+}
+
+/// The closure section of a v3 DIRECT record: `closure none`, `taylor none`,
+/// `softs 0`, then its provenance.
+fn write_direct_section(record: &DirectRecord, lines: &mut Vec<String>) -> Result<()> {
+    lines.push("closure\tnone".into());
+    lines.push("taylor\tnone".into());
+    lines.push("softs\t0".into());
+    match record.original_cycles {
+        None => lines.push("original_cycles\tnone".into()),
+        Some((f, g)) => lines.push(format!("original_cycles\tfermion={f}\tghost={g}")),
+    }
+    if !record.weights.is_empty() {
+        lines.push(format!("weights\t{}", record.weights.len()));
+    }
+    for (name, by_vakint, atom) in &record.weights {
+        token(name, "weight name")?;
+        lines.push(format!(
+            "weight\t{name}\tapplied_by={}\t{}",
+            if *by_vakint { "vakint" } else { "beta" },
+            one_atom(atom, "weight")?
+        ));
+    }
+    lines.push(match record.depth {
+        None => "depth\tnone".into(),
+        Some(depth) => format!("depth\t{depth}"),
+    });
+    Ok(())
+}
+
+/// The closure section of a v3 DIRECT record (read): `closure none`, `taylor
+/// none`, `softs 0`, `original_cycles`, optional `weights`, `depth`.
+fn read_direct_section(reader: &mut Reader<'_>) -> Result<DirectRecord> {
+    for key in ["closure", "taylor"] {
+        let line = reader.expect(key)?;
+        if line.fields.as_slice() != ["none"] {
+            return Err(reader.syntax(line.number, format!("kind direct with `{key}` not none")));
+        }
+    }
+    let (line, n) = count_section(reader, "softs")?;
+    if n != 0 {
+        return Err(reader.syntax(line, "kind direct with soft legs"));
+    }
+    let line = reader.expect("original_cycles")?;
+    let original_cycles = if line.fields.as_slice() == ["none"] {
+        None
+    } else {
+        Some((
+            number(line.number, field(&line, "fermion")?, "fermion cycles")?,
+            number(line.number, field(&line, "ghost")?, "ghost cycles")?,
+        ))
+    };
+    let n = if reader.peek_key() == Some("weights") {
+        count_section(reader, "weights")?.1
+    } else {
+        0
+    };
+    let mut weights = Vec::with_capacity(n);
+    for _ in 0..n {
+        let line = reader.expect("weight")?;
+        let by = match field(&line, "applied_by")? {
+            "vakint" => true,
+            "beta" => false,
+            other => return Err(reader.syntax(line.number, format!("applied_by={other}"))),
+        };
+        weights.push((
+            line.fields.first().copied().unwrap_or("").to_string(),
+            by,
+            last_atom(&line, 2)?,
+        ));
+    }
+    let line = reader.expect("depth")?;
+    let depth = match line.fields.as_slice() {
+        ["none"] => None,
+        [n] => Some(number(line.number, n, "depth")?),
+        _ => return Err(reader.syntax(line.number, "depth<TAB><n>")),
+    };
+    Ok(DirectRecord {
+        original_cycles,
+        depth,
+        weights,
+    })
 }
 
 /// The closure section of v3 (`closure` .. `depth`).
@@ -565,8 +655,14 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
     let label = reader.expect("label")?.fields.join("\t");
     let kind = reader.expect("kind")?;
     // v3: kind closure (this reader); v1: kind direct
+    let direct_v3 = v3
+        && matches!(
+            kind.fields.as_slice(),
+            ["direct"] | ["direct", "externals=conserved"]
+        );
     let independent_externals = match (v3, kind.fields.as_slice()) {
         (false, ["direct"]) => false,
+        (true, ["direct"]) | (true, ["direct", "externals=conserved"]) => false,
         (false, ["closure", ..]) => {
             return Err(FactorizedError::Reserved {
                 feature: "the closure kind in schema v1 (it is written in schema v3)".into(),
@@ -577,7 +673,8 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
         (true, [other, ..]) if *other == "direct" || *other == "vacuum" => {
             return Err(FactorizedError::Reserved {
                 feature: format!(
-                    "kind {other} in schema v3 (this reader takes v3 closure records)"
+                    "kind {other} in schema v3 with {:?} (direct is conserved; vacuum is not a v3 kind)",
+                    kind.fields
                 ),
             });
         }
@@ -744,7 +841,11 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
             rows: integers(branch.number, field(&branch, "rows")?, "colour rows")?,
         }),
     };
-    let closure = if v3 {
+    let mut record = None;
+    let closure = if direct_v3 {
+        record = Some(read_direct_section(reader)?);
+        None
+    } else if v3 {
         let (spec, ignored) = read_closure_section(reader, independent_externals)?;
         if !ignored.is_empty() {
             eprintln!(
@@ -785,7 +886,7 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
     if end.key != "end" || !end.fields.is_empty() {
         return Err(reader.syntax(end.number, "a record ends with `end`"));
     }
-    let value = FactorizedNumerator {
+    let mut value = FactorizedNumerator {
         label,
         kind: match closure {
             Some(spec) => FactorizedKind::Closure(spec),
@@ -807,7 +908,11 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
         },
         colour_branch,
         insertions: Vec::new(),
+        record,
     };
+    // rule R4: compact slashes in the projector are written out on read,
+    // before the `open` lines are checked against the value
+    value.expand_compact_slashes()?;
     if let Some((line, slots)) = open {
         let derived = open_slots(&value)?;
         // compare as atoms' canonical strings
