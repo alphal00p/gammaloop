@@ -27,56 +27,34 @@
 //! # Cost
 //!
 //! Every allocation, reallocation and deallocation through [`Counting`] makes
-//! one thread-local access, to a const-initialised struct without a destructor
+//! one thread-local access, to a const-initialised pointer without a destructor
 //! (no lazy initialisation, no state check, no allocation). On a thread that is
-//! not registered that read is all. On a registered thread the size change is
-//! added to a plain (non-atomic) pending delta of the thread; only when
-//! `|pending| >= FLUSH_BYTES` (one add and one unsigned compare with a
-//! constant) is the delta added to the thread's shared counter, with one
-//! relaxed `fetch_add`, and the pending delta restarts at 0. A locked add on
-//! every call (as before) has to wait for the thread's outstanding stores,
-//! which is what made it expensive next to code that writes the memory it
-//! allocates.
+//! not registered (null) that read and its branch are all. On a registered
+//! thread the size change goes to the thread's counter with a relaxed load and a
+//! relaxed store, not a locked add: each counter has one writer, its own
+//! thread, so no update can be lost, and nothing waits for the thread's
+//! outstanding stores (which made the locked add of every call expensive next
+//! to code that writes the memory it allocates). Each counter sits on cache
+//! lines of its own.
 //!
 //! # What other threads see
 //!
-//! Each registered thread is the only writer of its counter. For a registered
-//! thread `t` at any moment at which `t` is not inside a [`Counting`] call,
-//! `published(t) = live(t) - pending(t)` with `|pending(t)| < FLUSH_BYTES`: a
-//! reader of another thread's counter ([`max_other_live_bytes`],
-//! [`live_bytes_rank`]) sees its live bytes to within `FLUSH_BYTES`, exclusive.
-//! The published count is exact (`pending(t) = 0`)
-//!
-//! - when `t` starts a job ([`reset_current`]: both are set to 0),
-//! - after every read of `t`'s own count ([`current_live_bytes`],
-//!   [`live_bytes_rank`]: they publish `t`'s pending delta first),
-//! - after `t` exits: the thread-local destructor that registration installs
-//!   publishes the pending delta, and every change made during the rest of the
-//!   thread's teardown (frees by later thread-local destructors) is published
-//!   at once. A registered thread's counter stays in the registry after it
-//!   exits, with its final value (as before this batching; the RSS guard keeps
-//!   comparing with it). A thread that ends without running thread-local
-//!   destructors (the process exits or aborts while it runs) leaves its last
-//!   pending delta unpublished: its counter then stays within `FLUSH_BYTES` of
-//!   exact, as for a running thread.
+//! Every count is exact at every moment at which its thread is not inside a
+//! [`Counting`] call: readers of other threads' counters
+//! ([`max_other_live_bytes`], [`live_bytes_rank`]) see the live bytes as of the
+//! thread's last allocator call, as with a locked add. A registered thread's
+//! counter stays in the registry after the thread exits, with its final value
+//! (frees by thread-local destructors during its teardown included).
 //!
 //! # The RSS guard's choice
 //!
-//! [`live_bytes_rank`] compares the caller's exact count with the published
-//! counts of the other threads. Its answer differs from the one exact counts
-//! would give only if some other registered thread is between two publications
-//! and its live bytes lie within `FLUSH_BYTES` of the caller's. Two counts that
-//! are both only published (neither thread has just read its own) can be
-//! misordered only if they lie within `2 * FLUSH_BYTES` of each other. Threads
-//! that wait at the guard read their own count in every round, so among them the
-//! comparison is exact. The guard's limits are GiB-scale: two jobs whose counts
-//! lie within a MiB of each other hold the same memory for its purposes.
-//!
-//! Equal counts are broken deterministically: the thread with the smaller key
+//! [`live_bytes_rank`] compares the caller's count with the other threads'
+//! counts, all exact, as `mine >= max(0, others)`. Equal counts are broken
+//! deterministically: the thread with the smaller key
 //! ([`register_current_thread_with_key`]; the registration order for
 //! [`register_current_thread`]) comes first, then the earlier registration. So
-//! of several threads with exactly equal counts, all of which have published,
-//! exactly one comes first.
+//! of several threads with exactly equal counts exactly one comes first (with
+//! `>=` alone all of them did).
 //!
 //! # Frees on another thread
 //!
@@ -84,9 +62,9 @@
 //! another thread than it was allocated on is subtracted from the freeing
 //! thread's count (if that thread is registered; otherwise from none) and stays
 //! counted on the allocating thread. Each thread only ever writes its own
-//! pending delta and its own counter, so a cross-thread free cannot corrupt any
-//! count; it can make the freeing thread's count negative. This is rare in
-//! beta's single-threaded jobs.
+//! counter, so a cross-thread free cannot corrupt any count (nor make an update
+//! of another thread get lost); it can make the freeing thread's count
+//! negative. This is rare in beta's single-threaded jobs.
 
 use std::{
     alloc::{GlobalAlloc, Layout},
@@ -97,66 +75,17 @@ use std::{
     },
 };
 
-/// A registered thread adds its pending delta to its shared counter once the
-/// delta's magnitude reaches this many bytes (and always at the job boundaries
-/// listed in the module documentation).
-pub const FLUSH_BYTES: u64 = 1 << 20;
-
-/// Whether a pending delta must be published, `|pending| >= FLUSH_BYTES`: one
-/// add and one unsigned compare.
-#[inline(always)]
-const fn must_publish(pending: i64) -> bool {
-    (pending.wrapping_add(FLUSH_BYTES as i64 - 1) as u64) >= 2 * FLUSH_BYTES - 1
-}
-
-/// The base of the pending delta after the thread's exit flush: far outside
-/// the publication window, so that every later change takes the cold path,
-/// which publishes it at once (frees made by later thread-local destructors).
-const EXITED: i64 = i64::MIN / 2;
-
-/// The only thread-local the allocation path touches.
-struct Slot {
-    /// The registered thread's shared counter (leaked, never freed); null on a
-    /// thread that is not registered.
-    counter: Cell<*const AtomicI64>,
-    /// `base` plus the bytes counted on this thread and not yet added to
-    /// `counter`.
-    pending: Cell<i64>,
-    /// 0 while the thread runs, `EXITED` after its exit flush; read on the
-    /// cold path only.
-    base: Cell<i64>,
-}
-
 thread_local! {
     // const-initialised and without a destructor: every access is a plain
     // thread-local access, valid for the whole life of the thread (also during
     // the teardown of other thread-locals), and it never allocates.
-    static SLOT: Slot = const {
-        Slot {
-            counter: Cell::new(std::ptr::null()),
-            pending: Cell::new(0),
-            base: Cell::new(0),
-        }
-    };
+    static COUNTER: Cell<*const AtomicI64> = const { Cell::new(std::ptr::null()) };
 }
 
-/// Installed by registration (its first access registers the destructor):
-/// publishes the pending delta when the thread exits.
-struct ExitFlush;
-
-impl Drop for ExitFlush {
-    fn drop(&mut self) {
-        let _ = SLOT.try_with(|slot| {
-            publish_pending(slot);
-            slot.base.set(EXITED);
-            slot.pending.set(EXITED);
-        });
-    }
-}
-
-thread_local! {
-    static EXIT_FLUSH: ExitFlush = const { ExitFlush };
-}
+/// A registered thread's counter, alone on its cache lines: it is written at
+/// every allocator call of that thread.
+#[repr(align(128))]
+struct OwnLine(AtomicI64);
 
 struct Registered {
     counter: &'static AtomicI64,
@@ -173,46 +102,20 @@ static REGISTRY: Mutex<Vec<Registered>> = Mutex::new(Vec::new());
 // but left the thread-local accessor out of line (a call per allocation).
 #[inline]
 fn account(delta: i64) {
-    let _ = SLOT.try_with(|slot| {
-        let counter = slot.counter.get();
-        if counter.is_null() {
-            return;
-        }
-        let pending = slot.pending.get().wrapping_add(delta);
-        slot.pending.set(pending);
-        if must_publish(pending) {
-            publish(slot, counter);
+    let _ = COUNTER.try_with(|counter| {
+        let pointer = counter.get();
+        if !pointer.is_null() {
+            // SAFETY: a registered counter is leaked ('static) and never freed;
+            // the probe counter of `probe_counting` is a local that is
+            // uninstalled before it goes out of scope.
+            let counter = unsafe { &*pointer };
+            // The calling thread is the only writer of this counter.
+            counter.store(
+                counter.load(Ordering::Relaxed).wrapping_add(delta),
+                Ordering::Relaxed,
+            );
         }
     });
-}
-
-#[cold]
-#[inline(never)]
-fn publish(slot: &Slot, counter: *const AtomicI64) {
-    let base = slot.base.get();
-    let pending = slot.pending.replace(base);
-    // SAFETY: a registered counter is leaked ('static) and never freed; the
-    // probe counter of `probe_counting` is a local that is uninstalled before
-    // it goes out of scope.
-    unsafe { &*counter }.fetch_add(pending.wrapping_sub(base), Ordering::Relaxed);
-}
-
-/// Adds the calling thread's pending delta to its counter (now exact) and
-/// returns the counter; `None` on a thread that is not registered.
-fn publish_pending(slot: &Slot) -> Option<&'static AtomicI64> {
-    let counter = slot.counter.get();
-    if counter.is_null() {
-        return None;
-    }
-    // SAFETY: see `publish`; outside `probe_counting` the slot holds a leaked
-    // registered counter.
-    let counter: &'static AtomicI64 = unsafe { &*counter };
-    let base = slot.base.get();
-    let pending = slot.pending.replace(base).wrapping_sub(base);
-    if pending != 0 {
-        counter.fetch_add(pending, Ordering::Relaxed);
-    }
-    Some(counter)
 }
 
 /// A global allocator that delegates to `A` and accounts live bytes per
@@ -277,25 +180,20 @@ pub fn counting_installed() -> bool {
     }
 }
 
-/// Allocates one box on the calling thread with a local counter (and an empty
-/// pending delta) in place of the thread's own, and reports whether the global
-/// allocator counted it. The thread's own counter and pending delta are
-/// restored unchanged.
+/// Allocates one box on the calling thread with a local counter in place of
+/// the thread's own, and reports whether the global allocator counted it. The
+/// thread's own counter is left unchanged.
 fn probe_counting() -> bool {
     const PROBE_BYTES: usize = 64;
     let probe = AtomicI64::new(0);
-    SLOT.with(|slot| {
-        let previous_counter = slot.counter.replace(&probe as *const AtomicI64);
-        let previous_pending = slot.pending.replace(0);
-        let previous_base = slot.base.replace(0);
+    COUNTER.with(|counter| {
+        let previous = counter.replace(&probe as *const AtomicI64);
         // black_box: the allocation must happen (and go through the global
         // allocator) although its contents are never read.
         let boxed = std::hint::black_box(Box::new([0u8; PROBE_BYTES]));
-        let counted = slot.pending.get() + probe.load(Ordering::Relaxed);
+        let counted = probe.load(Ordering::Relaxed);
         drop(boxed);
-        slot.counter.set(previous_counter);
-        slot.pending.set(previous_pending);
-        slot.base.set(previous_base);
+        counter.set(previous);
         counted >= PROBE_BYTES as i64
     })
 }
@@ -315,14 +213,10 @@ pub fn register_current_thread_with_key(key: u64) {
 }
 
 fn register(key: Option<u64>) {
-    if SLOT.with(|slot| !slot.counter.get().is_null()) {
+    if COUNTER.with(|counter| !counter.get().is_null()) {
         return;
     }
-    // Install the exit flush first (registering a thread-local destructor may
-    // allocate; nothing is counted before the slot holds the counter). On a
-    // thread whose thread-locals are already being destroyed there is none.
-    let _ = EXIT_FLUSH.try_with(|_| {});
-    let counter: &'static AtomicI64 = Box::leak(Box::new(AtomicI64::new(0)));
+    let counter: &'static AtomicI64 = &Box::leak(Box::new(OwnLine(AtomicI64::new(0)))).0;
     {
         let mut registry = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
         let sequence = registry.len() as u64;
@@ -332,30 +226,23 @@ fn register(key: Option<u64>) {
             sequence,
         });
     }
-    SLOT.with(|slot| {
-        slot.pending.set(0);
-        slot.base.set(0);
-        slot.counter.set(counter as *const AtomicI64);
-    });
+    COUNTER.with(|cell| cell.set(counter as *const AtomicI64));
 }
 
-/// Reset the calling job thread's count to 0 (a new job starts); its counter is
-/// exact again.
+/// Reset the calling job thread's count to 0 (a new job starts).
 pub fn reset_current() {
-    SLOT.with(|slot| {
-        let counter = slot.counter.get();
-        if !counter.is_null() {
-            slot.pending.set(slot.base.get());
-            // SAFETY: see `publish`.
-            unsafe { &*counter }.store(0, Ordering::Relaxed);
+    COUNTER.with(|counter| {
+        let pointer = counter.get();
+        if !pointer.is_null() {
+            // SAFETY: see `account`.
+            unsafe { &*pointer }.store(0, Ordering::Relaxed);
         }
     });
 }
 
-/// The calling thread's live bytes since its last reset (exact: its pending
-/// delta is published first); `None` on a thread that is not registered, and on
-/// every thread when [`Counting`] is not the global allocator (then nothing is
-/// counted, and a guard must not read 0).
+/// The calling thread's live bytes since its last reset; `None` on a thread
+/// that is not registered, and on every thread when [`Counting`] is not the
+/// global allocator (then nothing is counted, and a guard must not read 0).
 pub fn current_live_bytes() -> Option<i64> {
     if !counting_installed() {
         return None;
@@ -363,19 +250,24 @@ pub fn current_live_bytes() -> Option<i64> {
     registered_live_bytes()
 }
 
-/// The calling thread's count, published first, whether or not [`Counting`]
-/// counts into it.
-fn registered_live_bytes() -> Option<i64> {
-    SLOT.with(publish_pending)
-        .map(|counter| counter.load(Ordering::Relaxed))
+/// The calling thread's registered counter, whether or not [`Counting`] counts
+/// into it.
+fn own_counter() -> Option<&'static AtomicI64> {
+    // SAFETY: see `account`; outside `probe_counting` the cell holds a leaked
+    // registered counter or null.
+    COUNTER.with(|counter| unsafe { counter.get().as_ref() })
 }
 
-/// The largest published live-byte count among the other registered threads
-/// (each within `FLUSH_BYTES` of exact, see the module documentation; 0 if
-/// none, never below 0, and always 0 when [`Counting`] is not the global
-/// allocator: check [`current_live_bytes`] first).
+/// The calling thread's count, whether or not [`Counting`] counts into it.
+fn registered_live_bytes() -> Option<i64> {
+    own_counter().map(|counter| counter.load(Ordering::Relaxed))
+}
+
+/// The largest live-byte count among the other registered threads (0 if none,
+/// never below 0, and always 0 when [`Counting`] is not the global allocator:
+/// check [`current_live_bytes`] first).
 pub fn max_other_live_bytes() -> i64 {
-    let mine = SLOT.with(|slot| slot.counter.get());
+    let mine = COUNTER.with(|counter| counter.get());
     REGISTRY
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -390,22 +282,20 @@ pub fn max_other_live_bytes() -> i64 {
 /// What the RSS guard compares at a checkpoint of a job thread.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LiveBytesRank {
-    /// The calling thread's live bytes since its last reset, exact.
+    /// The calling thread's live bytes since its last reset.
     pub mine: i64,
     /// [`max_other_live_bytes`] at the same moment.
     pub largest_other: i64,
     /// Whether the calling thread comes first: `mine >= largest_other` (so
     /// `mine >= 0`), and every other thread with exactly `mine` bytes has a
-    /// larger key (then a later registration). Several threads that all
-    /// compare exactly cannot all come first.
+    /// larger key (then a later registration). Of several threads with equal
+    /// counts at most one comes first.
     pub largest: bool,
 }
 
-/// The calling thread's count (published first, so exact) against the other
-/// registered threads' published counts; `None` on a thread that is not
-/// registered, and on every thread when [`Counting`] is not the global
-/// allocator. See the module documentation for when the answer can differ
-/// from the one exact counts would give.
+/// The calling thread's count against the other registered threads' counts;
+/// `None` on a thread that is not registered, and on every thread when
+/// [`Counting`] is not the global allocator.
 pub fn live_bytes_rank() -> Option<LiveBytesRank> {
     if !counting_installed() {
         return None;
@@ -414,7 +304,7 @@ pub fn live_bytes_rank() -> Option<LiveBytesRank> {
 }
 
 fn registered_rank() -> Option<LiveBytesRank> {
-    let counter = SLOT.with(publish_pending)?;
+    let counter = own_counter()?;
     let mine = counter.load(Ordering::Relaxed);
     let registry = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
     let me = registry
@@ -462,21 +352,13 @@ mod tests {
     use super::*;
     use std::sync::{Arc, Barrier};
 
-    const T: i64 = FLUSH_BYTES as i64;
+    /// A size above any threshold an earlier, batched version of this module
+    /// used (1 MiB).
+    const T: i64 = 1 << 20;
 
-    /// The calling thread's counter, read as another thread reads it (no
-    /// publication of the pending delta).
-    fn own_counter() -> Option<&'static AtomicI64> {
-        // SAFETY: see `publish`.
-        SLOT.with(|slot| unsafe { slot.counter.get().as_ref() })
-    }
-
+    /// The calling thread's count as another thread reads it.
     fn published() -> i64 {
         own_counter().unwrap().load(Ordering::Relaxed)
-    }
-
-    fn pending() -> i64 {
-        SLOT.with(|slot| slot.pending.get().wrapping_sub(slot.base.get()))
     }
 
     /// An inner allocator without memory: it hands out dangling (aligned,
@@ -577,7 +459,6 @@ mod tests {
             let pointer = unsafe { counting.alloc(layout) };
             assert!(!pointer.is_null());
             assert_eq!(registered_live_bytes(), None);
-            assert_eq!(pending(), 0);
             unsafe { counting.dealloc(pointer, layout) };
 
             register_current_thread();
@@ -604,52 +485,47 @@ mod tests {
         .unwrap();
     }
 
-    /// The pending delta is published exactly when its magnitude reaches
-    /// FLUSH_BYTES, upwards and downwards, and restarts at 0.
+    /// What another thread reads is the exact count after every call: small
+    /// and large changes, upwards and downwards, below zero.
     #[test]
-    fn publishes_at_the_threshold_in_both_directions() {
+    fn every_change_is_visible_at_once() {
         on_registered_thread(|| {
             let t = T as usize;
-            grow(t - 1);
-            assert_eq!((published(), pending()), (0, T - 1));
-            grow(1);
-            assert_eq!((published(), pending()), (T, 0));
-            shrink(t - 1);
-            assert_eq!((published(), pending()), (T, -(T - 1)));
-            shrink(1);
-            assert_eq!((published(), pending()), (0, 0));
-            // Below zero (frees of memory allocated before the reset or on
-            // another thread).
-            shrink(t - 1);
-            assert_eq!((published(), pending()), (0, -(T - 1)));
-            shrink(1);
-            assert_eq!((published(), pending()), (-T, 0));
-            grow(t - 1);
-            assert_eq!((published(), pending()), (-T, T - 1));
-            grow(1);
-            assert_eq!((published(), pending()), (0, 0));
-            // A single change of any size beyond the threshold is published at
-            // once, together with what was pending.
-            grow(100);
-            grow(10 * t);
-            assert_eq!((published(), pending()), (10 * T + 100, 0));
-            shrink(7);
-            shrink(10 * t + 93);
-            assert_eq!((published(), pending()), (0, 0));
-            // Changes that cancel never reach the counter.
+            let mut live = 0i64;
+            for (size, up) in [
+                (t - 1, true),
+                (1, true),
+                (t - 1, false),
+                (1, false),
+                (t - 1, false),
+                (1, false),
+                (t + 1, true),
+                (10 * t, true),
+                (7, false),
+                (1, true),
+            ] {
+                if up {
+                    grow(size);
+                    live += size as i64;
+                } else {
+                    shrink(size);
+                    live -= size as i64;
+                }
+                assert_eq!(published(), live);
+            }
             for _ in 0..1000 {
                 grow(t - 1);
                 shrink(t - 1);
             }
-            assert_eq!((published(), pending()), (0, 0));
+            assert_eq!(published(), live);
         });
     }
 
-    /// The counter is exact after a reset, after every read of the thread's
-    /// own count, and after the thread exits (including frees made by
-    /// thread-local destructors during its teardown, whichever runs first).
+    /// The counter of a thread that has exited keeps its exact final value,
+    /// including frees made by thread-local destructors during its teardown
+    /// (registered before and after the thread's registration).
     #[test]
-    fn job_boundaries_publish_exactly() {
+    fn exited_threads_keep_their_exact_count() {
         struct FreeOnExit(usize);
         impl Drop for FreeOnExit {
             fn drop(&mut self) {
@@ -661,25 +537,16 @@ mod tests {
             static AFTER: FreeOnExit = const { FreeOnExit(20) };
         }
         let counter = std::thread::spawn(|| {
-            // Destroyed after the exit flush (destructors run in reverse
-            // order of registration) ...
             BEFORE.with(|_| {});
             register_current_thread();
-            // ... and before it.
             AFTER.with(|_| {});
             grow(5000);
-            assert_eq!((published(), pending()), (0, 5000));
+            assert_eq!(published(), 5000);
             reset_current();
-            assert_eq!((published(), pending()), (0, 0));
-            grow(700);
-            assert_eq!((published(), pending()), (0, 700));
-            assert_eq!(registered_live_bytes(), Some(700));
-            assert_eq!((published(), pending()), (700, 0));
-            grow(300);
-            assert_eq!(registered_rank().map(|rank| rank.mine), Some(1000));
-            assert_eq!((published(), pending()), (1000, 0));
-            grow(100);
-            assert_eq!((published(), pending()), (1000, 100));
+            assert_eq!(published(), 0);
+            grow(1100);
+            assert_eq!(registered_live_bytes(), Some(1100));
+            assert_eq!(registered_rank().map(|rank| rank.mine), Some(1100));
             own_counter().unwrap()
         })
         .join()
@@ -687,35 +554,11 @@ mod tests {
         assert_eq!(counter.load(Ordering::Relaxed), 1100 - 30 - 20);
     }
 
-    /// After the exit flush (run here by hand) every change is published at
-    /// once, so frees by thread-local destructors that run after it keep the
-    /// exited thread's counter exact.
+    /// Readers of other threads' counters see every count exactly at the
+    /// points where those threads stop, while 8 threads count concurrently; no
+    /// update of any thread is lost.
     #[test]
-    fn after_the_exit_flush_every_change_is_published() {
-        on_registered_thread(|| {
-            grow(100);
-            assert_eq!((published(), pending()), (0, 100));
-            drop(ExitFlush);
-            assert_eq!((published(), pending()), (100, 0));
-            grow(30);
-            assert_eq!((published(), pending()), (130, 0));
-            shrink(70);
-            assert_eq!((published(), pending()), (60, 0));
-            grow(3 * T as usize);
-            shrink(3 * T as usize);
-            assert_eq!((published(), pending()), (60, 0));
-            assert_eq!(registered_live_bytes(), Some(60));
-            reset_current();
-            shrink(5);
-            assert_eq!((published(), pending()), (-5, 0));
-        });
-    }
-
-    /// Readers of other threads' counters see every count to within
-    /// FLUSH_BYTES while the threads run concurrently; after their own reads
-    /// the counts are exact.
-    #[test]
-    fn published_counts_stay_within_the_threshold_under_concurrent_threads() {
+    fn counts_are_exact_under_concurrent_threads() {
         const THREADS: usize = 8;
         const ROUNDS: usize = 200;
         let barrier = Arc::new(Barrier::new(THREADS + 1));
@@ -734,12 +577,11 @@ mod tests {
                     let mut live = 0i64;
                     let mut state = 0x9e37_79b9_7f4a_7c15u64 ^ worker as u64;
                     for _ in 0..ROUNDS {
-                        for _ in 0..200 {
+                        for _ in 0..2000 {
                             state = state
                                 .wrapping_mul(6364136223846793005)
                                 .wrapping_add(1442695040888963407);
                             let r = state >> 33;
-                            // Mostly small changes, some beyond the threshold.
                             let size = if r % 50 == 0 {
                                 (r % (3 * T as u64)) as usize
                             } else {
@@ -758,25 +600,19 @@ mod tests {
                         barrier.wait(); // checked: next round
                     }
                     assert_eq!(registered_live_bytes(), Some(live));
-                    assert_eq!(published(), live);
                 })
             })
             .collect();
         drop(sender);
         let mut counters: Vec<_> = receiver.iter().take(THREADS).collect();
         counters.sort_by_key(|(worker, _)| *worker);
-        let mut lagging = 0;
         for _ in 0..ROUNDS {
             barrier.wait();
             let mut largest = 0;
             for (worker, counter) in &counters {
                 let exact = exact[*worker].load(Ordering::Relaxed);
                 let seen = counter.load(Ordering::Relaxed);
-                assert!(
-                    (seen - exact).abs() < T,
-                    "worker {worker}: published {seen}, live {exact}"
-                );
-                lagging += (seen != exact) as usize;
+                assert_eq!(seen, exact, "worker {worker}");
                 largest = largest.max(seen);
             }
             // This thread is not registered: every registered counter is
@@ -787,8 +623,6 @@ mod tests {
         for worker in workers {
             worker.join().unwrap();
         }
-        // The test exercised the lag.
-        assert!(lagging > ROUNDS);
     }
 
     /// A free on another thread is subtracted from the freeing thread (if it is
@@ -798,13 +632,13 @@ mod tests {
         let small = Layout::from_size_align(5000, 8).unwrap();
         let large = Layout::from_size_align(2 * T as usize, 8).unwrap();
         // A (registered) allocates real memory: small, large, small.
-        let (pointers, live_a) = on_registered_thread(move || {
+        let (pointers, live_a, counter_a) = on_registered_thread(move || {
             let pointers: Vec<usize> = [small, large, small]
                 .into_iter()
                 .map(|layout| unsafe { Counting(std::alloc::System).alloc(layout) } as usize)
                 .collect();
             assert!(pointers.iter().all(|pointer| *pointer != 0));
-            (pointers, registered_live_bytes())
+            (pointers, registered_live_bytes(), own_counter().unwrap())
         });
         assert_eq!(live_a, Some(2 * 5000 + 2 * T));
         // B (registered) frees the large one and one small one ...
@@ -812,9 +646,8 @@ mod tests {
         let live_b = on_registered_thread(move || {
             let counting = Counting(std::alloc::System);
             unsafe { counting.dealloc(large_pointer as *mut u8, large) };
-            assert_eq!((published(), pending()), (-2 * T, 0));
+            assert_eq!(published(), -2 * T);
             unsafe { counting.dealloc(small_pointer as *mut u8, small) };
-            assert_eq!((published(), pending()), (-2 * T, -5000));
             registered_live_bytes()
         });
         assert_eq!(live_b, Some(-2 * T - 5000));
@@ -823,28 +656,27 @@ mod tests {
         std::thread::spawn(move || {
             unsafe { Counting(std::alloc::System).dealloc(first as *mut u8, small) };
             assert_eq!(registered_live_bytes(), None);
-            assert_eq!(pending(), 0);
         })
         .join()
         .unwrap();
+        assert_eq!(counter_a.load(Ordering::Relaxed), 2 * 5000 + 2 * T);
     }
 
-    /// realloc accounts the size change: below and across the threshold,
-    /// growing and shrinking; a failed reallocation changes nothing.
+    /// realloc accounts the size change, growing and shrinking, small and
+    /// large; a failed allocation or reallocation changes nothing.
     #[test]
     fn realloc_accounts_the_size_change() {
         on_registered_thread(|| {
             let counting = Counting(NoMemory);
             let pointer = unsafe { counting.alloc(bytes(100)) };
             let pointer = unsafe { counting.realloc(pointer, bytes(100), 1000) };
-            assert_eq!((published(), pending()), (0, 1000));
+            assert_eq!(published(), 1000);
             let pointer = unsafe { counting.realloc(pointer, bytes(1000), T as usize + 500) };
-            assert_eq!((published(), pending()), (T + 500, 0));
+            assert_eq!(published(), T + 500);
             let pointer = unsafe { counting.realloc(pointer, bytes(T as usize + 500), 600) };
-            assert_eq!((published(), pending()), (T + 500, -(T - 100)));
+            assert_eq!(published(), 600);
             let pointer = unsafe { counting.realloc(pointer, bytes(600), 400) };
-            assert_eq!((published(), pending()), (400, 0));
-            assert_eq!(registered_live_bytes(), Some(400));
+            assert_eq!(published(), 400);
             unsafe { counting.dealloc(pointer, bytes(400)) };
             assert_eq!(registered_live_bytes(), Some(0));
 
@@ -853,33 +685,32 @@ mod tests {
             assert!(unsafe { failing.alloc_zeroed(bytes(10)) }.is_null());
             let dangling = std::ptr::without_provenance_mut(1);
             assert!(unsafe { failing.realloc(dangling, bytes(10), 3 * T as usize) }.is_null());
-            assert_eq!((published(), pending()), (0, 0));
+            assert_eq!(published(), 0);
         });
     }
 
     /// Zero-size changes (a realloc to the same size; a zero-size layout, which
     /// GlobalAlloc's callers never pass to a real allocator and Rust's
-    /// collections never allocate) leave the pending delta and the counter
-    /// alone, also next to the threshold.
+    /// collections never allocate) leave the count alone.
     #[test]
     fn zero_size_changes_nothing() {
         on_registered_thread(|| {
             let counting = Counting(NoMemory);
-            for edge in [T - 1, -(T - 1), 0] {
+            for start in [T - 1, -(T - 1), 0] {
                 reset_current();
                 let pointer = unsafe { counting.alloc(bytes(64)) };
-                if edge >= 64 {
-                    grow((edge - 64) as usize);
+                if start >= 64 {
+                    grow((start - 64) as usize);
                 } else {
-                    shrink((64 - edge) as usize);
+                    shrink((64 - start) as usize);
                 }
-                assert_eq!((published(), pending()), (0, edge));
+                assert_eq!(published(), start);
                 let zero = unsafe { counting.alloc(bytes(0)) };
                 unsafe { counting.dealloc(zero, bytes(0)) };
                 let zero = unsafe { counting.alloc_zeroed(bytes(0)) };
                 unsafe { counting.dealloc(zero, bytes(0)) };
                 let pointer = unsafe { counting.realloc(pointer, bytes(64), 64) };
-                assert_eq!((published(), pending()), (0, edge));
+                assert_eq!(published(), start);
                 unsafe { counting.dealloc(pointer, bytes(64)) };
             }
         });
@@ -893,7 +724,6 @@ mod tests {
                 grow(3 * T as usize);
                 shrink(5);
             }
-            assert_eq!(pending(), 0);
             assert!(own_counter().is_none());
             assert_eq!(registered_live_bytes(), None);
             assert_eq!(registered_rank(), None);
@@ -903,17 +733,25 @@ mod tests {
     }
 
     /// The probe of counting_installed leaves a registered thread's counter
-    /// and pending delta as they were.
+    /// as it was.
     #[test]
     fn the_probe_leaves_the_thread_count_alone() {
         on_registered_thread(|| {
             grow(T as usize + 3);
-            grow(500);
-            let before = (published(), pending());
+            let (counter, before) = (own_counter().unwrap() as *const AtomicI64, published());
             // Counting is not this binary's global allocator.
             assert!(!probe_counting());
-            assert_eq!((published(), pending()), before);
+            assert_eq!(own_counter().unwrap() as *const AtomicI64, counter);
+            assert_eq!(published(), before);
         });
+    }
+
+    /// Each registered counter lies alone on its cache lines.
+    #[test]
+    fn counters_have_lines_of_their_own() {
+        let counter = on_registered_thread(|| own_counter().unwrap() as *const AtomicI64 as usize);
+        assert_eq!(counter % 128, 0);
+        assert_eq!(std::mem::size_of::<OwnLine>(), 128);
     }
 
     /// The guard's order: the larger count first; equal counts by key, then by
@@ -942,11 +780,10 @@ mod tests {
                 register_current_thread_with_key(key);
                 reset_current();
                 grow(huge + extra);
-                barrier.wait(); // both published
+                barrier.wait(); // both counted
                 let rank = registered_rank().unwrap();
                 barrier.wait(); // both ranked
                 shrink(huge + extra);
-                registered_live_bytes();
                 rank
             })
         };
