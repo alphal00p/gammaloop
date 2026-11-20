@@ -897,16 +897,19 @@ fn the_closure_kind_refuses_what_it_does_not_support() {
     let mut v = l2_root(1, true);
     v.kind = FactorizedKind::Direct;
     refused(&v, "not a closure record");
-    // insertions stay reserved
+    // an insertion on a vertex that is neither a contracted (ct:) nor a
+    // surrogate (ins:) vertex is refused
     let mut v = l2_root(1, true);
     v.insertions.push(super::super::Insertion {
         vertex: 1,
+        hedges: Vec::new(),
+        cycles: (0, 0),
         coefficient: Atom::num(1),
         factor: Atom::num(1),
     });
     assert!(matches!(
         v.validate(),
-        Err(FactorizedError::Reserved { .. })
+        Err(FactorizedError::Insertion { .. })
     ));
     // the adapter and the vacuum entry keep refusing the kind
     let vakint = Vakint::new().unwrap();
@@ -1819,10 +1822,9 @@ fn closure_contraction_probe() {
 
 /// The beta's k1-quick set (every root remainder of the L4 graphs 40, 42, 49,
 /// 100 that reaches their boundary path, as v3 records with the value and the
-/// RR_CONTRACT seconds of that call): each record WITHOUT insertions through
-/// the entry, its value equal to value.txt through valid_through, and its
-/// contraction seconds printed beside theirs (records with insertions are
-/// INSERT's). Data: `VAKINT_TEST_WH_K1_QUICK` (default the beta's directory);
+/// RR_CONTRACT seconds of that call; 30 of the 35 with child insertions):
+/// each record through the entry, its value equal to value.txt through
+/// valid_through, and its contraction seconds printed beside theirs. Data: `VAKINT_TEST_WH_K1_QUICK` (default the beta's directory);
 /// SKIP without it.
 #[test]
 fn the_beta_k1_quick_records_equal_their_values() {
@@ -1850,11 +1852,7 @@ fn the_beta_k1_quick_records_equal_their_values() {
         let input = std::fs::read_to_string(record.join("input.txt")).unwrap();
         let value_text = std::fs::read_to_string(record.join("value.txt")).unwrap();
         let value = match FactorizedNumerator::from_text(&input) {
-            Ok(value) if value.insertions.is_empty() => value,
-            Ok(_) | Err(FactorizedError::Reserved { .. }) => {
-                eprintln!("K1_QUICK {} insertions: lane INSERT", record.display());
-                continue;
-            }
+            Ok(value) => value,
             Err(e) => panic!("{}: {e}", record.display()),
         };
         let meta = std::fs::read_to_string(record.join("meta.json")).unwrap_or_default();
@@ -1880,7 +1878,8 @@ fn the_beta_k1_quick_records_equal_their_values() {
         );
         let r = &got.records[0];
         eprintln!(
-            "K1_QUICK {what} entry_contract_s={:.4} their_rr_contract_s={their_seconds:.4} ratio={:.2} patterns={} key_plans={} lowered={} lower_s={:.4} reduce_s={:.4}",
+            "K1_QUICK {what} insertions={} entry_contract_s={:.4} their_rr_contract_s={their_seconds:.4} ratio={:.2} patterns={} key_plans={} lowered={} lower_s={:.4} reduce_s={:.4}",
+            value.insertions.len(),
             r.contract_seconds,
             r.contract_seconds / their_seconds,
             r.patterns,
@@ -1895,5 +1894,271 @@ fn the_beta_k1_quick_records_equal_their_values() {
     }
     eprintln!(
         "K1_QUICK SUM records={checked} entry_contract_s={mine:.4} their_rr_contract_s={theirs:.4}"
+    );
+}
+
+/// THE BETA'S REAL RECORDS WITH INSERTIONS (closure kind + insertion
+/// vertices), through `real_record` (exact through `valid_through`, caller
+/// notation, byte-identical round trip), with the summed pole order printed.
+fn real_insertion_record(record: &str, value_text: &str, what: &str) {
+    let value = FactorizedNumerator::from_text(record).unwrap();
+    let epsilon = crate::utils::vakint_macros::vk_symbol!("gammalooprs::ε");
+    let started = std::time::Instant::now();
+    real_record(record, value_text, what);
+    eprintln!(
+        "{what}: insertions {} pole order {} seconds {:.3}",
+        value.insertions.len(),
+        value.insertion_pole_order(epsilon).unwrap(),
+        started.elapsed().as_secs_f64()
+    );
+}
+
+#[test]
+fn the_beta_k2_child_with_an_insertion_equals_its_contracted_value() {
+    real_insertion_record(
+        include_str!("../fixtures/wh-k2-child-ins.record.txt"),
+        include_str!("../fixtures/wh-k2-child-ins.value.txt"),
+        "k2-child-ins",
+    );
+}
+
+#[test]
+fn the_beta_k5_surrogate_root_equals_its_contracted_value() {
+    real_insertion_record(
+        include_str!("../fixtures/wh-k5-surrogate.record.txt"),
+        include_str!("../fixtures/wh-k5-surrogate.value.txt"),
+        "k5-surrogate",
+    );
+}
+
+#[test]
+fn the_beta_k4_quotient_equals_its_contracted_value() {
+    real_insertion_record(
+        include_str!("../fixtures/wh-k4-quotient.record.txt"),
+        include_str!("../fixtures/wh-k4-quotient.value.txt"),
+        "k4-quotient",
+    );
+}
+
+/// A child insertion of momentum degree 2 in a record with Taylor degree
+/// w = 2 goes through the same routing, lambda scaling and truncation as a
+/// vertex factor: the record with the polynomial on a contracted (ct:)
+/// vertex equals the record with it as that vertex's own factor.
+#[test]
+fn a_degree_two_insertion_is_routed_and_truncated_like_a_factor() {
+    let mut base = l2_root(2, true);
+    // the port of vertex 2 moves to its leg; the vertex keeps a degree-2
+    // scalar polynomial of its boundary momenta
+    let compact = format!("{MINK}({DIM})");
+    base.edges.iter_mut().find(|e| e.id == 21).unwrap().factor = atom(&q(2, &hedge(121)));
+    let polynomial = atom(&format!(
+        "({DIM}-2)/3*spenso::dot({},{})+spenso::dot({},{})",
+        q(1, &compact),
+        q(2, &compact),
+        q(3, &compact),
+        q(3, &compact)
+    ));
+    base.vertices.iter_mut().find(|v| v.id == 2).unwrap().factor = polynomial.clone();
+    base.validate().unwrap();
+    let mut with = base.clone();
+    let hedges = with
+        .local_hedges(super::super::Location::Vertex(2))
+        .into_iter()
+        .collect::<Vec<_>>();
+    let v = with.vertices.iter_mut().find(|v| v.id == 2).unwrap();
+    v.factor = Atom::num(1);
+    v.rule = "ct:child".into();
+    with.insertions.push(super::super::Insertion {
+        vertex: 2,
+        hedges,
+        cycles: (0, 0),
+        coefficient: Atom::num(1),
+        factor: polynomial,
+    });
+    with.validate().unwrap();
+    let vakint = Vakint::new().unwrap();
+    let settings = rstar_site_settings();
+    let run = |v: &FactorizedNumerator| {
+        evaluate_factorized_closure(
+            &vakint,
+            &settings,
+            std::slice::from_ref(v),
+            &[v.prefactor.total()],
+        )
+        .unwrap()
+        .value
+    };
+    let (a, b) = (run(&with), run(&base));
+    assert!(!b.is_zero());
+    assert!((&a - &b).expand().is_zero(), "insertion {a}\nvertex {b}");
+}
+
+/// The beta's k5-stress set (L5 graph 3793, closed surrogate root, five
+/// records with four insertion vertices each; r0051 has five loops and needs
+/// the 1-4 loop package of `VAKINT_TEST_P_LIBRARY_1_4`): each record equal to
+/// its value through valid_through, with the entry's seconds per stage.
+/// Data: `VAKINT_TEST_WH_K5_STRESS` (default the beta's directory); SKIP
+/// without it.
+#[test]
+fn the_beta_k5_stress_records_equal_their_values() {
+    let root = std::env::var("VAKINT_TEST_WH_K5_STRESS")
+        .unwrap_or_else(|_| "/common/ben/beta/results/consolidation/wh-fixtures/k5-stress".into());
+    let root = std::path::PathBuf::from(root);
+    if !root.is_dir() {
+        eprintln!("SKIP: no k5-stress data under {}", root.display());
+        return;
+    }
+    let mut vakint = Vakint::new().unwrap();
+    let package = std::env::var_os("VAKINT_TEST_P_LIBRARY_1_4");
+    if let Some(directory) = &package {
+        let library = rustred_app::propagator::load_p_library(
+            rustred_app::propagator::PLibrarySource::Directory(directory.into()),
+            &rustred_app::propagator::PLibraryOptions {
+                verify_descent: false,
+            },
+        )
+        .unwrap();
+        vakint.inject_p_library(library).unwrap();
+    }
+    let mut records = std::fs::read_dir(&root)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.join("input.txt").is_file())
+        .collect::<Vec<_>>();
+    records.sort();
+    let epsilon = crate::utils::vakint_macros::vk_symbol!("gammalooprs::ε");
+    for record in &records {
+        let input = std::fs::read_to_string(record.join("input.txt")).unwrap();
+        let value_text = std::fs::read_to_string(record.join("value.txt")).unwrap();
+        let value = FactorizedNumerator::from_text(&input)
+            .unwrap_or_else(|e| panic!("{}: {e}", record.display()));
+        if value.loops() > 4 && package.is_none() {
+            eprintln!(
+                "K5_STRESS {} SKIP: five loops need VAKINT_TEST_P_LIBRARY_1_4",
+                record.display()
+            );
+            continue;
+        }
+        let started = std::time::Instant::now();
+        let got = evaluate_factorized_closure(
+            &vakint,
+            &rstar_site_settings(),
+            std::slice::from_ref(&value),
+            &[value.prefactor.total()],
+        )
+        .unwrap_or_else(|e| panic!("{}: {e}", record.display()));
+        let total = started.elapsed().as_secs_f64();
+        let what = record.display().to_string();
+        assert_equal_through(
+            &got.value,
+            &fixture_value(&value_text),
+            valid_through(&value_text),
+            &what,
+        );
+        let r = &got.records[0];
+        eprintln!(
+            "K5_STRESS {what} loops={} insertions={} pole_order={} total_s={total:.3} contract_s={:.3} split_s={:.3} lower_s={:.3} reduce_s={:.3} evaluate_s={:.3} patterns={}",
+            value.loops(),
+            value.insertions.len(),
+            value.insertion_pole_order(epsilon).unwrap(),
+            r.contract_seconds,
+            r.split_seconds,
+            r.lower_seconds,
+            r.reduce_seconds,
+            r.evaluate_seconds,
+            r.patterns
+        );
+    }
+}
+
+/// Two contracted children with a pole each (ε^-1 and 3 ε^-1) on the L2 root
+/// remainder: the entry raises the integral's depth by the SUM of their pole
+/// orders (2). The contracted route: the record without the insertions (their
+/// factors left on the vertices) evaluated two terms deeper, times the product
+/// of the coefficients, truncated at eps^(depth - L - 1), as the beta's
+/// integrate.rs does. With the maximum (1) the last kept order would differ.
+#[test]
+fn two_poled_insertions_raise_the_depth_by_their_sum() {
+    let eps = "gammalooprs::ε";
+    let mut base = l2_root(1, true);
+    base.vertices.iter_mut().find(|v| v.id == 1).unwrap().factor = atom(&q(1, &hedge(120)));
+    let mut with = base.clone();
+    let coefficients = [atom(&format!("{eps}^-1")), atom(&format!("3*{eps}^-1+1/2"))];
+    for (vertex, coefficient) in [1usize, 2].into_iter().zip(&coefficients) {
+        let hedges = with
+            .local_hedges(super::super::Location::Vertex(vertex))
+            .into_iter()
+            .collect::<Vec<_>>();
+        let v = with.vertices.iter_mut().find(|v| v.id == vertex).unwrap();
+        let factor = std::mem::replace(&mut v.factor, Atom::num(1));
+        v.rule = format!("ct:child{vertex}");
+        with.insertions.push(super::super::Insertion {
+            vertex,
+            hedges,
+            cycles: (0, 0),
+            coefficient: coefficient.clone(),
+            factor,
+        });
+    }
+    with.validate().unwrap();
+    let epsilon = crate::utils::vakint_macros::vk_symbol!(eps);
+    assert_eq!(with.insertion_pole_order(epsilon).unwrap(), 2);
+    let vakint = Vakint::new().unwrap();
+    let settings = rstar_site_settings();
+    let terms = settings.number_of_terms_in_epsilon_expansion;
+    let got = evaluate_factorized_closure(
+        &vakint,
+        &settings,
+        std::slice::from_ref(&with),
+        &[with.prefactor.total()],
+    )
+    .unwrap();
+    let mut deeper = settings.clone();
+    deeper.number_of_terms_in_epsilon_expansion = terms + 2;
+    let bare = evaluate_factorized_closure(
+        &vakint,
+        &deeper,
+        std::slice::from_ref(&base),
+        &[base.prefactor.total()],
+    )
+    .unwrap();
+    let target = terms - base.loops() as i64 - 1;
+    let reference = (&coefficients[0] * &coefficients[1] * &bare.value)
+        .series(
+            epsilon,
+            Atom::Zero.as_view(),
+            symbolica::domains::rational::Rational::from(target),
+        )
+        .unwrap()
+        .to_atom()
+        .expand();
+    assert!(!reference.is_zero());
+    assert!(
+        (&got.value - &reference).expand().is_zero(),
+        "insertions {}\ncontracted {}",
+        got.value,
+        reference
+    );
+    eprintln!("TWO_POLED identical through eps^{target}: {}", got.value);
+}
+
+/// Weights with insertions: carried cycles + the insertions' cycles may be
+/// FEWER than `original_cycles` (a scope misses a loop of the diagram), never
+/// more.
+#[test]
+fn insertion_cycles_count_towards_original_cycles_at_most() {
+    let record = include_str!("../fixtures/wh-k2-child-ins.record.txt");
+    let value = FactorizedNumerator::from_text(record).unwrap();
+    let mut fewer = value.clone();
+    if let FactorizedKind::Closure(spec) = &mut fewer.kind {
+        spec.original_cycles = Some((1, 1));
+    }
+    fewer.insertions[0].cycles = (1, 0);
+    fewer.validate().unwrap();
+    let mut more = fewer.clone();
+    more.insertions[0].cycles = (2, 0);
+    assert!(
+        more.validate().is_err(),
+        "the insertions' cycles exceed original_cycles"
     );
 }
