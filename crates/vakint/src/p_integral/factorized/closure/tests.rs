@@ -1706,3 +1706,72 @@ fn p2_power_zero_and_minus_one_projectors_agree() {
         "k1-root at p2_power 0, / p^2",
     );
 }
+
+/// Contraction probe (ignored; run explicitly): the entry on the v3 record in
+/// `VAKINT_CLOSURE_PROBE_RECORD`, and, when `VAKINT_CLOSURE_PROBE_ROUTED`
+/// names a file whose first line `routed_numerator<TAB><atom>` (or a bare atom)
+/// is the producer's routed product, the SAME idenso chain on that product;
+/// both timed, `VAKINT_CLOSURE_TIMING_REPS` repetitions alternating.
+#[test]
+#[ignore]
+fn closure_contraction_probe() {
+    let Ok(path) = std::env::var("VAKINT_CLOSURE_PROBE_RECORD") else {
+        eprintln!("SKIP: VAKINT_CLOSURE_PROBE_RECORD unset");
+        return;
+    };
+    let reps = std::env::var("VAKINT_CLOSURE_TIMING_REPS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(3usize);
+    let value = FactorizedNumerator::from_text(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let theirs = std::env::var("VAKINT_CLOSURE_PROBE_ROUTED").ok().map(|p| {
+        let text = std::fs::read_to_string(p).unwrap();
+        let line = text
+            .lines()
+            .find_map(|l| l.strip_prefix("routed_numerator\t"))
+            .unwrap_or_else(|| text.lines().next().unwrap());
+        atom(line)
+    });
+    let vakint = Vakint::new().unwrap();
+    if let Some(routed) = theirs.as_ref()
+        && std::env::var("VAKINT_CLOSURE_PROBE_THEIRS_FIRST").is_ok()
+    {
+        let started = std::time::Instant::now();
+        let contracted = contract_with_idenso(routed, false).unwrap();
+        eprintln!(
+            "CLOSURE_PROBE_FIRST their_product_contract_s={:.4} terms={}",
+            started.elapsed().as_secs_f64(),
+            crate::census::summands(contracted.as_view())
+        );
+    }
+    for _ in 0..reps {
+        let got = evaluate_factorized_closure(
+            &vakint,
+            &rstar_site_settings(),
+            std::slice::from_ref(&value),
+            &[value.prefactor.total()],
+        )
+        .unwrap();
+        let r = &got.records[0];
+        let their_seconds = theirs.as_ref().map(|routed| {
+            let started = std::time::Instant::now();
+            let contracted = contract_with_idenso(routed, false).unwrap();
+            (
+                started.elapsed().as_secs_f64(),
+                crate::census::summands(contracted.as_view()),
+                contracted.as_view().get_byte_size(),
+                routed.as_view().get_byte_size(),
+            )
+        });
+        eprintln!(
+            "CLOSURE_PROBE label=\"{}\" entry_contract_s={:.4} entry_lower_s={:.4} entry_reduce_s={:.4} patterns={} key_plans={} lowered={} their_product_contract_s_terms_bytes_inbytes={their_seconds:?}",
+            value.label,
+            r.contract_seconds,
+            r.lower_seconds,
+            r.reduce_seconds,
+            r.patterns,
+            r.key_plans,
+            r.lowered_entries
+        );
+    }
+}
