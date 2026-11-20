@@ -687,10 +687,36 @@ fn graded_split(expanded: &Atom, lambda: Symbol) -> Vec<(Atom, u32, Atom)> {
         .collect()
 }
 
-/// The λ-degree of a q-structure monomial: its power of λ (the routing puts
-/// one λ on every external momentum, the mass compensation λ² on M_aux²).
+/// The λ-degree of a q-structure monomial: its number of external momenta
+/// (the routing's lambda sat on each of them) plus its power of λ (the mass
+/// compensation's λ² on M_aux²).
 fn lambda_degree(view: AtomView<'_>, lambda: Symbol) -> u32 {
-    lambda_power(view, lambda)
+    // external momenta: p(j) (an open index or inside a dot) count one each
+    let one = |view: AtomView<'_>| -> u32 {
+        match view {
+            AtomView::Fun(f) if f.get_symbol() == S.p => 1,
+            AtomView::Fun(f) if f.get_symbol() == S.dot => f
+                .iter()
+                .filter(|a| matches!(a, AtomView::Fun(g) if g.get_symbol() == S.p))
+                .count() as u32,
+            _ => 0,
+        }
+    };
+    let factor = |view: AtomView<'_>| -> u32 {
+        match view {
+            AtomView::Pow(p) => {
+                let (base, exponent) = p.get_base_exp();
+                one(base) * i64::try_from(exponent).unwrap_or(0).max(0) as u32
+            }
+            other => one(other),
+        }
+    };
+    let momenta = match view {
+        AtomView::Mul(m) => m.iter().map(factor).sum(),
+        other => factor(other),
+    };
+    // plus the lambda^2 of a compensated reference mass inside the factors
+    momenta + lambda_power(view, lambda)
 }
 
 /// The per-record preparation: the boundary (or `None`: exactly zero) and
@@ -966,6 +992,12 @@ fn prepare(
         let product = &insertion.coefficient * &insertion.factor;
         network *= routed_factor(value, &product, &lam, lambda, degree);
     }
+    // lambda has done its work (the per-factor truncation): every lambda
+    // accompanies exactly one external leg vector, so the grade of a term is
+    // read after the contraction as its number of external momenta; idenso
+    // gets the producer's product without a symbolic coefficient on the
+    // external momenta (with Dirac traces that coefficient costs ~25 %)
+    network = network.replace(Atom::var(lambda)).with(Atom::num(1));
     if let Some(taylor) = &spec.taylor {
         let image = if taylor.compensate_mass && !degree_zero {
             (Atom::num(1) - Atom::var(lambda).pow(Atom::num(2))) * &spec.auxiliary_mass_squared

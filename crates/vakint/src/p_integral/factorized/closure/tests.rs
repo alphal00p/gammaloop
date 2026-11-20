@@ -1846,9 +1846,16 @@ fn the_beta_k1_quick_records_equal_their_values() {
         }
     }
     records.sort();
+    let only = std::env::var("VAKINT_TEST_WH_K1_ONLY").ok();
     let vakint = Vakint::new().unwrap();
     let (mut mine, mut theirs, mut checked) = (0.0, 0.0, 0);
     for record in &records {
+        if only
+            .as_ref()
+            .is_some_and(|o| !record.display().to_string().ends_with(o.as_str()))
+        {
+            continue;
+        }
         let input = std::fs::read_to_string(record.join("input.txt")).unwrap();
         let value_text = std::fs::read_to_string(record.join("value.txt")).unwrap();
         let value = match FactorizedNumerator::from_text(&input) {
@@ -1878,11 +1885,21 @@ fn the_beta_k1_quick_records_equal_their_values() {
         );
         let r = &got.records[0];
         eprintln!(
-            "K1_QUICK {what} insertions={} entry_contract_s={:.4} their_rr_contract_s={their_seconds:.4} ratio={:.2} patterns={} key_plans={} lowered={} lower_s={:.4} reduce_s={:.4}",
+            "K1_QUICK {what} insertions={} entry_contract_s={:.4} their_rr_contract_s={their_seconds:.4} ratio={:.2} split_s={:.4} evaluate_s={:.4} peak_rss_kb={} patterns={} blocks={} key_plans={} lowered={} lower_s={:.4} reduce_s={:.4}",
             value.insertions.len(),
             r.contract_seconds,
             r.contract_seconds / their_seconds,
+            r.split_seconds,
+            r.evaluate_seconds,
+            std::fs::read_to_string("/proc/self/status")
+                .ok()
+                .and_then(|s| s
+                    .lines()
+                    .find_map(|l| l.strip_prefix("VmHWM:"))
+                    .map(|v| v.trim().to_string()))
+                .unwrap_or_default(),
             r.patterns,
+            r.blocks,
             r.key_plans,
             r.lowered_entries,
             r.lower_seconds,
