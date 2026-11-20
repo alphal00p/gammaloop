@@ -42,7 +42,9 @@
 //!    reduction): the lowering efficiency of the R* boundary path is kept.
 //!
 //! Refusals: [`FactorizedError::Closure`] with the reason (see
-//! `validate_closure`), [`FactorizedError::Reserved`] for insertions.
+//! `validate_closure`). Insertions (child counterterms, surrogate coefficient
+//! vertices) are factors of the routed network; their summed pole order
+//! raises the integral's ε depth.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::Instant;
@@ -202,6 +204,11 @@ impl FactorizedNumerator {
         // `original_cycles` the original graph's weights stay with the caller;
         // without, the carried graph's closed loops are applied here
         let p = &self.prefactor;
+        // cycles inside insertions are the original graph's too
+        let (inner_fermion, inner_ghost) = self
+            .insertions
+            .iter()
+            .fold((0u32, 0u32), |(f, g), i| (f + i.cycles.0, g + i.cycles.1));
         match spec.original_cycles {
             Some((fermion, ghost)) => {
                 if p.loop_sign != 1 || p.nf_power != 0 || p.overall != Atom::num(1) {
@@ -211,9 +218,10 @@ impl FactorizedNumerator {
                     )));
                 }
                 let (f, g) = carried_cycles(self);
+                let (f, g) = (f + inner_fermion, g + inner_ghost);
                 if f > fermion || g > ghost {
                     return Err(refuse(format!(
-                        "the carried graph has {f} fermion and {g} ghost cycles, more than original_cycles fermion={fermion} ghost={ghost}"
+                        "the carried graph and its insertions have {f} fermion and {g} ghost cycles, more than original_cycles fermion={fermion} ghost={ghost}"
                     )));
                 }
             }
@@ -222,12 +230,14 @@ impl FactorizedNumerator {
                 let f = cycles
                     .iter()
                     .filter(|c| c.line == super::LineKind::Fermion)
-                    .count();
-                let sign = if cycles.len() % 2 == 0 { 1 } else { -1 };
+                    .count()
+                    + inner_fermion as usize;
+                let n = cycles.len() + (inner_fermion + inner_ghost) as usize;
+                let sign = if n % 2 == 0 { 1 } else { -1 };
                 if p.loop_sign != sign {
                     return Err(FactorizedError::LoopSign {
                         found: p.loop_sign,
-                        loops: cycles.len(),
+                        loops: n,
                     });
                 }
                 if p.nf_power as usize != f {
@@ -252,6 +262,11 @@ impl FactorizedNumerator {
             .map(|e| e.factor.clone())
             .chain(self.vertices.iter().map(|v| v.factor.clone()))
             .chain(self.projector.iter().map(|p| p.tensor.clone()))
+            .chain(
+                self.insertions
+                    .iter()
+                    .flat_map(|i| [i.coefficient.clone(), i.factor.clone()]),
+            )
             .chain([p.scalars.clone(), p.colour.clone()])
             .collect::<Vec<_>>();
         for atom in &all {
@@ -943,6 +958,13 @@ fn prepare(
     {
         network *= routed_factor(value, factor, &lam, lambda, degree);
     }
+    // insertions (validated by `check_insertions`): coefficient x factor, a
+    // factor like any other: routed and lambda-scaled (its boundary momenta),
+    // truncated, R-substituted, contracted with the rest
+    for insertion in &value.insertions {
+        let product = &insertion.coefficient * &insertion.factor;
+        network *= routed_factor(value, &product, &lam, lambda, degree);
+    }
     if let Some(taylor) = &spec.taylor {
         let image = if taylor.compensate_mass && !degree_zero {
             (Atom::num(1) - Atom::var(lambda).pow(Atom::num(2))) * &spec.auxiliary_mass_squared
@@ -1247,6 +1269,14 @@ pub fn evaluate_factorized_closure(
         if let Some(depth) = spec.depth {
             local.number_of_terms_in_epsilon_expansion = depth as i64;
         }
+        // `depth` counts the terms of the RETURNED product: insertions with
+        // poles of total order n promote n more orders of the integral, which
+        // is evaluated n terms deeper and the product truncated back
+        let epsilon_symbol = vk_symbol!(&settings.epsilon_symbol);
+        value.check_insertion_epsilon(epsilon_symbol.get_name())?;
+        let pole_order = value.insertion_pole_order(epsilon_symbol)?;
+        let returned_terms = local.number_of_terms_in_epsilon_expansion;
+        local.number_of_terms_in_epsilon_expansion += pole_order as i64;
         let prepared = prepare(vakint, &local, value, spec, prefactor)?;
         let started = Instant::now();
         let mut counts = (0, 0, 0);
@@ -1292,7 +1322,20 @@ pub fn evaluate_factorized_closure(
         for (symbol, tensor) in &prepared.tensors {
             vakint_value = vakint_value.replace(symbol.clone()).with(tensor.clone());
         }
-        let vakint_value = vakint_value.expand();
+        let vakint_value = if pole_order > 0 {
+            let target = returned_terms - value.loops() as i64 - 1;
+            vakint_value
+                .series(
+                    epsilon_symbol,
+                    Atom::Zero.as_view(),
+                    symbolica::domains::rational::Rational::from(target),
+                )
+                .map_err(|e| refuse(format!("truncating the insertion product: {e}")))?
+                .to_atom()
+                .expand()
+        } else {
+            vakint_value.expand()
+        };
         let evaluate_seconds = started.elapsed().as_secs_f64();
         // the caller's notation; with no open slot, scalar products of the
         // external momenta still come back as spenso::dot(Q(x, mink(D)), ..):
