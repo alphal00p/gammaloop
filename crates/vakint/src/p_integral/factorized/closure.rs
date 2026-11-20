@@ -690,13 +690,20 @@ struct Prepared {
     split_seconds: f64,
 }
 
-/// First edge id of the loop-momentum vectors `Q(LOOP_BASE + i, ..)` = `k(i+1)`
-/// written into the factors by the routing (no record has such an edge).
-const LOOP_BASE: usize = 2_000_000_000;
+/// The edge id whose `Q(id, ..)` stands for the loop momentum `k(i+1)` in the
+/// routed factors: the record's loop edge `b_i` (its momentum is exactly
+/// `k(i+1)`, as the producer routes onto its basis edges), else a fresh id
+/// above every edge id of the record.
+fn loop_vector_id(value: &FactorizedNumerator, i: usize) -> usize {
+    match value.loop_edges.get(i).copied().flatten() {
+        Some(edge) => edge,
+        None => value.edges.iter().map(|e| e.id).max().unwrap_or(0) + 1 + i,
+    }
+}
 
 /// The ROUTING of a factor before the contraction (a linear substitution of
 /// its momenta, no tensor algebra): every `Q(e, s)` of an internal edge becomes
-/// `SUM_i eta_ei Q(LOOP_BASE + i, s) + lam SUM_j xi_ej Q(x_j, s)` (x_j = the
+/// `SUM_i eta_ei Q(b_i, s) + lam SUM_j xi_ej Q(x_j, s)` (x_j = the
 /// leg of p(j)), every `Q(x, s)` of an external leg `lam Q(x, s)`; `lam` is
 /// the Taylor parameter (lambda), 0 for degree 0, 1 for a pre-expanded sector.
 /// Then, for a Taylor step of degree `w`, the factor's terms of lambda-degree
@@ -726,15 +733,36 @@ fn routed_factor(
         else {
             return;
         };
+        let q = |id: usize| function!(f.get_symbol(), Atom::num(id as i64), slot.to_owned());
         if edge.is_external() {
-            **out = lam * part.to_owned();
+            // a leg through the legs of the independent momenta it carries
+            // (the dependent leg of a two-point root becomes -Q(x0): one
+            // external vector per p(j), as the R* sigma does)
+            let mut image = Atom::Zero;
+            let mut own = true;
+            for (j, c) in edge.momentum[loops..].iter().enumerate() {
+                if *c != 0 {
+                    match value.external_edges[j] {
+                        Some(leg) if leg != edge.id || *c != 1 => {
+                            own = false;
+                            image += Atom::num(*c) * q(leg);
+                        }
+                        Some(_) => image += q(edge.id),
+                        None => own = true,
+                    }
+                }
+            }
+            **out = if own {
+                lam * part.to_owned()
+            } else {
+                lam * image
+            };
             return;
         }
-        let q = |id: usize| function!(f.get_symbol(), Atom::num(id as i64), slot.to_owned());
         let mut image = Atom::Zero;
         for (i, c) in edge.momentum[..loops].iter().enumerate() {
             if *c != 0 {
-                image += Atom::num(*c) * q(LOOP_BASE + i);
+                image += Atom::num(*c) * q(loop_vector_id(value, i));
             }
         }
         for (j, c) in edge.momentum[loops..].iter().enumerate() {
@@ -745,8 +773,14 @@ fn routed_factor(
         }
         **out = image;
     });
+    // flatten the substituted sums (`c (sum)` inside a sum), as the R* producer's
+    // linearisation does before its contraction: the factor keeps its products
+    let routed = linearized(routed);
     match degree {
-        Some(w) if w > 0 && routed.contains_symbol(lambda) => {
+        // truncate only a factor whose lambda-degree can exceed w (a bound read
+        // off the tree without expanding): the usual vertex and propagator
+        // factors are linear in the momenta and keep their factored form
+        Some(w) if w > 0 && lambda_degree_bound(routed.as_view(), lambda) > w => {
             let expanded = routed.expand();
             let summands = match expanded.as_view() {
                 AtomView::Add(sum) => sum.iter().map(|t| t.to_owned()).collect::<Vec<_>>(),
@@ -760,6 +794,66 @@ fn routed_factor(
         }
         _ => routed,
     }
+}
+
+/// An upper bound of the lambda-degree of an expression, without expanding:
+/// products add, sums take the maximum, `x^n` multiplies by n.
+fn lambda_degree_bound(view: AtomView<'_>, lambda: Symbol) -> u32 {
+    match view {
+        AtomView::Var(v) => u32::from(v.get_symbol() == lambda),
+        AtomView::Num(_) => 0,
+        AtomView::Add(a) => a
+            .iter()
+            .map(|t| lambda_degree_bound(t, lambda))
+            .max()
+            .unwrap_or(0),
+        AtomView::Mul(m) => m.iter().map(|t| lambda_degree_bound(t, lambda)).sum(),
+        AtomView::Pow(p) => {
+            let (base, exponent) = p.get_base_exp();
+            let n = i64::try_from(exponent).unwrap_or(0).max(0) as u32;
+            lambda_degree_bound(base, lambda) * n
+        }
+        AtomView::Fun(f) => f.iter().map(|t| lambda_degree_bound(t, lambda)).sum(),
+    }
+}
+
+/// `c (sum)` with a number `c`.
+fn is_scaled_sum(view: AtomView<'_>) -> bool {
+    match view {
+        AtomView::Mul(product) => {
+            product.get_nargs() == 2
+                && product.iter().any(|f| matches!(f, AtomView::Num(_)))
+                && product.iter().any(|f| matches!(f, AtomView::Add(_)))
+        }
+        _ => false,
+    }
+}
+
+/// A sum with a nested (scaled) sum among its terms.
+fn is_nested_sum(view: AtomView<'_>) -> bool {
+    matches!(view, AtomView::Add(sum) if sum
+        .iter()
+        .any(|t| is_scaled_sum(t) || matches!(t, AtomView::Add(_))))
+}
+
+/// The expression with every nested sum flattened by distributing its numbers
+/// (`q5 - q8 + q11 - (-q9 - q11)` -> `q5 + 2 q11 - q8 + q9`); products of
+/// sums stay products. The same normalisation as the R* producer's
+/// momentum linearisation; the value is unchanged.
+fn linearized(atom: Atom) -> Atom {
+    let mut nested = false;
+    atom.as_view().visitor(&mut |part| {
+        nested |= is_nested_sum(part);
+        !nested
+    });
+    if !nested {
+        return atom;
+    }
+    atom.replace_map(|term, _, out| {
+        if is_nested_sum(term) {
+            **out = term.expand_num();
+        }
+    })
 }
 
 /// The power of `lambda` in a product.
@@ -783,16 +877,16 @@ fn lambda_power(view: AtomView<'_>, lambda: Symbol) -> u32 {
 }
 
 /// The record for the mapping to vakint notation after a routed contraction:
-/// its open slots as ports and the loop-momentum vectors `LOOP_BASE + i` as
+/// its open slots as ports and the loop-momentum vectors of loops without a loop edge as
 /// edges carrying `k(i+1)` (external, so that they are never lines).
 fn mapping_view(value: &FactorizedNumerator) -> FactorizedNumerator {
     let mut view = opened(value);
     let n = value.loops() + value.externals();
-    for i in 0..value.loops() {
+    for i in (0..value.loops()).filter(|i| value.loop_edges[*i].is_none()) {
         let mut momentum = vec![0; n];
         momentum[i] = 1;
         view.edges.push(super::FactorizedEdge {
-            id: LOOP_BASE + i,
+            id: loop_vector_id(value, i),
             source: super::Endpoint::External,
             target: super::Endpoint::External,
             source_hedge: None,
@@ -858,16 +952,22 @@ fn prepare(
         };
         network = network.replace(spec.mass_squared.clone()).with(image);
     }
-    let predicted = distributed_lorentz_monomials(network.as_view());
-    if let Some(limit) = settings.rustred_resources.max_process_rss_bytes {
-        let bound = contract_first_bound_bytes(predicted);
-        if bound > limit as f64 {
-            return Err(refuse(format!(
-                "the uncontracted network distributes to D = {predicted:.3e} Lorentz monomials; its contraction is bounded by {bound:.3e} bytes, above the budget of {limit} bytes"
-            )));
-        }
+    let routing_seconds = started.elapsed().as_secs_f64();
+    if let Ok(path) = std::env::var("VAKINT_CLOSURE_DUMP_NETWORK") {
+        let _ = std::fs::write(path, network.to_canonical_string());
     }
-    let contracted = match stream_pieces_for(predicted) {
+    // The routed product is contracted WHOLE, as the R* boundary path does
+    // (one idenso call); the streamed contraction (pieces contracted one after
+    // another) is only the memory fallback when the caller sets a process
+    // budget that the contract-first bound of the size predictor exceeds.
+    let predicted = distributed_lorentz_monomials(network.as_view());
+    let pieces = match settings.rustred_resources.max_process_rss_bytes {
+        Some(limit) if contract_first_bound_bytes(predicted) > limit as f64 => {
+            stream_pieces_for(predicted)
+        }
+        _ => 1,
+    };
+    let contracted = match pieces {
         1 => super::contract_with_idenso(&network, false)?,
         n => vacuum::contract_streamed(settings, &network, n)?.0,
     };
@@ -879,10 +979,27 @@ fn prepare(
     let contract_seconds = started.elapsed().as_secs_f64();
     if std::env::var("VAKINT_CLOSURE_PROFILE").is_ok() {
         eprintln!(
-            "CLOSURE_PROFILE label=\"{}\" idenso_s={idenso_seconds:.4} map_expand_s={:.4} contracted_terms={} scalar_terms={}",
+            "CLOSURE_PROFILE label=\"{}\" loop_terms={} root_terms={} predicted_monomials={predicted:.3e} pieces={} network_bytes={} routing_s={routing_seconds:.4} idenso_s={idenso_seconds:.4} map_expand_s={:.4} contracted_terms={} contracted_bytes={} scalar_terms={}",
             value.label,
+            value
+                .edges
+                .iter()
+                .filter(|e| !e.is_external())
+                .map(|e| e.momentum[..value.loops()]
+                    .iter()
+                    .filter(|c| **c != 0)
+                    .count())
+                .sum::<usize>(),
+            value
+                .edges
+                .iter()
+                .filter(|e| !e.is_external() && e.momentum[value.loops()..].iter().any(|c| *c != 0))
+                .count(),
+            pieces,
+            network.as_view().get_byte_size(),
             contract_seconds - idenso_seconds,
             crate::census::summands(contracted.as_view()),
+            contracted.as_view().get_byte_size(),
             crate::census::summands(scalar.as_view())
         );
     }
