@@ -510,10 +510,26 @@ pub fn evaluate_factorized_ports(
     // a ports record is a new kind whatever it carries
     let settings = &pinned_settings(settings);
     let counted = crate::timing::Snapshot::now();
+    let started = Instant::now();
     let evaluated = evaluate_factorized(vakint, settings, value, prefactor)?;
     let open = value.open_slots()?;
     let caller = to_caller_notation_p(value, &evaluated.value)?;
     let timing = counted.elapsed();
+    if crate::timing::record_log_enabled() {
+        eprintln!(
+            "{}",
+            crate::timing::record_line(
+                "direct",
+                &value.label,
+                value.loops(),
+                Some(settings.number_of_terms_in_epsilon_expansion),
+                None,
+                &timing,
+                started.elapsed().as_secs_f64(),
+                evaluated.input.as_view().get_byte_size(),
+            )
+        );
+    }
     Ok(PortsValue {
         value: caller,
         vakint_value: evaluated.value,
