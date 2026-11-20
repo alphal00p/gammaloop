@@ -53,7 +53,11 @@ use symbolica::{
 };
 
 use super::taylor::TaylorExpansion;
-use crate::{numerator::aind::Aind, utils::{GS, W_}, uv::approx::integrated::Integrated};
+use crate::{
+    numerator::aind::Aind,
+    utils::{GS, W_},
+    uv::approx::integrated::Integrated,
+};
 use spenso::structure::{partial::PartialStructureExt, slot::IsAbstractSlot};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -67,7 +71,11 @@ pub enum ClosedMode {
 /// paths, compared at a random rational point; today's moments are used).
 pub fn closed_mode() -> ClosedMode {
     static MODE: LazyLock<ClosedMode> = LazyLock::new(|| {
-        match std::env::var("GAMMALOOP_IR_HARD").ok().as_deref().map(str::trim) {
+        match std::env::var("GAMMALOOP_IR_HARD")
+            .ok()
+            .as_deref()
+            .map(str::trim)
+        {
             Some("closed") => ClosedMode::On,
             Some("check") => ClosedMode::Check,
             _ => ClosedMode::Off,
@@ -150,7 +158,11 @@ pub(super) fn guarded<T>(
             let message = payload
                 .downcast_ref::<String>()
                 .cloned()
-                .or_else(|| payload.downcast_ref::<&str>().map(|text| (*text).to_owned()))
+                .or_else(|| {
+                    payload
+                        .downcast_ref::<&str>()
+                        .map(|text| (*text).to_owned())
+                })
                 .unwrap_or_default();
             drop(payload);
             (message, true, false)
@@ -255,7 +267,8 @@ fn soft_momentum<'a>(view: AtomView<'a>, edge: usize) -> Option<AtomView<'a>> {
     if function.get_symbol() != GS.emr_mom || function.get_nargs() < 2 {
         return None;
     }
-    (usize::try_from(function.get(0)).ok() == Some(edge)).then(|| function.get(function.get_nargs() - 1))
+    (usize::try_from(function.get(0)).ok() == Some(edge))
+        .then(|| function.get(function.get_nargs() - 1))
 }
 
 /// A slot-less vector `V(.., mink(D))` with its last argument replaced by `slot`.
@@ -427,7 +440,10 @@ pub(super) fn closed_moments(
         idenso::dirac::AGS.projm,
         *idenso::epsilon::EPSILON_SYMBOL,
     ];
-    if parity_odd.iter().any(|symbol| routed.contains_symbol(*symbol)) {
+    if parity_odd
+        .iter()
+        .any(|symbol| routed.contains_symbol(*symbol))
+    {
         return Ok(Err("parity_odd".into()));
     }
     let open = match open_minkowski_slots(routed) {
@@ -438,7 +454,10 @@ pub(super) fn closed_moments(
     if open.len() > 4 {
         return Ok(Err(format!("slots:{}", open.len())));
     }
-    let edges = soft_edges.iter().map(|edge| usize::from(*edge)).collect::<Vec<_>>();
+    let edges = soft_edges
+        .iter()
+        .map(|edge| usize::from(*edge))
+        .collect::<Vec<_>>();
 
     // Sectors: the multisets of soft momenta of size n <= degree. An odd
     // total rank (slots + n) averages to zero for a parity-even hard part.
@@ -487,7 +506,9 @@ pub(super) fn closed_moments(
             .collect::<Vec<_>>();
         let mut sector = routed.clone();
         if !others.is_empty() {
-            sector = TaylorExpansion::new(mu, 0).orders(&scale(&sector, &others, mu))?.swap_remove(0);
+            sector = TaylorExpansion::new(mu, 0)
+                .orders(&scale(&sector, &others, mu))?
+                .swap_remove(0);
         }
         let mut counts = std::collections::BTreeMap::new();
         for edge in &multidegree {
@@ -519,7 +540,10 @@ pub(super) fn closed_moments(
                 Err(reason) => return Ok(Err(reason)),
             };
         }
-        if edges.iter().any(|edge| contains_soft(tensor.as_view(), *edge)) {
+        if edges
+            .iter()
+            .any(|edge| contains_soft(tensor.as_view(), *edge))
+        {
             return Ok(Err("soft_momentum_left".into()));
         }
         // 1/m! for the multiplicities of the multidegree.
@@ -548,12 +572,13 @@ pub(super) fn closed_moments(
         let channels = (0..matchings.len())
             .map(|j| symbol!(format!("gammalooprs::ir_closed_tau{j}").as_str()))
             .collect::<Vec<_>>();
-        let closure = matchings
-            .iter()
-            .zip(&channels)
-            .fold(Atom::Zero, |sum, (pairing, channel)| {
-                sum + Atom::var(*channel) * pairing_tensor(pairing, &open, &alphas)
-            });
+        let closure =
+            matchings
+                .iter()
+                .zip(&channels)
+                .fold(Atom::Zero, |sum, (pairing, channel)| {
+                    sum + Atom::var(*channel) * pairing_tensor(pairing, &open, &alphas)
+                });
         let (closed, certified) = simplify(&(tensor * closure))?;
         // The closure must leave a closed scalar. Without idenso's certificate,
         // scan for open slots: a leaked spinor index (an open trace or chain)
@@ -572,10 +597,16 @@ pub(super) fn closed_moments(
         stats.closed_bytes += closed.as_view().get_byte_size();
         // The channel markers occur linearly, possibly inside unexpanded
         // products: collect in them only.
-        let channel_atoms = channels.iter().map(|channel| Atom::var(*channel)).collect::<Vec<_>>();
+        let channel_atoms = channels
+            .iter()
+            .map(|channel| Atom::var(*channel))
+            .collect::<Vec<_>>();
         let mut projections = vec![Atom::Zero; channels.len()];
         for (monomial, coefficient) in closed.coefficient_list::<u8>(&channel_atoms) {
-            let Some(position) = channel_atoms.iter().position(|channel| *channel == monomial) else {
+            let Some(position) = channel_atoms
+                .iter()
+                .position(|channel| *channel == monomial)
+            else {
                 if coefficient.is_zero() {
                     continue;
                 }
@@ -589,7 +620,8 @@ pub(super) fn closed_moments(
             1 => vec![&projections[0] / &dimension],
             3 => {
                 let sum = projections.iter().fold(Atom::Zero, |sum, p| sum + p);
-                let normalization = Atom::one() / (&dimension * (&dimension - 1) * (&dimension + 2));
+                let normalization =
+                    Atom::one() / (&dimension * (&dimension - 1) * (&dimension + 2));
                 projections
                     .iter()
                     .map(|p| ((&dimension + 2) * p - &sum) * &normalization)
@@ -611,7 +643,10 @@ pub(super) fn closed_moments(
             let coefficient =
                 Integrated::dimensionally_regularized(&(coefficient / Atom::num(factorial)));
             let insertion = pairing_insertion(pairing, &open);
-            match moments.iter_mut().find(|(_, existing)| *existing == insertion) {
+            match moments
+                .iter_mut()
+                .find(|(_, existing)| *existing == insertion)
+            {
                 Some((sum, _)) => *sum = &*sum + coefficient,
                 None => moments.push((coefficient, insertion)),
             }
@@ -698,7 +733,9 @@ mod tests {
             .to_symbolic([Aind::Hedge(hedge, 0).to_atom()])
     }
     fn spinor(hedge: u16) -> Atom {
-        Bispinor {}.new_rep(4).to_symbolic([Aind::Hedge(hedge, 1).to_atom()])
+        Bispinor {}
+            .new_rep(4)
+            .to_symbolic([Aind::Hedge(hedge, 1).to_atom()])
     }
     fn vector(edge: usize) -> Atom {
         soft_vector(edge, None)
@@ -717,7 +754,12 @@ mod tests {
     }
 
     /// Today's path: Taylor, contraction, vacuum projection, moments.
-    fn today(expression: &Atom, soft: &[usize], hard: &[usize], degree: usize) -> Result<Vec<(Atom, Atom)>> {
+    fn today(
+        expression: &Atom,
+        soft: &[usize],
+        hard: &[usize],
+        degree: usize,
+    ) -> Result<Vec<(Atom, Atom)>> {
         let lambda = symbol!("rstar_hard_taylor"; Scalar);
         let scaled = RStarIntegrand::scale_edges(expression, &edges(soft), lambda);
         let polynomial = TaylorExpansion::new(lambda, degree).evaluate(&scaled)?;
@@ -743,18 +785,27 @@ mod tests {
     }
 
     fn value(rows: &[(Atom, Atom)]) -> Atom {
-        rows.iter().fold(Atom::Zero, |sum, (coefficient, insertion)| {
-            sum + random_point(coefficient) * random_point(insertion)
-        })
+        rows.iter()
+            .fold(Atom::Zero, |sum, (coefficient, insertion)| {
+                sum + random_point(coefficient) * random_point(insertion)
+            })
     }
 
     /// The closed moments equal today's at a random rational point, and
     /// neither is zero.
-    fn assert_same(expression: &Atom, soft: &[usize], hard: &[usize], degree: usize) -> Result<ClosedStats> {
+    fn assert_same(
+        expression: &Atom,
+        soft: &[usize],
+        hard: &[usize],
+        degree: usize,
+    ) -> Result<ClosedStats> {
         let reference = today(expression, soft, hard, degree)?;
         let (moments, stats) = closed(expression, soft, degree)?;
         let moments = moments.map_err(|reason| eyre!("declined: {reason}"))?;
-        assert!(!value(&reference).is_zero(), "the reference is zero: {reference:?}");
+        assert!(
+            !value(&reference).is_zero(),
+            "the reference is zero: {reference:?}"
+        );
         assert!(
             (value(&moments) - value(&reference)).is_zero(),
             "closed {moments:?}\ntoday {reference:?}"
@@ -769,10 +820,11 @@ mod tests {
         test_initialise()?;
         let (mu, nu) = (slot(10), slot(11));
         let k = vector(0);
-        let expression = indexed(0, &mu) * indexed(0, &nu) * dot(&k, &vector(4)) * dot(&k, &vector(5))
-            + dot(&vector(4), &vector(5)) * dot(&k, &k) * function!(ETS.metric, &mu, &nu)
-            + indexed(4, &mu) * dot(&k, &vector(5)) * indexed(0, &nu)
-            + dot(&k, &k) * function!(ETS.metric, &mu, &nu);
+        let expression =
+            indexed(0, &mu) * indexed(0, &nu) * dot(&k, &vector(4)) * dot(&k, &vector(5))
+                + dot(&vector(4), &vector(5)) * dot(&k, &k) * function!(ETS.metric, &mu, &nu)
+                + indexed(4, &mu) * dot(&k, &vector(5)) * indexed(0, &nu)
+                + dot(&k, &k) * function!(ETS.metric, &mu, &nu);
         let stats = assert_same(&expression, &[4, 5], &[0], 2)?;
         assert!(stats.closures > 0);
         Ok(())
@@ -800,7 +852,8 @@ mod tests {
         let (mu, nu) = (slot(10), slot(11));
         let (a, b, c, e) = (spinor(20), spinor(21), spinor(22), spinor(23));
         let k = vector(0);
-        let trace = gamma(&a, &b, &mu) * gamma(&b, &c, &vector(4)) * gamma(&c, &e, &k) * gamma(&e, &a, &nu);
+        let trace =
+            gamma(&a, &b, &mu) * gamma(&b, &c, &vector(4)) * gamma(&c, &e, &k) * gamma(&e, &a, &nu);
         let expression = trace * dot(&k, &vector(5));
         let stats = assert_same(&expression, &[4, 5], &[0], 2)?;
         assert_eq!(stats.slots, 2);
@@ -813,7 +866,11 @@ mod tests {
         test_initialise()?;
         let slots = [slot(10), slot(11), slot(12), slot(13)];
         let k = vector(0);
-        let expression = slots.iter().fold(dot(&k, &vector(4)).pow(2), |product, slot| product * indexed(0, slot));
+        let expression = slots
+            .iter()
+            .fold(dot(&k, &vector(4)).pow(2), |product, slot| {
+                product * indexed(0, slot)
+            });
         let (moments, _) = closed(&expression, &[4], 2)?;
         let reason = moments.expect_err("a rank-6 sector must decline");
         assert!(reason.starts_with("rank"), "{reason}");
@@ -828,8 +885,13 @@ mod tests {
         let k = vector(0);
         let open_chain = gamma(&spinor(20), &spinor(21), &mu) * dot(&k, &vector(4));
         let (moments, _) = closed(&open_chain, &[4], 1)?;
-        assert!(moments.expect_err("open spinor slots").starts_with("slot_rep"));
-        let odd = dot(&k, &k) * function!(ETS.metric, &mu, &slot(11))
+        assert!(
+            moments
+                .expect_err("open spinor slots")
+                .starts_with("slot_rep")
+        );
+        let odd = dot(&k, &k)
+            * function!(ETS.metric, &mu, &slot(11))
             * Atom::var(idenso::dirac::AGS.gamma5);
         let (moments, _) = closed(&odd, &[4], 0)?;
         assert_eq!(moments.expect_err("parity odd"), "parity_odd");
@@ -844,7 +906,8 @@ mod tests {
         test_initialise()?;
         let (mu, nu, rho) = (slot(10), slot(11), slot(12));
         let k = vector(0);
-        let one = indexed(0, &rho) * dot(&k, &vector(4)) + indexed(4, &rho) * dot(&k, &k)
+        let one = indexed(0, &rho) * dot(&k, &vector(4))
+            + indexed(4, &rho) * dot(&k, &k)
             + indexed(0, &rho) * dot(&k, &k);
         let stats = assert_same(&one, &[4], &[0], 1)?;
         assert_eq!(stats.slots, 1);
