@@ -1254,6 +1254,10 @@
   {
    "name": "vakint::closure_lambda",
    "reason": "the closure kind's internal Taylor parameter (substituted and graded away before any output)"
+  },
+  {
+   "name": "vakint::slash",
+   "reason": "the dummy index of a compact slash written out on read (vakint::slash(scope, n)); contracted away by idenso"
   }
  ]
 }
