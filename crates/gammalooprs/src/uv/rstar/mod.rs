@@ -107,8 +107,9 @@ impl<T: 'static> Drop for ScopedSlot<T> {
     }
 }
 pub use boundary::{
-    BoundaryMode, ClosedRootNormalization, remainder_boundary_mode, remainder_boundary_provenance,
-    startup_line, validate_remainder_boundary,
+    BoundaryMode, ChildBoundary, ClosedRootNormalization, child_boundary_mode,
+    remainder_boundary_mode, remainder_boundary_provenance, startup_line,
+    validate_remainder_boundary,
 };
 pub use expression::{ClosedSkipMode, closed_dot_scalar, closed_skip_mode, set_memory_release};
 pub use insertion_identity::{InsertionSkeletonIdentity, InsertionSkeletonKey};

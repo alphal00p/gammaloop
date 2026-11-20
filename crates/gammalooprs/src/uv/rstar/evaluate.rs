@@ -546,6 +546,10 @@ impl RStarPlan {
                 });
         let normalization = Atom::one() / (&d * (&d - 1) * (&d + 2));
         let normalize = |tensor: &Atom| -> Result<Atom> { Ok(tensor * &normalization) };
+        // GAMMALOOP_CHILD_BOUNDARY=closed: the three channels stay ONE
+        // evaluation; on the boundary path the markers are momentum-free
+        // scalar spectators of each remainder's one boundary.
+        let child_root = child_closed_root(self, graph, true, &normalization)?;
         let mut evaluation = Evaluation::new(
             self,
             graph,
@@ -558,6 +562,7 @@ impl RStarPlan {
         )?;
         evaluation.root_closure = Some(closure);
         evaluation.channel = ("isotropic", "1/(d (d-1) (d+2))");
+        evaluation.close_child(child_root.as_ref(), "isotropic");
         let channels = evaluation.counterterm()?;
         Ok(markers
             .iter()
@@ -590,6 +595,9 @@ impl RStarPlan {
         boundary: &DiracBoundary,
     ) -> Result<Atom> {
         let normalize = |tensor: &Atom| -> Result<Atom> { Ok(tensor * &boundary.normalization) };
+        // GAMMALOOP_CHILD_BOUNDARY=dirac|closed: the closed vertex child's
+        // admitted remainders take the remainder-boundary path.
+        let child_root = child_closed_root(self, graph, false, &boundary.normalization)?;
         let mut evaluation = Evaluation::new(
             self,
             graph,
@@ -605,6 +613,13 @@ impl RStarPlan {
             DiracKind::Vertex => ("dirac vertex", "1/(Tr[1] d)"),
             DiracKind::SelfEnergy => ("dirac self-energy", "1/Tr[1]"),
         };
+        evaluation.close_child(
+            child_root.as_ref(),
+            match boundary.kind {
+                DiracKind::Vertex => "dirac_vertex",
+                DiracKind::SelfEnergy => "dirac_self_energy",
+            },
+        );
         let trace = evaluation.counterterm()?;
         Ok(trace * &boundary.structure)
     }
@@ -895,6 +910,13 @@ struct Evaluation<'a> {
     /// The IR Dirac closure of each IR correction (or its decline reason),
     /// computed on first use when `ir_dirac` is on.
     ir_dirac_boundaries: BTreeMap<usize, std::result::Result<DiracBoundary, String>>,
+    /// `GAMMALOOP_CHILD_BOUNDARY`: the closure of a closed UV child whose
+    /// `closed_root` is its own closed-child normalisation (`dirac_vertex`,
+    /// `isotropic`); its admitted remainders take the boundary path.
+    closed_child: Option<&'static str>,
+    /// Why a closed UV child is not admitted (`not_admitted` reason in place
+    /// of `no_closed_root`); `None` with the switch off.
+    child_decline: Option<&'static str>,
 }
 
 impl<'a> Evaluation<'a> {
@@ -1000,21 +1022,7 @@ impl<'a> Evaluation<'a> {
                 }
             })?
         };
-        let root_edges = match &plan.root_boundary {
-            None => {
-                let root_external = graph.external_filter::<SuBitGraph>();
-                graph
-                    .iter_edges_of(&root_external)
-                    .map(|(_, edge, _)| edge)
-                    .collect::<Vec<_>>()
-            }
-            Some(boundary) => graph
-                .iter_edges_of(boundary)
-                .map(|(_, edge, _)| edge)
-                .collect::<std::collections::BTreeSet<_>>()
-                .into_iter()
-                .collect(),
-        };
+        let root_edges = root_edges_of(plan, graph);
         let proper_uv_elapsed = children_started.elapsed();
         let mut uv = MassiveUvEvaluator::new(graph, model, vakint, uv_settings);
         if let Some(cache) = &plan.counterterm_cache {
@@ -1058,6 +1066,8 @@ impl<'a> Evaluation<'a> {
             skipped_terms: 0,
             ir_dirac,
             ir_dirac_boundaries: BTreeMap::new(),
+            closed_child: None,
+            child_decline: None,
         })
     }
 
@@ -1086,6 +1096,24 @@ impl<'a> Evaluation<'a> {
                 self.top_mass.map_or("child", TopMassTerms::as_str),
                 self.skipped_terms
             );
+        }
+    }
+
+    /// `GAMMALOOP_CHILD_BOUNDARY` ([`child_closed_root`]): a closed UV child
+    /// (`kind` its closure) admitted with its closed-child normalisation, or
+    /// the reason it is not; `None` leaves this evaluation as today.
+    fn close_child(
+        &mut self,
+        child: Option<&'a std::result::Result<ClosedRootNormalization, &'static str>>,
+        kind: &'static str,
+    ) {
+        match child {
+            None => {}
+            Some(Ok(normalization)) => {
+                self.closed_root = Some(normalization);
+                self.closed_child = Some(kind);
+            }
+            Some(Err(reason)) => self.child_decline = Some(reason),
         }
     }
 
@@ -2753,7 +2781,34 @@ impl<'a> Evaluation<'a> {
         ) {
             return;
         }
-        let root = if self.root_closure.is_some() && self.root_projector.is_some() {
+        if let Some(kind) = self.closed_child {
+            // GAMMALOOP_CHILD_BOUNDARY: one line per closed-child evaluation,
+            // with the key-plan reductions of its boundary and today's
+            // intervals (the channels of a closure are spectators of one
+            // boundary per remainder, so these do not scale with them).
+            eprintln!(
+                "CHILD_BOUNDARY graph={} kind={kind} loops={} degree={} edges={} remainders={} boundary={} zero={} fallback={} errors={} checks={} reduce_calls_boundary={} reduce_calls_today={} reduce_boundary_s={:.3} lower_boundary_s={:.3} seconds_boundary={:.3} seconds_today={:.3} outcome={outcome}",
+                self.graph.name,
+                self.graph.n_loops(&self.plan.support),
+                self.plan.taylor_order,
+                self.edges(&self.plan.support),
+                self.summary.remainders,
+                self.summary.boundary,
+                self.summary.zero,
+                self.summary.fallback,
+                self.summary.errors,
+                self.summary.checks,
+                self.summary.reduce_calls_boundary,
+                self.summary.reduce_calls_today,
+                self.summary.reduce_boundary,
+                self.summary.lower_boundary,
+                self.summary.seconds_boundary,
+                self.summary.seconds_today,
+            );
+        }
+        let root = if self.closed_child.is_some() {
+            "closed-child"
+        } else if self.root_closure.is_some() && self.root_projector.is_some() {
             if self.plan.root_boundary.is_some() {
                 "child"
             } else {
@@ -3134,17 +3189,22 @@ impl<'a> Evaluation<'a> {
 
     /// Remainder-boundary admission (DESIGN 10a): every reason is silent and
     /// counted, never an error, except the vakint gates under STRICT.
-    fn boundary_admits(&self, remainder: &RStarIntegrand) -> std::result::Result<(), String> {
+    /// Read from the remainder's region alone (its loop count), so that it is
+    /// decided before the remainder is built.
+    fn boundary_admits(&self, region: &super::GraphRegion) -> std::result::Result<(), String> {
         if self.closed_root.is_none() {
-            return Err("no_closed_root".into());
+            // GAMMALOOP_CHILD_BOUNDARY: a closed child that is not admitted
+            // names its reason.
+            return Err(self.child_decline.unwrap_or("no_closed_root").into());
         }
         if self.root_closure.is_none() || self.root_projector.is_none() {
             return Err("open_root".into());
         }
-        if self.plan.root_boundary.is_some() {
+        // A support root only as a closed child (GAMMALOOP_CHILD_BOUNDARY).
+        if self.plan.root_boundary.is_some() && self.closed_child.is_none() {
             return Err("proper_support_root".into());
         }
-        if remainder.region.loops < 2 {
+        if region.loops < 2 {
             return Err("one_loop_tree_cut".into());
         }
         if !RStarIntegrand::plain_remainder_contraction() {
@@ -3177,8 +3237,8 @@ impl<'a> Evaluation<'a> {
     /// 6a, 7).
     fn integrate_ordinary(&mut self, term: &UvPreparationTerm) -> Result<Atom> {
         let mode = boundary::remainder_boundary_mode()?;
-        let remainder = self.remainder(term)?;
         if mode == BoundaryMode::Off {
+            let remainder = self.remainder(term)?;
             if let Some(result) = self.integrate_streamed(&remainder)? {
                 return Ok(result);
             }
@@ -3186,7 +3246,8 @@ impl<'a> Evaluation<'a> {
         }
         self.summary.remainders += 1;
         let strict = boundary::boundary_strict();
-        if let Err(reason) = self.boundary_admits(&remainder) {
+        if let Err(reason) = self.boundary_admits(&term.remainder) {
+            let remainder = self.remainder(term)?;
             if strict && reason.starts_with("vakint_gates") {
                 return Err(eyre!(
                     "BOUNDARY strict: the vakint gates reject an admissible remainder of {} ({reason})",
@@ -3199,8 +3260,17 @@ impl<'a> Evaluation<'a> {
             }
             return self.integrate(&remainder, remainder.expression()?);
         }
+        // A closed child's boundary is built from the whole remainder, never
+        // the root-truncated one (GAMMALOOP_UV_CHILD_TRUNCATE): its σ takes
+        // the degree-0 part itself. Today's path (check mode, a decline)
+        // takes today's remainder, truncated as before.
+        let remainder = if self.closed_child.is_some() {
+            self.remainder_with(term, self.root_closure.as_ref())?
+        } else {
+            self.remainder(term)?
+        };
         let errors = self.summary.errors;
-        let result = self.integrate_admitted(&remainder, mode, strict);
+        let result = self.integrate_admitted(&remainder, term, mode, strict);
         if result.is_err() && self.summary.errors == errors {
             // A hard error of an admitted remainder (the build, the
             // evaluation, or today's path in check mode or as a fallback).
@@ -3215,6 +3285,7 @@ impl<'a> Evaluation<'a> {
     fn integrate_admitted(
         &mut self,
         remainder: &RStarIntegrand,
+        term: &UvPreparationTerm,
         mode: BoundaryMode,
         strict: bool,
     ) -> Result<Atom> {
@@ -3294,13 +3365,29 @@ impl<'a> Evaluation<'a> {
                         decline.reason
                     ));
                 }
+                if self.closed_child.is_some() {
+                    // Today's path of a closed child, as when not admitted.
+                    let today = self.remainder(term)?;
+                    if let Some(result) = self.integrate_streamed(&today)? {
+                        return Ok(result);
+                    }
+                    return self.integrate(&today, today.expression()?);
+                }
                 return self.integrate(remainder, remainder.expression()?);
             }
             built => built,
         };
         match mode {
             BoundaryMode::Check => {
-                self.check_boundary(remainder, built, &settings, id, started, counted)
+                // A closed child compares with today's (root-truncated)
+                // remainder; a diagram root with the same remainder.
+                let today = if self.closed_child.is_some() {
+                    Some(self.remainder(term)?)
+                } else {
+                    None
+                };
+                let today = today.as_ref().unwrap_or(remainder);
+                self.check_boundary(remainder, today, built, &settings, id, started, counted)
             }
             _ => self.evaluate_boundary(remainder, built, &settings, id, started, counted),
         }
@@ -3417,9 +3504,11 @@ impl<'a> Evaluation<'a> {
     /// capture (its closures, value and root callback), compared per vacuum
     /// integral; one `BOUNDARY_CHECK` line. Returns today's value; any
     /// MISMATCH is an error.
+    #[allow(clippy::too_many_arguments)]
     fn check_boundary(
         &mut self,
         remainder: &RStarIntegrand,
+        today: &RStarIntegrand,
         built: Built,
         settings: &VakintSettings,
         id: usize,
@@ -3481,8 +3570,8 @@ impl<'a> Evaluation<'a> {
         let old_started = Instant::now();
         let ((today, callback), capture) = super::integrate::capturing_closures(|| {
             boundary::with_callback_check(closed_root, || -> Result<Atom> {
-                let expression = remainder.expression()?;
-                self.integrate(remainder, expression)
+                let expression = today.expression()?;
+                self.integrate(today, expression)
             })
         });
         let today = today?;
@@ -3728,6 +3817,89 @@ impl<'a> Evaluation<'a> {
         }
         Ok(())
     }
+}
+
+/// The carriers scaled by the outer Taylor operation of `plan`'s root: the
+/// graph's external edges, or the full crown of a proper support root
+/// (sorted, without repetition).
+fn root_edges_of(plan: &RStarPlan, graph: &Graph) -> Vec<EdgeIndex> {
+    match &plan.root_boundary {
+        None => {
+            let root_external = graph.external_filter::<SuBitGraph>();
+            graph
+                .iter_edges_of(&root_external)
+                .map(|(_, edge, _)| edge)
+                .collect::<Vec<_>>()
+        }
+        Some(boundary) => graph
+            .iter_edges_of(boundary)
+            .map(|(_, edge, _)| edge)
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect(),
+    }
+}
+
+/// `GAMMALOOP_CHILD_BOUNDARY`: the closed-child normalisation of a closed UV
+/// child (`plan` a support root whose root scope `closure` closes every
+/// remainder), as [`ClosedRootNormalization`] data for the remainder-boundary
+/// path: the callback `X -> factor · X` of the child's root projector, with
+///
+/// * `factor`: the closure's own normalisation (`1/(Tr[1] d)` for the Dirac
+///   vertex, `1/(d (d-1) (d+2))` for the isotropic channels), joined after
+///   the Taylor step as before;
+/// * `external`: a crown edge `x0` (the first root edge). It only labels the
+///   cut head `p(x0)` of the vacuum closure; it is never a loop basis edge;
+/// * `external_routing` `σ`: every crown momentum `Q(e, ..) -> 0`. A degree-0
+///   child's outer Taylor operation keeps only the `λ^0` coefficient in its
+///   crown momenta, which is the numerator at zero crown momenta (it is a
+///   polynomial in them; the denominator orders are taken at degree 0 by the
+///   build itself), so the boundary has no `p` at all: blocks and
+///   coefficients are closed, momentum-free scalars in the loop dots.
+///
+/// `None` keeps today's path unchanged (the switch is off, the remainder
+/// boundary is off, or `plan` is not a support root); `Some(Err(reason))` is
+/// a closed child that is not admitted (counted as `not_admitted=reason`).
+fn child_closed_root(
+    plan: &RStarPlan,
+    graph: &Graph,
+    isotropic: bool,
+    factor: &Atom,
+) -> Result<Option<std::result::Result<ClosedRootNormalization, &'static str>>> {
+    let mode = boundary::child_boundary_mode()?;
+    if mode == boundary::ChildBoundary::Off
+        || plan.root_boundary.is_none()
+        || boundary::remainder_boundary_mode()? == BoundaryMode::Off
+    {
+        return Ok(None);
+    }
+    if isotropic && mode < boundary::ChildBoundary::Closed {
+        return Ok(Some(Err("child_isotropic_off")));
+    }
+    if plan.taylor_order != 0 {
+        // The Dirac self-energy (degree 1): `Tr[gamma_nu X]` keeps the open
+        // Lorentz index `nu`, outside the vakint boundary contract.
+        return Ok(Some(Err("child_open_index")));
+    }
+    let root_edges = root_edges_of(plan, graph);
+    let Some(external) = root_edges.first().copied() else {
+        return Ok(Some(Err("child_no_roots")));
+    };
+    let external_routing = root_edges
+        .iter()
+        .map(|edge| {
+            symbolica::id::Replacement::new(
+                symbolica::function!(GS.emr_mom, usize::from(*edge), crate::utils::W_.x___)
+                    .to_pattern(),
+                Atom::Zero,
+            )
+        })
+        .collect();
+    Ok(Some(Ok(ClosedRootNormalization {
+        external,
+        external_routing,
+        factor: factor.clone(),
+    })))
 }
 
 /// The momentum degree of a homogeneous insertion polynomial: the common

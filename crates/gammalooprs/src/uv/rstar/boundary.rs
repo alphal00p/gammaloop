@@ -302,7 +302,108 @@ pub(crate) fn with_census_dump<T>(active: bool, f: impl FnOnce() -> T) -> T {
 /// Mode on (and check) with a census dump write the boundary record (DESIGN
 /// 6b); the refusal of 6e49bae5e5 is lifted with the dump writer.
 pub fn validate_remainder_boundary() -> Result<BoundaryMode> {
+    child_boundary_mode()?;
     remainder_boundary_mode()
+}
+
+/// `GAMMALOOP_CHILD_BOUNDARY=off|dirac|closed` (default off): which closed
+/// proper UV children (support roots evaluated as their own R* root, whose
+/// momentum-free root closure closes every root-scope remainder) take the
+/// remainder-boundary path for their admitted ordinary remainders, as a
+/// closed diagram root does.
+///
+/// - unset, empty, `0` or `off`: none; nothing changes (every child keeps
+///   `not_admitted=no_closed_root`);
+/// - `dirac`: children closed by the Dirac closure
+///   (`GAMMALOOP_UV_CHILD_CLOSURE=dirac`) of Taylor order 0, the vertex
+///   `c gamma^mu` (the degree-1 self-energy keeps the open index `nu` of
+///   `Tr[gamma_nu X]` and is not admitted: `child_open_index`);
+/// - `closed`: also children closed by the isotropic closure
+///   (`GAMMALOOP_UV_CHILD_CLOSURE=isotropic,dirac`): a degree-0 four-slot
+///   child through its three scalar metric channels, whose channel markers
+///   are momentum-free scalar spectators of ONE boundary per remainder.
+///
+/// Acts only with `GAMMALOOP_REMAINDER_BOUNDARY=1|check`. Any other value is
+/// an error at the first use (and at start-up).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ChildBoundary {
+    Off,
+    Dirac,
+    Closed,
+}
+
+impl ChildBoundary {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ChildBoundary::Off => "off",
+            ChildBoundary::Dirac => "dirac",
+            ChildBoundary::Closed => "closed",
+        }
+    }
+}
+
+fn parse_child_boundary(value: Option<&str>) -> std::result::Result<ChildBoundary, String> {
+    match value.map(str::trim) {
+        None | Some("" | "0" | "off") => Ok(ChildBoundary::Off),
+        Some("dirac") => Ok(ChildBoundary::Dirac),
+        Some("closed") => Ok(ChildBoundary::Closed),
+        Some(other) => Err(format!(
+            "GAMMALOOP_CHILD_BOUNDARY={other:?}: expected unset, 0, off, dirac or closed"
+        )),
+    }
+}
+
+static CHILD_BOUNDARY: LazyLock<std::result::Result<ChildBoundary, String>> =
+    LazyLock::new(|| match std::env::var("GAMMALOOP_CHILD_BOUNDARY") {
+        Ok(value) => parse_child_boundary(Some(&value)),
+        Err(std::env::VarError::NotPresent) => parse_child_boundary(None),
+        Err(std::env::VarError::NotUnicode(value)) => {
+            Err(format!("GAMMALOOP_CHILD_BOUNDARY={value:?} is not unicode"))
+        }
+    });
+
+#[cfg(test)]
+thread_local! {
+    static TEST_CHILD_BOUNDARY: std::cell::Cell<Option<ChildBoundary>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// The mode of `GAMMALOOP_CHILD_BOUNDARY`, read once.
+pub fn child_boundary_mode() -> Result<ChildBoundary> {
+    #[cfg(test)]
+    if let Some(mode) = TEST_CHILD_BOUNDARY.with(|slot| slot.get()) {
+        return Ok(mode);
+    }
+    CHILD_BOUNDARY.clone().map_err(|error| eyre!(error))
+}
+
+/// Tests: run `f` with the child-boundary mode set on this thread.
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) fn with_child_boundary<T>(mode: ChildBoundary, f: impl FnOnce() -> T) -> T {
+    let previous = TEST_CHILD_BOUNDARY.with(|slot| slot.replace(Some(mode)));
+    let result = f();
+    TEST_CHILD_BOUNDARY.with(|slot| slot.set(previous));
+    result
+}
+
+#[cfg(test)]
+#[test]
+fn child_boundary_values_parse() {
+    assert_eq!(parse_child_boundary(None), Ok(ChildBoundary::Off));
+    for off in ["", "0", "off", " off "] {
+        assert_eq!(parse_child_boundary(Some(off)), Ok(ChildBoundary::Off));
+    }
+    assert_eq!(
+        parse_child_boundary(Some("dirac")),
+        Ok(ChildBoundary::Dirac)
+    );
+    assert_eq!(
+        parse_child_boundary(Some("closed")),
+        Ok(ChildBoundary::Closed)
+    );
+    assert!(parse_child_boundary(Some("1")).is_err());
+    assert!(ChildBoundary::Dirac < ChildBoundary::Closed);
 }
 
 /// `VAKINT_P_BOUNDARY_BLOCKS`: `reuse` (default) or `off`.
@@ -326,7 +427,7 @@ pub fn remainder_boundary_provenance() -> serde_json::Value {
 
 /// The start-up line of a binary that may take the new path (DESIGN 0).
 pub fn startup_line() -> String {
-    format!(
+    let mut line = format!(
         "remainder_boundary={} strict={} vakint_gates={} vakint_boundary_blocks={} fallback_max_summands={} fallback_max_bytes={} large_loops={LARGE_LOOPS}",
         match remainder_boundary_mode() {
             Ok(mode) => mode.as_str().to_owned(),
@@ -346,7 +447,14 @@ pub fn startup_line() -> String {
             usize::MAX => "unlimited".to_owned(),
             max => max.to_string(),
         }
-    )
+    );
+    // Only when on: the line is unchanged with the switch off.
+    match child_boundary_mode() {
+        Ok(ChildBoundary::Off) => {}
+        Ok(mode) => line.push_str(&format!(" child_boundary={}", mode.as_str())),
+        Err(error) => line.push_str(&format!(" child_boundary=error({error})")),
+    }
+    line
 }
 
 // ---------------------------------------------------------------------------
@@ -503,6 +611,10 @@ pub(super) struct BoundarySummary {
     pub lower_boundary: f64,
     pub reduce_today: f64,
     pub lower_today: f64,
+    /// vakint::timing reduction entries (key-plan reductions) over the
+    /// same intervals (`CHILD_BOUNDARY` lines only).
+    pub reduce_calls_boundary: u64,
+    pub reduce_calls_today: u64,
     /// Check mode: remainders compared, and those with a skipped input pair.
     pub checks: usize,
     pub checks_skipped: usize,
@@ -513,12 +625,14 @@ impl BoundarySummary {
     pub(super) fn add_boundary(&mut self, delta: vakint::timing::Delta) {
         self.reduce_boundary += delta.reduce_seconds;
         self.lower_boundary += delta.lower_seconds;
+        self.reduce_calls_boundary += delta.reduce_calls;
     }
 
     /// Add the vakint::timing counters of a today's-path interval.
     pub(super) fn add_today(&mut self, delta: vakint::timing::Delta) {
         self.reduce_today += delta.reduce_seconds;
         self.lower_today += delta.lower_seconds;
+        self.reduce_calls_today += delta.reduce_calls;
     }
 
     pub(super) fn declined(&mut self, decline: &Decline) {
