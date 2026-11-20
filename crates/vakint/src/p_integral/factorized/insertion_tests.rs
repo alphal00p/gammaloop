@@ -857,15 +857,19 @@ fn a_compact_slash_in_an_insertion_is_opened_on_read() {
         a.value,
         b.value
     );
-    // two compact slashes in one record get distinct dummies
-    let mut counter = 0;
+    // two compact slashes in one factor get distinct dummies
     let other = atom(&gamma(
         &bis(H_IN),
         &bis(H_OUT),
         &q(OUT, &format!("{MINK}({DIM})")),
     ));
-    let twice = super::open_compact_slashes(&(&compact * &other), &mut counter);
-    assert_eq!(counter, 2, "{twice}");
+    let twice = super::expand_compact_slash(&(&compact * &other), C0 as i64);
+    assert!(
+        !twice
+            .to_canonical_string()
+            .contains(&format!("{MINK}({DIM})")),
+        "{twice}"
+    );
 }
 
 fn one_line(atom: &Atom) -> String {
