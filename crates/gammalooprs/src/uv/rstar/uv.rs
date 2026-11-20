@@ -11,7 +11,7 @@ use symbolica::atom::{Atom, AtomCore};
 use vakint::Vakint;
 
 use crate::{
-    graph::{Autogen, Graph, LMBext},
+    graph::{Autogen, Graph},
     model::Model,
     utils::GS,
     uv::{
@@ -172,7 +172,7 @@ impl<'a> MassiveUvEvaluator<'a> {
             None
         };
         graph.loop_momentum_basis = super::routing::remainder_basis(
-            &self.graph,
+            self.graph,
             &region.support,
             &contracted,
             region.boundary.clone(),
