@@ -869,6 +869,7 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
     };
     let (insertions_line, n_insertions) = count_section(reader, "insertions")?;
     let mut insertions = Vec::with_capacity(n_insertions);
+    let mut slashes = 0usize;
     while reader.peek_key() == Some("insertion") {
         let line = reader.expect("insertion")?;
         let vertex: usize = number(
@@ -902,7 +903,8 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
                 number(line.number, ghost, "ghost cycles")?,
             ),
             coefficient,
-            factor: last_atom(&factor_line, 1)?,
+            // a compact slash gamma(a, b, Q(x, mink(D))) is opened on read
+            factor: super::open_compact_slashes(&last_atom(&factor_line, 1)?, &mut slashes),
         });
     }
     if insertions.len() != n_insertions {
