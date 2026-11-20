@@ -202,7 +202,12 @@ fn slash_insertion(insertion: &Atom, boundary: &DiracBoundary) -> Option<Atom> {
         }
         let vector = function!(GS.emr_mom, momentum.get(0), bare.finish());
         replaced += 1;
-        **out = function!(idenso::dirac::AGS.gamma, &boundary.row, &boundary.column, vector);
+        **out = function!(
+            idenso::dirac::AGS.gamma,
+            &boundary.row,
+            &boundary.column,
+            vector
+        );
     });
     let left = {
         let mut found = false;
@@ -261,8 +266,9 @@ fn tensor_zero(difference: &Atom) -> Result<bool> {
             ..Default::default()
         })?
         .to_dots()?;
-    let reduced = Integrated::dimensionally_regularized(&cooking.uncook(tensor.expression().as_view()))
-        .expand();
+    let reduced =
+        Integrated::dimensionally_regularized(&cooking.uncook(tensor.expression().as_view()))
+            .expand();
     if reduced.is_zero() {
         return Ok(true);
     }
@@ -332,9 +338,11 @@ pub(super) fn agree(
         }
         projected_open += coefficient * projection;
     }
-    let projected_closed = closed.iter().fold(Atom::Zero, |sum, (coefficient, insertion)| {
-        sum + Integrated::dimensionally_regularized(&(coefficient * &normalization)) * insertion
-    });
+    let projected_closed = closed
+        .iter()
+        .fold(Atom::Zero, |sum, (coefficient, insertion)| {
+            sum + Integrated::dimensionally_regularized(&(coefficient * &normalization)) * insertion
+        });
     let coefficients = vanishes(&(projected_closed - projected_open))?;
     Ok(Agreement {
         identical,
@@ -346,7 +354,11 @@ pub(super) fn agree(
 /// The bare Minkowski vector `Q(e, mink(d))` of soft edge `edge`.
 #[cfg(test)]
 pub(super) fn bare_vector(edge: usize) -> Atom {
-    function!(GS.emr_mom, edge, Minkowski {}.new_rep(GS.dim).to_symbolic([]))
+    function!(
+        GS.emr_mom,
+        edge,
+        Minkowski {}.new_rep(GS.dim).to_symbolic([])
+    )
 }
 
 #[cfg(test)]
