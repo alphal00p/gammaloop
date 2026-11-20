@@ -37,7 +37,7 @@ use crate::{
 };
 
 use super::{
-    CountertermCache, MassiveUvEvaluator, RStarPlan,
+    CountertermCache, MassiveUvEvaluator, RStarPlan, UvChildrenRoute,
     tests::{
         assert_same_counterterm, canonical_tensor, gluon_self_energy, parallel_pair, settings,
     },
@@ -708,7 +708,10 @@ fn prewarmed_original_uv_children_keep_the_exact_reference_mass_and_open_ports()
     let vakint = Vakint::new()?;
     let mark = parallel_pair(&graph).unwrap()[0];
     let cache = Arc::new(CountertermCache::default());
-    let plain = RStarPlan::new(&graph, &model, mark, &settings)?;
+    // The prewarm requests are the massive route's (`uv_child_requests`), so
+    // the plan takes that route explicitly (the default is `rstar`).
+    let plain =
+        RStarPlan::new(&graph, &model, mark, &settings)?.with_uv_children(UvChildrenRoute::Massive);
     let reference_mass = Atom::var(*super::REFERENCE_MASS_SQUARED).sqrt();
     let expected =
         plain.evaluate_uv_children(&graph, &model, &reference_mass, &vakint, &settings)?;
