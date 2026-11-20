@@ -66,7 +66,9 @@ impl State {
     fn flush(&self, now: Instant) {
         let delta = nanos(self.since.get(), now);
         match self.mode.get() {
-            Kind::Reduce => self.reduce_ns.set(self.reduce_ns.get().saturating_add(delta)),
+            Kind::Reduce => self
+                .reduce_ns
+                .set(self.reduce_ns.get().saturating_add(delta)),
             Kind::Lower => self.lower_ns.set(self.lower_ns.get().saturating_add(delta)),
             Kind::None => {}
         }
@@ -97,7 +99,9 @@ impl Guard {
                     if state.reduce_depth.get() == 0 {
                         state.calls.set(state.calls.get().saturating_add(1));
                     }
-                    state.reduce_depth.set(state.reduce_depth.get().saturating_add(1));
+                    state
+                        .reduce_depth
+                        .set(state.reduce_depth.get().saturating_add(1));
                 }
                 state.mode.set(kind);
                 Some(previous)
@@ -121,7 +125,9 @@ impl Drop for Guard {
         let _ = STATE.try_with(|state| {
             state.flush(Instant::now());
             if kind == Kind::Reduce {
-                state.reduce_depth.set(state.reduce_depth.get().saturating_sub(1));
+                state
+                    .reduce_depth
+                    .set(state.reduce_depth.get().saturating_sub(1));
             }
             state.mode.set(previous);
         });
