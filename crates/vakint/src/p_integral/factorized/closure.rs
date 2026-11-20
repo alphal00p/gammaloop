@@ -104,6 +104,95 @@ pub(super) fn contains_atom(hay: AtomView<'_>, needle: AtomView<'_>) -> bool {
     found
 }
 
+/// The slots that stay OPEN in a closure record's value: the ports its
+/// projector does not close, then the projector's own free slots that are not
+/// ports (WH-RECORD-FORMAT `open`), in that order.
+pub(super) fn open_slot_atoms(value: &FactorizedNumerator) -> Vec<Atom> {
+    let Some(projector) = &value.projector else {
+        return value.ports.clone();
+    };
+    let mut open = value
+        .ports
+        .iter()
+        .filter(|port| !contains_atom(projector.tensor.as_view(), port.as_view()))
+        .cloned()
+        .collect::<Vec<_>>();
+    // free slots of the projector: once in (the first term of) its tensor
+    let term = match projector.tensor.as_view() {
+        AtomView::Add(sum) => sum.iter().next().unwrap().to_owned(),
+        _ => projector.tensor.clone(),
+    };
+    let mut counts = Vec::<(Atom, usize)>::new();
+    term.as_view().visitor(&mut |part| {
+        if let Some(slot) = super::as_slot(part) {
+            match counts.iter_mut().find(|(a, _)| *a == slot.atom) {
+                Some((_, n)) => *n += 1,
+                None => counts.push((slot.atom, 1)),
+            }
+            return false;
+        }
+        true
+    });
+    for (slot, n) in counts {
+        if n == 1 && !value.ports.contains(&slot) {
+            open.push(slot);
+        }
+    }
+    open
+}
+
+/// `(fermion, ghost)` closed cycles of the carried graph; a line through
+/// external legs (an open quark line of a hard part) is not a cycle.
+fn carried_cycles(value: &FactorizedNumerator) -> (u32, u32) {
+    let mut out = [0u32; 2];
+    for (slot, kind) in [super::LineKind::Fermion, super::LineKind::Ghost]
+        .into_iter()
+        .enumerate()
+    {
+        let lines = value
+            .edges
+            .iter()
+            .filter(|e| e.line == kind)
+            .collect::<Vec<_>>();
+        let mut visited = BTreeSet::new();
+        for start in &lines {
+            if visited.contains(&start.id) {
+                continue;
+            }
+            let mut current = *start;
+            visited.insert(current.id);
+            loop {
+                let next = match current.target {
+                    super::Endpoint::Vertex(v) => lines
+                        .iter()
+                        .find(|e| e.source == super::Endpoint::Vertex(v)),
+                    super::Endpoint::External => None,
+                };
+                match next {
+                    Some(next) if next.id == start.id => {
+                        out[slot] += 1;
+                        break;
+                    }
+                    Some(next) if !visited.contains(&next.id) => {
+                        visited.insert(next.id);
+                        current = next;
+                    }
+                    _ => break,
+                }
+            }
+        }
+    }
+    (out[0], out[1])
+}
+
+/// The record with its open slots as its ports (the vakint notation's raw
+/// port indices `PORT + i` and the caller notation follow them).
+fn opened(value: &FactorizedNumerator) -> FactorizedNumerator {
+    let mut opened = value.clone();
+    opened.ports = open_slot_atoms(value);
+    opened
+}
+
 /// The edge ids `Q(e, ..)` in `view`.
 fn momentum_ids(view: AtomView<'_>) -> BTreeSet<usize> {
     let mut ids = BTreeSet::new();
@@ -137,10 +226,12 @@ impl FactorizedNumerator {
         } else {
             loops
         };
-        self.validate_contract(Some(conserved))?;
         if loops == 0 {
-            return Err(refuse("a closure record has at least one loop"));
+            return Err(refuse(
+                "a closure record has at least one loop (a zero-loop term, e.g. an inserted counterterm alone, stays with the caller)",
+            ));
         }
+        self.validate_contract(Some(conserved))?;
         // weights, exactly once (WH-RECORD-FORMAT section 3): with
         // `original_cycles` the original graph's weights stay with the caller;
         // without, the carried graph's closed loops are applied here
@@ -153,14 +244,7 @@ impl FactorizedNumerator {
                         p.loop_sign, p.nf_power, p.overall
                     )));
                 }
-                let cycles = self
-                    .closed_loops()
-                    .map_err(|e| refuse(format!("closed loops of the carried graph: {e}")))?;
-                let f = cycles
-                    .iter()
-                    .filter(|c| c.line == super::LineKind::Fermion)
-                    .count() as u32;
-                let g = cycles.len() as u32 - f;
+                let (f, g) = carried_cycles(self);
                 if f > fermion || g > ghost {
                     return Err(refuse(format!(
                         "the carried graph has {f} fermion and {g} ghost cycles, more than original_cycles fermion={fermion} ghost={ghost}"
@@ -281,16 +365,13 @@ impl FactorizedNumerator {
                 return Err(refuse("p2_power without an external momentum"));
             }
         }
-        // open ports (those the projector does not close): Lorentz only
-        for port in &self.ports {
-            let closed = self
-                .projector
-                .as_ref()
-                .is_some_and(|p| contains_atom(p.tensor.as_view(), port.as_view()));
-            let lorentz = matches!(port.as_view(), AtomView::Fun(f) if f.get_symbol().get_name() == names::MINK);
-            if !closed && !lorentz {
+        // open slots (ports the projector does not close, the projector's own
+        // free slots): Lorentz only
+        for slot in open_slot_atoms(self) {
+            let lorentz = matches!(slot.as_view(), AtomView::Fun(f) if f.get_symbol().get_name() == names::MINK);
+            if !lorentz {
                 return Err(refuse(format!(
-                    "open port {port} is not a Lorentz slot (open bispinor ports are not supported; close the line with the projector)"
+                    "open slot {slot} is not a Lorentz slot (open bispinor ports are not supported; close the line with the projector)"
                 )));
             }
         }
@@ -727,7 +808,7 @@ fn prepare(
         1 => super::contract_with_idenso(&network, false)?,
         n => vacuum::contract_streamed(settings, &network, n)?.0,
     };
-    let scalar = map_to_vakint_vacuum(value, &contracted)?
+    let scalar = map_to_vakint_vacuum(&opened(value), &contracted)?
         .replace(d.clone())
         .with(in_epsilon.clone())
         .expand();
@@ -1014,7 +1095,7 @@ pub fn evaluate_factorized_closure(
         }
         let vakint_value = vakint_value.expand();
         let evaluate_seconds = started.elapsed().as_secs_f64();
-        let caller = vacuum::to_caller_notation(value, &vakint_value);
+        let caller = vacuum::to_caller_notation(&opened(value), &vakint_value);
         out.value += &caller;
         out.vakint_value += &vakint_value;
         out.records.push(ClosureRecordValue {
