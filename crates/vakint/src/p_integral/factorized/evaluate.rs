@@ -489,6 +489,11 @@ pub struct PortsValue {
     pub input: Atom,
     pub contract_seconds: f64,
     pub evaluate_seconds: f64,
+    /// The `vakint::timing` counters of this call on the calling thread:
+    /// contraction / lowering / reduction / finalisation
+    /// ([`crate::timing::Delta::stage`]), thread CPU and sampled RSS when the
+    /// resources are enabled.
+    pub timing: crate::timing::Delta,
 }
 
 /// [`evaluate_factorized`] with the result mapped to the caller's notation
@@ -504,9 +509,11 @@ pub fn evaluate_factorized_ports(
 ) -> Result<PortsValue> {
     // a ports record is a new kind whatever it carries
     let settings = &pinned_settings(settings);
+    let counted = crate::timing::Snapshot::now();
     let evaluated = evaluate_factorized(vakint, settings, value, prefactor)?;
     let open = value.open_slots()?;
     let caller = to_caller_notation_p(value, &evaluated.value)?;
+    let timing = counted.elapsed();
     Ok(PortsValue {
         value: caller,
         vakint_value: evaluated.value,
@@ -514,6 +521,7 @@ pub fn evaluate_factorized_ports(
         input: evaluated.input,
         contract_seconds: evaluated.contract_seconds,
         evaluate_seconds: evaluated.evaluate_seconds,
+        timing,
     })
 }
 
