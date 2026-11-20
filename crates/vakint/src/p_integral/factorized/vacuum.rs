@@ -67,7 +67,7 @@ use crate::{Vakint, VakintExpression, VakintSettings, VakintTerm};
 /// First raw index of the open ports in vakint notation (`PORT + i`).
 pub const PORT: i64 = 9001;
 
-fn error(detail: impl Into<String>) -> FactorizedError {
+pub(super) fn error(detail: impl Into<String>) -> FactorizedError {
     FactorizedError::Evaluation {
         detail: format!("vacuum: {}", detail.into()),
     }
@@ -308,7 +308,7 @@ pub fn contract_to_vakint_vacuum_streamed(
 
 /// Step 2 of the module documentation: an idenso-contracted network in vakint's
 /// vacuum notation.
-fn map_to_vakint_vacuum(value: &FactorizedNumerator, contracted: &Atom) -> Result<Atom> {
+pub(super) fn map_to_vakint_vacuum(value: &FactorizedNumerator, contracted: &Atom) -> Result<Atom> {
     let port_index = |slot: AtomView<'_>| {
         value
             .ports
@@ -878,6 +878,37 @@ fn evaluate_closure(
     input: &Atom,
     cut: &VacuumCut,
 ) -> Result<Atom> {
+    let (tensors, inputs) = closure_inputs(vakint, settings, input, cut)?;
+    let direct = matches!(cut.topology.as_view(), AtomView::Fun(f) if f.get_symbol() == S.topo);
+    let values = if direct {
+        MassiveClosure::evaluate_direct_batch(vakint, settings, &inputs)
+            .map_err(|e| error(e.to_string()))?
+    } else {
+        inputs
+            .iter()
+            .map(|(closure, input)| {
+                closure
+                    .evaluate(vakint, settings, input.ordinary().as_view())
+                    .map_err(|e| error(e.to_string()))
+            })
+            .collect::<Result<Vec<_>>>()?
+    };
+    let mut value = Atom::Zero;
+    for (tensor, coefficient) in tensors.iter().zip(values) {
+        value += tensor * coefficient;
+    }
+    Ok(value)
+}
+
+/// The first half of [`evaluate_closure`]: vakint's vacuum tensor reduction of
+/// `input` ([`reduce_vacuum`]) and, per external tensor, the tensor and the
+/// massive closure of its scalar coefficient through `cut` (not evaluated).
+pub(super) fn closure_inputs(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    input: &Atom,
+    cut: &VacuumCut,
+) -> Result<(Vec<Atom>, Vec<(MassiveClosure, DirectClosureInput)>)> {
     let reduced = reduce_vacuum(vakint, settings, input)?;
     let expression = VakintExpression::try_from(reduced).map_err(|e| error(e.to_string()))?;
     let mut tensors = Vec::new();
@@ -924,25 +955,29 @@ fn evaluate_closure(
             )
         })
         .collect::<Vec<_>>();
-    let direct = matches!(cut.topology.as_view(), AtomView::Fun(f) if f.get_symbol() == S.topo);
-    let values = if direct {
-        MassiveClosure::evaluate_direct_batch(vakint, settings, &inputs)
-            .map_err(|e| error(e.to_string()))?
-    } else {
-        inputs
-            .iter()
-            .map(|(closure, input)| {
-                closure
-                    .evaluate(vakint, settings, input.ordinary().as_view())
-                    .map_err(|e| error(e.to_string()))
-            })
-            .collect::<Result<Vec<_>>>()?
-    };
-    let mut value = Atom::Zero;
-    for (tensor, coefficient) in tensors.iter().zip(values) {
-        value += tensor * coefficient;
+    Ok((tensors, inputs))
+}
+
+/// `PROD prop(id, edge(s,t), momentum, mass², power)` of the vacuum lines
+/// (the argument of `topo(..)` of the integrand).
+pub(super) fn vacuum_topology(lines: &[VacuumLine]) -> Atom {
+    let mut topology = Atom::num(1);
+    for line in lines {
+        let mut momentum = Atom::Zero;
+        for (i, c) in line.momentum.iter().enumerate() {
+            if *c != 0 {
+                momentum += Atom::num(*c) * S.k.call(i as i64 + 1);
+            }
+        }
+        topology *= S.prop.call((
+            line.id as i64,
+            S.edge.call((line.source as i64, line.target as i64)),
+            momentum,
+            line.mass_squared.clone(),
+            Atom::num(line.power),
+        ));
     }
-    Ok(value)
+    topology
 }
 
 /// The integrand vakint receives (module documentation): `prefactor ×
@@ -973,22 +1008,7 @@ pub fn vakint_vacuum_input_streamed(
             (scalar, seconds, 0)
         }
     };
-    let mut topology = Atom::num(1);
-    for line in vacuum_lines(value) {
-        let mut momentum = Atom::Zero;
-        for (i, c) in line.momentum.iter().enumerate() {
-            if *c != 0 {
-                momentum += Atom::num(*c) * S.k.call(i as i64 + 1);
-            }
-        }
-        topology *= S.prop.call((
-            line.id as i64,
-            S.edge.call((line.source as i64, line.target as i64)),
-            momentum,
-            line.mass_squared.clone(),
-            Atom::num(line.power),
-        ));
-    }
+    let topology = vacuum_topology(&vacuum_lines(value));
     let epsilon = Atom::var(vk_symbol!(&settings.epsilon_symbol));
     let in_epsilon = Atom::num(4) - Atom::num(2) * epsilon;
     let input = (prefactor * scalar * S.topo.call(topology))
