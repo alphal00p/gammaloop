@@ -923,6 +923,7 @@ fn prepare(
     spec: &ClosureSpec,
     prefactor: &Atom,
 ) -> Result<Prepared> {
+    let _step = crate::timing::contract();
     let lambda = lambda_symbol();
     let loops = value.loops();
     let epsilon = Atom::var(vk_symbol!(&settings.epsilon_symbol));

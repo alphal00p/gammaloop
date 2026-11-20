@@ -1822,6 +1822,7 @@ impl MassiveClosure {
         mode: RustRedMasterMode,
     ) -> Result<Atom, VakintError> {
         let _timing = crate::timing::reduce();
+        let _step = crate::timing::finalize();
         // The engine's p master catalogue whatever the cut loop count: a
         // `PResidual(node, key..)` names its own integral, so its row applies
         // wherever the terminal occurs (a closure input may carry one too).
@@ -1847,6 +1848,7 @@ impl MassiveClosure {
         mode: RustRedMasterMode,
     ) -> Result<Atom, VakintError> {
         let _timing = crate::timing::reduce();
+        let _step = crate::timing::finalize();
         let epsilon = vk_symbol!(&settings.epsilon_symbol);
         let loops = cut_loops as i64 + 1;
         let target = settings.number_of_terms_in_epsilon_expansion - loops - 1;
@@ -1944,6 +1946,7 @@ impl MassiveClosure {
         prefactors: &mut std::collections::BTreeMap<i64, Atom>,
     ) -> Result<Option<Atom>, VakintError> {
         let _timing = crate::timing::reduce();
+        let _step = crate::timing::finalize();
         let epsilon = vk_symbol!(&settings.epsilon_symbol);
         let loops = cut_loops as i64 + 1;
         let target = settings.number_of_terms_in_epsilon_expansion - loops - 1;
