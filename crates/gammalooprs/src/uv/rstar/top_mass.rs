@@ -331,10 +331,15 @@ pub(super) fn compensate_where(
 /// `auto` = R* only above four loops; `check` computes both, compares them
 /// and uses the massive value.
 ///
-/// Production runs `rstar`, but it is not the default: with it the
-/// uv::rstar test `four_loop_nested_ghost_hard_taylor_is_hard_line_independent`
-/// gets a marked-line-dependent counterterm (with `log(rstar_mass_squared)`
-/// poles), on the old and on the new defaults of every other switch.
+/// Production runs `rstar`, but it is not the default. The R* route writes
+/// a quotient's external momentum through one leg (`Q(1)·Q(1)` where the
+/// massive route has `Q(0)·Q(1)`); on two-point kinematics (`Q(0) = Q(1)`,
+/// imposed by the beta projection) every quotient checked equals the massive
+/// one (results/ir-quotient-rstar).
+/// The uv::rstar test `four_loop_nested_ghost_hard_taylor_is_hard_line_independent`
+/// therefore compares on those kinematics: before them, its marked line 2
+/// carries `log(rstar_mass_squared)` terms, all proportional to
+/// `(Q(0) - Q(1))·Q(1)`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IrQuotient {
     Unset,

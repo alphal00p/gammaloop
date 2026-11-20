@@ -7,8 +7,9 @@ use feynkit_generator::{
 use linnet::half_edge::{
     NodeIndex,
     involution::{EdgeIndex, HedgePair},
+    subgraph::SuBitGraph,
 };
-use symbolica::atom::Atom;
+use symbolica::atom::{Atom, AtomCore};
 use vakint::Vakint;
 
 use crate::{
@@ -22,7 +23,8 @@ use crate::{
 };
 
 use super::{
-    RStarPlan,
+    RStarPlan, auxiliary_mass_squared,
+    expression::RStarIntegrand,
     tests::{assert_same_counterterm, canonical_tensor, massive_oracle, settings},
 };
 
@@ -281,14 +283,36 @@ fn four_loop_nested_ghost_hard_taylor_is_hard_line_independent() -> Result<()> {
         hard.taylor_order > 0 && hard.forest.iter().any(|forest| forest.steps.len() >= 3)
     }));
 
+    // The counterterms are compared on the physical kinematics Q(0) = Q(1):
+    // the routes write the external momentum of a quotient differently (the
+    // R* quotient route as Q(1)·Q(1), the massive route as Q(0)·Q(1)), and
+    // hard-part log(rstar_mass_squared) terms multiply (Q(0) - Q(1))·Q(1).
+    // Every external momentum becomes ±Q(p) of the first external edge by
+    // the routing production imposes before it closes the root (beta's
+    // project_physical_root applies the same rule before projecting).
+    let (_, routing) =
+        RStarIntegrand::physical_external_routing(&graph, &graph.external_filter::<SuBitGraph>())?;
+    let physical = |result: Atom| result.replace_multiple(&routing);
     let automatic = automatic_ghost_plan(&graph, &model, &settings)?;
-    let automatic_result = timed_ghost_counterterm(&automatic, &graph, &model, &vakint, &settings)?;
+    let automatic_result = physical(timed_ghost_counterterm(
+        &automatic, &graph, &model, &vakint, &settings,
+    )?);
     let inside_result = if inside.marked_edge == automatic.marked_edge {
         automatic_result.clone()
     } else {
-        timed_ghost_counterterm(&inside, &graph, &model, &vakint, &settings)?
+        physical(timed_ghost_counterterm(
+            &inside, &graph, &model, &vakint, &settings,
+        )?)
     };
-    assert!(!canonical_tensor(&inside_result)?.is_zero());
+    let canonical = canonical_tensor(&inside_result)?;
+    assert!(!canonical.is_zero());
+    // An absolute check besides the line independence: on these kinematics
+    // no log(rstar_mass_squared) survives, as the production validator
+    // requires of every pole.
+    assert!(
+        !canonical.contains_symbol(auxiliary_mass_squared()),
+        "the counterterm keeps rstar_mass_squared on two-point kinematics: {canonical}"
+    );
     assert_same_counterterm(&automatic_result, &inside_result)?;
     // Vary all eleven internal lines, including every directed ghost and gluon.
     // Every production UV sub-operator has at most three loops; the root uses
@@ -298,10 +322,14 @@ fn four_loop_nested_ghost_hard_taylor_is_hard_line_independent() -> Result<()> {
             continue;
         }
         let plan = RStarPlan::new(&graph, &model, marked, &settings)?;
-        let result = timed_ghost_counterterm(&plan, &graph, &model, &vakint, &settings)?;
+        let result = physical(timed_ghost_counterterm(
+            &plan, &graph, &model, &vakint, &settings,
+        )?);
         assert_same_counterterm(&inside_result, &result)?;
     }
-    let repeated = timed_ghost_counterterm(&automatic, &graph, &model, &vakint, &settings)?;
+    let repeated = physical(timed_ghost_counterterm(
+        &automatic, &graph, &model, &vakint, &settings,
+    )?);
     assert_same_counterterm(&automatic_result, &repeated)?;
     Ok(())
 }
