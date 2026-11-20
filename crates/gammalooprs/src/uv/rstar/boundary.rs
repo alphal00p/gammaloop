@@ -106,9 +106,8 @@ static MODE: LazyLock<std::result::Result<BoundaryMode, String>> =
         )),
     });
 
-static STRICT: LazyLock<bool> = LazyLock::new(|| {
-    std::env::var("GAMMALOOP_REMAINDER_BOUNDARY_STRICT").as_deref() == Ok("1")
-});
+static STRICT: LazyLock<bool> =
+    LazyLock::new(|| std::env::var("GAMMALOOP_REMAINDER_BOUNDARY_STRICT").as_deref() == Ok("1"));
 
 #[cfg(test)]
 thread_local! {
@@ -234,7 +233,11 @@ pub(crate) const LARGE_LOOPS: usize = 6;
 /// contraction, `P` above the byte or the summand limit. One predicate for
 /// both decisions: a large decline never falls back to today's path, and a
 /// large remainder runs vakint strict (no `ordinary()` expansion of a pattern).
-pub(super) fn large_reason(stats: &BoundaryStats, loops: usize, census_dump: bool) -> Option<String> {
+pub(super) fn large_reason(
+    stats: &BoundaryStats,
+    loops: usize,
+    census_dump: bool,
+) -> Option<String> {
     if loops >= LARGE_LOOPS {
         return Some(format!("{loops} loops (large from {LARGE_LOOPS})"));
     }
@@ -655,7 +658,6 @@ impl Grade {
         }
         Atom::mul_many(factors.iter())
     }
-
 }
 
 /// A small map grade -> coefficient (p-free, reference-mass-free, vakint
@@ -696,7 +698,12 @@ enum Vector {
 }
 
 fn head_name(symbol: Symbol) -> String {
-    symbol.get_name().rsplit("::").next().unwrap_or("").to_owned()
+    symbol
+        .get_name()
+        .rsplit("::")
+        .next()
+        .unwrap_or("")
+        .to_owned()
 }
 
 /// The λ symbols of the outer and hard Taylor operations.
@@ -777,7 +784,11 @@ impl Grammar {
         reference_mass_squared: Symbol,
     ) -> Self {
         Self {
-            position: basis.iter().enumerate().map(|(j, edge)| (*edge, j)).collect(),
+            position: basis
+                .iter()
+                .enumerate()
+                .map(|(j, edge)| (*edge, j))
+                .collect(),
             x0,
             degree,
             reference_mass_squared,
@@ -849,10 +860,7 @@ impl Grammar {
     }
 
     /// A `dot` argument as `Σ α_e v_e` with numbers `α_e`.
-    fn linear_vectors(
-        &self,
-        view: AtomView<'_>,
-    ) -> std::result::Result<Vec<(Atom, Vector)>, Fail> {
+    fn linear_vectors(&self, view: AtomView<'_>) -> std::result::Result<Vec<(Atom, Vector)>, Fail> {
         let terms = match view {
             AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
             other => vec![other],
@@ -928,7 +936,10 @@ impl Grammar {
                     *truncated += 1;
                     continue;
                 }
-                accumulated.entry(grade).or_default().push(coefficient * leaf);
+                accumulated
+                    .entry(grade)
+                    .or_default()
+                    .push(coefficient * leaf);
             }
         }
         Ok(collect_map(accumulated))
@@ -1081,7 +1092,12 @@ impl Grammar {
                     if function.get_nargs() != 2 {
                         return decline("dot_argument:arity");
                     }
-                    return self.dot(function.get(0), function.get(1), true, &mut stats.p_truncated);
+                    return self.dot(
+                        function.get(0),
+                        function.get(1),
+                        true,
+                        &mut stats.p_truncated,
+                    );
                 }
                 if let Some(head) = self.indexed(view) {
                     return Err(Fail::Indexed(head));
@@ -1300,7 +1316,8 @@ impl Grammar {
                 }
                 if self.forbidden.contains(&symbol)
                     || function.iter().any(|argument| {
-                        argument.contains_symbol(GS.emr_mom) || argument.contains_symbol(GS.loop_mom)
+                        argument.contains_symbol(GS.emr_mom)
+                            || argument.contains_symbol(GS.loop_mom)
                     })
                 {
                     return decline(format!("function:{}", head_name(symbol)));
@@ -1451,10 +1468,13 @@ pub(super) fn verify_vakint_scalar(
     reference_mass_squared: Symbol,
 ) -> std::result::Result<(), Decline> {
     let forbidden = forbidden_symbols(reference_mass_squared);
-    let fail = |what: String| Decline::new("verify", format!("postcondition:{}:{what}", role.as_str()));
+    let fail =
+        |what: String| Decline::new("verify", format!("postcondition:{}:{what}", role.as_str()));
     let vector_index = |view: AtomView<'_>, symbol: Symbol| -> Option<i64> {
         match view {
-            AtomView::Fun(function) if function.get_symbol() == symbol && function.get_nargs() == 1 => {
+            AtomView::Fun(function)
+                if function.get_symbol() == symbol && function.get_nargs() == 1 =>
+            {
                 i64::try_from(function.get(0)).ok()
             }
             _ => None,
@@ -1589,7 +1609,8 @@ pub(super) fn denominator_orders(
     let taylor = TaylorExpansion::new(parameter, degree);
     let product = Atom::mul_many(denominators.iter());
     let scaled = RStarIntegrand::scale_edges(&product, root_edges, parameter);
-    let compensated = taylor.compensate_mass(&scaled, reference_mass_squared, auxiliary_mass_squared);
+    let compensated =
+        taylor.compensate_mass(&scaled, reference_mass_squared, auxiliary_mass_squared);
     let orders = match taylor.orders(&compensated) {
         Ok(orders) => orders,
         Err(error) => return Ok(Err(Decline::new("den", format!("series: {error}")))),
@@ -1609,13 +1630,20 @@ pub(super) fn denominator_orders(
                 AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
                 single => vec![single],
             };
-            let (dens, others): (Vec<_>, Vec<_>) =
-                factors.into_iter().partition(|factor| is_denominator(*factor));
+            let (dens, others): (Vec<_>, Vec<_>) = factors
+                .into_iter()
+                .partition(|factor| is_denominator(*factor));
             if dens.is_empty() {
-                return Ok(Err(Decline::new("den", "a denominator order term without denominators")));
+                return Ok(Err(Decline::new(
+                    "den",
+                    "a denominator order term without denominators",
+                )));
             }
             if others.iter().any(|factor| factor.contains_symbol(GS.den)) {
-                return Ok(Err(Decline::new("den", "a denominator inside a coefficient")));
+                return Ok(Err(Decline::new(
+                    "den",
+                    "a denominator inside a coefficient",
+                )));
             }
             let monomial = Atom::mul_many(dens.iter().copied());
             let coefficient = Atom::mul_many(others.iter().copied());
@@ -1726,7 +1754,10 @@ struct Pattern {
 /// 6a): den, frames, cut, routing, contract, collect, project, assemble,
 /// verify. Hard errors (a failing contraction, a failing projection) are
 /// errors; anything the boundary cannot represent is a decline.
-pub(super) fn build_boundary(remainder: &RStarIntegrand, request: &BoundaryRequest<'_>) -> Result<Built> {
+pub(super) fn build_boundary(
+    remainder: &RStarIntegrand,
+    request: &BoundaryRequest<'_>,
+) -> Result<Built> {
     let loops = remainder.region.loops;
     let mut stats = BoundaryStats {
         loops,
@@ -1776,7 +1807,10 @@ pub(super) fn build_boundary(remainder: &RStarIntegrand, request: &BoundaryReque
         let Some((key, rest)) = rewrites.denominator_image(monomial) else {
             declined!(Decline::new("frames", "no single topology"));
         };
-        grouped.entry(key).or_default().push((monomial.clone(), rest));
+        grouped
+            .entry(key)
+            .or_default()
+            .push((monomial.clone(), rest));
     }
     let mut frames = Vec::with_capacity(grouped.len());
     for (key, raw) in grouped {
@@ -1805,7 +1839,10 @@ pub(super) fn build_boundary(remainder: &RStarIntegrand, request: &BoundaryReque
             cut,
         });
     }
-    let scaleless = patterns.iter().filter(|pattern| pattern.cut.scaleless).count();
+    let scaleless = patterns
+        .iter()
+        .filter(|pattern| pattern.cut.scaleless)
+        .count();
     if scaleless == patterns.len() {
         clock.lap(&mut stats, "cut");
         return Ok(Built::Zero(stats));
@@ -1828,14 +1865,20 @@ pub(super) fn build_boundary(remainder: &RStarIntegrand, request: &BoundaryReque
         .map(|edge| usize::from(*edge))
         .collect::<Vec<_>>();
     if basis.len() != loops {
-        declined!(Decline::new("routing", "the loop basis does not match the loop count"));
+        declined!(Decline::new(
+            "routing",
+            "the loop basis does not match the loop count"
+        ));
     }
     let mut routing: Option<Vec<(Atom, Atom)>> = None;
     for pattern in &patterns {
         let mut images = Vec::with_capacity(loops);
         for (j, edge) in basis.iter().enumerate() {
             let Some(image) = pattern.frame.loop_image(*edge) else {
-                declined!(Decline::new("routing", format!("no loop image of Q({edge})")));
+                declined!(Decline::new(
+                    "routing",
+                    format!("no loop image of Q({edge})")
+                ));
             };
             images.push((
                 Grammar::loop_vector(j),
@@ -1854,7 +1897,10 @@ pub(super) fn build_boundary(remainder: &RStarIntegrand, request: &BoundaryReque
         pattern.cut.closure.momentum != first.momentum
             || pattern.cut.closure.mass_squared != first.mass_squared
     }) {
-        declined!(Decline::new("routing", "the closing momentum or mass differs"));
+        declined!(Decline::new(
+            "routing",
+            "the closing momentum or mass differs"
+        ));
     }
     let closing = MassiveClosure {
         momentum: first.momentum.clone(),
@@ -1978,10 +2024,8 @@ pub(super) fn build_boundary(remainder: &RStarIntegrand, request: &BoundaryReque
                 continue;
             }
             unprojected_nonzero = true;
-            let rho = (grade.structure_atom(grammar.external())
-                * auxiliary.pow(b as i64)
-                * sum)
-                .expand();
+            let rho =
+                (grade.structure_atom(grammar.external()) * auxiliary.pow(b as i64) * sum).expand();
             if rho.is_zero() {
                 continue;
             }
@@ -1992,8 +2036,9 @@ pub(super) fn build_boundary(remainder: &RStarIntegrand, request: &BoundaryReque
                 numerator: rho,
                 vectors,
             };
-            let projected = tensor_reduce_by_factors(request.vakint, &tensor_settings, &term, &mut images)?
-                .unwrap_or_else(|| term.numerator.clone());
+            let projected =
+                tensor_reduce_by_factors(request.vakint, &tensor_settings, &term, &mut images)?
+                    .unwrap_or_else(|| term.numerator.clone());
             let coefficient = (&normalization * projected).expand();
             if coefficient.is_zero() {
                 continue;
@@ -2185,7 +2230,10 @@ pub(super) fn evaluate_boundary(
             result += MassiveClosure::evaluate_batch(
                 vakint,
                 settings,
-                &[(boundary.closure(pattern), boundary.direct_input(pattern).ordinary())],
+                &[(
+                    boundary.closure(pattern),
+                    boundary.direct_input(pattern).ordinary(),
+                )],
             )
             .map_err(|error| eyre!("{error}"))?
             .pop()
@@ -2246,7 +2294,10 @@ pub(super) fn with_callback_check<T>(
     let scope = super::ScopedSlot::enter(&CALLBACK_CHECK, (normalization.clone(), None));
     let result = f();
     let outcome = scope.exit();
-    (result, outcome.and_then(|(_, outcome)| outcome).unwrap_or("none"))
+    (
+        result,
+        outcome.and_then(|(_, outcome)| outcome).unwrap_or("none"),
+    )
 }
 
 /// Whether a callback comparison is pending on this thread.
@@ -2266,7 +2317,8 @@ pub(super) fn check_callback(expanded: &Atom, projected: &Atom) {
             "skipped"
         } else {
             let expected = crate::uv::approx::integrated::Integrated::dimensionally_regularized(
-                &(expanded.replace_multiple(&normalization.external_routing) * &normalization.factor),
+                &(expanded.replace_multiple(&normalization.external_routing)
+                    * &normalization.factor),
             );
             if expected == *projected {
                 "identical"
@@ -2354,7 +2406,11 @@ pub(super) fn compare_pairs(
             group.kept.push(index);
             group.orders.push((meta.order, true));
         }
-        for meta in built.zero_patterns.iter().filter(|meta| meta.unprojected_nonzero) {
+        for meta in built
+            .zero_patterns
+            .iter()
+            .filter(|meta| meta.unprojected_nonzero)
+        {
             groups
                 .entry(meta.integral.clone())
                 .or_default()
@@ -2386,7 +2442,10 @@ pub(super) fn compare_pairs(
                 let closure = &captured[*index];
                 let relabel = match &new_head {
                     Some(head) if *head != closure.closure.momentum => {
-                        vec![Replacement::new(closure.closure.momentum.to_pattern(), head.clone())]
+                        vec![Replacement::new(
+                            closure.closure.momentum.to_pattern(),
+                            head.clone(),
+                        )]
                     }
                     _ => Vec::new(),
                 };
@@ -2409,7 +2468,10 @@ pub(super) fn compare_pairs(
                 if closure.closure.mass_squared != boundary.mass_squared
                     || closure.closure.power != pattern.closure_power
                 {
-                    fail(format!("pair={pair} closure differs: today {:?}", closure.closure), &mut failing);
+                    fail(
+                        format!("pair={pair} closure differs: today {:?}", closure.closure),
+                        &mut failing,
+                    );
                     worst = "MISMATCH";
                 }
                 if input.topology != pattern.topology {
@@ -2425,7 +2487,10 @@ pub(super) fn compare_pairs(
             }
             for index in &group.kept[1..] {
                 if boundary.patterns[*index].topology != pattern.topology {
-                    fail(format!("pair={pair} patterns of one integral with two topologies"), &mut failing);
+                    fail(
+                        format!("pair={pair} patterns of one integral with two topologies"),
+                        &mut failing,
+                    );
                     worst = "MISMATCH";
                 }
             }
@@ -2485,7 +2550,8 @@ pub(super) fn compare_pairs(
                         std::process::id(),
                         label.replace([' ', '='], "_")
                     );
-                    let _ = std::fs::write(format!("{stem}.boundary.txt"), new.to_canonical_string());
+                    let _ =
+                        std::fs::write(format!("{stem}.boundary.txt"), new.to_canonical_string());
                     let _ = std::fs::write(format!("{stem}.today.txt"), old.to_canonical_string());
                 }
                 worst = "MISMATCH";
@@ -2509,7 +2575,11 @@ pub(super) fn compare_pairs(
         let paired = if orders.len() == sequences.len() {
             orders.iter().map(|(order, _)| *order).collect::<Vec<_>>()
         } else {
-            orders.iter().filter(|(_, kept)| *kept).map(|(order, _)| *order).collect()
+            orders
+                .iter()
+                .filter(|(_, kept)| *kept)
+                .map(|(order, _)| *order)
+                .collect()
         };
         if paired.len() == sequences.len() {
             for (order, sequence) in paired.into_iter().zip(sequences) {
@@ -2530,7 +2600,10 @@ pub(super) fn compare_pairs(
         (Some(new), Some(old)) => {
             let outcome = compare_atoms(new, old);
             if outcome == "MISMATCH" {
-                fail(format!("value MISMATCH boundary={new} today={old}"), &mut failing);
+                fail(
+                    format!("value MISMATCH boundary={new} today={old}"),
+                    &mut failing,
+                );
             }
             outcome
         }
@@ -2560,33 +2633,33 @@ pub(super) fn record_stats(graph: &str, id: usize, stats: &BoundaryStats) {
 /// The counts of one built remainder as JSON (the census record, and the
 /// `counts` line of the boundary record).
 pub(super) fn stats_json(graph: &str, id: usize, stats: &BoundaryStats) -> serde_json::Value {
-        serde_json::json!({
-            "graph": graph,
-            "integration_id": id,
-            "loops": stats.loops,
-            "degree": stats.degree,
-            "p_summands": stats.p_summands,
-            "p_bytes": stats.p_bytes,
-            "p_truncated": stats.p_truncated,
-            "certified": stats.certified,
-            "notation_retries": stats.notation_retries,
-            "grades": stats.grades,
-            "graded_entries": stats.graded_entries,
-            "d_orders": stats.d_orders,
-            "raw_patterns": stats.raw_patterns,
-            "patterns": stats.patterns,
-            "zero_patterns": stats.zero_patterns,
-            "classes": stats.classes,
-            "blocks": stats.blocks,
-            "block_max": [stats.block_max.0, stats.block_max.1],
-            "blocks_total": [stats.blocks_total.0, stats.blocks_total.1],
-            "r": [stats.r_terms, stats.r_summands_total, stats.r_summands_max],
-            "images": stats.images,
-            "routing_terms": stats.routing_terms,
-            "block_reads": stats.block_reads,
-            "block_hits": stats.block_hits,
-            "boundary_blocks": vakint_boundary_blocks(),
-            "seconds": stats.seconds.iter().map(|(stage, seconds)| serde_json::json!([stage, seconds])).collect::<Vec<_>>(),
-            "rss_gb": stats.rss_gb,
-        })
+    serde_json::json!({
+        "graph": graph,
+        "integration_id": id,
+        "loops": stats.loops,
+        "degree": stats.degree,
+        "p_summands": stats.p_summands,
+        "p_bytes": stats.p_bytes,
+        "p_truncated": stats.p_truncated,
+        "certified": stats.certified,
+        "notation_retries": stats.notation_retries,
+        "grades": stats.grades,
+        "graded_entries": stats.graded_entries,
+        "d_orders": stats.d_orders,
+        "raw_patterns": stats.raw_patterns,
+        "patterns": stats.patterns,
+        "zero_patterns": stats.zero_patterns,
+        "classes": stats.classes,
+        "blocks": stats.blocks,
+        "block_max": [stats.block_max.0, stats.block_max.1],
+        "blocks_total": [stats.blocks_total.0, stats.blocks_total.1],
+        "r": [stats.r_terms, stats.r_summands_total, stats.r_summands_max],
+        "images": stats.images,
+        "routing_terms": stats.routing_terms,
+        "block_reads": stats.block_reads,
+        "block_hits": stats.block_hits,
+        "boundary_blocks": vakint_boundary_blocks(),
+        "seconds": stats.seconds.iter().map(|(stage, seconds)| serde_json::json!([stage, seconds])).collect::<Vec<_>>(),
+        "rss_gb": stats.rss_gb,
+    })
 }
