@@ -796,19 +796,26 @@ fn a_reference_mass_inside_an_insertion_is_refused() {
 /// The pole order the closure entry raises its depth by.
 #[test]
 fn the_pole_order_of_the_insertions() {
-    let AtomView::Var(epsilon) = atom(EPS).as_view() else {
+    let epsilon = atom(EPS);
+    let AtomView::Var(epsilon) = epsilon.as_view() else {
         unreachable!()
     };
     let epsilon = epsilon.get_symbol();
     assert_eq!(read(GLUON).insertion_pole_order(epsilon).unwrap(), 0);
     assert_eq!(gluon_surrogate(1).insertion_pole_order(epsilon).unwrap(), 1);
     assert_eq!(quark_surrogate(1).insertion_pole_order(epsilon).unwrap(), 1);
+    // SUM over the insertions (the product multiplies the record): the
+    // child's eps^-2 and the surrogate's eps^-1 give 3, not the maximum 2
     assert_eq!(
         gluon_surrogate_and_child(1)
             .insertion_pole_order(epsilon)
             .unwrap(),
-        2
+        3
     );
+    // two eps^-1 insertions: raise 2
+    let mut two = gluon_surrogate_and_child(1);
+    two.insertions[0].coefficient = atom(&format!("{EPS}^-1"));
+    assert_eq!(two.insertion_pole_order(epsilon).unwrap(), 2);
     // a pole only inside the factor (coefficient 1), and a regular insertion
     let mut value = gluon_surrogate(1);
     let factor = &ins(&mut value).factor * atom(&format!("{EPS}^-3+{DIM}"));
@@ -820,4 +827,83 @@ fn the_pole_order_of_the_insertions() {
         metric(&mink(H_IN), &mink(H_OUT))
     ));
     assert_eq!(value.insertion_pole_order(epsilon).unwrap(), 0);
+}
+
+/// A compact slash `gamma(a, b, Q(x, mink(D)))` in an insertion factor (the
+/// producers' K3 Dirac reassembly inside a quotient's insertion) is opened on
+/// read, exactly: the record equals the one written with the opened slash.
+#[test]
+fn a_compact_slash_in_an_insertion_is_opened_on_read() {
+    let (vakint, _) = engine();
+    let settings = settings(2);
+    let opened = quark_surrogate(1);
+    let text = opened.to_text().unwrap();
+    let factor = one_line(&opened.insertions[0].factor);
+    let compact = atom(&gamma(
+        &bis(H_OUT),
+        &bis(H_IN),
+        &q(3, &format!("{MINK}({DIM})")),
+    ));
+    let compact_text = text.replace(&factor, &compact.to_canonical_string());
+    assert_ne!(compact_text, text);
+    let read = FactorizedNumerator::from_text(&compact_text).unwrap();
+    assert_ne!(read.insertions[0].factor, opened.insertions[0].factor);
+    let a = evaluate_factorized(&vakint, &settings, &read, &Atom::num(1)).unwrap();
+    let b = evaluate_factorized(&vakint, &settings, &opened, &Atom::num(1)).unwrap();
+    assert!(!b.value.is_zero());
+    assert!(
+        (&a.value - &b.value).expand().is_zero(),
+        "{}\n{}",
+        a.value,
+        b.value
+    );
+    // two compact slashes in one record get distinct dummies
+    let mut counter = 0;
+    let other = atom(&gamma(
+        &bis(H_IN),
+        &bis(H_OUT),
+        &q(OUT, &format!("{MINK}({DIM})")),
+    ));
+    let twice = super::open_compact_slashes(&(&compact * &other), &mut counter);
+    assert_eq!(counter, 2, "{twice}");
+}
+
+fn one_line(atom: &Atom) -> String {
+    atom.to_canonical_string()
+}
+
+/// Format v1.4 section 5: zeta(n) and pi are scalars in an insertion's
+/// coefficient and factor; symbol dummies (`gammalooprs::dummy(n)`,
+/// `insertion_slash_<n>`) are slots; bispinor hedge slots inside an
+/// insertion factor (a Dirac decorated vertex) are local slots.
+#[test]
+fn zeta_pi_symbol_dummies_and_spinor_slots_inside_insertions() {
+    let (vakint, _) = engine();
+    let settings = settings(2);
+    let mut value = gluon_surrogate(1);
+    ins(&mut value).coefficient = &ins(&mut value).coefficient * atom("zeta(3)*𝜋^-2");
+    let dummy = format!("{MINK}({DIM},gammalooprs::dummy(5))");
+    let slash = format!("{MINK}({DIM},gammalooprs::insertion_slash_3)");
+    ins(&mut value).factor = atom(&format!(
+        "(zeta(5)+{DIM})*{}*{}*{}-{}*{}*{}*{}",
+        metric(&mink(H_IN), &mink(H_OUT)),
+        q(3, &dummy),
+        q(3, &dummy),
+        q(3, &mink(H_IN)),
+        q(OUT, &mink(H_OUT)),
+        metric(&slash, &slash),
+        atom("1/gammalooprs::dim").to_canonical_string()
+    ));
+    value.label = format!("{} (zeta, pi, symbol dummies)", value.label);
+    identical(&vakint, &settings, &value);
+    // a Dirac insertion with spinor hedge slots: the quark surrogate's factor
+    // written with a symbol dummy
+    let mut quark = quark_surrogate(1);
+    ins(&mut quark).factor = atom(&format!(
+        "{}*{}",
+        gamma(&bis(H_OUT), &bis(H_IN), &slash),
+        q(3, &slash)
+    ));
+    quark.label = format!("{} (spinor slots, symbol dummy)", quark.label);
+    identical(&vakint, &settings, &quark);
 }
