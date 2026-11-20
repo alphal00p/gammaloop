@@ -798,6 +798,97 @@ pub(crate) fn contains_colour_slot(view: AtomView<'_>) -> bool {
     found
 }
 
+/// `gamma(a, b, Q(x, mink(D)))` (a compact slash) written
+/// `gamma(a, b, mink(D, nu)) Q(x, mink(D, nu))` with a fresh index `nu =
+/// edge(x, SLASH_INDEX_BASE + n)`, `n` counting the slashes opened so far in
+/// `counter` (one counter per record keeps the dummies distinct): the same
+/// tensor, exactly (the producers' compact form, e.g. the K3 Dirac
+/// reassembly inside a quotient's insertion and K6 quark projectors). The
+/// readers apply it to insertion factors and projectors.
+/// `(edge, D)` of a compact momentum `Q(edge, mink(D))`.
+fn compact_momentum<'a>(view: AtomView<'a>) -> Option<(AtomView<'a>, AtomView<'a>)> {
+    let AtomView::Fun(q) = view else {
+        return None;
+    };
+    if q.get_symbol().get_name() != names::MOMENTUM || q.get_nargs() != 2 {
+        return None;
+    }
+    let mut args = q.iter();
+    let edge = args.next()?;
+    match args.next()? {
+        AtomView::Fun(r) if r.get_symbol().get_name() == names::MINK && r.get_nargs() == 1 => {
+            Some((edge, r.iter().next()?))
+        }
+        _ => None,
+    }
+}
+
+pub(crate) fn open_compact_slashes(atom: &Atom, counter: &mut usize) -> Atom {
+    let mut found = false;
+    atom.visitor(&mut |part| {
+        if let AtomView::Fun(g) = part
+            && g.get_symbol().get_name() == names::GAMMA
+            && g.get_nargs() == 3
+            && compact_momentum(g.iter().nth(2).unwrap()).is_some()
+        {
+            found = true;
+        }
+        !found
+    });
+    if !found {
+        return atom.clone();
+    }
+    // the producers' dummy index head, with its attributes
+    let head = "gammalooprs::{spenso::index,spenso::index-label:e}::edge(0,0)";
+    let edge_index = crate::utils::vakint_macros::vk_parse!(head)
+        .ok()
+        .and_then(|a| match a.as_view() {
+            AtomView::Fun(f) => Some(f.get_symbol()),
+            _ => None,
+        })
+        .expect("the edge index symbol");
+    let next = std::cell::Cell::new(*counter);
+    let opened = atom.replace_map(|part, _, out| {
+        let AtomView::Fun(g) = part else { return };
+        if g.get_symbol().get_name() != names::GAMMA || g.get_nargs() != 3 {
+            return;
+        }
+        let args = g.iter().collect::<Vec<_>>();
+        let Some((edge, dimension)) = compact_momentum(args[2]) else {
+            return;
+        };
+        let AtomView::Fun(q) = args[2] else { return };
+        let AtomView::Fun(rep) = q.iter().nth(1).unwrap() else {
+            return;
+        };
+        let index = symbolica::atom::FunctionBuilder::new(edge_index)
+            .add_arg(edge)
+            .add_arg(&Atom::num((SLASH_INDEX_BASE + next.get()) as i64))
+            .finish();
+        next.set(next.get() + 1);
+        let slot = symbolica::atom::FunctionBuilder::new(rep.get_symbol())
+            .add_arg(dimension)
+            .add_arg(&index)
+            .finish();
+        let gamma = symbolica::atom::FunctionBuilder::new(g.get_symbol())
+            .add_arg(args[0])
+            .add_arg(args[1])
+            .add_arg(&slot)
+            .finish();
+        let momentum = symbolica::atom::FunctionBuilder::new(q.get_symbol())
+            .add_arg(edge)
+            .add_arg(&slot)
+            .finish();
+        **out = gamma * momentum;
+    });
+    *counter = next.get();
+    opened
+}
+
+/// The second index of the fresh dummies `edge(x, k)` of opened compact
+/// slashes ([`open_compact_slashes`]): far from the producers' own `edge(e, 1)`.
+pub(crate) const SLASH_INDEX_BASE: usize = 1_000_000;
+
 /// Limits of an insertion factor (R* child counterterms of QCD: at most four
 /// boundary slots, degree at most two in the boundary momenta).
 pub const INSERTION_MAX_SLOTS: usize = 4;
@@ -1603,9 +1694,7 @@ impl FactorizedNumerator {
                 .mass_symbol_in(&insertion.coefficient)
                 .or_else(|| self.mass_symbol_in(&insertion.factor))
             {
-                return Err(error(format!(
-                    "contains the reference / closing mass symbol {name}: the counterterm of a child on the massive-reference-mass route stays on the caller's contracted path"
-                )));
+                return Err(error(format!("contains a mass symbol {name}")));
             }
             check_scalar(
                 insertion.coefficient.as_view(),
@@ -1705,10 +1794,12 @@ impl FactorizedNumerator {
         found
     }
 
-    /// The POLE ORDER of the insertions: the largest `−v` over the
-    /// insertions, `v` the trailing power of `epsilon` of `coefficient ×
+    /// The POLE ORDER of the insertions: the SUM over the insertions of
+    /// `max(0, −v)`, `v` the trailing power of `epsilon` of `coefficient ×
     /// factor` (the dimension `D → 4 − 2 ε` first; tensors are constants in
-    /// ε); 0 when no insertion has a pole. An entry that integrates the rest
+    /// ε), i.e. an upper bound of the pole order of their PRODUCT (exact
+    /// unless leading terms cancel or another insertion has a zero), which
+    /// multiplies the rest of the record; 0 when no insertion has a pole. An entry that integrates the rest
     /// of the record separately and multiplies the insertions afterwards must
     /// raise the integral's ε depth by it (a pole promotes higher orders of
     /// the integral); one that hands the insertions to vakint inside the
@@ -1744,7 +1835,7 @@ impl FactorizedNumerator {
                 .to_i64()
                 .ok_or_else(|| failure("an ε power out of range".into()))?;
             if v < 0 {
-                order = order.max(v.unsigned_abs());
+                order += v.unsigned_abs();
             }
         }
         Ok(order)
