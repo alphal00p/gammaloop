@@ -15,8 +15,26 @@ use std::sync::LazyLock;
 
 use symbolica::atom::{Atom, AtomCore, AtomView};
 
+#[cfg(test)]
+thread_local! {
+    static TEST_LINEARIZE: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+}
+
+/// Tests: run `f` with the linearisation switched `on` or off on this thread.
+#[cfg(test)]
+pub(crate) fn with_linearize<T>(on: bool, f: impl FnOnce() -> T) -> T {
+    let previous = TEST_LINEARIZE.with(|slot| slot.replace(Some(on)));
+    let result = f();
+    TEST_LINEARIZE.with(|slot| slot.set(previous));
+    result
+}
+
 /// Whether `GAMMALOOP_LINEARIZE_MOMENTA` is on (unset, `1`, `on`, `true`).
 pub(crate) fn enabled() -> bool {
+    #[cfg(test)]
+    if let Some(on) = TEST_LINEARIZE.with(|slot| slot.get()) {
+        return on;
+    }
     static ON: LazyLock<bool> =
         LazyLock::new(
             || match std::env::var("GAMMALOOP_LINEARIZE_MOMENTA").as_deref() {

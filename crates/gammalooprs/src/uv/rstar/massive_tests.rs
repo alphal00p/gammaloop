@@ -25,7 +25,7 @@ use crate::{
 };
 
 use super::{
-    RStarPlan,
+    RStarPlan, UvChildrenRoute,
     massive::{VacuumTopology, massive_vacuum_direct},
 };
 
@@ -162,7 +162,9 @@ fn massive_vacuum_masters_reproduce_their_poles() -> Result<()> {
             record["direct"] = direct.to_string().into();
             record["direct_unit"] = unit_scales(&direct, mass_symbol).to_string().into();
             let t = Instant::now();
-            let plan = RStarPlan::new(&graph, &model, EdgeIndex::from(0), &settings)?;
+            // Massive R children (the R* route, the default, needs a massless graph).
+            let plan = RStarPlan::new(&graph, &model, EdgeIndex::from(0), &settings)?
+                .with_uv_children(UvChildrenRoute::Massive);
             record["plan_ms"] = (t.elapsed().as_millis() as u64).into();
             record["spinneys"] = plan
                 .ordinary_uv
@@ -382,7 +384,9 @@ fn massive_vacuum_part_a_from_spec() -> Result<()> {
             let delta_only = std::env::var("RSTAR_PARTA_DELTA_ONLY").is_ok_and(|v| v == "1");
             for monomial in monomials.iter().filter(|_| !delta_only) {
                 let graph = topology.monomial_graph(&model, &mass, &monomial.attachments)?;
-                let plan = RStarPlan::new(&graph, &model, EdgeIndex::from(0), &settings)?;
+                // Massive R children (the R* route, the default, needs a massless graph).
+                let plan = RStarPlan::new(&graph, &model, EdgeIndex::from(0), &settings)?
+                    .with_uv_children(UvChildrenRoute::Massive);
                 spinneys += plan
                     .ordinary_uv
                     .iter()

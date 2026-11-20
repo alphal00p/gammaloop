@@ -34,7 +34,7 @@ use crate::{
     uv::UVgenerationSettings,
 };
 
-use super::RStarPlan;
+use super::{RStarPlan, UvChildrenRoute};
 
 fn mass() -> Atom {
     Atom::var(symbol!("massive_r_regression_mass"; Scalar))
@@ -186,7 +186,9 @@ fn massive_r_child_with_both_ends_of_one_boundary_line() -> Result<()> {
     }"
         .into_finalized_runtime_graph(&model)?,
     );
-    let plan = RStarPlan::new(&graph, &model, EdgeIndex::from(0), &settings)?;
+    // Massive R children (the R* route, the default, needs a massless graph).
+    let plan = RStarPlan::new(&graph, &model, EdgeIndex::from(0), &settings)?
+        .with_uv_children(UvChildrenRoute::Massive);
     let mut child: SuBitGraph = graph.empty_subgraph();
     for edge in 0..4 {
         child.add(graph[&EdgeIndex::from(edge)].1);
@@ -206,7 +208,21 @@ fn massive_r_child_with_both_ends_of_one_boundary_line() -> Result<()> {
 /// The numerator-monomial path on 3-loop stress cases (built-in 1L-3L data):
 /// the identity `K G = -Delta(G) - K sum_S Delta(S) G/S` must equal Vakint's
 /// direct evaluation with `Delta(G)` from the ordinary forest AND from R*.
+///
+/// The identity is about the massive R operation, not the momentum
+/// linearisation: with `GAMMALOOP_LINEARIZE_MOMENTA` on (the default) the
+/// factor-by-factor momentum routing of n5 is a different spelling than the
+/// whole map's, which the test-only `report_check` rejects. The
+/// linearisation is off here, as before it became the default.
 fn assert_identity_with_numerators(
+    name: &str,
+    edges: &[(usize, usize, u32)],
+    numerators: &[Vec<(usize, i64)>],
+) -> Result<()> {
+    super::linearize::with_linearize(false, || identity_with_numerators(name, edges, numerators))
+}
+
+fn identity_with_numerators(
     name: &str,
     edges: &[(usize, usize, u32)],
     numerators: &[Vec<(usize, i64)>],
@@ -223,7 +239,9 @@ fn assert_identity_with_numerators(
     let (mut poles, mut direct, mut delta_forest) = (Atom::Zero, Atom::Zero, Atom::Zero);
     for monomial in topology.numerator_monomials(&mass()) {
         let graph = topology.monomial_graph(&model, &mass(), &monomial.attachments)?;
-        let plan = RStarPlan::new(&graph, &model, EdgeIndex::from(0), &settings)?;
+        // Massive R children (the R* route, the default, needs a massless graph).
+        let plan = RStarPlan::new(&graph, &model, EdgeIndex::from(0), &settings)?
+            .with_uv_children(UvChildrenRoute::Massive);
         let sub = plan.massive_vacuum_subdivergence_poles(
             &graph,
             &model,

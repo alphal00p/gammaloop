@@ -42,7 +42,7 @@ use crate::{
     },
 };
 
-use super::RStarPlan;
+use super::{RStarPlan, UvChildrenRoute};
 
 pub(super) fn settings() -> UVgenerationSettings {
     UVgenerationSettings {
@@ -406,7 +406,9 @@ fn embedded_massive_banana_counterterm_matches_standalone_polynomial() -> Result
     settings.add_marker = false;
     settings.vakint.evaluation_methods = vec!["rustred".into()];
     let vakint = Vakint::new()?;
-    let plan = RStarPlan::new(&embedded, &model, EdgeIndex(0), &settings)?;
+    // Massive R children (the R* route, the default, needs a massless graph).
+    let plan = RStarPlan::new(&embedded, &model, EdgeIndex(0), &settings)?
+        .with_uv_children(UvChildrenRoute::Massive);
     let child = plan
         .counterterms
         .iter()
