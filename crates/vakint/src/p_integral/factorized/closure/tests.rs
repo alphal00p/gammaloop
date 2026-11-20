@@ -2162,3 +2162,82 @@ fn insertion_cycles_count_towards_original_cycles_at_most() {
         "the insertions' cycles exceed original_cycles"
     );
 }
+
+/// The beta's k1-l5 set: K1 records of every boundary root remainder of a
+/// FIVE-LOOP diagram (most with child insertions), each against value.txt
+/// through valid_through, its seconds printed beside the RR_CONTRACT of
+/// meta.json. Heavy (five-loop reductions): runs only when
+/// `VAKINT_TEST_WH_K1_L5` names a graph directory (e.g. .../k1-l5/L5-60), with
+/// the 1-4 loop package of `VAKINT_TEST_P_LIBRARY_1_4`.
+#[test]
+fn the_beta_k1_l5_records_equal_their_values() {
+    let Some(root) = std::env::var_os("VAKINT_TEST_WH_K1_L5") else {
+        eprintln!("SKIP: VAKINT_TEST_WH_K1_L5 not set");
+        return;
+    };
+    let Some(package) = std::env::var_os("VAKINT_TEST_P_LIBRARY_1_4") else {
+        eprintln!("SKIP: five-loop records need VAKINT_TEST_P_LIBRARY_1_4");
+        return;
+    };
+    let mut vakint = Vakint::new().unwrap();
+    let library = rustred_app::propagator::load_p_library(
+        rustred_app::propagator::PLibrarySource::Directory(package.into()),
+        &rustred_app::propagator::PLibraryOptions {
+            verify_descent: false,
+        },
+    )
+    .unwrap();
+    vakint.inject_p_library(library).unwrap();
+    let mut records = std::fs::read_dir(std::path::PathBuf::from(root))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.join("input.txt").is_file() && p.join("value.txt").is_file())
+        .collect::<Vec<_>>();
+    records.sort();
+    let (mut mine, mut theirs) = (0.0, 0.0);
+    for record in &records {
+        let input = std::fs::read_to_string(record.join("input.txt")).unwrap();
+        let value_text = std::fs::read_to_string(record.join("value.txt")).unwrap();
+        let value = FactorizedNumerator::from_text(&input)
+            .unwrap_or_else(|e| panic!("{}: {e}", record.display()));
+        let meta = std::fs::read_to_string(record.join("meta.json")).unwrap_or_default();
+        let their_seconds = meta
+            .split("\"rr_contract_seconds\": ")
+            .nth(1)
+            .and_then(|t| t.split([',', '\n', '}']).next())
+            .and_then(|t| t.trim().parse::<f64>().ok())
+            .unwrap_or(f64::NAN);
+        let started = std::time::Instant::now();
+        let got = evaluate_factorized_closure(
+            &vakint,
+            &rstar_site_settings(),
+            std::slice::from_ref(&value),
+            &[value.prefactor.total()],
+        )
+        .unwrap_or_else(|e| panic!("{}: {e}", record.display()));
+        let total = started.elapsed().as_secs_f64();
+        let what = record.display().to_string();
+        assert_equal_through(
+            &got.value,
+            &fixture_value(&value_text),
+            valid_through(&value_text),
+            &what,
+        );
+        let r = &got.records[0];
+        eprintln!(
+            "K1_L5 {what} loops={} insertions={} total_s={total:.3} contract_s={:.3} their_rr_contract_s={their_seconds:.3} lower_s={:.3} reduce_s={:.3} patterns={}",
+            value.loops(),
+            value.insertions.len(),
+            r.contract_seconds,
+            r.lower_seconds,
+            r.reduce_seconds,
+            r.patterns
+        );
+        mine += r.contract_seconds;
+        theirs += their_seconds;
+    }
+    eprintln!(
+        "K1_L5 SUM records={} entry_contract_s={mine:.3} their_rr_contract_s={theirs:.3}",
+        records.len()
+    );
+}
