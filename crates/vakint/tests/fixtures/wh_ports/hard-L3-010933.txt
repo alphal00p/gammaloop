@@ -1,0 +1,61 @@
+schema	pint6.factorized-numerator.v2
+label	d5-caller graph=B_self_energy_L3_317 diagram=B_self_energy_L3_317 colour_branch=0/1 term=ir_hard[corr=0,term=0,children=-] remainder=2517 sector=2/3 taylor_degree=1/1 orders=[v3:l1m0] marked_edge=6 colour=weight_line weights_excluded=nf^0*(-1)^2*AutG^-1(beta,after_poles) scalars_include=additional_normalization^2*den_taylor*pulled_couplings
+kind	hard
+dimension	gammalooprs::{}::dim
+momenta	loops=2	externals=3
+loop	1	edge=5
+loop	2	edge=7
+external	1	edge=1
+external	2	edge=2
+external	3	edge=3
+edges	8
+edge	1	source=4	target=ext	hedges=1,-	particle=B	line=vector	power=1	momentum=0,0,1,0,0	0
+edge_factor	1	1
+edge	2	source=ext	target=3	hedges=-,3	particle=c	line=ghost	power=1	momentum=0,0,0,1,0	0
+edge_factor	2	1
+edge	3	source=4	target=ext	hedges=4,-	particle=c	line=ghost	power=1	momentum=0,0,0,0,1	0
+edge_factor	3	1
+edge	4	source=2	target=1	hedges=6,7	particle=c	line=ghost	power=1	momentum=1,-1,0,0,0	0
+edge_factor	4	1
+edge	5	source=1	target=2	hedges=8,9	particle=c	line=ghost	power=1	momentum=1,0,0,0,0	0
+edge_factor	5	1
+edge	6	source=1	target=4	hedges=10,11	particle=Q	line=vector	power=1	momentum=0,-1,0,0,0	gammalooprs::{scalar}::rstar_mass_squared
+edge_factor	6	spenso::{symmetric,linear,real,spenso::tensor}::g(spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(10,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(11,1)))
+edge	7	source=2	target=3	hedges=12,13	particle=Q	line=vector	power=1	momentum=0,1,0,0,0	0
+edge_factor	7	spenso::{symmetric,linear,real,spenso::tensor}::g(spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(12,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(13,1)))
+edge	8	source=3	target=4	hedges=14,15	particle=c	line=ghost	power=1	momentum=0,1,0,1,0	0
+edge_factor	8	1
+vertices	4
+vertex	1	rule=V_ccQ	gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(5,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(10,1)))
+vertex	2	rule=V_ccQ	gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(12,1)))
+vertex	3	rule=V_ccQ	gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(13,1)))
+vertex	4	rule=V_ccBQ	spenso::{symmetric,linear,real,spenso::tensor}::g(spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(1,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(11,1)))
+ports	1
+port	spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(1,1))
+projector	none
+prefactor	loop_sign=1	nf_power=0
+prefactor_overall	1
+prefactor_scalars	1
+prefactor_colour	1
+colour_branch	none
+hard	omega=1	denominators=lambda0	externals=independent
+softs	3
+soft	1	edge=1	role=root
+soft	2	edge=2	role=soft
+soft	3	edge=3	role=soft
+closure	edge=6	power=1	gammalooprs::{scalar}::rstar_mass_squared
+closure_momentum	vakint::{spenso::tensor,spenso::rank1}::p(1)
+routing	2
+route	1	image=1,0
+route	2	image=0,1
+cut_topology	vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(0,1),vakint::{spenso::tensor,spenso::rank1}::k(1),0,1)*vakint::{}::prop(2,vakint::{}::edge(1,2),vakint::{spenso::tensor,spenso::rank1}::p(1),0,2)*vakint::{}::prop(4,vakint::{}::edge(1,0),-1*vakint::{spenso::tensor,spenso::rank1}::p(1)+vakint::{spenso::tensor,spenso::rank1}::k(1),0,1))
+weights	5
+weight	colour	applied_by=beta	-1*beta::{}::cA^3
+weight	flavour	applied_by=beta	nf_power=0
+weight	loop_sign	applied_by=beta	1
+weight	overall	applied_by=beta	1
+weight	scalars	applied_by=vakint	(𝑖)*UFO::{}::gs2_minus_i*UFO::{}::gs_minus^3
+original_cycles	fermion=0	ghost=2
+insertions	0
+lines	60
+end
