@@ -1731,6 +1731,11 @@ impl FactorizedNumerator {
     /// flow is not conserved or branches.
     pub fn closed_loops(&self) -> Result<Vec<ClosedLoop>> {
         let mut loops = Vec::new();
+        let open = if self.projector.is_some() {
+            self.open_slots()?
+        } else {
+            self.ports.clone()
+        };
         for line in [LineKind::Fermion, LineKind::Ghost] {
             let lines = self
                 .edges
@@ -1740,8 +1745,27 @@ impl FactorizedNumerator {
             if !line.is_directed_loop() {
                 continue;
             }
-            for edge in &lines {
-                if edge.is_external() {
+            // An open FERMION line whose two legs' spinor slots are ports the
+            // projector closes (the caller's Dirac closure, e.g. the quark
+            // form factor Tr[slash(p) X]) is traced by the contraction: it is
+            // neither an open line nor a closed loop (no loop sign, no n_f).
+            let closed_by_projector = |edge: &FactorizedEdge| {
+                line == LineKind::Fermion
+                    && self.projector.is_some()
+                    && edge.source_hedge.or(edge.target_hedge).is_some_and(|h| {
+                        self.ports.iter().any(|port| {
+                            as_slot(port.as_view()).is_some_and(|slot| {
+                                slot.rep == names::BIS
+                                    && slot.hedge() == Some(h)
+                                    && !open.contains(port)
+                            })
+                        })
+                    })
+            };
+            let legs = lines.iter().filter(|e| e.is_external()).collect::<Vec<_>>();
+            let incoming = legs.iter().filter(|e| e.source == Endpoint::External).count();
+            for edge in &legs {
+                if !closed_by_projector(edge) || legs.len() != 2 || incoming != 1 {
                     return Err(FactorizedError::OpenLine {
                         edge: edge.id,
                         line: line.as_str().into(),
@@ -1781,6 +1805,13 @@ impl FactorizedNumerator {
                     unused.remove(&next.id);
                     cycle.push(next.id);
                     current = next;
+                }
+                // the projector-closed line runs through the external legs
+                if cycle
+                    .iter()
+                    .any(|id| lines.iter().any(|e| e.id == *id && e.is_external()))
+                {
+                    continue;
                 }
                 loops.push(ClosedLoop { line, edges: cycle });
             }
