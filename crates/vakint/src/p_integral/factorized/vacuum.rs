@@ -261,11 +261,14 @@ fn validate_vacuum(value: &FactorizedNumerator) -> Result<()> {
             "no massive line: a massless vacuum integral is scaleless",
         ));
     }
-    for port in &value.ports {
+    // The OPEN slots (ports no projector closes, fresh projector slots):
+    // Lorentz only. Bispinor ports closed by the caller's gamma projector
+    // (a Dirac line closed into a trace) are fine.
+    for port in &value.open_slots()? {
         if !matches!(port.as_view(), AtomView::Fun(f) if f.get_symbol().get_name() == names::MINK && f.get_nargs() == 2)
         {
             return Err(error(format!(
-                "port {port}: only Lorentz ports mink(D, index) are in the vacuum scope"
+                "open slot {port}: only Lorentz slots mink(D, index) stay open in the vacuum scope"
             )));
         }
     }
@@ -309,10 +312,11 @@ pub fn contract_to_vakint_vacuum_streamed(
 /// Step 2 of the module documentation: an idenso-contracted network in vakint's
 /// vacuum notation.
 pub(super) fn map_to_vakint_vacuum(value: &FactorizedNumerator, contracted: &Atom) -> Result<Atom> {
+    // the open slots: the ports when there is no projector (raw index PORT + i
+    // by position, as always), what a projector leaves open otherwise
+    let open = value.open_slots()?;
     let port_index = |slot: AtomView<'_>| {
-        value
-            .ports
-            .iter()
+        open.iter()
             .position(|port| port.as_view() == slot)
             .map(|i| PORT + i as i64)
     };
@@ -1026,7 +1030,10 @@ pub fn vakint_vacuum_input_streamed(
 /// graph); an external vector without either stays `p(j)`.
 pub fn to_caller_notation(value: &FactorizedNumerator, vakint_value: &Atom) -> Atom {
     let q = symbolica::symbol!(names::MOMENTUM);
-    let rep = value.ports.first().and_then(|port| match port.as_view() {
+    let open = value
+        .open_slots()
+        .unwrap_or_else(|_| value.ports.clone());
+    let rep = open.first().and_then(|port| match port.as_view() {
         AtomView::Fun(f) => Some(function!(
             f.get_symbol(),
             f.iter().next().unwrap().to_owned()
@@ -1042,7 +1049,7 @@ pub fn to_caller_notation(value: &FactorizedNumerator, vakint_value: &Atom) -> A
             _ => i64::try_from(index).ok(),
         };
         raw.and_then(|i| usize::try_from(i - PORT).ok())
-            .and_then(|i| value.ports.get(i).cloned())
+            .and_then(|i| open.get(i).cloned())
     };
     let constant = value.constant_vectors();
     let leg = |j: AtomView<'_>| {
