@@ -233,7 +233,7 @@ impl FactorizedNumerator {
                     .count()
                     + inner_fermion as usize;
                 let n = cycles.len() + (inner_fermion + inner_ghost) as usize;
-                let sign = if n % 2 == 0 { 1 } else { -1 };
+                let sign = if n.is_multiple_of(2) { 1 } else { -1 };
                 if p.loop_sign != sign {
                     return Err(FactorizedError::LoopSign {
                         found: p.loop_sign,

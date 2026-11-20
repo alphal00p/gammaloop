@@ -375,7 +375,11 @@ fn hard_as_vacuum(text: &str) -> FactorizedNumerator {
     let closed = value
         .closed_loops()
         .unwrap_or_else(|e| panic!("{}: {e}", value.label));
-    value.prefactor.loop_sign = if closed.len().is_multiple_of(2) { 1 } else { -1 };
+    value.prefactor.loop_sign = if closed.len().is_multiple_of(2) {
+        1
+    } else {
+        -1
+    };
     value.prefactor.nf_power = closed
         .iter()
         .filter(|l| l.line == LineKind::Fermion)
