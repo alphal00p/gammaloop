@@ -997,7 +997,6 @@ fn the_v3_text_form_round_trips_every_fixture() {
 fn dot_root_remainders(
     picks: &[(&str, usize)],
 ) -> Vec<(FactorizedNumerator, Vec<(String, String)>)> {
-    use super::super::FromFeynkitOptions;
     let root = std::env::var("VAKINT_TEST_FACTORIZED_DOT_ROOT")
         .unwrap_or_else(|_| "/common/ben/beta/results/prepared".into());
     let root = std::path::PathBuf::from(root);
@@ -1019,7 +1018,48 @@ fn dot_root_remainders(
             })
             .collect::<Vec<_>>();
         files.sort_by_key(|p| (std::fs::metadata(p).unwrap().len(), p.clone()));
-        for path in files.into_iter().take(*n) {
+        out.extend(dot_files_as_roots(
+            level,
+            &model,
+            files.into_iter().take(*n),
+        ));
+    }
+    out
+}
+
+/// Named DOT graphs as root remainders ([`dot_root_remainders`]).
+#[cfg(feature = "feynkit-ingress")]
+fn dot_named_root_remainders(
+    names: &[(&str, &str)],
+) -> Vec<(FactorizedNumerator, Vec<(String, String)>)> {
+    let root = std::env::var("VAKINT_TEST_FACTORIZED_DOT_ROOT")
+        .unwrap_or_else(|_| "/common/ben/beta/results/prepared".into());
+    let root = std::path::PathBuf::from(root);
+    let mut out = Vec::new();
+    for (level, name) in names {
+        let directory = root.join(level);
+        let path = directory.join(name);
+        if !path.is_file() {
+            eprintln!("SKIP: {}", path.display());
+            continue;
+        }
+        let model = crate::refpath::load_model(&directory).unwrap();
+        out.extend(dot_files_as_roots(level, &model, [path]));
+    }
+    out
+}
+
+#[cfg(feature = "feynkit-ingress")]
+fn dot_files_as_roots(
+    level: &str,
+    model: &std::sync::Arc<feynkit_model::Model>,
+    files: impl IntoIterator<Item = std::path::PathBuf>,
+) -> Vec<(FactorizedNumerator, Vec<(String, String)>)> {
+    use super::super::FromFeynkitOptions;
+    let model = std::sync::Arc::clone(model);
+    let mut out = Vec::new();
+    {
+        for path in files {
             let text = std::fs::read_to_string(&path).unwrap();
             let diagram =
                 feynkit_graph::FeynmanDiagram::from_dot(std::sync::Arc::clone(&model), &text)
@@ -1149,6 +1189,13 @@ fn closure_kind_timing() {
         ),
     ];
     cases.extend(dot_root_remainders(&[("L2", 3), ("L3", 2), ("L4", 1)]));
+    // the beta's quick-turnaround L4 set (their Q7: 40, 42, 49, 100)
+    cases.extend(dot_named_root_remainders(&[
+        ("L4", "diagram-000040.dot"),
+        ("L4", "diagram-000042.dot"),
+        ("L4", "diagram-000049.dot"),
+        ("L4", "diagram-000100.dot"),
+    ]));
     let vakint = Vakint::new().unwrap();
     let median = |mut v: Vec<f64>| {
         v.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -1477,5 +1524,58 @@ fn an_open_port_record_keeps_its_odd_order() {
         &fixture_value(text),
         valid_through(text),
         "k3-hs order 1",
+    );
+}
+
+/// THE BETA'S VERIFIED C4 FIXTURE: the K1 root of B_self_energy_L2_21 under
+/// their production root routing (num-est), whose closing edge 2 carries
+/// r_c = +p(1), and its twin under the default routing (r_c = 0): each equals
+/// its value.txt, and the two values are identical.
+#[test]
+fn the_beta_k1_root_with_q_through_the_closing_line_equals_its_twin() {
+    let rc = real_record(
+        include_str!("../fixtures/wh-k1-root-rc.record.txt"),
+        include_str!("../fixtures/wh-k1-root-rc.value.txt"),
+        "k1-root-rc (r_c = +p(1))",
+    );
+    // the control's value file has no valid_through line: the same remainder,
+    // compared through the r_c != 0 fixture's (eps^-1)
+    let order = valid_through(include_str!("../fixtures/wh-k1-root-rc.value.txt"));
+    let control =
+        FactorizedNumerator::from_text(include_str!("../fixtures/wh-k1-root-rc0.record.txt"))
+            .unwrap();
+    control.validate().unwrap();
+    assert!(
+        control.edge(2).unwrap().momentum[2] == 0,
+        "the control's closing edge carries no q"
+    );
+    let vakint = Vakint::new().unwrap();
+    let rc0 = evaluate_factorized_closure(
+        &vakint,
+        &rstar_site_settings(),
+        std::slice::from_ref(&control),
+        &[control.prefactor.total()],
+    )
+    .unwrap()
+    .records[0]
+        .clone();
+    assert_equal_through(
+        &rc0.value,
+        &fixture_value(include_str!("../fixtures/wh-k1-root-rc0.value.txt")),
+        order,
+        "k1-root-rc control (r_c = 0)",
+    );
+    let record =
+        FactorizedNumerator::from_text(include_str!("../fixtures/wh-k1-root-rc.record.txt"))
+            .unwrap();
+    assert!(
+        record.edge(2).unwrap().momentum[2] != 0,
+        "the fixture's closing edge carries q"
+    );
+    assert!(
+        (&rc.value - &rc0.value).expand().is_zero(),
+        "r_c != 0 {}\nr_c = 0 {}",
+        rc.value,
+        rc0.value
     );
 }
