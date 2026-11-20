@@ -266,7 +266,9 @@ fn write_closure_section(
         None => lines.push("original_cycles\tnone".into()),
         Some((f, g)) => lines.push(format!("original_cycles\tfermion={f}\tghost={g}")),
     }
-    lines.push(format!("weights\t{}", spec.weights.len()));
+    if !spec.weights.is_empty() {
+        lines.push(format!("weights\t{}", spec.weights.len()));
+    }
     for (name, by_vakint, atom) in &spec.weights {
         token(name, "weight name")?;
         lines.push(format!(
@@ -372,7 +374,12 @@ fn read_closure_section(
             number(line.number, field(&line, "ghost")?, "ghost cycles")?,
         ))
     };
-    let (_, n) = count_section(reader, "weights")?;
+    // the weights section is optional provenance (absent = none)
+    let n = if reader.peek_key() == Some("weights") {
+        count_section(reader, "weights")?.1
+    } else {
+        0
+    };
     let mut weights = Vec::with_capacity(n);
     for _ in 0..n {
         let line = reader.expect("weight")?;
