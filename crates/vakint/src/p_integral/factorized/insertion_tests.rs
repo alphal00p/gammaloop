@@ -911,3 +911,52 @@ fn zeta_pi_symbol_dummies_and_spinor_slots_inside_insertions() {
     quark.label = format!("{} (spinor slots, symbol dummy)", quark.label);
     identical(&vakint, &settings, &quark);
 }
+
+/// Weights convention (B): a direct record WITH `original_cycles` leaves the
+/// closed-loop sign and n_f to the caller (loop_sign 1, nf_power 0), also when
+/// an insertion holds a quark loop; its value carries neither the -1 nor n_f
+/// and equals the contracted route. Without `original_cycles` the v1
+/// standalone rule stays (the record's own sign and n_f, checked).
+#[test]
+fn direct_records_with_original_cycles_leave_the_weights_to_the_caller() {
+    let (vakint, _) = engine();
+    let settings = settings(2);
+    let mut value = gluon_surrogate(1);
+    ins(&mut value).cycles = (1, 0);
+    // (B): every weight is the caller's (the symmetry factor too)
+    value.prefactor.overall = Atom::num(1);
+    value.record = Some(DirectRecord {
+        original_cycles: Some((1, 0)),
+        depth: None,
+        weights: Vec::new(),
+    });
+    value.validate().unwrap();
+    let prefactor = value.prefactor.total();
+    let got = evaluate_factorized(&vakint, &settings, &value, &prefactor).unwrap();
+    assert!(!got.value.contains_symbol(symbolica::symbol!(names::NF)));
+    let (reference, _) = contracted_route(&vakint, &settings, &value);
+    assert!(
+        (&got.value - &reference * &prefactor).expand().is_zero(),
+        "{}\n{}",
+        got.value,
+        reference
+    );
+    // the record's own sign under (B) is refused, more cycles than the original too
+    let mut signed = value.clone();
+    signed.prefactor.loop_sign = -1;
+    assert!(signed.validate().is_err());
+    let mut more = value.clone();
+    ins(&mut more).cycles = (2, 0);
+    assert!(more.validate().is_err());
+    // v1 standalone (no original_cycles): the inner quark loop must be in the
+    // record's own weights
+    let mut standalone = value.clone();
+    standalone.record = None;
+    assert!(matches!(
+        standalone.validate(),
+        Err(FactorizedError::LoopSign { .. })
+    ));
+    standalone.prefactor.loop_sign = -1;
+    standalone.prefactor.nf_power = 1;
+    standalone.validate().unwrap();
+}
