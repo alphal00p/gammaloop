@@ -103,7 +103,7 @@ pub(super) fn write_record(value: &FactorizedNumerator) -> Result<String> {
             lines.push(if spec.independent_externals {
                 "kind\tclosure\texternals=independent".into()
             } else {
-                "kind\tclosure".into()
+                "kind\tclosure\texternals=conserved".into()
             });
         }
     }

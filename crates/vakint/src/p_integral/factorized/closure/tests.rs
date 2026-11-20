@@ -38,8 +38,8 @@ const MOMENTUM: &str = "gammalooprs::{spenso::rank1,spenso::tensor,spenso::compo
 const HEDGE: &str = "gammalooprs::{spenso::index}::hedge";
 const EDGE: &str = "gammalooprs::{spenso::index,spenso::index-label:e}::edge";
 const DIM: &str = "gammalooprs::{}::dim";
-const R: &str = "gammalooprs::rstar_reference_mass_squared";
-const MAUX: &str = "gammalooprs::rstar_mass_squared";
+const R: &str = "gammalooprs::{scalar}::rstar_reference_mass_squared";
+const MAUX: &str = "gammalooprs::{scalar}::rstar_mass_squared";
 
 fn atom(text: &str) -> Atom {
     crate::Vakint::initialize_vakint_symbols();
@@ -1318,4 +1318,164 @@ fn the_beta_k3_dirac_record_equals_its_contracted_value() {
     )
     .unwrap();
     assert_equal_through(&got.value, &expected, valid_through(value_text), "k3-dirac");
+}
+
+fn real_record(record: &str, value_text: &str, what: &str) -> ClosureRecordValue {
+    let expected = fixture_value(value_text);
+    let value = FactorizedNumerator::from_text(record).unwrap_or_else(|e| panic!("{what}: {e}"));
+    value.validate().unwrap_or_else(|e| panic!("{what}: {e}"));
+    assert_eq!(
+        value.to_text().unwrap(),
+        record,
+        "{what}: byte-identical round trip"
+    );
+    let vakint = Vakint::new().unwrap();
+    let got = evaluate_factorized_closure(
+        &vakint,
+        &rstar_site_settings(),
+        std::slice::from_ref(&value),
+        &[value.prefactor.total()],
+    )
+    .unwrap_or_else(|e| panic!("{what}: {e}"));
+    assert_equal_through(&got.value, &expected, valid_through(value_text), what);
+    got.records[0].clone()
+}
+
+/// THE BETA'S REAL K1 RECORD: the root remainder of B_self_energy_L2_22
+/// (closed by the metric projector, p2_power -1, w = 2 compensated, ghost
+/// loop): equal to `evaluate_boundary`'s value at that site through its
+/// valid_through, in the caller's notation (p^2 = spenso::dot(Q(0),Q(0))).
+#[test]
+fn the_beta_k1_root_record_equals_its_contracted_value() {
+    real_record(
+        include_str!("../fixtures/wh-k1-root.record.txt"),
+        include_str!("../fixtures/wh-k1-root.value.txt"),
+        "k1-root",
+    );
+}
+
+/// THE BETA'S REAL K2 RECORD: the isotropic closed UV child {2,3,5} of
+/// B_self_energy_L2_22 (three independent crown momenta, w = 0, the channel
+/// markers uv_isotropic_channel_1..3 carried through the projector).
+#[test]
+fn the_beta_k2_child_record_equals_its_contracted_value() {
+    real_record(
+        include_str!("../fixtures/wh-k2-child.record.txt"),
+        include_str!("../fixtures/wh-k2-child.value.txt"),
+        "k2-child",
+    );
+}
+
+/// A unimodular change of the loop basis `k(i) -> k(i) + c p(j)`: the edge
+/// momenta are data, the factors keep their edge momenta `Q(e)`.
+fn shift_loop(value: &FactorizedNumerator, i: usize, j: usize, c: i64) -> FactorizedNumerator {
+    let mut out = value.clone();
+    let loops = out.loops();
+    for edge in out.edges.iter_mut() {
+        edge.momentum[loops + j] += c * edge.momentum[i];
+    }
+    out.loop_edges[i] = None;
+    out.label = format!(
+        "{} rerouted k({}) -> k({}) + {c} p({})",
+        value.label,
+        i + 1,
+        i + 1,
+        j + 1
+    );
+    out
+}
+
+/// C4: the closing line carrying the external momentum (r_c != 0, the
+/// production root routing can do this). The same remainder rerouted so that
+/// q flows through the closing edge gives the SAME value, and equals the
+/// contracted reference chain (which expands the closing line's l.q terms);
+/// also on the beta's real K1 record.
+#[test]
+fn a_closing_line_carrying_the_external_momentum_gives_the_same_value() {
+    let vakint = Vakint::new().unwrap();
+    let evaluate = |value: &FactorizedNumerator| {
+        value
+            .validate()
+            .unwrap_or_else(|e| panic!("{}: {e}", value.label));
+        evaluate_factorized_closure(
+            &vakint,
+            &rstar_site_settings(),
+            std::slice::from_ref(value),
+            &[value.prefactor.total()],
+        )
+        .unwrap_or_else(|e| panic!("{}: {e}", value.label))
+        .value
+    };
+    for (degree, compensate) in [(1, true), (2, true), (2, false)] {
+        let value = l2_root(degree, compensate);
+        // the closing edge 3 is k(2): k(2) -> k(2) + p(1) sends q through it
+        let rerouted = shift_loop(&value, 1, 0, 1);
+        assert!(
+            rerouted
+                .edges
+                .iter()
+                .any(|e| e.id == 3 && e.momentum[2] != 0)
+        );
+        let a = evaluate(&value);
+        let b = evaluate(&rerouted);
+        assert!(
+            (&a - &b).expand().is_zero(),
+            "{}:\n{a}\n{b}",
+            rerouted.label
+        );
+        check(&rerouted, &L2_CUT);
+    }
+    let value = l2_child(2);
+    let rerouted = shift_loop(&value, 1, 1, -1);
+    assert!(
+        (&evaluate(&value) - &evaluate(&rerouted))
+            .expand()
+            .is_zero()
+    );
+    check(&rerouted, &L2_CUT);
+    // the beta's K1 record, its closing edge 2 = k(1) rerouted onto k(1) + p(1)
+    let text = include_str!("../fixtures/wh-k1-root.value.txt");
+    let record =
+        FactorizedNumerator::from_text(include_str!("../fixtures/wh-k1-root.record.txt")).unwrap();
+    let rerouted = shift_loop(&record, 0, 0, 1);
+    assert_equal_through(
+        &evaluate(&rerouted),
+        &fixture_value(text),
+        valid_through(text),
+        "k1-root rerouted",
+    );
+}
+
+/// An open-port record keeps every order: the beta's k3-hs hard part (three
+/// open Lorentz ports, omega 1) is entirely of ODD order 1 in its crown
+/// momenta: at degree 0 the entry gives exactly 0, at degree 1 the beta's
+/// nonzero value (the boundary path's odd-order drop is only for records
+/// without an open slot).
+#[test]
+fn an_open_port_record_keeps_its_odd_order() {
+    let vakint = Vakint::new().unwrap();
+    let record =
+        FactorizedNumerator::from_text(include_str!("../fixtures/wh-k3-hs.record.txt")).unwrap();
+    let at = |degree: u32| {
+        let mut value = record.clone();
+        spec(&mut value).taylor.as_mut().unwrap().degree = degree;
+        evaluate_factorized_closure(
+            &vakint,
+            &rstar_site_settings(),
+            std::slice::from_ref(&value),
+            &[value.prefactor.total()],
+        )
+        .unwrap()
+        .value
+    };
+    assert!(at(0).is_zero(), "order 0 of k3-hs is not zero");
+    let text = include_str!("../fixtures/wh-k3-hs.value.txt");
+    let odd = at(1);
+    assert!(!odd.is_zero());
+    assert_equal_through(
+        &odd,
+        &fixture_value(text),
+        valid_through(text),
+        "k3-hs order 1",
+    );
 }

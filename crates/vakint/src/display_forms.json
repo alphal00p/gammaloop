@@ -1250,6 +1250,10 @@
   {
    "name": "vakint::p_master_basis_eps",
    "reason": "placeholder variable while the pole-bounded master basis data is parsed (replaced by the epsilon symbol at once)"
+  },
+  {
+   "name": "vakint::closure_lambda",
+   "reason": "the closure kind's internal Taylor parameter (substituted and graded away before any output)"
   }
  ]
 }
