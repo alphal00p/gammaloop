@@ -636,7 +636,9 @@ impl PropagatorInsertionEvaluator {
         let result = RStarIntegrand::physical_external_routing(&graph, &boundary).and_then(
             |(_, routing)| {
                 Ok(super::linearize::linearize(
-                    identity.restore_delta(&canonical)?.replace_multiple(&routing),
+                    identity
+                        .restore_delta(&canonical)?
+                        .replace_multiple(&routing),
                 ))
             },
         );

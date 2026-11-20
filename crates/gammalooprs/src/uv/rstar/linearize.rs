@@ -16,13 +16,16 @@ use symbolica::atom::{Atom, AtomCore, AtomView};
 
 /// Whether `GAMMALOOP_LINEARIZE_MOMENTA` is on (`1`, `on`, `true`).
 pub(crate) fn enabled() -> bool {
-    static ON: LazyLock<bool> = LazyLock::new(|| {
-        match std::env::var("GAMMALOOP_LINEARIZE_MOMENTA").as_deref() {
-            Err(_) | Ok("" | "0" | "off" | "false") => false,
-            Ok("1" | "on" | "true") => true,
-            Ok(other) => panic!("GAMMALOOP_LINEARIZE_MOMENTA={other:?}: expected 0/off or 1/on"),
-        }
-    });
+    static ON: LazyLock<bool> =
+        LazyLock::new(
+            || match std::env::var("GAMMALOOP_LINEARIZE_MOMENTA").as_deref() {
+                Err(_) | Ok("" | "0" | "off" | "false") => false,
+                Ok("1" | "on" | "true") => true,
+                Ok(other) => {
+                    panic!("GAMMALOOP_LINEARIZE_MOMENTA={other:?}: expected 0/off or 1/on")
+                }
+            },
+        );
     *ON
 }
 
@@ -42,7 +45,9 @@ fn is_scaled_sum(view: AtomView<'_>) -> bool {
 /// A sum with a nested (scaled) sum among its terms.
 fn is_nested_sum(view: AtomView<'_>) -> bool {
     match view {
-        AtomView::Add(sum) => sum.iter().any(|t| is_scaled_sum(t) || matches!(t, AtomView::Add(_))),
+        AtomView::Add(sum) => sum
+            .iter()
+            .any(|t| is_scaled_sum(t) || matches!(t, AtomView::Add(_))),
         _ => false,
     }
 }
@@ -104,6 +109,9 @@ mod tests {
         assert_eq!(out, parse!("(a-b-c)*(c+d)"));
         // inside a function argument
         let inside = parse!("f(a-2*(b-c),e)");
-        assert_eq!(linearize_view(inside.as_view()).unwrap(), parse!("f(a-2*b+2*c,e)"));
+        assert_eq!(
+            linearize_view(inside.as_view()).unwrap(),
+            parse!("f(a-2*b+2*c,e)")
+        );
     }
 }

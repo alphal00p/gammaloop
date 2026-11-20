@@ -109,8 +109,9 @@ fn make_mul(children: Vec<Node>) -> Node {
 }
 
 fn make_add(children: Vec<Node>) -> Node {
-    let (polys, rest): (Vec<Node>, Vec<Node>) =
-        children.into_iter().partition(|c| matches!(c, Node::Poly(_)));
+    let (polys, rest): (Vec<Node>, Vec<Node>) = children
+        .into_iter()
+        .partition(|c| matches!(c, Node::Poly(_)));
     let merged = poly_add(
         polys
             .into_iter()
@@ -127,7 +128,11 @@ fn make_add(children: Vec<Node>) -> Node {
     if !merged.is_empty() {
         rest.push(Node::Poly(merged));
     }
-    if rest.len() == 1 { rest.pop().unwrap() } else { Node::Add(rest) }
+    if rest.len() == 1 {
+        rest.pop().unwrap()
+    } else {
+        Node::Add(rest)
+    }
 }
 
 /// The distinct linear forms `Σ c_e Q(e)` of the numerator (one momentum
@@ -141,7 +146,10 @@ struct Forms {
 impl Forms {
     fn id(&mut self, mut form: Vec<(u32, f64)>) -> u32 {
         form.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)));
-        let key = form.iter().map(|(e, c)| (*e, c.to_bits())).collect::<Vec<_>>();
+        let key = form
+            .iter()
+            .map(|(e, c)| (*e, c.to_bits()))
+            .collect::<Vec<_>>();
         let next = self.forms.len() as u32;
         *self.ids.entry(key).or_insert_with(|| {
             self.forms.push(form);
@@ -156,12 +164,13 @@ fn leaf(id: u32) -> Node {
 
 /// `c * Q(e, slot...)` with a numeric `c`: (edge, c, slot arguments).
 fn scaled_momentum<'a>(view: AtomView<'a>) -> Option<(u32, f64, Vec<AtomView<'a>>)> {
-    let momentum = |f: symbolica::atom::representation::FunView<'a>| -> Option<(u32, Vec<AtomView<'a>>)> {
-        (f.get_symbol() == GS.emr_mom)
-            .then(|| usize::try_from(f.get(0)).ok())
-            .flatten()
-            .map(|edge| (edge as u32, f.iter().skip(1).collect()))
-    };
+    let momentum =
+        |f: symbolica::atom::representation::FunView<'a>| -> Option<(u32, Vec<AtomView<'a>>)> {
+            (f.get_symbol() == GS.emr_mom)
+                .then(|| usize::try_from(f.get(0)).ok())
+                .flatten()
+                .map(|edge| (edge as u32, f.iter().skip(1).collect()))
+        };
     match view {
         AtomView::Fun(f) => momentum(f).map(|(e, slot)| (e, 1.0, slot)),
         AtomView::Mul(product) if product.get_nargs() == 2 => {
@@ -354,7 +363,14 @@ impl NumeratorProfile {
         let root = build(view, &mut forms);
         let (max_power, max_degree) = max_powers(&root);
         let (nodes, monomials) = sizes(&root);
-        Self { root, forms: forms.forms, max_power, max_degree, nodes, monomials }
+        Self {
+            root,
+            forms: forms.forms,
+            max_power,
+            max_degree,
+            nodes,
+            monomials,
+        }
     }
 
     /// Terms of the routed numerator per boundary order `0..=degree`, with
@@ -480,7 +496,10 @@ mod tests {
 
     #[test]
     fn series_and_dens() {
-        assert_eq!(series_mul(&[1.0, 2.0, 0.0], &[3.0, 1.0, 0.0], 2), vec![3.0, 7.0, 2.0]);
+        assert_eq!(
+            series_mul(&[1.0, 2.0, 0.0], &[3.0, 1.0, 0.0], 2),
+            vec![3.0, 7.0, 2.0]
+        );
         let d = den_orders(&[(2.0, 1.0)], 2);
         assert_eq!(d, vec![1.0, 3.0, 10.0]);
     }
