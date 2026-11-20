@@ -161,9 +161,11 @@ pub fn surrogate_closed_root() -> bool {
     *MODE
 }
 
-/// `GAMMALOOP_INSERTION_CLOSURE=off|on|check` (default off): how each excised
+/// `GAMMALOOP_INSERTION_CLOSURE=off|on|check` (default on: production since r6,
+/// results/ins4-family, check runs insclose-a..f): how each excised
 /// self-energy insertion is integrated in [`PropagatorInsertionEvaluator::prepare`].
-/// `off` integrates the open tensor (today's path, byte-identical). `on`
+/// `off` (an explicit `off`, `0` or empty value) integrates the open tensor
+/// (the path before the production default). `on` (also unset)
 /// integrates its closed form factors and rebuilds the open tensor exactly
 /// ([`super::propagator::integrate_propagator_closed`]: quark `A slash(p)`,
 /// gluon `a g + b p p` as one integral with channel markers); a ghost or
@@ -179,12 +181,13 @@ pub enum InsertionClosure {
 }
 
 impl InsertionClosure {
-    pub fn parse(value: &str) -> Result<Self> {
-        match value.trim() {
-            "" | "off" | "0" => Ok(Self::Off),
-            "on" | "1" => Ok(Self::On),
-            "check" => Ok(Self::Check),
-            other => Err(eyre!(
+    /// The mode of a `GAMMALOOP_INSERTION_CLOSURE` value (`None`: unset).
+    pub fn parse(value: Option<&str>) -> Result<Self> {
+        match value.map(str::trim) {
+            Some("" | "off" | "0") => Ok(Self::Off),
+            None | Some("on" | "1") => Ok(Self::On),
+            Some("check") => Ok(Self::Check),
+            Some(other) => Err(eyre!(
                 "GAMMALOOP_INSERTION_CLOSURE must be off, on or check, not `{other}`"
             )),
         }
@@ -192,13 +195,40 @@ impl InsertionClosure {
 
     pub fn from_environment() -> Self {
         static MODE: LazyLock<InsertionClosure> = LazyLock::new(|| {
-            InsertionClosure::parse(
-                &std::env::var("GAMMALOOP_INSERTION_CLOSURE").unwrap_or_default(),
-            )
+            match std::env::var("GAMMALOOP_INSERTION_CLOSURE") {
+                Ok(value) => InsertionClosure::parse(Some(&value)),
+                Err(std::env::VarError::NotPresent) => InsertionClosure::parse(None),
+                Err(std::env::VarError::NotUnicode(value)) => Err(eyre!(
+                    "GAMMALOOP_INSERTION_CLOSURE={value:?} is not unicode"
+                )),
+            }
             .unwrap_or_else(|error| panic!("{error:#}"))
         });
         *MODE
     }
+}
+
+#[cfg(test)]
+#[test]
+fn insertion_closure_values_parse() {
+    assert_eq!(InsertionClosure::parse(None).unwrap(), InsertionClosure::On);
+    for off in ["", "0", "off", " off "] {
+        assert_eq!(
+            InsertionClosure::parse(Some(off)).unwrap(),
+            InsertionClosure::Off
+        );
+    }
+    for on in ["1", "on"] {
+        assert_eq!(
+            InsertionClosure::parse(Some(on)).unwrap(),
+            InsertionClosure::On
+        );
+    }
+    assert_eq!(
+        InsertionClosure::parse(Some("check")).unwrap(),
+        InsertionClosure::Check
+    );
+    assert!(InsertionClosure::parse(Some("yes")).is_err());
 }
 
 /// The bare poles of the original graph, without its overall factor or projector.
