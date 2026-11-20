@@ -426,6 +426,19 @@ entering a shell installs no global upload hook.
 
 == Performance measurements
 
+=== Gammabench performance tracker
+
+Open #link("https://alphal00p.github.io/gammabench/ci-history/")[Benchmarks]
+in the site navigation to follow workloads across main-branch runs. Switch
+between generation time in seconds and the paired change relative to the
+baseline measured on the same runner. Select a run to inspect its case results
+and the discovery or confirmation measurements behind them.
+
+For a proposed change, use the exact-run link in its Actions summary or open
+the #link("https://alphal00p.github.io/gammabench/previews/")[PR previews].
+
+=== Measurement procedure
+
 GammaLoop's adapter in `.github/scripts/run_performance.py` prepares one suite per
 manifest case and delegates paired execution, numerical qualification, regression
 screening and sealed evidence to the commit-pinned gammabench framework.
@@ -745,8 +758,7 @@ workflow completes. It verifies the source run, PR identity and artifact before
 using `GAMMABENCH_PUBLISH_TOKEN`, a fine-grained token restricted to gammabench
 Contents read/write. Candidate code is not executed in that publisher.
 Main captures append to gammabench main; PR captures append to its separate
-`pr-results` branch. One Pages deployment combines main history with
-#link("https://alphal00p.github.io/gammabench/previews/")[PR previews].
+`pr-results` branch. One Pages deployment serves both histories.
 Each PR has a stable landing page and permanent links for each measured SHA,
 run and attempt. PR evidence never becomes a main-history point on merge.
 

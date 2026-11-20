@@ -61,6 +61,7 @@ jobs:
           python3 -m unittest
           test_export_test_timings
           test_performance_changes
+          test_performance_summary
           test_run_performance
 
       - uses: NixOS/nix-installer-action@main
