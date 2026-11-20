@@ -1208,6 +1208,7 @@ fn closure_kind_timing() {
             .collect::<Vec<_>>();
         let (mut entry, mut reference_times) = (Vec::new(), Vec::new());
         let (mut contract, mut lower, mut reduce) = (Vec::new(), Vec::new(), Vec::new());
+        let mut rustred = (0, 0, 0, 0, 0);
         for _ in 0..reps {
             let started = std::time::Instant::now();
             let got = evaluate_factorized_closure(
@@ -1219,6 +1220,13 @@ fn closure_kind_timing() {
             .unwrap();
             entry.push(started.elapsed().as_secs_f64());
             contract.push(got.records[0].contract_seconds);
+            rustred = (
+                got.records[0].patterns,
+                got.records[0].blocks,
+                got.records[0].key_plans,
+                got.records[0].lowered_entries,
+                got.records[0].distinct_monomials,
+            );
             lower.push(got.records[0].lower_seconds);
             reduce.push(got.records[0].reduce_seconds);
             let started = std::time::Instant::now();
@@ -1231,7 +1239,7 @@ fn closure_kind_timing() {
             );
         }
         eprintln!(
-            "CLOSURE_TIMING label=\"{}\" reps={reps} entry_median_s={:.4} reference_median_s={:.4} entry_contract_s={:.4} entry_lower_s={:.4} entry_reduce_s={:.4} entry_all={:?} reference_all={:?}",
+            "CLOSURE_TIMING label=\"{}\" patterns_blocks_keyplans_lowered_monomials={rustred:?} reps={reps} entry_median_s={:.4} reference_median_s={:.4} entry_contract_s={:.4} entry_lower_s={:.4} entry_reduce_s={:.4} entry_all={:?} reference_all={:?}",
             value.label,
             median(entry.clone()),
             median(reference_times.clone()),
@@ -1385,6 +1393,20 @@ fn real_record(record: &str, value_text: &str, what: &str) -> ClosureRecordValue
     )
     .unwrap_or_else(|e| panic!("{what}: {e}"));
     assert_equal_through(&got.value, &expected, valid_through(value_text), what);
+    // the caller's notation: no vakint-notation vector or scalar product survives
+    let mut vakint_notation = None;
+    got.value.as_view().visitor(&mut |part| {
+        if let AtomView::Fun(f) = part
+            && (f.get_symbol() == S.dot || f.get_symbol() == S.p || f.get_symbol() == S.k)
+        {
+            vakint_notation = Some(part.to_owned());
+        }
+        vakint_notation.is_none()
+    });
+    assert!(
+        vakint_notation.is_none(),
+        "{what}: vakint notation {vakint_notation:?} in the returned value"
+    );
     got.records[0].clone()
 }
 
@@ -1577,5 +1599,102 @@ fn the_beta_k1_root_with_q_through_the_closing_line_equals_its_twin() {
         "r_c != 0 {}\nr_c = 0 {}",
         rc.value,
         rc0.value
+    );
+}
+
+/// The value does not depend on the caller's `tensor_reduction_method` or
+/// `use_dot_product_notation` (format v1.4 section 7): k1-root and k3-hs with
+/// each flipped give the same value.
+#[test]
+fn the_value_does_not_depend_on_the_reduction_method_or_the_notation() {
+    let vakint = Vakint::new().unwrap();
+    for (record, what) in [
+        (include_str!("../fixtures/wh-k1-root.record.txt"), "k1-root"),
+        (include_str!("../fixtures/wh-k3-hs.record.txt"), "k3-hs"),
+    ] {
+        let value = FactorizedNumerator::from_text(record).unwrap();
+        let run = |method: crate::TensorReductionMethod, dots: bool| {
+            let mut settings = rstar_site_settings();
+            settings.tensor_reduction_method = method;
+            settings.use_dot_product_notation = dots;
+            evaluate_factorized_closure(
+                &vakint,
+                &settings,
+                std::slice::from_ref(&value),
+                &[value.prefactor.total()],
+            )
+            .unwrap()
+            .value
+        };
+        let reference = run(crate::TensorReductionMethod::FeynKit, true);
+        for (method, dots) in [
+            (crate::TensorReductionMethod::FeynKit, false),
+            (crate::TensorReductionMethod::AlphaLoop, true),
+            (crate::TensorReductionMethod::AlphaLoop, false),
+        ] {
+            let other = run(method, dots);
+            assert!(
+                (&other - &reference).expand().is_zero(),
+                "{what}: {method:?} dots={dots}: {other}\nvs {reference}"
+            );
+        }
+    }
+}
+
+/// zeta(n) is a legal scalar inside a factor (the beta's K5 coefficient
+/// vertices carry symbolica::zeta(3)): accepted, and it multiplies the value.
+#[test]
+fn zeta_values_are_legal_scalars_in_factors() {
+    let record = include_str!("../fixtures/wh-k3-hs.record.txt");
+    let text = include_str!("../fixtures/wh-k3-hs.value.txt");
+    let mut value = FactorizedNumerator::from_text(record).unwrap();
+    let zeta = atom("symbolica::{}::zeta(3)");
+    value.vertices[0].factor = &value.vertices[0].factor * &zeta;
+    value.validate().unwrap();
+    let back = FactorizedNumerator::from_text(&value.to_text().unwrap()).unwrap();
+    assert_eq!(back, value);
+    let vakint = Vakint::new().unwrap();
+    let got = evaluate_factorized_closure(
+        &vakint,
+        &rstar_site_settings(),
+        std::slice::from_ref(&value),
+        &[value.prefactor.total()],
+    )
+    .unwrap();
+    assert_equal_through(
+        &got.value,
+        &(fixture_value(text) * &zeta),
+        valid_through(text),
+        "k3-hs x zeta(3)",
+    );
+}
+
+/// Both projector forms work: K1 emits p2_power = -1 (the 1/p^2 applied by
+/// the entry), the K5 surrogate root p2_power = 0 (applied by the caller):
+/// k1-root at p2_power 0, times 1/p^2 in the caller's notation, is its value.
+#[test]
+fn p2_power_zero_and_minus_one_projectors_agree() {
+    let text = include_str!("../fixtures/wh-k1-root.value.txt");
+    let mut value =
+        FactorizedNumerator::from_text(include_str!("../fixtures/wh-k1-root.record.txt")).unwrap();
+    value.projector.as_mut().unwrap().p2_power = 0;
+    value.validate().unwrap();
+    let vakint = Vakint::new().unwrap();
+    let got = evaluate_factorized_closure(
+        &vakint,
+        &rstar_site_settings(),
+        std::slice::from_ref(&value),
+        &[value.prefactor.total()],
+    )
+    .unwrap();
+    let q = format!("{MOMENTUM}(0,{MINK}({DIM}))");
+    let p2 = atom(&format!(
+        "spenso::{{symmetric,linear,scalar}}::dot({q},{q})"
+    ));
+    assert_equal_through(
+        &(got.value / p2),
+        &fixture_value(text),
+        valid_through(text),
+        "k1-root at p2_power 0, / p^2",
     );
 }
