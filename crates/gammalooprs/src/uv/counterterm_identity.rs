@@ -283,10 +283,10 @@ impl CountertermIdentity {
                 } else {
                     let mut mass = data.data.mass_atom(model);
                     if marked == Some(edge) {
-                        mass = mass + Atom::var(symbol!("ir_hard_identity_marked"));
+                        mass += Atom::var(symbol!("ir_hard_identity_marked"));
                     }
                     if decorated.contains(&edge_id) {
-                        mass = mass + Atom::var(symbol!("ir_hard_identity_contracted"));
+                        mass += Atom::var(symbol!("ir_hard_identity_contracted"));
                     }
                     mass
                 },

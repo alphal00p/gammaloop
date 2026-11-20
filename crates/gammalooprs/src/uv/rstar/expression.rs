@@ -2470,7 +2470,7 @@ impl RStarIntegrand {
         let contract_piece = |digits: &[usize]| -> Result<Option<Atom>> {
             let mut piece = rest.clone();
             for (terms, &digit) in choices.iter().zip(digits) {
-                piece = piece * terms[digit].to_owned();
+                piece *= terms[digit].to_owned();
             }
             let contracted = Self::simplify_view(piece.as_view())?;
             if streamed::introduces_dummies(piece.as_view(), contracted.as_view()) {
