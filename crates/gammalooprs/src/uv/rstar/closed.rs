@@ -99,7 +99,7 @@ pub(super) fn budget_extra_bytes() -> Option<u64> {
             .ok()
             .and_then(|value| value.trim().parse().ok())
             .unwrap_or(24.0);
-        (gib > 0.0).then(|| (gib * (1u64 << 30) as f64) as u64)
+        (gib > 0.0).then_some((gib * (1u64 << 30) as f64) as u64)
     });
     *BYTES
 }
