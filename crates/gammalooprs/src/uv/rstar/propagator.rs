@@ -544,7 +544,13 @@ mod tests {
                 .map_err(|reason| eyre::eyre!("declined: {reason}"))?;
         assert_eq!(shape.kind(), "gluon");
         assert!(!open.is_zero());
-        assert_same_counterterm(&closed, &open)
+        // The closed form factors carry 1/(d-1) unexpanded: they agree with
+        // the open tensor through the computed depth, eps^(3-1-1).
+        use symbolica::atom::AtomCore;
+        let depth = |value: &Atom| -> Result<Atom> {
+            Ok(value.series(GS.dim_epsilon, 0, 1)?.to_atom().expand())
+        };
+        assert_same_counterterm(&depth(&closed)?, &depth(&open)?)
     }
 
     /// GAMMALOOP_INSERTION_CLOSURE: an open Dirac line `gamma_mu slash(k)
