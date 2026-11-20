@@ -67,27 +67,36 @@ pub enum ClosedMode {
     Check,
 }
 
-/// `GAMMALOOP_IR_HARD`: unset/`off` (today), `closed`, or `check` (both
-/// paths, compared at a random rational point; today's moments are used).
+/// `GAMMALOOP_IR_HARD`, trimmed; unset is `child` (production since r5i,
+/// results/ir-hard-child). `off` (or any value naming no mode) restores the
+/// projected path.
+fn ir_hard_setting() -> String {
+    match std::env::var("GAMMALOOP_IR_HARD") {
+        Ok(value) => value.trim().to_owned(),
+        Err(std::env::VarError::NotPresent) => "child".to_owned(),
+        Err(std::env::VarError::NotUnicode(_)) => String::new(),
+    }
+}
+
+/// `GAMMALOOP_IR_HARD`: `off` (the projected path), `closed`, or `check` (both
+/// paths, compared at a random rational point; the projected moments are
+/// used). Unset is `child`, whose fallback is the closed path.
 pub fn closed_mode() -> ClosedMode {
     static MODE: LazyLock<ClosedMode> = LazyLock::new(|| {
-        match std::env::var("GAMMALOOP_IR_HARD")
-            .ok()
-            .as_deref()
-            .map(str::trim)
-        {
+        match ir_hard_setting().as_str() {
             // `child`/`child-check`: the closed path is the fallback and the
             // reference of the hard-part-as-child route.
-            Some("closed" | "child" | "child-check") => ClosedMode::On,
-            Some("check") => ClosedMode::Check,
+            "closed" | "child" | "child-check" => ClosedMode::On,
+            "check" => ClosedMode::Check,
             _ => ClosedMode::Off,
         }
     });
     *MODE
 }
 
-/// `GAMMALOOP_IR_HARD=child|child-check` (results/ir-hard-child): each IR
-/// correction's integrated hard part `H(γ) = Σ_σ ∫ T_ω[γ/σ Π Δ(σ_i)]` is
+/// `GAMMALOOP_IR_HARD=child|child-check` (results/ir-hard-child; unset is
+/// `child`): each IR correction's integrated hard part
+/// `H(γ) = Σ_σ ∫ T_ω[γ/σ Π Δ(σ_i)]` is
 /// computed as its own support root (the UV children's remainder path at
 /// fixed reference mass, no `K`), read off as `Σ_j h_j E_j`, and multiplied
 /// by the unchanged quotient counterterms with the analytic outer Taylor.
@@ -101,16 +110,10 @@ pub enum ChildMode {
 }
 
 pub fn child_mode() -> ChildMode {
-    static MODE: LazyLock<ChildMode> = LazyLock::new(|| {
-        match std::env::var("GAMMALOOP_IR_HARD")
-            .ok()
-            .as_deref()
-            .map(str::trim)
-        {
-            Some("child") => ChildMode::On,
-            Some("child-check") => ChildMode::Check,
-            _ => ChildMode::Off,
-        }
+    static MODE: LazyLock<ChildMode> = LazyLock::new(|| match ir_hard_setting().as_str() {
+        "child" => ChildMode::On,
+        "child-check" => ChildMode::Check,
+        _ => ChildMode::Off,
     });
     *MODE
 }

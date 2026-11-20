@@ -1332,7 +1332,8 @@ impl<'a> Evaluation<'a> {
         hard: &RStarIntegrand,
         order: usize,
     ) -> Result<TermMoments> {
-        // GAMMALOOP_IR_HARD=closed|check (prototype, default off).
+        // GAMMALOOP_IR_HARD=closed|check (on under the default `child`: the
+        // closed path is its fallback; `off`: the projected path).
         let mode = super::closed::closed_mode();
         let mut closed_stats = super::closed::ClosedStats::default();
         let closed_started = Instant::now();
@@ -1682,18 +1683,19 @@ impl<'a> Evaluation<'a> {
             )
         });
         // GAMMALOOP_IR_HARD_CHILD_SELECT=all|omega1|omega1-spinor (default
-        // all): which corrections take the child route; the others stay on
-        // the closed path. `omega1`: hard Taylor order ω >= 1 only (order-0
-        // hard parts close to a few scalar channels, cheaper than an open
-        // tensor integration); `omega1-spinor`: also ω = 0 with spinor slots
-        // (which the closed path declines to the projected path).
+        // omega1, production since r5i): which corrections take the child
+        // route; the others stay on the closed path. `all` (or any other
+        // value): every correction. `omega1`: hard Taylor order ω >= 1 only
+        // (order-0 hard parts close to a few scalar channels, cheaper than an
+        // open tensor integration); `omega1-spinor`: also ω = 0 with spinor
+        // slots (which the closed path declines to the projected path).
         static SELECT: std::sync::LazyLock<u8> =
             std::sync::LazyLock::new(|| {
                 match std::env::var("GAMMALOOP_IR_HARD_CHILD_SELECT")
                     .as_deref()
                     .map(str::trim)
                 {
-                    Ok("omega1") => 1,
+                    Err(std::env::VarError::NotPresent) | Ok("omega1") => 1,
                     Ok("omega1-spinor") => 2,
                     _ => 0,
                 }

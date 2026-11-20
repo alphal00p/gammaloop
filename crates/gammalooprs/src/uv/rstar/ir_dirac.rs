@@ -1,5 +1,5 @@
-//! `GAMMALOOP_IR_DIRAC_CLOSURE=on|check`: the Dirac closure of IR hard parts
-//! with one open Dirac line, as in FORM (projector -> trace).
+//! `GAMMALOOP_IR_DIRAC_CLOSURE=on|check` (unset: `on`): the Dirac closure of IR
+//! hard parts with one open Dirac line, as in FORM (projector -> trace).
 //!
 //! The hard part `H` of an IR correction with one open Dirac line (row `r`,
 //! column `c`) whose vacuum average has a unique Dirac structure is computed
@@ -26,7 +26,7 @@
 //!
 //! Any other hard part with spinor slots (two Dirac segments, Lorentz slots at
 //! `omega >= 1`, colour slots, parity-odd content) declines to the open path
-//! with a logged reason. Unset/`off`: the open path, unchanged.
+//! with a logged reason. `off` (or empty, `0`): the open path, unchanged.
 
 use std::sync::LazyLock;
 
@@ -52,9 +52,10 @@ use crate::{graph::Graph, utils::GS, uv::approx::integrated::Integrated};
 /// `GAMMALOOP_IR_DIRAC_CLOSURE`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum IrDiracMode {
-    /// Unset, empty, `0` or `off`: the open hard part (today's path).
+    /// Empty, `0` or `off`: the open hard part (the path before the
+    /// production default).
     Off,
-    /// `on` or `1`: close the shapes with a unique Dirac structure.
+    /// `on`, `1` or unset: close the shapes with a unique Dirac structure.
     On,
     /// `check`: as `on`, and also compute the open hard moments, which must
     /// equal the closed, reassembled ones (`IR_DIRAC_CHECK`, an error
@@ -65,8 +66,8 @@ pub enum IrDiracMode {
 impl IrDiracMode {
     pub fn parse(value: Option<&str>) -> Result<Self> {
         match value.map(str::trim) {
-            None | Some("" | "0" | "off") => Ok(Self::Off),
-            Some("1" | "on") => Ok(Self::On),
+            Some("" | "0" | "off") => Ok(Self::Off),
+            None | Some("1" | "on") => Ok(Self::On),
             Some("check") => Ok(Self::Check),
             Some(other) => Err(eyre!(
                 "GAMMALOOP_IR_DIRAC_CLOSURE must be unset, `off`, `on` or `check`, not `{other}`"
@@ -86,7 +87,7 @@ impl IrDiracMode {
 static MODE: LazyLock<std::result::Result<IrDiracMode, String>> =
     LazyLock::new(|| match std::env::var("GAMMALOOP_IR_DIRAC_CLOSURE") {
         Ok(value) => IrDiracMode::parse(Some(&value)).map_err(|error| format!("{error}")),
-        Err(std::env::VarError::NotPresent) => Ok(IrDiracMode::Off),
+        Err(std::env::VarError::NotPresent) => Ok(IrDiracMode::On),
         Err(std::env::VarError::NotUnicode(value)) => Err(format!(
             "GAMMALOOP_IR_DIRAC_CLOSURE={value:?} is not unicode"
         )),
