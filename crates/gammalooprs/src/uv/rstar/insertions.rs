@@ -143,19 +143,20 @@ fn freshen_insertion_indices(coefficient: &Atom, reservation_context: &[Atom]) -
     Ok(cooking.uncook(expression.as_view()))
 }
 
-/// `GAMMALOOP_SURROGATE_CLOSED_ROOT=1` (opt-in, default off): above four
-/// loops, a caller that closes the root metric
-/// ([`PropagatorInsertionEvaluator::pole_part_closing_root`] with
+/// `GAMMALOOP_SURROGATE_CLOSED_ROOT=1` (default on: production since r5r-nf1,
+/// results/surrogate-closed-root): above four loops, a caller that closes the
+/// root metric ([`PropagatorInsertionEvaluator::pole_part_closing_root`] with
 /// `close_root`) receives the surrogate's bare poles already root-closed
 /// ([`RStarPlan::closed_pole_part`]), so the surrogate's root-scope
-/// remainders take the remainder-boundary path. Any other value: off.
+/// remainders take the remainder-boundary path. Any other value (`0`,
+/// `off`): off.
 pub fn surrogate_closed_root() -> bool {
     static MODE: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
         matches!(
             std::env::var("GAMMALOOP_SURROGATE_CLOSED_ROOT")
                 .as_deref()
                 .map(str::trim),
-            Ok("1")
+            Err(std::env::VarError::NotPresent) | Ok("1")
         )
     });
     *MODE
