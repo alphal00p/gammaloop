@@ -758,9 +758,6 @@ struct FactorRules<'a> {
     location: Location,
     dimension: Symbol,
     edges: &'a BTreeMap<usize, &'a FactorizedEdge>,
-    /// The projector of a closure record: `gamma` between bispinor ports is
-    /// allowed there (the producer's Dirac closure).
-    closure: bool,
 }
 
 impl FactorRules<'_> {
@@ -856,8 +853,10 @@ impl FactorRules<'_> {
                 Ok(slots)
             }
             names::GAMMA => {
-                if (self.location == Location::Projector && !self.closure)
-                    || args.len() != 3
+                // In a projector: the caller's Dirac closure between a
+                // bispinor port pair (its spinor slots must be ports,
+                // `check_contraction`; its Lorentz slot a port or open).
+                if args.len() != 3
                     || slots.len() != 3
                     || slots[0].rep != names::BIS
                     || slots[1].rep != names::BIS
@@ -1094,6 +1093,42 @@ impl FactorizedNumerator {
         self.vertices.iter().find(|vertex| vertex.id == id)
     }
 
+    /// The slots that stay OPEN in the value (sorted by canonical string):
+    /// without a projector every port; with one, the ports it does not close
+    /// and its own free slots that are not ports (e.g. a fresh Lorentz index
+    /// of a Dirac projector `gamma(bis_c, bis_r, mink(D, nu))`). Empty for a
+    /// closed scalar value. Assumes a valid value ([`Self::validate`]).
+    pub fn open_slots(&self) -> Result<Vec<Atom>> {
+        let Some(projector) = &self.projector else {
+            let mut open = self.ports.clone();
+            open.sort_by_key(|port| port.to_canonical_string());
+            return Ok(open);
+        };
+        let edges = self.check_graph()?;
+        let rules = FactorRules {
+            location: Location::Projector,
+            dimension: self.dimension,
+            edges: &edges,
+        };
+        let (sets, _) = rules.analyse(&projector.tensor)?;
+        let ports = self
+            .ports
+            .iter()
+            .map(|port| (port.to_canonical_string(), port.clone()))
+            .collect::<BTreeMap<_, _>>();
+        let mut open = ports
+            .iter()
+            .filter(|(key, _)| !sets.free.contains_key(*key))
+            .map(|(key, port)| (key.clone(), port.clone()))
+            .collect::<BTreeMap<_, _>>();
+        for (key, slot) in &sets.free {
+            if !ports.contains_key(key) {
+                open.insert(key.clone(), slot.atom.clone());
+            }
+        }
+        Ok(open.into_values().collect())
+    }
+
     /// The product of all edge and vertex factors (colour-free), as one atom.
     pub fn factor_product(&self) -> Atom {
         let mut product = Atom::num(1);
@@ -1140,7 +1175,6 @@ impl FactorizedNumerator {
                 location: Location::Edge(edge.id),
                 dimension: self.dimension,
                 edges: &edges,
-                closure: false,
             };
             let (sets, elements) = rules.analyse(&edge.factor)?;
             analysed.push((rules.location, sets, elements));
@@ -1150,7 +1184,6 @@ impl FactorizedNumerator {
                 location: Location::Vertex(vertex.id),
                 dimension: self.dimension,
                 edges: &edges,
-                closure: false,
             };
             let (sets, elements) = rules.analyse(&vertex.factor)?;
             analysed.push((rules.location, sets, elements));
@@ -1160,7 +1193,6 @@ impl FactorizedNumerator {
                 location: Location::Projector,
                 dimension: self.dimension,
                 edges: &edges,
-                closure: matches!(self.kind, FactorizedKind::Closure(_)),
             };
             let (sets, elements) = rules.analyse(&projector.tensor)?;
             analysed.push((rules.location, sets, elements));
@@ -1489,36 +1521,33 @@ impl FactorizedNumerator {
             .iter()
             .find(|(location, _, _)| *location == Location::Projector)
             .map(|(_, sets, _)| sets.free.keys().cloned().collect::<BTreeSet<_>>());
-        // A closure record's projector may leave ports open and open slots of
-        // its own (WH-RECORD-FORMAT section 3: its free slots are ports or open
-        // slots); a direct record's projector closes exactly the ports.
-        let mut projector_open = BTreeSet::new();
+        // The projector closes some or all ports; a free slot of the projector
+        // that is not a port must not occur in the factors: it stays OPEN
+        // (`open_slots`). Ports it does not close stay open too.
         if let Some(projector_free) = &projector_free {
-            if matches!(self.kind, FactorizedKind::Closure(_)) {
-                projector_open = projector_free.difference(&ports).cloned().collect();
-            } else if *projector_free != ports {
-                return Err(FactorizedError::Ports {
-                    detail: format!(
-                        "the projector's free indices {projector_free:?} are not the ports {ports:?}"
-                    ),
-                });
+            for key in projector_free.difference(&ports) {
+                if free.get(key).is_some_and(|locations| {
+                    locations.iter().any(|l| *l != Location::Projector)
+                }) {
+                    return Err(FactorizedError::Ports {
+                        detail: format!(
+                            "the projector's free index {key} occurs in the factors but is not a \
+                             port (the projector's free indices {projector_free:?}, the ports \
+                             {ports:?})"
+                        ),
+                    });
+                }
             }
         }
         for (key, locations) in &free {
+            if locations.iter().all(|l| *l == Location::Projector) {
+                // An open slot of the projector (checked above).
+                continue;
+            }
             let in_factors = locations
                 .iter()
                 .filter(|l| **l != Location::Projector)
                 .count();
-            if projector_open.contains(key) {
-                if in_factors != 0 {
-                    return Err(FactorizedError::Ports {
-                        detail: format!(
-                            "{key} is free in the projector and occurs in the factors without being a port"
-                        ),
-                    });
-                }
-                continue;
-            }
             let is_port = ports.contains(key);
             let expected = if is_port { 1 } else { 2 };
             if in_factors > expected {
@@ -1578,13 +1607,11 @@ impl FactorizedNumerator {
                         .into_iter()
                         .chain(edge.target_hedge)
                         .collect::<BTreeSet<_>>();
-                    // a closure record's external quark leg may carry factor 1:
-                    // its spinor slot is a port (closed by the projector)
-                    let bare_leg = matches!(self.kind, FactorizedKind::Closure(_))
-                        && edge.is_external()
-                        && spinor_free.is_empty();
-                    if edge.line == LineKind::Fermion && !bare_leg {
-                        if spinor_free != own {
+                    if edge.line == LineKind::Fermion {
+                        // An amputated external fermion leg (factor without
+                        // spinors): its slot at the vertex is a port.
+                        let amputated_leg = edge.is_external() && spinor_free.is_empty();
+                        if spinor_free != own && !amputated_leg {
                             return Err(FactorizedError::FermionOrientation {
                                 location: location.to_string(),
                                 detail: format!(
