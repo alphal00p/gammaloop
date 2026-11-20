@@ -56,6 +56,9 @@ mod taylor;
 #[cfg(test)]
 mod tests;
 mod top_mass;
+mod uncontracted;
+#[cfg(test)]
+mod uncontracted_tests;
 mod uv;
 
 pub use crate::uv::counterterm_cache::{

@@ -345,6 +345,12 @@ pub(crate) fn in_dressed_scope<T>(f: impl FnOnce() -> T) -> T {
     result
 }
 
+/// Whether this thread is inside the R* of a dressed skeleton (an insertion
+/// surrogate, [`in_dressed_scope`]); the record kind of `uncontracted`.
+pub(super) fn dressed_scope() -> bool {
+    DRESSED_SCOPE.with(|scope| scope.get())
+}
+
 thread_local! {
     static UV_CHILD_SCOPE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
@@ -395,7 +401,7 @@ pub(super) fn in_ir_hard_scope<T>(edge_basis: bool, f: impl FnOnce() -> T) -> T 
     f()
 }
 
-fn ir_hard_fixed_mass() -> bool {
+pub(super) fn ir_hard_fixed_mass() -> bool {
     IR_HARD_FIXED_MASS.with(|scope| scope.get())
 }
 
@@ -2102,6 +2108,12 @@ impl RStarIntegrand {
 
     pub fn soft_edges(&self) -> &[EdgeIndex] {
         &self.soft_edges
+    }
+
+    /// The R* loop basis of this component (the routing of its momentum
+    /// vectors in an uncontracted record, `uncontracted`).
+    pub(super) fn basis(&self) -> &LoopMomentumBasis {
+        &self.basis
     }
 
     /// Whether the routed remainder vanishes (nothing is integrated).

@@ -563,6 +563,11 @@ impl RStarPlan {
         evaluation.root_closure = Some(closure);
         evaluation.channel = ("isotropic", "1/(d (d-1) (d+2))");
         evaluation.close_child(child_root.as_ref(), "isotropic");
+        evaluation.closure_data = Some(super::uncontracted::ClosureData {
+            kind: super::uncontracted::ChildClosure::Isotropic,
+            normalization: normalization.clone(),
+            open: None,
+        });
         let channels = evaluation.counterterm()?;
         Ok(markers
             .iter()
@@ -620,6 +625,14 @@ impl RStarPlan {
                 DiracKind::SelfEnergy => "dirac_self_energy",
             },
         );
+        evaluation.closure_data = Some(super::uncontracted::ClosureData {
+            kind: match boundary.kind {
+                DiracKind::Vertex => super::uncontracted::ChildClosure::DiracVertex,
+                DiracKind::SelfEnergy => super::uncontracted::ChildClosure::DiracSelfEnergy,
+            },
+            normalization: boundary.normalization.clone(),
+            open: matches!(boundary.kind, DiracKind::SelfEnergy).then(|| boundary.index.clone()),
+        });
         let trace = evaluation.counterterm()?;
         Ok(trace * &boundary.structure)
     }
@@ -917,6 +930,10 @@ struct Evaluation<'a> {
     /// Why a closed UV child is not admitted (`not_admitted` reason in place
     /// of `no_closed_root`); `None` with the switch off.
     child_decline: Option<&'static str>,
+    /// The closure of a closed UV child as data (isotropic, Dirac vertex,
+    /// Dirac self-energy): read only by the uncontracted records
+    /// (`GAMMALOOP_UNCONTRACTED_NUMERATOR`).
+    closure_data: Option<super::uncontracted::ClosureData>,
 }
 
 impl<'a> Evaluation<'a> {
@@ -1068,6 +1085,7 @@ impl<'a> Evaluation<'a> {
             ir_dirac_boundaries: BTreeMap::new(),
             closed_child: None,
             child_decline: None,
+            closure_data: None,
         })
     }
 
@@ -3140,16 +3158,20 @@ impl<'a> Evaluation<'a> {
             UvChildrenRoute::Massive => UvChildrenRoute::Rstar { min_loops: 1 },
             route => route,
         };
-        let delta = RStarPlan::rstar_child_counterterm(
-            &cache,
-            &graph,
-            support,
-            self.model,
-            self.vakint,
-            self.uv_settings,
-            route,
-            self.plan.uv_child_closure,
-        )
+        // GAMMALOOP_UNCONTRACTED_NUMERATOR: records inside are of kind
+        // quotient (a plain call with the switch off).
+        let delta = super::uncontracted::scoped(super::uncontracted::Scope::Quotient, || {
+            RStarPlan::rstar_child_counterterm(
+                &cache,
+                &graph,
+                support,
+                self.model,
+                self.vakint,
+                self.uv_settings,
+                route,
+                self.plan.uv_child_closure,
+            )
+        })
         .wrap_err_with(|| {
             format!(
                 "while applying R* to the decorated quotient {}",
@@ -3235,10 +3257,113 @@ impl<'a> Evaluation<'a> {
     }
 
     /// One root-scope ordinary remainder (the ordinary loop and the census
-    /// bare-term loop): today's [`Self::integrate`] with the mode off; the
-    /// remainder-boundary path for an admitted remainder otherwise (DESIGN
-    /// 6a, 7).
+    /// bare-term loop). `GAMMALOOP_UNCONTRACTED_NUMERATOR` off (the default):
+    /// today's path, [`Self::integrate_ordinary_today`], and nothing else;
+    /// on or check: [`Self::integrate_ordinary_uncontracted`].
     fn integrate_ordinary(&mut self, term: &UvPreparationTerm) -> Result<Atom> {
+        let switch = super::uncontracted::switch();
+        if switch.mode == super::uncontracted::Mode::Off {
+            return self.integrate_ordinary_today(term);
+        }
+        self.integrate_ordinary_uncontracted(term, switch)
+    }
+
+    /// `GAMMALOOP_UNCONTRACTED_NUMERATOR` on or check (U7a): the remainder as
+    /// one uncontracted record evaluated by vakint's factorised entry
+    /// ([`super::uncontracted`]), under the integration id today's path would
+    /// consume. On: its value, or today's path for this record when it is
+    /// declined. Check: our attempt (no state changes), then today's path;
+    /// the pole parts must agree; today's value is returned.
+    fn integrate_ordinary_uncontracted(
+        &mut self,
+        term: &UvPreparationTerm,
+        switch: super::uncontracted::Switch,
+    ) -> Result<Atom> {
+        use super::uncontracted::{self as uncontracted, Mode};
+        let kind = uncontracted::classify(self.plan.root_boundary.is_some());
+        if !switch.enabled(kind) {
+            return self.integrate_ordinary_today(term);
+        }
+        let id = self.integration_id + 1;
+        let started = Instant::now();
+        let attempt = {
+            let site = self.uncontracted_site(term);
+            uncontracted::attempt(&site, kind, id, switch.mode, || {
+                self.remainder_with(term, self.root_closure.as_ref())
+            })?
+        };
+        let uncontracted_elapsed = started.elapsed();
+        if switch.mode == Mode::Check {
+            let today_started = Instant::now();
+            let today = self.integrate_ordinary_today(term)?;
+            let check = attempt.value().map(|ours| {
+                uncontracted::compare(
+                    &today,
+                    &ours,
+                    self.epsilon,
+                    today_started.elapsed().as_secs_f64(),
+                    uncontracted_elapsed.as_secs_f64(),
+                )
+            });
+            uncontracted::report(&attempt, check.as_ref());
+            if let Some(check) = &check
+                && !check.equal
+            {
+                return Err(uncontracted::check_failure(&attempt, check, self.epsilon));
+            }
+            return Ok(today);
+        }
+        uncontracted::report(&attempt, None);
+        match attempt.value() {
+            Some(value) => {
+                self.integration_id = id;
+                self.integration_elapsed += uncontracted_elapsed;
+                Ok(value)
+            }
+            None => self.integrate_ordinary_today(term),
+        }
+    }
+
+    /// The borrowed view of this evaluation that an uncontracted record is
+    /// built from.
+    fn uncontracted_site<'s>(
+        &'s self,
+        term: &'s UvPreparationTerm,
+    ) -> super::uncontracted::Site<'s> {
+        let today = match boundary::remainder_boundary_mode() {
+            Ok(BoundaryMode::Off) => "whole".to_owned(),
+            Ok(_) => match self.boundary_admits(&term.remainder) {
+                Ok(()) => "boundary".to_owned(),
+                Err(reason) => format!("declined:{reason}"),
+            },
+            Err(_) => "error".to_owned(),
+        };
+        super::uncontracted::Site {
+            graph: self.graph,
+            model: self.model,
+            plan: self.plan,
+            term,
+            children: &self.children,
+            root_closure: self.root_closure.as_ref(),
+            closed_root: self.closed_root,
+            closure_data: self.closure_data.as_ref(),
+            root_projector: self.root_projector.is_some(),
+            root_edges: &self.root_edges,
+            reference_mass_squared: self.reference_mass_squared,
+            auxiliary_mass_squared: &self.auxiliary_mass_squared,
+            settings: &self.settings,
+            vakint: self.vakint,
+            uv_settings: self.uv_settings,
+            top_mass: self.top_mass,
+            epsilon: self.epsilon,
+            today,
+        }
+    }
+
+    /// Today's path of one root-scope ordinary remainder: [`Self::integrate`]
+    /// with the remainder-boundary mode off; the remainder-boundary path for
+    /// an admitted remainder otherwise (DESIGN 6a, 7).
+    fn integrate_ordinary_today(&mut self, term: &UvPreparationTerm) -> Result<Atom> {
         let mode = boundary::remainder_boundary_mode()?;
         if mode == BoundaryMode::Off {
             let remainder = self.remainder(term)?;

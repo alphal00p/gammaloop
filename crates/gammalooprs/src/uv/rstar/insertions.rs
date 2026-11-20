@@ -1010,7 +1010,7 @@ impl PropagatorInsertionEvaluator {
 /// Whether two normalised insertion coefficients in the same caller frame
 /// agree: `identical` as expressions, `equal` after gamma and colour
 /// simplification and canonical dummy relabelling of their difference.
-fn insertion_coefficients_agree(closed: &Atom, open: &Atom) -> Result<(bool, bool)> {
+pub(super) fn insertion_coefficients_agree(closed: &Atom, open: &Atom) -> Result<(bool, bool)> {
     use idenso::{
         color::ColorSimplifySettings, dirac::GammaSimplifySettings, tensor::AlgebraSettings,
     };

@@ -1,0 +1,43 @@
+schema	pint6.factorized-numerator.v3
+label	k1-root graph=B_self_energy_L2_22 scope=root:2,3,4,5 term=bare remaining=2,3,4,5 marked_edge=2 site=evaluate_boundary source=wh-fixture.v0
+kind	closure	externals=conserved
+dimension	gammalooprs::{}::dim
+momenta	loops=2	externals=1
+loop	1	edge=2
+loop	2	edge=5
+external	1	edge=0
+edges	6
+edge	0	source=ext	target=0	hedges=-,0	particle=B	line=vector	power=1	momentum=0,0,1	0
+edge_factor	0	1
+edge	1	source=2	target=ext	hedges=1,-	particle=B	line=vector	power=1	momentum=0,0,1	0
+edge_factor	1	1
+edge	2	source=0	target=1	hedges=2,3	particle=c	line=ghost	power=1	momentum=1,0,0	gammalooprs::{scalar}::rstar_reference_mass_squared
+edge_factor	2	𝑖
+edge	3	source=2	target=0	hedges=4,5	particle=c	line=ghost	power=1	momentum=1,0,-1	0
+edge_factor	3	𝑖
+edge	4	source=1	target=2	hedges=6,7	particle=Q	line=vector	power=1	momentum=1,-1,0	0
+edge_factor	4	(𝑖)*spenso::{symmetric,linear,real,spenso::tensor}::g(spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(6,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(7,1)))
+edge	5	source=1	target=2	hedges=8,9	particle=c	line=ghost	power=1	momentum=0,1,0	0
+edge_factor	5	𝑖
+vertices	3
+vertex	0	rule=V_ccB	(-1*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(0,1)))+-1*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(0,1))))*-1*UFO::{}::gs_minus
+vertex	1	rule=V_ccQ	UFO::{}::gs_minus*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(5,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(6,1)))
+vertex	2	rule=V_ccBQ	UFO::{}::gs2_minus_i*spenso::{symmetric,linear,real,spenso::tensor}::g(spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(1,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(7,1)))
+ports	2
+port	spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(0,1))
+port	spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(1,1))
+projector	p2_power=-1	spenso::{symmetric,linear,real,spenso::tensor}::g(spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(0,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(1,1)))
+open	0
+prefactor	loop_sign=1	nf_power=0
+prefactor_overall	1
+prefactor_scalars	(-1+gammalooprs::{}::dim)^(-1)*(-𝑖)*beta_projection::{}::transverse
+prefactor_colour	1
+colour_branch	none
+closure	edge=2	power=1	gammalooprs::{scalar}::rstar_reference_mass_squared
+taylor	degree=2	compensate_mass=1	scaled_edges=0	orders=all	gammalooprs::{scalar}::rstar_mass_squared
+softs	0
+original_cycles	fermion=0	ghost=1
+depth	2
+insertions	0
+lines	42
+end
