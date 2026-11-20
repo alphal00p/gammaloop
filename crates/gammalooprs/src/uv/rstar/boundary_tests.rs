@@ -26,10 +26,10 @@ use crate::{
 use super::{
     RStarPlan, TaylorExpansion,
     boundary::{
-        BoundaryMode, BoundaryStats, ClosedRootNormalization, Grammar, Role,
-        denominator_orders, fallback_max_bytes, fallback_max_summands, large_reason, split_into_blocks,
-        take_logged_summaries, validate_remainder_boundary, verify_vakint_scalar, with_boundary_mode,
-        with_census_dump,
+        BoundaryMode, BoundaryStats, ClosedRootNormalization, Grammar, Role, denominator_orders,
+        fallback_max_bytes, fallback_max_summands, large_reason, split_into_blocks,
+        take_logged_summaries, validate_remainder_boundary, verify_vakint_scalar,
+        with_boundary_mode, with_census_dump,
     },
     expression::RStarIntegrand,
     recursive_tests::{colour_factored, load, settings},
@@ -68,7 +68,10 @@ fn to_spenso(atom: &Atom) -> Atom {
         .enumerate()
         .map(|(j, edge)| Replacement::new(function!(S.k, j as i64 + 1).to_pattern(), q(*edge)))
         .collect::<Vec<_>>();
-    rules.push(Replacement::new(function!(S.p, X0 as i64).to_pattern(), q(X0)));
+    rules.push(Replacement::new(
+        function!(S.p, X0 as i64).to_pattern(),
+        q(X0),
+    ));
     atom.replace_multiple(&rules)
         .replace(function!(S.dot, W_.a_, W_.b_))
         .with(function!(SPENSO_TAG.dot, W_.a_, W_.b_))
@@ -170,7 +173,8 @@ fn graded_split_matches_the_outer_taylor_polynomial() -> Result<()> {
     let taylor = TaylorExpansion::new(parameter, degree);
     let product = &p * Atom::mul_many(denominators.iter());
     let scaled = RStarIntegrand::scale_edges(&product, &root_edges, parameter);
-    let expected = taylor.evaluate(&taylor.compensate_mass(&scaled, reference_symbol, &auxiliary))?;
+    let expected =
+        taylor.evaluate(&taylor.compensate_mass(&scaled, reference_symbol, &auxiliary))?;
     let difference = (regulated(&reassembled) - regulated(&expected)).expand();
     ensure!(
         difference.is_zero(),
@@ -220,7 +224,10 @@ fn graded_split_declines() -> Result<()> {
     let pair = indexed(2, 5) * indexed(3, 5);
     let notated = super::boundary::retry_contraction(pair.as_view())?;
     let reason = decline_reason(pair * dot(2, X0) + dot(3, 3))?;
-    ensure!(reason == "accepted", "(c) closed pair: {reason}; the notation pass gives {notated}");
+    ensure!(
+        reason == "accepted",
+        "(c) closed pair: {reason}; the notation pass gives {notated}"
+    );
     let reason = decline_reason(indexed(2, 5) * indexed(3, 6) * dot(2, X0) + dot(3, 3))?;
     ensure!(reason.starts_with("indexed"), "(c) open pair: {reason}");
     // (d) dot(Q(x0),Q(x0))^-1.
@@ -250,9 +257,14 @@ fn split_checkpoints_inside_a_factorized_p() -> Result<()> {
     use std::time::Duration;
     use symbolica::utils::resources::{ResourceBudget, ResourceLimits};
     test_initialise()?;
-    let terms = (1..=5000).map(|i| dot(2, 2).pow(i as i64)).collect::<Vec<_>>();
+    let terms = (1..=5000)
+        .map(|i| dot(2, 2).pow(i as i64))
+        .collect::<Vec<_>>();
     let p = Atom::add_many(terms.iter()) * dot(3, 3);
-    ensure!(matches!(p.as_view(), AtomView::Mul(_)), "P must be one top-level product");
+    ensure!(
+        matches!(p.as_view(), AtomView::Mul(_)),
+        "P must be one top-level product"
+    );
     let split = |p: Atom| -> Result<std::result::Result<usize, String>> {
         let mut grammar = Grammar::new(&BASIS, X0, 2, *super::REFERENCE_MASS_SQUARED);
         let mut stats = BoundaryStats::default();
@@ -267,7 +279,10 @@ fn split_checkpoints_inside_a_factorized_p() -> Result<()> {
         ..Default::default()
     });
     let exhausted = budget.run(|| split(p));
-    ensure!(exhausted.is_err(), "an exhausted budget must be a hard error: {exhausted:?}");
+    ensure!(
+        exhausted.is_err(),
+        "an exhausted budget must be a hard error: {exhausted:?}"
+    );
     Ok(())
 }
 
@@ -298,19 +313,37 @@ fn scopes_are_restored_when_an_integration_panics() -> Result<()> {
         })
     }));
     ensure!(caught.is_err(), "the panic must reach the caller");
-    ensure!(!super::integrate::capture_active(), "the closure capture is left set");
-    ensure!(!super::boundary::callback_check_active(), "the callback check is left set");
-    ensure!(!super::pint6_dump::channel_active(), "the channel is left set");
+    ensure!(
+        !super::integrate::capture_active(),
+        "the closure capture is left set"
+    );
+    ensure!(
+        !super::boundary::callback_check_active(),
+        "the callback check is left set"
+    );
+    ensure!(
+        !super::pint6_dump::channel_active(),
+        "the channel is left set"
+    );
     // A normal end returns the scope's values and restores the slots too.
     let ((value, outcome), capture) = super::integrate::capturing_closures(|| {
         super::boundary::with_callback_check(&normalization, || {
             super::pint6_dump::with_channel(channel(), || {
-                (super::integrate::capture_active(), super::pint6_dump::channel_active())
+                (
+                    super::integrate::capture_active(),
+                    super::pint6_dump::channel_active(),
+                )
             })
         })
     });
-    ensure!(value == (true, true), "the scopes are not active inside: {value:?}");
-    ensure!(outcome == "none" && capture.closures.is_empty(), "{outcome}");
+    ensure!(
+        value == (true, true),
+        "the scopes are not active inside: {value:?}"
+    );
+    ensure!(
+        outcome == "none" && capture.closures.is_empty(),
+        "{outcome}"
+    );
     ensure!(!super::integrate::capture_active() && !super::boundary::callback_check_active());
     ensure!(!super::pint6_dump::channel_active());
     Ok(())
@@ -331,21 +364,41 @@ fn postconditions_reject_unmapped_loop_momenta() -> Result<()> {
     };
     // Accepted shapes.
     ensure!(check(vdot(&k(1), &k(2)) * Atom::var(symbol!("nf")), Role::Block) == "accepted");
-    ensure!(check(vdot(&k(1), &p(0)) * vdot(&p(0), &p(0)).pow(-1), Role::Coefficient) == "accepted");
+    ensure!(
+        check(
+            vdot(&k(1), &p(0)) * vdot(&p(0), &p(0)).pow(-1),
+            Role::Coefficient
+        ) == "accepted"
+    );
     ensure!(check(k(1) - p(1), Role::Routing) == "accepted");
     // Rejected ones.
     let reason = check(function!(GS.emr_mom, 2) * vdot(&k(1), &k(1)), Role::Block);
-    ensure!(reason.starts_with("postcondition:block:"), "emr_mom: {reason}");
+    ensure!(
+        reason.starts_with("postcondition:block:"),
+        "emr_mom: {reason}"
+    );
     let reason = check(k(1) * vdot(&k(1), &k(2)), Role::Block);
     ensure!(reason == "postcondition:block:k(1)", "bare k: {reason}");
     let reason = check(vdot(&p(1), &k(1)), Role::Block);
-    ensure!(reason == "postcondition:block:p(1)", "p in a block: {reason}");
+    ensure!(
+        reason == "postcondition:block:p(1)",
+        "p in a block: {reason}"
+    );
     let reason = check(vdot(&p(2), &k(1)), Role::Coefficient);
-    ensure!(reason == "postcondition:coefficient:p(2)", "p(b_j) in R: {reason}");
+    ensure!(
+        reason == "postcondition:coefficient:p(2)",
+        "p(b_j) in R: {reason}"
+    );
     let reason = check(vdot(&k(3), &k(1)), Role::Coefficient);
-    ensure!(reason == "postcondition:coefficient:k(3)", "k beyond L: {reason}");
+    ensure!(
+        reason == "postcondition:coefficient:k(3)",
+        "k beyond L: {reason}"
+    );
     let reason = check(k(2) + p(1), Role::Routing);
-    ensure!(reason == "postcondition:routing:k(2)", "vacuum label in a routing image: {reason}");
+    ensure!(
+        reason == "postcondition:routing:k(2)",
+        "vacuum label in a routing image: {reason}"
+    );
     let reason = check(Atom::var(GS.dim) * vdot(&k(1), &k(1)), Role::Block);
     ensure!(reason.starts_with("postcondition:block:"), "dim: {reason}");
     Ok(())
@@ -368,8 +421,14 @@ fn large_rule_holds_before_and_after_the_contraction() {
     stats.p_summands = 1;
     stats.p_bytes = 3_341_388;
     assert!(large_reason(&stats, 5, false).is_none());
-    assert!(large_reason(&stats, 6, false).is_some(), "six loops after the contraction");
-    assert!(large_reason(&stats, 5, true).is_some(), "a census dump after the contraction");
+    assert!(
+        large_reason(&stats, 6, false).is_some(),
+        "six loops after the contraction"
+    );
+    assert!(
+        large_reason(&stats, 5, true).is_some(),
+        "a census dump after the contraction"
+    );
     stats.p_bytes = fallback_max_bytes().saturating_add(1);
     assert!(fallback_max_bytes() == usize::MAX || large_reason(&stats, 5, false).is_some());
     stats.p_bytes = 10;
@@ -408,7 +467,10 @@ fn test_normalization(graph: &Graph) -> ClosedRootNormalization {
     let x0 = usize::from(external);
     let q_squared = function!(SPENSO_TAG.dot, q(x0), q(x0));
     let factor = Atom::var(symbol!("boundary_test_channel"))
-        * graph.global_prefactor.num.replace_multiple(&external_routing)
+        * graph
+            .global_prefactor
+            .num
+            .replace_multiple(&external_routing)
         / (Atom::i() * q_squared)
         / (Atom::var(GS.dim) - 1);
     ClosedRootNormalization {
@@ -463,7 +525,10 @@ fn boundary_matches_old_path_two_and_three_loop() -> Result<()> {
             let totals = |mode: BoundaryMode| -> Result<[usize; 6]> {
                 let mut totals = [0; 6];
                 for (root, outcome, summary) in take_logged_summaries() {
-                    ensure!(outcome == "ok", "{name} {mode:?}: root {root} ended {outcome}");
+                    ensure!(
+                        outcome == "ok",
+                        "{name} {mode:?}: root {root} ended {outcome}"
+                    );
                     for (total, count) in totals.iter_mut().zip([
                         summary.boundary,
                         summary.zero,
@@ -479,12 +544,18 @@ fn boundary_matches_old_path_two_and_three_loop() -> Result<()> {
             };
             let _ = take_logged_summaries();
             let off = run(BoundaryMode::Off)?;
-            ensure!(take_logged_summaries().is_empty(), "{name}: mode off logs no summary");
+            ensure!(
+                take_logged_summaries().is_empty(),
+                "{name}: mode off logs no summary"
+            );
             let on = run(BoundaryMode::On)?;
             let [boundaries, _, _, fallback, errors, uncertified] = totals(BoundaryMode::On)?;
             // Without this, On == Off would hold trivially if nothing were
             // admitted (A7-A9 are silent under STRICT).
-            ensure!(boundaries >= 1, "{name}: no remainder took the boundary path in mode on");
+            ensure!(
+                boundaries >= 1,
+                "{name}: no remainder took the boundary path in mode on"
+            );
             ensure!(
                 fallback == 0 && errors == 0 && uncertified == 0,
                 "{name} on: fallback={fallback} errors={errors} uncertified={uncertified}"
@@ -495,7 +566,10 @@ fn boundary_matches_old_path_two_and_three_loop() -> Result<()> {
                 checked == boundaries && checks == checked + zero,
                 "{name} check: {checked} built and {checks} checks against {boundaries} in mode on"
             );
-            ensure!(fallback == 0 && errors == 0, "{name} check: fallback={fallback} errors={errors}");
+            ensure!(
+                fallback == 0 && errors == 0,
+                "{name} check: fallback={fallback} errors={errors}"
+            );
             total_boundaries += boundaries;
             ensure!(!off.expand().is_zero(), "{name}: zero counterterm");
             let identical = off == on;
@@ -524,7 +598,10 @@ fn census_dump_is_accepted_in_every_mode() -> Result<()> {
             let startup = with_census_dump(dump, || {
                 with_boundary_mode(mode, false, validate_remainder_boundary)
             });
-            ensure!(startup.is_ok(), "{mode:?} dump={dump}: start-up {startup:?}");
+            ensure!(
+                startup.is_ok(),
+                "{mode:?} dump={dump}: start-up {startup:?}"
+            );
         }
     }
     Ok(())
@@ -539,7 +616,8 @@ fn census_dump_is_accepted_in_every_mode() -> Result<()> {
 fn boundary_record_round_trips() -> Result<()> {
     test_initialise()?;
     let parse = |text: &str| vakint::vakint_parse!(text).map_err(|error| eyre!("{error}"));
-    let directory = std::env::temp_dir().join(format!("pint6-boundary-test-{}", std::process::id()));
+    let directory =
+        std::env::temp_dir().join(format!("pint6-boundary-test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&directory);
     let dump = super::pint6_dump::test_settings(&directory)?;
     // A block of 100 summands (file) and a small one (inline).
@@ -551,7 +629,10 @@ fn boundary_record_round_trips() -> Result<()> {
     );
     let small = parse("dot(k(1),k(1))+3/7*dot(k(1),k(2))")?;
     let topology = parse("topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(2,1),k(1)-p(1),0,2))")?;
-    let routing = vec![(parse("k(1)")?, parse("k(1)")?), (parse("k(2)")?, parse("k(1)-p(1)")?)];
+    let routing = vec![
+        (parse("k(1)")?, parse("k(1)")?),
+        (parse("k(2)")?, parse("k(1)-p(1)")?),
+    ];
     let boundary = vakint::p_integral::RemainderBoundary::new(
         "graph=test marked_edge=2 integration_id=1 loops=2",
         parse("p(1)")?,
@@ -577,7 +658,10 @@ fn boundary_record_round_trips() -> Result<()> {
         boundary,
         patterns: vec![meta],
         zero_patterns: Vec::new(),
-        grades: vec![super::boundary::Grade::default(), super::boundary::Grade::default()],
+        grades: vec![
+            super::boundary::Grade::default(),
+            super::boundary::Grade::default(),
+        ],
         loops: 2,
         basis: vec![2, 3],
         normalisation: Atom::num(1),
@@ -603,21 +687,37 @@ fn boundary_record_round_trips() -> Result<()> {
         false,
         &Default::default(),
     )?;
-    ensure!(second.sequence == first.sequence + 1, "boundary sequence {first:?}");
+    ensure!(
+        second.sequence == first.sequence + 1,
+        "boundary sequence {first:?}"
+    );
     ensure!(first.block_files == 1, "one streamed block file expected");
     super::pint6_dump::verify_boundary(&built.boundary, &first.header)?;
     let (read, keys) = super::pint6_dump::read_boundary(&first.header)?;
-    ensure!(read.routing.len() == routing.len() + 1, "the closing route (A1)");
-    ensure!(keys.get("routing").map(String::as_str) == Some("3"), "routing count {keys:?}");
+    ensure!(
+        read.routing.len() == routing.len() + 1,
+        "the closing route (A1)"
+    );
+    ensure!(
+        keys.get("routing").map(String::as_str) == Some("3"),
+        "routing count {keys:?}"
+    );
     let header = std::fs::read_to_string(&first.header)?;
-    ensure!(header.contains("\tref_closure=7\t"), "ref_closure missing:\n{header}");
+    ensure!(
+        header.contains("\tref_closure=7\t"),
+        "ref_closure missing:\n{header}"
+    );
     ensure!(header.contains("\nroute "), "route lines missing");
     // A3: the block file has exactly `summands` lines after its three head lines.
     let block = std::fs::read_dir(&directory)?
         .filter_map(|entry| entry.ok().map(|entry| entry.path()))
         .find(|path| path.to_string_lossy().ends_with(".block-000.txt.zst"))
         .ok_or_else(|| eyre!("no block file"))?;
-    let text = std::process::Command::new("zstd").arg("-dcq").arg(&block).output()?.stdout;
+    let text = std::process::Command::new("zstd")
+        .arg("-dcq")
+        .arg(&block)
+        .output()?
+        .stdout;
     let text = String::from_utf8(text)?;
     ensure!(text.lines().count() == 3 + 100, "block lines");
     ensure!(text.lines().nth(2) == Some("summands 100"), "summands line");
@@ -636,8 +736,12 @@ fn feynkit_images_are_pattern_independent_and_odd_images_vanish() -> Result<()> 
     tensor_settings.tensor_reduction_method = vakint::TensorReductionMethod::FeynKit;
     tensor_settings.use_dot_product_notation = true;
     let parse = |text: &str| vakint::vakint_parse!(text).map_err(|error| eyre!("{error}"));
-    let first = parse("topo(prop(1,edge(1,2),k(0),M2,1)*prop(2,edge(1,2),k(1),0,1)*prop(3,edge(2,1),k(0)+k(1),0,1))")?;
-    let second = parse("topo(prop(1,edge(1,2),k(0),M2,2)*prop(2,edge(1,2),k(1),0,3)*prop(3,edge(2,1),k(0)+k(1),0,1))")?;
+    let first = parse(
+        "topo(prop(1,edge(1,2),k(0),M2,1)*prop(2,edge(1,2),k(1),0,1)*prop(3,edge(2,1),k(0)+k(1),0,1))",
+    )?;
+    let second = parse(
+        "topo(prop(1,edge(1,2),k(0),M2,2)*prop(2,edge(1,2),k(1),0,3)*prop(3,edge(2,1),k(0)+k(1),0,1))",
+    )?;
     let project = |integral: &Atom, numerator: &str| -> Result<Atom> {
         let numerator = parse(numerator)?;
         let vectors = vakint::VakintTerm::identify_vectors_in_numerator(numerator.as_view())
@@ -648,9 +752,14 @@ fn feynkit_images_are_pattern_independent_and_odd_images_vanish() -> Result<()> 
             vectors,
         };
         let mut images = std::collections::HashMap::new();
-        Ok(super::integrate::tensor_reduce_by_factors(&vakint, &tensor_settings, &term, &mut images)?
-            .unwrap_or_default()
-            .expand())
+        Ok(super::integrate::tensor_reduce_by_factors(
+            &vakint,
+            &tensor_settings,
+            &term,
+            &mut images,
+        )?
+        .unwrap_or_default()
+        .expand())
     };
     let rank2 = "dot(k(1),p(0))*dot(k(2),p(0))*dot(k(1),k(2))";
     let a = project(&first, rank2)?;

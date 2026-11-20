@@ -211,14 +211,18 @@ mod tests {
         let taylor = TaylorExpansion::new(symbol!("lambda"), 2);
         let lambda = Atom::var(symbol!("lambda"));
         // Two compensated propagators with a raised power and a numerator.
-        let product = parse!("(q2 + 2*lambda*qp + lambda^2*p2 + mu2)^-2*(k2 + lambda*kp)^-1*(a + lambda*b + lambda^3*c)");
+        let product = parse!(
+            "(q2 + 2*lambda*qp + lambda^2*p2 + mu2)^-2*(k2 + lambda*kp)^-1*(a + lambda*b + lambda^3*c)"
+        );
         let compensated = taylor.compensate_mass(&product, symbol!("mu2"), &parse!("M2"));
         let orders = taylor.orders(&compensated).unwrap();
         assert_eq!(orders.len(), 3);
         let reassembled = orders
             .iter()
             .enumerate()
-            .fold(Atom::Zero, |sum, (power, order)| sum + lambda.pow(power as i64) * order);
+            .fold(Atom::Zero, |sum, (power, order)| {
+                sum + lambda.pow(power as i64) * order
+            });
         assert_equal(reassembled, taylor.polynomial(&compensated).unwrap());
         // Regularity errors propagate.
         assert!(taylor.orders(&parse!("1/lambda + a")).is_err());
