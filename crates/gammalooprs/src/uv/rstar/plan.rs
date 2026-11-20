@@ -67,7 +67,12 @@ impl UvChildrenRoute {
         *UV_CHILDREN_ROUTE
     }
 
-    /// `massive` (also unset or empty), `rstar` (every child) or `rstar:N`
+    /// The route when `GAMMALOOP_UV_CHILDREN` is unset: `rstar` (every
+    /// child), the production route since r5 (results/five-loop-r5).
+    pub const DEFAULT: Self = Self::Rstar { min_loops: 1 };
+
+    /// An explicit `GAMMALOOP_UV_CHILDREN`: `massive` (also empty; the route
+    /// before the production default), `rstar` (every child) or `rstar:N`
     /// (children with at least N loops; smaller ones stay massive).
     pub fn parse(value: &str) -> Result<Self> {
         let value = value.trim();
@@ -98,15 +103,29 @@ impl UvChildrenRoute {
     }
 }
 
-/// `GAMMALOOP_UV_CHILDREN`, read once. Unset keeps the massive route, so the
-/// default evaluation is unchanged. An invalid value fails closed.
-static UV_CHILDREN_ROUTE: LazyLock<UvChildrenRoute> = LazyLock::new(|| {
-    let value = std::env::var("GAMMALOOP_UV_CHILDREN").unwrap_or_default();
-    UvChildrenRoute::parse(&value).unwrap_or_else(|error| panic!("{error:#}"))
-});
+/// `GAMMALOOP_UV_CHILDREN`, read once. Unset is [`UvChildrenRoute::DEFAULT`]
+/// (`rstar`); `massive` restores the massive route. An invalid value fails
+/// closed.
+static UV_CHILDREN_ROUTE: LazyLock<UvChildrenRoute> =
+    LazyLock::new(|| match explicit_value("GAMMALOOP_UV_CHILDREN") {
+        None => UvChildrenRoute::DEFAULT,
+        Some(value) => UvChildrenRoute::parse(&value).unwrap_or_else(|error| panic!("{error:#}")),
+    });
+
+/// The value of `name`, `None` when it is unset. A value that is not unicode
+/// fails closed.
+fn explicit_value(name: &str) -> Option<String> {
+    match std::env::var(name) {
+        Ok(value) => Some(value),
+        Err(std::env::VarError::NotPresent) => None,
+        Err(std::env::VarError::NotUnicode(value)) => panic!("{name}={value:?} is not unicode"),
+    }
+}
 
 /// How an R*-route proper UV child with a closed tensor structure is
-/// contracted. `Off` (the default) contracts the open child tensor.
+/// contracted. `Off` (explicit `off`) contracts the open child tensor; unset
+/// `GAMMALOOP_UV_CHILD_CLOSURE` is [`UvChildClosure::DEFAULT`], the Dirac
+/// closure. (The derived `Default` stays `Off`, the closure-free value.)
 /// `Isotropic { min_loops }` computes a logarithmically divergent child with
 /// four open Lorentz slots and at least `min_loops` loops through its three
 /// scalar metric channels ([`RStarPlan::isotropic_counterterm`]).
@@ -114,8 +133,9 @@ static UV_CHILDREN_ROUTE: LazyLock<UvChildrenRoute> = LazyLock::new(|| {
 /// ([`RStarPlan::dirac_counterterm`]): a child with one open Dirac line whose
 /// counterterm has a unique Dirac structure (a degree-0 vertex `c gamma^mu`,
 /// a degree-1 self-energy `c slash(p)`) is computed as a closed trace, and the
-/// isotropic closure as well when `isotropic` is set. Exact either way; which
-/// is faster depends on the child class, so it is opt-in.
+/// isotropic closure as well when `isotropic` is set. Exact either way; the
+/// Dirac closure alone is the production setting (r5m-nf1 on), so it is the
+/// default, and the isotropic closure stays opt-in.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum UvChildClosure {
     #[default]
@@ -163,7 +183,17 @@ impl std::fmt::Display for UvChildClosure {
 }
 
 impl UvChildClosure {
-    /// `GAMMALOOP_UV_CHILD_CLOSURE`: unset, empty or `off`; otherwise a comma
+    /// The closure when `GAMMALOOP_UV_CHILD_CLOSURE` is unset: `dirac` (every
+    /// child of at least one loop), production since r5m-nf1.
+    pub const DEFAULT: Self = Self::Dirac {
+        isotropic: None,
+        dirac: DiracClosure {
+            min_loops: 1,
+            check: false,
+        },
+    };
+
+    /// An explicit `GAMMALOOP_UV_CHILD_CLOSURE`: empty or `off`; otherwise a comma
     /// list of `isotropic`, `dirac` or `dirac-check` (each at most once, and
     /// not both Dirac modes), each optionally `:N` for children of at least
     /// N loops. Anything else is an error.
@@ -244,10 +274,13 @@ impl UvChildClosure {
     }
 }
 
-static UV_CHILD_CLOSURE: LazyLock<UvChildClosure> = LazyLock::new(|| {
-    let value = std::env::var("GAMMALOOP_UV_CHILD_CLOSURE").unwrap_or_default();
-    UvChildClosure::parse(&value).unwrap_or_else(|error| panic!("{error:#}"))
-});
+/// `GAMMALOOP_UV_CHILD_CLOSURE`, read once. Unset is
+/// [`UvChildClosure::DEFAULT`]; `off` restores the open child tensor.
+static UV_CHILD_CLOSURE: LazyLock<UvChildClosure> =
+    LazyLock::new(|| match explicit_value("GAMMALOOP_UV_CHILD_CLOSURE") {
+        None => UvChildClosure::DEFAULT,
+        Some(value) => UvChildClosure::parse(&value).unwrap_or_else(|error| panic!("{error:#}")),
+    });
 
 /// Children computed through [`RStarPlan::isotropic_counterterm`], for tests.
 #[cfg(test)]
@@ -267,13 +300,21 @@ pub(crate) static DIRAC_CHECKS: [std::sync::atomic::AtomicUsize; 3] = [
     std::sync::atomic::AtomicUsize::new(0),
 ];
 
-/// `GAMMALOOP_UV_CHILDREN_LOG=1`: one stderr line per proper UV child request
-/// of an R*-route plan (route, loops, seconds, the child's edge ids); for smoke
-/// tests, timing and per-child views.
+/// `GAMMALOOP_UV_CHILDREN_LOG` (default on; `0`, `off` or `false` turn it
+/// off): one stderr line per proper UV child request of an R*-route plan
+/// (route, loops, seconds, the child's edge ids). The progress notebook and
+/// the timing split read these lines.
 pub(super) fn uv_children_log() -> bool {
-    static LOG: LazyLock<bool> =
-        LazyLock::new(|| std::env::var_os("GAMMALOOP_UV_CHILDREN_LOG").is_some());
+    static LOG: LazyLock<bool> = LazyLock::new(|| log_switch("GAMMALOOP_UV_CHILDREN_LOG"));
     *LOG
+}
+
+/// A log switch that is on unless `name` is `0`, `off` or `false`.
+pub(super) fn log_switch(name: &str) -> bool {
+    !matches!(
+        std::env::var(name).as_deref().map(str::trim),
+        Ok("0" | "off" | "false")
+    )
 }
 
 /// The internal (paired) edge ids of `support`, sorted. Edge ids are the
