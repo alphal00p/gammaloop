@@ -80,6 +80,14 @@ for weighted in (numerator * weight, weight * numerator):
     )
 
 assert model.expand_couplings(E("0")) == 0
+
+# Unqualified user symbols share E's module namespace even when it is customized.
+SYMBOLICA_NAMESPACE = "coupling_input"
+expression = model.parse_expression("weight*GC_11*Q(0,cind(0))")
+assert_type(expression, Expression)
+momentum = E("gammalooprs::Q(0,spenso::cind(0))")
+assert model.expand_couplings(expression) == E("weight") * analytic * momentum
+
 print(
     "Coupling expansion: overloads, coefficients, ordered ports, zeros and diagram passed"
 )

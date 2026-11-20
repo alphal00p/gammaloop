@@ -1,10 +1,13 @@
+use color_eyre::Result;
 use eyre::Context;
 use feynkit_graph::{NumeratorInterface, expressions::evaluate_overall_factor};
+use feynkit_model::Model;
 use linnet::parser::GlobalData;
 use symbolica::atom::Atom;
 
 use crate::graph::{GroupId, threshold_counterterms::ThresholdCountertermSpec};
 
+use super::parse::string_utils;
 use super::{
     Graph,
     parse::{ParseGraph, StripParse, ToQuoted},
@@ -58,35 +61,36 @@ impl ParseData {
         self.num_interface = None;
         self
     }
-}
 
-impl TryFrom<linnet::parser::GlobalData> for ParseData {
-    type Error = color_eyre::Report;
-
-    fn try_from(value: linnet::parser::GlobalData) -> color_eyre::Result<Self> {
+    pub(crate) fn parse(value: GlobalData, model: &Model) -> Result<Self> {
         let mut parse_data = ParseData {
             name: value.name,
             ..Default::default()
         };
 
         if let Some(factor) = value.statements.get("overall_factor") {
-            parse_data = parse_data
-                .with_overall_factor(factor.strip_parse().context("overall_factor").unwrap());
+            parse_data = parse_data.with_overall_factor(
+                string_utils::parse_expression(factor, model).context("overall_factor")?,
+            );
         }
 
         if let Some(polarizations) = value.statements.get("projector") {
-            parse_data = parse_data
-                .with_projectors(polarizations.strip_parse().context("projector").unwrap());
+            parse_data = parse_data.with_projectors(
+                string_utils::parse_expression(polarizations, model).context("projector")?,
+            );
         }
 
         if let Some(factor) = value.statements.get("num") {
-            parse_data = parse_data.with_num(factor.strip_parse().context("num").unwrap());
+            parse_data =
+                parse_data.with_num(string_utils::parse_expression(factor, model).context("num")?);
         }
         if let Some(interface) = value.statements.get("numerator_prefactor_interface") {
-            parse_data.num_interface = Some(NumeratorInterface::parse(interface)?);
+            parse_data.num_interface =
+                Some(NumeratorInterface::parse_with_model(interface, model)?);
         }
         if let Some(interface) = value.statements.get("projector_interface") {
-            parse_data.projector_interface = Some(NumeratorInterface::parse(interface)?);
+            parse_data.projector_interface =
+                Some(NumeratorInterface::parse_with_model(interface, model)?);
         }
 
         if let Some(is_group_master) = value.statements.get("is_group_master") {
@@ -108,12 +112,10 @@ impl TryFrom<linnet::parser::GlobalData> for ParseData {
                 .map(str::trim)
                 .filter(|param| !param.is_empty())
                 .map(|param| {
-                    param
-                        .strip_parse()
+                    string_utils::parse_expression(param, model)
                         .with_context(|| format!("params entry {param}"))
-                        .unwrap()
                 })
-                .collect();
+                .collect::<Result<_>>()?;
         }
 
         if let Some(threshold_counterterms) = value.statements.get("threshold_counterterms") {
@@ -308,7 +310,7 @@ mod tests {
     #[test]
     fn params_roundtrip_in_global_data() {
         test_initialise().unwrap();
-        match finalized_runtime_dot!(digraph params_roundtrip {
+        let graph: Graph = finalized_runtime_dot!(digraph params_roundtrip {
             graph [
                 overall_factor = 1;
                 multiplicity_factor = 1;
@@ -325,22 +327,13 @@ mod tests {
             v6 -> v5 [source="{ufo_order:1}" sink="{ufo_order:2}"];
             v4 -> v6 [source="{ufo_order:2}" sink="{ufo_order:2}"];
         },"scalars")
-        {
-            Ok(g) => {
-                let g: Graph = g;
-                // g.to_dot_graph_with_settings().dot()
-                let serialized = g.dot_serialize(&DotExportSettings::default());
-                let parsed: DotGraph<NodeStorageVec<DotVertexData>> =
-                    DotGraph::from_string(serialized).unwrap();
-
-                assert_eq!(
-                    parsed.global_data.statements.get("params"),
-                    Some(&"a;b;c".to_string())
-                );
-            }
-            Err(e) => {
-                eprintln!("Graph parsing failed: {:?}", e);
-            }
-        }
+        .unwrap();
+        let serialized = graph.dot_serialize(&DotExportSettings::default());
+        let parsed: DotGraph<NodeStorageVec<DotVertexData>> =
+            DotGraph::from_string(serialized).unwrap();
+        assert_eq!(
+            parsed.global_data.statements["params"],
+            "gammalooprs::a;gammalooprs::b;gammalooprs::c"
+        );
     }
 }

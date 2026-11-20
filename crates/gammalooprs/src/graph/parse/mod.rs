@@ -227,7 +227,7 @@ impl ParseGraph {
                 "cross-section runtime DOT does not carry canonical physical cuts or topology-threshold candidates; import the canonical FeynmanDiagram DOT artifact through FeynKit instead"
             ));
         }
-        let global_data = graph.global_data.try_into()?;
+        let global_data = ParseData::parse(graph.global_data, model)?;
         let graph = graph
             .graph
             .map_data_ref_result(
@@ -329,7 +329,7 @@ impl Graph {
                 let parsed = DotGraph { graph, global_data };
                 let attributes = &parsed.global_data.statements;
                 if attributes.contains_key("model_fingerprint") {
-                    let metadata = ParseData::try_from(parsed.global_data.clone())?;
+                    let metadata = ParseData::parse(parsed.global_data.clone(), model)?;
                     let diagram = FeynmanDiagram::from_dot(
                         std::sync::Arc::new(model.clone()),
                         &parsed.debug_dot(),
@@ -397,7 +397,7 @@ impl Graph {
             // Parse in the established GammaLoop namespace before handing the
             // canonical expression to FeynKit. Only represented half-edge
             // indices change chart; momentum and other owner tags stay literal.
-            let atom: Atom = value.strip_parse()?;
+            let atom = string_utils::parse_expression(value, model)?;
             Self::validate_spatial_momentum_expressions(&[&atom], n_edges, &name)?;
             let atom = Aind::native_hedge_slots(&atom)?;
             *value = atom.to_canonical_string();
@@ -425,7 +425,7 @@ impl Graph {
             },
             |(_, hedge)| Ok(hedge.clone()),
         )?;
-        let mut metadata = ParseData::try_from(parsed.global_data.clone())?;
+        let mut metadata = ParseData::parse(parsed.global_data.clone(), model)?;
         let vertex_overrides = parsed
             .iter_nodes()
             .filter_map(|(node, _, data)| data.statements.contains_key("num").then_some(node.0))
@@ -514,12 +514,13 @@ impl Graph {
                 edge.dod = Autogen::explicit(dod.strip_parse()?);
             }
             if let Some(mass) = attributes.get("mass") {
-                let mass: Atom = mass.strip_parse()?;
+                let mass = string_utils::parse_expression(mass, model)?;
                 edge.particle = edge.particle.clone().override_mass(Some(mass.clone()));
                 overridden_masses.push((target, mass));
             }
             if let Some(power) = attributes.get("momtrop_edge_power") {
-                edge.extra_data.momtrop_edge_power = Some(power.strip_parse()?);
+                edge.extra_data.momtrop_edge_power =
+                    Some(string_utils::parse_expression(power, model)?);
             }
             if let Some(power) = attributes.get("vakint_edge_power") {
                 edge.extra_data.vakint_edge_power = Some(power.trim().parse()?);
