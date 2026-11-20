@@ -101,7 +101,9 @@ where
 {
     match std::env::var(name) {
         Err(std::env::VarError::NotPresent) => Ok(default),
-        Err(std::env::VarError::NotUnicode(value)) => Err(format!("{name}={value:?} is not unicode")),
+        Err(std::env::VarError::NotUnicode(value)) => {
+            Err(format!("{name}={value:?} is not unicode"))
+        }
         Ok(value) => {
             let value = value.trim();
             if value.is_empty() {
@@ -114,7 +116,11 @@ where
                 .ok_or_else(|| {
                     format!(
                         "{name}={value:?}: expected unset, {}",
-                        values.iter().map(|(name, _)| *name).collect::<Vec<_>>().join(", ")
+                        values
+                            .iter()
+                            .map(|(name, _)| *name)
+                            .collect::<Vec<_>>()
+                            .join(", ")
                     )
                 })
         }
@@ -124,7 +130,11 @@ where
 static TERMS: LazyLock<std::result::Result<RStarTerms, String>> = LazyLock::new(|| {
     parse(
         "GAMMALOOP_RSTAR_TERMS",
-        &[("all", RStarTerms::All), ("bare", RStarTerms::Bare), ("nonbare", RStarTerms::Nonbare)],
+        &[
+            ("all", RStarTerms::All),
+            ("bare", RStarTerms::Bare),
+            ("nonbare", RStarTerms::Nonbare),
+        ],
         RStarTerms::All,
     )
 });
@@ -141,8 +151,12 @@ static MASS_TERMS: LazyLock<std::result::Result<TopMassTerms, String>> = LazyLoc
     )
 });
 
-static SPLIT: LazyLock<bool> =
-    LazyLock::new(|| matches!(std::env::var("GAMMALOOP_TOP_MASS_SPLIT").as_deref(), Ok("1" | "on")));
+static SPLIT: LazyLock<bool> = LazyLock::new(|| {
+    matches!(
+        std::env::var("GAMMALOOP_TOP_MASS_SPLIT").as_deref(),
+        Ok("1" | "on")
+    )
+});
 
 /// `GAMMALOOP_RSTAR_TERMS`, read once; a bad value is an error at first use.
 pub fn rstar_terms() -> Result<RStarTerms> {
@@ -213,16 +227,23 @@ pub fn split_auxiliary_mass(expression: &Atom) -> Result<[Atom; 2]> {
     let mass = auxiliary_mass_squared();
     let log = function!(Symbol::LOG, Atom::var(mass));
     let placeholder = Atom::var(symbolica::symbol!("top_mass_log_rstar_mass_squared"));
-    let hidden = expression.replace_multiple(&[Replacement::new(log.to_pattern(), placeholder.clone())]);
+    let hidden =
+        expression.replace_multiple(&[Replacement::new(log.to_pattern(), placeholder.clone())]);
     let restore = |atom: Atom| {
         atom.replace_multiple(&[Replacement::new(placeholder.to_pattern(), log.clone())])
             .together()
     };
     let constant = hidden.replace(mass).with(Atom::Zero).together();
-    let linear = hidden.derivative(mass).replace(mass).with(Atom::Zero).together();
+    let linear = hidden
+        .derivative(mass)
+        .replace(mass)
+        .with(Atom::Zero)
+        .together();
     let rest = (&hidden - &constant - Atom::var(mass) * &linear).together();
     if !rest.is_zero() {
-        return Err(eyre!("the result is not linear in rstar_mass_squared: rest {rest}"));
+        return Err(eyre!(
+            "the result is not linear in rstar_mass_squared: rest {rest}"
+        ));
     }
     Ok([restore(constant), restore(linear)])
 }
@@ -291,7 +312,10 @@ pub(super) fn compensate_where(
 ) -> Atom {
     expression.replace_map(|view, _, output| match view {
         AtomView::Fun(function) if function.get_symbol() == GS.den => {
-            **output = view.to_owned().replace(reference_mass_squared).with(in_den.clone());
+            **output = view
+                .to_owned()
+                .replace(reference_mass_squared)
+                .with(in_den.clone());
         }
         AtomView::Var(variable) if variable.get_symbol() == reference_mass_squared => {
             **output = outside.clone();
@@ -353,7 +377,11 @@ pub enum IrOuter {
 static IR_OUTER: LazyLock<std::result::Result<IrOuter, String>> = LazyLock::new(|| {
     parse(
         "GAMMALOOP_IR_OUTER",
-        &[("generic", IrOuter::Generic), ("analytic", IrOuter::Analytic), ("check", IrOuter::Check)],
+        &[
+            ("generic", IrOuter::Generic),
+            ("analytic", IrOuter::Analytic),
+            ("check", IrOuter::Check),
+        ],
         IrOuter::Unset,
     )
 });
@@ -466,11 +494,15 @@ mod tests {
     fn modes_keep_the_documented_orders() {
         assert!((0..4).all(|order| TopMassTerms::Keep.keeps_order(order)));
         assert_eq!(
-            (0..4).map(|order| TopMassTerms::Drop.keeps_order(order)).collect::<Vec<_>>(),
+            (0..4)
+                .map(|order| TopMassTerms::Drop.keeps_order(order))
+                .collect::<Vec<_>>(),
             [false, true, true, true]
         );
         assert_eq!(
-            (0..4).map(|order| TopMassTerms::DropOdd.keeps_order(order)).collect::<Vec<_>>(),
+            (0..4)
+                .map(|order| TopMassTerms::DropOdd.keeps_order(order))
+                .collect::<Vec<_>>(),
             [false, false, true, false]
         );
         assert!(RStarTerms::Nonbare.keeps(true) && !RStarTerms::Nonbare.keeps(false));
@@ -492,11 +524,20 @@ mod ir_outer_tests {
             compensation_factor(TopMassTerms::Keep, 1, 3, 0, 2, eps),
             Atom::one() - &x
         );
-        assert_eq!(compensation_factor(TopMassTerms::Keep, 1, 3, 1, 2, eps), Atom::one());
-        assert_eq!(compensation_factor(TopMassTerms::Keep, 1, 3, 2, 2, eps), Atom::one());
+        assert_eq!(
+            compensation_factor(TopMassTerms::Keep, 1, 3, 1, 2, eps),
+            Atom::one()
+        );
+        assert_eq!(
+            compensation_factor(TopMassTerms::Keep, 1, 3, 2, 2, eps),
+            Atom::one()
+        );
         // drop: no b = 0 term and no compensation; drop-odd: no odd b.
         assert!(compensation_factor(TopMassTerms::Drop, 1, 3, 0, 2, eps).is_zero());
-        assert_eq!(compensation_factor(TopMassTerms::Drop, 1, 3, 1, 2, eps), Atom::one());
+        assert_eq!(
+            compensation_factor(TopMassTerms::Drop, 1, 3, 1, 2, eps),
+            Atom::one()
+        );
         assert!(compensation_factor(TopMassTerms::DropOdd, 1, 3, 1, 2, eps).is_zero());
         // D = 4, b = 0: 1 - x + x(x-1)/2.
         let expected = (Atom::one() - &x + &x * (&x - Atom::one()) / Atom::num(2)).expand();
@@ -509,7 +550,10 @@ mod ir_outer_tests {
     #[test]
     fn mass_power_reads_the_unique_power_beside_logarithms() {
         let m = symbol!("top_mass_test_m2");
-        assert_eq!(mass_power(&parse!("top_mass_test_m2^2*(3+log(top_mass_test_m2)*e)"), m), Some(2));
+        assert_eq!(
+            mass_power(&parse!("top_mass_test_m2^2*(3+log(top_mass_test_m2)*e)"), m),
+            Some(2)
+        );
         assert_eq!(mass_power(&parse!("5*e"), m), Some(0));
         assert_eq!(mass_power(&parse!("top_mass_test_m2+e"), m), None);
         assert_eq!(mass_power(&parse!("sqrt(top_mass_test_m2)"), m), None);
