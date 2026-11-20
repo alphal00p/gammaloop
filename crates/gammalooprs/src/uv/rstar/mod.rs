@@ -114,7 +114,7 @@ pub use expression::{ClosedSkipMode, closed_dot_scalar, closed_skip_mode, set_me
 pub use insertion_identity::{InsertionSkeletonIdentity, InsertionSkeletonKey};
 pub use insertions::{
     GroupedInsertionPoleResult, InsertionPoleResult, PreparedInsertion, PreparedInsertionHole,
-    PropagatorInsertionEvaluator,
+    PropagatorInsertionEvaluator, surrogate_closed_root,
 };
 pub use integrate::integrate_single_mass;
 pub use ir_dirac::{IrDiracMode, ir_dirac_mode};

@@ -307,7 +307,38 @@ impl RStarPlan {
             ChildMass::Zero,
         )?
         .closing_root()?
-        .counterterm_from_pole_part(bare_poles)
+        .counterterm_from_pole_part(bare_poles, false)
+    }
+
+    /// As [`Self::projected_counterterm_from_pole_part_closing_root`] for bare
+    /// poles that are already closed: `closed_bare_poles` is the pole part of
+    /// the root-closed graph (e.g. [`Self::closed_pole_part`] of an insertion
+    /// surrogate, restored to this graph's frame), so it is not multiplied by
+    /// this graph's root closure a second time. The physical proper-UV terms
+    /// are closed as before; the root normalisation then acts on their sum.
+    /// `GAMMALOOP_SURROGATE_CLOSED_ROOT=1` (see
+    /// [`super::surrogate_closed_root`]).
+    pub fn projected_counterterm_from_closed_pole_part_closing_root(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        closed_bare_poles: &Atom,
+        root_normalization: &dyn Fn(&Atom) -> Result<Atom>,
+    ) -> Result<Atom> {
+        Evaluation::new(
+            self,
+            graph,
+            model,
+            vakint,
+            uv_settings,
+            Some(root_normalization),
+            None,
+            ChildMass::Zero,
+        )?
+        .closing_root()?
+        .counterterm_from_pole_part(closed_bare_poles, true)
     }
 
     /// Local export patch: as [`Self::projected_bare_terms_only`], closing the
@@ -618,6 +649,73 @@ impl RStarPlan {
         ))
     }
 
+    /// Whether [`Self::closed_pole_part`] can close this graph's root: its
+    /// numerator over the support has exactly two open external slots of one
+    /// representation ([`RStarIntegrand::root_closure`]).
+    pub fn closes_root(&self, graph: &Graph) -> bool {
+        RStarIntegrand::root_closure(graph, &self.support).is_ok()
+    }
+
+    /// [`Self::pole_part`] of the root-closed graph, `K[g_root G]`: the
+    /// momentum-free root metric [`RStarIntegrand::root_closure`] is
+    /// contracted in every root-scope remainder and every physical proper-UV
+    /// remainder (as the metric-closing entry points do), so the result is a
+    /// closed scalar in the external momentum. The closure is regular in
+    /// epsilon and momentum-free, so it commutes with `K`, the Taylor step and
+    /// the integration: `K[g G] = -Delta_g(G) - K sum_{S != empty} Delta(S)
+    /// g G/S`, the identity of [`Self::pole_part`] for the closed graph.
+    /// Proper UV children and IR quotients keep their open slots (and their
+    /// counterterm-cache keys).
+    ///
+    /// The root projector is the external routing `σ` alone (value-preserving:
+    /// [`Self::pole_part`] applies `σ` to its result anyway), and the closed
+    /// root normalisation as data has factor 1 with this graph's own external
+    /// edge and `σ`, so the remainder-boundary path
+    /// (`GAMMALOOP_REMAINDER_BOUNDARY`) admits the root-scope remainders and
+    /// its check mode compares the callback `σ(X)` with `1 · σ(X)`. A scalar
+    /// `d` from the closed metric is regularised (`d = 4 - 2 epsilon`) before
+    /// the pole projection. The bare/nonbare split (`GAMMALOOP_RSTAR_TERMS`)
+    /// is never applied, as for [`Self::pole_part`].
+    pub fn closed_pole_part(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+    ) -> Result<Atom> {
+        let (external, external_routing) = RStarIntegrand::physical_external_routing(
+            graph,
+            &graph.external_filter::<SuBitGraph>(),
+        )?;
+        let closed_root = ClosedRootNormalization {
+            external,
+            external_routing: external_routing.clone(),
+            factor: Atom::one(),
+        };
+        let route =
+            |tensor: &Atom| -> Result<Atom> { Ok(tensor.replace_multiple(&external_routing)) };
+        let mut evaluation = Evaluation::new(
+            self,
+            graph,
+            model,
+            vakint,
+            uv_settings,
+            Some(&route),
+            None,
+            ChildMass::Reference,
+        )?
+        .closing_root()?;
+        evaluation.closed_root = Some(&closed_root);
+        evaluation.rstar_terms = RStarTerms::All;
+        evaluation.channel = ("surrogate closed metric", "1");
+        let counterterm = evaluation.counterterm()?;
+        let physical = evaluation.physical_uv_preparation()?;
+        let result = -counterterm - physical;
+        evaluation.poles(&Integrated::dimensionally_regularized(
+            &super::linearize::linearize(result.replace_multiple(&external_routing)),
+        ))
+    }
+
     /// Recover the original local MS counterterm from independently known bare
     /// poles: `Delta_U(G) = -K [K G + sum_{S != empty} Delta_U(S) G/S]`.
     ///
@@ -652,7 +750,7 @@ impl RStarPlan {
             None,
             ChildMass::Zero,
         )?
-        .counterterm_from_pole_part(bare_poles)
+        .counterterm_from_pole_part(bare_poles, false)
     }
 
     /// Project the complete physical preparation before its final pole map.
@@ -681,7 +779,7 @@ impl RStarPlan {
             None,
             ChildMass::Zero,
         )?
-        .counterterm_from_pole_part(bare_poles)
+        .counterterm_from_pole_part(bare_poles, false)
     }
 }
 
@@ -2675,15 +2773,21 @@ impl<'a> Evaluation<'a> {
         Ok(expression.series(self.epsilon, 0, -1)?.to_atom().expand())
     }
 
-    fn counterterm_from_pole_part(&mut self, bare_poles: &Atom) -> Result<Atom> {
+    /// `bare_closed`: the bare poles are already root-closed (a closed
+    /// surrogate pole part), so the root closure is not applied to them again.
+    fn counterterm_from_pole_part(&mut self, bare_poles: &Atom, bare_closed: bool) -> Result<Atom> {
         let (_, external_routing) = RStarIntegrand::physical_external_routing(
             self.graph,
             &self.graph.external_filter::<SuBitGraph>(),
         )?;
         // Closed bare poles stand where the metric projector contracted them.
         let bare_poles = match &self.root_closure {
+            Some(_) if bare_closed => bare_poles.clone(),
             Some(closure) => bare_poles * closure,
-            None => bare_poles.clone(),
+            None => {
+                ensure!(!bare_closed, "closed bare poles need a closing root");
+                bare_poles.clone()
+            }
         };
         // GAMMALOOP_RSTAR_TERMS: here the bare term is the supplied bare poles.
         let bare_poles = if self.keeps_term(false) {

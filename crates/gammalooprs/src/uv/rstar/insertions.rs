@@ -143,11 +143,34 @@ fn freshen_insertion_indices(coefficient: &Atom, reservation_context: &[Atom]) -
     Ok(cooking.uncook(expression.as_view()))
 }
 
+/// `GAMMALOOP_SURROGATE_CLOSED_ROOT=1` (opt-in, default off): above four
+/// loops, a caller that closes the root metric
+/// ([`PropagatorInsertionEvaluator::pole_part_closing_root`] with
+/// `close_root`) receives the surrogate's bare poles already root-closed
+/// ([`RStarPlan::closed_pole_part`]), so the surrogate's root-scope
+/// remainders take the remainder-boundary path. Any other value: off.
+pub fn surrogate_closed_root() -> bool {
+    static MODE: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+        matches!(
+            std::env::var("GAMMALOOP_SURROGATE_CLOSED_ROOT")
+                .as_deref()
+                .map(str::trim),
+            Ok("1")
+        )
+    });
+    *MODE
+}
+
 /// The bare poles of the original graph, without its overall factor or projector.
 pub struct InsertionPoleResult {
     pub poles: Atom,
     pub insertions: usize,
     pub insertion_loops: usize,
+    /// Whether `poles` are root-closed (the pole part of the root metric
+    /// times the graph, a closed scalar): feed them to
+    /// [`RStarPlan::projected_counterterm_from_closed_pole_part_closing_root`].
+    /// Otherwise they keep the open root slots.
+    pub closed: bool,
 }
 
 /// One selected insertion, expressed in the final surrogate's owner frame.
@@ -306,6 +329,22 @@ impl PropagatorInsertionEvaluator {
             .transpose()
     }
 
+    /// [`Self::pole_part`] for a caller that closes the root with the metric
+    /// when `close_root` is true: with [`surrogate_closed_root`] on, a
+    /// surrogate above four loops whose root closes then returns closed poles
+    /// (`closed` in the result). Otherwise, as [`Self::pole_part`].
+    pub fn pole_part_closing_root(
+        &self,
+        diagram: &FeynmanDiagram,
+        vakint: &Vakint,
+        close_root: bool,
+    ) -> Result<Option<InsertionPoleResult>> {
+        let close = close_root && surrogate_closed_root();
+        self.prepare(diagram, vakint)?
+            .map(|prepared| self.pole_part_of_prepared_with(&prepared, vakint, close))
+            .transpose()
+    }
+
     /// Prepare the same bare identity as [`Self::pole_part`] without integrating
     /// its outer skeleton. A preparation belongs to this evaluator's settings.
     pub fn prepare(
@@ -419,10 +458,25 @@ impl PropagatorInsertionEvaluator {
         prepared: &PreparedInsertion,
         vakint: &Vakint,
     ) -> Result<InsertionPoleResult> {
+        self.pole_part_of_prepared_with(prepared, vakint, false)
+    }
+
+    /// [`Self::pole_part_of_prepared`]; with `close_root`, a surrogate above
+    /// four loops whose root closes is evaluated root-closed
+    /// ([`RStarPlan::closed_pole_part`]) and the result is flagged `closed`.
+    /// Through four loops, and for a vanishing numerator, the poles stay open
+    /// (`closed` false): the caller closes them as before.
+    fn pole_part_of_prepared_with(
+        &self,
+        prepared: &PreparedInsertion,
+        vakint: &Vakint,
+        close_root: bool,
+    ) -> Result<InsertionPoleResult> {
         self.check_preparation(prepared)?;
         let surrogate = &prepared.surrogate;
         let loops = prepared.loop_count();
         let surrogate_started = Instant::now();
+        let mut closed = false;
         // Through four loops the physical propagator backend gives KG directly.
         // Reconstructing it through R* would compute a second, unnecessary UV
         // forest: the caller still needs the original graph's forest for Delta.
@@ -444,12 +498,34 @@ impl PropagatorInsertionEvaluator {
             if let Some(cache) = &self.counterterm_cache {
                 plan = plan.with_counterterm_cache(cache.clone());
             }
+            // GAMMALOOP_SURROGATE_CLOSED_ROOT: the closed surrogate root, when
+            // its numerator has the two open external slots of the closure.
+            closed = close_root && plan.closes_root(&graph);
+            if close_root && !closed {
+                eprintln!(
+                    "SURROGATE_CLOSED_ROOT graph={} closed=false reason=root_closure",
+                    graph.name
+                );
+            }
             super::expression::in_dressed_scope(|| {
-                plan.pole_part(&graph, surrogate.model(), vakint, &self.settings)
+                if closed {
+                    plan.closed_pole_part(&graph, surrogate.model(), vakint, &self.settings)
+                } else {
+                    plan.pole_part(&graph, surrogate.model(), vakint, &self.settings)
+                }
             })
         }
         .wrap_err("while evaluating the scalar-bubble surrogate's bare poles")?;
+        // Closed poles are a scalar in the surrogate's external momentum: the
+        // owner map still carries that momentum label to the original's.
         let poles = prepared.restore_atom(&poles)?;
+        if closed {
+            eprintln!(
+                "SURROGATE_CLOSED_ROOT graph={} closed=true loops={loops} seconds={:.3}",
+                surrogate.name(),
+                surrogate_started.elapsed().as_secs_f64()
+            );
+        }
         tracing::info!(
             uv = true,
             rstar = true,
@@ -464,6 +540,7 @@ impl PropagatorInsertionEvaluator {
             poles,
             insertions: prepared.holes.len(),
             insertion_loops: prepared.holes.iter().map(|hole| hole.loops).sum(),
+            closed,
         })
     }
 
