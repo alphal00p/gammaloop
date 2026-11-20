@@ -485,6 +485,11 @@ pub struct ClosureRecordValue {
     /// The boundary path's own stage seconds (lowering vs reduction).
     pub lower_seconds: f64,
     pub reduce_seconds: f64,
+    /// What the boundary hands to RustRed: key plans (one reduction each),
+    /// lowered key entries, distinct canonical loop monomials.
+    pub key_plans: usize,
+    pub lowered_entries: usize,
+    pub distinct_monomials: usize,
 }
 
 /// The value of [`evaluate_factorized_closure`].
@@ -668,33 +673,10 @@ fn graded_split(expanded: &Atom, lambda: Symbol) -> Vec<(Atom, u32, Atom)> {
         .collect()
 }
 
-/// The λ-degree of a q-structure monomial: its number of external momenta
-/// plus its power of λ.
+/// The λ-degree of a q-structure monomial: its power of λ (the routing puts
+/// one λ on every external momentum, the mass compensation λ² on M_aux²).
 fn lambda_degree(view: AtomView<'_>, lambda: Symbol) -> u32 {
-    let one = |view: AtomView<'_>| -> u32 {
-        match view {
-            AtomView::Var(v) if v.get_symbol() == lambda => 1,
-            AtomView::Fun(f) if f.get_symbol() == S.p => 1,
-            AtomView::Fun(f) if f.get_symbol() == S.dot => f
-                .iter()
-                .filter(|a| matches!(a, AtomView::Fun(g) if g.get_symbol() == S.p))
-                .count() as u32,
-            _ => 0,
-        }
-    };
-    let factor = |view: AtomView<'_>| -> u32 {
-        match view {
-            AtomView::Pow(p) => {
-                let (base, exp) = p.get_base_exp();
-                one(base) * i64::try_from(exp).unwrap_or(0).max(0) as u32
-            }
-            other => one(other),
-        }
-    };
-    match view {
-        AtomView::Mul(m) => m.iter().map(factor).sum(),
-        other => factor(other),
-    }
+    lambda_power(view, lambda)
 }
 
 /// The per-record preparation: the boundary (or `None`: exactly zero) and
@@ -708,10 +690,27 @@ struct Prepared {
     split_seconds: f64,
 }
 
-/// The Taylor rewrite of a factor for `w = 0` (module documentation, step 1).
-fn degree_zero_factor(value: &FactorizedNumerator, factor: &Atom) -> Atom {
+/// First edge id of the loop-momentum vectors `Q(LOOP_BASE + i, ..)` = `k(i+1)`
+/// written into the factors by the routing (no record has such an edge).
+const LOOP_BASE: usize = 2_000_000_000;
+
+/// The ROUTING of a factor before the contraction (a linear substitution of
+/// its momenta, no tensor algebra): every `Q(e, s)` of an internal edge becomes
+/// `SUM_i eta_ei Q(LOOP_BASE + i, s) + lam SUM_j xi_ej Q(x_j, s)` (x_j = the
+/// leg of p(j)), every `Q(x, s)` of an external leg `lam Q(x, s)`; `lam` is
+/// the Taylor parameter (lambda), 0 for degree 0, 1 for a pre-expanded sector.
+/// Then, for a Taylor step of degree `w`, the factor's terms of lambda-degree
+/// above `w` are dropped (they cannot survive the expansion: every other
+/// factor is regular at lambda = 0).
+fn routed_factor(
+    value: &FactorizedNumerator,
+    factor: &Atom,
+    lam: &Atom,
+    lambda: Symbol,
+    degree: Option<u32>,
+) -> Atom {
     let loops = value.loops();
-    factor.replace_map(|part, _, out| {
+    let routed = factor.replace_map(|part, _, out| {
         let AtomView::Fun(f) = part else { return };
         if f.get_symbol().get_name() != names::MOMENTUM || f.get_nargs() != 2 {
             return;
@@ -728,23 +727,85 @@ fn degree_zero_factor(value: &FactorizedNumerator, factor: &Atom) -> Atom {
             return;
         };
         if edge.is_external() {
-            **out = Atom::Zero;
+            **out = lam * part.to_owned();
             return;
         }
-        let r = &edge.momentum[loops..];
-        if r.iter().all(|c| *c == 0) {
-            return;
+        let q = |id: usize| function!(f.get_symbol(), Atom::num(id as i64), slot.to_owned());
+        let mut image = Atom::Zero;
+        for (i, c) in edge.momentum[..loops].iter().enumerate() {
+            if *c != 0 {
+                image += Atom::num(*c) * q(LOOP_BASE + i);
+            }
         }
-        let mut image = part.to_owned();
-        for (j, c) in r.iter().enumerate() {
+        for (j, c) in edge.momentum[loops..].iter().enumerate() {
             if *c != 0 {
                 let leg = value.external_edges[j].expect("validated: every p(j) has a leg");
-                image -= Atom::num(*c)
-                    * function!(f.get_symbol(), Atom::num(leg as i64), slot.to_owned());
+                image += Atom::num(*c) * lam * q(leg);
             }
         }
         **out = image;
-    })
+    });
+    match degree {
+        Some(w) if w > 0 && routed.contains_symbol(lambda) => {
+            let expanded = routed.expand();
+            let summands = match expanded.as_view() {
+                AtomView::Add(sum) => sum.iter().map(|t| t.to_owned()).collect::<Vec<_>>(),
+                _ => vec![expanded.clone()],
+            };
+            Atom::add_many(
+                summands
+                    .iter()
+                    .filter(|t| lambda_power(t.as_view(), lambda) <= w),
+            )
+        }
+        _ => routed,
+    }
+}
+
+/// The power of `lambda` in a product.
+fn lambda_power(view: AtomView<'_>, lambda: Symbol) -> u32 {
+    let one = |view: AtomView<'_>| -> u32 {
+        match view {
+            AtomView::Var(v) if v.get_symbol() == lambda => 1,
+            AtomView::Pow(p) => match p.get_base_exp() {
+                (AtomView::Var(v), exp) if v.get_symbol() == lambda => {
+                    i64::try_from(exp).unwrap_or(0).max(0) as u32
+                }
+                _ => 0,
+            },
+            _ => 0,
+        }
+    };
+    match view {
+        AtomView::Mul(m) => m.iter().map(one).sum(),
+        other => one(other),
+    }
+}
+
+/// The record for the mapping to vakint notation after a routed contraction:
+/// its open slots as ports and the loop-momentum vectors `LOOP_BASE + i` as
+/// edges carrying `k(i+1)` (external, so that they are never lines).
+fn mapping_view(value: &FactorizedNumerator) -> FactorizedNumerator {
+    let mut view = opened(value);
+    let n = value.loops() + value.externals();
+    for i in 0..value.loops() {
+        let mut momentum = vec![0; n];
+        momentum[i] = 1;
+        view.edges.push(super::FactorizedEdge {
+            id: LOOP_BASE + i,
+            source: super::Endpoint::External,
+            target: super::Endpoint::External,
+            source_hedge: None,
+            target_hedge: None,
+            particle: "loop".into(),
+            line: super::LineKind::Scalar,
+            power: 0,
+            mass_squared: Atom::Zero,
+            momentum,
+            factor: Atom::num(1),
+        });
+    }
+    view
 }
 
 fn prepare(
@@ -773,6 +834,12 @@ fn prepare(
     // step 1: the network, R substituted, w = 0 truncated; idenso
     let started = Instant::now();
     let degree_zero = spec.taylor.as_ref().is_some_and(|t| t.degree == 0);
+    let lam = match &spec.taylor {
+        Some(_) if degree_zero => Atom::Zero,
+        Some(_) => Atom::var(lambda),
+        None => Atom::num(1),
+    };
+    let degree = spec.taylor.as_ref().map(|t| t.degree);
     let mut network = Atom::num(1);
     for factor in value
         .edges
@@ -781,11 +848,7 @@ fn prepare(
         .chain(value.vertices.iter().map(|v| &v.factor))
         .chain(value.projector.iter().map(|p| &p.tensor))
     {
-        network *= if degree_zero {
-            degree_zero_factor(value, factor)
-        } else {
-            factor.clone()
-        };
+        network *= routed_factor(value, factor, &lam, lambda, degree);
     }
     if let Some(taylor) = &spec.taylor {
         let image = if taylor.compensate_mass && !degree_zero {
@@ -808,11 +871,21 @@ fn prepare(
         1 => super::contract_with_idenso(&network, false)?,
         n => vacuum::contract_streamed(settings, &network, n)?.0,
     };
-    let scalar = map_to_vakint_vacuum(&opened(value), &contracted)?
+    let idenso_seconds = started.elapsed().as_secs_f64();
+    let scalar = map_to_vakint_vacuum(&mapping_view(value), &contracted)?
         .replace(d.clone())
         .with(in_epsilon.clone())
         .expand();
     let contract_seconds = started.elapsed().as_secs_f64();
+    if std::env::var("VAKINT_CLOSURE_PROFILE").is_ok() {
+        eprintln!(
+            "CLOSURE_PROFILE label=\"{}\" idenso_s={idenso_seconds:.4} map_expand_s={:.4} contracted_terms={} scalar_terms={}",
+            value.label,
+            contract_seconds - idenso_seconds,
+            crate::census::summands(contracted.as_view()),
+            crate::census::summands(scalar.as_view())
+        );
+    }
 
     // step 2: blocks
     let started = Instant::now();
@@ -1050,12 +1123,18 @@ pub fn evaluate_factorized_closure(
             )));
         };
         value.validate()?;
+        // the value must not depend on the caller's tensor-reduction method or
+        // notation (WH-RECORD-FORMAT v1.4 section 7): pinned to what the R*
+        // boundary path uses (FeynKit, dot notation)
         let mut local = settings.clone();
+        local.tensor_reduction_method = crate::TensorReductionMethod::FeynKit;
+        local.use_dot_product_notation = true;
         if let Some(depth) = spec.depth {
             local.number_of_terms_in_epsilon_expansion = depth as i64;
         }
         let prepared = prepare(vakint, &local, value, spec, prefactor)?;
         let started = Instant::now();
+        let mut counts = (0, 0, 0);
         let (mut vakint_value, lower_seconds, reduce_seconds, patterns) = match &prepared.boundary {
             None => (Atom::Zero, 0.0, 0.0, 0),
             Some(boundary) => {
@@ -1072,6 +1151,11 @@ pub fn evaluate_factorized_closure(
                         + stats.classify_seconds
                         + stats.slot_seconds
                         + stats.finish_seconds;
+                    counts = (
+                        stats.key_plans,
+                        stats.lowered_entries,
+                        stats.distinct_monomials,
+                    );
                     (
                         atom,
                         lower,
@@ -1120,6 +1204,9 @@ pub fn evaluate_factorized_closure(
             evaluate_seconds,
             lower_seconds,
             reduce_seconds,
+            key_plans: counts.0,
+            lowered_entries: counts.1,
+            distinct_monomials: counts.2,
         });
     }
     Ok(out)
