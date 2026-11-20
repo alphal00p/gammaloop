@@ -124,8 +124,8 @@ fn explicit_value(name: &str) -> Option<String> {
 
 /// How an R*-route proper UV child with a closed tensor structure is
 /// contracted. `Off` (explicit `off`) contracts the open child tensor; unset
-/// `GAMMALOOP_UV_CHILD_CLOSURE` is [`UvChildClosure::DEFAULT`], the Dirac
-/// closure. (The derived `Default` stays `Off`, the closure-free value.)
+/// `GAMMALOOP_UV_CHILD_CLOSURE` is [`UvChildClosure::DEFAULT`], the isotropic
+/// and Dirac closures. (The derived `Default` stays `Off`, the closure-free value.)
 /// `Isotropic { min_loops }` computes a logarithmically divergent child with
 /// four open Lorentz slots and at least `min_loops` loops through its three
 /// scalar metric channels ([`RStarPlan::isotropic_counterterm`]).
@@ -133,9 +133,10 @@ fn explicit_value(name: &str) -> Option<String> {
 /// ([`RStarPlan::dirac_counterterm`]): a child with one open Dirac line whose
 /// counterterm has a unique Dirac structure (a degree-0 vertex `c gamma^mu`,
 /// a degree-1 self-energy `c slash(p)`) is computed as a closed trace, and the
-/// isotropic closure as well when `isotropic` is set. Exact either way; the
-/// Dirac closure alone is the production setting (r5m-nf1 on), so it is the
-/// default, and the isotropic closure stays opt-in.
+/// isotropic closure as well when `isotropic` is set. Exact either way; both
+/// together (`isotropic,dirac`) are the production setting (the Dirac closure
+/// since r5m-nf1, with the isotropic one since r6, whose closed children take
+/// the remainder boundary), so they are the default.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum UvChildClosure {
     #[default]
@@ -183,10 +184,11 @@ impl std::fmt::Display for UvChildClosure {
 }
 
 impl UvChildClosure {
-    /// The closure when `GAMMALOOP_UV_CHILD_CLOSURE` is unset: `dirac` (every
-    /// child of at least one loop), production since r5m-nf1.
+    /// The closure when `GAMMALOOP_UV_CHILD_CLOSURE` is unset:
+    /// `isotropic,dirac` (every child of at least one loop), production since
+    /// r6 (the Dirac closure alone since r5m-nf1; `dirac` keeps that setting).
     pub const DEFAULT: Self = Self::Dirac {
-        isotropic: None,
+        isotropic: Some(1),
         dirac: DiracClosure {
             min_loops: 1,
             check: false,
