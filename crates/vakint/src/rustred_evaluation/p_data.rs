@@ -13,7 +13,9 @@
 //!    the heavy one-to-five-loop package until it is a downloadable asset,
 //!    WP6), loaded without the descent certificate unless
 //!    `VAKINT_P_LIBRARY_VERIFY=1` (a verified five-loop load takes about half
-//!    an hour);
+//!    an hour); its `p-master-catalogue.json` and `masters/` apply as those
+//!    of a package loaded into the engine (`VAKINT_P_MASTER_CATALOGUE` and
+//!    `VAKINT_P_MASTERS_DIRECTORY` still win);
 //! 2. the external data the engine loaded: a hand-made
 //!    `<root>/p/p-library-<a>-<b>/` under the external-data root (the layout
 //!    `rustred p-package` writes; loaded with the descent certificate), else
@@ -1186,7 +1188,9 @@ impl Vakint {
     /// The p master catalogue of this engine's five-loop p-integrals: the one
     /// set with [`Self::set_p_master_catalogue`]; else, unless disabled, the
     /// file of `VAKINT_P_MASTER_CATALOGUE` (`off`: none), the catalogue the
-    /// loaded package ships (`p-master-catalogue.json`), the built-in one.
+    /// loaded package ships (`p-master-catalogue.json`; the package of
+    /// [`Self::loaded_p_library`], `VAKINT_P_LIBRARY`'s included), the
+    /// built-in one.
     /// The expected but unknown five-loop master coefficients
     /// `UNKNOWN(master, k)` on which `expression` depends after its exact
     /// expansion: `(master id, order k, lowest ε power it enters)` per pair,
@@ -1349,12 +1353,22 @@ impl Vakint {
         }
     }
 
-    /// The library this engine resolves to, if it is loaded already (an
-    /// injected one, the external-data directory of its data root, else the
-    /// built-in library); never loads one.
+    /// The library this engine resolves to, if it is loaded already, in the
+    /// order of [`Self::p_library`] (an injected one, the package of
+    /// [`P_LIBRARY_VARIABLE`], the external-data directory of its data root,
+    /// else the built-in library); never loads one. While the variable is set
+    /// only its package qualifies, so that its master catalogue and `masters/`
+    /// apply with the relations it serves.
     pub(crate) fn loaded_p_library(&self) -> Option<Arc<PLibraryHandle>> {
         if let Some(handle) = &self.p_library {
             return Some(Arc::clone(handle));
+        }
+        if let Some(directory) = package_variable() {
+            return loaded_directories()
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .get(&directory)
+                .cloned();
         }
         match self.resolved_directory() {
             Ok(Some(directory)) => loaded_directories()
@@ -2059,6 +2073,302 @@ mod tests {
                     assert!(error.contains(text), "{name}: {error}");
                 }
             }
+        }
+    }
+
+    /// G-B part P6 (loader): the scenario a child process of
+    /// [`a_package_named_by_the_variable_brings_its_catalogue_and_masters`]
+    /// runs, and the directory of its probe packages.
+    const LOADER_SCENARIO: &str = "VAKINT_TEST_LOADER_SCENARIO";
+    const LOADER_ROOT: &str = "VAKINT_TEST_LOADER_ROOT";
+
+    /// The built-in five-loop p master catalogue under `data_version`, with
+    /// (if `probe_row`) the row `PResidual(Tloaderprobe, 1,1,1,1,1)`, a copy
+    /// of the `T002e` row that no other catalogue has.
+    fn loader_catalogue(data_version: &str, probe_row: bool) -> String {
+        let mut catalogue: serde_json::Value = serde_json::from_str(include_str!(
+            "../../data/p_master/p-master-catalogue-5l.json"
+        ))
+        .unwrap();
+        catalogue["data_version"] = data_version.into();
+        let terminals = catalogue["terminals"].as_array_mut().unwrap();
+        let mut row = terminals
+            .iter()
+            .find(|row| row["node"] == "T002e" && row["key"] == serde_json::json!([1, 1, 1, 1, 1]))
+            .unwrap()
+            .clone();
+        row["node"] = "Tloaderprobe".into();
+        if probe_row {
+            terminals.push(row);
+        }
+        catalogue.to_string()
+    }
+
+    /// A probe package: the built-in 1-3 library, the catalogue
+    /// [`loader_catalogue`]`(data_version, true)` and `masters/` = the in-repo
+    /// pole-bounded fixture.
+    fn write_loader_package(directory: &Path, data_version: &str) {
+        let (manifest, _) = built_in_manifest().unwrap().unwrap();
+        let mut files: Vec<(PathBuf, Vec<u8>)> = built_in_files(manifest)
+            .unwrap()
+            .iter()
+            .map(|(name, bytes)| (PathBuf::from(name), bytes.to_vec()))
+            .collect();
+        files.push((
+            PathBuf::from(P_MASTER_CATALOGUE_FILE),
+            loader_catalogue(data_version, true).into_bytes(),
+        ));
+        let fixture =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("src/p_integral/master_basis_fixture");
+        for sub in ["MANIFEST.json", "basis-change", "pole-bounded"] {
+            let source = fixture.join(sub);
+            let entries = if source.is_dir() {
+                fs::read_dir(&source)
+                    .unwrap()
+                    .map(|entry| entry.unwrap().path())
+                    .collect()
+            } else {
+                vec![source]
+            };
+            for path in entries {
+                let relative = path.strip_prefix(&fixture).unwrap();
+                files.push((
+                    Path::new(crate::p_integral::master_basis::P_PACKAGE_MASTERS_DIRECTORY)
+                        .join(relative),
+                    fs::read(&path).unwrap(),
+                ));
+            }
+        }
+        for (name, bytes) in files {
+            let path = directory.join(name);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, bytes).unwrap();
+        }
+    }
+
+    /// G-B part P6 (loader): a package named by `VAKINT_P_LIBRARY` alone
+    /// brings its own `p-master-catalogue.json` and `masters/` (a row only its
+    /// catalogue has resolves, to the value of the row it copies); an
+    /// engine's own package or catalogue, `VAKINT_P_MASTER_CATALOGUE` and
+    /// `VAKINT_P_MASTERS_DIRECTORY` still win; without the variable the
+    /// built-in library and catalogue apply as before; a missing or malformed
+    /// package is refused, naming it. Each scenario runs in a child process
+    /// (the variables are process-wide).
+    #[test]
+    fn a_package_named_by_the_variable_brings_its_catalogue_and_masters() {
+        if let Some(scenario) = std::env::var_os(LOADER_SCENARIO) {
+            return loader_scenario(scenario.to_str().unwrap());
+        }
+        let root = tempfile::tempdir().unwrap();
+        let probe = root.path().join("probe-package");
+        write_loader_package(&probe, "loader-probe");
+        write_loader_package(&root.path().join("explicit-package"), "loader-explicit");
+        let malformed = root.path().join("malformed-package");
+        write_loader_package(&malformed, "loader-malformed");
+        fs::write(malformed.join("library.json"), "{\"schema\": ").unwrap();
+        let dedicated = root.path().join("dedicated-catalogue.json");
+        fs::write(&dedicated, loader_catalogue("loader-dedicated", false)).unwrap();
+        let fixture =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("src/p_integral/master_basis_fixture");
+        let masters_variable = crate::p_integral::master_basis::P_MASTERS_DIRECTORY_VARIABLE;
+        let test = format!(
+            "{}::a_package_named_by_the_variable_brings_its_catalogue_and_masters",
+            module_path!().split_once("::").unwrap().1
+        );
+        let mut failures = Vec::new();
+        for (scenario, variables) in [
+            ("unset", vec![]),
+            ("package", vec![(P_LIBRARY_VARIABLE, probe.clone())]),
+            (
+                "dedicated",
+                vec![
+                    (P_LIBRARY_VARIABLE, probe.clone()),
+                    (P_MASTER_CATALOGUE_VARIABLE, dedicated.clone()),
+                    (masters_variable, fixture.clone()),
+                ],
+            ),
+            (
+                "missing",
+                vec![(P_LIBRARY_VARIABLE, root.path().join("missing-package"))],
+            ),
+            ("malformed", vec![(P_LIBRARY_VARIABLE, malformed.clone())]),
+        ] {
+            let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+            command.args(["--exact", &test, "--nocapture", "--test-threads=1"]);
+            for name in [
+                P_LIBRARY_VARIABLE,
+                P_LIBRARY_VERIFY_VARIABLE,
+                P_MASTER_CATALOGUE_VARIABLE,
+                masters_variable,
+            ] {
+                command.env_remove(name);
+            }
+            command
+                .env(LOADER_SCENARIO, scenario)
+                .env(LOADER_ROOT, root.path());
+            command.envs(variables);
+            let output = command.output().unwrap();
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if !(output.status.success() && stdout.contains("1 passed")) {
+                failures.push(format!(
+                    "scenario {scenario}:\n{stdout}\n{}",
+                    String::from_utf8_lossy(&output.stderr)
+                ));
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
+    /// One scenario of [`a_package_named_by_the_variable_brings_its_catalogue_and_masters`].
+    fn loader_scenario(scenario: &str) {
+        let root = PathBuf::from(std::env::var_os(LOADER_ROOT).unwrap());
+        let probe = root.join("probe-package");
+        crate::Vakint::initialize_vakint_symbols();
+        let settings = crate::VakintSettings {
+            evaluation_order: crate::EvaluationOrder(vec![crate::EvaluationMethod::RustRed(
+                crate::RustRedEvaluationOptions {
+                    master_mode: crate::RustRedMasterMode::Symbolic,
+                },
+            )]),
+            form_exe_path: "/rustred-p-integrals-must-not-call-form".into(),
+            integral_normalization_factor: crate::LoopNormalizationFactor::GScheme,
+            number_of_terms_in_epsilon_expansion: 4,
+            n_cores: 1,
+            ..crate::VakintSettings::default()
+        };
+        let pole_bounded = crate::VakintSettings {
+            p_master_basis: crate::p_integral::PMasterBasis::PoleBounded,
+            ..settings.clone()
+        };
+        let row = |node: &str| {
+            let mut arguments = vec![Atom::var(vk_symbol!(node))];
+            arguments.extend([1i64; 5].map(Atom::num));
+            p_residual_symbol().call(&arguments[..])
+        };
+        let refinalise = |engine: &Vakint, node: &str| {
+            engine.refinalise_p_retained(&settings, row(node).as_view(), 5)
+        };
+        let masters_record = |engine: &Vakint| {
+            engine
+                .p_master_basis_record(&pole_bounded)
+                .map(|record| record.unwrap().directory)
+        };
+        let built_in_version = built_in_master_catalogue()
+            .unwrap()
+            .data_version()
+            .to_owned();
+        let engine = Vakint::new().unwrap();
+        match scenario {
+            "unset" => {
+                // as before: the built-in library and catalogue, no masters directory
+                assert_eq!(engine.p_library().unwrap().origin, PLibraryOrigin::BuiltIn);
+                let catalogue = engine.p_master_catalogue().unwrap();
+                assert_eq!(catalogue.data_version(), built_in_version);
+                assert!(engine.p_masters_directory().is_none());
+                assert!(masters_record(&engine).is_err());
+                let refused = refinalise(&engine, "Tloaderprobe").unwrap_err().to_string();
+                assert!(
+                    refused.contains(&built_in_version)
+                        && refused.contains("Tloaderprobe")
+                        && refused.contains("without a master map row"),
+                    "{refused}"
+                );
+            }
+            "package" => {
+                // never loads; no other library stands in for the variable's
+                assert!(engine.loaded_p_library().is_none());
+                let handle = engine.p_library().unwrap();
+                assert_eq!(handle.origin, PLibraryOrigin::Package);
+                assert!(Arc::ptr_eq(&engine.loaded_p_library().unwrap(), &handle));
+                let catalogue = engine.p_master_catalogue().unwrap();
+                assert_eq!(catalogue.data_version(), "loader-probe");
+                assert_eq!(engine.p_masters_directory(), Some(probe.join("masters")));
+                assert_eq!(
+                    masters_record(&engine).unwrap(),
+                    probe.join("masters").display().to_string()
+                );
+                // the row only the package's catalogue has resolves, to the
+                // value of the row it copies; the built-in catalogue has none
+                let probe_value = refinalise(&engine, "Tloaderprobe").unwrap();
+                assert_eq!(probe_value, refinalise(&engine, "T002e").unwrap());
+                let mut built_in = Vakint::new().unwrap();
+                built_in.set_p_master_catalogue(
+                    crate::p_integral::PMasterCatalogue::from_json(
+                        "built-in",
+                        include_str!("../../data/p_master/p-master-catalogue-5l.json"),
+                    )
+                    .unwrap(),
+                );
+                assert!(refinalise(&built_in, "Tloaderprobe").is_err());
+                // the engine's own package and catalogue settings win
+                let mut explicit = Vakint::new().unwrap();
+                let explicit_package = root.join("explicit-package");
+                explicit
+                    .load_p_library_directory(&explicit_package, false)
+                    .unwrap();
+                let catalogue = explicit.p_master_catalogue().unwrap();
+                assert_eq!(catalogue.data_version(), "loader-explicit");
+                assert_eq!(
+                    explicit.p_masters_directory(),
+                    Some(explicit_package.join("masters"))
+                );
+                let mut set = Vakint::new().unwrap();
+                set.set_p_master_catalogue(
+                    crate::p_integral::PMasterCatalogue::from_json(
+                        "set",
+                        &loader_catalogue("loader-set", false),
+                    )
+                    .unwrap(),
+                );
+                assert_eq!(
+                    set.p_master_catalogue().unwrap().data_version(),
+                    "loader-set"
+                );
+                let mut disabled = Vakint::new().unwrap();
+                disabled.disable_default_p_master_catalogue();
+                assert!(disabled.p_master_catalogue().is_none());
+            }
+            "dedicated" => {
+                // VAKINT_P_MASTER_CATALOGUE and VAKINT_P_MASTERS_DIRECTORY win
+                assert_eq!(engine.p_library().unwrap().origin, PLibraryOrigin::Package);
+                let catalogue = engine.p_master_catalogue().unwrap();
+                assert_eq!(catalogue.data_version(), "loader-dedicated");
+                let refused = refinalise(&engine, "Tloaderprobe").unwrap_err().to_string();
+                assert!(
+                    refused.contains("loader-dedicated") && refused.contains("Tloaderprobe"),
+                    "{refused}"
+                );
+                let fixture =
+                    std::env::var(crate::p_integral::master_basis::P_MASTERS_DIRECTORY_VARIABLE)
+                        .unwrap();
+                assert_eq!(masters_record(&engine).unwrap(), fixture);
+            }
+            "missing" | "malformed" => {
+                let package = std::env::var(P_LIBRARY_VARIABLE).unwrap();
+                let refused = engine.p_library().unwrap_err().to_string();
+                eprintln!("LOADER_REFUSAL {scenario}: {refused}");
+                let expected = if scenario == "missing" {
+                    "does not exist (VAKINT_P_LIBRARY"
+                } else {
+                    "library.json"
+                };
+                assert!(
+                    refused.contains(&package) && refused.contains(expected),
+                    "{refused}"
+                );
+                // an evaluation refuses with it: no other library stands in
+                let input =
+                    crate::utils::vakint_macros::vk_parse!("topo(P2L(p(1),1,1,1,1,1))").unwrap();
+                let error = engine
+                    .evaluate(&settings, input.as_view())
+                    .unwrap_err()
+                    .to_string();
+                assert!(error.contains(&package), "{error}");
+                assert!(engine.loaded_p_library().is_none());
+                assert!(engine.p_masters_directory().is_none());
+                assert!(masters_record(&engine).is_err());
+            }
+            other => panic!("unknown scenario {other}"),
         }
     }
 }

@@ -987,7 +987,7 @@ impl Vakint {
             programs.push(application.ordered_cache_program().clone());
         }
         // The p library the engine resolves to after the change (injected,
-        // external-data or built-in) keeps its cache.
+        // VAKINT_P_LIBRARY's package, external-data or built-in) keeps its cache.
         programs.extend(self.loaded_p_cache_program());
         self.ordered_cache
             .detach_except(&programs, &data.undecoded_lower_programs());

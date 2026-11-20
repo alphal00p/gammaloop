@@ -660,7 +660,9 @@ Five-loop p-integrals (vk5l WP4):
   directory with `Vakint::load_p_library_directory(dir, verify)` or the environment variable
   `VAKINT_P_LIBRARY=<dir>` (any directory name; the layout `rustred p-package` or `p5l_library assemble` writes),
   used ahead of external and built-in data; it loads without the descent certificate unless
-  `VAKINT_P_LIBRARY_VERIFY=1` (a verified five-loop load takes about half an hour). The directory is recorded as
+  `VAKINT_P_LIBRARY_VERIFY=1` (a verified five-loop load takes about half an hour). Its `p-master-catalogue.json` and
+  `masters/` apply as for `load_p_library_directory` (`VAKINT_P_MASTER_CATALOGUE` and `VAKINT_P_MASTERS_DIRECTORY`
+  still win). The directory is recorded as
   the package of RustRed's reproduction commands. An optional `open-nodes.json` sidecar (schema
   `rustred.p-open-nodes.v1`, read by RustRed's loader) declares nodes not closed (T266).
 - Build: five-loop charts have 20 slots and RustRed compiles arities 1..=16 by default. Build vakint with
