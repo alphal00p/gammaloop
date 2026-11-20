@@ -678,7 +678,8 @@ impl IdentityBuilder {
                         _ => unreachable!(),
                     }
                 } else {
-                    if let Aind::Hedge(raw, _) | Aind::Edge(raw, _) | Aind::Vertex(raw, _) = original
+                    if let Aind::Hedge(raw, _) | Aind::Edge(raw, _) | Aind::Vertex(raw, _) =
+                        original
                         && raw >= CANONICAL_OWNER_OFFSET
                     {
                         failure = Some("an index outside the support exceeds the raw owner range");
