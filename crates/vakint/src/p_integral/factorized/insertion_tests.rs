@@ -960,3 +960,50 @@ fn direct_records_with_original_cycles_leave_the_weights_to_the_caller() {
     standalone.prefactor.nf_power = 1;
     standalone.validate().unwrap();
 }
+
+/// THE BETA'S REAL K5 DIRECT RECORD (the surrogate of L2_17 at <= 4 loops:
+/// kind direct v3, two open Lorentz ports, one `ins:` coefficient vertex, a
+/// ghost loop through it, weights left to the caller): through the ports
+/// entry, equal to the value their `integrate_physical_numerator` returns,
+/// exactly through its valid_through (eps^-1) and no further; the ghost
+/// loop's -1 is not in the value.
+#[test]
+fn the_beta_k5_direct_record_equals_its_contracted_value() {
+    let record = include_str!("fixtures/wh-k5-direct.record.txt");
+    let value_text = include_str!("fixtures/wh-k5-direct.value.txt");
+    let value = FactorizedNumerator::from_text(record).unwrap_or_else(|e| panic!("{e}"));
+    let expected = atom(
+        value_text
+            .lines()
+            .find_map(|l| l.strip_prefix("value\t"))
+            .expect("a value line"),
+    );
+    let settings = VakintSettings {
+        epsilon_symbol: "gammalooprs::ε".into(),
+        mu_r_sq_symbol: "gammalooprs::μᵣ²".into(),
+        integral_normalization_factor: LoopNormalizationFactor::MSbar,
+        number_of_terms_in_epsilon_expansion: 2,
+        ..settings(2)
+    };
+    let (vakint, _) = engine();
+    let got = evaluate_factorized_ports(&vakint, &settings, &value, &value.prefactor.total())
+        .unwrap_or_else(|e| panic!("{e}"));
+    let epsilon = atom("gammalooprs::ε");
+    let AtomView::Var(epsilon) = epsilon.as_view() else {
+        unreachable!()
+    };
+    let epsilon = epsilon.get_symbol();
+    let difference = (&got.value - &expected).expand();
+    if !difference.is_zero() {
+        let series = difference.series(epsilon, 0, 0).unwrap();
+        for (power, coefficient) in series.terms() {
+            let n = power.numerator().to_i64().unwrap();
+            assert!(
+                n > -1 || coefficient.expand().is_zero(),
+                "eps^{n} differs: {coefficient}\nentry {}\nbeta  {expected}",
+                got.value
+            );
+        }
+    }
+    eprintln!("K5_DIRECT identical through eps^-1: {}", got.value);
+}
