@@ -1159,7 +1159,7 @@ impl<'a> Evaluation<'a> {
             None
         } else {
             if ir_hard_declare() {
-                self.log_ir_hard_declaration(correction_index, correction, term_index, term, &hard);
+                self.log_ir_hard_declaration(correction_index, correction, term_index, term, hard);
             }
             let cost_started = Instant::now();
             let polynomial = hard
