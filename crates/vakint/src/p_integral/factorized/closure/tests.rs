@@ -827,6 +827,25 @@ fn the_closure_kind_refuses_what_it_does_not_support() {
     let mut v = l2_root(2, true);
     v.edges[1].mass_squared = atom(R);
     refused(&v, "several massive lines");
+    // a zero-loop record (OQ-25: the term without remaining loop)
+    let mut v = record(
+        "zero loops",
+        0,
+        vec![Some(20)],
+        vec![
+            line(3, 2, 1, &[1], R),
+            leg(20, 2, true, &[1]),
+            leg(21, 1, false, &[1]),
+        ],
+        vec![vertex(1, ""), vertex(2, "")],
+        Vec::new(),
+        None,
+        3,
+        taylor(0, vec![20, 21], false),
+        false,
+    );
+    v.label = "zero loops".into();
+    refused(&v, "at least one loop");
     // the closing edge massless / wrong mass / wrong power
     let mut v = l2_root(2, true);
     spec(&mut v).edge = 1;
@@ -975,7 +994,9 @@ fn the_v3_text_form_round_trips_every_fixture() {
 /// graph's last loop edge is the closing line (reference mass R), the Taylor
 /// step of degree 2 with mass compensation, the metric root projector.
 #[cfg(feature = "feynkit-ingress")]
-fn dot_root_remainders(picks: &[(&str, usize)]) -> Vec<(FactorizedNumerator, Vec<(String, String)>)> {
+fn dot_root_remainders(
+    picks: &[(&str, usize)],
+) -> Vec<(FactorizedNumerator, Vec<(String, String)>)> {
     use super::super::FromFeynkitOptions;
     let root = std::env::var("VAKINT_TEST_FACTORIZED_DOT_ROOT")
         .unwrap_or_else(|_| "/common/ben/beta/results/prepared".into());
@@ -1000,8 +1021,9 @@ fn dot_root_remainders(picks: &[(&str, usize)]) -> Vec<(FactorizedNumerator, Vec
         files.sort_by_key(|p| (std::fs::metadata(p).unwrap().len(), p.clone()));
         for path in files.into_iter().take(*n) {
             let text = std::fs::read_to_string(&path).unwrap();
-            let diagram = feynkit_graph::FeynmanDiagram::from_dot(std::sync::Arc::clone(&model), &text)
-                .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            let diagram =
+                feynkit_graph::FeynmanDiagram::from_dot(std::sync::Arc::clone(&model), &text)
+                    .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
             let values =
                 FactorizedNumerator::from_feynkit(&diagram, &model, &FromFeynkitOptions::default())
                     .unwrap();
@@ -1015,7 +1037,10 @@ fn dot_root_remainders(picks: &[(&str, usize)]) -> Vec<(FactorizedNumerator, Vec
                 .find_map(|(i, e)| e.map(|e| (i, e)))
                 .expect("a loop edge");
             let cycles = value.closed_loops().unwrap();
-            let fermion = cycles.iter().filter(|c| c.line == LineKind::Fermion).count() as u32;
+            let fermion = cycles
+                .iter()
+                .filter(|c| c.line == LineKind::Fermion)
+                .count() as u32;
             let ghost = cycles.len() as u32 - fermion;
             let legs = value
                 .edges
@@ -1094,10 +1119,34 @@ fn closure_kind_timing() {
         .and_then(|v| v.parse().ok())
         .unwrap_or(3usize);
     let mut cases = vec![
-        (l2_root(2, true), L2_CUT.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect::<Vec<_>>()),
-        (l2_child(2), L2_CUT.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect()),
-        (l3_root(2), L3_CUT.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect()),
-        (l4_root(2), L4_CUT.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect()),
+        (
+            l2_root(2, true),
+            L2_CUT
+                .iter()
+                .map(|(a, b)| (a.to_string(), b.to_string()))
+                .collect::<Vec<_>>(),
+        ),
+        (
+            l2_child(2),
+            L2_CUT
+                .iter()
+                .map(|(a, b)| (a.to_string(), b.to_string()))
+                .collect(),
+        ),
+        (
+            l3_root(2),
+            L3_CUT
+                .iter()
+                .map(|(a, b)| (a.to_string(), b.to_string()))
+                .collect(),
+        ),
+        (
+            l4_root(2),
+            L4_CUT
+                .iter()
+                .map(|(a, b)| (a.to_string(), b.to_string()))
+                .collect(),
+        ),
     ];
     cases.extend(dot_root_remainders(&[("L2", 3), ("L3", 2), ("L4", 1)]));
     let vakint = Vakint::new().unwrap();
@@ -1128,7 +1177,11 @@ fn closure_kind_timing() {
             let started = std::time::Instant::now();
             let expected = reference(value, &routing);
             reference_times.push(started.elapsed().as_secs_f64());
-            assert!((&got.records[0].vakint_value - &expected).expand().is_zero());
+            assert!(
+                (&got.records[0].vakint_value - &expected)
+                    .expand()
+                    .is_zero()
+            );
         }
         eprintln!(
             "CLOSURE_TIMING label=\"{}\" reps={reps} entry_median_s={:.4} reference_median_s={:.4} entry_contract_s={:.4} entry_lower_s={:.4} entry_reduce_s={:.4} entry_all={:?} reference_all={:?}",
@@ -1175,7 +1228,11 @@ fn the_beta_k3_hs_record_equals_its_contracted_value() {
     let expected = fixture_value(include_str!("../fixtures/wh-k3-hs.value.txt"));
     let value = FactorizedNumerator::from_text(record).unwrap_or_else(|e| panic!("{e}"));
     value.validate().unwrap();
-    assert_eq!(value.to_text().unwrap(), record, "byte-identical round trip");
+    assert_eq!(
+        value.to_text().unwrap(),
+        record,
+        "byte-identical round trip"
+    );
     let vakint = Vakint::new().unwrap();
     let got = evaluate_factorized_closure(
         &vakint,
@@ -1185,7 +1242,12 @@ fn the_beta_k3_hs_record_equals_its_contracted_value() {
     )
     .unwrap();
     eprintln!("K3_HS entry {}\nK3_HS beta  {}", got.value, expected);
-    assert_equal_through(&got.value, &expected, valid_through(include_str!("../fixtures/wh-k3-hs.value.txt")), "k3-hs");
+    assert_equal_through(
+        &got.value,
+        &expected,
+        valid_through(include_str!("../fixtures/wh-k3-hs.value.txt")),
+        "k3-hs",
+    );
 }
 
 /// The order in ε through which a fixture's value is valid (`valid_through
@@ -1226,4 +1288,34 @@ fn assert_equal_through(got: &Atom, expected: &Atom, order: i64, what: &str) {
         }
     }
     eprintln!("{what}: equal through eps^{order} ({checked} nonzero-difference orders inspected)");
+}
+
+/// THE BETA'S REAL K3 DIRAC RECORD: the IR hard part of B_self_energy_L4_4966
+/// with its open quark line closed by `gamma(bis, bis, nu)` (one fresh
+/// Lorentz index left open, the 1/Tr[1] normalisation applied by the caller,
+/// not in the record), fixed mass, degree 1, two independent crown momenta:
+/// against their contracted value, exactly through eps^0 (its valid_through:
+/// a (4 - 2 eps) trace factor multiplies part of their series, so eps^1 is
+/// incomplete there) and NO FURTHER.
+#[test]
+fn the_beta_k3_dirac_record_equals_its_contracted_value() {
+    let record = include_str!("../fixtures/wh-k3-dirac.record.txt");
+    let value_text = include_str!("../fixtures/wh-k3-dirac.value.txt");
+    let expected = fixture_value(value_text);
+    let value = FactorizedNumerator::from_text(record).unwrap_or_else(|e| panic!("{e}"));
+    value.validate().unwrap();
+    assert_eq!(
+        value.to_text().unwrap(),
+        record,
+        "byte-identical round trip"
+    );
+    let vakint = Vakint::new().unwrap();
+    let got = evaluate_factorized_closure(
+        &vakint,
+        &rstar_site_settings(),
+        std::slice::from_ref(&value),
+        &[value.prefactor.total()],
+    )
+    .unwrap();
+    assert_equal_through(&got.value, &expected, valid_through(value_text), "k3-dirac");
 }

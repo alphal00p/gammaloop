@@ -758,6 +758,9 @@ struct FactorRules<'a> {
     location: Location,
     dimension: Symbol,
     edges: &'a BTreeMap<usize, &'a FactorizedEdge>,
+    /// The projector of a closure record: `gamma` between bispinor ports is
+    /// allowed there (the producer's Dirac closure).
+    closure: bool,
 }
 
 impl FactorRules<'_> {
@@ -853,7 +856,7 @@ impl FactorRules<'_> {
                 Ok(slots)
             }
             names::GAMMA => {
-                if self.location == Location::Projector
+                if (self.location == Location::Projector && !self.closure)
                     || args.len() != 3
                     || slots.len() != 3
                     || slots[0].rep != names::BIS
@@ -1137,6 +1140,7 @@ impl FactorizedNumerator {
                 location: Location::Edge(edge.id),
                 dimension: self.dimension,
                 edges: &edges,
+                closure: false,
             };
             let (sets, elements) = rules.analyse(&edge.factor)?;
             analysed.push((rules.location, sets, elements));
@@ -1146,6 +1150,7 @@ impl FactorizedNumerator {
                 location: Location::Vertex(vertex.id),
                 dimension: self.dimension,
                 edges: &edges,
+                closure: false,
             };
             let (sets, elements) = rules.analyse(&vertex.factor)?;
             analysed.push((rules.location, sets, elements));
@@ -1155,6 +1160,7 @@ impl FactorizedNumerator {
                 location: Location::Projector,
                 dimension: self.dimension,
                 edges: &edges,
+                closure: matches!(self.kind, FactorizedKind::Closure(_)),
             };
             let (sets, elements) = rules.analyse(&projector.tensor)?;
             analysed.push((rules.location, sets, elements));
@@ -1483,20 +1489,36 @@ impl FactorizedNumerator {
             .iter()
             .find(|(location, _, _)| *location == Location::Projector)
             .map(|(_, sets, _)| sets.free.keys().cloned().collect::<BTreeSet<_>>());
-        if let Some(projector_free) = &projector_free
-            && *projector_free != ports
-        {
-            return Err(FactorizedError::Ports {
-                detail: format!(
-                    "the projector's free indices {projector_free:?} are not the ports {ports:?}"
-                ),
-            });
+        // A closure record's projector may leave ports open and open slots of
+        // its own (WH-RECORD-FORMAT section 3: its free slots are ports or open
+        // slots); a direct record's projector closes exactly the ports.
+        let mut projector_open = BTreeSet::new();
+        if let Some(projector_free) = &projector_free {
+            if matches!(self.kind, FactorizedKind::Closure(_)) {
+                projector_open = projector_free.difference(&ports).cloned().collect();
+            } else if *projector_free != ports {
+                return Err(FactorizedError::Ports {
+                    detail: format!(
+                        "the projector's free indices {projector_free:?} are not the ports {ports:?}"
+                    ),
+                });
+            }
         }
         for (key, locations) in &free {
             let in_factors = locations
                 .iter()
                 .filter(|l| **l != Location::Projector)
                 .count();
+            if projector_open.contains(key) {
+                if in_factors != 0 {
+                    return Err(FactorizedError::Ports {
+                        detail: format!(
+                            "{key} is free in the projector and occurs in the factors without being a port"
+                        ),
+                    });
+                }
+                continue;
+            }
             let is_port = ports.contains(key);
             let expected = if is_port { 1 } else { 2 };
             if in_factors > expected {
@@ -1556,7 +1578,12 @@ impl FactorizedNumerator {
                         .into_iter()
                         .chain(edge.target_hedge)
                         .collect::<BTreeSet<_>>();
-                    if edge.line == LineKind::Fermion {
+                    // a closure record's external quark leg may carry factor 1:
+                    // its spinor slot is a port (closed by the projector)
+                    let bare_leg = matches!(self.kind, FactorizedKind::Closure(_))
+                        && edge.is_external()
+                        && spinor_free.is_empty();
+                    if edge.line == LineKind::Fermion && !bare_leg {
                         if spinor_free != own {
                             return Err(FactorizedError::FermionOrientation {
                                 location: location.to_string(),
