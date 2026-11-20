@@ -297,6 +297,7 @@ fn contract_branch_edges(
     closing: bool,
     order: idenso::tensor::FrontierOrder,
 ) -> Result<(Atom, Atom)> {
+    let _step = crate::timing::contract();
     use idenso::dirac::GammaSimplifySettings;
     use idenso::tensor::{AlgebraContraction, AlgebraSettings, SymbolicTensor};
     use idenso::{CookMode, CookSettings, IndexTooling};
@@ -379,6 +380,7 @@ pub fn contract_edges(
     options: DirectOptions,
     compact: Option<(&Lines, &CompactBasis)>,
 ) -> Result<Vec<(&'static str, Atom)>> {
+    let _step = crate::timing::contract();
     let s = &*SYMBOLS;
     let basis = diagram.loop_momentum_basis();
     let d = Atom::var(s.d);
@@ -995,6 +997,7 @@ fn contract_branch_open_edges(
     dots: bool,
     order: idenso::tensor::FrontierOrder,
 ) -> Result<(Atom, Vec<Atom>)> {
+    let _step = crate::timing::contract();
     use idenso::dirac::GammaSimplifySettings;
     use idenso::tensor::{AlgebraContraction, AlgebraSettings, SymbolicTensor};
     use idenso::{CookMode, CookSettings, IndexTooling};
@@ -1046,6 +1049,7 @@ pub fn contract_edges_open(
     options: DirectOptions,
     compact: Option<(&Lines, &CompactBasis)>,
 ) -> Result<(Atom, Vec<Atom>)> {
+    let _step = crate::timing::contract();
     contract_open_terms(diagram, branches, options, compact, true)
 }
 

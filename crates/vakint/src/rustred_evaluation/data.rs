@@ -688,6 +688,7 @@ impl Vakint {
         settings: &crate::VakintSettings,
     ) -> Result<symbolica::atom::Atom, VakintError> {
         let _timing = crate::timing::reduce();
+    let _step = crate::timing::finalize();
         self.require_bare_master_coefficients(&expression)?;
         let data = self.rustred_data()?;
         crate::precision::materialize(

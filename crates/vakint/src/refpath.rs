@@ -486,6 +486,7 @@ fn indexed(momentum: &Atom, slot: &Atom) -> Result<Atom> {
 /// external Lorentz ports) and, unless `metric_only`, `S_qq` (`q^μ q^ν`),
 /// from one simplification of `T·g + L·q q` (tags `T`, `L`).
 fn contract_branch(product: &Atom, momentum: &Atom, metric_only: bool) -> Result<(Atom, Atom)> {
+    let _step = crate::timing::contract();
     let s = &*SYMBOLS;
     let cooking = CookSettings::indices()
         .with_mode(CookMode::ReversibleEncoding)
@@ -649,6 +650,7 @@ pub fn contract_open(
 
 /// [`contract_branch`] without a projector: the open Lorentz ports stay.
 fn contract_branch_open(product: &Atom) -> Result<(Atom, Vec<Atom>)> {
+    let _step = crate::timing::contract();
     let cooking = CookSettings::indices()
         .with_mode(CookMode::ReversibleEncoding)
         .with_representation_payloads(true, true);

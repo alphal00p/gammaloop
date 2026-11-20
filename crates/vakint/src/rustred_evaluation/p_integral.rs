@@ -2459,6 +2459,7 @@ pub(crate) fn finalize_reduced(
     mode: RustRedMasterMode,
 ) -> Result<Atom, VakintError> {
     let _timing = crate::timing::reduce();
+    let _step = crate::timing::finalize();
     let mut result = Atom::Zero;
     for ((loops, head), values) in reduced {
         let residual = values.iter().any(|value| {
