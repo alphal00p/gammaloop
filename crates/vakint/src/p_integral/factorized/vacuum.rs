@@ -1115,6 +1115,15 @@ pub fn evaluate_factorized_vacuum_streamed(
     prefactor: &Atom,
     streaming: Streaming,
 ) -> Result<VacuumValue> {
+    // the new record kinds do not depend on the caller's tensor reduction or
+    // notation (evaluate::is_new_kind); values accepted before keep them
+    let pinned;
+    let settings = if super::evaluate::is_new_kind(value) {
+        pinned = super::evaluate::pinned_settings(settings);
+        &pinned
+    } else {
+        settings
+    };
     // Lane unknown-masters: strict refusal once, on this call's summed value.
     if let Some(_boundary) = crate::public_result_boundary() {
         let inner = crate::unknown_master_coefficients_carried(settings);

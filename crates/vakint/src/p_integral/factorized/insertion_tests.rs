@@ -1007,3 +1007,67 @@ fn the_beta_k5_direct_record_equals_its_contracted_value() {
     }
     eprintln!("K5_DIRECT identical through eps^-1: {}", got.value);
 }
+
+/// Record format section 7: the value of a NEW kind does not depend on the
+/// caller's tensor-reduction method or notation: a direct record with an
+/// insertion and a ports record (the real k5-direct record through the ports
+/// entry), each with every combination (closure records: the closure tests).
+#[test]
+fn new_kinds_do_not_depend_on_the_reduction_method_or_the_notation() {
+    use crate::TensorReductionMethod::{AlphaLoop, FeynKit};
+    let (vakint, _) = engine();
+    let combinations = [
+        (FeynKit, true),
+        (FeynKit, false),
+        (AlphaLoop, true),
+        (AlphaLoop, false),
+    ];
+    let flipped = |base: &VakintSettings, method, dots| {
+        let mut s = base.clone();
+        s.tensor_reduction_method = method;
+        s.use_dot_product_notation = dots;
+        s
+    };
+    let same = |values: Vec<Atom>, what: &str| {
+        assert!(!values[0].is_zero(), "{what}");
+        for v in &values[1..] {
+            assert!(
+                (v - &values[0]).expand().is_zero(),
+                "{what}: {v}\nvs {}",
+                values[0]
+            );
+        }
+    };
+    let direct = gluon_surrogate(1);
+    let base = settings(2);
+    same(
+        combinations
+            .iter()
+            .map(|(m, d)| {
+                evaluate_factorized(&vakint, &flipped(&base, *m, *d), &direct, &Atom::num(1))
+                    .unwrap()
+                    .value
+            })
+            .collect(),
+        "direct with an insertion",
+    );
+    let ports =
+        FactorizedNumerator::from_text(include_str!("fixtures/wh-k5-direct.record.txt")).unwrap();
+    let site = VakintSettings {
+        epsilon_symbol: "gammalooprs::ε".into(),
+        mu_r_sq_symbol: "gammalooprs::μᵣ²".into(),
+        integral_normalization_factor: LoopNormalizationFactor::MSbar,
+        ..settings(2)
+    };
+    same(
+        combinations
+            .iter()
+            .map(|(m, d)| {
+                evaluate_factorized_ports(&vakint, &flipped(&site, *m, *d), &ports, &Atom::num(1))
+                    .unwrap()
+                    .value
+            })
+            .collect(),
+        "ports record",
+    );
+}
