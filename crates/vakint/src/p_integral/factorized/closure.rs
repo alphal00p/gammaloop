@@ -1,0 +1,1037 @@
+//! The R* CLOSURE kind of the uncontracted-numerator input mode: one R*
+//! remainder (root remainder K1, UV child K2, IR hard part K3) as a
+//! [`FactorizedNumerator`] of kind [`FactorizedKind::Closure`]: a vacuum graph
+//! with ONE massive (closing) line among massless ones, external legs carrying
+//! the independent external momenta `p(1..X)`, its numerator factorised and
+//! uncontracted, and the R* Taylor step UNAPPLIED ([`TaylorSpec`]), or one
+//! pre-expanded Taylor sector (`taylor = None`).
+//!
+//! What the record denotes (N/notes/wh/WH-RECORD-FORMAT.md section 4.1): with
+//! `E = projector · PROD factors · PROD_e den_e^(-power_e)`, `den_e = q_e² −
+//! m_e²`, every scaled `p(j) → λ p(j)` (in every edge momentum and every
+//! `Q(x_j, ..)`), the reference mass `R → (1 − λ²) M_aux²` (compensate) or
+//! `R → M_aux²` (fixed) everywhere, `E` expanded to total degree `w` in `λ`,
+//! the orders of [`TaylorOrders`] kept, `λ = 1`, integrated over the loop
+//! momenta; times the caller's prefactor and `dot(p(1), p(1))^p2_power`.
+//!
+//! How it is evaluated (the composition of the R* boundary path, by existing
+//! code only; no tensor algebra here):
+//! 1. idenso contracts `projector · PROD factors` ONCE per record
+//!    ([`super::contract_with_idenso`], streamed when large), `R` replaced by
+//!    `(1 − λ²) M_aux²` / `M_aux²` first (a scalar substitution; for `w = 0`
+//!    the external momenta are removed from the factors first: `Q(x, ..) → 0`
+//!    on the legs, `Q(e, ..) → Q(e, ..) − r_e` on the scaled lines, an exact
+//!    root-grade-0 truncation); the closed scalar is mapped to vakint's
+//!    notation (`dot` of the edges' momenta, open ports as raw indices);
+//! 2. GRADED SPLIT: every summand is split into its q-structure `T` (the
+//!    factors carrying an external momentum, an open port or `λ`) and a closed
+//!    loop-dot scalar; the scalars of one `T` form one BLOCK `S_T`;
+//! 3. the DENOMINATORS alone are Taylor expanded (scalar binomial series of
+//!    `(A + B λ + C λ²)^(−n)`, `B = 2 l_e·r_e`, `C = r_e·r_e` (+ `M_aux²` on the
+//!    compensated closing line)): every product term is a power PATTERN (the
+//!    lines' raised powers, a key change) with a coefficient of known λ-degree;
+//! 4. per pattern and block, the small coefficient `T × Σ_d d_{π,d}` (degrees
+//!    kept by the Taylor degree and `orders`) is tensor-reduced by vakint's
+//!    vacuum tensor reduction (memoised per q-monomial: the "q averaging" and
+//!    the open-port projection onto external tensors), external tensors
+//!    carried as scalar placeholders;
+//! 5. the cut of the closing line is derived from the lines
+//!    ([`super::vacuum::vacuum_backend`]); the blocks and patterns form ONE
+//!    [`RemainderBoundary`] per record, evaluated by the existing boundary path
+//!    (block reuse across patterns, one key plan per closing key, one
+//!    reduction): the lowering efficiency of the R* boundary path is kept.
+//!
+//! Refusals: [`FactorizedError::Closure`] with the reason (see
+//! `validate_closure`), [`FactorizedError::Reserved`] for insertions.
+
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::time::Instant;
+
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
+use symbolica::function;
+
+use super::vacuum::{
+    self, VacuumBackend, VacuumLine, closure_inputs, contract_first_bound_bytes,
+    distributed_lorentz_monomials, map_to_vakint_vacuum, stream_pieces_for, vacuum_backend,
+    vacuum_lines, vacuum_topology,
+};
+use super::{
+    ClosureSpec, FactorizedError, FactorizedKind, FactorizedNumerator, Result, TaylorSpec, names,
+};
+use crate::p_integral::{BoundaryOptions, BoundaryPattern, MassiveClosure, RemainderBoundary};
+use crate::symbols::S;
+use crate::utils::vakint_macros::vk_symbol;
+use crate::{Vakint, VakintSettings};
+
+/// Highest Taylor degree accepted (WH-RECORD-FORMAT OQ-5: QCD R* needs <= 2).
+pub const MAX_CLOSURE_TAYLOR_DEGREE: u32 = 2;
+
+fn refuse(detail: impl Into<String>) -> FactorizedError {
+    FactorizedError::Closure {
+        detail: detail.into(),
+    }
+}
+
+fn lambda_symbol() -> Symbol {
+    symbolica::symbol!("vakint::closure_lambda")
+}
+
+fn placeholder(n: usize) -> Atom {
+    Atom::var(symbolica::symbol!(format!("vakint::closure_tensor_{n}")))
+}
+
+/// Whether `view` mentions a symbol whose name satisfies `test`.
+fn mentions(view: AtomView<'_>, test: &dyn Fn(&str) -> bool) -> bool {
+    let mut found = false;
+    view.visitor(&mut |part| {
+        match part {
+            AtomView::Var(v) => found |= test(&v.get_symbol().get_name()),
+            AtomView::Fun(f) => found |= test(&f.get_symbol().get_name()),
+            _ => {}
+        }
+        !found
+    });
+    found
+}
+
+/// Whether `needle` occurs as a subexpression of `hay`.
+pub(super) fn contains_atom(hay: AtomView<'_>, needle: AtomView<'_>) -> bool {
+    let mut found = false;
+    hay.visitor(&mut |part| {
+        found |= part == needle;
+        !found
+    });
+    found
+}
+
+/// The edge ids `Q(e, ..)` in `view`.
+fn momentum_ids(view: AtomView<'_>) -> BTreeSet<usize> {
+    let mut ids = BTreeSet::new();
+    view.visitor(&mut |part| {
+        if let AtomView::Fun(f) = part
+            && f.get_symbol().get_name() == names::MOMENTUM
+            && f.get_nargs() == 2
+            && let Some(e) = f
+                .iter()
+                .next()
+                .and_then(|a| i64::try_from(a).ok())
+                .and_then(|a| usize::try_from(a).ok())
+        {
+            ids.insert(e);
+        }
+        true
+    });
+    ids
+}
+
+impl FactorizedNumerator {
+    /// The closure rules (the record of N/notes/wh/WH-RECORD-FORMAT.md):
+    /// CONTRACT-v1's graph, factor, index, locality and fermion rules
+    /// (momentum conservation on all components for a conserved record with a
+    /// Taylor step, on the loop components otherwise), then the closure kind's.
+    pub(super) fn validate_closure(&self, spec: &ClosureSpec) -> Result<()> {
+        let loops = self.loops();
+        let externals = self.externals();
+        let conserved = if spec.taylor.is_some() && !spec.independent_externals {
+            loops + externals
+        } else {
+            loops
+        };
+        self.validate_contract(Some(conserved))?;
+        if loops == 0 {
+            return Err(refuse("a closure record has at least one loop"));
+        }
+        // weights, exactly once (WH-RECORD-FORMAT section 3): with
+        // `original_cycles` the original graph's weights stay with the caller;
+        // without, the carried graph's closed loops are applied here
+        let p = &self.prefactor;
+        match spec.original_cycles {
+            Some((fermion, ghost)) => {
+                if p.loop_sign != 1 || p.nf_power != 0 || p.overall != Atom::num(1) {
+                    return Err(refuse(format!(
+                        "with original_cycles the prefactor has loop_sign=1, nf_power=0, overall 1 (the original graph's weights stay with the caller); found loop_sign={} nf_power={} overall {}",
+                        p.loop_sign, p.nf_power, p.overall
+                    )));
+                }
+                let cycles = self
+                    .closed_loops()
+                    .map_err(|e| refuse(format!("closed loops of the carried graph: {e}")))?;
+                let f = cycles
+                    .iter()
+                    .filter(|c| c.line == super::LineKind::Fermion)
+                    .count() as u32;
+                let g = cycles.len() as u32 - f;
+                if f > fermion || g > ghost {
+                    return Err(refuse(format!(
+                        "the carried graph has {f} fermion and {g} ghost cycles, more than original_cycles fermion={fermion} ghost={ghost}"
+                    )));
+                }
+            }
+            None => {
+                let cycles = self.closed_loops()?;
+                let f = cycles
+                    .iter()
+                    .filter(|c| c.line == super::LineKind::Fermion)
+                    .count();
+                let sign = if cycles.len() % 2 == 0 { 1 } else { -1 };
+                if p.loop_sign != sign {
+                    return Err(FactorizedError::LoopSign {
+                        found: p.loop_sign,
+                        loops: cycles.len(),
+                    });
+                }
+                if p.nf_power as usize != f {
+                    return Err(FactorizedError::NfPower {
+                        found: p.nf_power,
+                        loops: f,
+                    });
+                }
+            }
+        }
+        for (name, by_vakint, atom) in &spec.weights {
+            if *by_vakint && *atom != p.scalars {
+                return Err(refuse(format!(
+                    "weight {name} applied_by=vakint is {atom}, prefactor_scalars is {}",
+                    p.scalars
+                )));
+            }
+        }
+        let all = self
+            .edges
+            .iter()
+            .map(|e| e.factor.clone())
+            .chain(self.vertices.iter().map(|v| v.factor.clone()))
+            .chain(self.projector.iter().map(|p| p.tensor.clone()))
+            .chain([p.scalars.clone(), p.colour.clone()])
+            .collect::<Vec<_>>();
+        for atom in &all {
+            if mentions(atom.as_view(), &|n| n == names::NF || n.ends_with("::nf")) {
+                return Err(refuse(
+                    "a flavour symbol in the record (n_f stays with the caller)",
+                ));
+            }
+            if mentions(atom.as_view(), &|n| n.ends_with("mUVexp")) {
+                return Err(refuse("mUVexp in the record (the producer maps it to mUV)"));
+            }
+            if mentions(atom.as_view(), &|n| n == "vakint::closure_lambda") {
+                return Err(refuse(
+                    "vakint's internal Taylor parameter occurs in the record",
+                ));
+            }
+        }
+        // the closing line: the one massive internal edge
+        let Some(closing) = self.edge(spec.edge) else {
+            return Err(refuse(format!("closing edge {} does not exist", spec.edge)));
+        };
+        if closing.is_external() {
+            return Err(refuse(format!(
+                "closing edge {} is an external leg",
+                spec.edge
+            )));
+        }
+        if closing.mass_squared.is_zero() || closing.mass_squared != spec.mass_squared {
+            return Err(refuse(format!(
+                "closing edge {}: mass {} is zero or differs from the closure line's {}",
+                spec.edge, closing.mass_squared, spec.mass_squared
+            )));
+        }
+        if closing.power != spec.power || spec.power < 1 {
+            return Err(refuse(format!(
+                "closing edge {}: power {} differs from the closure line's {} (or < 1)",
+                spec.edge, closing.power, spec.power
+            )));
+        }
+        let massive = self
+            .edges
+            .iter()
+            .filter(|e| !e.is_external() && !e.mass_squared.is_zero())
+            .map(|e| e.id)
+            .collect::<Vec<_>>();
+        if massive.len() != 1 {
+            return Err(refuse(format!(
+                "several massive lines ({massive:?}): a closure record has exactly one, the closing edge"
+            )));
+        }
+        if spec.auxiliary_mass_squared.is_zero() {
+            return Err(refuse("the auxiliary mass is zero"));
+        }
+        if contains_atom(p.scalars.as_view(), spec.mass_squared.as_view())
+            || contains_atom(p.colour.as_view(), spec.mass_squared.as_view())
+        {
+            return Err(refuse(format!(
+                "the reference mass {} in the prefactor (it is substituted in the integrand only)",
+                spec.mass_squared
+            )));
+        }
+        // projector: no loop momentum
+        if let Some(projector) = &self.projector {
+            for e in momentum_ids(projector.tensor.as_view()) {
+                if spec.taylor.is_some() {
+                    return Err(refuse(format!(
+                        "the projector contains Q({e}, ..): with a Taylor step it acts after the step and must be momentum-free"
+                    )));
+                }
+                if self.edge(e).is_some_and(|edge| !edge.is_external()) {
+                    return Err(refuse(format!(
+                        "the projector contains the momentum of internal edge {e}"
+                    )));
+                }
+            }
+            if projector.p2_power != 0 && externals == 0 {
+                return Err(refuse("p2_power without an external momentum"));
+            }
+        }
+        // open ports (those the projector does not close): Lorentz only
+        for port in &self.ports {
+            let closed = self
+                .projector
+                .as_ref()
+                .is_some_and(|p| contains_atom(p.tensor.as_view(), port.as_view()));
+            let lorentz = matches!(port.as_view(), AtomView::Fun(f) if f.get_symbol().get_name() == names::MINK);
+            if !closed && !lorentz {
+                return Err(refuse(format!(
+                    "open port {port} is not a Lorentz slot (open bispinor ports are not supported; close the line with the projector)"
+                )));
+            }
+        }
+        for soft in &spec.softs {
+            if soft.external == 0
+                || soft.external > externals
+                || self.external_edges[soft.external - 1] != Some(soft.edge)
+            {
+                return Err(refuse(format!(
+                    "soft line {} edge {}: not the leg of p({})",
+                    soft.external, soft.edge, soft.external
+                )));
+            }
+        }
+        match &spec.taylor {
+            None => {
+                if spec.auxiliary_mass_squared != spec.mass_squared {
+                    return Err(refuse(
+                        "a pre-expanded sector (taylor none) has no auxiliary mass: it must equal the closing mass",
+                    ));
+                }
+                if let Some(edge) = self
+                    .edges
+                    .iter()
+                    .find(|e| !e.is_external() && e.momentum[loops..].iter().any(|c| *c != 0))
+                {
+                    return Err(refuse(format!(
+                        "taylor none (lambda^0 denominators): internal edge {} carries an external momentum",
+                        edge.id
+                    )));
+                }
+            }
+            Some(taylor) => {
+                if taylor.degree > MAX_CLOSURE_TAYLOR_DEGREE {
+                    return Err(refuse(format!(
+                        "Taylor degree {} above {MAX_CLOSURE_TAYLOR_DEGREE}",
+                        taylor.degree
+                    )));
+                }
+                if !(1..=taylor.degree).any(|n| taylor.orders.keeps(n)) && !taylor.orders.keeps(0) {
+                    return Err(refuse(format!(
+                        "orders={} keeps no order up to degree {}",
+                        taylor.orders.as_str(),
+                        taylor.degree
+                    )));
+                }
+                let mut scaled = BTreeSet::new();
+                let mut seen = BTreeSet::new();
+                for id in &taylor.scaled_edges {
+                    let Some(leg) = self.edge(*id).filter(|e| e.is_external()) else {
+                        return Err(refuse(format!("scaled_edges: {id} is not an external leg")));
+                    };
+                    if !seen.insert(*id) {
+                        return Err(refuse(format!("scaled_edges: {id} twice")));
+                    }
+                    for (j, c) in leg.momentum[loops..].iter().enumerate() {
+                        if *c != 0 {
+                            scaled.insert(j + 1);
+                        }
+                    }
+                }
+                let expected = (1..=externals).collect::<BTreeSet<_>>();
+                if scaled != expected {
+                    return Err(refuse(format!(
+                        "scaled_edges={:?} scale p{:?}: every independent external momentum p(1..{externals}) must be scaled",
+                        taylor.scaled_edges, scaled
+                    )));
+                }
+                if let Some(j) = self.external_edges.iter().position(Option::is_none) {
+                    return Err(refuse(format!(
+                        "p({}) has no external leg: the Taylor step needs Q(x_j) for every scaled momentum",
+                        j + 1
+                    )));
+                }
+                if !self.constant_vectors().is_empty() {
+                    return Err(refuse(format!(
+                        "constant external vectors {:?} (edges outside the graph) with a Taylor step: which momenta scale is not defined",
+                        self.constant_vectors()
+                    )));
+                }
+                if !matches!(spec.mass_squared.as_view(), AtomView::Var(_)) {
+                    return Err(refuse(format!(
+                        "the reference mass {} is not a symbol (it is substituted everywhere)",
+                        spec.mass_squared
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// The value of one record of [`evaluate_factorized_closure`].
+#[derive(Clone, Debug)]
+pub struct ClosureRecordValue {
+    /// In the caller's notation, times the prefactor and `(p²)^p2_power`.
+    pub value: Atom,
+    /// The same in vakint notation.
+    pub vakint_value: Atom,
+    /// Power patterns (nonzero, non-scaleless) and blocks of the boundary.
+    pub patterns: usize,
+    pub blocks: usize,
+    /// Distinct q-monomials tensor-reduced.
+    pub reduced_monomials: usize,
+    /// Seconds: idenso contraction; graded split, den expansion and the
+    /// coefficients' tensor reduction; the boundary evaluation (lowering,
+    /// reduction, finalisation).
+    pub contract_seconds: f64,
+    pub split_seconds: f64,
+    pub evaluate_seconds: f64,
+    /// The boundary path's own stage seconds (lowering vs reduction).
+    pub lower_seconds: f64,
+    pub reduce_seconds: f64,
+}
+
+/// The value of [`evaluate_factorized_closure`].
+#[derive(Clone, Debug)]
+pub struct ClosureValue {
+    /// The sum over the records, caller's notation.
+    pub value: Atom,
+    /// The sum over the records, vakint notation.
+    pub vakint_value: Atom,
+    pub records: Vec<ClosureRecordValue>,
+}
+
+/// The vakint vector `Σ c_i v(i)` of `coefficients` over `head`.
+fn vector(head: Symbol, coefficients: &[i64]) -> Atom {
+    let mut out = Atom::Zero;
+    for (i, c) in coefficients.iter().enumerate() {
+        if *c != 0 {
+            out += Atom::num(*c) * function!(head, Atom::num(i as i64 + 1));
+        }
+    }
+    out
+}
+
+fn binomial(n: i64, k: i64) -> i64 {
+    let mut out = 1i64;
+    for i in 0..k {
+        out = out * (n - i) / (i + 1);
+    }
+    out
+}
+
+fn factorial(n: i64) -> i64 {
+    (1..=n).product::<i64>().max(1)
+}
+
+/// One term of the denominator expansion: raised powers by edge id, λ-degree,
+/// coefficient (vakint notation).
+#[derive(Clone)]
+struct DenTerm {
+    raise: BTreeMap<usize, i64>,
+    degree: u32,
+    coefficient: Atom,
+}
+
+/// Step 3 of the module documentation: the Taylor terms of the denominator
+/// product up to degree `w`.
+fn denominator_terms(
+    value: &FactorizedNumerator,
+    spec: &ClosureSpec,
+    taylor: &TaylorSpec,
+) -> Vec<DenTerm> {
+    let loops = value.loops();
+    let w = taylor.degree as i64;
+    let mut terms = vec![DenTerm {
+        raise: BTreeMap::new(),
+        degree: 0,
+        coefficient: Atom::num(1),
+    }];
+    for edge in value.edges.iter().filter(|e| !e.is_external()) {
+        let l = vector(S.k, &edge.momentum[..loops]);
+        let r = vector(S.p, &edge.momentum[loops..]);
+        let closing = edge.id == spec.edge;
+        let compensated = closing && taylor.compensate_mass;
+        if r.is_zero() && !compensated {
+            continue;
+        }
+        let b = if r.is_zero() {
+            Atom::Zero
+        } else {
+            Atom::num(2) * S.dot.call((&l, &r))
+        };
+        let mut c = if r.is_zero() {
+            Atom::Zero
+        } else {
+            S.dot.call((&r, &r))
+        };
+        if compensated {
+            c += &spec.auxiliary_mass_squared;
+        }
+        let n = edge.power;
+        // (A + B λ + C λ²)^(−n) = Σ (−1)^m C(n+m−1, m) m!/(a! b!) B^a C^b λ^(a+2b) / A^(n+m)
+        let mut own = Vec::new();
+        for b_power in 0..=w / 2 {
+            for a_power in 0..=(w - 2 * b_power) {
+                if (a_power > 0 && b.is_zero()) || (b_power > 0 && c.is_zero()) {
+                    continue;
+                }
+                let m = a_power + b_power;
+                let number = binomial(n + m - 1, m) * factorial(m)
+                    / (factorial(a_power) * factorial(b_power))
+                    * if m % 2 == 0 { 1 } else { -1 };
+                // B^0 = C^0 = 1 (also where B or C vanishes: no 0^0)
+                let mut coefficient = Atom::num(number);
+                if a_power > 0 {
+                    coefficient = coefficient * b.pow(Atom::num(a_power));
+                }
+                if b_power > 0 {
+                    coefficient = coefficient * c.pow(Atom::num(b_power));
+                }
+                own.push((m, (a_power + 2 * b_power) as u32, coefficient));
+            }
+        }
+        let mut next = Vec::new();
+        for term in &terms {
+            for (m, degree, coefficient) in &own {
+                if term.degree + degree > taylor.degree {
+                    continue;
+                }
+                let mut raise = term.raise.clone();
+                if *m != 0 {
+                    raise.insert(edge.id, *m);
+                }
+                next.push(DenTerm {
+                    raise,
+                    degree: term.degree + degree,
+                    coefficient: (&term.coefficient * coefficient).expand(),
+                });
+            }
+        }
+        terms = next;
+    }
+    terms
+}
+
+/// The q-structure factors of a summand (step 2): anything carrying an
+/// external momentum `p`, an open index (two-argument `k`, `g`) or `λ`.
+fn is_structure(view: AtomView<'_>, lambda: Symbol) -> bool {
+    let base = match view {
+        AtomView::Pow(p) => p.get_base_exp().0,
+        other => other,
+    };
+    match base {
+        AtomView::Var(v) => v.get_symbol() == lambda,
+        AtomView::Fun(f) => {
+            let symbol = f.get_symbol();
+            symbol == S.g
+                || (symbol == S.p)
+                || (symbol == S.k && f.get_nargs() == 2)
+                || (symbol == S.dot && base.contains_symbol(S.p))
+        }
+        _ => false,
+    }
+}
+
+/// `(structure, its λ-degree, block scalar)` of an expanded scalar.
+fn graded_split(expanded: &Atom, lambda: Symbol) -> Vec<(Atom, u32, Atom)> {
+    let summands = match expanded.as_view() {
+        AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
+        AtomView::Num(_) if expanded.is_zero() => Vec::new(),
+        single => vec![single],
+    };
+    let mut groups: Vec<(Atom, Vec<Atom>)> = Vec::new();
+    let mut index = HashMap::<Atom, usize>::new();
+    for summand in summands {
+        let factors = match summand {
+            AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+            single => vec![single],
+        };
+        let (structure, scalar): (Vec<_>, Vec<_>) =
+            factors.into_iter().partition(|f| is_structure(*f, lambda));
+        let structure = Atom::mul_many(structure.iter().copied());
+        let scalar = Atom::mul_many(scalar.iter().copied());
+        match index.get(&structure) {
+            Some(i) => groups[*i].1.push(scalar),
+            None => {
+                index.insert(structure.clone(), groups.len());
+                groups.push((structure, vec![scalar]));
+            }
+        }
+    }
+    groups
+        .into_iter()
+        .map(|(structure, scalars)| {
+            let degree = lambda_degree(structure.as_view(), lambda);
+            (
+                structure.replace(Atom::var(lambda)).with(Atom::num(1)),
+                degree,
+                Atom::add_many(scalars.iter()),
+            )
+        })
+        .collect()
+}
+
+/// The λ-degree of a q-structure monomial: its number of external momenta
+/// plus its power of λ.
+fn lambda_degree(view: AtomView<'_>, lambda: Symbol) -> u32 {
+    let one = |view: AtomView<'_>| -> u32 {
+        match view {
+            AtomView::Var(v) if v.get_symbol() == lambda => 1,
+            AtomView::Fun(f) if f.get_symbol() == S.p => 1,
+            AtomView::Fun(f) if f.get_symbol() == S.dot => f
+                .iter()
+                .filter(|a| matches!(a, AtomView::Fun(g) if g.get_symbol() == S.p))
+                .count() as u32,
+            _ => 0,
+        }
+    };
+    let factor = |view: AtomView<'_>| -> u32 {
+        match view {
+            AtomView::Pow(p) => {
+                let (base, exp) = p.get_base_exp();
+                one(base) * i64::try_from(exp).unwrap_or(0).max(0) as u32
+            }
+            other => one(other),
+        }
+    };
+    match view {
+        AtomView::Mul(m) => m.iter().map(factor).sum(),
+        other => factor(other),
+    }
+}
+
+/// The per-record preparation: the boundary (or `None`: exactly zero) and
+/// its statistics.
+struct Prepared {
+    boundary: Option<RemainderBoundary>,
+    tensors: Vec<(Atom, Atom)>,
+    blocks: usize,
+    reduced_monomials: usize,
+    contract_seconds: f64,
+    split_seconds: f64,
+}
+
+/// The Taylor rewrite of a factor for `w = 0` (module documentation, step 1).
+fn degree_zero_factor(value: &FactorizedNumerator, factor: &Atom) -> Atom {
+    let loops = value.loops();
+    factor.replace_map(|part, _, out| {
+        let AtomView::Fun(f) = part else { return };
+        if f.get_symbol().get_name() != names::MOMENTUM || f.get_nargs() != 2 {
+            return;
+        }
+        let mut args = f.iter();
+        let (Some(e), Some(slot)) = (args.next(), args.next()) else {
+            return;
+        };
+        let Some(edge) = i64::try_from(e)
+            .ok()
+            .and_then(|e| usize::try_from(e).ok())
+            .and_then(|e| value.edge(e))
+        else {
+            return;
+        };
+        if edge.is_external() {
+            **out = Atom::Zero;
+            return;
+        }
+        let r = &edge.momentum[loops..];
+        if r.iter().all(|c| *c == 0) {
+            return;
+        }
+        let mut image = part.to_owned();
+        for (j, c) in r.iter().enumerate() {
+            if *c != 0 {
+                let leg = value.external_edges[j].expect("validated: every p(j) has a leg");
+                image -= Atom::num(*c)
+                    * function!(f.get_symbol(), Atom::num(leg as i64), slot.to_owned());
+            }
+        }
+        **out = image;
+    })
+}
+
+fn prepare(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    value: &FactorizedNumerator,
+    spec: &ClosureSpec,
+    prefactor: &Atom,
+) -> Result<Prepared> {
+    let lambda = lambda_symbol();
+    let loops = value.loops();
+    let epsilon = Atom::var(vk_symbol!(&settings.epsilon_symbol));
+    let in_epsilon = Atom::num(4) - Atom::num(2) * &epsilon;
+    let d = Atom::var(value.dimension);
+    // the caller's prefactor rides in every pattern coefficient (inside the
+    // Laurent expansion, as on the boundary path); (p²)^p2_power with the
+    // external tensors
+    let prefactor = prefactor.replace(d.clone()).with(in_epsilon.clone());
+    let p2 = match &value.projector {
+        Some(projector) if projector.p2_power != 0 => S
+            .dot
+            .call((S.p.call(1), S.p.call(1)))
+            .pow(Atom::num(projector.p2_power)),
+        _ => Atom::num(1),
+    };
+    // step 1: the network, R substituted, w = 0 truncated; idenso
+    let started = Instant::now();
+    let degree_zero = spec.taylor.as_ref().is_some_and(|t| t.degree == 0);
+    let mut network = Atom::num(1);
+    for factor in value
+        .edges
+        .iter()
+        .map(|e| &e.factor)
+        .chain(value.vertices.iter().map(|v| &v.factor))
+        .chain(value.projector.iter().map(|p| &p.tensor))
+    {
+        network *= if degree_zero {
+            degree_zero_factor(value, factor)
+        } else {
+            factor.clone()
+        };
+    }
+    if let Some(taylor) = &spec.taylor {
+        let image = if taylor.compensate_mass && !degree_zero {
+            (Atom::num(1) - Atom::var(lambda).pow(Atom::num(2))) * &spec.auxiliary_mass_squared
+        } else {
+            spec.auxiliary_mass_squared.clone()
+        };
+        network = network.replace(spec.mass_squared.clone()).with(image);
+    }
+    let predicted = distributed_lorentz_monomials(network.as_view());
+    if let Some(limit) = settings.rustred_resources.max_process_rss_bytes {
+        let bound = contract_first_bound_bytes(predicted);
+        if bound > limit as f64 {
+            return Err(refuse(format!(
+                "the uncontracted network distributes to D = {predicted:.3e} Lorentz monomials; its contraction is bounded by {bound:.3e} bytes, above the budget of {limit} bytes"
+            )));
+        }
+    }
+    let contracted = match stream_pieces_for(predicted) {
+        1 => super::contract_with_idenso(&network, false)?,
+        n => vacuum::contract_streamed(settings, &network, n)?.0,
+    };
+    let scalar = map_to_vakint_vacuum(value, &contracted)?
+        .replace(d.clone())
+        .with(in_epsilon.clone())
+        .expand();
+    let contract_seconds = started.elapsed().as_secs_f64();
+
+    // step 2: blocks
+    let started = Instant::now();
+    let split = graded_split(&scalar, lambda);
+    if split.is_empty() {
+        return Ok(Prepared {
+            boundary: None,
+            tensors: Vec::new(),
+            blocks: 0,
+            reduced_monomials: 0,
+            contract_seconds,
+            split_seconds: started.elapsed().as_secs_f64(),
+        });
+    }
+    // step 3: the denominator terms (or the sector as it is)
+    let (den, w, orders) = match &spec.taylor {
+        Some(taylor) => (
+            denominator_terms(value, spec, taylor),
+            taylor.degree,
+            taylor.orders,
+        ),
+        None => (
+            vec![DenTerm {
+                raise: BTreeMap::new(),
+                degree: 0,
+                coefficient: Atom::num(1),
+            }],
+            // a pre-expanded sector: every grade is kept as written
+            u32::MAX,
+            super::TaylorOrders::All,
+        ),
+    };
+    // patterns: the raised powers; per pattern Σ over den terms by degree
+    let mut patterns = BTreeMap::<BTreeMap<usize, i64>, Vec<&DenTerm>>::new();
+    for term in &den {
+        patterns.entry(term.raise.clone()).or_default().push(term);
+    }
+    // the lines of every pattern, its cut
+    let base_powers = value
+        .edges
+        .iter()
+        .filter(|e| !e.is_external())
+        .map(|e| (e.id, e.power))
+        .collect::<BTreeMap<_, _>>();
+    let closing_mass = spec.auxiliary_mass_squared.clone();
+    let head = S.p.call(value.externals() as i64 + 1);
+    let lines_of = |raise: &BTreeMap<usize, i64>| -> Vec<VacuumLine> {
+        let mut sector = value.clone();
+        sector.kind = FactorizedKind::Direct;
+        for edge in sector.edges.iter_mut().filter(|e| !e.is_external()) {
+            for c in edge.momentum[loops..].iter_mut() {
+                *c = 0;
+            }
+            edge.power = base_powers[&edge.id] + raise.get(&edge.id).copied().unwrap_or(0);
+            if edge.id == spec.edge {
+                edge.mass_squared = closing_mass.clone();
+            }
+        }
+        vacuum_lines(&sector)
+    };
+    // step 4: per pattern and block the reduced coefficient
+    let base_lines = lines_of(&BTreeMap::new());
+    let base_topology = S.topo.call(vacuum_topology(&base_lines));
+    let mut memo = HashMap::<Atom, Vec<(Atom, Atom)>>::new();
+    let mut tensor_index = BTreeMap::<Atom, usize>::new();
+    let mut tensors = Vec::<(Atom, Atom)>::new();
+    let base_cut = match vacuum_backend(&base_lines, loops)? {
+        VacuumBackend::Closure(cut) => Some(cut),
+        VacuumBackend::Scaleless => None,
+        VacuumBackend::Family => return Err(refuse("every line is massive: not a closure")),
+    };
+    let mut reduce = |monomial: &Atom| -> Result<Vec<(Atom, Atom)>> {
+        if let Some(found) = memo.get(monomial) {
+            return Ok(found.clone());
+        }
+        let input = monomial * &base_topology;
+        let Some(cut) = &base_cut else {
+            return Err(refuse(
+                "the lines do not form one closing line among massless ones",
+            ));
+        };
+        let (external, inputs) = closure_inputs(vakint, settings, &input, cut)?;
+        let reduced = external
+            .into_iter()
+            .zip(inputs)
+            .map(|(tensor, (_, input))| (tensor, input.numerator))
+            .collect::<Vec<_>>();
+        memo.insert(monomial.clone(), reduced.clone());
+        Ok(reduced)
+    };
+    let mut boundary_patterns = Vec::new();
+    let mut routing = None::<Vec<(Atom, Atom)>>;
+    let mut blocks_used = BTreeSet::new();
+    for (raise, terms) in &patterns {
+        let lines = lines_of(raise);
+        let cut = match vacuum_backend(&lines, loops)? {
+            VacuumBackend::Closure(cut) => cut,
+            VacuumBackend::Scaleless => continue,
+            VacuumBackend::Family => {
+                return Err(refuse("every line is massive: not a closure"));
+            }
+        };
+        if cut.line.mass_squared != closing_mass {
+            return Err(refuse(format!(
+                "the derived closing line {} is not the closure's",
+                cut.line.id
+            )));
+        }
+        let to_head = |atom: &Atom| atom.replace(S.p.call(1)).with(head.clone());
+        let images = cut
+            .routing
+            .iter()
+            .map(|(k, image)| (k.clone(), to_head(image)))
+            .collect::<Vec<_>>();
+        match &routing {
+            None => routing = Some(images),
+            Some(first) if *first == images => {}
+            Some(_) => return Err(refuse("the cut routing differs between patterns")),
+        }
+        let mut pattern_terms = Vec::new();
+        for (block, (structure, degree, _)) in split.iter().enumerate() {
+            let mut den_sum = Atom::Zero;
+            for term in terms {
+                let total = degree.saturating_add(term.degree);
+                if spec.taylor.is_none() || (total <= w && orders.keeps(total)) {
+                    den_sum += &term.coefficient;
+                }
+            }
+            if den_sum.is_zero() {
+                continue;
+            }
+            let small = (structure * den_sum).expand();
+            let mut coefficient = Atom::Zero;
+            for (monomial, _, number) in graded_split(&small, lambda) {
+                for (tensor, reduced) in reduce(&monomial)? {
+                    let slot = match tensor_index.get(&tensor) {
+                        Some(i) => *i,
+                        None => {
+                            let i = tensors.len();
+                            tensor_index.insert(tensor.clone(), i);
+                            tensors.push((placeholder(i), &tensor * &p2));
+                            i
+                        }
+                    };
+                    coefficient += &number * reduced * &tensors[slot].0 * &prefactor;
+                }
+            }
+            let coefficient = coefficient.expand();
+            if !coefficient.is_zero() {
+                blocks_used.insert(block);
+                pattern_terms.push((block, coefficient));
+            }
+        }
+        if pattern_terms.is_empty() {
+            continue;
+        }
+        boundary_patterns.push(BoundaryPattern {
+            topology: to_head(&cut.topology),
+            closure_power: cut.line.power,
+            terms: pattern_terms,
+        });
+    }
+    let split_seconds = started.elapsed().as_secs_f64();
+    let blocks = split
+        .into_iter()
+        .map(|(_, _, block)| block)
+        .collect::<Vec<_>>();
+    if boundary_patterns.is_empty() {
+        return Ok(Prepared {
+            boundary: None,
+            tensors,
+            blocks: 0,
+            reduced_monomials: memo.len(),
+            contract_seconds,
+            split_seconds,
+        });
+    }
+    let boundary = RemainderBoundary::new(
+        value.label.clone(),
+        head,
+        closing_mass,
+        routing.expect("one pattern"),
+        blocks,
+        boundary_patterns,
+    )
+    .map_err(|e| refuse(e.to_string()))?;
+    Ok(Prepared {
+        boundary: Some(boundary),
+        tensors,
+        blocks: blocks_used.len(),
+        reduced_monomials: memo.len(),
+        contract_seconds,
+        split_seconds,
+    })
+}
+
+/// Evaluate R* closure records (module documentation): every record of kind
+/// [`FactorizedKind::Closure`] (validated), times `prefactors[r]` (normally
+/// `records[r].prefactor.total()`), `D -> 4 - 2ε`. One boundary per record,
+/// all its power patterns lowered and reduced together.
+pub fn evaluate_factorized_closure(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    records: &[FactorizedNumerator],
+    prefactors: &[Atom],
+) -> Result<ClosureValue> {
+    // Lane unknown-masters: strict refusal once, on this call's summed value.
+    if let Some(_boundary) = crate::public_result_boundary() {
+        let inner = crate::unknown_master_coefficients_carried(settings);
+        let result = evaluate_factorized_closure(vakint, &inner, records, prefactors)?;
+        vakint
+            .refuse_unknown_master_coefficients(settings, &result.vakint_value)
+            .map_err(|error| FactorizedError::Evaluation {
+                detail: error.to_string(),
+            })?;
+        return Ok(result);
+    }
+    if records.len() != prefactors.len() {
+        return Err(refuse(format!(
+            "{} records and {} prefactors",
+            records.len(),
+            prefactors.len()
+        )));
+    }
+    let mut out = ClosureValue {
+        value: Atom::Zero,
+        vakint_value: Atom::Zero,
+        records: Vec::with_capacity(records.len()),
+    };
+    for (value, prefactor) in records.iter().zip(prefactors) {
+        let FactorizedKind::Closure(spec) = &value.kind else {
+            return Err(refuse(format!(
+                "{}: not a closure record (kind direct: evaluate_factorized / evaluate_factorized_vacuum)",
+                value.label
+            )));
+        };
+        value.validate()?;
+        let mut local = settings.clone();
+        if let Some(depth) = spec.depth {
+            local.number_of_terms_in_epsilon_expansion = depth as i64;
+        }
+        let prepared = prepare(vakint, &local, value, spec, prefactor)?;
+        let started = Instant::now();
+        let (mut vakint_value, lower_seconds, reduce_seconds, patterns) = match &prepared.boundary {
+            None => (Atom::Zero, 0.0, 0.0, 0),
+            Some(boundary) => {
+                let direct = boundary
+                    .patterns
+                    .iter()
+                    .all(|p| matches!(p.topology.as_view(), AtomView::Fun(f) if f.get_symbol() == S.topo));
+                if direct {
+                    let (atom, stats) = boundary
+                        .evaluate_with_stats(vakint, &local, BoundaryOptions::default())
+                        .map_err(|e| refuse(e.to_string()))?;
+                    let lower = stats.match_seconds
+                        + stats.read_seconds
+                        + stats.classify_seconds
+                        + stats.slot_seconds
+                        + stats.finish_seconds;
+                    (
+                        atom,
+                        lower,
+                        stats.reduce_finalize_seconds,
+                        boundary.patterns.len(),
+                    )
+                } else {
+                    // a loop-free cut (one loop): the ordinary closure per pattern
+                    let mut atom = Atom::Zero;
+                    for (closure, input) in boundary.ordinary() {
+                        atom += closure
+                            .evaluate(vakint, &local, input.as_view())
+                            .map_err(|e| refuse(e.to_string()))?;
+                    }
+                    (atom, 0.0, 0.0, boundary.patterns.len())
+                }
+            }
+        };
+        for (symbol, tensor) in &prepared.tensors {
+            vakint_value = vakint_value.replace(symbol.clone()).with(tensor.clone());
+        }
+        let vakint_value = vakint_value.expand();
+        let evaluate_seconds = started.elapsed().as_secs_f64();
+        let caller = vacuum::to_caller_notation(value, &vakint_value);
+        out.value += &caller;
+        out.vakint_value += &vakint_value;
+        out.records.push(ClosureRecordValue {
+            value: caller,
+            vakint_value,
+            patterns,
+            blocks: prepared.blocks,
+            reduced_monomials: prepared.reduced_monomials,
+            contract_seconds: prepared.contract_seconds,
+            split_seconds: prepared.split_seconds,
+            evaluate_seconds,
+            lower_seconds,
+            reduce_seconds,
+        });
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod tests;

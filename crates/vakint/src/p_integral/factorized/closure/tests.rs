@@ -1,0 +1,959 @@
+//! The closure kind against the CONTRACTED reference chain, exactly in ε, on
+//! hand-built R* remainders at two, three and four loops: root remainders
+//! closed by the metric projector (K1), children with open Lorentz ports and
+//! independent externals (K2), a pre-expanded sector (form B); every refusal;
+//! the v3 text form.
+//!
+//! The reference is independent of the entry's route: idenso contracts the
+//! WHOLE numerator (the same production chain), the Taylor step is
+//! symbolica's `series` of the full integrand (scaled momenta and the mass
+//! substitution applied to the contracted scalar, every denominator a symbol
+//! `a_e + B λ + C λ²`), each denominator pattern goes through the PUBLIC
+//! `Vakint::tensor_reduce`, is cut by hand and closed by the ORDINARY
+//! `MassiveClosure::evaluate` (the entry: graded blocks, binomial den series,
+//! memoised coefficient reduction, `RemainderBoundary` direct lowering).
+//! RustRed only, FORM at a path that does not exist.
+
+use std::collections::BTreeMap;
+
+use symbolica::atom::{Atom, AtomCore, AtomView};
+use symbolica::function;
+
+use super::super::vacuum::map_to_vakint_vacuum;
+use super::super::{
+    ClosureSpec, Endpoint, FactorizedEdge, FactorizedError, FactorizedKind, FactorizedNumerator,
+    FactorizedVertex, LineKind, Prefactor, Projector, TaylorOrders, TaylorSpec,
+    contract_with_idenso,
+};
+use super::*;
+use crate::utils::vakint_macros::vk_parse;
+use crate::{
+    EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, RustRedEvaluationOptions,
+    RustRedMasterMode,
+};
+
+const MINK: &str = "spenso::{spenso::representation,spenso::self_dual}::mink";
+const METRIC: &str = "spenso::{symmetric,linear,real,spenso::tensor}::g";
+const MOMENTUM: &str = "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q";
+const HEDGE: &str = "gammalooprs::{spenso::index}::hedge";
+const EDGE: &str = "gammalooprs::{spenso::index,spenso::index-label:e}::edge";
+const DIM: &str = "gammalooprs::{}::dim";
+const R: &str = "gammalooprs::rstar_reference_mass_squared";
+const MAUX: &str = "gammalooprs::rstar_mass_squared";
+
+fn atom(text: &str) -> Atom {
+    crate::Vakint::initialize_vakint_symbols();
+    vk_parse!(text).unwrap_or_else(|e| panic!("{e}: {text}"))
+}
+
+fn hedge(h: usize) -> String {
+    format!("{MINK}({DIM},{HEDGE}({h},1))")
+}
+
+fn index(e: usize, k: usize) -> String {
+    format!("{MINK}({DIM},{EDGE}({e},{k}))")
+}
+
+fn q(e: usize, index: &str) -> String {
+    format!("{MOMENTUM}({e},{index})")
+}
+
+fn line(id: usize, s: usize, t: usize, momentum: &[i64], mass: &str) -> FactorizedEdge {
+    FactorizedEdge {
+        id,
+        source: Endpoint::Vertex(s),
+        target: Endpoint::Vertex(t),
+        source_hedge: Some(2 * id),
+        target_hedge: Some(2 * id + 1),
+        particle: "x".into(),
+        line: LineKind::Scalar,
+        power: 1,
+        mass_squared: atom(mass),
+        momentum: momentum.to_vec(),
+        factor: Atom::num(1),
+    }
+}
+
+/// A leg `id` at vertex `v` (incoming when `into`) with momentum `momentum`;
+/// its half-edge is `100 + id`.
+fn leg(id: usize, v: usize, into: bool, momentum: &[i64]) -> FactorizedEdge {
+    let (source, target, sh, th) = if into {
+        (
+            Endpoint::External,
+            Endpoint::Vertex(v),
+            None,
+            Some(100 + id),
+        )
+    } else {
+        (
+            Endpoint::Vertex(v),
+            Endpoint::External,
+            Some(100 + id),
+            None,
+        )
+    };
+    FactorizedEdge {
+        id,
+        source,
+        target,
+        source_hedge: sh,
+        target_hedge: th,
+        particle: "x".into(),
+        line: LineKind::Vector,
+        power: 1,
+        mass_squared: Atom::Zero,
+        momentum: momentum.to_vec(),
+        factor: Atom::num(1),
+    }
+}
+
+fn vertex(id: usize, factor: &str) -> FactorizedVertex {
+    FactorizedVertex {
+        id,
+        rule: "test".into(),
+        factor: if factor.is_empty() {
+            Atom::num(1)
+        } else {
+            atom(factor)
+        },
+    }
+}
+
+fn taylor(degree: u32, scaled_edges: Vec<usize>, compensate: bool) -> Option<TaylorSpec> {
+    Some(TaylorSpec {
+        degree,
+        scaled_edges,
+        compensate_mass: compensate,
+        orders: TaylorOrders::All,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn record(
+    label: &str,
+    loops: usize,
+    external_edges: Vec<Option<usize>>,
+    mut edges: Vec<FactorizedEdge>,
+    vertices: Vec<FactorizedVertex>,
+    ports: Vec<Atom>,
+    projector: Option<Projector>,
+    closing: usize,
+    taylor: Option<TaylorSpec>,
+    independent: bool,
+) -> FactorizedNumerator {
+    edges.sort_by_key(|e| e.id);
+    let power = edges.iter().find(|e| e.id == closing).unwrap().power;
+    let mut loop_edges = vec![None; loops];
+    for edge in &edges {
+        if let Some(i) = (0..loops).find(|i| {
+            edge.momentum
+                .iter()
+                .enumerate()
+                .all(|(j, c)| *c == i64::from(j == *i))
+        }) {
+            loop_edges[i] = Some(edge.id);
+        }
+    }
+    let auxiliary = if taylor.is_some() {
+        atom(MAUX)
+    } else {
+        atom(R)
+    };
+    FactorizedNumerator {
+        label: label.into(),
+        kind: FactorizedKind::Closure(ClosureSpec {
+            edge: closing,
+            mass_squared: atom(R),
+            auxiliary_mass_squared: auxiliary,
+            power,
+            independent_externals: independent,
+            taylor,
+            softs: Vec::new(),
+            original_cycles: Some((0, 0)),
+            depth: None,
+            weights: Vec::new(),
+        }),
+        dimension: FactorizedNumerator::default_dimension(),
+        loop_edges,
+        external_edges,
+        edges,
+        vertices,
+        ports,
+        projector,
+        prefactor: Prefactor {
+            scalars: atom(&format!("(-1+{DIM})^(-1)*gs^2")),
+            ..Prefactor::default()
+        },
+        colour_branch: None,
+        insertions: Vec::new(),
+    }
+}
+
+fn root_projector() -> Option<Projector> {
+    Some(Projector {
+        tensor: atom(&format!("{METRIC}({},{})", hedge(120), hedge(121))),
+        p2_power: -1,
+    })
+}
+
+/// L2 root remainder: the sunrise with the closing line 3 (k2, massive),
+/// q through line 1 (k1 + q); vertex 1 carries `q1^mu (q1.q3)`, vertex 2
+/// `q2^nu`, closed by `g(mu, nu) / p^2`.
+fn l2_root(degree: u32, compensate: bool) -> FactorizedNumerator {
+    record(
+        &format!("L2 root w={degree} compensate={compensate}"),
+        2,
+        vec![Some(20)],
+        vec![
+            line(1, 1, 2, &[1, 0, 1], "0"),
+            line(2, 1, 2, &[-1, 1, 0], "0"),
+            line(3, 2, 1, &[0, 1, 0], R),
+            leg(20, 1, true, &[0, 0, 1]),
+            leg(21, 2, false, &[0, 0, 1]),
+        ],
+        vec![
+            vertex(
+                1,
+                &format!(
+                    "{}*{}*{}",
+                    q(1, &hedge(120)),
+                    q(1, &index(1, 7)),
+                    q(3, &index(1, 7))
+                ),
+            ),
+            vertex(2, &q(2, &hedge(121))),
+        ],
+        vec![atom(&hedge(120)), atom(&hedge(121))],
+        root_projector(),
+        3,
+        taylor(degree, vec![20, 21], compensate),
+        false,
+    )
+}
+
+/// L2 child: the same graph with two INDEPENDENT crown momenta (p1 into vertex
+/// 1, p2 into vertex 2, line 1 = k1 + p1), the two Lorentz ports open.
+fn l2_child(degree: u32) -> FactorizedNumerator {
+    record(
+        &format!("L2 child w={degree}"),
+        2,
+        vec![Some(20), Some(21)],
+        vec![
+            line(1, 1, 2, &[1, 0, 1, 0], "0"),
+            line(2, 1, 2, &[-1, 1, 0, 0], "0"),
+            line(3, 2, 1, &[0, 1, 0, 0], R),
+            leg(20, 1, true, &[0, 0, 1, 0]),
+            leg(21, 2, true, &[0, 0, 0, 1]),
+        ],
+        vec![
+            vertex(1, &q(1, &hedge(120))),
+            vertex(
+                2,
+                &format!(
+                    "{}*({}*{}+{}*{})",
+                    q(2, &hedge(121)),
+                    q(21, &index(2, 7)),
+                    q(1, &index(2, 7)),
+                    q(3, &index(2, 7)),
+                    q(1, &index(2, 7))
+                ),
+            ),
+        ],
+        vec![atom(&hedge(120)), atom(&hedge(121))],
+        None,
+        3,
+        taylor(degree, vec![20, 21], true),
+        true,
+    )
+}
+
+/// L3 root remainder: the tetrahedron, closing line 3 (k3), q through line 1.
+fn l3_root(degree: u32) -> FactorizedNumerator {
+    record(
+        &format!("L3 root w={degree}"),
+        3,
+        vec![Some(20)],
+        vec![
+            line(1, 1, 2, &[1, 0, 0, 1], "0"),
+            line(2, 2, 3, &[0, 1, 0, 0], "0"),
+            line(3, 3, 1, &[0, 0, 1, 0], R),
+            line(4, 1, 4, &[-1, 0, 1, 0], "0"),
+            line(5, 2, 4, &[1, -1, 0, 0], "0"),
+            line(6, 3, 4, &[0, 1, -1, 0], "0"),
+            leg(20, 1, true, &[0, 0, 0, 1]),
+            leg(21, 2, false, &[0, 0, 0, 1]),
+        ],
+        vec![
+            vertex(
+                1,
+                &format!(
+                    "{}*{}*{}",
+                    q(1, &hedge(120)),
+                    q(3, &index(1, 7)),
+                    q(4, &index(1, 7))
+                ),
+            ),
+            vertex(2, &q(2, &hedge(121))),
+            vertex(3, ""),
+            vertex(4, ""),
+        ],
+        vec![atom(&hedge(120)), atom(&hedge(121))],
+        root_projector(),
+        3,
+        taylor(degree, vec![20, 21], true),
+        false,
+    )
+}
+
+/// L4 root remainder: the tetrahedron with line 2 split into a bubble
+/// (2: k2 - k4, 7: k4), closing line 3 (k3).
+fn l4_root(degree: u32) -> FactorizedNumerator {
+    record(
+        &format!("L4 root w={degree}"),
+        4,
+        vec![Some(20)],
+        vec![
+            line(1, 1, 2, &[1, 0, 0, 0, 1], "0"),
+            line(2, 2, 3, &[0, 1, 0, -1, 0], "0"),
+            line(7, 2, 3, &[0, 0, 0, 1, 0], "0"),
+            line(3, 3, 1, &[0, 0, 1, 0, 0], R),
+            line(4, 1, 4, &[-1, 0, 1, 0, 0], "0"),
+            line(5, 2, 4, &[1, -1, 0, 0, 0], "0"),
+            line(6, 3, 4, &[0, 1, -1, 0, 0], "0"),
+            leg(20, 1, true, &[0, 0, 0, 0, 1]),
+            leg(21, 2, false, &[0, 0, 0, 0, 1]),
+        ],
+        vec![
+            vertex(1, &q(1, &hedge(120))),
+            vertex(
+                2,
+                &format!(
+                    "{}*{}*{}",
+                    q(7, &hedge(121)),
+                    q(5, &index(2, 7)),
+                    q(2, &index(2, 7))
+                ),
+            ),
+            vertex(3, ""),
+            vertex(4, ""),
+        ],
+        vec![atom(&hedge(120)), atom(&hedge(121))],
+        root_projector(),
+        3,
+        taylor(degree, vec![20, 21], true),
+        false,
+    )
+}
+
+/// A pre-expanded sector (form B) of the L2 root: lambda^0 denominators (line
+/// 1 at k1), the den-side `(l1.q)` factor written with Q(20), line 1 at power 2.
+fn l2_sector() -> FactorizedNumerator {
+    let mut value = record(
+        "L2 sector (l1.q) / l1^4",
+        2,
+        vec![Some(20)],
+        vec![
+            line(1, 1, 2, &[1, 0, 0], "0"),
+            line(2, 1, 2, &[-1, 1, 0], "0"),
+            line(3, 2, 1, &[0, 1, 0], R),
+            leg(20, 1, true, &[0, 0, 1]),
+            leg(21, 2, false, &[0, 0, 1]),
+        ],
+        vec![
+            vertex(
+                1,
+                &format!(
+                    "{}*{}*{}*{}*{}",
+                    q(1, &hedge(120)),
+                    q(1, &index(1, 7)),
+                    q(3, &index(1, 7)),
+                    q(1, &index(1, 8)),
+                    q(20, &index(1, 8))
+                ),
+            ),
+            vertex(
+                2,
+                &format!(
+                    "{}*{}*{}",
+                    q(2, &hedge(121)),
+                    q(20, &index(2, 7)),
+                    q(2, &index(2, 7))
+                ),
+            ),
+        ],
+        vec![atom(&hedge(120)), atom(&hedge(121))],
+        root_projector(),
+        3,
+        None,
+        false,
+    );
+    value.edges[0].power = 2;
+    value
+}
+
+fn settings() -> VakintSettings {
+    VakintSettings {
+        evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
+            RustRedEvaluationOptions {
+                master_mode: RustRedMasterMode::Symbolic,
+            },
+        )]),
+        form_exe_path: "/nonexistent/helper-vh/form".into(),
+        integral_normalization_factor: LoopNormalizationFactor::MSbar,
+        number_of_terms_in_epsilon_expansion: 3,
+        use_dot_product_notation: true,
+        n_cores: 1,
+        ..Default::default()
+    }
+}
+
+/// The external-tensor split of a reduced numerator (as the vacuum entry's).
+fn external_split(numerator: &Atom) -> Vec<(Atom, Atom)> {
+    let mut external = std::collections::BTreeSet::new();
+    numerator.as_view().visitor(&mut |part| {
+        if let AtomView::Fun(function) = part {
+            let symbol = function.get_symbol();
+            let external_dot = symbol == S.dot
+                && function
+                    .iter()
+                    .all(|v| matches!(v, AtomView::Fun(f) if f.get_symbol() == S.p));
+            if symbol == S.g || (symbol == S.p && function.get_nargs() == 2) || external_dot {
+                external.insert(part.to_owned());
+                return false;
+            }
+        }
+        true
+    });
+    let external = external.into_iter().collect::<Vec<_>>();
+    if external.is_empty() {
+        vec![(Atom::num(1), numerator.clone())]
+    } else {
+        numerator.coefficient_list::<i8>(&external)
+    }
+}
+
+/// The CONTRACTED reference chain (module documentation). `routing`: the hand
+/// cut (vacuum k(i) -> cut momenta / head p(1)); `closing`: the closing edge.
+fn reference(value: &FactorizedNumerator, routing: &[(&str, &str)]) -> Atom {
+    let vakint = Vakint::new().unwrap();
+    let settings = settings();
+    let FactorizedKind::Closure(spec) = &value.kind else {
+        unreachable!()
+    };
+    let loops = value.loops();
+    let lambda = Atom::var(symbolica::symbol!("reference_lambda"));
+    let epsilon = Atom::var(crate::utils::vakint_macros::vk_symbol!(
+        &settings.epsilon_symbol
+    ));
+    let in_epsilon = Atom::num(4) - Atom::num(2) * &epsilon;
+    // the whole numerator, contracted by idenso
+    let mut network = value.factor_product();
+    if let Some(projector) = &value.projector {
+        network *= &projector.tensor;
+    }
+    let contracted = contract_with_idenso(&network, false).unwrap();
+    let mut scalar = map_to_vakint_vacuum(value, &contracted)
+        .unwrap()
+        .replace(Atom::var(value.dimension))
+        .with(in_epsilon.clone())
+        .expand();
+    let (w, compensate) = match &spec.taylor {
+        Some(t) => (t.degree as usize, t.compensate_mass),
+        None => (0, false),
+    };
+    let closing_mass = spec.auxiliary_mass_squared.clone();
+    // the Taylor step on the contracted scalar: p -> lambda p, R -> ..
+    if spec.taylor.is_some() {
+        scalar = scalar.replace_map(|part, _, out| {
+            let AtomView::Fun(f) = part else { return };
+            if f.get_symbol() == S.dot {
+                let n = f
+                    .iter()
+                    .filter(|a| matches!(a, AtomView::Fun(g) if g.get_symbol() == S.p))
+                    .count();
+                if n > 0 {
+                    **out = lambda.pow(Atom::num(n as i64)) * part.to_owned();
+                }
+            } else if f.get_symbol() == S.p && f.get_nargs() == 2 {
+                **out = &lambda * part.to_owned();
+            }
+        });
+        let image = if compensate {
+            (Atom::num(1) - lambda.pow(Atom::num(2))) * &closing_mass
+        } else {
+            closing_mass.clone()
+        };
+        scalar = scalar.replace(spec.mass_squared.clone()).with(image);
+    }
+    // every denominator a symbol a_e + B lambda + C lambda^2
+    let vector = |head, c: &[i64]| {
+        let mut out = Atom::Zero;
+        for (i, x) in c.iter().enumerate() {
+            if *x != 0 {
+                out += Atom::num(*x) * function!(head, Atom::num(i as i64 + 1));
+            }
+        }
+        out
+    };
+    let a = |id: usize| Atom::var(symbolica::symbol!(format!("reference_den_{id}")));
+    let mut integrand = scalar;
+    let internal = value
+        .edges
+        .iter()
+        .filter(|e| !e.is_external())
+        .collect::<Vec<_>>();
+    for edge in &internal {
+        let l = vector(S.k, &edge.momentum[..loops]);
+        let r = vector(S.p, &edge.momentum[loops..]);
+        let mut den = a(edge.id);
+        if spec.taylor.is_some() {
+            if !r.is_zero() {
+                den += Atom::num(2) * &lambda * S.dot.call((&l, &r))
+                    + lambda.pow(Atom::num(2)) * S.dot.call((&r, &r));
+            }
+            if edge.id == spec.edge && compensate {
+                den += lambda.pow(Atom::num(2)) * &closing_mass;
+            }
+        }
+        integrand *= den.pow(Atom::num(-edge.power));
+    }
+    let integrand = if spec.taylor.is_some() {
+        let series = integrand
+            .series(symbolica::symbol!("reference_lambda"), 0, w)
+            .unwrap();
+        let mut kept = Atom::Zero;
+        let orders = spec.taylor.as_ref().unwrap().orders;
+        for (power, coefficient) in series.terms() {
+            let n = power.numerator().to_i64().unwrap();
+            assert!(power.is_integer() && n >= 0);
+            if (n as usize) <= w && orders.keeps(n as u32) {
+                kept += coefficient;
+            }
+        }
+        kept
+    } else {
+        integrand
+    };
+    // patterns: a_e -> 1/b_e, then the (positive) powers of the b_e
+    let b_of = |id: usize| Atom::var(symbolica::symbol!(format!("reference_inv_{id}")));
+    let mut integrand = integrand;
+    for edge in &internal {
+        integrand = integrand
+            .replace(a(edge.id))
+            .with(b_of(edge.id).pow(Atom::num(-1)));
+    }
+    let integrand = integrand.expand();
+    let inverses = internal.iter().map(|e| b_of(e.id)).collect::<Vec<_>>();
+    let by_pattern = integrand.coefficient_list::<i8>(&inverses);
+    let prefactor = value
+        .prefactor
+        .total()
+        .replace(Atom::var(value.dimension))
+        .with(in_epsilon.clone());
+    let routing = routing
+        .iter()
+        .map(|(k, image)| symbolica::id::Replacement::new(atom(k).to_pattern(), atom(image)))
+        .collect::<Vec<_>>();
+    let mut total = Atom::Zero;
+    for (monomial, numerator) in by_pattern {
+        let mut powers = BTreeMap::new();
+        for edge in &internal {
+            let mut power = 0;
+            monomial.as_view().visitor(&mut |part| {
+                if part == b_of(edge.id).as_view() {
+                    power = 1;
+                }
+                if let AtomView::Pow(p) = part {
+                    let (base, exp) = p.get_base_exp();
+                    if base == b_of(edge.id).as_view() {
+                        power = i64::try_from(exp).unwrap();
+                        return false;
+                    }
+                }
+                true
+            });
+            assert!(power > 0, "{monomial}: edge {} not a denominator", edge.id);
+            powers.insert(edge.id, power);
+        }
+        let mut topology = Atom::num(1);
+        let mut cut = Atom::num(1);
+        for edge in &internal {
+            let (Endpoint::Vertex(s), Endpoint::Vertex(t)) = (edge.source, edge.target) else {
+                unreachable!()
+            };
+            let mass = if edge.id == spec.edge {
+                closing_mass.clone()
+            } else {
+                Atom::Zero
+            };
+            let l = vector(S.k, &edge.momentum[..loops]);
+            topology *= S.prop.call((
+                edge.id as i64,
+                S.edge.call((s as i64, t as i64)),
+                l.clone(),
+                mass,
+                Atom::num(powers[&edge.id]),
+            ));
+            if edge.id != spec.edge {
+                cut *= S.prop.call((
+                    edge.id as i64,
+                    S.edge.call((s as i64, t as i64)),
+                    l.replace_multiple(&routing).expand(),
+                    Atom::Zero,
+                    Atom::num(powers[&edge.id]),
+                ));
+            }
+        }
+        let input = &prefactor * &numerator * S.topo.call(topology);
+        let reduced = vakint.tensor_reduce(&settings, input.as_view()).unwrap();
+        let expression = crate::VakintExpression::try_from(reduced).unwrap();
+        let closure = MassiveClosure {
+            momentum: S.p.call(1),
+            mass_squared: closing_mass.clone(),
+            power: powers[&spec.edge],
+        };
+        for term in &expression.0 {
+            for (tensor, coefficient) in external_split(&term.numerator.expand()) {
+                assert!(
+                    !coefficient.contains_symbol(S.p),
+                    "{}: external momentum left in {coefficient}",
+                    value.label
+                );
+                let hand = (coefficient.replace_multiple(&routing).expand()
+                    * S.topo.call(cut.clone()))
+                .expand();
+                let closed = closure
+                    .evaluate(&vakint, &settings, hand.as_view())
+                    .unwrap();
+                total += tensor * closed;
+            }
+        }
+    }
+    if let Some(projector) = &value.projector
+        && projector.p2_power != 0
+    {
+        total *= S
+            .dot
+            .call((S.p.call(1), S.p.call(1)))
+            .pow(Atom::num(projector.p2_power));
+    }
+    total.expand()
+}
+
+fn check(value: &FactorizedNumerator, routing: &[(&str, &str)]) -> ClosureRecordValue {
+    value
+        .validate()
+        .unwrap_or_else(|e| panic!("{}: {e}", value.label));
+    let vakint = Vakint::new().unwrap();
+    let got = evaluate_factorized_closure(
+        &vakint,
+        &settings(),
+        std::slice::from_ref(value),
+        &[value.prefactor.total()],
+    )
+    .unwrap_or_else(|e| panic!("{}: {e}", value.label));
+    let started = std::time::Instant::now();
+    let expected = reference(value, routing);
+    let reference_seconds = started.elapsed().as_secs_f64();
+    let record = got.records[0].clone();
+    assert!(!expected.is_zero(), "{}: zero reference", value.label);
+    assert!(
+        (&record.vakint_value - &expected).expand().is_zero(),
+        "{}:\nentry     {}\nreference {}",
+        value.label,
+        record.vakint_value,
+        expected
+    );
+    eprintln!(
+        "CLOSURE_KIND label=\"{}\" patterns={} blocks={} reduced={} contract_s={:.4} split_s={:.4} evaluate_s={:.4} lower_s={:.4} reduce_s={:.4} reference_s={:.4}",
+        value.label,
+        record.patterns,
+        record.blocks,
+        record.reduced_monomials,
+        record.contract_seconds,
+        record.split_seconds,
+        record.evaluate_seconds,
+        record.lower_seconds,
+        record.reduce_seconds,
+        reference_seconds
+    );
+    record
+}
+
+const L2_CUT: [(&str, &str); 2] = [("k(1)", "k(1)"), ("k(2)", "p(1)")];
+const L3_CUT: [(&str, &str); 3] = [("k(1)", "k(1)"), ("k(2)", "k(2)"), ("k(3)", "p(1)")];
+const L4_CUT: [(&str, &str); 4] = [
+    ("k(1)", "k(1)"),
+    ("k(2)", "k(2)"),
+    ("k(3)", "p(1)"),
+    ("k(4)", "k(3)"),
+];
+
+#[test]
+fn l2_root_remainder_equals_the_contracted_reference() {
+    for (degree, compensate) in [(0, true), (1, true), (2, true), (2, false)] {
+        let record = check(&l2_root(degree, compensate), &L2_CUT);
+        if degree == 2 {
+            assert!(record.patterns > 1, "the Taylor step raised no power");
+        }
+    }
+}
+
+#[test]
+fn l2_root_orders_filters() {
+    for orders in [TaylorOrders::DropZero, TaylorOrders::DropZeroOdd] {
+        let mut value = l2_root(2, false);
+        let FactorizedKind::Closure(spec) = &mut value.kind else {
+            unreachable!()
+        };
+        spec.taylor.as_mut().unwrap().orders = orders;
+        value.label = format!("L2 root orders={}", orders.as_str());
+        check(&value, &L2_CUT);
+    }
+}
+
+#[test]
+fn l2_child_with_open_ports_equals_the_contracted_reference() {
+    for degree in [0, 1, 2] {
+        check(&l2_child(degree), &L2_CUT);
+    }
+}
+
+/// A remainder whose numerator vanishes at the Taylor degree: exactly zero.
+#[test]
+fn a_vanishing_remainder_is_exactly_zero() {
+    let mut value = l2_child(0);
+    value.vertices[1].factor = atom(&format!(
+        "{}*{}*{}",
+        q(2, &hedge(121)),
+        q(21, &index(2, 7)),
+        q(1, &index(2, 7))
+    ));
+    let vakint = Vakint::new().unwrap();
+    let got = evaluate_factorized_closure(
+        &vakint,
+        &settings(),
+        std::slice::from_ref(&value),
+        &[Atom::num(1)],
+    )
+    .unwrap();
+    assert!(got.value.is_zero());
+    assert!(reference(&value, &L2_CUT).is_zero());
+}
+
+#[test]
+fn l2_pre_expanded_sector_equals_the_contracted_reference() {
+    check(&l2_sector(), &L2_CUT);
+}
+
+#[test]
+fn l3_root_remainder_equals_the_contracted_reference() {
+    for degree in [0, 2] {
+        check(&l3_root(degree), &L3_CUT);
+    }
+}
+
+#[test]
+fn l4_root_remainder_equals_the_contracted_reference() {
+    check(&l4_root(2), &L4_CUT);
+}
+
+/// All records in one call: the sum of the single calls.
+#[test]
+fn several_records_in_one_call() {
+    let vakint = Vakint::new().unwrap();
+    let records = [l2_root(2, true), l2_child(1), l2_sector()];
+    let prefactors = records
+        .iter()
+        .map(|r| r.prefactor.total())
+        .collect::<Vec<_>>();
+    let all = evaluate_factorized_closure(&vakint, &settings(), &records, &prefactors).unwrap();
+    let mut sum = Atom::Zero;
+    for (record, prefactor) in records.iter().zip(&prefactors) {
+        sum += evaluate_factorized_closure(
+            &vakint,
+            &settings(),
+            std::slice::from_ref(record),
+            std::slice::from_ref(prefactor),
+        )
+        .unwrap()
+        .value;
+    }
+    assert!((&all.value - &sum).expand().is_zero());
+    assert_eq!(all.records.len(), 3);
+}
+
+fn refused(value: &FactorizedNumerator, what: &str) {
+    let vakint = Vakint::new().unwrap();
+    match evaluate_factorized_closure(
+        &vakint,
+        &settings(),
+        std::slice::from_ref(value),
+        &[Atom::num(1)],
+    ) {
+        Err(FactorizedError::Closure { detail }) => {
+            assert!(detail.contains(what), "{}: {detail}", value.label);
+            eprintln!("CLOSURE_REFUSAL {what}: {detail}");
+        }
+        other => panic!(
+            "{}: expected a closure refusal ({what}), got {other:?}",
+            value.label
+        ),
+    }
+}
+
+fn spec(value: &mut FactorizedNumerator) -> &mut ClosureSpec {
+    let FactorizedKind::Closure(spec) = &mut value.kind else {
+        unreachable!()
+    };
+    spec
+}
+
+#[test]
+fn the_closure_kind_refuses_what_it_does_not_support() {
+    // several massive lines
+    let mut v = l2_root(2, true);
+    v.edges[1].mass_squared = atom(R);
+    refused(&v, "several massive lines");
+    // the closing edge massless / wrong mass / wrong power
+    let mut v = l2_root(2, true);
+    spec(&mut v).edge = 1;
+    refused(&v, "mass");
+    let mut v = l2_root(2, true);
+    spec(&mut v).power = 2;
+    refused(&v, "power");
+    // Taylor degree above the limit
+    let mut v = l2_root(2, true);
+    spec(&mut v).taylor.as_mut().unwrap().degree = 3;
+    refused(&v, "Taylor degree 3");
+    // a scaled-edge set that does not scale every external momentum
+    let mut v = l2_child(1);
+    spec(&mut v).taylor.as_mut().unwrap().scaled_edges = vec![20];
+    refused(&v, "must be scaled");
+    // an internal edge among the scaled edges
+    let mut v = l2_root(1, true);
+    spec(&mut v).taylor.as_mut().unwrap().scaled_edges = vec![1, 20];
+    refused(&v, "not an external leg");
+    // a momentum in the projector with a Taylor step
+    let mut v = l2_root(1, true);
+    v.projector.as_mut().unwrap().tensor =
+        atom(&format!("{}*{}", q(20, &hedge(120)), q(20, &hedge(121))));
+    refused(&v, "momentum-free");
+    // a pre-expanded sector whose internal edge still carries q
+    let mut v = l2_root(1, true);
+    spec(&mut v).taylor = None;
+    spec(&mut v).auxiliary_mass_squared = atom(R);
+    refused(&v, "carries an external momentum");
+    // weights: with original_cycles the prefactor carries none
+    let mut v = l2_root(1, true);
+    v.prefactor.loop_sign = -1;
+    refused(&v, "loop_sign=1");
+    let mut v = l2_root(1, true);
+    v.prefactor.scalars = atom(&format!("gs^2*{R}"));
+    refused(&v, "reference mass");
+    // an open bispinor port
+    let mut v = l2_child(1);
+    v.ports.push(atom(&format!(
+        "spenso::{{spenso::representation,spenso::self_dual}}::bis(4,{HEDGE}(150,1))"
+    )));
+    match v.validate() {
+        Err(FactorizedError::Closure { .. }) | Err(_) => {}
+        Ok(()) => panic!("an open bispinor port validated"),
+    }
+    // not a closure record
+    let mut v = l2_root(1, true);
+    v.kind = FactorizedKind::Direct;
+    refused(&v, "not a closure record");
+    // insertions stay reserved
+    let mut v = l2_root(1, true);
+    v.insertions.push(super::super::Insertion {
+        vertex: 1,
+        coefficient: Atom::num(1),
+        factor: Atom::num(1),
+    });
+    assert!(matches!(
+        v.validate(),
+        Err(FactorizedError::Reserved { .. })
+    ));
+    // the adapter and the vacuum entry keep refusing the kind
+    let vakint = Vakint::new().unwrap();
+    let v = l2_root(1, true);
+    assert!(matches!(
+        super::super::evaluate_factorized(&vakint, &settings(), &v, &Atom::num(1)),
+        Err(FactorizedError::Reserved { .. })
+    ));
+    assert!(matches!(
+        super::super::evaluate_factorized_vacuum(&vakint, &settings(), &v, &Atom::num(1)),
+        Err(FactorizedError::Reserved { .. })
+    ));
+}
+
+#[test]
+fn the_v3_text_form_round_trips_every_fixture() {
+    let mut child = l2_child(2);
+    spec(&mut child).softs = vec![
+        super::super::SoftLeg {
+            external: 1,
+            edge: 20,
+            root: true,
+        },
+        super::super::SoftLeg {
+            external: 2,
+            edge: 21,
+            root: false,
+        },
+    ];
+    spec(&mut child).depth = Some(4);
+    spec(&mut child).weights = vec![("scalars".into(), true, child.prefactor.scalars.clone())];
+    for value in [l2_root(2, true), child, l2_sector(), l3_root(2), l4_root(2)] {
+        value.validate().unwrap();
+        let text = value.to_text().unwrap();
+        assert!(text.starts_with("schema\tpint6.factorized-numerator.v3\n"));
+        let back = FactorizedNumerator::from_text(&text)
+            .unwrap_or_else(|e| panic!("{}: {e}\n{text}", value.label));
+        assert_eq!(back, value, "{}", value.label);
+        assert_eq!(back.to_text().unwrap(), text);
+    }
+    let text = l2_root(2, true).to_text().unwrap();
+    // the beta's cut lines are read and ignored
+    let with_cut = text.replace(
+        "softs\t0\n",
+        "routing\t2\nroute\t1\timage=1,0\nroute\t2\timage=0,1\ncut_topology\tvakint::topo(1)\nsofts\t0\n",
+    );
+    let lines = with_cut.lines().count() - 1;
+    let with_cut = with_cut
+        .lines()
+        .map(|l| {
+            if l.starts_with("lines\t") {
+                format!("lines\t{lines}")
+            } else {
+                l.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    assert_eq!(
+        FactorizedNumerator::from_text(&with_cut).unwrap(),
+        l2_root(2, true)
+    );
+    // a wrong open-slot list, kind direct in v3, kind closure in v1
+    let wrong = text.replace(
+        "open\t0\n",
+        &format!("open\t1\nopen_slot\t{}\n", hedge(120)),
+    );
+    assert!(FactorizedNumerator::parse_text(&wrong).is_err());
+    let direct = text.replace("kind\tclosure", "kind\tdirect");
+    assert!(matches!(
+        FactorizedNumerator::parse_text(&direct),
+        Err(FactorizedError::Reserved { .. })
+    ));
+    let v1 = text.replace(
+        "pint6.factorized-numerator.v3",
+        "pint6.factorized-numerator.v1",
+    );
+    assert!(matches!(
+        FactorizedNumerator::parse_text(&v1),
+        Err(FactorizedError::Reserved { .. })
+    ));
+}
