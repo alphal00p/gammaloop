@@ -270,7 +270,7 @@ pub(crate) static DIRAC_CHECKS: [std::sync::atomic::AtomicUsize; 3] = [
 /// `GAMMALOOP_UV_CHILDREN_LOG=1`: one stderr line per proper UV child request
 /// of an R*-route plan (route, loops, seconds, the child's edge ids); for smoke
 /// tests, timing and per-child views.
-fn uv_children_log() -> bool {
+pub(super) fn uv_children_log() -> bool {
     static LOG: LazyLock<bool> =
         LazyLock::new(|| std::env::var_os("GAMMALOOP_UV_CHILDREN_LOG").is_some());
     *LOG

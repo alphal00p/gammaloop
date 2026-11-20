@@ -377,6 +377,7 @@ impl PropagatorInsertionEvaluator {
         }
         let loops = diagram.loop_count();
         let extraction_started = Instant::now();
+        let counted = vakint::timing::Snapshot::now();
         let mut surrogate = diagram.clone();
         let mut maps: Vec<DiagramRelabeling> = Vec::new();
         let mut holes: Vec<PreparedInsertionHole> = Vec::new();
@@ -440,6 +441,17 @@ impl PropagatorInsertionEvaluator {
             if vanishes {
                 break;
             }
+        }
+        if super::plan::uv_children_log() {
+            // The insertions' own integrals (normalisation), outside every R*
+            // evaluation of the diagram.
+            eprintln!(
+                "INSERTION_PREPARE graph={} insertions={} seconds={:.3}{}",
+                diagram.name(),
+                holes.len(),
+                extraction_started.elapsed().as_secs_f64(),
+                counted.elapsed().fields()
+            );
         }
         Ok(Some(PreparedInsertion {
             surrogate,
