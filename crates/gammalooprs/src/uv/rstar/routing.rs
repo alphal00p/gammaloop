@@ -123,9 +123,8 @@ fn parse_mode(value: Option<&str>) -> std::result::Result<RootRouting, String> {
     }
 }
 
-static MODE: LazyLock<std::result::Result<RootRouting, String>> = LazyLock::new(|| {
-    parse_mode(std::env::var("GAMMALOOP_ROOT_ROUTING").ok().as_deref())
-});
+static MODE: LazyLock<std::result::Result<RootRouting, String>> =
+    LazyLock::new(|| parse_mode(std::env::var("GAMMALOOP_ROOT_ROUTING").ok().as_deref()));
 
 /// The routing mode (read once); an invalid value is an error.
 pub(crate) fn mode() -> Result<RootRouting> {
@@ -334,7 +333,13 @@ where
             // a self-loop carries no boundary flow
             continue;
         }
-        arcs.push(Arc { u, v, edge, pair, weight: weight(edge) });
+        arcs.push(Arc {
+            u,
+            v,
+            edge,
+            pair,
+            weight: weight(edge),
+        });
     }
     let mut terminals = Vec::new();
     for hedge in externals.included_iter() {
@@ -452,7 +457,9 @@ pub(crate) fn guided_shrunken_sub_lmb(
         }
     }
     let weight = |edge: EdgeIndex| rule.weight(edge, marked);
-    let production = graph.shrunken_sub_lmb(outer, shrunken, externals.clone()).ok();
+    let production = graph
+        .shrunken_sub_lmb(outer, shrunken, externals.clone())
+        .ok();
     let preferred = |edge: EdgeIndex| {
         production.as_ref().is_some_and(|lmb| {
             let (_, pair) = &g[&edge];
@@ -476,7 +483,13 @@ pub(crate) fn guided_shrunken_sub_lmb(
             &mut extra,
         )
     } else {
-        guide(&contracted, &remainder, &contracted_externals, &weight, &preferred)
+        guide(
+            &contracted,
+            &remainder,
+            &contracted_externals,
+            &weight,
+            &preferred,
+        )
     };
     if rule.enumerates() && log_level() >= 1 {
         eprintln!(
@@ -542,7 +555,13 @@ pub(crate) fn minimal_report(
         rule
     };
     let weight = |edge: EdgeIndex| rule.weight(edge, marked);
-    let guide = guide(&contracted, &remainder, &contracted_externals, &weight, &|_| false)?;
+    let guide = guide(
+        &contracted,
+        &remainder,
+        &contracted_externals,
+        &weight,
+        &|_| false,
+    )?;
     Some(SteinerReport {
         terminals: guide.terminals,
         min_edges: guide.steiner_edges.len(),
@@ -579,7 +598,6 @@ pub(crate) fn remainder_basis(
         .shrunken_sub_lmb(outer, shrunken, externals)
         .map_err(|e| eyre!("{e}"))
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -694,15 +712,25 @@ pub(crate) fn log_basis(
     boundary_edges.sort();
     boundary_edges.dedup();
     let report = |rule| {
-        minimal_report(graph, &region.support, contracted, &region.boundary, rule, Some(marked))
+        minimal_report(
+            graph,
+            &region.support,
+            contracted,
+            &region.boundary,
+            rule,
+            Some(marked),
+        )
     };
     let shortest = report(RootRouting::Shortest);
     let avoid = report(RootRouting::AvoidMarked);
     let prefer = report(RootRouting::PreferMarked);
     let paired = |edges: &mut dyn Iterator<Item = bool>| edges.filter(|p| *p).count();
     let (loop_terms, root_terms) = routing_terms(graph, region, basis);
-    let root_scope = paired(&mut graph.iter_edges_of(&region.support).map(|(p, _, _)| p.is_paired()))
-        == paired(&mut graph.underlying.iter_edges().map(|(p, _, _)| p.is_paired()));
+    let root_scope = paired(
+        &mut graph
+            .iter_edges_of(&region.support)
+            .map(|(p, _, _)| p.is_paired()),
+    ) == paired(&mut graph.underlying.iter_edges().map(|(p, _, _)| p.is_paired()));
     let mut line = format!(
         "RR_BASIS graph={} mode={} root_scope={root_scope} loops={} dens={dens} boundary_edges={} terminals={} root_dens={root_dens} min_root_dens={} exact={} marked_present={marked_present} marked_root={marked_root} min_marked_avoidable={} min_marked_possible={} loop_terms={loop_terms} root_terms={root_terms}",
         graph.name,
@@ -784,7 +812,11 @@ pub(crate) fn log_taylor(
 
 /// Σ over the remaining propagators of the number of loop momenta and of
 /// boundary momenta in their routed momentum (the size of the routing).
-fn routing_terms(graph: &Graph, region: &super::GraphRegion, basis: &LoopMomentumBasis) -> (usize, usize) {
+fn routing_terms(
+    graph: &Graph,
+    region: &super::GraphRegion,
+    basis: &LoopMomentumBasis,
+) -> (usize, usize) {
     use symbolica::atom::Atom;
     let (mut loops, mut roots) = (0, 0);
     for (pair, edge, _) in graph.iter_edges_of(&region.remaining) {
@@ -808,13 +840,14 @@ enum Completion {
 }
 
 fn completion() -> Completion {
-    static MODE: LazyLock<Completion> = LazyLock::new(|| {
-        match std::env::var("GAMMALOOP_ROOT_ROUTING_TREE").as_deref() {
-            Ok("kruskal") => Completion::Kruskal,
-            Ok("bfs") => Completion::Bfs,
-            _ => Completion::Keep,
-        }
-    });
+    static MODE: LazyLock<Completion> =
+        LazyLock::new(
+            || match std::env::var("GAMMALOOP_ROOT_ROUTING_TREE").as_deref() {
+                Ok("kruskal") => Completion::Kruskal,
+                Ok("bfs") => Completion::Bfs,
+                _ => Completion::Keep,
+            },
+        );
     *MODE
 }
 
@@ -891,7 +924,10 @@ impl RootRouting {
     pub(crate) fn uses_numerator(self) -> bool {
         matches!(
             self,
-            RootRouting::NumSum | RootRouting::NumLex | RootRouting::NumEst | RootRouting::NumEstDen
+            RootRouting::NumSum
+                | RootRouting::NumLex
+                | RootRouting::NumEst
+                | RootRouting::NumEstDen
         )
     }
 }
@@ -930,9 +966,17 @@ fn tree_cost(
     signatures: bool,
 ) -> TreeCost {
     let columns = arcs.len() + sources.len();
-    let mut sig = if signatures { vec![vec![0i32; columns]; arcs.len()] } else { Vec::new() };
+    let mut sig = if signatures {
+        vec![vec![0i32; columns]; arcs.len()]
+    } else {
+        Vec::new()
+    };
     let forward = |a: usize, from: usize, to: usize| -> i32 {
-        if arcs[a].u == from && arcs[a].v == to { 1 } else { -1 }
+        if arcs[a].u == from && arcs[a].v == to {
+            1
+        } else {
+            -1
+        }
     };
     let mut adjacency = vec![Vec::new(); n];
     for &a in tree {
@@ -1038,7 +1082,13 @@ fn enumerate_guide<G: GraphAccess>(
         let (a, b) = contracted.ends(&pair)?;
         let (u, v) = (node_of(a, &mut nodes), node_of(b, &mut nodes));
         if u != v {
-            arcs.push(Arc { u, v, edge, pair, weight: 1000 });
+            arcs.push(Arc {
+                u,
+                v,
+                edge,
+                pair,
+                weight: 1000,
+            });
         } else {
             self_loops.push(edge);
         }
@@ -1164,7 +1214,13 @@ fn enumerate_guide<G: GraphAccess>(
     };
     let cf_key = |c: &TreeCost| -> (u64, u64, u64, u64, u64) {
         let total = (c.loop_terms + c.root_terms) as u64;
-        (total, u64::from(c.marked_root), c.root_dens as u64, c.loop_terms as u64, 0)
+        (
+            total,
+            u64::from(c.marked_root),
+            c.root_dens as u64,
+            c.loop_terms as u64,
+            0,
+        )
     };
     // (key, tree, total, numw, est) of the best tree and of compact-free's.
     type Best = ((u64, u64, u64, u64, u64), Vec<usize>, u64, u64, f64);
@@ -1215,7 +1271,15 @@ fn enumerate_guide<G: GraphAccess>(
             }
         }
     };
-    walk(0, &mut Vec::new(), &UnionFind::new(n), &arcs, n, &mut count, &mut visit);
+    walk(
+        0,
+        &mut Vec::new(),
+        &UnionFind::new(n),
+        &arcs,
+        n,
+        &mut count,
+        &mut visit,
+    );
     let (_, tree, best_total, best_numw, best_est) = best?;
     if let Some((_, cf_tree, cf_total, cf_numw, cf_est)) = &cf_best {
         extra.push_str(&format!(

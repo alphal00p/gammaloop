@@ -19,9 +19,8 @@ use symbolica::{
 use vakint::Vakint;
 
 use super::{
-    ChildTruncate, IntegrationTimings, RStarIntegrand, TaylorExpansion, UvStream,
-    truncate_routed, truncation_degree, truncation_dump_label, truncation_key_suffix,
-    uv_child_truncation_key,
+    ChildTruncate, IntegrationTimings, RStarIntegrand, TaylorExpansion, UvStream, truncate_routed,
+    truncation_degree, truncation_dump_label, truncation_key_suffix, uv_child_truncation_key,
 };
 use crate::{
     feyngen::feynkit::FeynmanDiagramGammaLoopExt,
@@ -57,7 +56,14 @@ const NU: &str = "uv_truncate_test::nu";
 
 /// `den(edge, Q(hard), 0, dot(k, k))^-1` with `k` mixing loop and root momenta.
 fn den(edge: i64, hard: i64, momentum: &Atom) -> Atom {
-    function!(GS.den, Atom::num(edge), p(hard), Atom::num(0), dot(momentum, momentum)).pow(-1)
+    function!(
+        GS.den,
+        Atom::num(edge),
+        p(hard),
+        Atom::num(0),
+        dot(momentum, momentum)
+    )
+    .pow(-1)
 }
 
 fn edges(ids: &[usize]) -> Vec<EdgeIndex> {
@@ -120,7 +126,11 @@ fn truncation_degree_follows_the_mode_the_scope_and_the_order() {
     use ChildTruncate::*;
     for order in [-1, 0, 1, 2] {
         for mode in [Off, DegreeZero, Graded] {
-            assert_eq!(truncation_degree(mode, false, order), None, "{mode:?} {order}");
+            assert_eq!(
+                truncation_degree(mode, false, order),
+                None,
+                "{mode:?} {order}"
+            );
         }
         assert_eq!(truncation_degree(Off, true, order), None);
         assert_eq!(
@@ -150,7 +160,9 @@ fn the_switch_accepts_only_its_modes() {
     ] {
         assert_eq!(ChildTruncate::parse(Some(value)), Ok(mode), "{value:?}");
     }
-    for value in ["off", "on", "2", "01", "true", "Graded", "GRADED", "1 graded", "graded=1"] {
+    for value in [
+        "off", "on", "2", "01", "true", "Graded", "GRADED", "1 graded", "graded=1",
+    ] {
         let error = ChildTruncate::parse(Some(value)).expect_err(value);
         assert!(error.contains("GAMMALOOP_UV_CHILD_TRUNCATE"), "{error}");
         assert!(error.contains(value.trim()), "{error}");
@@ -172,10 +184,22 @@ fn closure_dump_label_is_present_only_when_on() {
     use ChildTruncate::*;
     assert_eq!(truncation_dump_label(Off, None), None);
     assert_eq!(truncation_dump_label(Off, Some(0)), None);
-    assert_eq!(truncation_dump_label(DegreeZero, Some(0)).as_deref(), Some("1@0"));
-    assert_eq!(truncation_dump_label(DegreeZero, None).as_deref(), Some("1@-"));
-    assert_eq!(truncation_dump_label(Graded, Some(2)).as_deref(), Some("graded@2"));
-    assert_eq!(truncation_dump_label(Graded, None).as_deref(), Some("graded@-"));
+    assert_eq!(
+        truncation_dump_label(DegreeZero, Some(0)).as_deref(),
+        Some("1@0")
+    );
+    assert_eq!(
+        truncation_dump_label(DegreeZero, None).as_deref(),
+        Some("1@-")
+    );
+    assert_eq!(
+        truncation_dump_label(Graded, Some(2)).as_deref(),
+        Some("graded@2")
+    );
+    assert_eq!(
+        truncation_dump_label(Graded, None).as_deref(),
+        Some("graded@-")
+    );
 }
 
 #[test]
@@ -347,7 +371,9 @@ fn degree_zero_equals_the_zeroth_order() {
         (q(2, MU) + q(6, MU)) * (q(6, NU) - q(3, NU) + q(7, NU)) * q(7, MU) * q(2, NU),
         (dot(&p(2), &p(7)) + &a * dot(&p(6), &p(7))).pow(2) * (q(3, MU) - q(6, MU)) * q(7, MU),
         (q(6, MU) - (q(6, MU) + q(2, MU) - q(7, MU))) * q(6, MU) + &a,
-        dot(&(p(2) + p(3) + p(6)), &(p(7) - p(2))) * (Atom::num(2) * q(2, MU) + q(7, MU)) * q(6, MU),
+        dot(&(p(2) + p(3) + p(6)), &(p(7) - p(2)))
+            * (Atom::num(2) * q(2, MU) + q(7, MU))
+            * q(6, MU),
     ];
     for numerator in &numerators {
         let truncated = sum(&truncate(numerator, &[2, 3], 0, 32).unwrap());
@@ -373,15 +399,25 @@ fn graded_parts_add_up_to_the_truncated_series() {
         let numerator = (0..k as i64).fold(q(6, MU) * q(7, MU), |product, i| product * factor(i));
         for degree in 1..=2 {
             let parts = truncate(&numerator, &[2, 3], degree, 64).unwrap();
-            assert_eq!(parts.len(), binomial(k + degree, degree), "k={k} d={degree}");
+            assert_eq!(
+                parts.len(),
+                binomial(k + degree, degree),
+                "k={k} d={degree}"
+            );
             assert_equal(
                 &sum(&parts),
                 &(graded_reference(&numerator, &[2, 3], degree).unwrap() * denominators()),
             );
             // The cap declines above it and admits exactly at it.
             let count = parts.len();
-            assert_eq!(truncate(&numerator, &[2, 3], degree, count - 1), Err("parts"));
-            assert_eq!(truncate(&numerator, &[2, 3], degree, count).map(|p| p.len()), Ok(count));
+            assert_eq!(
+                truncate(&numerator, &[2, 3], degree, count - 1),
+                Err("parts")
+            );
+            assert_eq!(
+                truncate(&numerator, &[2, 3], degree, count).map(|p| p.len()),
+                Ok(count)
+            );
         }
     }
     // Vanishing graded factors are dropped from the count.
@@ -424,7 +460,11 @@ fn declines_keep_the_routed_form() {
 /// automatic plan: (degree, root edges, untagged, tagged by `mode`).
 type Remainders = Vec<(i32, Vec<EdgeIndex>, RStarIntegrand, RStarIntegrand)>;
 
-fn child_remainders(dot: &str, vakint: &Vakint, mode: ChildTruncate) -> Result<(Graph, Remainders)> {
+fn child_remainders(
+    dot: &str,
+    vakint: &Vakint,
+    mode: ChildTruncate,
+) -> Result<(Graph, Remainders)> {
     let diagram = colour_factored(&load(dot)?)?;
     let graph = diagram.to_gamma_loop_graph(None, true)?;
     let model = diagram.model();
@@ -452,7 +492,10 @@ fn child_remainders(dot: &str, vakint: &Vakint, mode: ChildTruncate) -> Result<(
             &settings,
             ChildMass::Reference,
         )?;
-        let boundary = plan.root_boundary.as_ref().ok_or_else(|| eyre!("a support root"))?;
+        let boundary = plan
+            .root_boundary
+            .as_ref()
+            .ok_or_else(|| eyre!("a support root"))?;
         let root_edges = graph
             .iter_edges_of(boundary)
             .map(|(_, edge, _)| edge)
@@ -548,7 +591,10 @@ fn truncated_child_remainders_keep_the_outer_taylor_polynomial() -> Result<()> {
         eprintln!(
             "UV_TRUNCATE_TEST tagged={tagged} untagged={untagged} vanishing={vanishing} several_parts={several} degrees={degrees:?}"
         );
-        ensure!(degrees.is_superset(&BTreeSet::from([0, 1, 2])), "{degrees:?}");
+        ensure!(
+            degrees.is_superset(&BTreeSet::from([0, 1, 2])),
+            "{degrees:?}"
+        );
         ensure!(several > 0, "no graded remainder in several parts");
         Ok(())
     })
@@ -559,8 +605,11 @@ fn truncated_remainders_guard_their_consumers_and_stream_their_parts() -> Result
     with_production_piece_limit(|| -> Result<()> {
         test_initialise()?;
         let vakint = Vakint::new()?;
-        let (_, remainders) =
-            child_remainders(include_str!("testdata/l3-d166.dot"), &vakint, ChildTruncate::Graded)?;
+        let (_, remainders) = child_remainders(
+            include_str!("testdata/l3-d166.dot"),
+            &vakint,
+            ChildTruncate::Graded,
+        )?;
         let mut checked = false;
         let mut streamed = false;
         for (order, root_edges, full, truncated) in remainders {
@@ -575,15 +624,36 @@ fn truncated_remainders_guard_their_consumers_and_stream_their_parts() -> Result
             let reference = *REFERENCE_MASS_SQUARED;
             assert!(
                 truncated
-                    .outer_taylor(expression, &root_edges[1..], degree, reference, &mass, &mut timing)
+                    .outer_taylor(
+                        expression,
+                        &root_edges[1..],
+                        degree,
+                        reference,
+                        &mass,
+                        &mut timing
+                    )
                     .is_err()
             );
             assert!(
                 truncated
-                    .outer_taylor(expression, &root_edges, degree + 1, reference, &mass, &mut timing)
+                    .outer_taylor(
+                        expression,
+                        &root_edges,
+                        degree + 1,
+                        reference,
+                        &mass,
+                        &mut timing
+                    )
                     .is_err()
             );
-            let _ = truncated.outer_taylor(expression, &root_edges, degree, reference, &mass, &mut timing)?;
+            let _ = truncated.outer_taylor(
+                expression,
+                &root_edges,
+                degree,
+                reference,
+                &mass,
+                &mut timing,
+            )?;
             // The consumers that need the whole remainder.
             assert!(truncated.taylor(0).is_err());
             assert!(truncated.taylor_contracted(0).is_err());
@@ -605,10 +675,11 @@ fn truncated_remainders_guard_their_consumers_and_stream_their_parts() -> Result
             // The stream of several graded parts adds up to their contraction.
             if truncation.parts.len() > 1 && !streamed {
                 let mut emitted = Vec::new();
-                let applied = truncated.stream_parts(&truncation.parts, UvStream::On, &mut |batch| {
-                    emitted.push(batch);
-                    Ok(())
-                })?;
+                let applied =
+                    truncated.stream_parts(&truncation.parts, UvStream::On, &mut |batch| {
+                        emitted.push(batch);
+                        Ok(())
+                    })?;
                 if applied {
                     let mut whole = Vec::new();
                     for part in &truncation.parts {
@@ -629,20 +700,18 @@ fn off_mode_is_inert() -> Result<()> {
     with_production_piece_limit(|| -> Result<()> {
         test_initialise()?;
         let vakint = Vakint::new()?;
-        let (_, remainders) =
-            child_remainders(include_str!("testdata/l2-d8.dot"), &vakint, ChildTruncate::Off)?;
+        let (_, remainders) = child_remainders(
+            include_str!("testdata/l2-d8.dot"),
+            &vakint,
+            ChildTruncate::Off,
+        )?;
         ensure!(!remainders.is_empty());
         for (order, root_edges, full, off) in remainders {
             assert!(off.truncation.is_none());
             assert_eq!(off.contraction_inputs(), std::slice::from_ref(&full.routed));
             // Not a support root: untouched in every mode.
-            let root = off.with_root_truncation_in(
-                ChildTruncate::Graded,
-                32,
-                false,
-                &root_edges,
-                order,
-            )?;
+            let root =
+                off.with_root_truncation_in(ChildTruncate::Graded, 32, false, &root_edges, order)?;
             assert!(root.truncation.is_none());
             assert_eq!(root.contracted_certified()?, full.contracted_certified()?);
             if let Ok(degree) = usize::try_from(order) {
