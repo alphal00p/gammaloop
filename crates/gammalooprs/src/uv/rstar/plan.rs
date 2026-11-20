@@ -1168,6 +1168,11 @@ impl RStarPlan {
         if let Some(suffix) = truncation {
             key.push_str(&suffix);
         }
+        // GAMMALOOP_UNCONTRACTED_NUMERATOR (on or check only):
+        // `#uncontracted=<enabled kinds>`.
+        if let Some(suffix) = super::uncontracted::cache_key_suffix() {
+            key.push_str(&suffix);
+        }
         key
     }
 
