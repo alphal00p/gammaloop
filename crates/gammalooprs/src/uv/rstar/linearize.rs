@@ -1,5 +1,6 @@
 //! Linearisation of momentum sums after a substitution
-//! (`GAMMALOOP_LINEARIZE_MOMENTA=1`, inert when unset).
+//! (`GAMMALOOP_LINEARIZE_MOMENTA`, on when unset: production since r5g,
+//! results/numerator-routing; `0`, `off`, `false` or empty: inert).
 //!
 //! Routing substitutes every edge momentum `Q(e, ...)` by its basis sum. A
 //! Feynman-rule combination `Q_a - Q_b` then becomes a nested sum such as
@@ -14,13 +15,13 @@ use std::sync::LazyLock;
 
 use symbolica::atom::{Atom, AtomCore, AtomView};
 
-/// Whether `GAMMALOOP_LINEARIZE_MOMENTA` is on (`1`, `on`, `true`).
+/// Whether `GAMMALOOP_LINEARIZE_MOMENTA` is on (unset, `1`, `on`, `true`).
 pub(crate) fn enabled() -> bool {
     static ON: LazyLock<bool> =
         LazyLock::new(
             || match std::env::var("GAMMALOOP_LINEARIZE_MOMENTA").as_deref() {
-                Err(_) | Ok("" | "0" | "off" | "false") => false,
-                Ok("1" | "on" | "true") => true,
+                Err(std::env::VarError::NotPresent) | Ok("1" | "on" | "true") => true,
+                Err(std::env::VarError::NotUnicode(_)) | Ok("" | "0" | "off" | "false") => false,
                 Ok(other) => {
                     panic!("GAMMALOOP_LINEARIZE_MOMENTA={other:?}: expected 0/off or 1/on")
                 }

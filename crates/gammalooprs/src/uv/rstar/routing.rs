@@ -1,4 +1,4 @@
-//! Opt-in routing of the root (boundary) momenta through an R* remainder
+//! Routing of the root (boundary) momenta through an R* remainder
 //! (root-routing lane, `GAMMALOOP_ROOT_ROUTING`).
 //!
 //! The remainder basis is [`LMBext::shrunken_sub_lmb`]: a depth-first
@@ -15,7 +15,10 @@
 //! flow only through the Steiner tree, i.e. through the minimal number of
 //! propagators. `shortest-avoid-marked` / `shortest-prefer-marked` break ties
 //! between minimal trees against / in favour of the marked (massive) edge.
-//! Unset or `default`: the production basis, byte for byte.
+//! `default` (or `0`, `off`, empty): the depth-first basis, byte for byte as
+//! before the routing lane. Unset is `num-est` (production since r5g,
+//! results/numerator-routing): per remainder, the spanning tree with the
+//! smallest estimate `Σ |P_i| |D_j|`.
 //!
 //! K R* is independent of the routing (a shift of loop momenta), so the
 //! result is unchanged; only the size of the intermediate expressions is.
@@ -104,7 +107,7 @@ impl RootRouting {
 
 fn parse_mode(value: Option<&str>) -> std::result::Result<RootRouting, String> {
     match value {
-        None | Some("" | "default" | "0" | "off") => Ok(RootRouting::Default),
+        Some("" | "default" | "0" | "off") => Ok(RootRouting::Default),
         Some("shortest" | "1") => Ok(RootRouting::Shortest),
         Some("shortest-avoid-marked" | "avoid-marked") => Ok(RootRouting::AvoidMarked),
         Some("shortest-prefer-marked" | "prefer-marked") => Ok(RootRouting::PreferMarked),
@@ -115,7 +118,7 @@ fn parse_mode(value: Option<&str>) -> std::result::Result<RootRouting, String> {
         Some("compact-free") => Ok(RootRouting::CompactFree),
         Some("num-sum") => Ok(RootRouting::NumSum),
         Some("num-lex") => Ok(RootRouting::NumLex),
-        Some("num-est") => Ok(RootRouting::NumEst),
+        None | Some("num-est") => Ok(RootRouting::NumEst),
         Some("num-est-den") => Ok(RootRouting::NumEstDen),
         Some(other) => Err(format!(
             "GAMMALOOP_ROOT_ROUTING={other:?}: expected default, shortest, shortest-avoid-marked, shortest-prefer-marked, strict-avoid-marked, compact, compact-loops, compact-roots, compact-free, num-sum, num-lex, num-est or num-est-den"
@@ -605,7 +608,9 @@ mod tests {
 
     #[test]
     fn modes_parse() {
-        assert_eq!(parse_mode(None), Ok(RootRouting::Default));
+        assert_eq!(parse_mode(None), Ok(RootRouting::NumEst));
+        assert_eq!(parse_mode(Some("")), Ok(RootRouting::Default));
+        assert_eq!(parse_mode(Some("off")), Ok(RootRouting::Default));
         assert_eq!(parse_mode(Some("default")), Ok(RootRouting::Default));
         assert_eq!(parse_mode(Some("shortest")), Ok(RootRouting::Shortest));
         assert_eq!(
