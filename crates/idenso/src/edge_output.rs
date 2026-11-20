@@ -1,10 +1,11 @@
-//! `IDENSO_EDGE_OUTPUT=<list>`: opt-in switches that make an edge-basis
-//! contraction produce less, with the same result. Comma-separated; `all`
-//! enables every switch; unset (or a value naming none) leaves everything as
-//! before. The value is read once per process.
+//! `IDENSO_EDGE_OUTPUT=<list>`: switches that make an edge-basis contraction
+//! produce less, with the same result. Comma-separated; `all` enables every
+//! switch. Unset is `flatten` (the production setting since r5); a set value
+//! replaces it, so an empty value or one naming no switch (e.g. `off`) leaves
+//! everything as before. The value is read once per process.
 //!
-//! **Recommended setting: `flatten`.** It is the switch the edge-basis
-//! contractions need, and its reach is limited to them.
+//! **Recommended setting: `flatten`** (the default). It is the switch the
+//! edge-basis contractions need, and its reach is limited to them.
 //!
 //! - `flatten`: the caller's rename of momentum combinations to independent
 //!   vectors expands a nested linear combination of momenta first, so that
@@ -26,7 +27,7 @@ use std::sync::LazyLock;
 static SWITCHES: LazyLock<Vec<String>> = LazyLock::new(|| {
     std::env::var("IDENSO_EDGE_OUTPUT")
         .map(|value| value.split(',').map(|v| v.trim().to_owned()).collect())
-        .unwrap_or_default()
+        .unwrap_or_else(|_| vec!["flatten".to_owned()])
 });
 
 /// Whether `IDENSO_EDGE_OUTPUT` names `switch` (or `all`).
