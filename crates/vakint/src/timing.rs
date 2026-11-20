@@ -617,9 +617,7 @@ impl std::ops::AddAssign for Delta {
         // CPU: summed when both carry it, else whichever does (an interval
         // partly without resources reports what it has)
         self.cpu = match (self.cpu, other.cpu) {
-            (Some((a, sa)), Some((b, sb))) => {
-                Some((a + b, std::array::from_fn(|i| sa[i] + sb[i])))
-            }
+            (Some((a, sa)), Some((b, sb))) => Some((a + b, std::array::from_fn(|i| sa[i] + sb[i]))),
             (a, b) => a.or(b),
         };
         self.stage_rss = match (self.stage_rss, other.stage_rss) {

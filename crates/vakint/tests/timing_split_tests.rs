@@ -43,18 +43,28 @@ fn engine() -> Vakint {
 
 /// One graph, metric projection, through the graph entry: the value and the
 /// interval's counters.
-fn run(vakint: &Vakint, root: &Path, level: &str, number: usize) -> (symbolica::atom::Atom, timing::Delta, f64) {
+fn run(
+    vakint: &Vakint,
+    root: &Path,
+    level: &str,
+    number: usize,
+) -> (symbolica::atom::Atom, timing::Delta, f64) {
     let directory = root.join(level);
     let model = refpath::load_model(&directory).unwrap();
-    let text =
-        std::fs::read_to_string(directory.join(format!("diagram-{number:06}.dot"))).unwrap();
+    let text = std::fs::read_to_string(directory.join(format!("diagram-{number:06}.dot"))).unwrap();
     let diagram = FeynmanDiagram::from_dot(Arc::clone(&model), &text).unwrap();
     let loops = level[1..].parse::<i64>().unwrap();
     let settings = refpath::vakint_settings(loops + 1);
     let start = timing::Snapshot::now();
     let wall = Instant::now();
-    let value = evaluate_graph(vakint, &settings, &diagram, &model, &FromFeynkitOptions::default())
-        .unwrap();
+    let value = evaluate_graph(
+        vakint,
+        &settings,
+        &diagram,
+        &model,
+        &FromFeynkitOptions::default(),
+    )
+    .unwrap();
     let wall = wall.elapsed().as_secs_f64();
     (value.value, start.elapsed(), wall)
 }
@@ -100,7 +110,10 @@ fn the_four_sub_steps_of_a_graph_through_the_graph_entry() {
             // P12's two counters keep their meaning: lower = lowering + the
             // sub-steps inside it, reduce = reduction + the finalisation inside it
             assert!(d.lower_seconds + 1e-9 >= s(timing::Stage::Lowering));
-            assert!(d.reduce_seconds + 1e-9 >= s(timing::Stage::Reduction) + s(timing::Stage::Finalization) - 1e-3);
+            assert!(
+                d.reduce_seconds + 1e-9
+                    >= s(timing::Stage::Reduction) + s(timing::Stage::Finalization) - 1e-3
+            );
         }
         let mut line = format!("TIMING_SPLIT graph={level}/{number} wall_s={wall:.3}");
         let mut sum = 0.0;
