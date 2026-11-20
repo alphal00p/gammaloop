@@ -306,19 +306,20 @@ pub fn validate_remainder_boundary() -> Result<BoundaryMode> {
     remainder_boundary_mode()
 }
 
-/// `GAMMALOOP_CHILD_BOUNDARY=off|dirac|closed` (default off): which closed
+/// `GAMMALOOP_CHILD_BOUNDARY=off|dirac|closed` (default `closed`: production
+/// since r6, results/child-boundary/REPORT.md): which closed
 /// proper UV children (support roots evaluated as their own R* root, whose
 /// momentum-free root closure closes every root-scope remainder) take the
 /// remainder-boundary path for their admitted ordinary remainders, as a
 /// closed diagram root does.
 ///
-/// - unset, empty, `0` or `off`: none; nothing changes (every child keeps
-///   `not_admitted=no_closed_root`);
+/// - empty, `0` or `off`: none, the path before the production default
+///   (every child keeps `not_admitted=no_closed_root`);
 /// - `dirac`: children closed by the Dirac closure
 ///   (`GAMMALOOP_UV_CHILD_CLOSURE=dirac`) of Taylor order 0, the vertex
 ///   `c gamma^mu` (the degree-1 self-energy keeps the open index `nu` of
 ///   `Tr[gamma_nu X]` and is not admitted: `child_open_index`);
-/// - `closed`: also children closed by the isotropic closure
+/// - `closed` (also unset): also children closed by the isotropic closure
 ///   (`GAMMALOOP_UV_CHILD_CLOSURE=isotropic,dirac`): a degree-0 four-slot
 ///   child through its three scalar metric channels, whose channel markers
 ///   are momentum-free scalar spectators of ONE boundary per remainder.
@@ -344,9 +345,9 @@ impl ChildBoundary {
 
 fn parse_child_boundary(value: Option<&str>) -> std::result::Result<ChildBoundary, String> {
     match value.map(str::trim) {
-        None | Some("" | "0" | "off") => Ok(ChildBoundary::Off),
+        Some("" | "0" | "off") => Ok(ChildBoundary::Off),
         Some("dirac") => Ok(ChildBoundary::Dirac),
-        Some("closed") => Ok(ChildBoundary::Closed),
+        None | Some("closed") => Ok(ChildBoundary::Closed),
         Some(other) => Err(format!(
             "GAMMALOOP_CHILD_BOUNDARY={other:?}: expected unset, 0, off, dirac or closed"
         )),
@@ -390,7 +391,7 @@ pub(crate) fn with_child_boundary<T>(mode: ChildBoundary, f: impl FnOnce() -> T)
 #[cfg(test)]
 #[test]
 fn child_boundary_values_parse() {
-    assert_eq!(parse_child_boundary(None), Ok(ChildBoundary::Off));
+    assert_eq!(parse_child_boundary(None), Ok(ChildBoundary::Closed));
     for off in ["", "0", "off", " off "] {
         assert_eq!(parse_child_boundary(Some(off)), Ok(ChildBoundary::Off));
     }
