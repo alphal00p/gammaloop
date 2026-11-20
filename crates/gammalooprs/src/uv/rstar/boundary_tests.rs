@@ -160,11 +160,11 @@ fn graded_split_matches_the_outer_taylor_polynomial() -> Result<()> {
             let binomial = (0..c).fold(1i64, |v, i| v * (b - i) as i64 / (i as i64 + 1));
             let sign = if c % 2 == 0 { 1 } else { -1 };
             for order in orders.iter().take(limit + 1) {
-                sum = sum + Atom::num(binomial * sign) * order;
+                sum += Atom::num(binomial * sign) * order;
             }
         }
         let structure = to_spenso(&grade.structure_atom(grammar.external()));
-        reassembled = reassembled + to_spenso(block) * structure * auxiliary.pow(b as i64) * sum;
+        reassembled += to_spenso(block) * structure * auxiliary.pow(b as i64) * sum;
     }
     let parameter = symbol!("rstar_outer_taylor"; Scalar);
     let taylor = TaylorExpansion::new(parameter, degree);
