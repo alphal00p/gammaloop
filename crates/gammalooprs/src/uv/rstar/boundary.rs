@@ -541,7 +541,17 @@ impl BoundarySummary {
 
     /// `outcome`: `ok`, or `error` when the evaluation ends in an error (the
     /// summary is printed before the error propagates).
-    pub(super) fn log(&self, graph: &str, root: &str, outcome: &str) {
+    /// `eval_seconds`, `eval`: the wall seconds and the vakint::timing counters
+    /// of the whole evaluation so far (its UV children, IR parts and outer
+    /// integrations; `eval_s`, `reduce_eval_s`, `lower_eval_s`).
+    pub(super) fn log(
+        &self,
+        graph: &str,
+        root: &str,
+        outcome: &str,
+        eval_seconds: f64,
+        eval: vakint::timing::Delta,
+    ) {
         let list = |map: &BTreeMap<String, usize>| {
             if map.is_empty() {
                 "none".to_owned()
@@ -553,7 +563,7 @@ impl BoundarySummary {
             }
         };
         eprintln!(
-            "BOUNDARY_SUMMARY graph={graph} root={root} remainders={} boundary={} zero={} fallback={} errors={} not_admitted={} fallback_reasons={} certified={} uncertified={} checks={} checks_skipped={} seconds_boundary={:.3} seconds_today={:.3} reduce_boundary_s={:.3} lower_boundary_s={:.3} reduce_today_s={:.3} lower_today_s={:.3} outcome={outcome}",
+            "BOUNDARY_SUMMARY graph={graph} root={root} remainders={} boundary={} zero={} fallback={} errors={} not_admitted={} fallback_reasons={} certified={} uncertified={} checks={} checks_skipped={} seconds_boundary={:.3} seconds_today={:.3} reduce_boundary_s={:.3} lower_boundary_s={:.3} reduce_today_s={:.3} lower_today_s={:.3} eval_s={eval_seconds:.3} reduce_eval_s={:.3} lower_eval_s={:.3} outcome={outcome}",
             self.remainders,
             self.boundary,
             self.zero,
@@ -571,6 +581,8 @@ impl BoundarySummary {
             self.lower_boundary,
             self.reduce_today,
             self.lower_today,
+            eval.reduce_seconds,
+            eval.lower_seconds,
         );
         #[cfg(test)]
         LOGGED_SUMMARIES.with(|logged| {

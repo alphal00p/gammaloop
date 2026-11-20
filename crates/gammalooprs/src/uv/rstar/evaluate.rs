@@ -866,6 +866,8 @@ struct Evaluation<'a> {
     /// Remainder-boundary counts of this evaluation (`BOUNDARY_SUMMARY`).
     summary: boundary::BoundarySummary,
     started: Instant,
+    /// vakint::timing at `started` (`BOUNDARY_SUMMARY` eval_*).
+    counted: vakint::timing::Snapshot,
     proper_uv_elapsed: Duration,
     quotient_elapsed: Duration,
     integration_elapsed: Duration,
@@ -919,6 +921,7 @@ impl<'a> Evaluation<'a> {
         compute_children: bool,
     ) -> Result<Self> {
         let started = Instant::now();
+        let counted = vakint::timing::Snapshot::now();
         // The top-level switches act at a top-level root only; read before
         // any work so that a bad value fails early.
         let (top_mass, rstar_terms) = if plan.root_boundary.is_none() {
@@ -1027,6 +1030,7 @@ impl<'a> Evaluation<'a> {
             boundary_elapsed: Duration::ZERO,
             summary: Default::default(),
             started,
+            counted,
             proper_uv_elapsed,
             quotient_elapsed: Duration::ZERO,
             integration_elapsed: Duration::ZERO,
@@ -2735,7 +2739,13 @@ impl<'a> Evaluation<'a> {
         } else {
             "open"
         };
-        self.summary.log(&self.graph.name, root, outcome);
+        self.summary.log(
+            &self.graph.name,
+            root,
+            outcome,
+            self.started.elapsed().as_secs_f64(),
+            self.counted.elapsed(),
+        );
     }
 
     fn log_timing(&self) {
