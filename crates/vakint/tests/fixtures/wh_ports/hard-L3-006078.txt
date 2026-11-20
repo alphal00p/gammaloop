@@ -1,0 +1,53 @@
+schema	pint6.factorized-numerator.v2
+label	d5-caller graph=B_self_energy_L3_171 diagram=B_self_energy_L3_171 colour_branch=0/1 term=ir_hard[corr=0,term=0,children=-] remainder=1552 sector=1/3 taylor_degree=1/1 orders=[den3:a1b0] marked_edge=2 colour=weight_line weights_excluded=nf^0*(-1)^0*AutG^-1(beta,after_poles) scalars_include=additional_normalization^1*den_taylor*pulled_couplings
+kind	hard
+dimension	gammalooprs::{}::dim
+momenta	loops=1	externals=3
+loop	1	edge=2
+external	1	edge=1
+external	2	edge=6
+external	3	edge=7
+edges	5
+edge	1	source=0	target=ext	hedges=1,-	particle=B	line=vector	power=1	momentum=0,1,0,0	0
+edge_factor	1	1
+edge	2	source=0	target=3	hedges=2,3	particle=Q	line=vector	power=1	momentum=1,0,0,0	gammalooprs::{scalar}::rstar_mass_squared
+edge_factor	2	spenso::{symmetric,linear,real,spenso::tensor}::g(spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(2,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(3,1)))
+edge	3	source=0	target=3	hedges=4,5	particle=Q	line=vector	power=2	momentum=-1,-1,0,0	0
+edge_factor	3	gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(1,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index,spenso::index-label:e}::edge(3,100)))*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index,spenso::index-label:e}::edge(3,100)))*spenso::{symmetric,linear,real,spenso::tensor}::g(spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(4,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(5,1)))
+edge	6	source=ext	target=3	hedges=-,11	particle=Q	line=vector	power=1	momentum=0,0,1,0	0
+edge_factor	6	1
+edge	7	source=ext	target=3	hedges=-,13	particle=Q	line=vector	power=1	momentum=0,0,0,1	0
+edge_factor	7	1
+vertices	2
+vertex	0	rule=V_BQQ	-1*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(1,1)))*spenso::{symmetric,linear,real,spenso::tensor}::g(spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(2,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(4,1)))+gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(1,1)))*spenso::{symmetric,linear,real,spenso::tensor}::g(spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(2,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(4,1)))
+vertex	3	rule=V_QQQQ	-1*spenso::{symmetric,linear,real,spenso::tensor}::g(spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(11,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(5,1)))*spenso::{symmetric,linear,real,spenso::tensor}::g(spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(13,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(3,1)))+spenso::{symmetric,linear,real,spenso::tensor}::g(spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(11,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(3,1)))*spenso::{symmetric,linear,real,spenso::tensor}::g(spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(13,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(5,1)))
+ports	3
+port	spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(1,1))
+port	spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(11,1))
+port	spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(13,1))
+projector	none
+prefactor	loop_sign=1	nf_power=0
+prefactor_overall	1
+prefactor_scalars	1
+prefactor_colour	1
+colour_branch	none
+hard	omega=1	denominators=lambda0	externals=independent
+softs	3
+soft	1	edge=1	role=root
+soft	2	edge=6	role=soft
+soft	3	edge=7	role=soft
+closure	edge=2	power=1	gammalooprs::{scalar}::rstar_mass_squared
+closure_momentum	vakint::{spenso::tensor,spenso::rank1}::p(1)
+routing	1
+route	1	image=1
+cut_topology	(vakint::{symmetric,linear}::dot(vakint::{spenso::tensor,spenso::rank1}::p(1),vakint::{spenso::tensor,spenso::rank1}::p(1)))^(-1)
+weights	5
+weight	colour	applied_by=beta	1/4*beta::{}::cA^3
+weight	flavour	applied_by=beta	nf_power=0
+weight	loop_sign	applied_by=beta	1
+weight	overall	applied_by=beta	1/8
+weight	scalars	applied_by=vakint	6*UFO::{}::gs2_i*UFO::{}::gs_minus
+original_cycles	fermion=0	ghost=0
+insertions	0
+lines	52
+end

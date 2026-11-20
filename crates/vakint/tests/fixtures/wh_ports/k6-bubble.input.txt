@@ -1,0 +1,35 @@
+schema	pint6.factorized-numerator.v3
+label	k6-bubble graph=insertion_normalization parent=B_self_energy_L3_044 context=f_bubble[B_self_energy_L3_044_subgraph] loops=1 external_edge=0 source=wh-fixture.v0
+kind	direct	externals=conserved
+dimension	gammalooprs::{}::dim
+momenta	loops=1	externals=1
+loop	1	edge=1
+external	1	edge=0
+edges	4
+edge	0	source=ext	target=0	hedges=-,0	particle=Q	line=scalar	power=1	momentum=0,1	0
+edge_factor	0	1
+edge	1	source=0	target=1	hedges=1,2	particle=Q	line=scalar	power=1	momentum=1,0	0
+edge_factor	1	1
+edge	2	source=0	target=1	hedges=3,4	particle=Q	line=scalar	power=1	momentum=-1,1	0
+edge_factor	2	1
+edge	3	source=1	target=ext	hedges=5,-	particle=Q	line=scalar	power=1	momentum=0,1	0
+edge_factor	3	1
+vertices	2
+vertex	0	rule=left	1
+vertex	1	rule=right	1
+ports	0
+projector	none
+open	0
+prefactor	loop_sign=1	nf_power=0
+prefactor_overall	1
+prefactor_scalars	1
+prefactor_colour	1
+colour_branch	none
+closure	none
+taylor	none
+softs	0
+original_cycles	fermion=0	ghost=0
+depth	3
+insertions	0
+lines	34
+end
