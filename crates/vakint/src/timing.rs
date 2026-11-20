@@ -652,6 +652,54 @@ pub fn finalize_seconds() -> f64 {
     Snapshot::now().finalize_seconds()
 }
 
+/// Whether the factorised entries print one `VAKINT_RECORD` line per record
+/// on stderr (`VAKINT_RECORD_LOG=1`, read once; off by default: no output).
+pub fn record_log_enabled() -> bool {
+    static ON: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+        matches!(
+            std::env::var("VAKINT_RECORD_LOG").as_deref().map(str::trim),
+            Ok("1")
+        )
+    });
+    *ON
+}
+
+/// The per-record line the beta's runs read (their WH-RECORD-ANSWERS Q6):
+/// `VAKINT_RECORD kind= label="" loops= depth= patterns= contract_s=
+/// lower_s= reduce_s= finalize_s= cpu_s= wall_s= rss_gib=
+/// contracted_bytes=`. `lower_s` / `reduce_s` are P12's inclusive counters,
+/// `contract_s` / `finalize_s` the sub-steps; `cpu_s` and `rss_gib` (the
+/// largest process RSS sampled at a stage boundary) are `-` unless the
+/// resources are enabled; `patterns` is `-` where the entry has none.
+#[allow(clippy::too_many_arguments)]
+pub fn record_line(
+    kind: &str,
+    label: &str,
+    loops: usize,
+    depth: Option<i64>,
+    patterns: Option<usize>,
+    delta: &Delta,
+    wall_seconds: f64,
+    contracted_bytes: usize,
+) -> String {
+    let rss = Stage::ALL
+        .iter()
+        .filter_map(|stage| delta.stage(*stage).peak_rss_bytes)
+        .max();
+    let dash = |v: Option<String>| v.unwrap_or_else(|| "-".into());
+    format!(
+        "VAKINT_RECORD kind={kind} label={label:?} loops={loops} depth={} patterns={} contract_s={:.3} lower_s={:.3} reduce_s={:.3} finalize_s={:.3} cpu_s={} wall_s={wall_seconds:.3} rss_gib={} contracted_bytes={contracted_bytes}",
+        dash(depth.map(|d| d.to_string())),
+        dash(patterns.map(|p| p.to_string())),
+        delta.contract_seconds(),
+        delta.lower_seconds,
+        delta.reduce_seconds,
+        delta.finalize_seconds(),
+        dash(delta.cpu_seconds().map(|c| format!("{c:.3}"))),
+        dash(rss.map(|b| format!("{:.2}", b as f64 / (1u64 << 30) as f64))),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -746,6 +794,29 @@ mod tests {
         assert!(fields.starts_with(" reduce_s="), "{fields}");
         assert!(fields.contains(" lower_s=") && fields.contains(" contract_s="));
         assert!(fields.contains(" finalize_s="), "{fields}");
+    }
+
+    #[test]
+    fn the_record_line_carries_every_field() {
+        let start = Snapshot::now();
+        {
+            let _lower = lower();
+            let _contract = contract();
+            spin(1);
+        }
+        let line = record_line("direct", "x", 2, Some(3), None, &start.elapsed(), 0.5, 1234);
+        for field in [
+            "VAKINT_RECORD kind=direct label=\"x\" loops=2 depth=3 patterns=- contract_s=",
+            " lower_s=",
+            " reduce_s=",
+            " finalize_s=",
+            " cpu_s=",
+            " wall_s=0.500",
+            " rss_gib=",
+            " contracted_bytes=1234",
+        ] {
+            assert!(line.contains(field), "{line}");
+        }
     }
 
     #[test]
