@@ -10,7 +10,8 @@
 //! 2. MAP each edge dot to vakint's `dot` of the edges' momenta in vakint's
 //!    p-integral notation: the value's loop momenta become `k(1..L)` in order
 //!    and its external momentum `orientation · p(1)`, `p(1)` flowing INTO the
-//!    graph through the external leg of smallest edge id: exactly the
+//!    graph through the external leg of smallest edge id (among the legs
+//!    carrying it: soft legs are skipped): exactly the
 //!    convention of vakint's FeynKit ingress (`VakintExpression::from_diagram`
 //!    for a propagator graph), so that a DOT graph reaches vakint here in the
 //!    same notation as through that ingress (lane refpath's chain).
@@ -22,6 +23,21 @@
 //!    finaliser). The folded channel inputs are available, as for every
 //!    evaluation, through the existing gate observers
 //!    ([`crate::rustred_evaluation::p_gate::observe`]).
+//!
+//! 4. OPEN SLOTS ([`FactorizedNumerator::open_slots`]: the ports no
+//!    projector closes, and slots of the projector that are not ports; e.g. a
+//!    propagator-type R* remainder whose external indices the caller keeps):
+//!    the edge momenta and metrics idenso leaves open carry the CALLER's
+//!    indices (`mink(D, a)` -> `a`) into vakint's `k(i, a)`, `p(1, a)`,
+//!    `g(a, b)`; vakint's tensor prepass (feynkit-tensor's reducer with `p(1)`
+//!    external) reduces them. [`evaluate_factorized`] returns `Σ c_S T_S`,
+//!    `T_S` products of vakint's `g(a, b)` and `p(1, a)` in the orientation of
+//!    step 2; [`evaluate_factorized_ports`] returns the same value in the
+//!    CALLER's notation (`spenso::g(slot, slot)`, `Q(x, slot)` of the
+//!    external leg `x` of the value's own `p(1)`, `spenso::dot(Q(x, mink(D)),
+//!    Q(x, mink(D)))`). A soft external leg (all-zero momentum vector) may
+//!    carry ports. At most [`MAX_OPEN_PORTS`] open Lorentz slots; open spinor
+//!    slots and integer indices are refused.
 //!
 //! No numerator algebra happens here beyond idenso's; the mapping of step 2 is
 //! linear substitution. `prefactor` is the caller's scalar (colour, couplings,
@@ -59,6 +75,18 @@ fn evaluation(detail: impl Into<String>) -> FactorizedError {
 /// The vakint momentum of every edge (module documentation, step 2), and
 /// `p(1)`.
 fn vakint_momenta(value: &FactorizedNumerator) -> Result<(Vec<(usize, Atom)>, Atom)> {
+    vakint_momenta_oriented(value).map(|(momenta, head, _)| (momenta, head))
+}
+
+/// [`vakint_momenta`] and the orientation: vakint's `p(1)` is `into ×` the
+/// value's own `p(1)` (the last component of its momentum
+/// vectors). vakint's `p(1)` flows INTO the graph through the first external
+/// leg (by edge id) that carries the external momentum; a leg whose momentum
+/// vector is all zero is a SOFT leg (e.g. the zero-momentum legs of an R*
+/// child made propagator-type) and is skipped.
+fn vakint_momenta_oriented(
+    value: &FactorizedNumerator,
+) -> Result<(Vec<(usize, Atom)>, Atom, Orientation)> {
     let loops = value.loops();
     if value.externals() != 1 {
         return Err(evaluation(format!(
@@ -67,12 +95,22 @@ fn vakint_momenta(value: &FactorizedNumerator) -> Result<(Vec<(usize, Atom)>, At
         )));
     }
     let head = S.p.call(1);
-    let first = value
-        .edges
-        .iter()
-        .filter(|edge| edge.is_external())
+    let legs = value.edges.iter().filter(|edge| edge.is_external());
+    let first_leg = legs
+        .clone()
         .min_by_key(|edge| edge.id)
         .ok_or_else(|| evaluation("a value without external legs"))?;
+    // Unchanged when the first leg by id carries momentum; a soft first leg
+    // (all components zero) was refused before and now defers to the first
+    // leg that carries the external momentum.
+    let soft = |edge: &&super::FactorizedEdge| edge.momentum.iter().all(|c| *c == 0);
+    let first = if soft(&first_leg) {
+        legs.filter(|edge| !soft(edge))
+            .min_by_key(|edge| edge.id)
+            .ok_or_else(|| evaluation("every external leg is soft (zero momentum)"))?
+    } else {
+        first_leg
+    };
     if first.momentum[..loops].iter().any(|c| *c != 0) {
         return Err(evaluation("an external leg carries a loop momentum"));
     }
@@ -99,7 +137,64 @@ fn vakint_momenta(value: &FactorizedNumerator) -> Result<(Vec<(usize, Atom)>, At
         }
         out.push((edge.id, momentum));
     }
-    Ok((out, head))
+    Ok((
+        out,
+        head,
+        Orientation {
+            into,
+            leg: first.id,
+        },
+    ))
+}
+
+/// How vakint's `p(1)` relates to the value's own: `p_vakint(1) = into ×
+/// p_value(1)`, flowing in through the external leg `leg`.
+#[derive(Clone, Copy, Debug)]
+struct Orientation {
+    into: i64,
+    leg: usize,
+}
+
+/// The most open Lorentz ports a propagator-type value may keep: the
+/// transverse Gram matrix of the tensor reduction with one external momentum
+/// is regular at `d = 4` through rank 7 and singular at rank 8 (a spurious
+/// `1/(d-4)`, N/notes D6 section 3); ranks above 6 are not validated.
+pub const MAX_OPEN_PORTS: usize = 6;
+
+/// The open slots ([`FactorizedNumerator::open_slots`]) the p-integral route
+/// can return: Lorentz slots `mink(D, a)` with a non-integer index `a`, at
+/// most [`MAX_OPEN_PORTS`]. A closed value passes.
+fn check_open_ports(value: &FactorizedNumerator) -> Result<()> {
+    let open = value.open_slots()?;
+    if open.is_empty() {
+        return Ok(());
+    }
+    let ports = |detail: String| FactorizedError::Ports { detail };
+    if open.len() > MAX_OPEN_PORTS {
+        return Err(ports(format!(
+            "{} open slots; a propagator-type value keeps at most {MAX_OPEN_PORTS} open \
+             Lorentz slots (close the others with a projector)",
+            open.len()
+        )));
+    }
+    for port in &open {
+        let Some(slot) = super::as_slot(port.as_view()) else {
+            return Err(ports(format!("{port} is not a slot")));
+        };
+        if slot.rep != names::MINK {
+            return Err(ports(format!(
+                "open port {port} is not a Lorentz slot: the p-integral route returns open \
+                 Lorentz indices only (close the spinor line first)"
+            )));
+        }
+        if i64::try_from(slot.index.as_view()).is_ok() {
+            return Err(ports(format!(
+                "open port {port} has an integer index: vakint would read a metric g(i, j) of \
+                 integer indices as a vector; name the index (hedge(h, k) or a symbol)"
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// The edge id of idenso's bare momentum `Q(e, mink(D))`.
@@ -156,13 +251,19 @@ pub fn contract_to_vakint_dots(value: &FactorizedNumerator) -> Result<(Atom, f64
     if let Some((a, b)) = unknown.get() {
         return Err(evaluation(format!("a dot of unknown edges {a}, {b}")));
     }
-    // Open ports (no projector; D6, helper VH): an edge momentum carrying a
-    // port index, `Q(e, mink(D, i))`, becomes the edge's vakint momentum with
-    // that index (`k(j, i)`, `±p(1, i)`), a metric between two ports
+    // Open slots (D6, helper VH; `open_slots`: the ports without a projector,
+    // or what a projector leaves open): an edge momentum carrying an open
+    // index, `Q(e, mink(D, i))`, becomes the edge's vakint momentum with that
+    // index (`k(j, i)`, `±p(1, i)`), a metric between two open slots
     // `g(mink(D, a), mink(D, b))` vakint's `g(a, b)`; vakint's tensor prepass
-    // reduces them after its denominator match. With a projector every index
-    // is contracted and this changes nothing.
-    let mapped = if value.projector.is_none() && !value.ports.is_empty() {
+    // reduces them after its denominator match. A closed value (every index
+    // contracted) is unchanged by this.
+    let open_slots = if value.projector.is_none() {
+        !value.ports.is_empty()
+    } else {
+        !value.open_slots()?.is_empty()
+    };
+    let mapped = if open_slots {
         let port_index = |view: AtomView<'_>| match view {
             AtomView::Fun(rep)
                 if rep.get_symbol().get_name() == names::MINK && rep.get_nargs() == 2 =>
@@ -259,6 +360,7 @@ pub fn vakint_input(
         });
     }
     value.validate()?;
+    check_open_ports(value)?;
     let (momenta, head) = vakint_momenta(value)?;
     let (scalar, seconds) = contract_to_vakint_dots(value)?;
     let mut topology = Atom::num(1);
@@ -331,4 +433,125 @@ pub fn evaluate_factorized(
         contract_seconds,
         evaluate_seconds: started.elapsed().as_secs_f64(),
     })
+}
+
+/// A value of [`evaluate_factorized_ports`]: the open tensor in the caller's
+/// notation.
+#[derive(Clone, Debug)]
+pub struct PortsValue {
+    /// The Laurent expansion in the CALLER's notation (module documentation,
+    /// step 4): `spenso::g(slot, slot)`, `Q(x, slot)`, `spenso::dot(Q(x,
+    /// mink(D)), Q(x, mink(D)))`, `Q(x)` the external leg of the value's own
+    /// `p(1)`.
+    pub value: Atom,
+    /// The same value in vakint notation (what [`evaluate_factorized`]
+    /// returns).
+    pub vakint_value: Atom,
+    /// The open slots ([`FactorizedNumerator::open_slots`]), sorted.
+    pub open: Vec<Atom>,
+    pub input: Atom,
+    pub contract_seconds: f64,
+    pub evaluate_seconds: f64,
+}
+
+/// [`evaluate_factorized`] with the result mapped to the caller's notation
+/// ([`to_caller_notation_p`]): the entry for a propagator-type value whose
+/// open slots the caller keeps (no projector, or a projector that closes only
+/// some ports). A closed value comes back as [`evaluate_factorized`]'s scalar
+/// with `dot(p(1), p(1))` written `spenso::dot(Q(x, mink(D)), Q(x, mink(D)))`.
+pub fn evaluate_factorized_ports(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    value: &FactorizedNumerator,
+    prefactor: &Atom,
+) -> Result<PortsValue> {
+    let evaluated = evaluate_factorized(vakint, settings, value, prefactor)?;
+    let open = value.open_slots()?;
+    let caller = to_caller_notation_p(value, &evaluated.value)?;
+    Ok(PortsValue {
+        value: caller,
+        vakint_value: evaluated.value,
+        open,
+        input: evaluated.input,
+        contract_seconds: evaluated.contract_seconds,
+        evaluate_seconds: evaluated.evaluate_seconds,
+    })
+}
+
+/// A value of [`evaluate_factorized`] (vakint notation) in the caller's
+/// notation: `g(a, b)` of two open indices -> `spenso::g(slot_a, slot_b)`;
+/// `p(1, a)` -> `σ Q(x, slot_a)` and `dot(p(1), p(1))` ->
+/// `spenso::dot(Q(x, mink(D)), Q(x, mink(D)))`, with `x` the edge named for
+/// `p(1)` (`external 1 edge=x`), else the leg vakint's `p(1)` flows through,
+/// and `σ = ±1` such that the result is in the VALUE's own `p(1)` (the last
+/// component of its momentum vectors), whatever leg vakint chose. Fails
+/// closed if any of vakint's `g`, `p`, `k` survives.
+pub fn to_caller_notation_p(value: &FactorizedNumerator, vakint_value: &Atom) -> Result<Atom> {
+    use spenso::network::{library::symbolic::ETS, tags::SPENSO_TAG};
+    let (_, _, orientation) = vakint_momenta_oriented(value)?;
+    let loops = value.loops();
+    let x = value.external_edges[0].unwrap_or(orientation.leg);
+    let leg = value
+        .edge(x)
+        .ok_or_else(|| evaluation(format!("the external leg {x} of p(1) is not an edge")))?;
+    let xi = leg.momentum[loops];
+    if (xi != 1 && xi != -1) || leg.momentum[..loops].iter().any(|c| *c != 0) {
+        return Err(evaluation(format!("the leg {x} of p(1) does not carry ±p(1)")));
+    }
+    // p_vakint(1) = into p_value(1) = into xi Q(x).
+    let sigma = Atom::num(orientation.into * xi);
+    let q = symbolica::symbol!(names::MOMENTUM);
+    let open = value.open_slots()?;
+    let slot_of = |index: AtomView<'_>| {
+        open.iter()
+            .find(|slot| {
+                super::as_slot(slot.as_view()).is_some_and(|s| s.index.as_view() == index)
+            })
+            .cloned()
+    };
+    let mink = symbolica::function!(symbolica::symbol!(names::MINK), Atom::var(value.dimension));
+    let head = |view: AtomView<'_>| match view {
+        AtomView::Fun(f) if f.get_symbol() == S.p && f.get_nargs() == 1 => {
+            f.iter().next().and_then(|id| i64::try_from(id).ok()) == Some(1)
+        }
+        _ => false,
+    };
+    let mapped = vakint_value.replace_map(|part, _, out| {
+        let AtomView::Fun(function) = part else {
+            return;
+        };
+        let args = function.iter().collect::<Vec<_>>();
+        if function.get_symbol() == S.g && args.len() == 2 {
+            if let (Some(a), Some(b)) = (slot_of(args[0]), slot_of(args[1])) {
+                **out = symbolica::function!(ETS.metric, a, b);
+            }
+        } else if function.get_symbol() == S.p && args.len() == 2 {
+            if i64::try_from(args[0]).ok() == Some(1)
+                && let Some(slot) = slot_of(args[1])
+            {
+                **out = &sigma * symbolica::function!(q, Atom::num(x as i64), slot);
+            }
+        } else if function.get_symbol() == S.dot && args.len() == 2 && head(args[0]) && head(args[1])
+        {
+            let vector = symbolica::function!(q, Atom::num(x as i64), &mink);
+            **out = symbolica::function!(SPENSO_TAG.dot, &vector, &vector);
+        }
+    });
+    let mut leftover = None;
+    mapped.as_view().visitor(&mut |part| {
+        if let AtomView::Fun(function) = part {
+            let symbol = function.get_symbol();
+            if symbol == S.g || symbol == S.p || symbol == S.k {
+                leftover = Some(part.to_owned());
+                return false;
+            }
+        }
+        leftover.is_none()
+    });
+    if let Some(part) = leftover {
+        return Err(evaluation(format!(
+            "vakint notation left after the mapping to the caller's notation: {part}"
+        )));
+    }
+    Ok(mapped)
 }

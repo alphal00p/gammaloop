@@ -69,7 +69,10 @@ pub use colour::{
     ColourMode, ColourRow, MergedColourTerm, colour_coefficient, merge_colour_channels,
     split_local_colour,
 };
-pub use evaluate::{FactorizedValue, contract_to_vakint_dots, evaluate_factorized, vakint_input};
+pub use evaluate::{
+    FactorizedValue, MAX_OPEN_PORTS, PortsValue, contract_to_vakint_dots, evaluate_factorized,
+    evaluate_factorized_ports, to_caller_notation_p, vakint_input,
+};
 #[cfg(feature = "feynkit-ingress")]
 pub use feynkit::{
     FromFeynkitOptions, OverallFactorSource, ProjectorChoice, dot_sets_graph_attribute,
