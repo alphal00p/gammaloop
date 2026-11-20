@@ -119,6 +119,7 @@ fn value(
         prefactor: Prefactor::default(),
         colour_branch: None,
         insertions: Vec::new(),
+        record: None,
     }
 }
 

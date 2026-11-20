@@ -443,6 +443,24 @@ pub struct FactorizedNumerator {
     pub colour_branch: Option<ColourBranchInfo>,
     /// RESERVED: must be empty in v1.
     pub insertions: Vec<Insertion>,
+    /// A DIRECT record read from (and written as) schema v3: its provenance
+    /// lines; `None` for a v1 record and for every closure record (whose
+    /// provenance is in its [`ClosureSpec`]).
+    pub record: Option<DirectRecord>,
+}
+
+/// The v3 provenance of a DIRECT record (`closure none`, `taylor none`,
+/// `softs 0` in its closure section): with `original_cycles` the weights
+/// (loop sign, n_f, overall factor) are the caller's, applied once after the
+/// call (WH-RECORD-FORMAT, the weights rule R2); without, the v1 rule.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DirectRecord {
+    /// `(fermion, ghost)` closed cycles of the ORIGINAL graph.
+    pub original_cycles: Option<(u32, u32)>,
+    /// Laurent terms wanted; `None`: the caller's settings.
+    pub depth: Option<usize>,
+    /// Weight provenance `(name, applied by vakint, atom)`.
+    pub weights: Vec<(String, bool, Atom)>,
 }
 
 /// Plain data for [`FactorizedNumerator::from_parts`].
@@ -1113,6 +1131,7 @@ impl FactorizedNumerator {
             prefactor,
             colour_branch: None,
             insertions: Vec::new(),
+            record: None,
         };
         let mut value = value;
         value.expand_compact_slashes()?;
@@ -1274,6 +1293,33 @@ impl FactorizedNumerator {
         let loops = self.closed_loops()?;
         let n_loops = loops.len();
         let n_fermion = loops.iter().filter(|l| l.line == LineKind::Fermion).count();
+        // a v3 direct record with `original_cycles`: the weights are the
+        // caller's (R2): loop_sign 1, nf_power 0, overall 1, and the carried
+        // closed cycles do not exceed the original graph's
+        if let Some(DirectRecord {
+            original_cycles: Some((fermion, ghost)),
+            ..
+        }) = &self.record
+        {
+            let n_ghost = n_loops - n_fermion;
+            if p.loop_sign != 1 || p.nf_power != 0 || p.overall != Atom::num(1) {
+                return Err(FactorizedError::NotScalar {
+                    location: "prefactor".into(),
+                    detail: "with original_cycles the weights are the caller's: loop_sign=1, \
+                             nf_power=0, prefactor_overall 1"
+                        .into(),
+                });
+            }
+            if n_fermion > *fermion as usize || n_ghost > *ghost as usize {
+                return Err(FactorizedError::Graph {
+                    detail: format!(
+                        "the record carries {n_fermion} fermion / {n_ghost} ghost cycles, more than \
+                         original_cycles fermion={fermion} ghost={ghost}"
+                    ),
+                });
+            }
+            return Ok(());
+        }
         let expected_sign = if n_loops % 2 == 0 { 1 } else { -1 };
         if p.loop_sign != expected_sign {
             return Err(FactorizedError::LoopSign {

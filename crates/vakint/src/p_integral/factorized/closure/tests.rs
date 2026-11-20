@@ -187,6 +187,7 @@ fn record(
         },
         colour_branch: None,
         insertions: Vec::new(),
+        record: None,
     }
 }
 
@@ -975,10 +976,12 @@ fn the_v3_text_form_round_trips_every_fixture() {
         &format!("open\t1\nopen_slot\t{}\n", hedge(120)),
     );
     assert!(FactorizedNumerator::parse_text(&wrong).is_err());
+    // kind direct is a v3 kind too; with a closure line that is not `none`
+    // the record is refused
     let direct = text.replace("kind\tclosure", "kind\tdirect");
     assert!(matches!(
         FactorizedNumerator::parse_text(&direct),
-        Err(FactorizedError::Reserved { .. })
+        Err(FactorizedError::TextSyntax { .. })
     ));
     let v1 = text.replace(
         "pint6.factorized-numerator.v3",
