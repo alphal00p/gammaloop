@@ -634,17 +634,50 @@ fn is_structure(view: AtomView<'_>, lambda: Symbol) -> bool {
     }
 }
 
+/// Whether `view` contains a q-structure atom anywhere ([`is_structure`]).
+fn contains_structure(view: AtomView<'_>, lambda: Symbol) -> bool {
+    let mut found = false;
+    view.visitor(&mut |part| {
+        found |= is_structure(part, lambda);
+        !found
+    });
+    found
+}
+
 /// `(structure, its λ-degree, block scalar)` of an expanded scalar.
 fn graded_split(expanded: &Atom, lambda: Symbol) -> Vec<(Atom, u32, Atom)> {
     let summands = match expanded.as_view() {
-        AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
+        AtomView::Add(sum) => sum.iter().map(|t| t.to_owned()).collect::<Vec<_>>(),
         AtomView::Num(_) if expanded.is_zero() => Vec::new(),
-        single => vec![single],
+        single => vec![single.to_owned()],
     };
+    // a summand whose non-structure factors still hide a structure inside a
+    // sum is expanded on its own (the contracted scalar is a flat sum of
+    // monomials in practice: no full expansion of the whole scalar)
+    let mut flat = Vec::with_capacity(summands.len());
+    for summand in summands {
+        let hidden = match summand.as_view() {
+            AtomView::Mul(product) => product
+                .iter()
+                .any(|f| !is_structure(f, lambda) && contains_structure(f, lambda)),
+            AtomView::Add(_) => true,
+            single => !is_structure(single, lambda) && contains_structure(single, lambda),
+        };
+        if hidden {
+            let expanded = summand.expand();
+            match expanded.as_view() {
+                AtomView::Add(sum) => flat.extend(sum.iter().map(|t| t.to_owned())),
+                AtomView::Num(_) if expanded.is_zero() => {}
+                _ => flat.push(expanded),
+            }
+        } else {
+            flat.push(summand);
+        }
+    }
     let mut groups: Vec<(Atom, Vec<Atom>)> = Vec::new();
     let mut index = HashMap::<Atom, usize>::new();
-    for summand in summands {
-        let factors = match summand {
+    for summand in &flat {
+        let factors = match summand.as_view() {
             AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
             single => vec![single],
         };
@@ -968,14 +1001,13 @@ fn prepare(
         _ => 1,
     };
     let contracted = match pieces {
-        1 => super::contract_with_idenso(&network, false)?,
+        1 => super::oracle::contract_with_idenso_unexpanded(&network, false)?,
         n => vacuum::contract_streamed(settings, &network, n)?.0,
     };
     let idenso_seconds = started.elapsed().as_secs_f64();
-    let scalar = map_to_vakint_vacuum(&mapping_view(value), &contracted)?
-        .replace(d.clone())
-        .with(in_epsilon.clone())
-        .expand();
+    // the dimension is substituted per block after the split (no expansion of
+    // the D-dependent coefficients into epsilon terms)
+    let scalar = map_to_vakint_vacuum(&mapping_view(value), &contracted)?;
     let contract_seconds = started.elapsed().as_secs_f64();
     if std::env::var("VAKINT_CLOSURE_PROFILE").is_ok() {
         eprintln!(
@@ -1168,7 +1200,7 @@ fn prepare(
     let split_seconds = started.elapsed().as_secs_f64();
     let blocks = split
         .into_iter()
-        .map(|(_, _, block)| block)
+        .map(|(_, _, block)| block.replace(d.clone()).with(in_epsilon.clone()))
         .collect::<Vec<_>>();
     if boundary_patterns.is_empty() {
         return Ok(Prepared {

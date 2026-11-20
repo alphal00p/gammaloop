@@ -21,6 +21,13 @@ use super::{FactorizedError, FactorizedNumerator, Result};
 /// notation (`to_dots`), with the production settings. `colour` additionally
 /// reduces colour (SU(3) numbers, as the beta's root callback).
 pub fn contract_with_idenso(expression: &Atom, colour: bool) -> Result<Atom> {
+    Ok(contract_with_idenso_unexpanded(expression, colour)?.expand())
+}
+
+/// [`contract_with_idenso`] without its final `expand`: the uncooked
+/// closed scalar exactly as idenso's `to_dots` returns it (the R* producer's
+/// `simplify_view_certified` stops there too).
+pub(crate) fn contract_with_idenso_unexpanded(expression: &Atom, colour: bool) -> Result<Atom> {
     let err = |detail: String| FactorizedError::Oracle { detail };
     let cooking = CookSettings::indices()
         .with_mode(CookMode::ReversibleEncoding)
@@ -38,7 +45,7 @@ pub fn contract_with_idenso(expression: &Atom, colour: bool) -> Result<Atom> {
         .and_then(|t| t.simplify_algebra(&settings))
         .and_then(|t| t.to_dots())
         .map_err(|e| err(format!("idenso: {e}")))?;
-    Ok(cooking.uncook(reduced.expression().as_view()).expand())
+    Ok(cooking.uncook(reduced.expression().as_view()))
 }
 
 impl FactorizedNumerator {

@@ -1737,7 +1737,8 @@ fn closure_contraction_probe() {
         && std::env::var("VAKINT_CLOSURE_PROBE_THEIRS_FIRST").is_ok()
     {
         let started = std::time::Instant::now();
-        let contracted = contract_with_idenso(routed, false).unwrap();
+        let contracted =
+            super::super::oracle::contract_with_idenso_unexpanded(routed, false).unwrap();
         eprintln!(
             "CLOSURE_PROBE_FIRST their_product_contract_s={:.4} terms={}",
             started.elapsed().as_secs_f64(),
@@ -1755,7 +1756,8 @@ fn closure_contraction_probe() {
         let r = &got.records[0];
         let their_seconds = theirs.as_ref().map(|routed| {
             let started = std::time::Instant::now();
-            let contracted = contract_with_idenso(routed, false).unwrap();
+            let contracted =
+                super::super::oracle::contract_with_idenso_unexpanded(routed, false).unwrap();
             (
                 started.elapsed().as_secs_f64(),
                 crate::census::summands(contracted.as_view()),
@@ -1774,4 +1776,85 @@ fn closure_contraction_probe() {
             r.lowered_entries
         );
     }
+}
+
+/// The beta's k1-quick set (every root remainder of the L4 graphs 40, 42, 49,
+/// 100 that reaches their boundary path, as v3 records with the value and the
+/// RR_CONTRACT seconds of that call): each record WITHOUT insertions through
+/// the entry, its value equal to value.txt through valid_through, and its
+/// contraction seconds printed beside theirs (records with insertions are
+/// INSERT's). Data: `VAKINT_TEST_WH_K1_QUICK` (default the beta's directory);
+/// SKIP without it.
+#[test]
+fn the_beta_k1_quick_records_equal_their_values() {
+    let root = std::env::var("VAKINT_TEST_WH_K1_QUICK")
+        .unwrap_or_else(|_| "/common/ben/beta/results/consolidation/wh-fixtures/k1-quick".into());
+    let root = std::path::PathBuf::from(root);
+    if !root.is_dir() {
+        eprintln!("SKIP: no k1-quick data under {}", root.display());
+        return;
+    }
+    let mut records = Vec::new();
+    for graph in std::fs::read_dir(&root).unwrap().map(|e| e.unwrap().path()) {
+        if let Ok(entries) = std::fs::read_dir(&graph) {
+            for record in entries.map(|e| e.unwrap().path()) {
+                if record.join("input.txt").is_file() && record.join("value.txt").is_file() {
+                    records.push(record);
+                }
+            }
+        }
+    }
+    records.sort();
+    let vakint = Vakint::new().unwrap();
+    let (mut mine, mut theirs, mut checked) = (0.0, 0.0, 0);
+    for record in &records {
+        let input = std::fs::read_to_string(record.join("input.txt")).unwrap();
+        let value_text = std::fs::read_to_string(record.join("value.txt")).unwrap();
+        let value = match FactorizedNumerator::from_text(&input) {
+            Ok(value) if value.insertions.is_empty() => value,
+            Ok(_) | Err(FactorizedError::Reserved { .. }) => {
+                eprintln!("K1_QUICK {} insertions: lane INSERT", record.display());
+                continue;
+            }
+            Err(e) => panic!("{}: {e}", record.display()),
+        };
+        let meta = std::fs::read_to_string(record.join("meta.json")).unwrap_or_default();
+        let their_seconds = meta
+            .split("\"rr_contract_seconds\": ")
+            .nth(1)
+            .and_then(|t| t.split([',', '\n']).next())
+            .and_then(|t| t.trim().parse::<f64>().ok())
+            .unwrap_or(f64::NAN);
+        let got = evaluate_factorized_closure(
+            &vakint,
+            &rstar_site_settings(),
+            std::slice::from_ref(&value),
+            &[value.prefactor.total()],
+        )
+        .unwrap_or_else(|e| panic!("{}: {e}", record.display()));
+        let what = record.display().to_string();
+        assert_equal_through(
+            &got.value,
+            &fixture_value(&value_text),
+            valid_through(&value_text),
+            &what,
+        );
+        let r = &got.records[0];
+        eprintln!(
+            "K1_QUICK {what} entry_contract_s={:.4} their_rr_contract_s={their_seconds:.4} ratio={:.2} patterns={} key_plans={} lowered={} lower_s={:.4} reduce_s={:.4}",
+            r.contract_seconds,
+            r.contract_seconds / their_seconds,
+            r.patterns,
+            r.key_plans,
+            r.lowered_entries,
+            r.lower_seconds,
+            r.reduce_seconds
+        );
+        mine += r.contract_seconds;
+        theirs += their_seconds;
+        checked += 1;
+    }
+    eprintln!(
+        "K1_QUICK SUM records={checked} entry_contract_s={mine:.4} their_rr_contract_s={theirs:.4}"
+    );
 }
