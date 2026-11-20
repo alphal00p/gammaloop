@@ -408,6 +408,23 @@ pub(crate) fn vakint_input_unchecked(
     Ok((input, seconds))
 }
 
+/// Whether `value` is one of the record kinds of the R* interface (a record
+/// with insertions, or a v3 direct record): its value must not depend on the
+/// caller's tensor-reduction method or notation (record format, section 7).
+/// Values accepted before (no insertion, v1) keep the caller's settings.
+pub(crate) fn is_new_kind(value: &FactorizedNumerator) -> bool {
+    !value.insertions.is_empty() || value.record.is_some()
+}
+
+/// The caller's settings with the tensor reduction and the notation pinned to
+/// what the R* sites use (FeynKit, dot notation), on a clone.
+pub(crate) fn pinned_settings(settings: &VakintSettings) -> VakintSettings {
+    let mut pinned = settings.clone();
+    pinned.tensor_reduction_method = crate::TensorReductionMethod::FeynKit;
+    pinned.use_dot_product_notation = true;
+    pinned
+}
+
 /// Evaluate `value` (a DIRECT-kind value: one graph, one colour branch) times
 /// `prefactor` with vakint's existing p path (module documentation). Wrap the
 /// call in [`crate::rustred_evaluation::p_gate::observe`] to also get the
@@ -418,6 +435,13 @@ pub fn evaluate_factorized(
     value: &FactorizedNumerator,
     prefactor: &Atom,
 ) -> Result<FactorizedValue> {
+    let pinned;
+    let settings = if is_new_kind(value) {
+        pinned = pinned_settings(settings);
+        &pinned
+    } else {
+        settings
+    };
     let (input, contract_seconds) = vakint_input(settings, value, prefactor)?;
     let loops = value.loops();
     if value
@@ -478,6 +502,8 @@ pub fn evaluate_factorized_ports(
     value: &FactorizedNumerator,
     prefactor: &Atom,
 ) -> Result<PortsValue> {
+    // a ports record is a new kind whatever it carries
+    let settings = &pinned_settings(settings);
     let evaluated = evaluate_factorized(vakint, settings, value, prefactor)?;
     let open = value.open_slots()?;
     let caller = to_caller_notation_p(value, &evaluated.value)?;
