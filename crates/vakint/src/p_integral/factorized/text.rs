@@ -64,7 +64,8 @@ fn list<T: ToString>(values: &[T]) -> String {
 /// The ports a closure record leaves open: those its projector does not close
 /// (the `open` lines of v3, derived), sorted canonical strings.
 fn open_slots(value: &FactorizedNumerator) -> Result<Vec<String>> {
-    let mut open = super::closure::open_slot_atoms(value)
+    let mut open = value
+        .open_slots()?
         .iter()
         .map(|p| one_atom(p, "open slot"))
         .collect::<Result<Vec<_>>>()?;
