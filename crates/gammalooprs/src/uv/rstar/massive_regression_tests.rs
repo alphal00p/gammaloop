@@ -31,7 +31,10 @@ use crate::{
     initialisation::test_initialise,
     model::Model,
     utils::{GS, load_generic_model},
-    uv::UVgenerationSettings,
+    uv::{
+        UVgenerationSettings,
+        approx::streamed::{CheckTally, with_algebraic_check},
+    },
 };
 
 use super::{RStarPlan, UvChildrenRoute};
@@ -205,6 +208,51 @@ fn massive_r_child_with_both_ends_of_one_boundary_line() -> Result<()> {
     Ok(())
 }
 
+/// A numerator stress case (built-in 1L-3L data): name, vacuum lines
+/// `(from, to, power)` and numerator monomials `[(line, power)]`.
+type StressCase = (
+    &'static str,
+    &'static [(usize, usize, u32)],
+    &'static [&'static [(usize, i64)]],
+);
+
+/// n1: bubble crossed by q = Q_a + Q_b, whose loop dependence cancels.
+const N1: StressCase = (
+    "n1_cancel_bubble",
+    &[(0, 1, 1), (0, 1, 1), (1, 2, 1), (1, 2, 1), (2, 0, 1)],
+    &[&[(0, 1), (1, 1)]],
+);
+
+/// n3c: dotted self-loop with a cancelling bubble numerator.
+const N3C: StressCase = (
+    "n3c_selfloop_dot_cancel",
+    &[(0, 0, 2), (0, 1, 1), (0, 1, 1), (1, 0, 1)],
+    &[&[(1, 1), (2, 1)]],
+);
+
+/// n4: one-vertex-reducible subgraph (two bubbles at a cut vertex) with a
+/// numerator straddling both blocks.
+const N4: StressCase = (
+    "n4_1VR_straddle",
+    &[(0, 1, 1), (0, 1, 1), (1, 2, 1), (1, 2, 1), (2, 0, 1)],
+    &[&[(0, 1), (2, 1)]],
+);
+
+/// n5: disconnected spinney (two vertex-disjoint bubbles) with a numerator
+/// straddling both components.
+const N5: StressCase = (
+    "n5_disconnected_straddle",
+    &[
+        (0, 1, 1),
+        (0, 1, 1),
+        (2, 3, 1),
+        (2, 3, 1),
+        (1, 2, 1),
+        (3, 0, 1),
+    ],
+    &[&[(0, 1), (2, 1)]],
+);
+
 /// The numerator-monomial path on 3-loop stress cases (built-in 1L-3L data):
 /// the identity `K G = -Delta(G) - K sum_S Delta(S) G/S` must equal Vakint's
 /// direct evaluation with `Delta(G)` from the ordinary forest AND from R*.
@@ -213,20 +261,39 @@ fn massive_r_child_with_both_ends_of_one_boundary_line() -> Result<()> {
 /// linearisation: with `GAMMALOOP_LINEARIZE_MOMENTA` on (the default) the
 /// factor-by-factor momentum routing of n5 is a different spelling than the
 /// whole map's, which the test-only `report_check` rejects. The
-/// linearisation is off here, as before it became the default.
-fn assert_identity_with_numerators(
-    name: &str,
-    edges: &[(usize, usize, u32)],
-    numerators: &[Vec<(usize, i64)>],
-) -> Result<()> {
-    super::linearize::with_linearize(false, || identity_with_numerators(name, edges, numerators))
+/// linearisation is off here, as before it became the default; the
+/// `_linearized` tests ([`assert_identity_with_numerators_linearized`]) run
+/// the same identities with it on.
+fn assert_identity_with_numerators(case: StressCase) -> Result<()> {
+    super::linearize::with_linearize(false, || identity_with_numerators(case))
 }
 
-fn identity_with_numerators(
-    name: &str,
-    edges: &[(usize, usize, u32)],
-    numerators: &[Vec<(usize, i64)>],
-) -> Result<()> {
+/// [`assert_identity_with_numerators`] with the momentum linearisation on
+/// (the production default), through the same two pole assertions. The
+/// streamed maps are compared with the whole maps algebraically (a
+/// structural difference must have an expanded difference of zero), and the
+/// streamed result goes on: the forest and R* poles are computed from the
+/// linearised factor-by-factor routing. Returns the stream checks per stage.
+fn assert_identity_with_numerators_linearized(case: StressCase) -> Result<CheckTally> {
+    let (result, tally) = super::linearize::with_linearize(true, || {
+        assert!(super::linearize::enabled());
+        with_algebraic_check(|| identity_with_numerators(case))
+    });
+    result?;
+    eprintln!(
+        "{}: stream checks with the linearisation on, per stage (identical, algebraic only): {tally:?}",
+        case.0
+    );
+    let (identical, algebraic) = tally.get("momentum_routing").copied().unwrap_or_default();
+    assert!(
+        identical + algebraic > 0,
+        "{}: the momentum routing was never checked",
+        case.0
+    );
+    Ok(tally)
+}
+
+fn identity_with_numerators((name, edges, numerators): StressCase) -> Result<()> {
     test_initialise()?;
     let model = load_generic_model("scalars");
     let settings = super::tests::settings();
@@ -234,7 +301,10 @@ fn identity_with_numerators(
     let topology = super::VacuumTopology {
         name: name.into(),
         edges: edges.to_vec(),
-        numerators: numerators.to_vec(),
+        numerators: numerators
+            .iter()
+            .map(|monomial| monomial.to_vec())
+            .collect(),
     };
     let (mut poles, mut direct, mut delta_forest) = (Atom::Zero, Atom::Zero, Atom::Zero);
     for monomial in topology.numerator_monomials(&mass()) {
@@ -274,53 +344,62 @@ fn identity_with_numerators(
     Ok(())
 }
 
-/// n1: bubble crossed by q = Q_a + Q_b, whose loop dependence cancels.
+/// n1 ([`N1`]), linearisation off.
 #[test]
 fn numerator_cancelling_inside_a_bubble() -> Result<()> {
-    assert_identity_with_numerators(
-        "n1_cancel_bubble",
-        &[(0, 1, 1), (0, 1, 1), (1, 2, 1), (1, 2, 1), (2, 0, 1)],
-        &[vec![(0, 1), (1, 1)]],
-    )
+    assert_identity_with_numerators(N1)
 }
 
-/// n3c: dotted self-loop with a cancelling bubble numerator.
+/// n3c ([`N3C`]), linearisation off.
 #[test]
 fn numerator_on_a_bubble_next_to_a_dotted_self_loop() -> Result<()> {
-    assert_identity_with_numerators(
-        "n3c_selfloop_dot_cancel",
-        &[(0, 0, 2), (0, 1, 1), (0, 1, 1), (1, 0, 1)],
-        &[vec![(1, 1), (2, 1)]],
-    )
+    assert_identity_with_numerators(N3C)
 }
 
-/// n4: one-vertex-reducible subgraph (two bubbles at a cut vertex) with a
-/// numerator straddling both blocks.
+/// n4 ([`N4`]), linearisation off.
 #[test]
 fn numerator_straddling_a_one_vertex_reducible_subgraph() -> Result<()> {
-    assert_identity_with_numerators(
-        "n4_1VR_straddle",
-        &[(0, 1, 1), (0, 1, 1), (1, 2, 1), (1, 2, 1), (2, 0, 1)],
-        &[vec![(0, 1), (2, 1)]],
-    )
+    assert_identity_with_numerators(N4)
 }
 
-/// n5: disconnected spinney (two vertex-disjoint bubbles) with a numerator
-/// straddling both components.
+/// n5 ([`N5`]), linearisation off.
 #[test]
 fn numerator_straddling_a_disconnected_spinney() -> Result<()> {
-    assert_identity_with_numerators(
-        "n5_disconnected_straddle",
-        &[
-            (0, 1, 1),
-            (0, 1, 1),
-            (2, 3, 1),
-            (2, 3, 1),
-            (1, 2, 1),
-            (3, 0, 1),
-        ],
-        &[vec![(0, 1), (2, 1)]],
-    )
+    assert_identity_with_numerators(N5)
+}
+
+/// n1 ([`N1`]), linearisation on.
+#[test]
+fn numerator_cancelling_inside_a_bubble_linearized() -> Result<()> {
+    assert_identity_with_numerators_linearized(N1).map(drop)
+}
+
+/// n3c ([`N3C`]), linearisation on.
+#[test]
+fn numerator_on_a_bubble_next_to_a_dotted_self_loop_linearized() -> Result<()> {
+    assert_identity_with_numerators_linearized(N3C).map(drop)
+}
+
+/// n4 ([`N4`]), linearisation on.
+#[test]
+fn numerator_straddling_a_one_vertex_reducible_subgraph_linearized() -> Result<()> {
+    assert_identity_with_numerators_linearized(N4).map(drop)
+}
+
+/// n5 ([`N5`]), linearisation on. Its factor-by-factor momentum routing is
+/// spelled differently from the whole map's (the stream check that stopped
+/// the default-on run before both pole assertions); here that linearised
+/// spelling is what the forest and R* poles are computed from.
+#[test]
+fn numerator_straddling_a_disconnected_spinney_linearized() -> Result<()> {
+    let tally = assert_identity_with_numerators_linearized(N5)?;
+    let (_, algebraic) = tally["momentum_routing"];
+    assert!(
+        algebraic > 0,
+        "n5: the linearised momentum routing is now spelled as the whole map's; \
+         this test no longer exercises a different spelling than the off-mode test"
+    );
+    Ok(())
 }
 
 /// `power_distributions` with a line of power 0: no underflow, the absent

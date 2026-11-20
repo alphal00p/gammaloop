@@ -118,9 +118,69 @@ pub(crate) fn check_streamed(input: AtomView<'_>) -> bool {
     cfg!(test) || CHECK_LIMIT.is_some_and(|limit| input.get_byte_size() <= limit)
 }
 
-/// Report a streamed result against the whole map. Tests fail on a difference.
+/// Tests only: what [`report_check`] saw under [`with_algebraic_check`], per
+/// stage: (structurally identical, structurally different but with an
+/// expanded difference of zero).
+#[cfg(test)]
+pub(crate) type CheckTally = std::collections::BTreeMap<String, (usize, usize)>;
+
+#[cfg(test)]
+thread_local! {
+    static TEST_ALGEBRAIC_CHECK: std::cell::RefCell<Option<CheckTally>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Tests only: run `f` on this thread with [`report_check`] comparing
+/// algebraically. A streamed result that is not structurally identical to the
+/// whole map's must have an expanded difference of zero (a different spelling
+/// of the same polynomial, e.g. the factor-by-factor momentum linearisation);
+/// any other difference still fails. Returns the tally per stage.
+#[cfg(test)]
+pub(crate) fn with_algebraic_check<T>(f: impl FnOnce() -> T) -> (T, CheckTally) {
+    let previous = TEST_ALGEBRAIC_CHECK.with(|cell| cell.replace(Some(CheckTally::new())));
+    let result = f();
+    let tally = TEST_ALGEBRAIC_CHECK
+        .with(|cell| cell.replace(previous))
+        .unwrap_or_default();
+    (result, tally)
+}
+
+/// Under [`with_algebraic_check`]: tally the check and assert that the
+/// expanded difference is zero; otherwise `identical`.
+#[cfg(test)]
+fn algebraic_check(
+    stage: &str,
+    input: AtomView<'_>,
+    streamed: &Atom,
+    whole: &Atom,
+    identical: bool,
+) -> bool {
+    TEST_ALGEBRAIC_CHECK.with(|cell| {
+        let mut tally = cell.borrow_mut();
+        let Some(tally) = tally.as_mut() else {
+            return identical;
+        };
+        let counts = tally.entry(stage.to_owned()).or_default();
+        if identical {
+            counts.0 += 1;
+            return true;
+        }
+        let difference = (streamed - whole).expand();
+        assert!(
+            difference.is_zero(),
+            "streamed {stage} differs algebraically from the whole map by {difference}\ninput: {input}\nstreamed: {streamed}\nwhole: {whole}"
+        );
+        counts.1 += 1;
+        true
+    })
+}
+
+/// Report a streamed result against the whole map. Tests fail on a difference
+/// (on an algebraic one only, under [`with_algebraic_check`]).
 pub(crate) fn report_check(stage: &str, input: AtomView<'_>, streamed: &Atom, whole: &Atom) {
     let equal = streamed == whole;
+    #[cfg(test)]
+    let equal = algebraic_check(stage, input, streamed, whole, equal);
     if cfg!(test) {
         assert!(
             equal,
