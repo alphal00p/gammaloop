@@ -1,6 +1,7 @@
 #![allow(mixed_script_confusables)]
 pub mod census;
 pub mod stage_timing;
+pub mod timing;
 
 /// M5 batch 2: mimalloc serves the Rust allocations of every binary linking vakint
 /// (default feature `mimalloc`; see Cargo.toml).
@@ -2302,6 +2303,7 @@ impl EvaluationMethod {
         numerator: AtomView,
         integral_specs: &ReplacementRules,
     ) -> Result<Atom, VakintError> {
+        let _timing = crate::timing::lower();
         // Lane unknown-masters: strict refusal once, on this public call's result.
         if let Some(_boundary) = crate::public_result_boundary() {
             let inner = unknown_master_coefficients_carried(settings);
@@ -2331,6 +2333,9 @@ impl EvaluationMethod {
             numerator.to_owned()
         };
         let numerator = staged.as_view();
+        // The external and FORM backends reduce as a whole; the RustRed arms
+        // mark their own reduction scopes (lowering stays lowering).
+        let _timing = (!matches!(self, EvaluationMethod::RustRed(_))).then(crate::timing::reduce);
         let result = match self {
             EvaluationMethod::AlphaLoop(opts) => {
                 vakint.alphaloop_evaluate(settings, numerator, integral_specs, opts)
@@ -3182,6 +3187,7 @@ impl VakintTerm {
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
+        let _timing = crate::timing::lower();
         // Lane unknown-masters: strict refusal once, on this public call's result.
         if let Some(_boundary) = crate::public_result_boundary() {
             // On any error the receiver is restored to its input.
@@ -3538,6 +3544,7 @@ impl VakintTerm {
         replacement_rules: &ReplacementRules,
         short_form: bool,
     ) -> Result<(), VakintError> {
+        let _timing = crate::timing::lower();
         self.canonicalize_expanding(settings, replacement_rules, short_form, true)
     }
 
@@ -3631,6 +3638,7 @@ impl VakintTerm {
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
+        let _timing = crate::timing::lower();
         // No backend evaluates the unknown integral of an out-of-domain
         // p-integral, and a vacuum projection of its numerator would be wrong
         // (zero at odd rank): this is the first step that may see it.
@@ -5256,6 +5264,7 @@ impl VakintExpression {
         topologies: &Topologies,
         short_form: bool,
     ) -> Result<(), VakintError> {
+        let _timing = crate::timing::lower();
         settings.with_resource_budget(|| {
             self.canonicalize_with(settings, short_form, true, |input| {
                 topologies.match_topologies_to_user_input(input, settings.allow_unknown_integrals)
@@ -5305,6 +5314,7 @@ impl VakintExpression {
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
+        let _timing = crate::timing::lower();
         settings.with_resource_budget(|| {
             for term in self.0.iter_mut() {
                 crate::execution::checkpoint()?;
@@ -5319,6 +5329,7 @@ impl VakintExpression {
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
+        let _timing = crate::timing::lower();
         // Lane unknown-masters: strict refusal once, on this public call's result.
         if let Some(_boundary) = crate::public_result_boundary() {
             // On any error the receiver is restored to its input.
@@ -8709,6 +8720,7 @@ Evaluated (n_loops=1, mu_r=1) :
         settings: &VakintSettings,
         input: AtomView,
     ) -> Result<Atom, VakintError> {
+        let _timing = crate::timing::lower();
         self.autosave_ordered_cache(self.evaluate_observed(settings, input, None, None))
     }
 
@@ -8719,6 +8731,7 @@ Evaluated (n_loops=1, mu_r=1) :
         input: AtomView,
         monitor: &RustRedMonitorOptions,
     ) -> Result<Atom, VakintError> {
+        let _timing = crate::timing::lower();
         self.autosave_ordered_cache(MonitorContext::run(monitor, |observation, progress| {
             self.evaluate_observed(settings, input, observation, progress)
         }))
@@ -8841,6 +8854,7 @@ Evaluated (n_loops=1, mu_r=1) :
         settings: &VakintSettings,
         input: AtomView,
     ) -> Result<Atom, VakintError> {
+        let _timing = crate::timing::lower();
         settings.with_resource_budget(|| {
             let mut vakint_expr = VakintExpression::try_from(input)?;
             vakint_expr.tensor_reduce(self, settings)?;
@@ -8853,6 +8867,7 @@ Evaluated (n_loops=1, mu_r=1) :
         settings: &VakintSettings,
         input: AtomView,
     ) -> Result<Atom, VakintError> {
+        let _timing = crate::timing::lower();
         self.autosave_ordered_cache(self.evaluate_integral_observed(settings, input, None, None))
     }
 
@@ -8863,6 +8878,7 @@ Evaluated (n_loops=1, mu_r=1) :
         input: AtomView,
         monitor: &RustRedMonitorOptions,
     ) -> Result<Atom, VakintError> {
+        let _timing = crate::timing::lower();
         self.autosave_ordered_cache(MonitorContext::run(monitor, |observation, progress| {
             self.evaluate_integral_observed(settings, input, observation, progress)
         }))

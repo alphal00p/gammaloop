@@ -181,12 +181,15 @@ impl Drop for CaptureScope {
 
 /// Counts only the outermost active interval in its capture.
 ///
-/// With capture disabled this holds no state, allocates nothing and reads no
-/// clock. Declare the guard before locals whose destruction belongs to the
+/// With capture disabled this holds no capture state and allocates nothing;
+/// it always enters a [`crate::timing`] reduction scope (two clock reads). Declare the guard before locals whose destruction belongs to the
 /// measured boundary, so their natural drop remains inside the interval.
 pub(crate) struct MathSpan {
     state: Option<Rc<CaptureState>>,
     entered: bool,
+    /// Always on: the reduction-math boundary is a reduction scope of
+    /// [`crate::timing`] (dropped after this span's own `Drop`).
+    _reduce: crate::timing::Guard,
 }
 
 impl MathSpan {
@@ -198,6 +201,7 @@ impl MathSpan {
         let mut span = Self {
             state,
             entered: false,
+            _reduce: crate::timing::reduce(),
         };
         if let Some(state) = &span.state {
             let mut measured = state.measurements.get();

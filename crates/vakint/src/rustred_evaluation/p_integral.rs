@@ -905,6 +905,7 @@ fn fold_request(
     forms: &mut BTreeMap<PresentationId, BTreeMap<PDot, AffineSlotForm>>,
     epsilon: Symbol,
 ) -> Result<Arc<FoldedRequest>, VakintError> {
+    let _timing = crate::timing::lower();
     let key = request_memo_enabled().then(|| RequestKey {
         epsilon,
         family: request.family.name,
@@ -1207,6 +1208,7 @@ fn split_request<'r>(
     forms: &mut BTreeMap<PresentationId, BTreeMap<PDot, AffineSlotForm>>,
     channels: &mut PendingChannels<'r>,
 ) -> Result<(), VakintError> {
+    let _timing = crate::timing::lower();
     let family = P_FAMILIES
         .iter()
         .position(|family| family.name == request.family.name)
@@ -1246,6 +1248,7 @@ fn lower_channel(
     parts: Vec<PendingPart>,
     forms: &mut BTreeMap<PresentationId, BTreeMap<PDot, AffineSlotForm>>,
 ) -> Result<BTreeMap<(PresentationId, Vec<i64>), Rational>, RustRedEvaluationError> {
+    let _timing = crate::timing::lower();
     let mut inputs = BTreeMap::<(PresentationId, Vec<i64>), Rational>::new();
     for PendingPart {
         top,
@@ -1287,6 +1290,7 @@ fn reduce_channel(
     inputs: BTreeMap<(PresentationId, Vec<i64>), Rational>,
     integrals: &BTreeSet<String>,
 ) -> Result<Option<Atom>, VakintError> {
+    let _timing = crate::timing::reduce();
     let library = &reducer.handle.library;
     let exact = reducer.options.limits.exact_algebra;
     let inputs = inputs
@@ -1827,6 +1831,7 @@ pub(crate) fn fold_requests(
     settings: &VakintSettings,
     requests: &[PropagatorRequest],
 ) -> Result<BTreeMap<Channel, FoldedInputs>, VakintError> {
+    let _timing = crate::timing::lower();
     let epsilon = vk_symbol!(&settings.epsilon_symbol);
     let mut forms = BTreeMap::new();
     // Every request split, lowered and folded (or taken from the request
@@ -1884,6 +1889,7 @@ pub(crate) fn reduce_folded_channels(
     mode: FoldMode,
     factored: bool,
 ) -> Result<BTreeMap<(usize, Atom), Vec<ReducedPropagatorValue>>, VakintError> {
+    let _timing = crate::timing::reduce();
     let epsilon = vk_symbol!(&settings.epsilon_symbol);
     let reducer = ChannelReducer {
         handle,
@@ -2427,6 +2433,7 @@ pub(crate) fn finalize_reduced(
     names: &BTreeMap<(usize, Atom), BTreeSet<String>>,
     mode: RustRedMasterMode,
 ) -> Result<Atom, VakintError> {
+    let _timing = crate::timing::reduce();
     let mut result = Atom::Zero;
     for ((loops, head), values) in reduced {
         let catalogue = p_master_catalogue(vakint, loops);

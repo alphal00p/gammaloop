@@ -1040,6 +1040,7 @@ impl RStarPlan {
         for (call, request) in self.counterterms.iter().zip(requests) {
             let support = &call.argument.support;
             let started = Instant::now();
+            let counted = vakint::timing::Snapshot::now();
             let route = if !self.uv_children.uses_rstar(call.argument.loops) {
                 "massive"
             } else if child_mass == ChildMass::Reference
@@ -1083,8 +1084,9 @@ impl RStarPlan {
             );
             if uv_children_log() {
                 let seconds = started.elapsed().as_secs_f64();
+                let reduction = counted.elapsed().fields();
                 eprintln!(
-                    "UV_CHILD graph={} route={route} loops={} degree={} parent_loops={} seconds={:.3} edges={}{}",
+                    "UV_CHILD graph={} route={route} loops={} degree={} parent_loops={} seconds={:.3}{reduction} edges={}{}",
                     graph.name,
                     call.argument.loops,
                     call.taylor_order,

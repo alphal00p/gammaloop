@@ -219,6 +219,7 @@ impl RemainderBoundary {
         settings: &VakintSettings,
         options: BoundaryOptions,
     ) -> Result<(Vec<LoweredClosure>, BoundaryStats), VakintError> {
+        let _timing = crate::timing::lower();
         let mut cache = crate::rustred_evaluation::p_lowering::BlockReadCache::default();
         let mut direct = crate::rustred_evaluation::p_lowering::DirectStats::default();
         let mut stats = BoundaryStats {
@@ -268,6 +269,7 @@ impl RemainderBoundary {
         settings: &VakintSettings,
         index: usize,
     ) -> Result<Result<LoweredClosure, String>, VakintError> {
+        let _timing = crate::timing::lower();
         if index >= self.patterns.len() {
             return Err(super::invalid(format!(
                 "pattern {index} of {}",
@@ -331,6 +333,7 @@ impl RemainderBoundary {
         settings: &VakintSettings,
         options: BoundaryOptions,
     ) -> Result<(Atom, BoundaryStats), VakintError> {
+        let _timing = crate::timing::lower();
         // Lane unknown-masters: strict refusal once, on the sum of the patterns.
         if let Some(_boundary) = crate::public_result_boundary() {
             let inner = crate::unknown_master_coefficients_carried(settings);

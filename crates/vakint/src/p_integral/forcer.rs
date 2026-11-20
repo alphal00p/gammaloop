@@ -846,6 +846,7 @@ fn run_forcer(
     program: &str,
     locals: &[&str],
 ) -> Result<Vec<String>, VakintError> {
+    let _timing = crate::timing::reduce();
     crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Form);
     crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Forcer);
     // Keeping backend artifacts explicitly requests a fresh run directory.

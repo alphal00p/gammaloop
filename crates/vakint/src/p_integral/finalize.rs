@@ -181,6 +181,7 @@ pub(crate) fn finalize(
     mode: RustRedMasterMode,
     backend: &str,
 ) -> Result<Atom, VakintError> {
+    let _timing = crate::timing::reduce();
     finalize_with(
         values,
         loops,
@@ -208,6 +209,7 @@ pub(crate) fn finalize_with(
     backend: &str,
     source: PMasterSource<'_>,
 ) -> Result<Atom, VakintError> {
+    let _timing = crate::timing::reduce();
     let epsilon = vk_symbol!(&settings.epsilon_symbol);
     let (head, _) = external_head(external)?;
     let square = function!(S.dot, &head, &head);

@@ -423,6 +423,7 @@ impl Vakint {
         mode: RustRedMasterMode,
         observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<Atom, VakintError> {
+        let _timing = crate::timing::reduce();
         // Ordered reduction combines all normalized contributions first, so
         // simplify real logarithms and zero powers once here, before master
         // substitution, rather than per contribution.

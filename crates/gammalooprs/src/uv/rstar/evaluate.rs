@@ -1285,6 +1285,7 @@ impl<'a> Evaluation<'a> {
         let mode = super::closed::closed_mode();
         let mut closed_stats = super::closed::ClosedStats::default();
         let closed_started = Instant::now();
+        let closed_counted = vakint::timing::Snapshot::now();
         let closed = if mode == super::closed::ClosedMode::Off {
             None
         } else {
@@ -1294,6 +1295,7 @@ impl<'a> Evaluation<'a> {
             )
         };
         let closed_seconds = closed_started.elapsed().as_secs_f64();
+        let closed_reduction = closed_counted.elapsed().fields();
         let use_closed = mode == super::closed::ClosedMode::On && matches!(closed, Some(Ok(_)));
         let (mut taylor_seconds, mut taylor_bytes, mut project_seconds, mut project_bytes) =
             (0.0, 0, 0.0, 0);
@@ -1358,7 +1360,7 @@ impl<'a> Evaluation<'a> {
                 }
             };
             eprintln!(
-                "IR_CLOSED graph={} corr={correction_index} term={term_index} hard_loops={} rem_loops={} order={order} outcome={outcome}{check} slots={} sectors={} odd={} closures={} seconds={closed_seconds:.3} taylor_s={:.3} polarize_s={:.3} close_s={:.3} taylor_bytes={} closed_bytes={} certified={} uncertified={} dropped_zero={} zero_test_skipped={} today_taylor_s={taylor_seconds:.3} today_project_s={project_seconds:.3} today_taylor_bytes={taylor_bytes} today_project_bytes={project_bytes}",
+                "IR_CLOSED graph={} corr={correction_index} term={term_index} hard_loops={} rem_loops={} order={order} outcome={outcome}{check} slots={} sectors={} odd={} closures={} seconds={closed_seconds:.3}{closed_reduction} taylor_s={:.3} polarize_s={:.3} close_s={:.3} taylor_bytes={} closed_bytes={} certified={} uncertified={} dropped_zero={} zero_test_skipped={} today_taylor_s={taylor_seconds:.3} today_project_s={project_seconds:.3} today_taylor_bytes={taylor_bytes} today_project_bytes={project_bytes}",
                 self.graph.name,
                 self.graph.n_loops(&correction.hard),
                 term.remainder.loops,
@@ -1612,6 +1614,7 @@ impl<'a> Evaluation<'a> {
         mode: super::closed::ChildMode,
     ) -> Result<Option<Atom>> {
         let started = Instant::now();
+        let counted = vakint::timing::Snapshot::now();
         // GAMMALOOP_IR_HARD_CHILD_GUARD=1 (opt-in): the closed path's scoped
         // budget around the whole H(γ). Off by default: its RSS checks run
         // inside every vakint integration of H and cost as much system time
@@ -1653,7 +1656,7 @@ impl<'a> Evaluation<'a> {
                     .is_some_and(|slots| slots.iter().any(|(rep, _)| !rep.contains("mink")));
             if !spinor {
                 eprintln!(
-                    "IR_HARD_CHILD graph={} corr={correction_index} hard_loops={} omega={} outcome=skipped:select seconds=0.000",
+                    "IR_HARD_CHILD graph={} corr={correction_index} hard_loops={} omega={} outcome=skipped:select seconds=0.000 reduce_s=0.000 lower_s=0.000",
                     self.graph.name,
                     self.graph.n_loops(&correction.hard),
                     correction.taylor_order,
@@ -1674,11 +1677,12 @@ impl<'a> Evaluation<'a> {
             })
         };
         let seconds = started.elapsed().as_secs_f64();
+        let reduction = counted.elapsed().fields();
         let (value, stats) = match attempt {
             Ok(outcome) => outcome,
             Err(reason) => {
                 eprintln!(
-                    "IR_HARD_CHILD graph={} corr={correction_index} hard_loops={} omega={} outcome=declined:{reason} seconds={seconds:.3}",
+                    "IR_HARD_CHILD graph={} corr={correction_index} hard_loops={} omega={} outcome=declined:{reason} seconds={seconds:.3}{reduction}",
                     self.graph.name,
                     self.graph.n_loops(&correction.hard),
                     correction.taylor_order,
@@ -1737,7 +1741,7 @@ impl<'a> Evaluation<'a> {
             (value, String::new())
         };
         eprintln!(
-            "IR_HARD_CHILD graph={} corr={correction_index} hard_loops={} omega={} outcome=child{stats}{check} seconds={seconds:.3}",
+            "IR_HARD_CHILD graph={} corr={correction_index} hard_loops={} omega={} outcome=child{stats}{check} seconds={seconds:.3}{reduction}",
             self.graph.name,
             self.graph.n_loops(&correction.hard),
             correction.taylor_order,
@@ -1816,6 +1820,7 @@ impl<'a> Evaluation<'a> {
                     continue;
                 }
                 let term_started = Instant::now();
+                let term_counted = vakint::timing::Snapshot::now();
                 let (closures, _) = super::integrate::single_mass_counts();
                 let remainder = self.open_remainder(term)?;
                 soft = remainder.soft_edges().to_vec();
@@ -1838,13 +1843,14 @@ impl<'a> Evaluation<'a> {
                     })?;
                 drop(remainder);
                 eprintln!(
-                    "IR_HARD_CHILD_TERM graph={} corr={correction_index} term={term_index} attempt={attempts} hard_loops={hard_loops} rem_loops={} children={} omega={omega} edge={edge_basis} extra_depth={extra} routed_bytes={routed_bytes} h_bytes={} closures={} seconds={:.3}",
+                    "IR_HARD_CHILD_TERM graph={} corr={correction_index} term={term_index} attempt={attempts} hard_loops={hard_loops} rem_loops={} children={} omega={omega} edge={edge_basis} extra_depth={extra} routed_bytes={routed_bytes} h_bytes={} closures={} seconds={:.3}{}",
                     self.graph.name,
                     term.remainder.loops,
                     term.counterterms.len(),
                     value.as_view().get_byte_size(),
                     super::integrate::single_mass_counts().0 - closures,
                     term_started.elapsed().as_secs_f64(),
+                    term_counted.elapsed().fields(),
                 );
                 let term_seconds = term_started.elapsed().as_secs_f64();
                 closed_seconds += term_seconds;
@@ -2913,6 +2919,7 @@ impl<'a> Evaluation<'a> {
             return Ok(value.clone());
         }
         let started = Instant::now();
+        let counted = vakint::timing::Snapshot::now();
         // GAMMALOOP_IR_QUOTIENT: the massive R operation (default) or R* on
         // the same decorated graph.
         let mode = top_mass::ir_quotient()?;
@@ -2984,10 +2991,11 @@ impl<'a> Evaluation<'a> {
         };
         if mode != top_mass::IrQuotient::Unset && mode != top_mass::IrQuotient::Check {
             eprintln!(
-                "IR_QUOTIENT graph={} loops={} route={route} seconds={:.3}",
+                "IR_QUOTIENT graph={} loops={} route={route} seconds={:.3}{}",
                 self.graph.name,
                 call.argument.loops,
-                started.elapsed().as_secs_f64()
+                started.elapsed().as_secs_f64(),
+                counted.elapsed().fields()
             );
         }
         self.quotient_elapsed += started.elapsed();
@@ -3177,6 +3185,7 @@ impl<'a> Evaluation<'a> {
             .expect("admission requires the closed-root normalisation");
         let id = self.integration_id + 1;
         let started = Instant::now();
+        let counted = vakint::timing::Snapshot::now();
         let mut settings = self.settings.clone();
         settings.number_of_terms_in_epsilon_expansion = i64::try_from(remainder.region.loops)?;
         let degree = usize::try_from(self.plan.taylor_order)?;
@@ -3226,6 +3235,7 @@ impl<'a> Evaluation<'a> {
                 self.summary.contracted(&stats);
                 self.boundary_elapsed += started.elapsed();
                 self.summary.seconds_boundary += started.elapsed().as_secs_f64();
+                self.summary.add_boundary(counted.elapsed());
                 if let Some(why) = large {
                     self.summary.errors += 1;
                     return Err(eyre!(
@@ -3251,8 +3261,10 @@ impl<'a> Evaluation<'a> {
             built => built,
         };
         match mode {
-            BoundaryMode::Check => self.check_boundary(remainder, built, &settings, id, started),
-            _ => self.evaluate_boundary(remainder, built, &settings, id, started),
+            BoundaryMode::Check => {
+                self.check_boundary(remainder, built, &settings, id, started, counted)
+            }
+            _ => self.evaluate_boundary(remainder, built, &settings, id, started, counted),
         }
     }
 
@@ -3265,6 +3277,7 @@ impl<'a> Evaluation<'a> {
         settings: &VakintSettings,
         id: usize,
         started: Instant,
+        counted: vakint::timing::Snapshot,
     ) -> Result<Atom> {
         let loops = remainder.region.loops;
         let (value, mut stats, built) = match built {
@@ -3279,6 +3292,7 @@ impl<'a> Evaluation<'a> {
         let mut value = value;
         let evaluate_started = Instant::now();
         let mut dump_seconds = 0.0;
+        let mut split = boundary::EvaluateSplit::default();
         if let Some(built) = &built {
             self.summary.boundary += 1;
             let p_loops = built.loops.saturating_sub(1);
@@ -3302,7 +3316,7 @@ impl<'a> Evaluation<'a> {
                 let options = vakint::p_integral::BoundaryOptions {
                     strict: boundary::boundary_strict() || boundary::is_large(&stats, loops),
                 };
-                let (evaluated, reads, hits) =
+                let (evaluated, reads, hits, phases) =
                     boundary::evaluate_boundary(&built.boundary, self.vakint, settings, options)
                         .wrap_err_with(|| {
                             format!(
@@ -3313,6 +3327,7 @@ impl<'a> Evaluation<'a> {
                 value = evaluated;
                 stats.block_reads = reads;
                 stats.block_hits = hits;
+                split = phases;
             }
         }
         let evaluate_seconds = evaluate_started.elapsed().as_secs_f64() - dump_seconds;
@@ -3320,6 +3335,7 @@ impl<'a> Evaluation<'a> {
             stats.seconds.push(("dump", dump_seconds));
         }
         stats.seconds.push(("evaluate", evaluate_seconds));
+        split.push(&mut stats);
         stats.rss_gb[3] = boundary::rss_gb();
         let finish_started = Instant::now();
         let result = RStarIntegrand::finish_tensor(value, id)?;
@@ -3355,6 +3371,7 @@ impl<'a> Evaluation<'a> {
         self.integration_elapsed += elapsed;
         self.boundary_elapsed += elapsed;
         self.summary.seconds_boundary += elapsed.as_secs_f64();
+        self.summary.add_boundary(counted.elapsed());
         Ok(result)
     }
 
@@ -3369,6 +3386,7 @@ impl<'a> Evaluation<'a> {
         settings: &VakintSettings,
         id: usize,
         started: Instant,
+        counted: vakint::timing::Snapshot,
     ) -> Result<Atom> {
         let (built, mut stats) = match built {
             Built::Zero(stats) => {
@@ -3389,6 +3407,7 @@ impl<'a> Evaluation<'a> {
         let skipped =
             super::pint6_dump::settings().is_some_and(|dump| p_loops >= dump.skip_min_p_loops);
         let evaluate_started = Instant::now();
+        let mut split = boundary::EvaluateSplit::default();
         let new_value = match &built {
             Some(_) if skipped => None,
             Some(built) => {
@@ -3396,7 +3415,7 @@ impl<'a> Evaluation<'a> {
                     strict: boundary::boundary_strict()
                         || boundary::is_large(&stats, remainder.region.loops),
                 };
-                let (value, reads, hits) =
+                let (value, reads, hits, phases) =
                     boundary::evaluate_boundary(&built.boundary, self.vakint, settings, options)
                         .wrap_err_with(|| {
                             format!(
@@ -3406,6 +3425,7 @@ impl<'a> Evaluation<'a> {
                         })?;
                 stats.block_reads = reads;
                 stats.block_hits = hits;
+                split = phases;
                 Some(value)
             }
             None => Some(Atom::Zero),
@@ -3413,9 +3433,11 @@ impl<'a> Evaluation<'a> {
         stats
             .seconds
             .push(("evaluate", evaluate_started.elapsed().as_secs_f64()));
+        split.push(&mut stats);
         stats.rss_gb[3] = boundary::rss_gb();
         let seconds_new = started.elapsed().as_secs_f64();
         self.summary.seconds_boundary += seconds_new;
+        self.summary.add_boundary(counted.elapsed());
         self.boundary_elapsed += started.elapsed();
         // Today's path, captured.
         let old_started = Instant::now();
@@ -3511,6 +3533,7 @@ impl<'a> Evaluation<'a> {
         let mut settings = self.settings.clone();
         settings.number_of_terms_in_epsilon_expansion = i64::try_from(remainder.region.loops)?;
         let started = Instant::now();
+        let counted = vakint::timing::Snapshot::now();
         let channel = super::pint6_dump::ClosureChannel {
             channel: self.channel.0,
             taylor_order: i64::from(self.plan.taylor_order),
@@ -3556,6 +3579,7 @@ impl<'a> Evaluation<'a> {
         self.integration_id = id;
         self.integration_elapsed += started.elapsed();
         self.summary.seconds_today += started.elapsed().as_secs_f64();
+        self.summary.add_today(counted.elapsed());
         Ok(Some(sum.finish()))
     }
 
@@ -3574,6 +3598,7 @@ impl<'a> Evaluation<'a> {
             "Integrating a compensated R* remainder"
         );
         let started = Instant::now();
+        let counted = vakint::timing::Snapshot::now();
         let channel = super::pint6_dump::ClosureChannel {
             channel: self.channel.0,
             taylor_order: i64::from(self.plan.taylor_order),
@@ -3599,6 +3624,7 @@ impl<'a> Evaluation<'a> {
         });
         self.integration_elapsed += started.elapsed();
         self.summary.seconds_today += started.elapsed().as_secs_f64();
+        self.summary.add_today(counted.elapsed());
         result
     }
 

@@ -164,6 +164,7 @@ impl LoweredClosure {
         vakint: &Vakint,
         settings: &crate::VakintSettings,
     ) -> Result<Atom, VakintError> {
+        let _timing = crate::timing::reduce();
         // Lane unknown-masters: strict refusal applies once, to the result of
         // this public call (after its signed sums); inside, UNKNOWN symbols
         // are carried.
@@ -223,6 +224,7 @@ impl LoweredClosure {
         vakint: &Vakint,
         settings: &[&crate::VakintSettings],
     ) -> Result<Vec<Atom>, VakintError> {
+        let _timing = crate::timing::reduce();
         // Lane unknown-masters: strict refusal once per returned result.
         if let Some(_boundary) = crate::public_result_boundary() {
             let inner: Vec<crate::VakintSettings> = settings
@@ -689,6 +691,7 @@ impl MassiveClosure {
         settings: &crate::VakintSettings,
         inputs: &[(Self, DirectClosureInput)],
     ) -> Result<Vec<Atom>, VakintError> {
+        let _timing = crate::timing::lower();
         // Lane unknown-masters: strict refusal once per returned result.
         if let Some(_boundary) = crate::public_result_boundary() {
             let inner = crate::unknown_master_coefficients_carried(settings);
@@ -855,6 +858,7 @@ impl MassiveClosure {
         settings: &crate::VakintSettings,
         input: &DirectClosureInput,
     ) -> Result<Option<LoweredClosure>, VakintError> {
+        let _timing = crate::timing::lower();
         let mut stats = crate::rustred_evaluation::p_lowering::DirectStats::default();
         Ok(self
             .lower_direct_explained(vakint, settings, input, &mut stats)?
@@ -870,6 +874,7 @@ impl MassiveClosure {
         input: &DirectClosureInput,
         stats: &mut crate::rustred_evaluation::p_lowering::DirectStats,
     ) -> Result<Result<LoweredClosure, &'static str>, VakintError> {
+        let _timing = crate::timing::lower();
         use crate::rustred_evaluation::p_lowering as direct;
         let head = self.validated_head(settings)?;
         let empty = || LoweredClosure {
@@ -923,6 +928,7 @@ impl MassiveClosure {
         cache: &mut crate::rustred_evaluation::p_lowering::BlockReadCache,
         stats: &mut crate::rustred_evaluation::p_lowering::DirectStats,
     ) -> Result<Result<LoweredClosure, &'static str>, VakintError> {
+        let _timing = crate::timing::lower();
         use crate::rustred_evaluation::p_lowering as direct;
         let head = self.validated_head(settings)?;
         let empty = || LoweredClosure {
@@ -1059,6 +1065,7 @@ impl MassiveClosure {
         settings: &crate::VakintSettings,
         inputs: &[(Self, DirectClosureInput)],
     ) -> Result<Atom, VakintError> {
+        let _timing = crate::timing::lower();
         // Lane unknown-masters: strict refusal applies once, to the result of
         // this public call (after its signed sums); inside, UNKNOWN symbols
         // are carried.
@@ -1144,6 +1151,7 @@ impl MassiveClosure {
         settings: &[&crate::VakintSettings],
         inputs: &[(Self, DirectClosureInput)],
     ) -> Result<Vec<Atom>, VakintError> {
+        let _timing = crate::timing::lower();
         // Lane unknown-masters: strict refusal once per returned result.
         if let Some(_boundary) = crate::public_result_boundary() {
             let inner: Vec<crate::VakintSettings> = settings
@@ -1244,6 +1252,7 @@ impl MassiveClosure {
         settings: &crate::VakintSettings,
         inputs: &[(Self, Atom)],
     ) -> Result<Vec<Atom>, VakintError> {
+        let _timing = crate::timing::lower();
         // Lane unknown-masters: strict refusal once per returned result.
         if let Some(_boundary) = crate::public_result_boundary() {
             let inner = crate::unknown_master_coefficients_carried(settings);
@@ -1588,6 +1597,7 @@ impl MassiveClosure {
         settings: &crate::VakintSettings,
         input: AtomView,
     ) -> Result<Atom, VakintError> {
+        let _timing = crate::timing::lower();
         // Lane unknown-masters: strict refusal applies once, to the result of
         // this public call (after its signed sums); inside, UNKNOWN symbols
         // are carried.
@@ -1811,6 +1821,7 @@ impl MassiveClosure {
         settings: &crate::VakintSettings,
         mode: RustRedMasterMode,
     ) -> Result<Atom, VakintError> {
+        let _timing = crate::timing::reduce();
         // The engine's p master catalogue whatever the cut loop count: a
         // `PResidual(node, key..)` names its own integral, so its row applies
         // wherever the terminal occurs (a closure input may carry one too).
@@ -1835,6 +1846,7 @@ impl MassiveClosure {
         settings: &crate::VakintSettings,
         mode: RustRedMasterMode,
     ) -> Result<Atom, VakintError> {
+        let _timing = crate::timing::reduce();
         let epsilon = vk_symbol!(&settings.epsilon_symbol);
         let loops = cut_loops as i64 + 1;
         let target = settings.number_of_terms_in_epsilon_expansion - loops - 1;
@@ -1931,6 +1943,7 @@ impl MassiveClosure {
         settings: &crate::VakintSettings,
         prefactors: &mut std::collections::BTreeMap<i64, Atom>,
     ) -> Result<Option<Atom>, VakintError> {
+        let _timing = crate::timing::reduce();
         let epsilon = vk_symbol!(&settings.epsilon_symbol);
         let loops = cut_loops as i64 + 1;
         let target = settings.number_of_terms_in_epsilon_expansion - loops - 1;

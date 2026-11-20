@@ -497,12 +497,30 @@ pub(super) struct BoundarySummary {
     pub seconds_boundary: f64,
     /// Every today's-path outer integration (ordinary, IR, fallbacks, checks).
     pub seconds_today: f64,
+    /// vakint::timing over the same intervals as `seconds_boundary` and
+    /// `seconds_today`: reduction (with finalisation) and lowering seconds.
+    pub reduce_boundary: f64,
+    pub lower_boundary: f64,
+    pub reduce_today: f64,
+    pub lower_today: f64,
     /// Check mode: remainders compared, and those with a skipped input pair.
     pub checks: usize,
     pub checks_skipped: usize,
 }
 
 impl BoundarySummary {
+    /// Add the vakint::timing counters of a boundary-path interval.
+    pub(super) fn add_boundary(&mut self, delta: vakint::timing::Delta) {
+        self.reduce_boundary += delta.reduce_seconds;
+        self.lower_boundary += delta.lower_seconds;
+    }
+
+    /// Add the vakint::timing counters of a today's-path interval.
+    pub(super) fn add_today(&mut self, delta: vakint::timing::Delta) {
+        self.reduce_today += delta.reduce_seconds;
+        self.lower_today += delta.lower_seconds;
+    }
+
     pub(super) fn declined(&mut self, decline: &Decline) {
         self.fallback += 1;
         *self
@@ -535,7 +553,7 @@ impl BoundarySummary {
             }
         };
         eprintln!(
-            "BOUNDARY_SUMMARY graph={graph} root={root} remainders={} boundary={} zero={} fallback={} errors={} not_admitted={} fallback_reasons={} certified={} uncertified={} checks={} checks_skipped={} seconds_boundary={:.3} seconds_today={:.3} outcome={outcome}",
+            "BOUNDARY_SUMMARY graph={graph} root={root} remainders={} boundary={} zero={} fallback={} errors={} not_admitted={} fallback_reasons={} certified={} uncertified={} checks={} checks_skipped={} seconds_boundary={:.3} seconds_today={:.3} reduce_boundary_s={:.3} lower_boundary_s={:.3} reduce_today_s={:.3} lower_today_s={:.3} outcome={outcome}",
             self.remainders,
             self.boundary,
             self.zero,
@@ -549,6 +567,10 @@ impl BoundarySummary {
             self.checks_skipped,
             self.seconds_boundary,
             self.seconds_today,
+            self.reduce_boundary,
+            self.lower_boundary,
+            self.reduce_today,
+            self.lower_today,
         );
         #[cfg(test)]
         LOGGED_SUMMARIES.with(|logged| {
@@ -2353,22 +2375,47 @@ fn binomial(n: usize, k: usize) -> i64 {
     (0..k).fold(1i64, |value, i| value * (n - i) as i64 / (i as i64 + 1))
 }
 
+/// The wall seconds of the phases of [`evaluate_boundary`] (`BOUNDARY_STATS`
+/// `lower:`, `reduce:`, `ordinary:`, `expand:`, which split `evaluate:`): the
+/// key-plan lowering, the reduction and finalisation of the key plans, the
+/// ordinary path of the declined patterns, the final expansion.
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct EvaluateSplit {
+    pub lower: f64,
+    pub reduce: f64,
+    pub ordinary: f64,
+    pub expand: f64,
+}
+
+impl EvaluateSplit {
+    pub(super) fn push(&self, stats: &mut BoundaryStats) {
+        stats.seconds.push(("lower", self.lower));
+        stats.seconds.push(("reduce", self.reduce));
+        stats.seconds.push(("ordinary", self.ordinary));
+        stats.seconds.push(("expand", self.expand));
+    }
+}
+
 /// [`RemainderBoundary::evaluate`] with the block read counts: the value
-/// (expanded), and `(reads, hits)`.
+/// (expanded), `(reads, hits)` and the phase seconds.
 pub(super) fn evaluate_boundary(
     boundary: &RemainderBoundary,
     vakint: &Vakint,
     settings: &VakintSettings,
     options: BoundaryOptions,
-) -> Result<(Atom, usize, usize)> {
+) -> Result<(Atom, usize, usize, EvaluateSplit)> {
+    let mut split = EvaluateSplit::default();
     // As `RemainderBoundary::evaluate` (the settings' RustRed resource
     // budget around the whole lowering and reduction), keeping the counts.
     symbolica::utils::resources::ResourceBudget::new(settings.rustred_resources).run(|| {
         symbolica::utils::resources::checkpoint().map_err(|error| eyre!("{error}"))?;
+        let clock = Instant::now();
         let (classes, declined, (reads, hits)) = boundary
             .lower_counted(vakint, settings, options)
             .map_err(|error| eyre!("{error}"))
             .wrap_err("while lowering an R* remainder boundary")?;
+        split.lower = clock.elapsed().as_secs_f64();
+        let clock = Instant::now();
         let mut result = Atom::Zero;
         for class in classes {
             result += class
@@ -2376,6 +2423,8 @@ pub(super) fn evaluate_boundary(
                 .map_err(|error| eyre!("{error}"))
                 .wrap_err("while reducing an R* remainder boundary")?;
         }
+        split.reduce = clock.elapsed().as_secs_f64();
+        let clock = Instant::now();
         for index in declined {
             let pattern = &boundary.patterns[index];
             result += MassiveClosure::evaluate_batch(
@@ -2390,8 +2439,12 @@ pub(super) fn evaluate_boundary(
             .pop()
             .unwrap_or_default();
         }
+        split.ordinary = clock.elapsed().as_secs_f64();
         symbolica::utils::resources::checkpoint().map_err(|error| eyre!("{error}"))?;
-        Ok((result.expand(), reads, hits))
+        let clock = Instant::now();
+        let result = result.expand();
+        split.expand = clock.elapsed().as_secs_f64();
+        Ok((result, reads, hits, split))
     })
 }
 

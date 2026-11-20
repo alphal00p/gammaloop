@@ -896,6 +896,7 @@ pub(crate) fn match_cut(
     topology: &Atom,
     closure_head: &Atom,
 ) -> Result<Result<Option<MatchedCut>, Declined>, VakintError> {
+    let _timing = crate::timing::lower();
     let mut term = VakintTerm {
         integral: topology.clone(),
         numerator: Atom::num(1),
@@ -959,6 +960,7 @@ pub(crate) fn lower_request(
     request: &PropagatorRequest,
     stats: &mut DirectStats,
 ) -> Result<Result<BTreeMap<Channel, FoldedInputs>, Declined>, VakintError> {
+    let _timing = crate::timing::lower();
     let (head, sigma) = external_head(&request.external)?;
     let scaleless = parts::split(
         request.family,
@@ -1002,6 +1004,7 @@ pub(crate) fn lower_closure(
     numerator: AtomView,
     stats: &mut DirectStats,
 ) -> Result<Result<BTreeMap<Channel, FoldedInputs>, Declined>, VakintError> {
+    let _timing = crate::timing::lower();
     lower_closure_source(
         settings,
         handle,
@@ -1051,6 +1054,7 @@ pub(crate) fn lower_closure_source(
     source: NumeratorSource<'_>,
     stats: &mut DirectStats,
 ) -> Result<Result<BTreeMap<Channel, FoldedInputs>, Declined>, VakintError> {
+    let _timing = crate::timing::lower();
     if cut.scaleless {
         return Ok(Ok(BTreeMap::new()));
     }

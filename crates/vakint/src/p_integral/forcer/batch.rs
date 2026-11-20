@@ -93,6 +93,7 @@ pub(crate) fn reduce_inputs(
     inputs: &[ForcerInput],
     settings: &VakintSettings,
 ) -> Result<Vec<Vec<ReducedPropagatorValue>>, VakintError> {
+    let _timing = crate::timing::reduce();
     let _stage = StageSpan::new("p_integral.forcer.batch_dispatch");
     let started = Instant::now();
     if inputs.iter().any(|input| !input.parts.is_empty()) {
