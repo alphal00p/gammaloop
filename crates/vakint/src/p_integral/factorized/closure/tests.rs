@@ -1065,9 +1065,20 @@ fn dot_files_as_roots(
             let diagram =
                 feynkit_graph::FeynmanDiagram::from_dot(std::sync::Arc::clone(&model), &text)
                     .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            // the generator DOTs (prepared/L1..L4) carry the unevaluated weight;
+            // the regrouped five-loop DOTs an evaluated one with the loop sign
+            // inside (the weight is replaced by 1 below either way)
             let values =
                 FactorizedNumerator::from_feynkit(&diagram, &model, &FromFeynkitOptions::default())
-                    .unwrap();
+                    .or_else(|_| {
+                        let options = FromFeynkitOptions {
+                            loop_sign_in_overall: true,
+                            ..FromFeynkitOptions::default()
+                        };
+                        FactorizedNumerator::from_feynkit_dot(&text, &model, &options)
+                            .map(|(_, values)| values)
+                    })
+                    .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
             let mut value = values.into_iter().next().expect("a colour branch");
             let loops = value.loops();
             let (i, closing) = value
@@ -1197,6 +1208,26 @@ fn closure_kind_timing() {
         ("L4", "diagram-000049.dot"),
         ("L4", "diagram-000100.dot"),
     ]));
+    // VAKINT_CLOSURE_TIMING_DOTS="L5/diagram-000051.dot,..." (under
+    // VAKINT_TEST_FACTORIZED_DOT_ROOT) replaces the cases
+    if let Ok(list) = std::env::var("VAKINT_CLOSURE_TIMING_DOTS") {
+        let named = list
+            .split(',')
+            .filter_map(|item| item.split_once('/'))
+            .collect::<Vec<_>>();
+        cases = dot_named_root_remainders(&named);
+    }
+    let with_reference = std::env::var("VAKINT_CLOSURE_TIMING_NO_REFERENCE").is_err();
+    let peak_kb = || {
+        std::fs::read_to_string("/proc/self/status")
+            .ok()
+            .and_then(|s| {
+                s.lines()
+                    .find_map(|l| l.strip_prefix("VmHWM:"))
+                    .and_then(|v| v.trim().trim_end_matches(" kB").trim().parse::<u64>().ok())
+            })
+            .unwrap_or(0)
+    };
     let vakint = Vakint::new().unwrap();
     let median = |mut v: Vec<f64>| {
         v.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -1237,18 +1268,23 @@ fn closure_kind_timing() {
             );
             lower.push(got.records[0].lower_seconds);
             reduce.push(got.records[0].reduce_seconds);
-            let started = std::time::Instant::now();
-            let expected = reference(value, &routing);
-            reference_times.push(started.elapsed().as_secs_f64());
-            assert!(
-                (&got.records[0].vakint_value - &expected)
-                    .expand()
-                    .is_zero()
-            );
+            if with_reference {
+                let started = std::time::Instant::now();
+                let expected = reference(value, &routing);
+                reference_times.push(started.elapsed().as_secs_f64());
+                assert!(
+                    (&got.records[0].vakint_value - &expected)
+                        .expand()
+                        .is_zero()
+                );
+            } else {
+                reference_times.push(f64::NAN);
+            }
         }
         eprintln!(
-            "CLOSURE_TIMING label=\"{}\" patterns_blocks_keyplans_lowered_monomials={rustred:?} reps={reps} entry_median_s={:.4} reference_median_s={:.4} entry_contract_s={:.4} entry_lower_s={:.4} entry_reduce_s={:.4} entry_all={:?} reference_all={:?}",
+            "CLOSURE_TIMING label=\"{}\" peak_rss_kb={} patterns_blocks_keyplans_lowered_monomials={rustred:?} reps={reps} entry_median_s={:.4} reference_median_s={:.4} entry_contract_s={:.4} entry_lower_s={:.4} entry_reduce_s={:.4} entry_all={:?} reference_all={:?}",
             value.label,
+            peak_kb(),
             median(entry.clone()),
             median(reference_times.clone()),
             median(contract),
