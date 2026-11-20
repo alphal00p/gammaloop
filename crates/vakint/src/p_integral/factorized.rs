@@ -27,9 +27,11 @@
 //! [`FactorizedNumerator::to_text`] and read by
 //! [`FactorizedNumerator::from_text`]; the round trip is exact.
 //!
-//! Reserved for the R* path (Phase 4) and REJECTED by v1: the closure kind
-//! ([`FactorizedKind::Closure`], with an unapplied [`TaylorSpec`]) and
-//! counterterm insertion vertices ([`Insertion`]).
+//! The R* closure kind ([`FactorizedKind::Closure`]: a massive closing line
+//! and an unapplied [`TaylorSpec`]) is evaluated by
+//! [`evaluate_factorized_closure`] (module `closure`, text schema
+//! [`FACTORIZED_SCHEMA_V3`]). Reserved for the R* path and REJECTED: counterterm
+//! insertion vertices ([`Insertion`]).
 //!
 //! Nothing here changes an existing entry point: the existing
 //! `DirectClosureInput` / `RemainderBoundary` paths are untouched.
@@ -44,6 +46,7 @@
 //! engine for these values is kept for reference on the branch
 //! `parked/vakint-numerator-engine` and is deprecated.
 
+mod closure;
 mod colour;
 mod evaluate;
 #[cfg(feature = "feynkit-ingress")]
@@ -59,6 +62,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use symbolica::coefficient::CoefficientView;
 
+pub use closure::{
+    ClosureRecordValue, ClosureValue, MAX_CLOSURE_TAYLOR_DEGREE, evaluate_factorized_closure,
+};
 pub use colour::{
     ColourMode, ColourRow, MergedColourTerm, colour_coefficient, merge_colour_channels,
     split_local_colour,
@@ -76,6 +82,11 @@ pub use vacuum::{VacuumValue, evaluate_factorized_vacuum};
 
 /// Schema line of the text form (first line of every record).
 pub const FACTORIZED_SCHEMA: &str = "pint6.factorized-numerator.v1";
+
+/// Schema line of the v3 text form: v1 plus the R* lines (closure section,
+/// `open`, `softs`, `original_cycles`, `weights`, `depth`). Records of kind
+/// closure are written and read in it; direct records stay v1.
+pub const FACTORIZED_SCHEMA_V3: &str = "pint6.factorized-numerator.v3";
 
 /// Fully qualified names of the symbols the contract refers to (DOT
 /// notation of FeynGen graphs). Classification is by name, so values built in
@@ -111,33 +122,111 @@ pub enum FactorizedKind {
     /// `prefactor × projector · Π factors / Π_e D_e^{power_e}` integrated over
     /// the loop momenta. Accepted by v1.
     Direct,
-    /// RESERVED (Phase 4, R* remainders): a graph with a massive closing line
-    /// and an unapplied Taylor expansion. [`FactorizedNumerator::validate`]
-    /// and the text reader reject it in v1.
+    /// An R* remainder (or one pre-expanded Taylor sector of one) closed by a
+    /// massive line among massless ones, evaluated by
+    /// [`evaluate_factorized_closure`]; the record form of
+    /// N/notes/wh/WH-RECORD-FORMAT.md (kinds K1-K3). The adapter and the vacuum
+    /// entry refuse it.
     Closure(ClosureSpec),
 }
 
-/// RESERVED (Phase 4): the closing line of an R* remainder (the v1 keys
-/// `closure_momentum` / `closure_mass_squared` of `pint6.remainder-boundary.v1`)
-/// and its unapplied Taylor step. Not accepted by v1.
+/// The closing line of an R* remainder and its Taylor step.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClosureSpec {
-    /// Index of the closing edge in [`FactorizedNumerator::edges`] order.
+    /// Id of the closing (marked) edge.
     pub edge: usize,
+    /// The closing edge's mass atom as the record writes it: the REFERENCE
+    /// symbol `R` (equal to that edge's `mass_squared`).
     pub mass_squared: Atom,
+    /// `M_aux²`: with a Taylor step, `R -> (1 - λ²) M_aux²` (compensate) or
+    /// `R -> M_aux²` (fixed) everywhere in the integrand; without one (a
+    /// pre-expanded sector) it equals `mass_squared`.
+    pub auxiliary_mass_squared: Atom,
+    /// Power of the closing line (equal to that edge's `power`).
     pub power: i64,
+    /// `externals=independent`: every crown leg carries its own `p(j)`;
+    /// momentum conservation is checked on the loop momenta only.
+    pub independent_externals: bool,
+    /// `None` = a pre-expanded Taylor sector (`denominators=lambda0`): every
+    /// internal edge carries its `λ = 0` momentum.
     pub taylor: Option<TaylorSpec>,
+    /// Informational provenance of the crown legs (`soft` lines).
+    pub softs: Vec<SoftLeg>,
+    /// `(fermion, ghost)` closed cycles of the ORIGINAL graph (provenance).
+    pub original_cycles: Option<(u32, u32)>,
+    /// Laurent terms wanted (vakint `number_of_terms_in_epsilon_expansion`);
+    /// `None`: the caller's settings.
+    pub depth: Option<usize>,
+    /// Optional weight provenance (`weight<TAB><name><TAB>applied_by=..`):
+    /// `(name, applied by vakint, atom)`; an `applied_by=vakint` weight must
+    /// equal `prefactor_scalars`.
+    pub weights: Vec<(String, bool, Atom)>,
 }
 
-/// RESERVED (Phase 4): an unapplied Taylor expansion in `lambda` of the
-/// momenta of `scaled_edges` to `degree`, with mass compensation `M² → (1 −
-/// λ²) M²` when `compensate_mass`. Not accepted by v1.
+/// The unapplied Taylor step of an R* remainder: the momentum `p(j)` of every
+/// external leg in `scaled_edges` becomes `λ p(j)` (in every edge momentum and
+/// every `Q(x, ..)`), the reference mass `R` becomes `(1 − λ²) M_aux²`
+/// (`compensate_mass`) or `M_aux²`, the product of factors and denominators
+/// (not the projector) is expanded to total degree `degree` in `λ`, the
+/// `orders` are kept, then `λ = 1`; the projector and `(p²)^p2_power` act
+/// after the step.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TaylorSpec {
-    pub lambda: Symbol,
     pub degree: u32,
+    /// Edge ids of the external legs whose momenta are scaled (the R*
+    /// `root_edges`); together they carry every independent external momentum.
     pub scaled_edges: Vec<usize>,
     pub compensate_mass: bool,
+    pub orders: TaylorOrders,
+}
+
+/// Which orders in `λ` of the Taylor polynomial are kept.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TaylorOrders {
+    /// `0..=degree` (`orders=all`).
+    All,
+    /// `1..=degree` (`orders=drop0`).
+    DropZero,
+    /// The even orders `2..=degree` (`orders=drop0-odd`).
+    DropZeroOdd,
+}
+
+impl TaylorOrders {
+    /// Whether order `n` (`<= degree`) is kept.
+    pub fn keeps(self, n: u32) -> bool {
+        match self {
+            Self::All => true,
+            Self::DropZero => n >= 1,
+            Self::DropZeroOdd => n >= 2 && n % 2 == 0,
+        }
+    }
+
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::All => "all",
+            Self::DropZero => "drop0",
+            Self::DropZeroOdd => "drop0-odd",
+        }
+    }
+
+    pub(crate) fn parse(text: &str) -> Option<Self> {
+        Some(match text {
+            "all" => Self::All,
+            "drop0" => Self::DropZero,
+            "drop0-odd" => Self::DropZeroOdd,
+            _ => return None,
+        })
+    }
+}
+
+/// One crown leg of a closure record (`soft<TAB><j><TAB>edge=<x><TAB>role=..`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SoftLeg {
+    /// One-based index of its external momentum `p(j)`.
+    pub external: usize,
+    pub edge: usize,
+    /// `true`: `role=root`; `false`: `role=soft`.
+    pub root: bool,
 }
 
 /// RESERVED (Phase 4): a contracted child counterterm acting as an extra
@@ -446,6 +535,8 @@ pub enum FactorizedError {
     Power { edge: usize, power: i64 },
     #[error("{feature} is reserved for the R* path and not accepted by v1")]
     Reserved { feature: String },
+    #[error("closure: {detail}")]
+    Closure { detail: String },
     #[error("text line {line}: unknown schema {found:?} (this reader knows {FACTORIZED_SCHEMA})")]
     TextSchema { line: usize, found: String },
     #[error("text line {line}: `lines` asserts {asserted} lines, {found} were read")]
@@ -1012,13 +1103,21 @@ impl FactorizedNumerator {
         product
     }
 
-    /// Check the contract (CONTRACT-v1.md). Returns the first violation.
+    /// Check the contract (CONTRACT-v1.md). Returns the first violation. A
+    /// closure record is checked by the closure rules
+    /// (`validate_closure`: the contract's graph, factor and index rules plus
+    /// those of the closure kind).
     pub fn validate(&self) -> Result<()> {
-        if let FactorizedKind::Closure(_) = self.kind {
-            return Err(FactorizedError::Reserved {
-                feature: "the closure kind (R* remainder with a closing line)".into(),
-            });
+        if let FactorizedKind::Closure(spec) = &self.kind {
+            return self.validate_closure(spec);
         }
+        self.validate_contract(None)
+    }
+
+    /// The contract's checks. `closure = Some(conserved)`: a closure record,
+    /// momentum conservation on the first `conserved` momentum components
+    /// only, and no graph-derived loop-sign / n_f rule (its own rule).
+    pub(crate) fn validate_contract(&self, closure: Option<usize>) -> Result<()> {
         if !self.insertions.is_empty() {
             return Err(FactorizedError::Reserved {
                 feature: "insertion vertices (child counterterms)".into(),
@@ -1030,7 +1129,7 @@ impl FactorizedNumerator {
             });
         }
         let edges = self.check_graph()?;
-        self.check_momenta()?;
+        self.check_momenta(closure.unwrap_or(self.loops() + self.externals()))?;
         // Factors: kinds, dimensions, indices.
         let mut analysed = Vec::<(Location, IndexSets, Elements)>::new();
         for edge in &self.edges {
@@ -1079,6 +1178,9 @@ impl FactorizedNumerator {
                 edge.mass_squared.as_view(),
                 &format!("edge {} mass", edge.id),
             )?;
+        }
+        if closure.is_some() {
+            return Ok(());
         }
         let loops = self.closed_loops()?;
         let n_loops = loops.len();
@@ -1171,7 +1273,9 @@ impl FactorizedNumerator {
         Ok(edges)
     }
 
-    fn check_momenta(&self) -> Result<()> {
+    /// Momentum vectors, basis edges and conservation of the first
+    /// `conserved` components at every vertex.
+    fn check_momenta(&self, conserved: usize) -> Result<()> {
         let n = self.loops() + self.externals();
         for edge in &self.edges {
             if edge.momentum.len() != n {
@@ -1224,7 +1328,7 @@ impl FactorizedNumerator {
                     }
                 }
             }
-            if residual.iter().any(|c| *c != 0) {
+            if residual.iter().take(conserved).any(|c| *c != 0) {
                 return Err(FactorizedError::MomentumNotConserved {
                     vertex: vertex.id,
                     residual,

@@ -268,12 +268,20 @@ fn the_reserved_extensions_are_rejected() {
     value.kind = FactorizedKind::Closure(ClosureSpec {
         edge: 2,
         mass_squared: Atom::num(1),
+        auxiliary_mass_squared: Atom::num(1),
         power: 1,
+        independent_externals: false,
         taylor: None,
+        softs: Vec::new(),
+        original_cycles: None,
+        depth: None,
+        weights: Vec::new(),
     });
+    // the closure kind is accepted now: this one is refused by its own rules
+    // (the massless edge 2 is not a closing line)
     assert!(matches!(
         value.validate(),
-        Err(FactorizedError::Reserved { .. })
+        Err(FactorizedError::Closure { .. })
     ));
     let closure = GLUON.replace("kind\tdirect", "kind\tclosure");
     assert!(matches!(
@@ -442,8 +450,14 @@ fn the_adapter_reproduces_lane_refpaths_archived_l1_values() {
     value.kind = FactorizedKind::Closure(ClosureSpec {
         edge: 2,
         mass_squared: Atom::num(1),
+        auxiliary_mass_squared: Atom::num(1),
         power: 1,
+        independent_externals: false,
         taylor: None,
+        softs: Vec::new(),
+        original_cycles: None,
+        depth: None,
+        weights: Vec::new(),
     });
     assert!(matches!(
         evaluate_factorized(&vakint, &settings, &value, &Atom::num(1)),

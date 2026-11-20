@@ -11,8 +11,9 @@
 //! carries at most one atom, always as its last field.
 
 use super::{
-    ColourBranchInfo, Endpoint, FACTORIZED_SCHEMA, FactorizedEdge, FactorizedError, FactorizedKind,
-    FactorizedNumerator, FactorizedVertex, LineKind, Prefactor, Projector, Result,
+    ClosureSpec, ColourBranchInfo, Endpoint, FACTORIZED_SCHEMA, FACTORIZED_SCHEMA_V3,
+    FactorizedEdge, FactorizedError, FactorizedKind, FactorizedNumerator, FactorizedVertex,
+    LineKind, Prefactor, Projector, Result, SoftLeg, TaylorOrders, TaylorSpec,
 };
 use symbolica::atom::{Atom, AtomCore, AtomView};
 
@@ -60,14 +61,31 @@ fn list<T: ToString>(values: &[T]) -> String {
         .join(",")
 }
 
-/// Write one record. Fails on the reserved R* extensions (closure kind,
-/// insertions), which v1 cannot carry.
+/// The ports a closure record leaves open: those its projector does not close
+/// (the `open` lines of v3, derived), sorted canonical strings.
+fn open_slots(value: &FactorizedNumerator) -> Result<Vec<String>> {
+    let mut open = value
+        .ports
+        .iter()
+        .filter(|port| {
+            !value
+                .projector
+                .as_ref()
+                .is_some_and(|p| super::closure::contains_atom(p.tensor.as_view(), port.as_view()))
+        })
+        .map(|p| one_atom(p, "open slot"))
+        .collect::<Result<Vec<_>>>()?;
+    open.sort();
+    Ok(open)
+}
+
+/// Write one record: v1 for kind direct (unchanged), v3 for kind closure.
+/// Fails on insertions, which neither carries yet.
 pub(super) fn write_record(value: &FactorizedNumerator) -> Result<String> {
-    if let FactorizedKind::Closure(_) = value.kind {
-        return Err(FactorizedError::Reserved {
-            feature: "the closure kind (R* remainder with a closing line)".into(),
-        });
-    }
+    let closure = match &value.kind {
+        FactorizedKind::Closure(spec) => Some(spec),
+        FactorizedKind::Direct => None,
+    };
     if !value.insertions.is_empty() {
         return Err(FactorizedError::Reserved {
             feature: "insertion vertices (child counterterms)".into(),
@@ -80,9 +98,22 @@ pub(super) fn write_record(value: &FactorizedNumerator) -> Result<String> {
         });
     }
     let mut lines = Vec::<String>::new();
-    lines.push(format!("schema\t{FACTORIZED_SCHEMA}"));
-    lines.push(format!("label\t{}", value.label));
-    lines.push("kind\tdirect".into());
+    match closure {
+        None => {
+            lines.push(format!("schema\t{FACTORIZED_SCHEMA}"));
+            lines.push(format!("label\t{}", value.label));
+            lines.push("kind\tdirect".into());
+        }
+        Some(spec) => {
+            lines.push(format!("schema\t{FACTORIZED_SCHEMA_V3}"));
+            lines.push(format!("label\t{}", value.label));
+            lines.push(if spec.independent_externals {
+                "kind\tclosure\texternals=independent".into()
+            } else {
+                "kind\tclosure".into()
+            });
+        }
+    }
     lines.push(format!(
         "dimension\t{}",
         one_atom(&Atom::var(value.dimension), "dimension")?
@@ -152,6 +183,13 @@ pub(super) fn write_record(value: &FactorizedNumerator) -> Result<String> {
             one_atom(&projector.tensor, "projector")?
         )),
     }
+    if closure.is_some() {
+        let open = open_slots(value)?;
+        lines.push(format!("open\t{}", open.len()));
+        for slot in open {
+            lines.push(format!("open_slot\t{slot}"));
+        }
+    }
     let p = &value.prefactor;
     lines.push(format!(
         "prefactor\tloop_sign={}\tnf_power={}",
@@ -178,12 +216,199 @@ pub(super) fn write_record(value: &FactorizedNumerator) -> Result<String> {
             list(&info.rows)
         )),
     }
+    if let Some(spec) = closure {
+        write_closure_section(spec, value, &mut lines)?;
+    }
     lines.push("insertions\t0".into());
     lines.push(format!("lines\t{}", lines.len() + 1));
     lines.push("end".into());
     let mut text = lines.join("\n");
     text.push('\n');
     Ok(text)
+}
+
+/// The closure section of v3 (`closure` .. `depth`).
+fn write_closure_section(
+    spec: &ClosureSpec,
+    value: &FactorizedNumerator,
+    lines: &mut Vec<String>,
+) -> Result<()> {
+    let _ = value;
+    lines.push(format!(
+        "closure\tedge={}\tpower={}\t{}",
+        spec.edge,
+        spec.power,
+        one_atom(&spec.mass_squared, "closure mass")?
+    ));
+    match &spec.taylor {
+        None => lines.push("taylor\tnone".into()),
+        Some(taylor) => lines.push(format!(
+            "taylor\tdegree={}\tcompensate_mass={}\tscaled_edges={}\torders={}\t{}",
+            taylor.degree,
+            u8::from(taylor.compensate_mass),
+            list(&taylor.scaled_edges),
+            taylor.orders.as_str(),
+            one_atom(&spec.auxiliary_mass_squared, "auxiliary mass")?
+        )),
+    }
+    lines.push(format!("softs\t{}", spec.softs.len()));
+    let mut softs = spec.softs.iter().collect::<Vec<_>>();
+    softs.sort_by_key(|s| s.external);
+    for soft in softs {
+        lines.push(format!(
+            "soft\t{}\tedge={}\trole={}",
+            soft.external,
+            soft.edge,
+            if soft.root { "root" } else { "soft" }
+        ));
+    }
+    match spec.original_cycles {
+        None => lines.push("original_cycles\tnone".into()),
+        Some((f, g)) => lines.push(format!("original_cycles\tfermion={f}\tghost={g}")),
+    }
+    lines.push(format!("weights\t{}", spec.weights.len()));
+    for (name, by_vakint, atom) in &spec.weights {
+        token(name, "weight name")?;
+        lines.push(format!(
+            "weight\t{name}\tapplied_by={}\t{}",
+            if *by_vakint { "vakint" } else { "beta" },
+            one_atom(atom, "weight")?
+        ));
+    }
+    lines.push(match spec.depth {
+        None => "depth\tnone".into(),
+        Some(depth) => format!("depth\t{depth}"),
+    });
+    Ok(())
+}
+
+/// Keys of the beta's v2 dialect that a v3 closure record may still carry:
+/// read and ignored (vakint derives the cut), one warning per record.
+const IGNORED_KEYS: [&str; 6] = [
+    "closure_momentum",
+    "external_square",
+    "routing",
+    "route",
+    "cut_topology",
+    "hard",
+];
+
+fn skip_ignored(reader: &mut Reader<'_>, ignored: &mut Vec<String>) -> Result<()> {
+    while let Some(key) = reader.peek_key() {
+        if !IGNORED_KEYS.contains(&key) {
+            break;
+        }
+        reader.raw()?;
+        if !ignored.iter().any(|k| k == key) {
+            ignored.push(key.to_string());
+        }
+    }
+    Ok(())
+}
+
+/// The closure section of a v3 record (after `colour_branch`).
+fn read_closure_section(
+    reader: &mut Reader<'_>,
+    independent_externals: bool,
+) -> Result<(ClosureSpec, Vec<String>)> {
+    let mut ignored = Vec::new();
+    skip_ignored(reader, &mut ignored)?;
+    let line = reader.expect("closure")?;
+    if line.fields.as_slice() == ["none"] {
+        return Err(reader.syntax(line.number, "kind closure with `closure none`"));
+    }
+    let edge = number(line.number, field(&line, "edge")?, "closure edge")?;
+    let power = number(line.number, field(&line, "power")?, "closure power")?;
+    let mass_squared = last_atom(&line, 2)?;
+    skip_ignored(reader, &mut ignored)?;
+    let line = reader.expect("taylor")?;
+    let (taylor, auxiliary_mass_squared) = if line.fields.as_slice() == ["none"] {
+        (None, mass_squared.clone())
+    } else {
+        let compensate = match field(&line, "compensate_mass")? {
+            "0" => false,
+            "1" => true,
+            other => return Err(reader.syntax(line.number, format!("compensate_mass={other}"))),
+        };
+        let orders = field(&line, "orders")?;
+        let orders = TaylorOrders::parse(orders)
+            .ok_or_else(|| reader.syntax(line.number, format!("orders={orders}")))?;
+        (
+            Some(TaylorSpec {
+                degree: number(line.number, field(&line, "degree")?, "degree")?,
+                scaled_edges: integers(line.number, field(&line, "scaled_edges")?, "scaled edge")?,
+                compensate_mass: compensate,
+                orders,
+            }),
+            last_atom(&line, 4)?,
+        )
+    };
+    skip_ignored(reader, &mut ignored)?;
+    let (_, n) = count_section(reader, "softs")?;
+    let mut softs = Vec::with_capacity(n);
+    for _ in 0..n {
+        let line = reader.expect("soft")?;
+        let role = field(&line, "role")?;
+        softs.push(SoftLeg {
+            external: number(
+                line.number,
+                line.fields.first().copied().unwrap_or(""),
+                "soft index",
+            )?,
+            edge: number(line.number, field(&line, "edge")?, "soft edge")?,
+            root: match role {
+                "root" => true,
+                "soft" => false,
+                other => return Err(reader.syntax(line.number, format!("role={other}"))),
+            },
+        });
+    }
+    let line = reader.expect("original_cycles")?;
+    let original_cycles = if line.fields.as_slice() == ["none"] {
+        None
+    } else {
+        Some((
+            number(line.number, field(&line, "fermion")?, "fermion cycles")?,
+            number(line.number, field(&line, "ghost")?, "ghost cycles")?,
+        ))
+    };
+    let (_, n) = count_section(reader, "weights")?;
+    let mut weights = Vec::with_capacity(n);
+    for _ in 0..n {
+        let line = reader.expect("weight")?;
+        let by = match field(&line, "applied_by")? {
+            "vakint" => true,
+            "beta" => false,
+            other => return Err(reader.syntax(line.number, format!("applied_by={other}"))),
+        };
+        weights.push((
+            line.fields.first().copied().unwrap_or("").to_string(),
+            by,
+            last_atom(&line, 2)?,
+        ));
+    }
+    let line = reader.expect("depth")?;
+    let depth = match line.fields.as_slice() {
+        ["none"] => None,
+        [n] => Some(number(line.number, n, "depth")?),
+        _ => return Err(reader.syntax(line.number, "depth<TAB><n>")),
+    };
+    skip_ignored(reader, &mut ignored)?;
+    Ok((
+        ClosureSpec {
+            edge,
+            mass_squared,
+            auxiliary_mass_squared,
+            power,
+            independent_externals,
+            taylor,
+            softs,
+            original_cycles,
+            depth,
+            weights,
+        },
+        ignored,
+    ))
 }
 
 /// A line split into its key and TAB-separated fields.
@@ -329,7 +554,8 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
         return Err(reader.syntax(schema.number, "a record starts with `schema`"));
     }
     let found = schema.fields.join("\t");
-    if found != FACTORIZED_SCHEMA {
+    let v3 = found == FACTORIZED_SCHEMA_V3;
+    if found != FACTORIZED_SCHEMA && !v3 {
         return Err(FactorizedError::TextSchema {
             line: schema.number,
             found,
@@ -337,15 +563,25 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
     }
     let label = reader.expect("label")?.fields.join("\t");
     let kind = reader.expect("kind")?;
-    match kind.fields.as_slice() {
-        ["direct"] => {}
-        ["closure", ..] => {
+    // v3: kind closure (this reader); v1: kind direct
+    let independent_externals = match (v3, kind.fields.as_slice()) {
+        (false, ["direct"]) => false,
+        (false, ["closure", ..]) => {
             return Err(FactorizedError::Reserved {
-                feature: "the closure kind (R* remainder with a closing line)".into(),
+                feature: "the closure kind in schema v1 (it is written in schema v3)".into(),
+            });
+        }
+        (true, ["closure"]) | (true, ["closure", "externals=conserved"]) => false,
+        (true, ["closure", "externals=independent"]) => true,
+        (true, [other, ..]) if *other == "direct" || *other == "vacuum" => {
+            return Err(FactorizedError::Reserved {
+                feature: format!(
+                    "kind {other} in schema v3 (this reader takes v3 closure records)"
+                ),
             });
         }
         _ => return Err(reader.syntax(kind.number, "unknown kind")),
-    }
+    };
     let dimension_line = reader.expect("dimension")?;
     let dimension = last_atom(&dimension_line, 0)?;
     let dimension = match dimension.as_view() {
@@ -478,6 +714,16 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
             tensor: last_atom(&projector_line, 1)?,
         }),
     };
+    let mut open = None;
+    if v3 {
+        let (line, n) = count_section(reader, "open")?;
+        let mut slots = Vec::with_capacity(n);
+        for _ in 0..n {
+            let slot = reader.expect("open_slot")?;
+            slots.push(slot.fields.join("\t"));
+        }
+        open = Some((line, slots));
+    }
     let signs = reader.expect("prefactor")?;
     let loop_sign = number(signs.number, field(&signs, "loop_sign")?, "loop_sign")?;
     let nf_power = number(signs.number, field(&signs, "nf_power")?, "nf_power")?;
@@ -496,6 +742,17 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
             count: number(branch.number, field(&branch, "of")?, "colour branch count")?,
             rows: integers(branch.number, field(&branch, "rows")?, "colour rows")?,
         }),
+    };
+    let closure = if v3 {
+        let (spec, ignored) = read_closure_section(reader, independent_externals)?;
+        if !ignored.is_empty() {
+            eprintln!(
+                "warning: closure record {label:?}: ignored keys {ignored:?} (vakint derives the cut)"
+            );
+        }
+        Some(spec)
+    } else {
+        None
     };
     let insertions = reader.expect("insertions")?;
     if insertions.fields.as_slice() != ["0"] {
@@ -527,9 +784,12 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
     if end.key != "end" || !end.fields.is_empty() {
         return Err(reader.syntax(end.number, "a record ends with `end`"));
     }
-    Ok(FactorizedNumerator {
+    let value = FactorizedNumerator {
         label,
-        kind: FactorizedKind::Direct,
+        kind: match closure {
+            Some(spec) => FactorizedKind::Closure(spec),
+            None => FactorizedKind::Direct,
+        },
         dimension,
         loop_edges,
         external_edges,
@@ -546,7 +806,25 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
         },
         colour_branch,
         insertions: Vec::new(),
-    })
+    };
+    if let Some((line, slots)) = open {
+        let derived = open_slots(&value)?;
+        // compare as atoms' canonical strings
+        let mut given = slots
+            .iter()
+            .map(|s| atom(line, s).map(|a| a.to_canonical_string()))
+            .collect::<Result<Vec<_>>>()?;
+        given.sort();
+        if given != derived {
+            return Err(FactorizedError::TextSyntax {
+                line,
+                detail: format!(
+                    "open slots {given:?} differ from the ports the projector leaves open {derived:?}"
+                ),
+            });
+        }
+    }
+    Ok(value)
 }
 
 /// Parse exactly one record (no validation).
