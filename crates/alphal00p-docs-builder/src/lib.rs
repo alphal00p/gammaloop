@@ -5797,20 +5797,25 @@ impl SiteHeader<'_> {
         let portal = escape_html(self.portal_root);
         let assets = escape_html(self.assets_root);
         let links = [
-            ("libraries", "Documentation"),
-            ("about", "About"),
-            ("people", "People"),
-            ("talks", "Talks"),
-            ("publications", "Publications"),
+            (portal.as_str(), "libraries/", "Documentation"),
+            (
+                "",
+                "https://alphal00p.github.io/gammabench/ci-history/",
+                "Benchmarks",
+            ),
+            (&portal, "about/", "About"),
+            (&portal, "people/", "People"),
+            (&portal, "talks/", "Talks"),
+            (&portal, "publications/", "Publications"),
         ]
         .into_iter()
-        .map(|(route, label)| {
-            let current = if route == "libraries" {
+        .map(|(root, route, label)| {
+            let current = if route == "libraries/" {
                 " aria-current=\"page\""
             } else {
                 ""
             };
-            format!("<a href=\"{portal}{route}/\"{current}>{label}</a>")
+            format!("<a href=\"{root}{route}\"{current}>{label}</a>")
         })
         .collect::<String>();
         format!(

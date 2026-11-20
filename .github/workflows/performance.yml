@@ -184,12 +184,10 @@ jobs:
           path: target/performance/
           if-no-files-found: ignore
           retention-days: 14
-      - name: Link performance results
-        if: always() && github.event_name == 'pull_request'
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+      - name: Summarize performance and link this capture
+        if: always() && steps.revisions.outcome == 'success'
         run: |
-          echo "Performance preview (published after this workflow completes): https://alphal00p.github.io/gammabench/previews/pr-$PR_NUMBER/" >> "$GITHUB_STEP_SUMMARY"
+          python3 candidate/.github/scripts/performance_summary.py target/performance/run.json >> "$GITHUB_STEP_SUMMARY"
       - name: Remove the cache credentials
         if: always()
         run: rm -f "$RUNNER_TEMP/nixci.netrc"

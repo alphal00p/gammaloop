@@ -360,6 +360,7 @@
   ]
   #el("nav", class: "portal-nav", attrs: (id: "portal-navigation", "aria-label": "Primary"))[
     #el("a", attrs: nav-attrs(root + "libraries/", "libraries", active))[Documentation]
+    #el("a", attrs: (href: "https://alphal00p.github.io/gammabench/ci-history/"))[Benchmarks]
     #el("a", attrs: nav-attrs(root + "about/", "about", active))[About]
     #el("a", attrs: nav-attrs(root + "people/", "people", active))[People]
     #el("a", attrs: nav-attrs(root + "talks/", "talks", active))[Talks]
