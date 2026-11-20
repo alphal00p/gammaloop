@@ -570,7 +570,7 @@ fn one_port(value: &FactorizedNumerator) -> FactorizedNumerator {
         .iter()
         .position(|p| *p == slot)
         .unwrap_or_else(|| panic!("{}: the leg slot is not a port", value.label));
-    value.ports.remove(position);
+    let _ = value.ports.remove(position);
     value.edges[leg].factor = &value.edges[leg].factor * q(first as i64, &slot);
     value.label.push_str(" one-port");
     value.validate().unwrap();
@@ -836,7 +836,7 @@ fn port_refusals_are_precise() {
     }
     let six = with_extra(MAX_OPEN_PORTS - 2);
     assert_eq!(six.ports.len(), MAX_OPEN_PORTS);
-    vakint::p_integral::factorized::vakint_input(&settings, &six, &Atom::num(1)).unwrap();
+    let _ = vakint::p_integral::factorized::vakint_input(&settings, &six, &Atom::num(1)).unwrap();
     // an integer index on an open slot (a projector slot that is not a port)
     let mut integer = base.clone();
     let seven = symbolica::function!(sym(MINK), Atom::var(integer.dimension), 7);
@@ -1018,48 +1018,22 @@ fn rstar_site_settings(terms: i64) -> VakintSettings {
     }
 }
 
-/// A v3 record of kind direct read through the v1 reader (the v3 reader takes
-/// closure records only, for now): the v3-only lines dropped (`open` is
-/// checked against `open_slots` instead), the weights of the carried graph
-/// put in the prefactor fields for the v1 validator (with `original_cycles`
-/// the record's weights are the caller's: the value does not use them, the
-/// prefactor is passed explicitly), and the `depth`.
-fn direct_v3(text: &str) -> (FactorizedNumerator, Vec<String>, i64) {
-    let drop = [
-        "open", "open_slot", "closure", "taylor", "softs", "soft", "original_cycles", "weights",
-        "weight", "depth", "lines", "end",
-    ];
-    let mut out = Vec::new();
-    let mut open = Vec::new();
-    let mut depth = 0;
-    for line in text.lines() {
-        let key = line.split('\t').next().unwrap();
-        match key {
-            "open_slot" => open.push(line.split('\t').nth(1).unwrap().to_string()),
-            "depth" => depth = line.split('\t').nth(1).unwrap().parse().unwrap(),
-            _ => {}
-        }
-        if drop.contains(&key) {
-            continue;
-        }
-        match key {
-            "schema" => out.push("schema\tpint6.factorized-numerator.v1".to_string()),
-            "kind" => out.push("kind\tdirect".to_string()),
-            _ => out.push(line.to_string()),
-        }
-    }
-    out.push(format!("lines\t{}", out.len() + 1));
-    out.push("end".into());
-    let mut v1 = out.join("\n");
-    v1.push('\n');
+/// A v3 record of kind direct, read by the v3 reader (its `open` lines are
+/// checked by the reader against `open_slots`), and its `depth`.
+fn direct_v3(text: &str) -> (FactorizedNumerator, i64) {
     init();
-    let mut value = FactorizedNumerator::parse_text(&v1).unwrap_or_else(|e| panic!("{e}\n{v1}"));
-    let loops = value.closed_loops().unwrap();
-    let fermions = loops.iter().filter(|l| l.line == LineKind::Fermion).count();
-    value.prefactor.loop_sign = if loops.len() % 2 == 0 { 1 } else { -1 };
-    value.prefactor.nf_power = fermions as u32;
-    value.validate().unwrap_or_else(|e| panic!("{}: {e}", value.label));
-    (value, open, depth)
+    let value = FactorizedNumerator::from_text(text).unwrap_or_else(|e| panic!("{e}"));
+    let depth = value
+        .record
+        .as_ref()
+        .and_then(|r| r.depth)
+        .expect("a v3 direct record with a depth") as i64;
+    // the written form reads back to the same value, and is stable
+    let written = value.to_text().unwrap();
+    let again = FactorizedNumerator::from_text(&written).unwrap();
+    assert_eq!(again, value, "{}", value.label);
+    assert_eq!(again.to_text().unwrap(), written);
+    (value, depth)
 }
 
 fn fixture_value(text: &str) -> (Atom, i64) {
@@ -1100,8 +1074,10 @@ fn assert_equal_through(got: &Atom, expected: &Atom, order: i64, what: &str) {
     assert!(expected.keys().any(|n| *n <= order), "{what}: the reference is zero through eps^{order}");
 }
 
-/// K6 (f): each VERIFIED record through `evaluate_factorized_ports` equals
-/// the value the beta's contracted path returns at that call, through
+/// K6 (f): each VERIFIED record (read as written: schema v3, kind direct)
+/// through `evaluate_factorized_ports` equals the value the beta's contracted
+/// path returns at that call (the return of `integrate_propagator_with`,
+/// their value.txt), through
 /// `valid_through`: the quark form factor (compact slash projector, open
 /// quark legs closed by it), the gluon (both channel markers in one
 /// projector), the gluon with a quark loop, the scalar bubble.
@@ -1111,17 +1087,11 @@ fn the_beta_k6_records_equal_their_contracted_values() {
     for name in ["quark", "gluon", "gluon-qloop", "bubble"] {
         let input = std::fs::read_to_string(fixtures().join(format!("k6-{name}.input.txt"))).unwrap();
         let reference = std::fs::read_to_string(fixtures().join(format!("k6-{name}.value.txt"))).unwrap();
-        let (value, open, depth) = direct_v3(&input);
-        assert_eq!(
-            value
-                .open_slots()
-                .unwrap()
-                .iter()
-                .map(|s| s.to_canonical_string())
-                .collect::<Vec<_>>(),
-            open,
-            "{name}: open slots"
-        );
+        let (value, depth) = direct_v3(&input);
+        // the comparison point: the return of the site's
+        // integrate_propagator_with (no 1/p^2, no 1/Tr[1], no channel solve:
+        // p2_power 0, nothing else applied by the entry)
+        assert_eq!(value.projector.as_ref().map_or(0, |p| p.p2_power), 0);
         let (expected, through) = fixture_value(&reference);
         let settings = rstar_site_settings(depth);
         let prefactor = &value.prefactor.scalars * &value.prefactor.colour * &value.prefactor.overall;
@@ -1142,7 +1112,7 @@ fn the_beta_k6_records_equal_their_contracted_values() {
 fn the_compact_slash_is_written_out_on_read() {
     init();
     let input = std::fs::read_to_string(fixtures().join("k6-quark.input.txt")).unwrap();
-    let (value, _, _) = direct_v3(&input);
+    let (value, _) = direct_v3(&input);
     let tensor = value.projector.as_ref().unwrap().tensor.to_canonical_string();
     assert!(tensor.contains("vakint::{}::slash(-1,0)") || tensor.contains("slash(-1,0)"), "{tensor}");
     let mut again = value.clone();
@@ -1158,22 +1128,13 @@ fn the_compact_slash_is_written_out_on_read() {
     let written = vakint::p_integral::factorized::expand_compact_slash(&(&compact * &other), 7);
     let text = written.to_canonical_string();
     assert!(text.contains("slash(7,0)") && text.contains("slash(7,1)"), "{text}");
-    // under a Taylor step: refused
-    let mut taylor = value.clone();
-    taylor.projector.as_mut().unwrap().tensor = compact.clone();
-    taylor.kind = vakint::p_integral::factorized::FactorizedKind::Closure(
-        vakint::p_integral::factorized::ClosureSpec {
-            edge: 2,
-            mass_squared: Atom::var(sym("gammalooprs::rstar_mass_squared")),
-            power: 1,
-            taylor: Some(vakint::p_integral::factorized::TaylorSpec {
-                lambda: sym("wh_ports_test::lambda"),
-                degree: 1,
-                scaled_edges: vec![0],
-                compensate_mass: false,
-            }),
-        },
-    );
+    // under a Taylor step: refused (the beta's k3-hs closure record, degree 1)
+    let k3 = std::fs::read_to_string(fixtures().join("k3-hs.input.txt")).unwrap();
+    let mut taylor = FactorizedNumerator::parse_text(&k3).unwrap();
+    taylor.projector = Some(Projector {
+        tensor: compact.clone(),
+        p2_power: 0,
+    });
     assert!(matches!(
         taylor.expand_compact_slashes(),
         Err(FactorizedError::Ports { .. })
