@@ -31,7 +31,7 @@ use crate::{
 };
 
 use super::{
-    RStarPlan,
+    CountertermCache, RStarPlan, UvChildClosure,
     boundary::{BoundaryMode, with_boundary_mode},
     ir_dirac::{self, IrDiracMode},
     recursive_tests::{colour_factored, load, settings},
@@ -303,4 +303,146 @@ fn child_guard_returns_a_diagnostic_failure() {
         format!("{error:#}"),
         "while computing a child: IR_DIRAC_CHECK: differs"
     );
+}
+
+/// L4 4966, its UV child [`CHILD`], the settings and the plan's children
+/// route.
+fn l4_4966_child<T>(
+    f: impl FnOnce(
+        &crate::graph::Graph,
+        &linnet::half_edge::subgraph::SuBitGraph,
+        &crate::model::Model,
+        &crate::uv::UVgenerationSettings,
+        super::UvChildrenRoute,
+    ) -> Result<T>,
+) -> Result<T> {
+    let diagram = colour_factored(&load(L4_4966)?)?;
+    let graph = diagram.to_gamma_loop_graph(None, true)?;
+    let model = diagram.model();
+    let settings = settings();
+    let plan = RStarPlan::with_automatic_edge(&graph, model, &settings)?;
+    let child = plan
+        .counterterms
+        .iter()
+        .map(|call| &call.argument.support)
+        .find(|child| super::plan::uv_child_edge_ids(&graph, child) == CHILD)
+        .ok_or_else(|| eyre!("{}: no UV child {CHILD:?}", graph.name))?;
+    f(&graph, child, model, &settings, plan.uv_children)
+}
+
+/// A failed comparison inside an R* computed through the Δ-cache (the
+/// decorated quotients of `ir_outer_integrated`, inside the child guard)
+/// stays a diagnostic failure across the cache: on the miss that computes it
+/// (inside the guard: returned, not declined) and on a later hit of the
+/// stored failure, its text unchanged; an ordinary failure stays ordinary
+/// (declined by the guard).
+#[test]
+fn a_diagnostic_failure_survives_the_counterterm_cache() -> Result<()> {
+    test_initialise()?;
+    l4_4966_child(|graph, child, model, _, _| {
+        let cache = CountertermCache::default();
+        let computed = std::cell::Cell::new(0_usize);
+        let lookup = |key: &str, diagnostic: bool| {
+            cache.counterterm_with(graph, child, model, key.to_owned(), || {
+                computed.set(computed.get() + 1);
+                let error = eyre!("IR_DIRAC_CHECK: differs");
+                Err(if diagnostic {
+                    ir_dirac::diagnostic_failure(error)
+                } else {
+                    error
+                })
+            })
+        };
+        let miss =
+            ir_dirac::guarded_unless_diagnostic(None, None, || lookup("diagnostic", true).map(Ok));
+        let error = match miss {
+            Err(error) => error,
+            Ok(outcome) => {
+                return Err(eyre!(
+                    "a failed comparison through the cache was not returned by the child guard: {outcome:?}"
+                ));
+            }
+        };
+        ensure!(ir_dirac::is_diagnostic_failure(&error), "miss: {error:#}");
+        ensure!(
+            format!("{error:#}") == "IR_DIRAC_CHECK: differs",
+            "miss: {error:#}"
+        );
+        let hit = lookup("diagnostic", false)
+            .err()
+            .ok_or_else(|| eyre!("hit: no error"))?;
+        ensure!(computed.get() == 1, "the stored failure was recomputed");
+        ensure!(ir_dirac::is_diagnostic_failure(&hit), "hit: {hit:#}");
+        ensure!(
+            format!("{hit:#}") == "IR_DIRAC_CHECK: differs",
+            "hit: {hit:#}"
+        );
+        let ordinary =
+            ir_dirac::guarded_unless_diagnostic(None, None, || lookup("ordinary", false).map(Ok))?;
+        ensure!(
+            ordinary == Err("error:IR_DIRAC_CHECK:_differs".to_owned()),
+            "an ordinary failure: {ordinary:?}"
+        );
+        Ok(())
+    })
+}
+
+/// `DIRAC_CLOSURE_CHECK` (`GAMMALOOP_UV_CHILD_CLOSURE=dirac-check`) under the
+/// child guard, the children's Δ through the Δ-cache, as for a decorated
+/// quotient's R* inside `ir_outer_integrated`: unchanged, the R* of
+/// [`CHILD`] checks its Dirac-closed children and passes; with their closed Δ
+/// changed ([`super::plan::with_dirac_closure_change`]) the failed comparison
+/// is returned by the guard as a diagnostic failure, never declined.
+#[test]
+fn a_failed_dirac_closure_check_survives_the_child_guard() -> Result<()> {
+    use std::sync::atomic::Ordering;
+    with_production_piece_limit(|| {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let closure = UvChildClosure::parse("isotropic,dirac-check")?;
+        l4_4966_child(|graph, child, model, settings, route| {
+            let run = |change: bool| {
+                let cache = std::sync::Arc::new(CountertermCache::default());
+                super::plan::with_dirac_closure_change(change, || {
+                    ir_dirac::guarded_unless_diagnostic(None, None, || {
+                        RStarPlan::rstar_child_counterterm(
+                            &cache, graph, child, model, &vakint, settings, route, closure,
+                        )
+                        .map(Ok)
+                    })
+                })
+            };
+            let checks = || {
+                super::plan::DIRAC_CHECKS
+                    .each_ref()
+                    .map(|count| count.load(Ordering::Relaxed))
+            };
+            let before = checks();
+            let unchanged = run(false);
+            let after = checks();
+            ensure!(
+                matches!(unchanged, Ok(Ok(_))),
+                "unchanged: {:?}",
+                unchanged.map_err(|error| format!("{error:#}"))
+            );
+            ensure!(
+                after[0] > before[0] && after[2] - before[2] == after[0] - before[0],
+                "no Dirac-closed child checked, or a check failed: {before:?} -> {after:?}"
+            );
+            let error = match run(true) {
+                Err(error) => error,
+                Ok(outcome) => {
+                    return Err(eyre!(
+                        "a failed DIRAC_CLOSURE_CHECK was declined or passed by the child guard: {outcome:?}"
+                    ));
+                }
+            };
+            let text = format!("{error:#}");
+            ensure!(
+                ir_dirac::is_diagnostic_failure(&error) && text.contains("DIRAC_CLOSURE_CHECK: "),
+                "not the failed comparison: {text}"
+            );
+            Ok(())
+        })
+    })
 }
