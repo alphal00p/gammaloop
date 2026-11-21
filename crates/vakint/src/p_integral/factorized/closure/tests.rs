@@ -188,7 +188,7 @@ fn record(
         ports,
         projector,
         prefactor: Prefactor {
-            scalars: atom(&format!("(-1+{DIM})^(-1)*gs^2")),
+            scalars: atom(&format!("(-1+{DIM})^(-1)*UFO::gs^2")),
             ..Prefactor::default()
         },
         colour_branch: None,
@@ -888,7 +888,7 @@ fn the_closure_kind_refuses_what_it_does_not_support() {
     v.prefactor.loop_sign = -1;
     refused(&v, "loop_sign=1");
     let mut v = l2_root(1, true);
-    v.prefactor.scalars = atom(&format!("gs^2*{R}"));
+    v.prefactor.scalars = atom(&format!("UFO::gs^2*{R}"));
     refused(&v, "reference mass");
     // an open bispinor port
     let mut v = l2_child(1);
@@ -2264,6 +2264,235 @@ fn the_beta_k1_l5_records_equal_their_values() {
     wh_fixtures::assert_compared("K1_L5", compared, Some(expected));
 }
 
+/// REGRESSION of the placeholder collision: a record naming one of the
+/// entry's internal symbols (`vakint::closure_tensor_<n>`, the Taylor
+/// parameter) as a legal scalar used to change the value silently (the
+/// placeholder substitution erased or replaced it); it is now refused, in the
+/// prefactor and inside a factor, closed and with open ports.
+#[test]
+fn internal_symbol_names_are_refused_in_a_record() {
+    let vakint = Vakint::new().unwrap();
+    for (mut value, name, inside) in [
+        (l2_root(2, true), "vakint::closure_tensor_0", false),
+        (l2_root(2, true), "vakint::closure_tensor_0", true),
+        (l2_child(2), "vakint::closure_tensor_1", false),
+        (l2_child(2), "vakint::closure_tensor_1", true),
+        (l2_root(2, true), "vakint::closure_lambda", true),
+    ] {
+        let named = atom(name);
+        if inside {
+            value.vertices[0].factor = &value.vertices[0].factor * &named;
+        } else {
+            value.prefactor.scalars = &value.prefactor.scalars * &named;
+        }
+        let refusal = evaluate_factorized_closure(
+            &vakint,
+            &settings(),
+            std::slice::from_ref(&value),
+            &[value.prefactor.total()],
+        );
+        match refusal {
+            Err(FactorizedError::Graph { detail }) => {
+                assert!(
+                    detail.starts_with("reserved symbol ") && detail.contains(name),
+                    "{name}: {detail}"
+                );
+                eprintln!("RESERVED {name} inside_factor={inside}: {detail}");
+            }
+            other => panic!("{name} inside_factor={inside}: not refused: {other:?}"),
+        }
+        // the renamed record still evaluates
+        let mut renamed = value.clone();
+        let innocent = atom("witness::collision_scalar");
+        for factor in renamed
+            .vertices
+            .iter_mut()
+            .map(|v| &mut v.factor)
+            .chain([&mut renamed.prefactor.scalars])
+        {
+            *factor = factor.replace(named.clone()).with(innocent.clone());
+        }
+        evaluate_factorized_closure(
+            &vakint,
+            &settings(),
+            std::slice::from_ref(&renamed),
+            &[renamed.prefactor.total()],
+        )
+        .unwrap();
+    }
+}
+
+/// Every internal name of the sweep, as a variable and (for the vakint
+/// notation's heads) as a function head.
+fn reserved_names() -> Vec<&'static str> {
+    vec![
+        "vakint::closure_tensor_0",
+        "vakint::closure_tensor_7",
+        "vakint::closure_lambda",
+        "vakint::slash(-1,0)",
+        "vakint::nf",
+        "vakint::p(1)",
+        "vakint::k(1)",
+        "vakint::dot(vakint::p(1),vakint::p(1))",
+        "vakint::g(9001,9002)",
+        "vakint::g(1,2)",
+        "vakint::dot(vakint::p(1),UFO::x)",
+        "UFO::coupling(vakint::p(1))",
+        "vakint::topo(1)",
+        "vakint::prop(1,vakint::edge(0,1),vakint::k(1),0,1)",
+        "vakint::mursq",
+        "vakint::graph_entry_branch_0",
+        "vakint::logMassiveClosure",
+        "vakint::any_name_at_all",
+    ]
+}
+
+fn assert_reserved(value: &FactorizedNumerator, name: &str, field: &str) {
+    match value.validate() {
+        Err(FactorizedError::Graph { detail }) if detail.starts_with("reserved symbol ") => {
+            assert!(
+                detail.contains(field),
+                "{name}: {detail} (expected field {field})"
+            );
+        }
+        other => panic!("{name} in {field}: not refused as reserved: {other:?}"),
+    }
+}
+
+/// One refusal per reserved name in a closure record's numerator factors
+/// (edge factor and vertex factor).
+#[test]
+fn reserved_symbols_are_refused_in_factors() {
+    for name in reserved_names() {
+        let symbol = atom(name);
+        let mut v = l2_root(2, true);
+        v.edges[1].factor = &v.edges[1].factor * &symbol;
+        assert_reserved(&v, name, "edge 2 factor");
+        let mut v = l2_root(2, true);
+        v.vertices[1].factor = &v.vertices[1].factor * &symbol;
+        assert_reserved(&v, name, "vertex 2 factor");
+    }
+}
+
+/// ... in the prefactor fields (overall, scalars, colour).
+#[test]
+fn reserved_symbols_are_refused_in_the_prefactor() {
+    for name in reserved_names() {
+        let symbol = atom(name);
+        for field in ["prefactor_overall", "prefactor_scalars", "prefactor_colour"] {
+            let mut v = l2_root(2, true);
+            let target = match field {
+                "prefactor_overall" => &mut v.prefactor.overall,
+                "prefactor_scalars" => &mut v.prefactor.scalars,
+                _ => &mut v.prefactor.colour,
+            };
+            *target = &*target * &symbol;
+            assert_reserved(&v, name, field);
+        }
+    }
+}
+
+/// ... in the projector, the ports, the masses (an edge's, the closure
+/// line's, the auxiliary one), the weights and the dimension.
+#[test]
+fn reserved_symbols_are_refused_in_projector_ports_masses_weights() {
+    for name in reserved_names() {
+        let symbol = atom(name);
+        let mut v = l2_root(2, true);
+        let projector = v.projector.as_mut().unwrap();
+        projector.tensor = &projector.tensor * &symbol;
+        assert_reserved(&v, name, "projector");
+        let mut v = l2_child(2);
+        v.ports.push(function!(
+            symbolica::symbol!(names::MINK),
+            Atom::var(v.dimension),
+            symbol.clone()
+        ));
+        if name.starts_with("vakint::slash(") {
+            // the reader's own dummy slot form mink(D, vakint::slash(..)) is
+            // exempt from the namespace (A-18): a forged one is refused by
+            // the index rules (here: a port that occurs in no factor)
+            match v.validate() {
+                Err(FactorizedError::Ports { detail }) => {
+                    assert!(
+                        detail.ends_with("does not occur in the factors"),
+                        "{detail}"
+                    )
+                }
+                other => panic!("forged slash port: {other:?}"),
+            }
+        } else {
+            assert_reserved(&v, name, "ports");
+        }
+        let mut v = l2_root(2, true);
+        v.edges[0].mass_squared = symbol.clone();
+        assert_reserved(&v, name, "edge 1 mass");
+        let mut v = l2_root(2, true);
+        spec(&mut v).auxiliary_mass_squared = symbol.clone();
+        assert_reserved(&v, name, "taylor auxiliary mass");
+        let mut v = l2_root(2, true);
+        spec(&mut v).mass_squared = symbol.clone();
+        assert_reserved(&v, name, "closure mass");
+        let mut v = l2_root(2, true);
+        spec(&mut v).weights = vec![("scalars".into(), false, symbol.clone())];
+        assert_reserved(&v, name, "weight scalars");
+    }
+    let mut v = l2_root(2, true);
+    v.dimension = symbolica::symbol!("vakint::closure_lambda");
+    assert_reserved(&v, "vakint::closure_lambda", "dimension");
+}
+
+/// ... in an insertion's coefficient and factor (a record with insertions is
+/// a lifted kind: closure and direct records alike).
+#[test]
+fn reserved_symbols_are_refused_in_insertions() {
+    let record = include_str!("../fixtures/wh-k2-child-ins.record.txt");
+    let base = FactorizedNumerator::from_text(record).unwrap();
+    base.validate().unwrap();
+    assert!(!base.insertions.is_empty());
+    let vertex = base.insertions[0].vertex;
+    for name in reserved_names() {
+        let symbol = atom(name);
+        let mut v = base.clone();
+        v.insertions[0].coefficient = &v.insertions[0].coefficient * &symbol;
+        assert_reserved(&v, name, &format!("insertion {vertex} coefficient"));
+        let mut v = base.clone();
+        v.insertions[0].factor = &v.insertions[0].factor * &symbol;
+        assert_reserved(&v, name, &format!("insertion {vertex} factor"));
+    }
+}
+
+/// A v3 DIRECT record is a lifted kind too; a v1 direct record (the
+/// pre-existing adapter's input) keeps its earlier behaviour.
+#[test]
+fn reserved_symbols_in_direct_records() {
+    let record = include_str!("../fixtures/wh-k5-direct.record.txt");
+    let base = FactorizedNumerator::from_text(record).unwrap();
+    base.validate().unwrap();
+    assert!(base.record.is_some() || !base.insertions.is_empty());
+    let mut v = base.clone();
+    v.prefactor.scalars = &v.prefactor.scalars * atom("vakint::closure_tensor_0");
+    assert_reserved(&v, "vakint::closure_tensor_0", "prefactor_scalars");
+    // v1, no insertion: not a lifted kind, the namespace is not checked
+    let mut v1 = base.clone();
+    v1.record = None;
+    v1.insertions.clear();
+    v1.prefactor.scalars = &v1.prefactor.scalars * atom("vakint::closure_tensor_0");
+    assert!(!matches!(
+        v1.validate(),
+        Err(FactorizedError::Graph { detail }) if detail.starts_with("reserved symbol")
+    ));
+}
+
+/// vakint's default epsilon is the one vakint symbol a record may carry (a
+/// default-settings caller writes its insertion coefficients in it).
+#[test]
+fn the_default_epsilon_is_not_reserved() {
+    let mut v = l2_root(2, true);
+    v.prefactor.scalars = &v.prefactor.scalars * atom("1+vakint::ε");
+    v.validate().unwrap();
+}
+
 /// The comparator FAILS FAST on a wrong oracle: k1-root's value perturbed at
 /// its lowest valid order (eps^-2, valid through eps^-1) is reported as
 /// different within seconds (an unsigned cast of the negative bound used to
@@ -2309,4 +2538,612 @@ fn the_comparator_needs_a_nonzero_reference() {
     );
     let expected = fixture_value(text);
     assert_equal_through(&expected, &expected, order, "the fixture against itself");
+}
+
+// ---------------------------------------------------------------------------
+// The reserved namespace and the caller-symbol rules: priority (1) tests.
+// Each refusal test asserts the VARIANT and the DETAIL PREFIX on a minimal
+// input (a valid record with one defect) and that the same input without the
+// defect is accepted.
+// ---------------------------------------------------------------------------
+
+/// `Err(Graph)` whose detail starts with `prefix`.
+fn assert_graph_prefix(result: std::result::Result<(), FactorizedError>, prefix: &str, what: &str) {
+    match result {
+        Err(FactorizedError::Graph { detail }) => {
+            assert!(
+                detail.starts_with(prefix),
+                "{what}: {detail}\n(expected prefix {prefix:?})"
+            )
+        }
+        other => panic!("{what}: expected Graph {prefix:?}, got {other:?}"),
+    }
+}
+
+fn reserved_prefix(name: &str, field: &str) -> String {
+    format!(
+        "reserved symbol {name} in {field}: the vakint:: namespace is reserved for vakint's internal symbols"
+    )
+}
+
+/// The gate's F1: `vakint::closure_lambda` AND `vakint::closure_tensor_0` in
+/// EVERY atom of a closure record, one case per field, with the exact message.
+#[test]
+fn closure_lambda_and_closure_tensor_0_are_refused_in_every_field() {
+    for name in ["vakint::closure_lambda", "vakint::closure_tensor_0"] {
+        let x = atom(name);
+        let mut cases: Vec<(FactorizedNumerator, String)> = Vec::new();
+        let mut v = l2_root(2, true);
+        v.prefactor.overall = &v.prefactor.overall * &x;
+        cases.push((v, "prefactor_overall".into()));
+        let mut v = l2_root(2, true);
+        v.prefactor.scalars = &v.prefactor.scalars * &x;
+        cases.push((v, "prefactor_scalars".into()));
+        let mut v = l2_root(2, true);
+        v.prefactor.colour = &v.prefactor.colour * &x;
+        cases.push((v, "prefactor_colour".into()));
+        let mut v = l2_root(2, true);
+        v.edges[0].mass_squared = x.clone();
+        cases.push((v, "edge 1 mass".into()));
+        let mut v = l2_root(2, true);
+        spec(&mut v).auxiliary_mass_squared = x.clone();
+        cases.push((v, "taylor auxiliary mass".into()));
+        let mut v = l2_root(2, true);
+        spec(&mut v).mass_squared = x.clone();
+        cases.push((v, "closure mass".into()));
+        let mut v = l2_root(2, true);
+        v.edges[0].factor = &v.edges[0].factor * &x;
+        cases.push((v, "edge 1 factor".into()));
+        let mut v = l2_root(2, true);
+        v.vertices[0].factor = &v.vertices[0].factor * &x;
+        cases.push((v, "vertex 1 factor".into()));
+        let mut v = l2_root(2, true);
+        let projector = v.projector.as_mut().unwrap();
+        projector.tensor = &projector.tensor * &x;
+        cases.push((v, "projector".into()));
+        let mut v = l2_child(2);
+        v.ports[0] = function!(
+            symbolica::symbol!(names::MINK),
+            Atom::var(v.dimension),
+            x.clone()
+        );
+        cases.push((v, "ports".into()));
+        let mut v = l2_root(2, true);
+        spec(&mut v).weights = vec![("scalars".into(), false, x.clone())];
+        cases.push((v, "weight scalars".into()));
+        let mut v = l2_root(2, true);
+        v.dimension = symbolica::symbol!(name);
+        cases.push((v, "dimension".into()));
+        let base =
+            FactorizedNumerator::from_text(include_str!("../fixtures/wh-k2-child-ins.record.txt"))
+                .unwrap();
+        let vertex = base.insertions[0].vertex;
+        let mut v = base.clone();
+        v.insertions[0].coefficient = &v.insertions[0].coefficient * &x;
+        cases.push((v, format!("insertion {vertex} coefficient")));
+        let mut v = base.clone();
+        v.insertions[0].factor = &v.insertions[0].factor * &x;
+        cases.push((v, format!("insertion {vertex} factor")));
+        for (v, field) in cases {
+            assert_graph_prefix(v.validate(), &reserved_prefix(name, &field), &field);
+        }
+        // without the defect: accepted
+        l2_root(2, true).validate().unwrap();
+        l2_child(2).validate().unwrap();
+        base.validate().unwrap();
+    }
+}
+
+/// The gate's F1 for the separately supplied prefactor ARGUMENT of every
+/// entry (A-17): closure (l2_root), evaluate_factorized, the ports entry and
+/// the vacuum entry (a v3 direct record): refused with the exact message;
+/// the record with a clean argument passes the argument checks.
+#[test]
+fn the_prefactor_argument_is_checked_at_every_entry() {
+    let vakint = Vakint::new().unwrap();
+    let field = "prefactor argument";
+    let direct =
+        FactorizedNumerator::from_text(include_str!("../fixtures/wh-k5-direct.record.txt"))
+            .unwrap();
+    assert!(super::super::is_marked(&direct));
+    for name in [
+        "vakint::closure_lambda",
+        "vakint::closure_tensor_0",
+        "vakint::dot(vakint::p(1),vakint::p(1))",
+        "UFO::coupling(vakint::p(1))",
+    ] {
+        let x = atom(name);
+        let reported = match x.as_view() {
+            AtomView::Var(v) => v.get_symbol().get_name().to_string(),
+            _ if name.starts_with("UFO::") => "vakint::p".to_string(),
+            _ => "vakint::dot".to_string(),
+        };
+        let prefix = reserved_prefix(&reported, field);
+        let root = l2_root(2, true);
+        let closure = evaluate_factorized_closure(
+            &vakint,
+            &settings(),
+            std::slice::from_ref(&root),
+            &[root.prefactor.total() * &x],
+        )
+        .map(|_| ());
+        assert_graph_prefix(closure, &prefix, "closure entry");
+        let argument = direct.prefactor.total() * &x;
+        let entries: [(&str, std::result::Result<(), FactorizedError>); 3] = [
+            (
+                "evaluate_factorized",
+                crate::p_integral::factorized::evaluate_factorized(
+                    &vakint,
+                    &settings(),
+                    &direct,
+                    &argument,
+                )
+                .map(|_| ()),
+            ),
+            (
+                "evaluate_factorized_ports",
+                crate::p_integral::factorized::evaluate_factorized_ports(
+                    &vakint,
+                    &settings(),
+                    &direct,
+                    &argument,
+                )
+                .map(|_| ()),
+            ),
+            (
+                "evaluate_factorized_vacuum",
+                crate::p_integral::factorized::evaluate_factorized_vacuum(
+                    &vakint,
+                    &settings(),
+                    &direct,
+                    &argument,
+                )
+                .map(|_| ()),
+            ),
+        ];
+        for (entry, result) in entries {
+            assert_graph_prefix(result, &prefix, entry);
+        }
+    }
+    // without the defect the argument checks pass (marked records)
+    super::super::check_prefactor_argument(&direct, &direct.prefactor.total()).unwrap();
+    let root = l2_root(2, true);
+    super::super::check_prefactor_argument(&root, &root.prefactor.total()).unwrap();
+    // an UNMARKED value keeps the base behaviour: no argument check
+    let mut v1 = direct.clone();
+    v1.record = None;
+    v1.insertions.clear();
+    assert!(!super::super::is_marked(&v1));
+    super::super::check_prefactor_argument(&v1, &atom("vakint::closure_tensor_0")).unwrap();
+}
+
+/// A-17: every item of the prefactor argument's checks, on the closure
+/// entry's l2_root (variant AND detail prefix; the clean argument accepted).
+#[test]
+fn the_prefactor_argument_gets_the_record_prefactor_checks() {
+    let root = l2_root(2, true);
+    let clean = root.prefactor.total();
+    let check = |x: &str| super::super::check_prefactor_argument(&root, &(&clean * atom(x)));
+    let not_scalar = |x: &str, prefix: &str| match check(x) {
+        Err(FactorizedError::NotScalar { location, detail }) => {
+            assert_eq!(location, "prefactor argument", "{x}");
+            assert!(detail.starts_with(prefix), "{x}: {detail}");
+        }
+        other => panic!("{x}: expected NotScalar {prefix:?}, got {other:?}"),
+    };
+    // the reserved namespace and wildcards: Graph
+    assert_graph_prefix(
+        check("vakint::closure_lambda"),
+        &reserved_prefix("vakint::closure_lambda", "prefactor argument"),
+        "lambda",
+    );
+    assert_graph_prefix(
+        check("UFO::x_"),
+        "a symbol ending in _ cannot be used as prefactor argument: UFO::x_ is a pattern wildcard",
+        "wildcard",
+    );
+    // loop momenta and indices (open colour indices included): NotScalar
+    not_scalar(&q(1, &hedge(120)), "must be free of indices and momenta");
+    not_scalar(
+        &format!("{METRIC}({},{})", hedge(120), hedge(121)),
+        "must be free of indices and momenta",
+    );
+    not_scalar(
+        "spenso::t(spenso::coad(8,gammalooprs::a),spenso::cof(3,gammalooprs::i),spenso::dind(spenso::cof(3,gammalooprs::j)))",
+        "must be free of indices and momenta",
+    );
+    // inexact numbers
+    match check("0.5") {
+        Err(FactorizedError::InexactNumber { location, .. }) => {
+            assert_eq!(location, "prefactor argument")
+        }
+        other => panic!("0.5: {other:?}"),
+    }
+    // the flavour symbol (nf_power = 0), mUVexp, the reference mass R
+    not_scalar(
+        "beta::nf",
+        "the flavour symbol beta::nf with the record's nf_power=0",
+    );
+    not_scalar(
+        "gammalooprs::mUVexp",
+        "gammalooprs::mUVexp (the producer maps it to mUV)",
+    );
+    not_scalar(R, "the reference mass ");
+    // accepted: the clean argument, vakint's epsilon, a colour invariant, the
+    // auxiliary mass, and the flavour factor of a record with nf_power > 0
+    for x in [
+        "1",
+        "vakint::ε",
+        "spenso::cas(2,spenso::coad(8))",
+        MAUX,
+        "witness::x",
+    ] {
+        check(x).unwrap_or_else(|e| panic!("{x}: {e}"));
+    }
+    let mut with_nf = root.clone();
+    with_nf.prefactor.nf_power = 1;
+    super::super::check_prefactor_argument(&with_nf, &with_nf.prefactor.total()).unwrap();
+    super::super::check_prefactor_argument(&with_nf, &(&clean * atom("beta::nf"))).unwrap();
+}
+
+/// THE GATE'S DELTA WITNESS (B-1) as acceptance tests on the REAL k1-root
+/// record: with `vakint::closure_tensor_0` in prefactor_scalars or in the
+/// prefactor argument it is REFUSED; with the control name
+/// `user::closure_tensor_0` in the argument the value is A x (A = the
+/// fixture's value) through valid_through, and with it in prefactor_scalars
+/// too.
+#[test]
+fn the_k1_root_collision_witness_is_refused_and_its_control_is_exact() {
+    let record = include_str!("../fixtures/wh-k1-root.record.txt");
+    let value_text = include_str!("../fixtures/wh-k1-root.value.txt");
+    let value = FactorizedNumerator::from_text(record).unwrap();
+    let expected = fixture_value(value_text);
+    let order = valid_through(value_text);
+    let vakint = Vakint::new().unwrap();
+    let run = |v: &FactorizedNumerator, argument: Atom| {
+        evaluate_factorized_closure(
+            &vakint,
+            &rstar_site_settings(),
+            std::slice::from_ref(v),
+            &[argument],
+        )
+    };
+    let internal = atom("vakint::closure_tensor_0");
+    let control = atom("user::closure_tensor_0");
+    let mut named = value.clone();
+    named.prefactor.scalars = &named.prefactor.scalars * &internal;
+    assert_graph_prefix(
+        run(&named, named.prefactor.total()).map(|_| ()),
+        &reserved_prefix("vakint::closure_tensor_0", "prefactor_scalars"),
+        "k1-root scalars",
+    );
+    assert_graph_prefix(
+        run(&value, value.prefactor.total() * &internal).map(|_| ()),
+        &reserved_prefix("vakint::closure_tensor_0", "prefactor argument"),
+        "k1-root argument",
+    );
+    let got = run(&value, value.prefactor.total() * &control).unwrap();
+    assert_equal_through(
+        &got.value,
+        &(&expected * &control),
+        order,
+        "k1-root x user:: argument",
+    );
+    let mut renamed = value.clone();
+    renamed.prefactor.scalars = &renamed.prefactor.scalars * &control;
+    let got = run(&renamed, renamed.prefactor.total()).unwrap();
+    assert_equal_through(
+        &got.value,
+        &(&expected * &control),
+        order,
+        "k1-root x user:: scalars",
+    );
+}
+
+/// A-16: a symbol whose name ends in `_` is a symbolica WILDCARD when an
+/// atom is used as a replacement pattern (witness: `replace(R_)` rewrites a
+/// sum that does not contain R_), so it is refused in a marked record and as
+/// the settings' epsilon; an unmarked value keeps the base behaviour.
+#[test]
+fn wildcard_names_are_refused() {
+    let wild = atom("UFO::R_");
+    let target = atom("UFO::a+UFO::b");
+    let replaced = target.replace(wild.clone()).with(Atom::num(1));
+    eprintln!("WILDCARD witness: (a+b).replace(R_).with(1) = {replaced}");
+    assert_ne!(replaced, target, "R_ did not act as a wildcard");
+    // the reference mass (closing edge and closure line): the first atom met
+    // is the closing edge's mass
+    let mut v = l2_root(2, true);
+    v.edges[2].mass_squared = wild.clone();
+    spec(&mut v).mass_squared = wild.clone();
+    assert_graph_prefix(
+        v.validate(),
+        "a symbol ending in _ cannot be used as edge 3 mass: UFO::R_ is a pattern wildcard",
+        "R_",
+    );
+    let mut v = l2_root(2, true);
+    spec(&mut v).auxiliary_mass_squared = wild.clone();
+    assert_graph_prefix(
+        v.validate(),
+        "a symbol ending in _ cannot be used as taylor auxiliary mass",
+        "M_aux",
+    );
+    let mut v = l2_root(2, true);
+    v.dimension = symbolica::symbol!("UFO::D_");
+    assert_graph_prefix(
+        v.validate(),
+        "a symbol ending in _ cannot be used as dimension: UFO::D_ is a pattern wildcard",
+        "D_",
+    );
+    let mut v = l2_root(2, true);
+    v.vertices[1].factor = &v.vertices[1].factor * atom("UFO::g_");
+    assert_graph_prefix(
+        v.validate(),
+        "a symbol ending in _ cannot be used as vertex 2 factor",
+        "factor",
+    );
+    l2_root(2, true).validate().unwrap();
+    // the settings' epsilon
+    let vakint = Vakint::new().unwrap();
+    let root = l2_root(0, true);
+    for (epsilon, prefix) in [
+        (
+            "UFO::eps_",
+            "a symbol ending in _ cannot be used as the epsilon_symbol setting",
+        ),
+        (
+            "closure_tensor_0",
+            "reserved symbol vakint::closure_tensor_0 in the epsilon_symbol setting",
+        ),
+    ] {
+        let settings = VakintSettings {
+            epsilon_symbol: epsilon.into(),
+            ..settings()
+        };
+        assert_graph_prefix(
+            evaluate_factorized_closure(
+                &vakint,
+                &settings,
+                std::slice::from_ref(&root),
+                &[root.prefactor.total()],
+            )
+            .map(|_| ()),
+            prefix,
+            epsilon,
+        );
+    }
+    // an unmarked (v1 direct) value is not checked: the base behaviour
+    let mut v1 =
+        FactorizedNumerator::from_text(include_str!("../fixtures/wh-k5-direct.record.txt"))
+            .unwrap();
+    v1.record = None;
+    v1.insertions.clear();
+    v1.prefactor.scalars = atom("UFO::x_");
+    assert!(!matches!(
+        v1.validate(),
+        Err(FactorizedError::Graph { detail }) if detail.starts_with("a symbol ending in _")
+    ));
+}
+
+/// Rename edge `old` to `new` everywhere in a record (ids, loop / external
+/// edges, the closing edge, every `Q(old, ..)`).
+fn renumber(value: &FactorizedNumerator, old: usize, new: usize) -> FactorizedNumerator {
+    let mut v = value.clone();
+    let q_atom = atom(&q(1, &hedge(1)));
+    let AtomView::Fun(q_fun) = q_atom.as_view() else {
+        unreachable!()
+    };
+    let q_symbol = q_fun.get_symbol();
+    let rename = |a: &Atom| {
+        a.replace_map(|part, _, out| {
+            if let AtomView::Fun(f) = part
+                && f.get_symbol() == q_symbol
+                && f.get_nargs() == 2
+            {
+                let args = f.iter().collect::<Vec<_>>();
+                if i64::try_from(args[0]).ok() == Some(old as i64) {
+                    **out = function!(q_symbol, Atom::num(new as i64), args[1].to_owned());
+                }
+            }
+        })
+    };
+    for e in &mut v.edges {
+        if e.id == old {
+            e.id = new;
+        }
+        e.factor = rename(&e.factor);
+    }
+    for vx in &mut v.vertices {
+        vx.factor = rename(&vx.factor);
+    }
+    if let Some(p) = &mut v.projector {
+        p.tensor = rename(&p.tensor);
+    }
+    for slot in v.loop_edges.iter_mut().chain(v.external_edges.iter_mut()) {
+        if *slot == Some(old) {
+            *slot = Some(new);
+        }
+    }
+    if let FactorizedKind::Closure(spec) = &mut v.kind {
+        if spec.edge == old {
+            spec.edge = new;
+        }
+        if let Some(taylor) = &mut spec.taylor {
+            for e in &mut taylor.scaled_edges {
+                if *e == old {
+                    *e = new;
+                }
+            }
+        }
+    }
+    v.edges.sort_by_key(|e| e.id);
+    v
+}
+
+/// A-20: edge ids are written as `Q(id, ..)` (i64) and a loop without a loop
+/// edge gets the fresh id max + 1 + i: an id near usize::MAX (which used to
+/// wrap the fresh id onto an existing edge) is refused, an id whose fresh ids
+/// stay at or below i64::MAX is accepted.
+#[test]
+fn edge_ids_beyond_i64_are_refused() {
+    // l2_root with loop 0 without a loop edge: line 1 (k1 + q) carries loop 0
+    let mut base = l2_root(0, true);
+    base.loop_edges[0] = None;
+    base.validate().unwrap();
+    let fresh = base.loop_edges.iter().filter(|e| e.is_none()).count();
+    assert_eq!(fresh, 1);
+    let prefix = |id: usize| {
+        format!(
+            "edge id {id}: the ids (with 1 fresh loop-vector ids above them) must not exceed i64::MAX"
+        )
+    };
+    for id in [usize::MAX, i64::MAX as usize] {
+        match renumber(&base, 21, id).validate() {
+            Err(FactorizedError::Closure { detail }) => {
+                assert!(detail.starts_with(&prefix(id)), "{id}: {detail}")
+            }
+            other => panic!("{id}: {other:?}"),
+        }
+    }
+    renumber(&base, 21, i64::MAX as usize - 1)
+        .validate()
+        .unwrap();
+}
+
+/// A-21: a power whose Taylor coefficients overflow i64 is refused by
+/// validate (not later at the evaluation), with the same power accepted
+/// without a Taylor step and a normal power accepted with one.
+#[test]
+fn powers_that_overflow_the_taylor_coefficients_are_refused() {
+    let huge = i64::MAX / 2;
+    let mut v = l2_root(2, true);
+    v.edges[0].power = huge;
+    match v.validate() {
+        Err(FactorizedError::Closure { detail }) => assert!(
+            detail.starts_with(&format!(
+                "edge 1: power {huge} is too large for a Taylor step of degree 2"
+            )),
+            "{detail}"
+        ),
+        other => panic!("{other:?}"),
+    }
+    let mut v = l2_root(2, true);
+    v.edges[0].power = 3;
+    v.validate().unwrap();
+    // the bound function itself
+    assert!(super::taylor_coefficient_bound(3_037_000_499, 2).is_some());
+    assert!(super::taylor_coefficient_bound(i64::MAX, 1).is_none());
+    assert!(super::taylor_coefficient_bound(huge, 2).is_none());
+}
+
+/// A-21: a degree read off an exponent saturates (a degree is only compared
+/// with w <= 2) instead of truncating `x^(2^32)` to order 0.
+#[test]
+fn degree_exponents_saturate() {
+    let exponent = |text: &str| {
+        let pow = atom(&format!("UFO::x^({text})"));
+        let AtomView::Pow(p) = pow.as_view() else {
+            panic!("{pow}")
+        };
+        super::degree_exponent(p.get_base_exp().1)
+    };
+    assert_eq!(exponent("2"), 2);
+    assert_eq!(exponent("4294967296"), u32::MAX);
+    assert_eq!(exponent("4294967298"), u32::MAX);
+    assert_eq!(exponent("100000000000000000000000"), u32::MAX);
+    assert_eq!(exponent("-2"), 0);
+}
+
+/// A-21b: the insertions' cycles are summed with checked arithmetic (two
+/// insertions of u32::MAX and 1 fermion cycles used to wrap to 0).
+#[test]
+fn insertion_cycles_do_not_wrap() {
+    let base =
+        FactorizedNumerator::from_text(include_str!("../fixtures/wh-k2-child-ins.record.txt"))
+            .unwrap();
+    let mut a = base.insertions[0].clone();
+    let mut b = a.clone();
+    a.cycles = (u32::MAX, 0);
+    b.cycles = (1, 0);
+    assert_eq!(super::insertion_cycles(&[a.clone(), b.clone()]), None);
+    b.cycles = (0, 1);
+    assert_eq!(super::insertion_cycles(&[a, b]), Some((u32::MAX, 1)));
+}
+
+/// THE GATE'S F2: raw port indices `PORT + i` (9001, 9002, ..) cannot meet a
+/// caller's integer index. (a) A caller's OPEN slot cannot be an integer: a
+/// port is a half-edge slot (`IndexNotLocal` otherwise, asserted here). (b) A
+/// caller's integer DUMMY is contracted away by idenso before the mapping;
+/// the mapping goes BY POSITION of the open slot, and the way back rewrites
+/// only vakint's `g` / `p` heads, which a marked record cannot carry.
+/// Witness of (b): l2_child with its dummy renamed to the integer 9001 (the
+/// first raw port index, while port 0 maps to 9001) gives the same value.
+#[test]
+fn integer_indices_in_the_port_range_do_not_collide() {
+    let vakint = Vakint::new().unwrap();
+    let original = l2_child(1);
+    let slot = |n: i64| atom(&format!("{MINK}({DIM},{n})"));
+    // (a) an integer port is refused
+    let mut port = original.clone();
+    for v in &mut port.vertices {
+        v.factor = v.factor.replace(atom(&hedge(120))).with(slot(9002));
+    }
+    port.ports[0] = slot(9002);
+    assert!(
+        matches!(port.validate(), Err(FactorizedError::IndexNotLocal { .. })),
+        "{:?}",
+        port.validate()
+    );
+    // (b) an integer dummy at the raw port base
+    let mut dummy = original.clone();
+    for v in &mut dummy.vertices {
+        v.factor = v.factor.replace(atom(&index(2, 7))).with(slot(9001));
+    }
+    assert_ne!(dummy, original);
+    dummy.validate().unwrap();
+    let run = |v: &FactorizedNumerator| {
+        evaluate_factorized_closure(
+            &vakint,
+            &settings(),
+            std::slice::from_ref(v),
+            &[v.prefactor.total()],
+        )
+        .unwrap()
+        .value
+    };
+    let expected = run(&original);
+    let got = run(&dummy);
+    assert!(!expected.is_zero());
+    assert!(
+        (&got - &expected).expand().is_zero(),
+        "integer dummy 9001\n got      {got}\n expected {expected}"
+    );
+}
+
+/// A-18: a FORGED `vakint::slash` dummy: as a bare symbol it is reserved; in
+/// the reader's slot form it is refused by the index rules (it can only meet
+/// a reader dummy), never evaluated.
+#[test]
+fn a_forged_slash_dummy_is_refused() {
+    let mut v = l2_root(2, true);
+    v.vertices[1].factor = &v.vertices[1].factor * atom("vakint::slash(-1,0)");
+    assert_graph_prefix(
+        v.validate(),
+        &reserved_prefix("vakint::slash", "vertex 2 factor"),
+        "bare slash",
+    );
+    let slash = format!("{MINK}({DIM},vakint::slash(2,0))");
+    let mut v = l2_root(2, true);
+    v.vertices[1].factor = &v.vertices[1].factor
+        * atom(&format!("{}*{}", q(2, &slash), q(1, &slash)))
+        * atom(&format!("{}*{}", q(3, &slash), q(1, &slash)));
+    assert!(
+        matches!(
+            v.validate(),
+            Err(FactorizedError::IndexOverContracted { .. })
+                | Err(FactorizedError::DummyIndexShared { .. })
+        ),
+        "{:?}",
+        v.validate()
+    );
 }

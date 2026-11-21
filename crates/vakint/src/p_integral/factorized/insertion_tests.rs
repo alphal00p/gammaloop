@@ -786,8 +786,8 @@ fn a_reference_mass_inside_an_insertion_is_refused() {
         .iter_mut()
         .find(|e| e.id == 2)
         .unwrap()
-        .mass_squared = atom("helper_test_m2");
-    ins(&mut value).coefficient = atom("helper_test_m2");
+        .mass_squared = atom("helper_test::m2");
+    ins(&mut value).coefficient = atom("helper_test::m2");
     assert!(is_insertion(&refused(&value)));
 }
 

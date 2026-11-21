@@ -754,6 +754,194 @@ pub fn expand_compact_slash(expression: &Atom, scope: i64) -> Atom {
     })
 }
 
+/// The one symbol of vakint's namespace a record of the R* interface may
+/// carry: vakint's default epsilon (`VakintSettings::epsilon_symbol`), used by
+/// internal code only as the evaluation's epsilon.
+pub const ALLOWED_VAKINT_SYMBOL: &str = "vakint::ε";
+
+/// What [`first_forbidden_symbol`] found.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum ForbiddenSymbol {
+    /// A symbol of the reserved `vakint::` namespace.
+    Reserved(String),
+    /// A symbol whose name ends in `_`: a symbolica pattern WILDCARD wherever
+    /// the entries use a caller atom as a replacement pattern (the dimension,
+    /// the reference mass, ...), where it would match any subexpression.
+    Wildcard(String),
+}
+
+/// The first FORBIDDEN symbol (variable or function head, at any nesting
+/// level) of `view`: one of vakint's namespace other than
+/// [`ALLOWED_VAKINT_SYMBOL`] and the names in `exempt`, or one whose name
+/// ends in `_`. The dummy index vakint's reader writes when it opens a compact
+/// slash, `mink(D, vakint::slash(scope, n))`, is accepted in exactly that slot
+/// form (a forged one can only clash with a reader dummy, which the
+/// contraction rule refuses as an index used more than twice or shared
+/// between factors; no code substitutes it).
+pub(crate) fn first_forbidden_symbol(
+    view: AtomView<'_>,
+    exempt: &[&str],
+) -> Option<ForbiddenSymbol> {
+    let classify = |name: &str| -> Option<ForbiddenSymbol> {
+        if name.ends_with('_') {
+            Some(ForbiddenSymbol::Wildcard(name.to_string()))
+        } else if name.starts_with("vakint::")
+            && name != ALLOWED_VAKINT_SYMBOL
+            && !exempt.contains(&name)
+        {
+            Some(ForbiddenSymbol::Reserved(name.to_string()))
+        } else {
+            None
+        }
+    };
+    let mut found = None;
+    view.visitor(&mut |part| {
+        if found.is_some() {
+            return false;
+        }
+        match part {
+            AtomView::Var(v) => found = classify(v.get_symbol().get_name()),
+            AtomView::Fun(f) => {
+                let symbol = f.get_symbol();
+                let name = symbol.get_name();
+                if name == names::MINK && f.get_nargs() == 2 {
+                    let args = f.iter().collect::<Vec<_>>();
+                    if let AtomView::Fun(index) = args[1]
+                        && index.get_symbol().get_name() == "vakint::slash"
+                        && index.iter().all(|a| matches!(a, AtomView::Num(_)))
+                    {
+                        found = first_forbidden_symbol(args[0], exempt);
+                        return false;
+                    }
+                }
+                found = classify(name);
+            }
+            _ => {}
+        }
+        found.is_none()
+    });
+    found
+}
+
+/// The refusal of a [`ForbiddenSymbol`] in `field` (variant `Graph`):
+/// `reserved symbol <name> in <field>: the vakint:: namespace is reserved for
+/// vakint's internal symbols`, or `a symbol ending in _ cannot be used as
+/// <field>: <name> is a pattern wildcard`.
+pub(crate) fn forbidden_symbol_error(found: ForbiddenSymbol, field: &str) -> FactorizedError {
+    let detail = match found {
+        ForbiddenSymbol::Reserved(name) => format!(
+            "reserved symbol {name} in {field}: the vakint:: namespace is reserved for vakint's internal symbols"
+        ),
+        ForbiddenSymbol::Wildcard(name) => {
+            format!("a symbol ending in _ cannot be used as {field}: {name} is a pattern wildcard")
+        }
+    };
+    FactorizedError::Graph { detail }
+}
+
+/// THE caller-symbol refusal of a marked value's atoms (one function for the
+/// record walk [`FactorizedNumerator::check_reserved_symbols`] and the
+/// entries' [`check_prefactor_argument`]): no symbol of the reserved
+/// `vakint::` namespace (but [`ALLOWED_VAKINT_SYMBOL`] and `exempt`), no
+/// wildcard name (ending in `_`).
+pub(crate) fn check_caller_atom(atom: &Atom, field: &str, exempt: &[&str]) -> Result<()> {
+    match first_forbidden_symbol(atom.as_view(), exempt) {
+        Some(found) => Err(forbidden_symbol_error(found, field)),
+        None => Ok(()),
+    }
+}
+
+/// THE PREFACTOR ARGUMENT of a marked value (the atom an entry multiplies in
+/// besides the record, normally `value.prefactor.total()`): the same checks as
+/// the record's prefactor fields, called by every entry that takes one
+/// (`evaluate_factorized`, hence `evaluate_factorized_ports`,
+/// `evaluate_factorized_vacuum[_streamed]`, `evaluate_factorized_closure`),
+/// in this order:
+/// - caller symbols ([`check_caller_atom`], variant `Graph`): no reserved
+///   `vakint::` symbol (vakint's internal placeholders, the Taylor parameter
+///   `vakint::closure_lambda`, the notation heads `p`, `k`, `g`, `dot`,
+///   `prop`, `topo`, at any nesting, function heads too) and no wildcard name;
+///   `vakint::nf` is exempt here only, being the flavour symbol
+///   [`Prefactor::total`] writes (no internal code substitutes it);
+/// - a scalar (`InexactNumber` / `NotScalar`, location `prefactor argument`):
+///   exact numbers, no index (no open colour index either), no momentum (no
+///   loop momentum); colour invariants as in `prefactor_colour` are allowed;
+/// - (`NotScalar`) a flavour symbol (`nf`, `…::nf`) only when the record's
+///   own `nf_power` is nonzero (the factor `total` writes; otherwise n_f
+///   stays with the caller), no `mUVexp`;
+/// - (`NotScalar`, closure kind) no reference mass `R` (substituted in the
+///   integrand only, as in `prefactor_scalars` / `prefactor_colour`).
+///
+/// Unmarked values are not checked (the base behaviour).
+pub(crate) fn check_prefactor_argument(
+    value: &FactorizedNumerator,
+    prefactor: &Atom,
+) -> Result<()> {
+    if !is_marked(value) {
+        return Ok(());
+    }
+    const FIELD: &str = "prefactor argument";
+    check_caller_atom(prefactor, FIELD, &[names::NF])?;
+    check_scalar(prefactor.as_view(), FIELD)?;
+    let refuse = |detail: String| FactorizedError::NotScalar {
+        location: FIELD.to_string(),
+        detail,
+    };
+    let mut flavour = None;
+    let mut exp = None;
+    prefactor.as_view().visitor(&mut |part| {
+        let symbol = match part {
+            AtomView::Var(v) => v.get_symbol(),
+            AtomView::Fun(f) => f.get_symbol(),
+            _ => return true,
+        };
+        let name = symbol.get_name();
+        if name == "nf" || name.ends_with("::nf") {
+            flavour.get_or_insert_with(|| name.to_string());
+        }
+        if name.ends_with("mUVexp") {
+            exp.get_or_insert_with(|| name.to_string());
+        }
+        true
+    });
+    if let Some(name) = flavour
+        && value.prefactor.nf_power == 0
+    {
+        return Err(refuse(format!(
+            "the flavour symbol {name} with the record's nf_power=0 (n_f stays with the caller)"
+        )));
+    }
+    if let Some(name) = exp {
+        return Err(refuse(format!("{name} (the producer maps it to mUV)")));
+    }
+    if let FactorizedKind::Closure(spec) = &value.kind
+        && closure::contains_atom(prefactor.as_view(), spec.mass_squared.as_view())
+    {
+        return Err(refuse(format!(
+            "the reference mass {} (it is substituted in the integrand only)",
+            spec.mass_squared
+        )));
+    }
+    Ok(())
+}
+
+/// The settings' epsilon of a marked evaluation: not a wildcard, not a
+/// reserved `vakint::` name but [`ALLOWED_VAKINT_SYMBOL`] (it is the
+/// replacement of `D -> 4 - 2 epsilon` and the expansion variable).
+pub(crate) fn check_epsilon_setting(value: &FactorizedNumerator, epsilon: Symbol) -> Result<()> {
+    if !is_marked(value) {
+        return Ok(());
+    }
+    check_caller_atom(&Atom::var(epsilon), "the epsilon_symbol setting", &[])
+}
+
+/// Whether `value` is a MARKED value (a record kind of the R* interface:
+/// kind closure, insertions, or a v3 direct record), to which the reserved
+/// namespace applies.
+pub(crate) fn is_marked(value: &FactorizedNumerator) -> bool {
+    matches!(value.kind, FactorizedKind::Closure(_)) || evaluate::is_new_kind(value)
+}
+
 /// Whether `view` contains a representation slot `rep(dim, index)` or a
 /// momentum `Q(..)` anywhere.
 pub(crate) fn contains_tensor_content(view: AtomView<'_>) -> bool {
@@ -1386,10 +1574,71 @@ impl FactorizedNumerator {
     /// (`validate_closure`: the contract's graph, factor and index rules plus
     /// those of the closure kind).
     pub fn validate(&self) -> Result<()> {
+        // the record kinds of the R* interface may not name vakint's own
+        // symbols (the entries' internal placeholders live there)
+        if is_marked(self) {
+            self.check_reserved_symbols()?;
+        }
         if let FactorizedKind::Closure(spec) = &self.kind {
             return self.validate_closure(spec);
         }
         self.validate_contract(None)
+    }
+
+    /// RESERVED SYMBOLS: no atom of the record (factors, masses, ports,
+    /// projector, prefactor, insertions, the closure line, the weights, the
+    /// dimension) may contain a symbol of vakint's namespace `vakint::`, where
+    /// the entries create their internal placeholders and the vakint notation
+    /// they map to (`closure_tensor_<n>`, `closure_lambda`, `slash`, `nf`,
+    /// `p`, `k`, `dot`, `g`, `topo`, `prop`, `edge`, ...): a caller's symbol
+    /// of that name would be substituted or read as one of them. The single
+    /// exception is [`ALLOWED_VAKINT_SYMBOL`], vakint's default epsilon,
+    /// which internal code only ever uses as the evaluation's epsilon. Nor a
+    /// symbol whose name ends in `_` (a symbolica pattern wildcard: the
+    /// dimension and the reference mass are replacement patterns). The first
+    /// offending atom is reported ([`forbidden_symbol_error`]).
+    pub(crate) fn check_reserved_symbols(&self) -> Result<()> {
+        let check = |atom: &Atom, field: &str| check_caller_atom(atom, field, &[]);
+        check(&Atom::var(self.dimension), "dimension")?;
+        for edge in &self.edges {
+            check(&edge.factor, &format!("edge {} factor", edge.id))?;
+            check(&edge.mass_squared, &format!("edge {} mass", edge.id))?;
+        }
+        for vertex in &self.vertices {
+            check(&vertex.factor, &format!("vertex {} factor", vertex.id))?;
+        }
+        for port in &self.ports {
+            check(port, "ports")?;
+        }
+        if let Some(projector) = &self.projector {
+            check(&projector.tensor, "projector")?;
+        }
+        check(&self.prefactor.overall, "prefactor_overall")?;
+        check(&self.prefactor.scalars, "prefactor_scalars")?;
+        check(&self.prefactor.colour, "prefactor_colour")?;
+        for insertion in &self.insertions {
+            check(
+                &insertion.coefficient,
+                &format!("insertion {} coefficient", insertion.vertex),
+            )?;
+            check(
+                &insertion.factor,
+                &format!("insertion {} factor", insertion.vertex),
+            )?;
+        }
+        let weights = match (&self.kind, &self.record) {
+            (FactorizedKind::Closure(spec), _) => {
+                check(&spec.mass_squared, "closure mass")?;
+                check(&spec.auxiliary_mass_squared, "taylor auxiliary mass")?;
+                spec.weights.as_slice()
+            }
+            (_, Some(record)) => record.weights.as_slice(),
+            _ => &[],
+        };
+        for (name, _, atom) in weights {
+            check(atom, &format!("weight {name}"))?;
+        }
+        Ok(())
     }
 
     /// The contract's checks. `closure = Some(conserved)`: a closure record,

@@ -208,16 +208,46 @@ impl FactorizedNumerator {
                 "a closure record has at least one loop (a zero-loop term, e.g. an inserted counterterm alone, stays with the caller)",
             ));
         }
+        // ids are written as Q(id, ..) (an i64), and a loop without a loop
+        // edge gets the fresh id max + 1 + i ([`loop_vector_id`]): every id,
+        // fresh ones included, must be an i64 (no wrap onto an existing id)
+        let fresh = self.loop_edges.iter().filter(|e| e.is_none()).count();
+        let top = self
+            .edges
+            .iter()
+            .map(|e| e.id)
+            .chain(self.constant_vectors())
+            .max()
+            .unwrap_or(0);
+        if top
+            .checked_add(fresh)
+            .is_none_or(|last| last > i64::MAX as usize)
+        {
+            return Err(refuse(format!(
+                "edge id {top}: the ids (with {fresh} fresh loop-vector ids above them) must not exceed i64::MAX"
+            )));
+        }
         self.validate_contract(Some(conserved))?;
         // weights, exactly once (WH-RECORD-FORMAT section 3): with
         // `original_cycles` the original graph's weights stay with the caller;
         // without, the carried graph's closed loops are applied here
         let p = &self.prefactor;
         // cycles inside insertions are the original graph's too
-        let (inner_fermion, inner_ghost) = self
-            .insertions
-            .iter()
-            .fold((0u32, 0u32), |(f, g), i| (f + i.cycles.0, g + i.cycles.1));
+        let (inner_fermion, inner_ghost) = insertion_cycles(&self.insertions)
+            .ok_or_else(|| refuse("the insertions' cycles overflow u32"))?;
+        // a Taylor step raises a power by at most its degree w, with the
+        // coefficient C(n + w - 1, w) w!: both must be i64 numbers
+        if let Some(taylor) = &spec.taylor {
+            let w = i64::from(taylor.degree);
+            for edge in self.edges.iter().filter(|e| !e.is_external()) {
+                if taylor_coefficient_bound(edge.power, w).is_none() {
+                    return Err(refuse(format!(
+                        "edge {}: power {} is too large for a Taylor step of degree {w} (its coefficients overflow i64)",
+                        edge.id, edge.power
+                    )));
+                }
+            }
+        }
         match spec.original_cycles {
             Some((fermion, ghost)) => {
                 if p.loop_sign != 1 || p.nf_power != 0 || p.overall != Atom::num(1) {
@@ -227,7 +257,12 @@ impl FactorizedNumerator {
                     )));
                 }
                 let (f, g) = carried_cycles(self);
-                let (f, g) = (f + inner_fermion, g + inner_ghost);
+                let (Some(f), Some(g)) = (f.checked_add(inner_fermion), g.checked_add(inner_ghost))
+                else {
+                    return Err(refuse(
+                        "the carried graph's and the insertions' cycles overflow u32",
+                    ));
+                };
                 if f > fermion || g > ghost {
                     return Err(refuse(format!(
                         "the carried graph and its insertions have {f} fermion and {g} ghost cycles, more than original_cycles fermion={fermion} ghost={ghost}"
@@ -503,14 +538,32 @@ fn vector(head: Symbol, coefficients: &[i64]) -> Atom {
     out
 }
 
-fn binomial(n: i64, k: i64) -> i64 {
-    let mut out = 1i64;
-    for i in 0..k {
-        out = out * (n - i) / (i + 1);
-    }
-    out
+/// The summed `(fermion, ghost)` cycles of the insertions, `None` on a u32
+/// overflow.
+pub(super) fn insertion_cycles(insertions: &[super::Insertion]) -> Option<(u32, u32)> {
+    insertions.iter().try_fold((0u32, 0u32), |(f, g), i| {
+        Some((f.checked_add(i.cycles.0)?, g.checked_add(i.cycles.1)?))
+    })
 }
 
+/// The largest Taylor coefficient factor of a line of power `n` raised by at
+/// most `w`: `n + w` and `C(n + w - 1, w) w!` as i64, `None` on an overflow
+/// (`C(n + m - 1, m) m!` grows with m for n >= 1).
+fn taylor_coefficient_bound(n: i64, w: i64) -> Option<i64> {
+    n.checked_add(w)?;
+    binomial(n.checked_add(w - 1)?, w)?.checked_mul(factorial(w))
+}
+
+/// `C(n, k)` exactly (in i128), `None` when it is not an i64.
+fn binomial(n: i64, k: i64) -> Option<i64> {
+    let mut out = 1i128;
+    for i in 0..k {
+        out = out.checked_mul(i128::from(n) - i128::from(i))? / (i128::from(i) + 1);
+    }
+    i64::try_from(out).ok()
+}
+
+/// `n!` (`k <= MAX_CLOSURE_TAYLOR_DEGREE`: never overflows).
 fn factorial(n: i64) -> i64 {
     (1..=n).product::<i64>().max(1)
 }
@@ -530,7 +583,7 @@ fn denominator_terms(
     value: &FactorizedNumerator,
     spec: &ClosureSpec,
     taylor: &TaylorSpec,
-) -> Vec<DenTerm> {
+) -> Result<Vec<DenTerm>> {
     let loops = value.loops();
     let w = taylor.degree as i64;
     let mut terms = vec![DenTerm {
@@ -568,7 +621,16 @@ fn denominator_terms(
                     continue;
                 }
                 let m = a_power + b_power;
-                let number = binomial(n + m - 1, m) * factorial(m)
+                let number = n
+                    .checked_add(m - 1)
+                    .and_then(|top| binomial(top, m))
+                    .and_then(|c| c.checked_mul(factorial(m)))
+                    .ok_or_else(|| {
+                        internal(
+                            "denominator series",
+                            format!("edge {}: power {n} overflows i64 (validated)", edge.id),
+                        )
+                    })?
                     / (factorial(a_power) * factorial(b_power))
                     * if m % 2 == 0 { 1 } else { -1 };
                 // B^0 = C^0 = 1 (also where B or C vanishes: no 0^0)
@@ -601,7 +663,7 @@ fn denominator_terms(
         }
         terms = next;
     }
-    terms
+    Ok(terms)
 }
 
 /// The q-structure factors of a summand (step 2): anything carrying an
@@ -715,17 +777,17 @@ fn lambda_degree(view: AtomView<'_>, lambda: Symbol) -> u32 {
         match view {
             AtomView::Pow(p) => {
                 let (base, exponent) = p.get_base_exp();
-                one(base) * i64::try_from(exponent).unwrap_or(0).max(0) as u32
+                one(base).saturating_mul(degree_exponent(exponent))
             }
             other => one(other),
         }
     };
     let momenta = match view {
-        AtomView::Mul(m) => m.iter().map(factor).sum(),
+        AtomView::Mul(m) => m.iter().map(factor).fold(0, u32::saturating_add),
         other => factor(other),
     };
     // plus the lambda^2 of a compensated reference mass inside the factors
-    momenta + lambda_power(view, lambda)
+    momenta.saturating_add(lambda_power(view, lambda))
 }
 
 /// The per-record preparation: the boundary (or `None`: exactly zero) and
@@ -746,7 +808,18 @@ struct Prepared {
 fn loop_vector_id(value: &FactorizedNumerator, i: usize) -> usize {
     match value.loop_edges.get(i).copied().flatten() {
         Some(edge) => edge,
-        None => value.edges.iter().map(|e| e.id).max().unwrap_or(0) + 1 + i,
+        // above every edge id AND every constant external vector Q(x, ..) of
+        // an absent edge the record names (a pre-expanded sector may carry
+        // one): a fresh id no caller atom can contain
+        // (validate_closure bounds max + fresh count by i64::MAX: no wrap)
+        None => value
+            .edges
+            .iter()
+            .map(|e| e.id)
+            .chain(value.constant_vectors())
+            .max()
+            .unwrap_or(0)
+            .saturating_add(1 + i),
     }
 }
 
@@ -856,13 +929,18 @@ fn lambda_degree_bound(view: AtomView<'_>, lambda: Symbol) -> u32 {
             .map(|t| lambda_degree_bound(t, lambda))
             .max()
             .unwrap_or(0),
-        AtomView::Mul(m) => m.iter().map(|t| lambda_degree_bound(t, lambda)).sum(),
+        AtomView::Mul(m) => m
+            .iter()
+            .map(|t| lambda_degree_bound(t, lambda))
+            .fold(0, u32::saturating_add),
         AtomView::Pow(p) => {
             let (base, exponent) = p.get_base_exp();
-            let n = i64::try_from(exponent).unwrap_or(0).max(0) as u32;
-            lambda_degree_bound(base, lambda) * n
+            lambda_degree_bound(base, lambda).saturating_mul(degree_exponent(exponent))
         }
-        AtomView::Fun(f) => f.iter().map(|t| lambda_degree_bound(t, lambda)).sum(),
+        AtomView::Fun(f) => f
+            .iter()
+            .map(|t| lambda_degree_bound(t, lambda))
+            .fold(0, u32::saturating_add),
     }
 }
 
@@ -911,17 +989,38 @@ fn lambda_power(view: AtomView<'_>, lambda: Symbol) -> u32 {
         match view {
             AtomView::Var(v) if v.get_symbol() == lambda => 1,
             AtomView::Pow(p) => match p.get_base_exp() {
-                (AtomView::Var(v), exp) if v.get_symbol() == lambda => {
-                    i64::try_from(exp).unwrap_or(0).max(0) as u32
-                }
+                (AtomView::Var(v), exp) if v.get_symbol() == lambda => degree_exponent(exp),
                 _ => 0,
             },
             _ => 0,
         }
     };
     match view {
-        AtomView::Mul(m) => m.iter().map(one).sum(),
+        AtomView::Mul(m) => m.iter().map(one).fold(0, u32::saturating_add),
         other => one(other),
+    }
+}
+
+/// The exponent of a power as a DEGREE multiplier: a nonnegative integer,
+/// saturated at `u32::MAX` (a degree is only compared with the Taylor degree
+/// `w <= 2`: a saturated degree is dropped as the true one would be, where a
+/// truncation to the low 32 bits read `x^(2^32)` as order 0); a negative or
+/// non-integer exponent counts 0 (as before).
+fn degree_exponent(exponent: AtomView<'_>) -> u32 {
+    match i64::try_from(exponent) {
+        Ok(n) if n >= 0 => u32::try_from(n).unwrap_or(u32::MAX),
+        Ok(_) => 0,
+        Err(_) => match exponent {
+            AtomView::Num(n)
+                if matches!(
+                    n.get_coeff_view(),
+                    symbolica::coefficient::CoefficientView::Large(..)
+                ) && exponent.to_owned().is_positive().is_true() =>
+            {
+                u32::MAX
+            }
+            _ => 0,
+        },
     }
 }
 
@@ -1082,7 +1181,7 @@ fn prepare(
     // step 3: the denominator terms (or the sector as it is)
     let (den, w, orders) = match &spec.taylor {
         Some(taylor) => (
-            denominator_terms(value, spec, taylor),
+            denominator_terms(value, spec, taylor)?,
             taylor.degree,
             taylor.orders,
         ),
@@ -1111,22 +1210,32 @@ fn prepare(
         .collect::<BTreeMap<_, _>>();
     let closing_mass = spec.auxiliary_mass_squared.clone();
     let head = S.p.call(value.externals() as i64 + 1);
-    let lines_of = |raise: &BTreeMap<usize, i64>| -> Vec<VacuumLine> {
+    let lines_of = |raise: &BTreeMap<usize, i64>| -> Result<Vec<VacuumLine>> {
         let mut sector = value.clone();
         sector.kind = FactorizedKind::Direct;
         for edge in sector.edges.iter_mut().filter(|e| !e.is_external()) {
             for c in edge.momentum[loops..].iter_mut() {
                 *c = 0;
             }
-            edge.power = base_powers[&edge.id] + raise.get(&edge.id).copied().unwrap_or(0);
+            edge.power = base_powers[&edge.id]
+                .checked_add(raise.get(&edge.id).copied().unwrap_or(0))
+                .ok_or_else(|| {
+                    internal(
+                        "raised powers",
+                        format!(
+                            "edge {}: power {} overflows i64 (validated)",
+                            edge.id, base_powers[&edge.id]
+                        ),
+                    )
+                })?;
             if edge.id == spec.edge {
                 edge.mass_squared = closing_mass.clone();
             }
         }
-        vacuum_lines(&sector)
+        Ok(vacuum_lines(&sector))
     };
     // step 4: per pattern and block the reduced coefficient
-    let base_lines = lines_of(&BTreeMap::new());
+    let base_lines = lines_of(&BTreeMap::new())?;
     let base_topology = S.topo.call(vacuum_topology(&base_lines));
     let mut memo = HashMap::<Atom, Vec<(Atom, Atom)>>::new();
     let mut tensor_index = BTreeMap::<Atom, usize>::new();
@@ -1159,7 +1268,7 @@ fn prepare(
     let mut routing = None::<Vec<(Atom, Atom)>>;
     let mut blocks_used = BTreeSet::new();
     for (raise, terms) in &patterns {
-        let lines = lines_of(raise);
+        let lines = lines_of(raise)?;
         let cut = match vacuum_backend(&lines, loops)? {
             VacuumBackend::Closure(cut) => cut,
             VacuumBackend::Scaleless => continue,
@@ -1302,6 +1411,11 @@ pub fn evaluate_factorized_closure(
             )));
         };
         value.validate()?;
+        // a marked value: the separately supplied prefactor gets the checks of
+        // the record's prefactor fields, the settings' epsilon the caller-symbol
+        // rule (no-ops for an unmarked value: the base behaviour)
+        super::check_prefactor_argument(value, prefactor)?;
+        super::check_epsilon_setting(value, vk_symbol!(&settings.epsilon_symbol))?;
         // the value must not depend on the caller's tensor-reduction method or
         // notation (WH-RECORD-FORMAT v1.4 section 7): pinned to what the R*
         // boundary path uses (FeynKit, dot notation)

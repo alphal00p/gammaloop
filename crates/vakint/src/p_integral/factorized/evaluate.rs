@@ -435,6 +435,14 @@ pub fn evaluate_factorized(
     value: &FactorizedNumerator,
     prefactor: &Atom,
 ) -> Result<FactorizedValue> {
+    // a marked value: the separately supplied prefactor gets the checks of
+    // the record's prefactor fields, the settings' epsilon the caller-symbol
+    // rule (no-ops for an unmarked value: the base behaviour; the closure
+    // kind keeps its earlier refusal of this entry, `Reserved`)
+    if !matches!(value.kind, super::FactorizedKind::Closure(_)) {
+        super::check_prefactor_argument(value, prefactor)?;
+        super::check_epsilon_setting(value, vk_symbol!(&settings.epsilon_symbol))?;
+    }
     let pinned;
     let settings = if is_new_kind(value) {
         pinned = pinned_settings(settings);
