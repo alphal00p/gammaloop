@@ -4889,3 +4889,1139 @@ fn data_atoms_are_linear_factors_and_no_zero_hides_in_a_denominator() {
         );
     }
 }
+
+// ===========================================================================
+// RETAIN, ZERO DENOMINATORS, DEPTH, BOUNDS AND ENTRY RULES on marked values:
+// each outcome printed (`CONTRACT CASE`) and asserted
+// ===========================================================================
+
+/// The outcome of a call, shown: `ACCEPTED`, or the variant and detail.
+fn outcome<T>(r: &Result<T, FactorizedError>) -> String {
+    match r {
+        Ok(_) => "ACCEPTED".into(),
+        Err(e) => format!("REFUSED {e:?}").chars().take(260).collect(),
+    }
+}
+
+/// `v` with the factor of vertex `id` moved into an insertion of coefficient
+/// `coefficient` (rule `ct:moved`, the vertex's half-edges, vertex factor 1),
+/// kept sorted by vertex.
+fn with_insertion_at(v: &FactorizedNumerator, id: usize, coefficient: &str) -> FactorizedNumerator {
+    use vakint::p_integral::factorized::{Endpoint, Insertion};
+    let mut w = v.clone();
+    let mut hedges = Vec::new();
+    for e in &w.edges {
+        if e.source == Endpoint::Vertex(id)
+            && let Some(h) = e.source_hedge
+        {
+            hedges.push(h);
+        }
+        if e.target == Endpoint::Vertex(id)
+            && let Some(h) = e.target_hedge
+        {
+            hedges.push(h);
+        }
+    }
+    hedges.sort();
+    let x = w.vertices.iter_mut().find(|x| x.id == id).unwrap();
+    let factor = std::mem::replace(&mut x.factor, Atom::num(1));
+    x.rule = "ct:moved".into();
+    w.insertions.push(Insertion {
+        vertex: id,
+        hedges,
+        cycles: (0, 0),
+        coefficient: atom(coefficient),
+        factor,
+    });
+    w.insertions.sort_by_key(|i| i.vertex);
+    w
+}
+
+fn set_depth(v: &mut FactorizedNumerator, depth: usize) {
+    match &mut v.kind {
+        FactorizedKind::Closure(spec) => spec.depth = Some(depth),
+        _ => v.record.as_mut().expect("a v3 record").depth = Some(depth),
+    }
+}
+
+/// The detail of a refusal (`Insertion`, `NotScalar`, `Graph`, `Closure`,
+/// `Ports`; other variants shown whole), for the prefix checks.
+fn refusal_detail(e: &FactorizedError) -> String {
+    match e {
+        FactorizedError::Insertion { detail, .. }
+        | FactorizedError::NotScalar { detail, .. }
+        | FactorizedError::Graph { detail }
+        | FactorizedError::Closure { detail }
+        | FactorizedError::Ports { detail } => detail.clone(),
+        other => format!("{other:?}"),
+    }
+}
+
+/// `f` in a thread, its result within `seconds` (a panic caught), `None` on
+/// time-out (the thread is left running: the test process ends with the
+/// test).
+fn within<T: Send + 'static>(
+    seconds: u64,
+    f: impl FnOnce() -> T + Send + 'static,
+) -> Option<std::thread::Result<T>> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
+        let _ = tx.send(r);
+    });
+    rx.recv_timeout(std::time::Duration::from_secs(seconds))
+        .ok()
+}
+
+/// The marked direct record k5-direct with the settings' number of terms set
+/// to its depth (the direct entries require them equal).
+fn direct_record_and_settings() -> (FactorizedNumerator, VakintSettings) {
+    let v = record("wh-k5-direct");
+    let mut s = symbolic();
+    s.number_of_terms_in_epsilon_expansion = v.record.as_ref().unwrap().depth.unwrap() as i64;
+    (v, s)
+}
+
+/// Retain with insertions. The real K2 with TWO insertions (its own at vertex
+/// 4, ε^-1, and the factor of vertex 2 moved into a second one, ε^-1): total
+/// pole order 2; in Retain at depth 1 and at depth 3 the values are EQUAL
+/// (Retain is the exact product: no truncation). The K1 root without
+/// insertions in Retain, expanded, equals Symbolic. The K2 insertion
+/// coefficient times (1+ε)^-1 (a ratio) in Retain, expanded, equals Symbolic.
+#[test]
+fn retain_values_are_exact_products() {
+    let retain = site(RustRedMasterMode::Retain);
+    let k2 = record("wh-k2-child-ins");
+    let two = with_insertion_at(&k2, 2, &format!("{EPS}^-1"));
+    two.validate().unwrap();
+    let at = |depth: usize| {
+        let mut v = two.clone();
+        set_depth(&mut v, depth);
+        closure(&v, &retain, &v.prefactor.total()).unwrap().value
+    };
+    let (d1, d3) = (at(1), at(3));
+    eprintln!(
+        "CONTRACT CASE two insertions (pole order 2), Retain, depth 1 vs 3: equal {}",
+        (&d1 - &d3).expand().is_zero()
+    );
+    assert_same(&d1, &d3, "Retain depth 1 vs depth 3");
+    let expanded_equals_symbolic = |v: &FactorizedNumerator, what: &str| {
+        let sym = value(v, &symbolic());
+        let top = top_order(&sym);
+        let ret = closure(v, &retain, &v.prefactor.total()).unwrap().value;
+        let series = ret
+            .series(
+                eps(),
+                Atom::Zero.as_view(),
+                symbolica::domains::rational::Rational::from(top),
+            )
+            .unwrap()
+            .to_atom()
+            .expand();
+        assert_same(&truncate(&series, top), &sym, what);
+        eprintln!("CONTRACT CASE {what}: Retain expanded = Symbolic through eps^{top}");
+    };
+    expanded_equals_symbolic(&record("wh-k1-root"), "the K1 root without insertions");
+    let mut ratio = k2.clone();
+    ratio.insertions[0].coefficient =
+        &ratio.insertions[0].coefficient * atom(&format!("(1+{EPS})^-1"));
+    expanded_equals_symbolic(&ratio, "the K2 coefficient eps^-1 (1+eps)^-1");
+}
+
+/// The evaluation order [Forcer(Retain), RustRed(Symbolic)] at the closure
+/// entry: per record, the value is one mode's (the Symbolic or the Retain
+/// value). Printed for the K1 root, the K1 root with an ε^-1 insertion and
+/// the K2 record.
+#[test]
+#[ignore = "expected: under the evaluation order [Forcer(Retain), RustRed(Symbolic)] the closure value of a two-loop record with an eps^-1 insertion is the Symbolic or the Retain value; on 08db06bcf it is the Symbolic value with one more order (eps^0) than the record's depth"]
+fn a_mixed_evaluation_order_gives_one_modes_value() {
+    let retain = site(RustRedMasterMode::Retain);
+    let mut mixed = retain.clone();
+    mixed.evaluation_order = EvaluationOrder(vec![
+        EvaluationMethod::Forcer(vakint::ForcerOptions {
+            master_mode: RustRedMasterMode::Retain,
+        }),
+        EvaluationMethod::RustRed(RustRedEvaluationOptions {
+            master_mode: RustRedMasterMode::Symbolic,
+        }),
+    ]);
+    let k1 = record("wh-k1-root");
+    let vertex1 = k1
+        .vertices
+        .iter()
+        .find(|x| x.factor != Atom::num(1))
+        .unwrap()
+        .id;
+    let k1_ins = with_insertion_at(&k1, vertex1, &format!("{EPS}^-1"));
+    let mut wrong = Vec::new();
+    for (name, v) in [
+        ("k1-root", k1.clone()),
+        ("k1-root with one eps^-1 insertion", k1_ins),
+        ("k2-child-ins", record("wh-k2-child-ins")),
+    ] {
+        let got = closure(&v, &mixed, &v.prefactor.total());
+        let sym = value(&v, &symbolic());
+        let ret = closure(&v, &retain, &v.prefactor.total()).unwrap().value;
+        let class = match &got {
+            Err(e) => format!("REFUSED {e}"),
+            Ok(g) if (&g.value - &sym).expand().is_zero() => "the Symbolic value".into(),
+            Ok(g) if (&g.value - &ret).expand().is_zero() => "the Retain value".into(),
+            Ok(g) => {
+                let top = top_order(&sym);
+                let orders = wh_fixtures::epsilon_coefficients(&g.value, eps())
+                    .keys()
+                    .copied()
+                    .collect::<Vec<_>>();
+                let through = (&truncate(&g.value, top) - &sym).expand().is_zero();
+                wrong.push(name);
+                format!(
+                    "NEITHER: orders {orders:?} (Symbolic top {top}); truncated at eps^{top} equal to Symbolic: {through}"
+                )
+            }
+        };
+        eprintln!("CONTRACT CASE [Forcer(Retain), RustRed(Symbolic)] {name}: {class}");
+    }
+    assert!(wrong.is_empty(), "neither mode's value: {wrong:?}");
+}
+
+/// Zero denominators and singular forms in every field, each with the rule
+/// that refuses it (variant, detail) or its acceptance. P(t) = (t-3)^2 - t^2
+/// + 6t - 9 (identically zero, written unexpanded). The caller-owned weight
+/// `overall` = 1/P(x), 1/ε, 1/(D-4) is EXPECTED TO CHANGE: accepted on
+/// 08db06bcf (printed BEFORE), refused after the fix (printed AFTER); either
+/// passes.
+#[test]
+fn zero_denominators_and_singular_forms_in_every_field() {
+    const DENOMINATOR: &str = "a denominator vanishes identically";
+    let k2 = record("wh-k2-child-ins");
+    let k1 = record("wh-k1-root");
+    let ins_vertex = k2.insertions[0].vertex;
+    let vertex1 = k1
+        .vertices
+        .iter()
+        .find(|x| x.factor != Atom::num(1))
+        .unwrap()
+        .id;
+    let p_x = zero_polynomial("caller::x");
+    let p_d = zero_polynomial(DIM);
+    let p_m = zero_polynomial("caller::m2");
+    type Check = Box<dyn Fn(&Result<(), FactorizedError>) -> bool>;
+    let refused = |variant: &'static str, part: String| -> Check {
+        Box::new(move |r| match r {
+            Err(e) => format!("{e:?}").starts_with(variant) && refusal_detail(e).contains(&part),
+            Ok(()) => false,
+        })
+    };
+    let coefficient = |c: &str| {
+        let mut v = k2.clone();
+        v.insertions[0].coefficient = &v.insertions[0].coefficient * atom(c);
+        v
+    };
+    let factor = |c: &str| {
+        let mut v = k2.clone();
+        v.insertions[0].factor = &v.insertions[0].factor * atom(c);
+        v
+    };
+    let vertex = |base: &FactorizedNumerator, id: usize, c: &str| {
+        let mut v = base.clone();
+        let x = v.vertices.iter_mut().find(|x| x.id == id).unwrap();
+        x.factor = &x.factor * atom(c);
+        v
+    };
+    let run = |v: &FactorizedNumerator, arg: &Atom| -> Result<(), FactorizedError> {
+        v.validate()?;
+        closure(v, &symbolic(), arg).map(|_| ())
+    };
+    let mut rows: Vec<(String, Result<(), FactorizedError>, Check)> = Vec::new();
+    let z1 = std::panic::catch_unwind(|| {
+        let e = Atom::var(eps());
+        Atom::num(1) / (&e - &e)
+    });
+    match z1 {
+        Ok(c) => {
+            eprintln!("CONTRACT CASE a typed 1/(eps - eps) builds {c}");
+            let mut v = k2.clone();
+            v.insertions[0].coefficient = &v.insertions[0].coefficient * &c;
+            rows.push((
+                "a typed coefficient 1/(eps - eps)".into(),
+                run(&v, &v.prefactor.total()),
+                Box::new(|r| matches!(r, Err(FactorizedError::InexactNumber { .. }))),
+            ));
+        }
+        Err(_) => panic!("Symbolica's arithmetic panics on 1/(eps - eps)"),
+    }
+    let v = coefficient(&format!("(2*({EPS}-2)+{DIM})/({DIM}-4+2*{EPS})"));
+    rows.push((
+        "the coefficient (2(eps-2)+D)/(D-4+2 eps)".into(),
+        run(&v, &v.prefactor.total()),
+        refused("Insertion", DENOMINATOR.into()),
+    ));
+    rows.push((
+        "the prefactor argument x 1/(D-4+2 eps) on the K1 root".into(),
+        run(
+            &k1,
+            &(k1.prefactor.total() * atom(&format!("1/({DIM}-4+2*{EPS})"))),
+        ),
+        refused("NotScalar", DENOMINATOR.into()),
+    ));
+    let v = vertex(&k1, vertex1, &format!("1/({DIM}-4+2*{EPS})"));
+    rows.push((
+        "a vertex factor x 1/(D-4+2 eps) on the K1 root".into(),
+        run(&v, &v.prefactor.total()),
+        refused("NotScalar", DENOMINATOR.into()),
+    ));
+    let v = factor(&format!("1/{p_d}"));
+    rows.push((
+        "1/P(D) in the insertion factor".into(),
+        run(&v, &v.prefactor.total()),
+        refused("Insertion", DENOMINATOR.into()),
+    ));
+    let v = coefficient(&format!("{p_x}^(-1/2)"));
+    rows.push((
+        "P(x)^(-1/2) in the coefficient (the zero base is found before the exponent rule)".into(),
+        run(&v, &v.prefactor.total()),
+        refused("Insertion", DENOMINATOR.into()),
+    ));
+    let v = coefficient(&format!("caller::y^(-1/2)"));
+    rows.push((
+        "y^(-1/2) in the coefficient (the exponent rule)".into(),
+        run(&v, &v.prefactor.total()),
+        refused("Insertion", "a non-integer exponent in insertion".into()),
+    ));
+    let v = coefficient(&format!("((({p_d})+1)^-1-1)^-1"));
+    rows.push((
+        "the nested ((P(D)+1)^-1 - 1)^-1".into(),
+        run(&v, &v.prefactor.total()),
+        refused("Insertion", DENOMINATOR.into()),
+    ));
+    let v = coefficient(
+        "((caller::f(caller::x)+1)^2-caller::f(caller::x)^2-2*caller::f(caller::x)-1)^-1",
+    );
+    rows.push((
+        "((f(x)+1)^2 - f(x)^2 - 2f(x) - 1)^-1 (zero as written: the denominator rule first)".into(),
+        run(&v, &v.prefactor.total()),
+        refused("Insertion", DENOMINATOR.into()),
+    ));
+    let v = coefficient("(caller::f(caller::x)+1)^-1");
+    rows.push(("(f(x)+1)^-1 (the head rule)".into(), run(&v, &v.prefactor.total()), refused("Insertion", format!("a function head that is not allowed in insertion {ins_vertex} coefficient: caller::f"))));
+    let v = coefficient("(sin(caller::x)^2+cos(caller::x)^2-1)^-1");
+    rows.push(("(sin(x)^2+cos(x)^2-1)^-1 (the head rule)".into(), run(&v, &v.prefactor.total()), refused("Insertion", format!("a function head that is not allowed in insertion {ins_vertex} coefficient: symbolica::"))));
+    rows.push((
+        "the prefactor argument x 1/P(x)".into(),
+        run(&k1, &(k1.prefactor.total() * atom(&format!("1/{p_x}")))),
+        refused("NotScalar", DENOMINATOR.into()),
+    ));
+    let v = vertex(&k1, vertex1, &format!("1/{p_d}"));
+    rows.push((
+        "a vertex factor x 1/P(D)".into(),
+        run(&v, &v.prefactor.total()),
+        refused("NotScalar", DENOMINATOR.into()),
+    ));
+    let mut v = k2.clone();
+    if let FactorizedKind::Closure(spec) = &mut v.kind {
+        spec.auxiliary_mass_squared = atom(&p_m);
+    }
+    rows.push((
+        "the auxiliary mass written P(m)".into(),
+        run(&v, &v.prefactor.total()),
+        refused("Closure", "is not a plain symbol".into()),
+    ));
+    let mut v = k2.clone();
+    let massless = v
+        .edges
+        .iter()
+        .position(|e| !e.is_external() && e.mass_squared.is_zero())
+        .unwrap();
+    v.edges[massless].mass_squared = atom(&p_m);
+    rows.push((
+        "a massless line's mass written P(m)".into(),
+        run(&v, &v.prefactor.total()),
+        refused("Closure", "is neither 0 nor a plain symbol".into()),
+    ));
+    for w in [
+        format!("1/{p_x}"),
+        format!("1/{EPS}"),
+        format!("1/({DIM}-4)"),
+    ] {
+        let mut v = k1.clone();
+        if let FactorizedKind::Closure(spec) = &mut v.kind {
+            spec.weights.push(("overall".into(), false, atom(&w)));
+        }
+        let got = run(&v, &v.prefactor.total());
+        let label = if got.is_ok() {
+            "BEFORE (accepted, as on 08db06bcf)"
+        } else {
+            "AFTER (refused)"
+        };
+        eprintln!("CONTRACT CASE the caller-owned weight overall = {w}: {label}");
+        rows.push((
+            format!("the caller-owned weight overall = {w} (expected to change)"),
+            got,
+            Box::new(|r| {
+                r.is_ok()
+                    || r.as_ref().is_err_and(|e| {
+                        matches!(
+                            e,
+                            FactorizedError::NotScalar { .. }
+                                | FactorizedError::Closure { .. }
+                                | FactorizedError::Graph { .. }
+                        )
+                    })
+            }),
+        ));
+    }
+    let mut wrong = Vec::new();
+    for (name, got, ok) in &rows {
+        eprintln!("CONTRACT CASE {name}: {}", outcome(got));
+        if !ok(got) {
+            wrong.push(format!("{name}: {}", outcome(got)));
+        }
+    }
+    let sum = (1..=300)
+        .map(|i| format!("caller::z{i}/({EPS}+caller::z{i})"))
+        .collect::<Vec<_>>()
+        .join("+");
+    let v = coefficient(&format!("({sum})^-1"));
+    let started = std::time::Instant::now();
+    let got = v.validate();
+    let seconds = started.elapsed().as_secs_f64();
+    eprintln!(
+        "CONTRACT CASE the sum of 300 z_i/(eps+z_i) under ^-1: validation {} in {seconds:.2}s",
+        outcome(&got)
+    );
+    if seconds > 60.0 {
+        wrong.push(format!("300 ratios: validation {seconds:.1}s"));
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+/// Depth and integer bounds. Depth = L (2 for the K1 root) with ONE ε^-1
+/// insertion: a value equal to ε^-1 times the depth-3 value truncated at the
+/// depth-2 top order. Depth 128 accepted at validation, 129 refused; depth
+/// 127 with the insertions' raise 2 refused by the closure entry before any
+/// reduction. Settings number_of_terms = 0 on an UNMARKED v1 record through
+/// `evaluate_factorized`: no marked rule applies (printed; the v1 path).
+/// A closure vertex id 2^63; two massless lines of power 2^62.
+#[test]
+fn depth_rules_and_integer_bounds() {
+    let k1 = record("wh-k1-root");
+    let k2 = record("wh-k2-child-ins");
+    let vertex1 = k1
+        .vertices
+        .iter()
+        .find(|x| x.factor != Atom::num(1))
+        .unwrap()
+        .id;
+    let mut d = with_insertion_at(&k1, vertex1, &format!("{EPS}^-1"));
+    set_depth(&mut d, 2);
+    let got = closure(&d, &symbolic(), &d.prefactor.total());
+    eprintln!(
+        "CONTRACT CASE depth 2 = L with one eps^-1 insertion: {}",
+        outcome(&got)
+    );
+    let got = got.unwrap().value;
+    let at2 = value(&k1, &symbolic());
+    let mut k1_3 = k1.clone();
+    set_depth(&mut k1_3, 3);
+    let at3 = value(&k1_3, &symbolic());
+    assert_same(
+        &got,
+        &truncate(&(atom(&format!("{EPS}^-1")) * &at3), top_order(&at2)),
+        "depth = L with an eps^-1 insertion",
+    );
+    let mut v = k1.clone();
+    set_depth(&mut v, 128);
+    v.validate().unwrap();
+    set_depth(&mut v, 129);
+    let r = v.validate();
+    eprintln!("CONTRACT CASE depth 129: {}", outcome(&r));
+    assert!(refusal_detail(&r.unwrap_err()).starts_with("the depth 129 is out of range"));
+    let mut v = with_insertion_at(&k2, 2, &format!("{EPS}^-1"));
+    set_depth(&mut v, 127);
+    v.validate().unwrap();
+    let started = std::time::Instant::now();
+    let r = closure(&v, &symbolic(), &v.prefactor.total());
+    eprintln!(
+        "CONTRACT CASE depth 127 + raise 2: {} in {:.2}s",
+        outcome(&r),
+        started.elapsed().as_secs_f64()
+    );
+    assert!(
+        refusal_detail(&r.unwrap_err())
+            .starts_with("the depth 127 is out of range: with the insertions' raise 2")
+    );
+    init();
+    let v1 = FactorizedNumerator::from_text(&fixture_text("l1-gluon-bubble.txt")).unwrap();
+    assert!(!v1.has_new_features());
+    let mut zero = symbolic();
+    zero.number_of_terms_in_epsilon_expansion = 0;
+    let got = vakint::p_integral::factorized::evaluate_factorized(
+        &engine(),
+        &zero,
+        &v1,
+        &v1.prefactor.total(),
+    );
+    let shown = match &got {
+        Ok(r) => format!("ACCEPTED value {}", r.value),
+        Err(e) => format!("REFUSED {e:?}"),
+    };
+    eprintln!("CONTRACT CASE number_of_terms 0 on an unmarked v1 record: {shown}");
+    assert!(!shown.contains("a marked value"), "{shown}");
+    let big = 1usize << 63;
+    let mut v = k1.clone();
+    let old = v.vertices[0].id;
+    v.vertices[0].id = big;
+    for e in &mut v.edges {
+        use vakint::p_integral::factorized::Endpoint;
+        if e.source == Endpoint::Vertex(old) {
+            e.source = Endpoint::Vertex(big);
+        }
+        if e.target == Endpoint::Vertex(old) {
+            e.target = Endpoint::Vertex(big);
+        }
+    }
+    let r = v.validate();
+    eprintln!("CONTRACT CASE a closure vertex id 2^63: {}", outcome(&r));
+    assert!(
+        refusal_detail(&r.unwrap_err()).starts_with(&format!("id {big}: the edge and vertex ids"))
+    );
+    let mut v = k1.clone();
+    let massless = v
+        .edges
+        .iter()
+        .filter(|e| !e.is_external() && e.mass_squared.is_zero())
+        .map(|e| e.id)
+        .take(2)
+        .collect::<Vec<_>>();
+    for e in v.edges.iter_mut().filter(|e| massless.contains(&e.id)) {
+        e.power = 1i64 << 62;
+    }
+    let r = v.validate();
+    eprintln!(
+        "CONTRACT CASE two massless lines of power 2^62: {}",
+        outcome(&r)
+    );
+    assert!(
+        refusal_detail(&r.unwrap_err()).contains(&format!("power {} out of range", 1i64 << 62))
+    );
+}
+
+/// Does a 128-term evaluation FINISH on a small record (`VAKINT_TEST_DEPTH128`:
+/// `k2`, the one-loop K2 at depth 127 + its insertion's raise 1; `k1`, the
+/// two-loop K1 root at depth 128)? Time printed; the caller runs it under a
+/// cap of 10 minutes and 15 G.
+#[test]
+#[ignore = "costly: a 128-term evaluation (run explicitly, under a time and memory cap)"]
+fn a_128_term_evaluation_finishes() {
+    let which = std::env::var("VAKINT_TEST_DEPTH128").unwrap_or_else(|_| "k2".into());
+    let (mut v, depth) = match which.as_str() {
+        "k1" => (record("wh-k1-root"), 128),
+        _ => (record("wh-k2-child-ins"), 127),
+    };
+    set_depth(&mut v, depth);
+    let started = std::time::Instant::now();
+    let got = closure(&v, &symbolic(), &v.prefactor.total());
+    let seconds = started.elapsed().as_secs_f64();
+    match &got {
+        Ok(r) => {
+            let orders = wh_fixtures::epsilon_coefficients(&r.value, eps());
+            eprintln!(
+                "CONTRACT CASE 128 terms, {which} at depth {depth}: FINISHED in {seconds:.1}s, {} orders {:?}..{:?}, {} chars",
+                orders.len(),
+                orders.keys().next(),
+                orders.keys().last(),
+                r.value.to_string().len()
+            );
+        }
+        Err(e) => {
+            eprintln!("CONTRACT CASE 128 terms, {which} at depth {depth}: {e} in {seconds:.1}s")
+        }
+    }
+    got.unwrap();
+}
+
+/// A huge integer power must be refused by the exponent bound BEFORE any
+/// algebra: the vertex factor 1/((1+UFO::x)^1000000000 - UFO::y) of a TYPED
+/// marked direct value (`evaluate_factorized`) and of a marked vacuum value
+/// (`evaluate_factorized_vacuum`): refused, "exceeds 64 in modulus", within
+/// 20 s (a time-out FAILS the test instead of hanging).
+#[test]
+#[ignore = "expected: a typed marked direct or vacuum value with the vertex factor 1/((1+x)^1000000000 - y) is refused by the exponent bound within 20 s; on 08db06bcf the finiteness check runs first and does not finish"]
+fn a_huge_power_is_refused_before_any_algebra_at_the_direct_and_vacuum_entries() {
+    let huge = "1/((1+UFO::x)^1000000000-UFO::y)";
+    let (mut direct, settings) = direct_record_and_settings();
+    let id = direct
+        .vertices
+        .iter()
+        .find(|x| x.factor != Atom::num(1))
+        .unwrap()
+        .id;
+    let x = direct.vertices.iter_mut().find(|x| x.id == id).unwrap();
+    x.factor = &x.factor * atom(huge);
+    let vacuum = marked_vacuum_sunrise("caller::m2", huge);
+    let mut wrong = Vec::new();
+    for (name, v, is_vacuum) in [("direct", direct, false), ("vacuum", vacuum, true)] {
+        let s = settings.clone();
+        let started = std::time::Instant::now();
+        let got = within(20, move || {
+            let vakint = engine();
+            let arg = v.prefactor.total();
+            if is_vacuum {
+                vakint::p_integral::factorized::evaluate_factorized_vacuum(&vakint, &s, &v, &arg)
+                    .map(|_| ())
+                    .map_err(|e| e.to_string())
+            } else {
+                vakint::p_integral::factorized::evaluate_factorized(&vakint, &s, &v, &arg)
+                    .map(|_| ())
+                    .map_err(|e| e.to_string())
+            }
+        });
+        let shown = match &got {
+            None => "TIMED OUT after 20 s".to_string(),
+            Some(Err(_)) => "PANIC".into(),
+            Some(Ok(r)) => format!("{r:?}"),
+        };
+        eprintln!(
+            "CONTRACT CASE a huge power at the {name} entry: {shown} [{:.2}s]",
+            started.elapsed().as_secs_f64()
+        );
+        if !matches!(&got, Some(Ok(Err(e))) if e.contains("exceeds 64 in modulus")) {
+            wrong.push(format!("{name}: {shown}"));
+        }
+    }
+    assert!(wrong.is_empty(), "{wrong:?}");
+}
+
+/// The integer bounds at the VACUUM entry (typed and through the text form):
+/// two series edges of power 2^62 (merged: their powers add), an external
+/// leg of power 2^31 + 1, a vertex id 2^63, a momentum coefficient i64::MIN:
+/// each refused like at the other entries, never a panic or a time-out.
+#[test]
+#[ignore = "expected: at the vacuum entry an edge power above 2^31 (two series edges of power 2^62, an external leg of power 2^31 + 1), a vertex id 2^63 and a momentum coefficient i64::MIN are refused; on 08db06bcf the vacuum entry has none of these bounds"]
+fn the_integer_bounds_hold_at_the_vacuum_entry() {
+    use vakint::p_integral::factorized::{Endpoint, FactorizedEdge, FactorizedVertex};
+    let base = marked_vacuum_sunrise("caller::m2", "1");
+    let mut cases: Vec<(&str, FactorizedNumerator)> = Vec::new();
+    // series: edge 3 (2 -> 1) split at a new vertex 3 into 3 (2 -> 3) and 4 (3 -> 1)
+    let mut v = base.clone();
+    let e3 = v.edges.iter().position(|e| e.id == 3).unwrap();
+    let mut second: FactorizedEdge = v.edges[e3].clone();
+    v.edges[e3].target = Endpoint::Vertex(3);
+    v.edges[e3].target_hedge = Some(7);
+    v.edges[e3].power = 1 << 62;
+    second.id = 4;
+    second.source = Endpoint::Vertex(3);
+    second.source_hedge = Some(8);
+    second.power = 1 << 62;
+    v.edges.push(second);
+    v.vertices.push(FactorizedVertex {
+        id: 3,
+        rule: "V".into(),
+        factor: Atom::num(1),
+    });
+    cases.push(("two series edges of power 2^62", v));
+    let mut v = base.clone();
+    v.edges[0].power = (1 << 31) + 1;
+    cases.push(("an edge of power 2^31 + 1", v));
+    let mut v = base.clone();
+    let big = 1usize << 63;
+    v.vertices[0].id = big;
+    for e in &mut v.edges {
+        if e.source == Endpoint::Vertex(1) {
+            e.source = Endpoint::Vertex(big);
+        }
+        if e.target == Endpoint::Vertex(1) {
+            e.target = Endpoint::Vertex(big);
+        }
+    }
+    cases.push(("a vertex id 2^63", v));
+    let mut v = base.clone();
+    v.edges[0].momentum = vec![i64::MIN, 0];
+    cases.push(("a momentum coefficient i64::MIN", v));
+    let mut wrong = Vec::new();
+    for (name, v) in cases {
+        for text in [false, true] {
+            let v = v.clone();
+            let got = within(20, move || {
+                let v = if text {
+                    let t = v.to_text().map_err(|e| e.to_string())?;
+                    FactorizedNumerator::parse_text(&t).map_err(|e| e.to_string())?
+                } else {
+                    v
+                };
+                let vakint = engine();
+                vakint::p_integral::factorized::evaluate_factorized_vacuum(
+                    &vakint,
+                    &symbolic(),
+                    &v,
+                    &v.prefactor.total(),
+                )
+                .map(|_| ())
+                .map_err(|e| e.to_string())
+            });
+            let shown = match &got {
+                None => "TIMED OUT".to_string(),
+                Some(Err(_)) => "PANIC".into(),
+                Some(Ok(r)) => format!("{r:?}"),
+            };
+            eprintln!("CONTRACT CASE vacuum entry, {name}, text={text}: {shown}");
+            if !matches!(&got, Some(Ok(Err(_)))) {
+                wrong.push(format!("{name} text={text}: {shown}"));
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "{wrong:?}");
+}
+
+/// The unmarked text with an unknown schema line (`schema vakint-factorized/2`):
+/// its refusal is the base's, word for word (dea282615: "text line {line}:
+/// unknown schema {found:?} (this reader knows pint6.factorized-numerator.v1)").
+#[test]
+#[ignore = "expected: an unmarked text with an unknown schema line is refused with the base's message (this reader knows pint6.factorized-numerator.v1); on 08db06bcf the message also names the v3 schema"]
+fn an_unknown_schema_keeps_the_base_message() {
+    init();
+    let text = fixture_text("l1-gluon-bubble.txt").replacen(
+        "pint6.factorized-numerator.v1",
+        "vakint-factorized/2",
+        1,
+    );
+    let e = FactorizedNumerator::from_text(&text).unwrap_err();
+    eprintln!("CONTRACT CASE unknown schema: {e}");
+    assert_eq!(
+        e.to_string(),
+        "text line 1: unknown schema \"vakint-factorized/2\" (this reader knows pint6.factorized-numerator.v1)"
+    );
+}
+
+/// The ports entry's prefactor argument (k5-direct): x ε/(D-4) is finite
+/// (-x/2) and accepted, the value -x/2 times the value with argument 1;
+/// x/(D-4) is a pole outside an insertion; 1/P(D) vanishes identically. The
+/// record's depth against the settings' number of terms at the direct and
+/// the vacuum entries: unequal refused, equal accepted.
+#[test]
+fn the_ports_argument_and_the_direct_depth_rules() {
+    use vakint::p_integral::factorized::{evaluate_factorized, evaluate_factorized_vacuum};
+    let (v, s) = direct_record_and_settings();
+    let vakint = engine();
+    let base = evaluate_factorized_ports(&vakint, &s, &v, &v.prefactor.total()).unwrap();
+    let finite = atom(&format!("UFO::x*{EPS}/({DIM}-4)"));
+    let got = evaluate_factorized_ports(&vakint, &s, &v, &(v.prefactor.total() * &finite));
+    eprintln!(
+        "CONTRACT CASE ports argument x eps/(D-4): {}",
+        outcome(&got)
+    );
+    assert_same(
+        &got.unwrap().value,
+        &(&base.value * atom("-UFO::x/2")),
+        "x eps/(D-4) = -x/2",
+    );
+    for (arg, part) in [
+        (
+            format!("UFO::x/({DIM}-4)"),
+            "a pole in ε outside an insertion",
+        ),
+        (
+            format!("1/{}", zero_polynomial(DIM)),
+            "a denominator vanishes identically",
+        ),
+    ] {
+        let r = evaluate_factorized_ports(&vakint, &s, &v, &(v.prefactor.total() * atom(&arg)));
+        eprintln!("CONTRACT CASE ports argument {arg}: {}", outcome(&r));
+        assert!(refusal_detail(&r.unwrap_err()).contains(part), "{arg}");
+    }
+    let mut d3 = v.clone();
+    set_depth(&mut d3, 3);
+    let mut s4 = s.clone();
+    s4.number_of_terms_in_epsilon_expansion = 4;
+    let r = evaluate_factorized(&vakint, &s4, &d3, &d3.prefactor.total());
+    eprintln!("CONTRACT CASE direct depth 3, settings 4: {}", outcome(&r));
+    assert!(
+        refusal_detail(&r.unwrap_err())
+            .starts_with("the depth 3 of the record differs from the settings' number of terms 4")
+    );
+    let mut s3 = s.clone();
+    s3.number_of_terms_in_epsilon_expansion = 3;
+    evaluate_factorized(&vakint, &s3, &d3, &d3.prefactor.total()).unwrap();
+    let mut vac = marked_vacuum_sunrise("caller::m2", "1");
+    set_depth(&mut vac, 3);
+    let r = evaluate_factorized_vacuum(&vakint, &s4, &vac, &vac.prefactor.total());
+    eprintln!("CONTRACT CASE vacuum depth 3, settings 4: {}", outcome(&r));
+    assert!(
+        refusal_detail(&r.unwrap_err())
+            .starts_with("the depth 3 of the record differs from the settings' number of terms 4")
+    );
+    evaluate_factorized_vacuum(&vakint, &s3, &vac, &vac.prefactor.total()).unwrap();
+}
+
+/// Data atoms, Taylor data, weights, epsilon and tensor rules on marked
+/// records: UNKNOWN(master, 65) and UNKNOWN(..)^2 refused; MZV(2,3) in a
+/// VERTEX factor refused; zeta(1) refused, zeta(3) accepted; Taylor degree 3
+/// refused; degree 2 with an edge power 2^31 accepted, 2^31 + 1 refused;
+/// orders=drop0 refused; a compact slash in the projector of a record with a
+/// Taylor step refused (`Ports`); a weight applied_by=vakint different from
+/// prefactor_scalars refused; vakint::ε in a field under the settings'
+/// gammalooprs::ε refused; 1/(g(mink(D,a), mink(D,a)) - D) in an edge factor
+/// refused (Symbolica contracts g(a, a) to D: a non-finite number).
+#[test]
+fn data_atoms_taylor_weights_epsilon_and_tensor_rules() {
+    let k1 = record("wh-k1-root");
+    let k2 = record("wh-k2-child-ins");
+    let k1_text = fixture_text("wh-k1-root.record.txt");
+    let coefficient = |c: &str| {
+        let mut v = k2.clone();
+        v.insertions[0].coefficient = &v.insertions[0].coefficient * atom(c);
+        v
+    };
+    let master = "vakint::ggppss_int_7";
+    let mut wrong = Vec::new();
+    let mut check = |name: &str, r: Result<(), FactorizedError>, refused: bool, part: &str| {
+        eprintln!("CONTRACT CASE {name}: {}", outcome(&r));
+        let ok = match &r {
+            Ok(()) => !refused,
+            Err(e) => refused && format!("{e:?} {e}").contains(part),
+        };
+        if !ok {
+            wrong.push(format!("{name}: {}", outcome(&r)));
+        }
+    };
+    check(
+        "UNKNOWN(master, 65) x eps^-1",
+        coefficient(&format!("{EPS}^-1*vakint::UNKNOWN({master},65)")).validate(),
+        true,
+        "reserved symbol vakint::UNKNOWN",
+    );
+    check(
+        "UNKNOWN(master, 1)^2",
+        coefficient(&format!("vakint::UNKNOWN({master},1)^2")).validate(),
+        true,
+        "a non-linear vakint data atom",
+    );
+    let mut v = k1.clone();
+    let id = v
+        .vertices
+        .iter()
+        .find(|x| x.factor != Atom::num(1))
+        .unwrap()
+        .id;
+    let x = v.vertices.iter_mut().find(|x| x.id == id).unwrap();
+    x.factor = &x.factor * atom("vakint::MZV(2,3)");
+    check(
+        "MZV(2,3) in a vertex factor (outside an insertion: a reserved symbol)",
+        v.validate(),
+        true,
+        "reserved symbol vakint::MZV",
+    );
+    check(
+        "zeta(1) in a coefficient",
+        coefficient("symbolica::zeta(1)").validate(),
+        true,
+        "InexactNumber",
+    );
+    check(
+        "zeta(3) in a coefficient",
+        coefficient("symbolica::zeta(3)").validate(),
+        false,
+        "",
+    );
+    let taylor = |degree: u32, power: Option<i64>| {
+        let mut v = k1.clone();
+        if let FactorizedKind::Closure(spec) = &mut v.kind {
+            spec.taylor.as_mut().unwrap().degree = degree;
+        }
+        if let Some(p) = power {
+            let e = v
+                .edges
+                .iter_mut()
+                .find(|e| !e.is_external() && e.mass_squared.is_zero())
+                .unwrap();
+            e.power = p;
+        }
+        v.validate()
+    };
+    check("Taylor degree 3", taylor(3, None), true, "Taylor degree");
+    check(
+        "Taylor degree 2, an edge power 2^31",
+        taylor(2, Some(1 << 31)),
+        false,
+        "",
+    );
+    check(
+        "Taylor degree 2, an edge power 2^31 + 1",
+        taylor(2, Some((1 << 31) + 1)),
+        true,
+        "out of range",
+    );
+    check(
+        "orders=drop0",
+        FactorizedNumerator::from_text(&k1_text.replacen("orders=all", "orders=drop0", 1))
+            .map(|_| ()),
+        true,
+        "orders=drop0 is not supported",
+    );
+    let slash = format!(
+        "spenso::{{linear,spenso::tensor}}::gamma(spenso::{{spenso::representation,spenso::self_dual}}::bis(4,gammalooprs::{{spenso::index}}::hedge(90,1)),spenso::{{spenso::representation,spenso::self_dual}}::bis(4,gammalooprs::{{spenso::index}}::hedge(91,1)),gammalooprs::{{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}}::Q(0,spenso::{{spenso::representation,spenso::self_dual}}::mink({DIM})))"
+    );
+    let with_slash = k1_text
+        .lines()
+        .map(|l| {
+            if l.starts_with("projector\t") {
+                format!("{l}*{slash}")
+            } else {
+                l.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    check(
+        "a compact slash in the projector under a Taylor step",
+        FactorizedNumerator::from_text(&with_slash).map(|_| ()),
+        true,
+        "a compact slash gamma(a, b, Q(x, mink(D))) in the projector",
+    );
+    let mut v = k1.clone();
+    if let FactorizedKind::Closure(spec) = &mut v.kind {
+        spec.weights
+            .push(("w".into(), true, atom("caller::not_the_scalars")));
+    }
+    check(
+        "a weight applied_by=vakint different from prefactor_scalars",
+        v.validate(),
+        true,
+        "weight w applied_by=vakint is",
+    );
+    let mut v = k2.clone();
+    let x = v
+        .vertices
+        .iter_mut()
+        .find(|x| x.factor != Atom::num(1))
+        .unwrap();
+    x.factor = &x.factor * atom("vakint::ε");
+    check(
+        "vakint::ε in a vertex factor under the settings' gammalooprs::ε",
+        closure(&v, &symbolic(), &v.prefactor.total()).map(|_| ()),
+        true,
+        "reserved symbol vakint::ε in",
+    );
+    let mut v = k1.clone();
+    let e = v.edges.iter_mut().find(|e| !e.is_external()).unwrap();
+    e.factor = &e.factor
+        * atom(&format!(
+            "1/(spenso::{{symmetric,linear,real,spenso::tensor}}::g(spenso::{{spenso::representation,spenso::self_dual}}::mink({DIM},caller::a),spenso::{{spenso::representation,spenso::self_dual}}::mink({DIM},caller::a))-{DIM})"
+        ));
+    check(
+        "1/(g(mink(D,a), mink(D,a)) - D) in an edge factor (Symbolica contracts g(a,a) to D: 1/0)",
+        v.validate(),
+        true,
+        "InexactNumber",
+    );
+    // a caller-owned weight 1/(D-4): accepted with no effect on the value, or
+    // refused as a pole (EXPECTED TO CHANGE, printed)
+    let mut v = k1.clone();
+    if let FactorizedKind::Closure(spec) = &mut v.kind {
+        spec.weights
+            .push(("w".into(), false, atom(&format!("1/({DIM}-4)"))));
+    }
+    match closure(&v, &symbolic(), &v.prefactor.total()) {
+        Ok(r) => {
+            assert_same(
+                &r.value,
+                &value(&k1, &symbolic()),
+                "a caller-owned weight has no effect on the value",
+            );
+            eprintln!(
+                "CONTRACT CASE a caller-owned weight 1/(D-4): BEFORE (accepted, no effect on the value)"
+            );
+        }
+        Err(e) => eprintln!("CONTRACT CASE a caller-owned weight 1/(D-4): AFTER (refused: {e})"),
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+/// MZV in an insertion coefficient: MZV(1) and MZV(1, 2) (divergent: the
+/// first argument 1) refused.
+#[test]
+#[ignore = "expected: vakint::MZV(1) and vakint::MZV(1,2) (a first argument 1: divergent) are refused in an insertion coefficient; on 08db06bcf the data-atom shape admits every argument from 1 to 64"]
+fn a_divergent_mzv_is_refused() {
+    let k2 = record("wh-k2-child-ins");
+    for c in ["vakint::MZV(1)", "vakint::MZV(1,2)"] {
+        let mut v = k2.clone();
+        v.insertions[0].coefficient = &v.insertions[0].coefficient * atom(c);
+        let r = v.validate();
+        eprintln!("CONTRACT CASE {c}: {}", outcome(&r));
+        assert!(r.is_err(), "{c} accepted");
+    }
+}
+
+/// MZV(2), MZV(2,1), MZV(5,3) in an insertion coefficient with a simple and
+/// a double pole (× ε^-1, × ε^-2): accepted, evaluated; the integer endpoints
+/// of the exponent and the UNKNOWN order: x^64, x^-64, UNKNOWN(master, ±64)
+/// accepted; x^65, x^-65, x^(i64::MIN + 1), UNKNOWN(master, ±65),
+/// UNKNOWN(master, i64::MIN + 1) refused; never a panic (i64::MIN itself:
+/// `the_most_negative_integer_is_refused_without_a_panic`).
+#[test]
+fn convergent_mzvs_and_integer_endpoints() {
+    let k2 = record("wh-k2-child-ins");
+    let k1 = record("wh-k1-root");
+    let mut wrong = Vec::new();
+    for c in ["vakint::MZV(2)", "vakint::MZV(2,1)", "vakint::MZV(5,3)"] {
+        for pole in [format!("{EPS}^-1"), format!("{EPS}^-2")] {
+            let mut v = k2.clone();
+            v.insertions[0].coefficient = atom(&format!("{c}*{pole}"));
+            let r = v
+                .validate()
+                .and_then(|()| closure(&v, &symbolic(), &v.prefactor.total()).map(|_| ()));
+            eprintln!("CONTRACT CASE {c} x {pole}: {}", outcome(&r));
+            if r.is_err() {
+                wrong.push(format!("{c} x {pole}: {}", outcome(&r)));
+            }
+        }
+    }
+    let min1 = (i64::MIN + 1).to_string();
+    let vertex = k1
+        .vertices
+        .iter()
+        .find(|x| x.factor != Atom::num(1))
+        .unwrap()
+        .id;
+    for (e, accepted) in [
+        ("64", true),
+        ("-64", true),
+        ("65", false),
+        ("-65", false),
+        (min1.as_str(), false),
+    ] {
+        let k1 = k1.clone();
+        let text = format!("caller::x^({e})");
+        let got = std::panic::catch_unwind(move || {
+            let mut v = k1.clone();
+            let x = v.vertices.iter_mut().find(|x| x.id == vertex).unwrap();
+            x.factor = &x.factor * atom(&text);
+            v.validate().map_err(|e| e.to_string())
+        });
+        eprintln!("CONTRACT CASE x^({e}): {got:?}");
+        match got {
+            Err(_) => wrong.push(format!("x^({e}): PANIC")),
+            Ok(r) if r.is_ok() != accepted => wrong.push(format!("x^({e}): {r:?}")),
+            _ => {}
+        }
+    }
+    for (k, accepted) in [
+        ("64", true),
+        ("-64", true),
+        ("65", false),
+        ("-65", false),
+        (min1.as_str(), false),
+    ] {
+        let k2 = k2.clone();
+        let text = format!("vakint::UNKNOWN(vakint::ggppss_int_7,{k})");
+        let got = std::panic::catch_unwind(move || {
+            let mut v = k2.clone();
+            v.insertions[0].coefficient = &v.insertions[0].coefficient * atom(&text);
+            v.validate().map_err(|e| e.to_string())
+        });
+        eprintln!("CONTRACT CASE UNKNOWN(master, {k}): {got:?}");
+        match got {
+            Err(_) => wrong.push(format!("UNKNOWN(master, {k}): PANIC")),
+            Ok(r) if r.is_ok() != accepted => wrong.push(format!("UNKNOWN(master, {k}): {r:?}")),
+            _ => {}
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+/// A caller-written compact-slash dummy `mink(D, vakint::slash(-1, 0))` (a
+/// contracted pair in one vertex factor) in a marked VACUUM value: refused,
+/// or accepted with the value of the same record with the dummy renamed to a
+/// caller symbol (printed).
+#[test]
+fn a_caller_slash_dummy_at_the_vacuum_entry() {
+    use vakint::p_integral::factorized::evaluate_factorized_vacuum;
+    let pair = |i: &str| {
+        format!(
+            "spenso::{{symmetric,linear,real,spenso::tensor}}::g(spenso::{{spenso::representation,spenso::self_dual}}::mink({DIM},{i}),spenso::{{spenso::representation,spenso::self_dual}}::mink({DIM},{i}))"
+        )
+    };
+    let vakint = engine();
+    let run = |factor: &str| {
+        let v = marked_vacuum_sunrise("caller::m2", factor);
+        evaluate_factorized_vacuum(&vakint, &symbolic(), &v, &v.prefactor.total())
+    };
+    let slash = run(&pair("vakint::slash(-1,0)"));
+    let renamed = run(&pair("caller::s"));
+    eprintln!(
+        "CONTRACT CASE a caller slash dummy at the vacuum entry: {}; renamed: {}",
+        outcome(&slash),
+        outcome(&renamed)
+    );
+    if let (Ok(a), Ok(b)) = (&slash, &renamed) {
+        assert_same(
+            &a.value,
+            &b.value,
+            "the caller slash dummy vs a caller symbol",
+        );
+    }
+}
+
+/// Numerical mode, allow-unknowns on: a caller's UNKNOWN(master, k) in an
+/// insertion coefficient whose master is a catalogue master (a symbol a
+/// numerical evaluation could substitute) comes back unchanged inside the
+/// value, linearly (with allow-unknowns off the policy refuses it as an
+/// unknown master coefficient, like vakint's own).
+#[test]
+fn an_unknown_atom_is_returned_unchanged_in_numerical_mode() {
+    let k2 = record("wh-k2-child-ins");
+    let unknown = atom("vakint::UNKNOWN(vakint::ggppss_int_7,0)");
+    let mut v = k2.clone();
+    v.insertions[0].coefficient = &v.insertions[0].coefficient * (Atom::num(1) + &unknown);
+    let mut numerical = site(RustRedMasterMode::Numerical);
+    numerical.allow_unknown_master_coefficients = true;
+    let got = closure(&v, &numerical, &v.prefactor.total());
+    eprintln!(
+        "CONTRACT CASE UNKNOWN(ggppss_int_7, 0) in Numerical: {}",
+        outcome(&got)
+    );
+    let got = got.unwrap().value;
+    let plain = closure(&k2, &numerical, &k2.prefactor.total())
+        .unwrap()
+        .value;
+    let shown = got.to_canonical_string();
+    assert!(
+        shown.contains(&unknown.to_canonical_string()),
+        "the atom is not in the value: {shown}"
+    );
+    assert_same(
+        &got,
+        &(&plain * (Atom::num(1) + &unknown)),
+        "linear in the UNKNOWN atom",
+    );
+}
+
+/// The exponent `i64::MIN` of a caller power and the order `i64::MIN` of an
+/// UNKNOWN atom: refused at validation, never a panic.
+#[test]
+#[ignore = "expected: x^(i64::MIN) in a vertex factor and UNKNOWN(master, i64::MIN) in an insertion coefficient are refused at validation; on 08db06bcf both panic (attempt to negate with overflow)"]
+fn the_most_negative_integer_is_refused_without_a_panic() {
+    let k1 = record("wh-k1-root");
+    let k2 = record("wh-k2-child-ins");
+    let min = i64::MIN;
+    let a = std::panic::catch_unwind(|| {
+        let mut v = k1.clone();
+        let x = v
+            .vertices
+            .iter_mut()
+            .find(|x| x.factor != Atom::num(1))
+            .unwrap();
+        x.factor = &x.factor * atom(&format!("caller::x^({min})"));
+        v.validate().map_err(|e| e.to_string())
+    });
+    let b = std::panic::catch_unwind(|| {
+        let mut v = k2.clone();
+        v.insertions[0].coefficient = &v.insertions[0].coefficient
+            * atom(&format!("vakint::UNKNOWN(vakint::ggppss_int_7,{min})"));
+        v.validate().map_err(|e| e.to_string())
+    });
+    eprintln!("CONTRACT CASE x^(i64::MIN): {a:?}; UNKNOWN(master, i64::MIN): {b:?}");
+    assert!(matches!(a, Ok(Err(_))), "x^(i64::MIN): {a:?}");
+    assert!(matches!(b, Ok(Err(_))), "UNKNOWN(master, i64::MIN): {b:?}");
+}
