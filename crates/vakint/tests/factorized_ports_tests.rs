@@ -39,8 +39,9 @@ use std::sync::Arc;
 use feynkit_graph::FeynmanDiagram;
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use vakint::p_integral::factorized::{
-    Endpoint, FactorizedEdge, FactorizedVertex, FromFeynkitOptions, LineKind, Prefactor, Projector,
-    ProjectorChoice, evaluate_factorized, evaluate_factorized_ports, evaluate_factorized_vacuum,
+    Endpoint, FactorizedEdge, FactorizedVertex, FromFeynkitOptions, LineKind, MAX_OPEN_PORTS,
+    Prefactor, Projector, ProjectorChoice, evaluate_factorized, evaluate_factorized_ports,
+    evaluate_factorized_vacuum,
 };
 use vakint::p_integral::{FactorizedError, FactorizedNumerator, FactorizedParts};
 use vakint::refpath;
@@ -854,8 +855,8 @@ fn port_refusals_are_precise() {
             .err()
             .unwrap_or_else(|| panic!("{}: accepted", value.label))
     };
-    // no ceiling on the open slots (a slot count is not the loop rank): seven
-    // open slots build the vakint input
+    // a marked value keeps at most MAX_OPEN_PORTS open slots (a conservative
+    // guard: a slot count is not the loop-tensor rank); exactly six pass
     let with_extra = |extra: usize| {
         let mut value = base.clone();
         for i in 0..extra {
@@ -868,9 +869,18 @@ fn port_refusals_are_precise() {
         value.validate().unwrap();
         value
     };
-    let seven = marked(&with_extra(5));
-    assert_eq!(seven.ports.len(), 7);
-    let _ = vakint::p_integral::factorized::vakint_input(&settings, &seven, &Atom::num(1)).unwrap();
+    let many = with_extra(MAX_OPEN_PORTS - 1);
+    assert_eq!(many.ports.len(), MAX_OPEN_PORTS + 1);
+    match refused(&many) {
+        FactorizedError::Ports { detail } => assert!(
+            detail.starts_with("7 open slots; a propagator-type value keeps at most 6 open"),
+            "{detail}"
+        ),
+        other => panic!("{other}"),
+    }
+    let six = with_extra(MAX_OPEN_PORTS - 2);
+    assert_eq!(six.ports.len(), MAX_OPEN_PORTS);
+    let _ = vakint::p_integral::factorized::vakint_input(&settings, &six, &Atom::num(1)).unwrap();
     // an integer index on an open slot (a projector slot that is not a port)
     let mut integer = base.clone();
     let seven = symbolica::function!(sym(MINK), Atom::var(integer.dimension), 7);

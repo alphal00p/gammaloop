@@ -75,7 +75,7 @@ pub use colour::{
     split_local_colour,
 };
 pub use evaluate::{
-    FactorizedValue, PortsValue, contract_to_vakint_dots, evaluate_factorized,
+    FactorizedValue, MAX_OPEN_PORTS, PortsValue, contract_to_vakint_dots, evaluate_factorized,
     evaluate_factorized_ports, to_caller_notation_p, vakint_input,
 };
 #[cfg(feature = "feynkit-ingress")]

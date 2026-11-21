@@ -36,9 +36,10 @@
 //!    CALLER's notation (`spenso::g(slot, slot)`, `Q(x, slot)` of the
 //!    external leg `x` of the value's own `p(1)`, `spenso::dot(Q(x, mink(D)),
 //!    Q(x, mink(D)))`). A soft external leg (all-zero momentum vector) may
-//!    carry ports. The ports entry refuses open spinor slots and integer
-//!    indices; the old entries keep their behaviour for every value they
-//!    accepted (no limit on the number of open slots anywhere).
+//!    carry ports. For a MARKED value (and on the ports entry, which marks
+//!    what it is given) at most [`MAX_OPEN_PORTS`] open Lorentz slots, no
+//!    open spinor slot, no integer index; a value without new features keeps
+//!    the base's behaviour on the old entries (no such limit).
 //!
 //! No numerator algebra happens here beyond idenso's; the mapping of step 2 is
 //! linear substitution. `prefactor` is the caller's scalar (colour, couplings,
@@ -160,20 +161,35 @@ struct Orientation {
     leg: usize,
 }
 
-/// The open slots ([`FactorizedNumerator::open_slots`]) the PORTS entry
-/// ([`evaluate_factorized_ports`]) returns in the caller's notation: Lorentz
-/// slots `mink(D, a)` with a non-integer index `a`. A closed value passes.
-/// The old entries ([`vakint_input`], [`evaluate_factorized`]) do not apply
-/// it: they keep their behaviour for every value they accepted. There is no
-/// limit on the number of slots: an open slot is not a loop-tensor rank (the
-/// reduction's own limit, a transverse Gram singular at d = 4 from loop rank
-/// 8, is the same on every entry).
+/// The most open Lorentz ports a MARKED propagator-type value may keep (the
+/// unmarked values keep the base's behaviour: no limit): the transverse Gram
+/// matrix of the tensor reduction with one external momentum is regular at
+/// `d = 4` through rank 7 and singular at rank 8 (a spurious `1/(d-4)`, N/notes
+/// D6 section 3); ranks above 6 are not validated. A CONSERVATIVE guard, not
+/// the exact condition: the exact one is the open LOOP-tensor rank (an open
+/// slot carried by an external momentum adds no loop rank).
+pub const MAX_OPEN_PORTS: usize = 6;
+
+/// The open slots ([`FactorizedNumerator::open_slots`]) the p-integral route
+/// can return for a MARKED value: Lorentz slots `mink(D, a)` with a
+/// non-integer index `a`, at most [`MAX_OPEN_PORTS`]. A closed value passes.
+/// Applied in the marked arm of [`vakint_input`] (so in
+/// [`evaluate_factorized`] and [`evaluate_factorized_ports`] for marked
+/// values, as at its introduction); an unmarked value runs the base's body,
+/// which has none of these rules.
 fn check_open_ports(value: &FactorizedNumerator) -> Result<()> {
     let open = value.open_slots()?;
     if open.is_empty() {
         return Ok(());
     }
     let ports = |detail: String| FactorizedError::Ports { detail };
+    if open.len() > MAX_OPEN_PORTS {
+        return Err(ports(format!(
+            "{} open slots; a propagator-type value keeps at most {MAX_OPEN_PORTS} open \
+             Lorentz slots (close the others with a projector)",
+            open.len()
+        )));
+    }
     for port in &open {
         let Some(slot) = super::as_slot(port.as_view()) else {
             return Err(ports(format!("{port} is not a slot")));
@@ -370,6 +386,7 @@ pub fn vakint_input(
     // a marked value called here directly: the entry check too (A-17)
     super::check_marked_entry(value, prefactor, vk_symbol!(&settings.epsilon_symbol))?;
     value.validate()?;
+    check_open_ports(value)?;
     value.check_insertion_epsilon(vk_symbol!(&settings.epsilon_symbol).get_name())?;
     vakint_input_unchecked(settings, value, prefactor)
 }
@@ -519,6 +536,10 @@ pub struct PortsValue {
 /// open slots the caller keeps (no projector, or a projector that closes only
 /// some ports). A closed value comes back as [`evaluate_factorized`]'s scalar
 /// with `dot(p(1), p(1))` written `spenso::dot(Q(x, mink(D)), Q(x, mink(D)))`.
+/// A value without new features is evaluated here as a MARKED one (the entry
+/// marks a local clone with an empty v3 direct record), so the record kinds'
+/// rules, the open-slot rules and the reserved-namespace and bare-name
+/// refusals apply to whatever goes through this entry.
 pub fn evaluate_factorized_ports(
     vakint: &Vakint,
     settings: &VakintSettings,

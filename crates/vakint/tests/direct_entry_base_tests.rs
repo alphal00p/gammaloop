@@ -16,7 +16,8 @@ use std::path::PathBuf;
 use symbolica::atom::{Atom, AtomCore};
 use vakint::Vakint;
 use vakint::p_integral::factorized::{
-    DirectRecord, FACTORIZED_SCHEMA_V3, Insertion, evaluate_factorized, vakint_input,
+    DirectRecord, FACTORIZED_SCHEMA_V3, Insertion, MAX_OPEN_PORTS, evaluate_factorized,
+    evaluate_factorized_ports, vakint_input,
 };
 use vakint::p_integral::{FACTORIZED_SCHEMA, FactorizedError, FactorizedNumerator};
 use vakint::refpath;
@@ -330,4 +331,34 @@ fn huge_counts_of_the_base_sections_are_refused_not_allocated() {
             }
         }
     }
+}
+
+/// MARKED values keep the open-slot ceiling (a conservative guard of the
+/// record kinds, `MAX_OPEN_PORTS`): the rank-7 bubble marked is refused by
+/// the ports entry and by the old entry with the frozen detail; marked rank 6
+/// is accepted; the UNMARKED rank-7 bubble keeps the base's value (pinned by
+/// `the_spectator_bubbles_keep_the_base_values`).
+#[test]
+fn a_marked_value_keeps_the_open_slot_ceiling() {
+    Vakint::initialize_vakint_symbols();
+    let vakint = Vakint::new().unwrap();
+    let settings = refpath::vakint_settings(1);
+    assert_eq!(MAX_OPEN_PORTS, 6);
+    let six = marked(&FactorizedNumerator::from_text(&rank(6)).unwrap());
+    evaluate_factorized_ports(&vakint, &settings, &six, &Atom::num(1)).unwrap();
+    let seven = marked(&FactorizedNumerator::from_text(&rank(7)).unwrap());
+    let refused = |result: Result<(), FactorizedError>| match result {
+        Err(FactorizedError::Ports { detail }) => assert!(
+            detail.starts_with(
+                "7 open slots; a propagator-type value keeps at most 6 open Lorentz slots"
+            ),
+            "{detail}"
+        ),
+        other => panic!("{other:?}"),
+    };
+    refused(evaluate_factorized_ports(&vakint, &settings, &seven, &Atom::num(1)).map(|_| ()));
+    refused(evaluate_factorized(&vakint, &settings, &seven, &Atom::num(1)).map(|_| ()));
+    refused(vakint_input(&settings, &seven, &Atom::num(1)).map(|_| ()));
+    let unmarked = FactorizedNumerator::from_text(&rank(7)).unwrap();
+    assert!(vakint_input(&settings, &unmarked, &Atom::num(1)).is_ok());
 }
