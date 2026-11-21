@@ -6986,3 +6986,71 @@ fn a_marked_four_loop_vacuum_value() {
     }
     assert!(false_errors.is_empty(), "{false_errors:#?}");
 }
+
+/// A record of the producer's next emitter (`VAKINT_TEST_RECORD_FILE`): read,
+/// validated and evaluated through the closure entry (Symbolic, at its own
+/// depth, within 600 s; the result check included), the outcome and the
+/// vakint:: names of the value printed; and every v3 record of
+/// `VAKINT_TEST_RECORD_DIR` validated (counts, refusals grouped by detail).
+#[test]
+#[ignore = "external data: VAKINT_TEST_RECORD_FILE, VAKINT_TEST_RECORD_DIR"]
+fn a_record_of_the_next_emitter_through_the_gated_grammar() {
+    init();
+    if let Some(path) = std::env::var_os("VAKINT_TEST_RECORD_FILE") {
+        let text = wh_fixtures::read_fixture(std::path::Path::new(&path));
+        let v = FactorizedNumerator::from_text(&text);
+        eprintln!("CONTRACT NEXT from_text + validate: {}", outcome(&v));
+        if let Ok(v) = v {
+            let r = uncovered_run(
+                "closure entry, Symbolic, the record's depth",
+                600,
+                move || {
+                    let vakint = engine();
+                    evaluate_factorized_closure(
+                        &vakint,
+                        &symbolic(),
+                        std::slice::from_ref(&v),
+                        &[v.prefactor.total()],
+                    )
+                    .map(|r| (r.value, Some(r.vakint_value)))
+                },
+            );
+            eprintln!("CONTRACT NEXT closure entry: {r:?}");
+        }
+    }
+    if let Some(dir) = std::env::var_os("VAKINT_TEST_RECORD_DIR") {
+        let mut accepted = 0;
+        let mut refused = std::collections::BTreeMap::<String, Vec<String>>::new();
+        let mut files = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .collect::<Vec<_>>();
+        files.sort();
+        for p in files {
+            let Ok(text) = std::fs::read_to_string(&p) else {
+                continue;
+            };
+            if !text.starts_with("schema\tpint6.factorized-numerator.v3") {
+                continue;
+            }
+            match FactorizedNumerator::from_text(&text) {
+                Ok(_) => accepted += 1,
+                Err(e) => {
+                    let d = e.to_string();
+                    let key: String = d.chars().take(70).collect();
+                    refused
+                        .entry(key)
+                        .or_default()
+                        .push(p.file_name().unwrap().to_string_lossy().into());
+                }
+            }
+        }
+        eprintln!(
+            "CONTRACT NEXT directory: accepted {accepted}, refused {}",
+            refused.values().map(Vec::len).sum::<usize>()
+        );
+        for (k, v) in &refused {
+            eprintln!("CONTRACT NEXT refused {} x {k} e.g. {}", v.len(), v[0]);
+        }
+    }
+}
