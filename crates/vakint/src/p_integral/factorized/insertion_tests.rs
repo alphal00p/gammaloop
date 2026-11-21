@@ -705,7 +705,7 @@ fn every_insertion_rule_has_its_refusal() {
         }
         other => panic!("colour: {other:?}"),
     }
-    match refused(&with(&|v| ins(v).coefficient = atom("vakint::nf"))) {
+    match refused(&with(&|v| ins(v).coefficient = atom("beta::nf"))) {
         FactorizedError::Graph { detail } => assert!(
             detail.starts_with(&format!(
                 "insertion at vertex {C0} coefficient contains the flavour symbol "
@@ -1404,4 +1404,56 @@ fn new_kinds_do_not_depend_on_the_reduction_method_or_the_notation() {
             .collect(),
         "ports record",
     );
+}
+
+/// The reserved `vakint::` namespace inside an insertion (marked value): a
+/// `vakint::` symbol in the coefficient and a `vakint::` function head in the
+/// factor are refused by the record walk (Graph, `reserved symbol <name> in
+/// insertion <v> coefficient|factor: `); the same atoms in another namespace
+/// are accepted.
+#[test]
+fn a_reserved_vakint_symbol_inside_an_insertion_is_refused() {
+    let good = gluon_surrogate(1);
+    good.validate().expect("the pristine record is accepted");
+    let reserved = |value: &FactorizedNumerator, prefix: &str, what: &str| match refused(value) {
+        FactorizedError::Graph { detail } => {
+            assert!(
+                detail.starts_with(prefix),
+                "{what}: {detail:?} does not start with {prefix:?}"
+            )
+        }
+        other => panic!("{what}: {other:?}"),
+    };
+    for (name, accepted) in [
+        ("vakint::closure_tensor_0", "witness::closure_tensor_0"),
+        ("vakint::helper_scalar", "witness::helper_scalar"),
+    ] {
+        let mut bad = good.clone();
+        ins(&mut bad).coefficient = &ins(&mut bad).coefficient * atom(name);
+        reserved(
+            &bad,
+            &format!(
+                "reserved symbol {name} in insertion {C0} coefficient: the vakint:: namespace is reserved"
+            ),
+            name,
+        );
+        let mut twin = good.clone();
+        ins(&mut twin).coefficient = &ins(&mut twin).coefficient * atom(accepted);
+        twin.validate()
+            .unwrap_or_else(|e| panic!("{accepted}: {e}"));
+    }
+    // a function head in the factor
+    let mut bad = good.clone();
+    ins(&mut bad).factor = &ins(&mut bad).factor * atom("vakint::helper_head(2)");
+    reserved(
+        &bad,
+        &format!(
+            "reserved symbol vakint::helper_head in insertion {C0} factor: the vakint:: namespace is reserved"
+        ),
+        "function head",
+    );
+    let mut twin = good.clone();
+    ins(&mut twin).factor = &ins(&mut twin).factor * atom("witness::helper_head(2)");
+    twin.validate()
+        .unwrap_or_else(|e| panic!("witness::helper_head: {e}"));
 }

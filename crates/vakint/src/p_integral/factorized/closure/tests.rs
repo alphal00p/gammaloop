@@ -2259,8 +2259,9 @@ fn the_beta_k1_quick_records_equal_their_values() {
 
 /// A child insertion of momentum degree 2 in a record with Taylor degree
 /// w = 2 goes through the same routing, lambda scaling and truncation as a
-/// vertex factor: the record with the polynomial on a contracted (ct:)
-/// vertex equals the record with it as that vertex's own factor.
+/// vertex factor: the entry on the record with the polynomial on a
+/// contracted (ct:) vertex equals the INDEPENDENT reference of the record
+/// with the polynomial multiplied into that vertex's own factor by hand.
 #[test]
 fn a_degree_two_insertion_is_routed_and_truncated_like_a_factor() {
     let mut base = l2_root(2, true);
@@ -2294,20 +2295,23 @@ fn a_degree_two_insertion_is_routed_and_truncated_like_a_factor() {
     });
     with.validate().unwrap();
     let vakint = Vakint::new().unwrap();
-    let settings = rstar_site_settings();
-    let run = |v: &FactorizedNumerator| {
-        evaluate_factorized_closure(
-            &vakint,
-            &settings,
-            std::slice::from_ref(v),
-            &[v.prefactor.total()],
-        )
-        .unwrap()
-        .value
-    };
-    let (a, b) = (run(&with), run(&base));
-    assert!(!b.is_zero());
-    assert!((&a - &b).expand().is_zero(), "insertion {a}\nvertex {b}");
+    let argument = atom("UFO::gs^2*witness::x");
+    let got = evaluate_factorized_closure(
+        &vakint,
+        &settings(),
+        std::slice::from_ref(&with),
+        std::slice::from_ref(&argument),
+    )
+    .unwrap();
+    let expected = independent_reference(&base, &L2_CUT, &argument);
+    assert!(!expected.is_zero());
+    assert!(
+        (&got.records[0].vakint_value - &expected)
+            .expand()
+            .is_zero(),
+        "insertion {}\nindependent (by hand) {expected}",
+        got.records[0].vakint_value
+    );
 }
 
 /// The beta's k5-stress set (L5 graph 3793, closed surrogate root, five
@@ -2416,6 +2420,8 @@ fn two_poled_insertions_raise_the_depth_by_their_sum() {
         &[with.prefactor.total()],
     )
     .unwrap();
+    // the base record (no insertion) against the independent reference
+    check_independent(&base, &L2_CUT, &atom("UFO::gs^2*witness::x"));
     let mut deeper = settings.clone();
     deeper.number_of_terms_in_epsilon_expansion = terms + 2;
     let bare = evaluate_factorized_closure(
