@@ -305,6 +305,13 @@ pub(crate) static DIRAC_CHECKS: [std::sync::atomic::AtomicUsize; 3] = [
 #[cfg(test)]
 thread_local! {
     static CHANGE_DIRAC_CLOSURE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// [`DIRAC_CHILDREN`] and [`DIRAC_CHECKS`] of this thread only (closed,
+    /// checked, identical, equal): a test that counts its own children reads
+    /// these, so tests running in parallel threads (`cargo test`) do not
+    /// add to its counts. The process-wide atomics stay for the multi-thread
+    /// sweep.
+    pub(crate) static DIRAC_LOCAL: std::cell::Cell<[usize; 4]> =
+        const { std::cell::Cell::new([0; 4]) };
 }
 
 /// Tests: run `f` with the closed Δ of every Dirac-closed child on this
@@ -1320,7 +1327,14 @@ impl RStarPlan {
         boundary: &super::expression::DiracBoundary,
     ) -> Result<Atom> {
         #[cfg(test)]
-        DIRAC_CHILDREN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        {
+            DIRAC_CHILDREN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            DIRAC_LOCAL.with(|local| {
+                let mut counts = local.get();
+                counts[0] += 1;
+                local.set(counts);
+            });
+        }
         let loops = graph.n_loops(support);
         let kind = match boundary.kind {
             super::expression::DiracKind::Vertex => "vertex",
@@ -1354,6 +1368,13 @@ impl RStarPlan {
             DIRAC_CHECKS[0].fetch_add(1, Ordering::Relaxed);
             DIRAC_CHECKS[1].fetch_add(usize::from(identical), Ordering::Relaxed);
             DIRAC_CHECKS[2].fetch_add(usize::from(equal), Ordering::Relaxed);
+            DIRAC_LOCAL.with(|local| {
+                let mut counts = local.get();
+                counts[1] += 1;
+                counts[2] += usize::from(identical);
+                counts[3] += usize::from(equal);
+                local.set(counts);
+            });
         }
         eprintln!(
             "DIRAC_CLOSURE_CHECK graph={} support={} loops={loops} degree={} kind={kind} identical={identical} equal={equal} zero={} closed_seconds={closed_seconds:.3} open_seconds={open_seconds:.3}",
