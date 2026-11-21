@@ -58,6 +58,8 @@ mod tests;
 mod top_mass;
 mod uncontracted;
 #[cfg(test)]
+mod uncontracted_oracle_k2_tests;
+#[cfg(test)]
 mod uncontracted_oracle_tests;
 #[cfg(test)]
 mod uncontracted_tests;

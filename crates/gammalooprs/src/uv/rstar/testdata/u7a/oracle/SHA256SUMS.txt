@@ -4,3 +4,10 @@ b43d08c131cbe1a5c45029a6bb4f1a190d9a476ac1047daffd060d0e87e4589f  l4-d40.dot  (k
 9feacccc8c5b5d4db584ba4e16acd941d9fbcbf393727971de40a1a42dc1cbc4  l4-40-rr1.input.txt  (k1-quick/L4-40/rr1/input.txt)
 13cd090e96829704f67c4e90cf152c3d4ffdc834bd92cdc0ff330ed44f29367f  l4-40-rr2.input.txt  (k1-quick/L4-40/rr2/input.txt)
 edfe99e7b944c91265ea7cae8a328ade18ebf09c089434428881412c61493352  l4-40-rr2.value.txt  (k1-quick/L4-40/rr2/value.txt)
+# Already in testdata/u7a/ (vendored by the emitter's tests), read by uncontracted_oracle_k2_tests; equal to the verified fixture files:
+91dd00e090dda732f625d7ff076967af05a40092373e90a65693918799f3ca35  ../k1-root.input.txt  (k1-root/input.txt)
+5c07a6181fa1d68217b398804a13f6ef88fdef75a3c84e8c3bdf3a864ae9de16  ../k1-root.value.txt  (k1-root/value.txt)
+b0c3fb79edf2df0f0e8b352f06297b1b5fadeed3875ddf5cd4f04f492526e8d1  ../k2-child.input.txt  (k2-child/input.txt)
+0e1e36221ac3f83f677f5b9a2642a420af1399b0c5e9c4458afa419e73ce8d34  ../k2-child.value.txt  (k2-child/value.txt)
+80eaa98270d00b7c3d4c4894800f135173f2104501e80651b7d2c757e36c1058  ../k2-child-ins.input.txt  (k2-child-ins/input.txt)
+4fbb49248aba3e8eb42024968f49714c63b83b0c47983c80901e9bd9c51f4739  ../k2-child-ins.value.txt  (k2-child-ins/value.txt)
