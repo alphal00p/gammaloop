@@ -384,6 +384,7 @@ static ENVIRONMENT: LazyLock<std::result::Result<Environment, String>> = LazyLoc
                 super::plan::UvChildrenRoute::Rstar { .. }
             ),
             ir_hard_child: super::closed::child_mode() != super::closed::ChildMode::Off,
+            ir_quotient: super::top_mass::ir_quotient().map_err(|error| error.to_string()),
         },
         || super::pint6_dump::settings().is_some(),
         read(super::uncontracted_ledger::EXCEPTIONS_VARIABLE)?.as_deref(),
