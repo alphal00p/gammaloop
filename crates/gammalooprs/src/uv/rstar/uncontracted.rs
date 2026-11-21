@@ -2619,6 +2619,131 @@ pub(super) fn crown_legs_at_node(
     delta
 }
 
+/// The ids `x` of every `Q(x, ..)` in `atom` (any arity, `x` a number).
+fn momentum_ids(atom: &Atom) -> BTreeSet<usize> {
+    let mut ids = BTreeSet::new();
+    atom.visitor(&mut |part| {
+        if let AtomView::Fun(f) = part
+            && f.get_symbol() == GS.emr_mom
+            && let Some(x) = f
+                .iter()
+                .next()
+                .and_then(|a| i64::try_from(a).ok())
+                .and_then(|a| usize::try_from(a).ok())
+        {
+            ids.insert(x);
+        }
+        true
+    });
+    ids
+}
+
+/// The emitter's own guard on the momenta a record names (pick 8, helper
+/// VH's caution on the `100000 + e` leg), run on every record [`build`]
+/// writes, before vakint sees it. Its codes are errors (not designed):
+///
+/// * `undeclared_momentum`: a `Q(x, ..)` in an edge, vertex or insertion
+///   factor or the projector whose `x` has no edge line. vakint reads such a
+///   vector as a CONSTANT external vector (reader rule 2); with the `taylor`
+///   line every record of ours has, its closure validation refuses it today,
+///   but the emitter never means one, so it does not rely on that.
+/// * `insertion_momentum`: a `Q(x, ..)` in an insertion factor whose `x` is
+///   not an edge owning one of the insertion's boundary half-edges (vakint's
+///   "not a boundary momentum of the insertion"; the pre-pick-8 `Q(e)` at the
+///   vertex of the incoming leg `100000 + e`).
+/// * `paired_leg`: a leg `100000 + e` ([`PAIRED_LEG_OFFSET`]) that does not
+///   mirror its partner `e`: both must be external legs, `100000 + e` the
+///   incoming one (ext -> vertex) and `e` the outgoing one, with the SAME
+///   momentum vector, and `e` must be in `scaled_edges`. vakint scales the
+///   momentum `p(j)` a leg carries and checks the loop components only of a
+///   record with independent externals, so a leg whose momentum differed
+///   from its partner's would NOT be refused by vakint.
+pub(super) fn declared_momenta(record: &FactorizedNumerator) -> std::result::Result<(), Decline> {
+    let undeclared = record
+        .edges
+        .iter()
+        .map(|edge| &edge.factor)
+        .chain(record.vertices.iter().map(|vertex| &vertex.factor))
+        .chain(record.insertions.iter().map(|insertion| &insertion.factor))
+        .chain(record.projector.iter().map(|projector| &projector.tensor))
+        .flat_map(momentum_ids)
+        .filter(|x| record.edge(*x).is_none())
+        .collect::<BTreeSet<_>>();
+    if !undeclared.is_empty() {
+        return Err(Decline::new(
+            "undeclared_momentum",
+            format!("the record names Q({undeclared:?}, ..) without an edge line"),
+        ));
+    }
+    for insertion in &record.insertions {
+        let boundary = record
+            .edges
+            .iter()
+            .filter(|edge| {
+                edge.source_hedge
+                    .into_iter()
+                    .chain(edge.target_hedge)
+                    .any(|h| insertion.hedges.contains(&h))
+            })
+            .map(|edge| edge.id)
+            .collect::<BTreeSet<_>>();
+        let outside = momentum_ids(&insertion.factor)
+            .into_iter()
+            .filter(|x| !boundary.contains(x))
+            .collect::<Vec<_>>();
+        if !outside.is_empty() {
+            return Err(Decline::new(
+                "insertion_momentum",
+                format!(
+                    "the insertion at vertex {} names Q({outside:?}, ..), not a boundary momentum {boundary:?}",
+                    insertion.vertex
+                ),
+            ));
+        }
+    }
+    let scaled = match &record.kind {
+        FactorizedKind::Closure(ClosureSpec {
+            taylor: Some(taylor),
+            ..
+        }) => Some(taylor.scaled_edges.iter().copied().collect::<BTreeSet<_>>()),
+        _ => None,
+    };
+    for leg in record
+        .edges
+        .iter()
+        .filter(|edge| edge.id >= PAIRED_LEG_OFFSET)
+    {
+        let e = leg.id - PAIRED_LEG_OFFSET;
+        let paired = |what: String| Decline::new("paired_leg", format!("leg {}: {what}", leg.id));
+        let Some(partner) = record.edge(e) else {
+            return Err(paired(format!("no line of its partner {e}")));
+        };
+        if !(leg.source == Endpoint::External && matches!(leg.target, Endpoint::Vertex(_))) {
+            return Err(paired("not an incoming external leg".into()));
+        }
+        if !(partner.target == Endpoint::External && matches!(partner.source, Endpoint::Vertex(_)))
+        {
+            return Err(paired(format!(
+                "its partner {e} is not an outgoing external leg"
+            )));
+        }
+        if leg.momentum != partner.momentum {
+            return Err(paired(format!(
+                "momentum {:?}, its partner {e} {:?}",
+                leg.momentum, partner.momentum
+            )));
+        }
+        if let Some(scaled) = &scaled
+            && !scaled.contains(&e)
+        {
+            return Err(paired(format!(
+                "its partner {e} is not in scaled_edges {scaled:?}"
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// The record of one K1 root or K2 child remainder (`Ok(None)`: a zero
 /// insertion).
 fn build(
@@ -3251,6 +3376,7 @@ fn build(
         .to_text()
         .map_err(|error| Decline::new("text", error.to_string()))?;
     let record = FactorizedNumerator::from_text(&text).map_err(|error| Decline::vakint(&error))?;
+    declared_momenta(&record)?;
     // last, so that every error of the record above stays loud
     if single_propagator(&record.edges, usize::from(marked)) {
         return Err(Decline::new(
