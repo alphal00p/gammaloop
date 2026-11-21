@@ -1923,3 +1923,67 @@ fn a_section_reclassifies_the_record_classes_too() -> Result<()> {
         Ok(())
     })
 }
+
+/// Review of the follow-ups (ledger lens, finding 3): with
+/// `GAMMALOOP_IR_DIRAC_CLOSURE=off` the hard part's open quark line stays
+/// open, so every quark-line K3 record declines the designed
+/// `vakint:open_spinor` because of a setting while gluon-line K3 records
+/// compare (one K3 class: neither the kind-wide nor the class rule sees
+/// it). With `ir-hard` enabled in on or check it is refused at the
+/// initialisation; `on` and `check` (production: on) start, a kind list
+/// without `ir-hard` does not read it, and an invalid value is refused.
+#[test]
+fn the_ir_dirac_closure_off_is_refused_with_ir_hard() {
+    use super::ir_dirac::IrDiracMode;
+    let routes = |ir_dirac| ledger::Routes {
+        ir_dirac,
+        ..ledger::Routes::PRODUCTION
+    };
+    for mode in [Mode::Check, Mode::On] {
+        for kinds in [&[Kind::IrHard][..], &ALL_KINDS] {
+            let switch = Switch::new(mode, kinds);
+            let error = ledger::initialise(
+                switch,
+                None,
+                None,
+                || routes(Ok(IrDiracMode::Off)),
+                || false,
+                None,
+            )
+            .unwrap_err();
+            assert!(
+                error.contains("GAMMALOOP_IR_DIRAC_CLOSURE=off is refused")
+                    && error.contains("open_spinor"),
+                "{error}"
+            );
+            for accepted in [IrDiracMode::On, IrDiracMode::Check] {
+                assert!(
+                    ledger::initialise(switch, None, None, || routes(Ok(accepted)), || false, None)
+                        .is_ok(),
+                    "{accepted:?}"
+                );
+            }
+            let error = ledger::initialise(
+                switch,
+                None,
+                None,
+                || routes(Err("GAMMALOOP_IR_DIRAC_CLOSURE must be unset, ...".into())),
+                || false,
+                None,
+            )
+            .unwrap_err();
+            assert!(error.contains("GAMMALOOP_IR_DIRAC_CLOSURE must be"), "{error}");
+        }
+        assert!(
+            ledger::initialise(
+                Switch::new(mode, &ROOT_CHILD),
+                None,
+                None,
+                || routes(Ok(IrDiracMode::Off)),
+                || false,
+                None
+            )
+            .is_ok()
+        );
+    }
+}
