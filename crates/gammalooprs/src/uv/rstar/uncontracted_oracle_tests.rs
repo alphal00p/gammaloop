@@ -748,9 +748,10 @@ fn k1_quick_l4_40_42_49_from_the_graph() -> Result<()> {
                 })
                 .collect::<Result<Vec<_>>>()?;
             // L4-49: its one-loop remainder (no fixture) is declined by vakint,
-            // `closure: every line is massive` (a finding, tested below)
+            // `closure: every line is massive` (a finding, tested below); its
+            // designed code (U7a review B1) is `vakint:all_massive`
             let allowed: &[&str] = if diagram == "L4-49" {
-                &["vakint:Closure"]
+                &["vakint:all_massive"]
             } else {
                 &[]
             };
@@ -1207,8 +1208,9 @@ fn site_conservation_zero_is_removed_exactly() -> Result<()> {
     })
 }
 
-/// A Taylor degree above 2 (the format's limit): declined by vakint
-/// (`vakint:Closure`), no value.
+/// A Taylor degree above 2 (the format's limit): declined by vakint, the
+/// designed refusal `vakint:taylor_degree` (Closure "Taylor degree", review
+/// B1), no value.
 #[test]
 fn site_taylor_degree_three_declines() -> Result<()> {
     with_production_piece_limit(|| -> Result<()> {
@@ -1217,7 +1219,7 @@ fn site_taylor_degree_three_declines() -> Result<()> {
         let case = l4_40()?;
         let attempt = site_attempt(&case, &deltas_of(&case), None, Some(3))?;
         ensure!(
-            declined_code(&attempt).as_deref() == Some("vakint:Closure"),
+            declined_code(&attempt).as_deref() == Some("vakint:taylor_degree"),
             "degree 3: outcome {:?}",
             attempt.outcome
         );
@@ -1289,12 +1291,12 @@ fn site_zero_insertion_is_zero() -> Result<()> {
     })
 }
 
-/// FINDING (review B1): a malformed child counterterm (an open slot on a
-/// half-edge that is not at its vertex) is an emitter bug, not a designed
-/// refusal. It must not end as a silent per-record fallback (`declined`);
-/// today it does.
+/// FINDING (review B1, fixed): a malformed child counterterm (an open slot on
+/// a half-edge that is not at its vertex) is an emitter bug, not a designed
+/// refusal. It must not end as a silent per-record fallback (`declined`): it
+/// is an ERROR outcome (`error:vakint:<Variant>`), which fails the diagram in
+/// check mode and in a strict on run.
 #[test]
-#[ignore = "review finding B1: a malformed record is declined (silent fallback) instead of being an error"]
 fn site_malformed_insertion_is_not_a_silent_fallback() -> Result<()> {
     with_production_piece_limit(|| -> Result<()> {
         test_initialise()?;
@@ -1311,6 +1313,14 @@ fn site_malformed_insertion_is_not_a_silent_fallback() -> Result<()> {
         let result = site_attempt(&case, &deltas, None, None);
         match result {
             Err(_) => Ok(()),
+            Ok(attempt) if attempt.is_error() => {
+                eprintln!(
+                    "U7A_ORACLE malformed insertion: outcome {:?}",
+                    attempt.outcome
+                );
+                ensure!(attempt.value().is_none(), "an error has no value");
+                Ok(())
+            }
             Ok(attempt) => Err(eyre!(
                 "a malformed record ends as {:?}: a fallback that hides the bug",
                 attempt.outcome
@@ -1319,12 +1329,15 @@ fn site_malformed_insertion_is_not_a_silent_fallback() -> Result<()> {
     })
 }
 
-/// FINDING: the one-loop root remainder of L4 diagram 49 (no fixture: today's
-/// path takes it whole, `one_loop_tree_cut`) is declined by vakint's closure
-/// entry, `closure: every line is massive: not a closure`. That refusal is
-/// not in the format's list; in on mode it is a silent per-record fallback.
+/// FINDING (vakint side, review B3): the one-loop root remainder of L4
+/// diagram 49 (no fixture: today's path takes it whole, `one_loop_tree_cut`)
+/// is declined by vakint's closure entry, `closure: every line is massive:
+/// not a closure` (a massive tadpole: only the closing line is left). Until
+/// the entry serves it (or the format lists it), the emitter treats it as the
+/// designed refusal `vakint:all_massive` (on the B1 list, counted in
+/// UNCONTRACTED_SUMMARY); this test states the goal: the record evaluated.
 #[test]
-#[ignore = "finding: vakint declines L4-49's one-loop K1 remainder (every line is massive); reads GAMMALOOP_U7A_FIXTURES_DIR"]
+#[ignore = "vakint-side finding B3: the closure entry declines L4-49's one-loop massive tadpole remainder (vakint:all_massive); reads GAMMALOOP_U7A_FIXTURES_DIR"]
 fn k1_quick_l4_49_one_loop_remainder_is_evaluated() -> Result<()> {
     with_production_piece_limit(|| -> Result<()> {
         test_initialise()?;
