@@ -8,9 +8,13 @@
 //! `grid/scripts/rowfix.py`). Every test compares the complete counterterm of
 //! the graph on the child route with today's path
 //! (`GAMMALOOP_IR_HARD=closed`) and pins its pole part in the units of the
-//! beta record (`zb`, the coefficient of C_A³; [`record`]) to the values of
-//! the IRH-DEPTH grid (results/consolidation/irh-depth/grid.json), where the
-//! third method (massive UV-only R, MATAD) agrees with them. The planner
+//! beta record (`zb`, the coefficient of C_A³; [`record`]) to the generic
+//! values of the IRH-DEPTH grid (results/consolidation/irh-depth/grid.json).
+//! The third method (massive UV-only R, MATAD) confirms every pin at the
+//! grid points kKjJ; at the row-level points rA, rB and rA0 it disagrees at
+//! the pinned (rearrangement-unsafe) order, so there the direct pin is the
+//! generic value only and the independent check is `point − control`
+//! (linearity onto k3j1 / k4j2, which the massive method confirms). The planner
 //! before IRH-DEPTH ([`Planner::Legacy`]) is run next to it and pinned to its
 //! wrong value, so each test fails on the old planner.
 //!
@@ -408,17 +412,13 @@ struct Run {
     start: usize,
     /// The planner (default: production).
     test: DepthTest,
-    /// The proper UV children are computed on the child route too (with
-    /// the same planner), so the child calls nested in their R* run on it.
-    nested: bool,
 }
 
 struct ChildRun {
     value: Atom,
-    /// The counts of the root evaluation's child-route corrections.
+    /// The counts of the root evaluation's child-route corrections, the
+    /// child calls nested in it (its decorated quotients' R*) included.
     root: DepthCounts,
-    /// The counts of the child calls nested in the UV children (`nested`).
-    nested: DepthCounts,
 }
 
 impl Case {
@@ -466,29 +466,9 @@ impl Case {
 
     /// The counterterm on the child route.
     fn child(&self, run: Run) -> Result<ChildRun> {
-        let Run {
-            hook,
-            start,
-            test,
-            nested,
-        } = run;
+        let Run { hook, start, test } = run;
         depth::with_depth_test(test, || {
-            let (children, nested) = if nested {
-                let (children, counts) = depth::collect(|| {
-                    with_ir_hard("child", || {
-                        self.plan.evaluate_uv_children(
-                            &self.graph,
-                            self.model(),
-                            &mass(),
-                            &self.vakint,
-                            &self.settings,
-                        )
-                    })
-                });
-                (children?, counts)
-            } else {
-                (self.children.clone(), DepthCounts::default())
-            };
+            let children = self.children.clone();
             let evaluate = || {
                 depth::with_start_extra(start, || {
                     with_ir_hard("child", || {
@@ -506,11 +486,10 @@ impl Case {
                 Some(hook) => depth::with_row_hook(hook, evaluate),
                 None => evaluate(),
             });
-            eprintln!("IRH_DEPTH_TEST {test:?} root={root:?} nested={nested:?}");
+            eprintln!("IRH_DEPTH_TEST {test:?} root={root:?}");
             Ok(ChildRun {
                 value: value?,
                 root,
-                nested,
             })
         })
     }
@@ -866,7 +845,62 @@ fn the_guard_refuses_a_hidden_row_without_a_known_bound() -> Result<()> {
         &unbounded.value,
         &[(-3, q(13, 32))],
         false,
-    )
+    )?;
+    // The fallback is the RIGHT value, not only today's: the leading order
+    // 13/32 ε⁻³ is the old route's too (the missed +351/64 sits at ε⁻¹), so
+    // both refusals are pinned through the X-only control as well (tests
+    // review, finding 3): rA0 − xA0 = -117/64 ε⁻¹ exactly.
+    let control = Case::new(&x_a0(), None)?.today()?;
+    for (label, refused) in [
+        ("rA0 no raise", &unverified),
+        ("rA0 unknown bound", &unbounded),
+    ] {
+        pinned(
+            &format!("{label} - control"),
+            &(&refused.value - &control),
+            &[(-1, q(-117, 64))],
+            true,
+        )?;
+    }
+    Ok(())
+}
+
+/// A row whose insertion has an unknown excess (tests review 5): on the
+/// unmodified graph (bound known, = the quotient's loops), the hook
+/// multiplies one returned row's insertion by an opaque `f(ε)`. Its row
+/// bound is unknown, so the correction is refused `unbounded` after the
+/// first integration of H, before the quotient factors are built; the value
+/// is today's (which never sees the hook).
+#[test]
+fn a_row_without_a_known_bound_is_refused_after_the_first_depth() -> Result<()> {
+    let case = Case::new(L3_006, None)?;
+    let today = case.today()?;
+    let opaque = symbolica::function!(symbolica::symbol!("irh_depth_test_f"), epsilon());
+    let hook: RowHook = Box::new(
+        move |site: &HookSite, rows: &mut Vec<(Atom, Atom, usize)>| {
+            if site.hard_loops != 2 || site.quotient_loops != 1 {
+                return;
+            }
+            if let Some((_, insertion, _)) = rows.first_mut() {
+                *insertion = &*insertion * &opaque;
+            }
+        },
+    );
+    let child = case.child(Run {
+        hook: Some(hook),
+        ..run(FIXED)
+    })?;
+    ensure_same("k0j0 opaque row", &child.value, &today)?;
+    ensure!(
+        child.root.bounded == 0
+            && child.root.refused == 1
+            && child.root.unbounded == 1
+            && child.root.retried == 0
+            && child.root.reason == Some("unbounded"),
+        "{:?}",
+        child.root
+    );
+    Ok(())
 }
 
 /// A measured need above the bound (pre-review note 3): k0j1 (true need 2)
@@ -908,46 +942,75 @@ fn a_measured_pole_above_the_bound_is_an_alarm() -> Result<()> {
 
 /// Nested child calls (pre-review 2(a)): c2-m9, k2j1 (v0·ε², v1·ε⁻¹) with
 /// the marked line 9. No top-level child call hides a pole; the condition
-/// holds only in the child calls nested in the R* evaluation of the
-/// two-loop UV subgraphs (hard edges {2,3,8}, every group zero at depth 1,
-/// quotient bound 2; IRH-DEPTH.md 2.6). Here the UV children themselves are
-/// computed on the child route: the nested calls start at their bound and
-/// the counterterm equals today's exactly (the legacy planner differs by
-/// [(351/32) log(M²/μ²) − 697/64] C_A³/ε in the record); -117/64 ε⁻² at the
-/// safe order (massive -117/64).
+/// holds only in the child calls nested in the root evaluation: the R* of
+/// its decorated quotients (`quotient_rstar` → `rstar_child_counterterm`,
+/// an evaluation on a proper support), hard edges {2,3,8}, every group zero
+/// at depth 1, quotient bound 2 over one quotient loop (IRH-DEPTH.md 2.6).
+/// The proper UV children of the root take no child-route correction (their
+/// counts are zero on either route), so they are kept on today's path. On the
+/// fixed planner every nested call is bounded and starts at its bound (one
+/// attempt at depth 2, recorded by a hook), and the counterterm equals
+/// today's exactly; -117/64 ε⁻² at the safe order (massive -117/64). The
+/// legacy planner misses the nested pole: legacy − today is exactly
+/// [(351/32) log(M²/μᵣ²) − 697/64] C_A³/ε in the record (IRH-DEPTH.md 2.6).
 #[test]
 fn nested_child_calls_keep_their_quotient_pole() -> Result<()> {
     let case = Case::new(&k(2, 1), Some(9))?;
     let today = case.today()?;
+    let sites = std::rc::Rc::new(std::cell::RefCell::new(Vec::<HookSite>::new()));
+    let record = sites.clone();
+    let hook: RowHook = Box::new(move |site: &HookSite, _: &mut Vec<(Atom, Atom, usize)>| {
+        record.borrow_mut().push(site.clone());
+    });
     let child = case.child(Run {
-        nested: true,
+        hook: Some(hook),
         ..run(FIXED)
     })?;
     ensure_same("c2-m9 nested", &child.value, &today)?;
-    // The nested calls: child-route corrections of evaluations on a proper
-    // support (the UV children's R*, the decorated quotients' R*, among them
-    // hard {2,3,8} with bound 2 > its quotient's loop), wherever they run.
-    let mut all = child.root;
-    all.nested += child.nested.nested;
-    all.nested_bounded += child.nested.nested_bounded;
-    all.exceeded += child.nested.exceeded;
-    all.refused += child.nested.refused;
+    let root = child.root;
     ensure!(
-        all.nested >= 1 && all.nested_bounded >= 1 && all.exceeded == 0 && all.refused == 0,
-        "root {:?} nested {:?}",
-        child.root,
-        child.nested
+        root.nested >= 1
+            && root.nested_bounded == root.nested
+            && root.retried == 0
+            && root.exceeded == 0
+            && root.refused == 0,
+        "{root:?}"
+    );
+    let sites = sites.borrow();
+    let nested = sites.iter().filter(|site| site.nested).collect::<Vec<_>>();
+    let deep = nested
+        .iter()
+        .filter(|site| site.edges == "2,3,8")
+        .collect::<Vec<_>>();
+    ensure!(
+        !deep.is_empty()
+            && deep
+                .iter()
+                .all(|site| site.hard_loops == 1 && site.quotient_loops == 1 && site.extra == 2),
+        "the nested calls on hard {{2,3,8}} start at their bound 2: {sites:?}"
+    );
+    eprintln!(
+        "IRH_DEPTH_NESTED c2-m9 attempts={} nested={} on_2_3_8={}",
+        sites.len(),
+        nested.len(),
+        deep.len()
     );
     pinned("c2-m9", &today, &[(-2, q(-117, 64))], false)?;
-    let legacy = case.child(Run {
-        nested: true,
-        ..run(LEGACY)
-    })?;
+    let legacy = case.child(run(LEGACY))?;
     ensure!(
         !same(&legacy.value, &today)?,
         "c2-m9: the legacy planner must miss the nested pole"
     );
-    pinned("c2-m9 legacy", &legacy.value, &[(-2, q(-117, 64))], false)
+    pinned("c2-m9 legacy", &legacy.value, &[(-2, q(-117, 64))], false)?;
+    // The order the fix changes (tests review, finding 2).
+    let log = |symbol| symbolica::function!(symbolica::atom::Symbol::LOG, Atom::var(symbol));
+    let log_ratio = log(super::top_mass::auxiliary_mass_squared()) - log(GS.mu_r_sq);
+    pinned(
+        "c2-m9 legacy - today",
+        &(&legacy.value - &today),
+        &[(-1, q(351, 32) * log_ratio - q(697, 64))],
+        true,
+    )
 }
 
 /// The trailing ε order of `value` (`None` when zero).
@@ -1018,66 +1081,89 @@ fn first_rows(case: &Case) -> Result<Vec<(Atom, Atom, usize)>> {
         .into_inner())
 }
 
+/// The vanished row is measured (tests review, finding 4). The candidate
+/// rows are taken in a canonical order (their insertions' text, not
+/// symbolica's term order), and the test uses the first one whose hooked
+/// quotient factor needs the full bound 3, so the retry comes from measuring
+/// the vanished row (`raised == 0`), whatever the process ran before. The
+/// same hook without the raise to the bound must reach the reference
+/// through the measurement alone.
 #[test]
 fn a_vanished_row_of_a_nonzero_group_keeps_its_quotient_pole() -> Result<()> {
     let case = Case::new(L3_006, None)?;
     let rows = first_rows(&case)?;
     let top = rows.iter().map(|(_, _, loops)| *loops).max().unwrap_or(0);
-    let group = rows
+    let mut group = rows
         .iter()
-        .filter(|(h, _, loops)| *loops == top && !h.is_zero())
-        .collect::<Vec<_>>();
+        .filter(|(h, _, loops)| *loops == top && !h.is_zero() && order(h) == Some(-2))
+        .map(|(_, insertion, _)| {
+            (
+                canonical_tensor(insertion).map(|tensor| tensor.to_string()),
+                insertion,
+            )
+        })
+        .map(|(key, insertion)| key.map(|key| (key, insertion)))
+        .collect::<Result<Vec<_>>>()?;
     ensure!(group.len() >= 2, "the top group needs two rows: {rows:?}");
-    let hooked = |target: &Atom, shown: bool, start: usize| {
+    group.sort_by(|a, b| a.0.cmp(&b.0));
+    let hooked = |target: &Atom, shown: bool, start: usize, test: DepthTest| {
         case.child(Run {
             hook: Some(vanished_row(target.clone(), shown)),
             start,
-            ..run(FIXED)
+            test,
         })
     };
-    for (h, target, _) in group {
-        if order(h) != Some(-2) {
-            continue;
-        }
+    for (_, target) in group {
         // The value of the hooked correction: from depth 3 on, every row's
         // coefficient is shown through the order its quotient needs.
-        let reference = hooked(target, true, 3)?;
+        let reference = hooked(target, true, 3, FIXED)?;
         // The same without the row's contribution: the row must reach the
         // pole part.
-        let without = hooked(target, false, 3)?;
+        let without = hooked(target, false, 3, FIXED)?;
         if same(&reference.value, &without.value)? {
             continue;
         }
-        let child = hooked(target, true, 0)?;
+        let child = hooked(target, true, 0, FIXED)?;
         ensure!(
             same(&child.value, &reference.value)?,
             "child route {} differs from the reference {}",
             child.value,
             reference.value
         );
-        // The vanished row's quotient factor is measured, and its insertion's
-        // excess raises the row bound to 3: the planner retries at depth 3
-        // (to the measured need, or to the bound when the measured need of
-        // the chosen row is lower: which row of the group comes first follows
-        // symbolica's term order, which depends on what the process ran
-        // before) and the child route gets the reference; the guard never
-        // fires.
+        // The vanished row's quotient factor is measured at depth 1, its
+        // insertion's excess raises its row bound to 3; a row whose measured
+        // need is lower is retried to the bound instead (raised): skip it.
+        if child.root.raised != 0 {
+            continue;
+        }
         let DepthCounts {
             corrections,
             retried,
-            raised,
             exceeded,
             refused,
             ..
         } = child.root;
         ensure!(
-            corrections >= 1 && retried == 1 && raised <= 1 && exceeded == 0 && refused == 0,
+            corrections >= 1 && retried == 1 && exceeded == 0 && refused == 0,
             "{:?}",
             child.root
+        );
+        // Measurement alone: no raise to the bound, the same retry to 3.
+        let measured = hooked(target, true, 0, NO_RAISE)?;
+        ensure!(
+            same(&measured.value, &reference.value)?,
+            "without the raise, child route {} differs from the reference {}",
+            measured.value,
+            reference.value
+        );
+        ensure!(
+            measured.root.retried == 1 && measured.root.raised == 0 && measured.root.refused == 0,
+            "{:?}",
+            measured.root
         );
         return Ok(());
     }
     Err(eyre!(
-        "no row of the top group reaches the pole part: {rows:?}"
+        "no row of the top group needs the full bound and reaches the pole part: {rows:?}"
     ))
 }
