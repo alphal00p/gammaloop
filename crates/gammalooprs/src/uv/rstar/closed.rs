@@ -198,14 +198,17 @@ fn reason_token(prefix: &str, message: &str) -> String {
 /// - an exhausted budget (idenso's/spenso's `resource budget exhausted`
 ///   panics, or an error carrying a `ResourceLimitError`) declines with
 ///   `budget`, after the freed pages are returned (`release`);
-/// - any other error or panic declines with `error:..` / `panic:..`.
+/// - any other error or panic declines with `error:..` / `panic:..`;
+/// - but the fatal IRH-DEPTH alarm ([`super::depth::DepthAlarm`], also one
+///   of a nested evaluation or replayed by the counterterm cache) is never
+///   declined: it is returned as the error.
 ///
-/// The caller then computes the term on today's path, unchanged.
+/// The caller then computes a declined term on today's path, unchanged.
 pub(super) fn guarded<T>(
     limit: Option<u64>,
     release: Option<fn()>,
     work: impl FnOnce() -> Result<std::result::Result<T, String>>,
-) -> std::result::Result<T, String> {
+) -> Result<std::result::Result<T, String>> {
     use symbolica::utils::resources::{ResourceBudget, ResourceLimitError, ResourceLimits};
     let budget = ResourceBudget::new(ResourceLimits {
         max_process_rss_bytes: limit,
@@ -214,7 +217,8 @@ pub(super) fn guarded<T>(
     let started = std::time::Instant::now();
     let attempt = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| budget.run(work)));
     let (message, panicked, limit_error) = match attempt {
-        Ok(Ok(outcome)) => return outcome,
+        Ok(Ok(outcome)) => return Ok(outcome),
+        Ok(Err(error)) if super::depth::is_alarm(&error) => return Err(error),
         Ok(Err(error)) => {
             let limit_error = error
                 .chain()
@@ -256,9 +260,9 @@ pub(super) fn guarded<T>(
             release();
             std::thread::sleep(std::time::Duration::from_millis(1500));
         }
-        return Err(outcome.into());
+        return Ok(Err(outcome.into()));
     }
-    Err(reason_token(outcome, &message))
+    Ok(Err(reason_token(outcome, &message)))
 }
 
 /// Whether `coefficient` is a hidden zero to drop. Tested only up to `limit`
@@ -1096,33 +1100,41 @@ mod tests {
     #[test]
     fn guard_declines_fail_closed() -> Result<()> {
         use symbolica::utils::resources::{ResourceLimitError, checkpoint};
-        let passed: std::result::Result<u8, String> = guarded(None, None, || Ok(Ok(7)));
+        let passed: std::result::Result<u8, String> = guarded(None, None, || Ok(Ok(7)))?;
         assert_eq!(passed, Ok(7));
         let declined: std::result::Result<u8, String> =
-            guarded(None, None, || Ok(Err("slots:5".to_owned())));
+            guarded(None, None, || Ok(Err("slots:5".to_owned())))?;
         assert_eq!(declined, Err("slots:5".to_owned()));
         let budget: std::result::Result<u8, String> = guarded(None, None, || {
             panic!("resource budget exhausted in a factorized contraction: test")
-        });
+        })?;
         assert_eq!(budget, Err("budget".to_owned()));
         // A real RSS budget of one byte: the first checkpoint fails.
         let real: std::result::Result<u8, String> = guarded(Some(1), None, || {
             checkpoint().map_err(eyre::Report::new)?;
             Ok(Ok(0))
-        });
+        })?;
         assert_eq!(real, Err("budget".to_owned()));
         let typed: std::result::Result<u8, String> = guarded(None, None, || {
             Err(eyre::Report::new(ResourceLimitError::MonitorUnavailable {
                 resource: "process RSS",
                 message: "test".into(),
             }))
-        });
+        })?;
         assert_eq!(typed, Err("budget".to_owned()));
         let error: std::result::Result<u8, String> =
-            guarded(None, None, || Err(eyre!("taylor failed here")));
+            guarded(None, None, || Err(eyre!("taylor failed here")))?;
         assert_eq!(error, Err("error:taylor_failed_here".to_owned()));
-        let panic: std::result::Result<u8, String> = guarded(None, None, || panic!("boom"));
+        let panic: std::result::Result<u8, String> = guarded(None, None, || panic!("boom"))?;
         assert_eq!(panic, Err("panic:boom".to_owned()));
+        // IRH-DEPTH round 4: the strict alarm is never declined, also wrapped
+        // in context (a nested evaluation's).
+        let alarm = guarded::<u8>(None, None, || {
+            Err(super::super::depth::alarm("IRH-DEPTH: test".into()))
+                .map_err(|error| error.wrap_err("while applying R* to a quotient"))
+        });
+        let error = alarm.expect_err("the alarm must not be declined");
+        assert!(super::super::depth::is_alarm(&error), "{error:#}");
         Ok(())
     }
 }

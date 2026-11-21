@@ -78,7 +78,10 @@
 //! bound (`bound_exceeded`, compared row by row: the proof of `B` failed;
 //! refused at once, an alarm of its own, fatal under
 //! `GAMMALOOP_IR_HARD_DEPTH_STRICT=1`, also under the opt-in closed-path
-//! guard `GAMMALOOP_IR_HARD_CHILD_GUARD=1`). The correction is then
+//! guard `GAMMALOOP_IR_HARD_CHILD_GUARD=1`, and at any nesting depth: a
+//! nested evaluation's alarm is a typed error, [`DepthAlarm`], that no guard,
+//! vanished-row valuation or counterterm cache turns into a decline). The
+//! correction is then
 //! evaluated on today's path (the closed or projected moments with the
 //! generic forest step, which measures every quotient factor before its
 //! hard coefficient is integrated), so a refusal costs time, never a value.
@@ -318,6 +321,38 @@ pub(super) fn strict() -> bool {
     *STRICT
 }
 
+/// The fatal [`strict`] alarm, a typed error: every boundary that turns an
+/// error into a decline, a missing measurement or a stored message (the
+/// closed-path guard, a vanished row's valuation, the counterterm cache) lets
+/// it through ([`is_alarm`]), so STRICT is fatal at any nesting depth, with
+/// and without `GAMMALOOP_IR_HARD_CHILD_GUARD=1`.
+#[derive(Debug)]
+pub(super) struct DepthAlarm(String);
+
+impl std::fmt::Display for DepthAlarm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for DepthAlarm {}
+
+/// The [`DepthAlarm`] with `message`.
+pub(super) fn alarm(message: String) -> eyre::Report {
+    eyre::Report::new(DepthAlarm(message))
+}
+
+/// Whether `error` carries a [`DepthAlarm`] anywhere in its chain, also one
+/// replayed by the counterterm cache.
+pub(super) fn is_alarm(error: &eyre::Report) -> bool {
+    error.chain().any(|cause| {
+        cause.is::<DepthAlarm>()
+            || cause
+                .downcast_ref::<crate::uv::counterterm_cache::CachedError>()
+                .is_some_and(|cached| is_alarm(cached.cause()))
+    })
+}
+
 /// IRH-DEPTH counts of one evaluation's child-route IR corrections
 /// (`IR_HARD_DEPTH_SUMMARY`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -534,9 +569,7 @@ pub(super) fn with_depth_test<T>(test: DepthTest, f: impl FnOnce() -> T) -> T {
 
 /// Tests: a counted scope on this thread (restored on unwinding too).
 #[cfg(test)]
-fn counted_scope(
-    slot: &'static std::thread::LocalKey<std::cell::Cell<usize>>,
-) -> impl Drop {
+fn counted_scope(slot: &'static std::thread::LocalKey<std::cell::Cell<usize>>) -> impl Drop {
     struct Scope(&'static std::thread::LocalKey<std::cell::Cell<usize>>);
     impl Drop for Scope {
         fn drop(&mut self) {
@@ -607,7 +640,10 @@ pub(super) fn planner_bound(bound: Option<usize>, nested: bool) -> Option<usize>
         BoundOverride::Computed => {}
         BoundOverride::Unknown => return None,
         BoundOverride::Fixed(fixed) => return Some(fixed),
-        BoundOverride::Nested { bound: fixed, within } => {
+        BoundOverride::Nested {
+            bound: fixed,
+            within,
+        } => {
             let scope = match within {
                 Within::ChildAttempt => &CHILD_ATTEMPT,
                 Within::ZeroRow => &ZERO_ROW,

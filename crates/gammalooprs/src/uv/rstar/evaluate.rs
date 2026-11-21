@@ -1730,32 +1730,23 @@ impl<'a> Evaluation<'a> {
             .root_boundary
             .is_none()
             .then(super::depth::child_attempt_scope);
-        let attempt = if mode == super::closed::ChildMode::Check
-            || !super::depth::child_guard(*GUARD)
-        {
-            self.ir_hard_child(correction_index, correction)?
-        } else {
-            // Fail-closed under the closed path's scoped budget
-            // (GAMMALOOP_IR_HARD_BUDGET_GIB over the RSS now): an exhausted
-            // budget, an error or a panic declines the correction.
-            let limit = super::closed::budget_extra_bytes()
-                .and_then(|extra| super::expression::process_rss_now().map(|rss| rss + extra));
-            let exceeded = self.depth.exceeded;
-            let attempt =
+        let attempt =
+            if mode == super::closed::ChildMode::Check || !super::depth::child_guard(*GUARD) {
+                self.ir_hard_child(correction_index, correction)?
+            } else {
+                // Fail-closed under the closed path's scoped budget
+                // (GAMMALOOP_IR_HARD_BUDGET_GIB over the RSS now): an exhausted
+                // budget, an error or a panic declines the correction.
+                let limit = super::closed::budget_extra_bytes()
+                    .and_then(|extra| super::expression::process_rss_now().map(|rss| rss + extra));
+                // IRH-DEPTH: `guarded` declines every error but the strict
+                // alarm (super::depth::DepthAlarm), which stays fatal: raised by
+                // this evaluation or by any nested one (a decorated quotient's
+                // or a UV child's R*, also replayed by the counterterm cache).
                 super::closed::guarded(limit, super::expression::memory_release(), || {
                     self.ir_hard_child(correction_index, correction)
-                });
-            // IRH-DEPTH: `guarded` declines every error, also the strict
-            // `bound_exceeded` one; under GAMMALOOP_IR_HARD_DEPTH_STRICT=1 it
-            // stays fatal (super::depth::strict).
-            ensure!(
-                !(super::depth::strict() && self.depth.exceeded > exceeded),
-                "IRH-DEPTH: a measured quotient pole exceeds the quotient bound in {} corr={correction_index} (GAMMALOOP_IR_HARD_DEPTH_STRICT=1; declined by the closed-path guard: {})",
-                self.graph.name,
-                attempt.as_ref().err().map_or("", String::as_str)
-            );
-            attempt
-        };
+                })?
+            };
         #[cfg(test)]
         drop(attempt_scope);
         let seconds = started.elapsed().as_secs_f64();
@@ -2206,11 +2197,12 @@ impl<'a> Evaluation<'a> {
                 && let Some((row_need, row_limit)) = super::depth::exceeded_row(&needs, &row_bounds)
             {
                 super::depth::note(&mut self.depth, |counts| &mut counts.exceeded);
-                ensure!(
-                    !super::depth::strict(),
-                    "IRH-DEPTH: a measured quotient pole exceeds the quotient bound in {} corr={correction_index}: needed={row_need} bound={row_limit} (GAMMALOOP_IR_HARD_DEPTH_STRICT=1)",
-                    self.graph.name
-                );
+                if super::depth::strict() {
+                    return Err(super::depth::alarm(format!(
+                        "IRH-DEPTH: a measured quotient pole exceeds the quotient bound in {} corr={correction_index}: needed={row_need} bound={row_limit} (GAMMALOOP_IR_HARD_DEPTH_STRICT=1)",
+                        self.graph.name
+                    )));
+                }
                 return Ok(self.refuse_depth(
                     correction_index,
                     correction,
@@ -2428,11 +2420,12 @@ impl<'a> Evaluation<'a> {
                     // IRH-DEPTH: a row whose h_j vanishes at this depth adds
                     // nothing, but its quotient factors are measured all the
                     // same: their pole may need a deeper h_j (the retry).
-                    if super::depth::guards()
-                        && let Some(pole) =
-                            self.ir_quotient_valuation(hard, forest, insertion, degree)
-                    {
-                        valuations[i] = valuations[i].min(pole);
+                    if super::depth::guards() {
+                        match self.ir_quotient_valuation(hard, forest, insertion, degree)? {
+                            Ok(Some(pole)) => valuations[i] = valuations[i].min(pole),
+                            Ok(None) => {}
+                            Err(reason) => return Ok(Err(reason)),
+                        }
                     }
                     continue;
                 };
@@ -2544,52 +2537,77 @@ impl<'a> Evaluation<'a> {
     /// factors `[λ^b] Z̃_F(E) · closure` of one vanished row of
     /// [`Self::ir_outer_integrated`], measured as for a shown row but without
     /// the compensation (a polynomial in `ε`, which only raises orders).
-    /// `None` when they vanish or cannot be measured: the quotient bound then
-    /// stands for the row (and the guard refuses an unknown bound).
+    /// `Ok(None)` when they vanish or cannot be measured (an unmeasurable
+    /// order or an outer-order decline): the quotient bound then stands for
+    /// the row (and the guard refuses an unknown bound). An error is never
+    /// read as "no measurement": the strict alarm of a nested evaluation
+    /// (super::depth::DepthAlarm, from the decorated quotient's R*)
+    /// propagates, and any other error declines the whole correction
+    /// (`Ok(Err(zero_row:..))`, today's terms follow).
     fn ir_quotient_valuation(
         &mut self,
         hard: &RStarIntegrand,
         forest: &IrForestTerm,
         insertion: &Atom,
         degree: usize,
-    ) -> Option<i64> {
+    ) -> Result<std::result::Result<Option<i64>, String>> {
         #[cfg(test)]
         let _zero_row = self
             .plan
             .root_boundary
             .is_none()
             .then(super::depth::zero_row_scope);
-        let mut z = self.ir_forest(forest, insertion).ok()?;
+        let declined = |error: eyre::Report| -> Result<std::result::Result<Option<i64>, String>> {
+            if super::depth::is_alarm(&error) {
+                return Err(error);
+            }
+            let reason = format!("{error}")
+                .chars()
+                .map(|c| if c.is_whitespace() { '_' } else { c })
+                .take(120)
+                .collect::<String>();
+            Ok(Err(format!("zero_row:{reason}")))
+        };
+        let mut z = match self.ir_forest(forest, insertion) {
+            Ok(z) => z,
+            Err(error) => return declined(error),
+        };
         if z.is_zero() {
-            return None;
+            return Ok(Ok(None));
         }
         if let Some(closure) = &self.root_closure {
             z *= closure;
         }
-        let orders = hard
-            .ir_outer_orders(&z, &self.root_edges, degree, self.reference_mass_squared)
-            .ok()?
-            .ok()?;
+        let orders =
+            match hard.ir_outer_orders(&z, &self.root_edges, degree, self.reference_mass_squared) {
+                Ok(Ok(orders)) => orders,
+                Ok(Err(_)) => return Ok(Ok(None)),
+                Err(error) => return declined(error),
+            };
         let mut valuation = None::<i64>;
         for value in orders.iter().filter(|value| !value.is_zero()) {
-            let series = Integrated::dimensionally_regularized(value)
-                .series(
-                    GS.dim_epsilon,
-                    0,
-                    symbolica::poly::series::SeriesDepth::relative(1),
-                )
-                .ok()?;
+            let series = match Integrated::dimensionally_regularized(value).series(
+                GS.dim_epsilon,
+                0,
+                symbolica::poly::series::SeriesDepth::relative(1),
+            ) {
+                Ok(series) => series,
+                Err(error) => return declined(eyre::eyre!("{error}")),
+            };
             if series.is_zero() {
                 continue;
             }
             let exponent = series.get_trailing_exponent();
-            let pole = exponent
+            let Some(pole) = exponent
                 .is_integer()
                 .then(|| exponent.numerator().to_i64())
-                .flatten()?;
+                .flatten()
+            else {
+                return Ok(Ok(None));
+            };
             valuation = Some(valuation.map_or(pole, |lowest| lowest.min(pole)));
         }
-        valuation
+        Ok(Ok(valuation))
     }
 
     /// `GAMMALOOP_IR_OUTER=analytic` for one IR correction term of the

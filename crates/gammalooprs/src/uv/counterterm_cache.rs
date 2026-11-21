@@ -118,7 +118,38 @@ impl<'a> CountertermPrewarmPlan<'a> {
     }
 }
 
-type Entry = Arc<OnceLock<std::result::Result<Atom, String>>>;
+/// A failed computation is stored with its whole error, and every lookup
+/// replays it as a [`CachedError`]: the classes of its causes survive the
+/// cache (a fatal IRH-DEPTH alarm, `rstar::depth::DepthAlarm`, stays one on
+/// every later hit).
+type Entry = Arc<OnceLock<std::result::Result<Atom, CachedError>>>;
+
+/// An error of a cached computation, replayed on a lookup. Its message is the
+/// stored error's whole chain (`{:#}`, the text the cache replayed before);
+/// [`CachedError::cause`] is the stored error itself, whose chain callers
+/// inspect for typed causes.
+#[derive(Clone, Debug)]
+pub(crate) struct CachedError(Arc<eyre::Report>);
+
+impl CachedError {
+    /// The stored error.
+    pub(crate) fn cause(&self) -> &eyre::Report {
+        &self.0
+    }
+
+    /// The replay on a lookup.
+    fn replay(&self) -> eyre::Report {
+        eyre::Report::new(self.clone())
+    }
+}
+
+impl std::fmt::Display for CachedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:#}", self.0)
+    }
+}
+
+impl std::error::Error for CachedError {}
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct Key {
@@ -393,7 +424,7 @@ impl CountertermCache {
             .filter_map(|entry| entry.get())
             .map(|value| match value {
                 Ok(atom) => atom.as_view().get_byte_size(),
-                Err(error) => error.len(),
+                Err(error) => error.to_string().len(),
             })
             .sum();
         (entries.len(), bytes)
@@ -439,7 +470,7 @@ impl CountertermCache {
                 .get(&key)
                 .cloned();
             if let Some(result) = entry.as_ref().and_then(|entry| entry.get()) {
-                result.as_ref().map_err(|message| eyre!(message.clone()))?;
+                result.as_ref().map_err(CachedError::replay)?;
                 continue;
             }
             let loops = request.loops();
@@ -593,12 +624,12 @@ impl CountertermCache {
                 .inspect(|_| {
                     self.stores.fetch_add(1, Ordering::Relaxed);
                 })
-                .map_err(|error| format!("{error:#}"));
+                .map_err(|error| CachedError(Arc::new(error)));
             timing.lap(CacheTimingPhase::Store);
             result
         });
         drop(resolve_stage);
-        let canonical = result.as_ref().map_err(|message| eyre!(message.clone()))?;
+        let canonical = result.as_ref().map_err(CachedError::replay)?;
         debug_tags!(#uv, #integrated, #cache;
             stage = "uv_counterterm_cache_lookup",
             hit = existing,

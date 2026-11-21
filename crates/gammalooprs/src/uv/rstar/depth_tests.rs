@@ -1282,8 +1282,11 @@ fn a_nested_alarm_while_valuing_a_vanished_row_is_fatal() -> Result<()> {
 
 /// The nested alarm stored by the shared counterterm (Δ) cache and replayed
 /// by a later evaluation that forces nothing: the replay is the alarm again,
-/// fatal also under GAMMALOOP_IR_HARD_CHILD_GUARD=1 (on 307ac11f2f the cache
-/// replayed the alarm as a plain message, which the guard declined).
+/// fatal also under GAMMALOOP_IR_HARD_CHILD_GUARD=1. On 307ac11f2f this test
+/// passes too: the cache replayed the alarm as a plain message, which the
+/// guard declined, but the root's fallback to today's terms looked up the
+/// same quotient and failed on the replay. The class itself is checked by
+/// [`the_counterterm_cache_replays_the_alarm_class`].
 #[test]
 fn a_cached_nested_alarm_stays_fatal() -> Result<()> {
     for guard in [false, true] {
@@ -1307,5 +1310,48 @@ fn a_cached_nested_alarm_stays_fatal() -> Result<()> {
         });
         ensure_alarm(&format!("{label} (replayed)"), replay)?;
     }
+    Ok(())
+}
+
+/// The counterterm cache keeps the class of a stored error (round 4): a
+/// computation that raised the strict alarm replays it on every later hit as
+/// the alarm (not a plain message), with the same text, without computing
+/// again.
+#[test]
+fn the_counterterm_cache_replays_the_alarm_class() -> Result<()> {
+    let case = Case::new(&k(2, 1), Some(9))?;
+    let cache = crate::uv::counterterm_cache::CountertermCache::default();
+    let lookup = |compute: &dyn Fn() -> Result<Atom>| {
+        cache.counterterm_with(
+            &case.graph,
+            &case.plan.support,
+            case.model(),
+            "irh-depth-round4".into(),
+            compute,
+        )
+    };
+    let first = lookup(&|| Err(depth::alarm("IRH-DEPTH: test alarm bound=1".into())))
+        .expect_err("the computation fails");
+    let replayed = lookup(&|| panic!("a cached error is not computed again"))
+        .expect_err("the cached error is replayed");
+    ensure!(
+        depth::is_alarm(&first) && depth::is_alarm(&replayed),
+        "the alarm class is lost: {first:#} / {replayed:#}"
+    );
+    ensure!(
+        format!("{replayed:#}").contains("IRH-DEPTH: test alarm bound=1"),
+        "{replayed:#}"
+    );
+    // An ordinary error stays ordinary.
+    let plain = cache
+        .counterterm_with(
+            &case.graph,
+            &case.plan.support,
+            case.model(),
+            "irh-depth-round4-plain".into(),
+            || Err(eyre!("an ordinary failure")),
+        )
+        .expect_err("the computation fails");
+    ensure!(!depth::is_alarm(&plain), "{plain:#}");
     Ok(())
 }
