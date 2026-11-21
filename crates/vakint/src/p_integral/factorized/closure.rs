@@ -1596,6 +1596,10 @@ pub fn evaluate_factorized_closure(
         super::check_data_atoms_catalogue(value, vakint)?;
         let record = evaluate_validated(vakint, settings, value, spec, prefactor)?;
         super::backstop::check_result(value, prefactor, settings, &record.value, false)?;
+        // each record's value in vakint's notation is returned too (the
+        // record's and the sum's `vakint_value`): the same check, in vakint's
+        // notation; the sums add checked values only
+        super::backstop::check_result(value, prefactor, settings, &record.vakint_value, true)?;
         out.value += &record.value;
         out.vakint_value += &record.vakint_value;
         out.records.push(record);

@@ -1223,6 +1223,9 @@ pub fn evaluate_factorized_vacuum_streamed(
     // (the vacuum caller notation keeps p(j) of an external vector without a
     // leg, and its scalar products, in vakint notation: allowed here)
     super::backstop::check_result(value, prefactor, settings, &caller, true)?;
+    // the value in vakint's notation is returned too (`vakint_value`): the
+    // same check, in vakint's notation
+    super::backstop::check_result(value, prefactor, settings, &vakint_value, true)?;
     Ok(VacuumValue {
         value: caller,
         vakint_value,
