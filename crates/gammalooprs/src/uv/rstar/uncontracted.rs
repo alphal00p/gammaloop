@@ -717,6 +717,37 @@ pub(super) const DESIGNED_LOCAL: &[&str] = &[
     "one_loop_tree_cut",
 ];
 
+/// The designed codes caused by a SETTING of the run or of the calling
+/// evaluation, not by the record's graph (a sub-list of [`DESIGNED_LOCAL`]):
+/// the PINT6 dump, a kind or child this build does not emit, an open root
+/// (no root closure or projector: the caller's entry, e.g. a K5 surrogate
+/// root under `GAMMALOOP_SURROGATE_CLOSED_ROOT=0`), a root projector
+/// without its normalisation as data, `additional_normalization` other than
+/// "1" and a top-mass mode other than keep. Such a code declines every
+/// record of its record class ([`Attempt::shape`]) in the evaluation, so
+/// the ledger fails a diagram-kind whose records of one shape ALL declined
+/// with nothing compared (check) / taken (on) and at least one of these
+/// codes, even when records of another shape of the same kind compared
+/// (helper VH 2's `k5_beta_ledger_misses_settings_wide_root_declines`:
+/// 16 K5 surrogate roots `open_root`, 35 surrogate children compared, the
+/// kind-wide all-declined rule passed it). The other designed codes depend
+/// on the record's graph (`one_loop_tree_cut`, `insertion_mass_symbol`, ...)
+/// and stay under the kind-wide rule only.
+pub(super) const SETTING_CODES: &[&str] = &[
+    "pint6_dump",
+    "kind_not_built",
+    "child_not_built",
+    "open_root",
+    "root_normalisation_opaque",
+    "additional_normalization",
+    "top_mass_mode",
+];
+
+/// Whether `code` (of `declined:<code>`) is a [`SETTING_CODES`] code.
+pub(super) fn is_setting_code(code: &str) -> bool {
+    SETTING_CODES.contains(&code)
+}
+
 /// vakint's designed refusals, matched by the error variant AND the prefix of
 /// its detail AND a phrase the detail must contain (`(variant, detail prefix,
 /// phrase, code)`, phrase `""`: none; the code is `vakint:<code>`): the rows
@@ -927,6 +958,12 @@ pub(super) struct Attempt {
     pub depth: usize,
     pub order: i64,
     pub closure: &'static str,
+    /// The record's frame shape, its record class for the ledger's
+    /// setting-wide rule ([`SETTING_CODES`]): `K1` (a root remainder: the
+    /// plan has no root boundary), `K2` (a remainder of a proper UV child),
+    /// `K3` (an IR hard term); the kind does not determine it (a K5
+    /// surrogate has K1- and K2-shaped records).
+    pub shape: &'static str,
     /// The record's text (what vakint read), when built.
     pub text: Option<String>,
     pub outcome: Outcome,
@@ -991,6 +1028,7 @@ pub(super) fn attempt<R: std::borrow::Borrow<RStarIntegrand>>(
         depth,
         order: valid_order(depth, region.loops),
         closure: closure_name(site, kind),
+        shape: shape_of(site),
         text: None,
         outcome: Outcome::Error(Decline::new("unbuilt", "")),
         fields: String::new(),
@@ -1118,6 +1156,19 @@ pub(super) fn attempt<R: std::borrow::Borrow<RStarIntegrand>>(
     }
     attempt.outcome = Outcome::Value(finished);
     Ok(attempt)
+}
+
+/// The frame shape of a record at `site` ([`Attempt::shape`]): `K3` for an
+/// IR hard term, `K1` for a remainder of an evaluation root (no root
+/// boundary), `K2` for a remainder of a proper UV child.
+fn shape_of(site: &Site<'_>) -> &'static str {
+    if site.ir_hard.is_some() {
+        "K3"
+    } else if site.plan.root_boundary.is_none() {
+        "K1"
+    } else {
+        "K2"
+    }
 }
 
 /// The closure of the record's label and log line, from the actual closure:
