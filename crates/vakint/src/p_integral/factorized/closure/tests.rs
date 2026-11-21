@@ -2489,12 +2489,36 @@ fn two_poled_insertions_raise_the_depth_by_their_sum() {
 }
 
 /// The closure entry is the only caller of `insertion_pole_order` (its depth
-/// raise): an insertion whose Laurent series in ε fails (exp(1/ε), an
-/// essential singularity that validation does not look for) reaches the caller
-/// as `Evaluation` from that site, before any reduction, not as a refusal.
+/// raise). An insertion whose Laurent series in ε would fail there because it
+/// is not a Laurent expression (exp(1/ε), an essential singularity) is refused
+/// first, by the entry's validation: `Insertion`. A Laurent coefficient whose
+/// integer power is beyond i64 (ε^(-10^30)) passes validation, and symbolica
+/// does not expand such a power: that failure reaches the caller as the pole
+/// order's `Evaluation`, before any reduction.
 #[test]
-fn a_failing_insertion_series_reaches_the_closure_caller_as_evaluation() {
+fn a_non_laurent_insertion_is_refused_by_the_closure_entry_before_its_pole_order() {
     let eps = "gammalooprs::ε";
+    let refused = closure_insertion_error(&format!("exp(1/{eps})"));
+    match &refused {
+        FactorizedError::Insertion { vertex: 1, detail } => assert!(
+            detail.starts_with("the dependence on ε is not a Laurent polynomial"),
+            "{detail}"
+        ),
+        other => panic!("expected the Insertion refusal at vertex 1, got {other:?}"),
+    }
+    let huge = closure_insertion_error(&format!("{eps}^(-10^30)"));
+    match &huge {
+        FactorizedError::Evaluation { detail } => assert!(
+            detail.starts_with("insertion at vertex 1: the Laurent series in ε failed: "),
+            "{detail}"
+        ),
+        other => panic!("expected the pole order's Evaluation, got {other:?}"),
+    }
+}
+
+/// The closure entry's error for the L2 root with vertex 1 as a contracted
+/// child of coefficient `coefficient` (its polynomial as the factor).
+fn closure_insertion_error(coefficient: &str) -> FactorizedError {
     let mut with = l2_root(1, true);
     with.vertices.iter_mut().find(|v| v.id == 1).unwrap().factor = atom(&q(1, &hedge(120)));
     let hedges = with
@@ -2508,26 +2532,17 @@ fn a_failing_insertion_series_reaches_the_closure_caller_as_evaluation() {
         vertex: 1,
         hedges,
         cycles: (0, 0),
-        coefficient: atom(&format!("exp(1/{eps})")),
+        coefficient: atom(coefficient),
         factor,
     });
-    with.validate()
-        .expect("validation accepts exp(1/eps): it is a scalar");
     let vakint = Vakint::new().unwrap();
-    let error = evaluate_factorized_closure(
+    evaluate_factorized_closure(
         &vakint,
         &rstar_site_settings(),
         std::slice::from_ref(&with),
         &[with.prefactor.total()],
     )
-    .unwrap_err();
-    let prefix = "insertion at vertex 1: the Laurent series in ε failed: ";
-    match &error {
-        FactorizedError::Evaluation { detail } => {
-            assert!(detail.starts_with(prefix), "{detail}")
-        }
-        other => panic!("expected Evaluation, got {other:?}"),
-    }
+    .unwrap_err()
 }
 
 /// Weights with insertions: carried cycles + the insertions' cycles may be

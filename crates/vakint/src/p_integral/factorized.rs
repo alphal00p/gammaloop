@@ -1099,6 +1099,53 @@ fn momentum_degree(view: AtomView<'_>) -> u64 {
     }
 }
 
+/// A symbol named `ε` in any namespace (the evaluation's epsilon; which one is
+/// checked against the settings when the input is built).
+fn is_epsilon_symbol(symbol: Symbol) -> bool {
+    let name = symbol.get_name();
+    name == "ε" || name.ends_with("::ε")
+}
+
+/// The first sub-expression of `view` that depends on a symbol `depends`
+/// selects other than through sums, products and integer powers (of any sign
+/// and size, of expressions that are themselves such): a function whose
+/// argument depends on it, a power whose exponent does, or a non-integer or
+/// symbolic power of a base that does; with the reason. None when the
+/// dependence is a Laurent polynomial (or a ratio of polynomials) in it.
+fn non_laurent_dependence(view: AtomView<'_>, depends: &dyn Fn(Symbol) -> bool) -> Option<String> {
+    let contains = |part: AtomView<'_>| {
+        let mut found = false;
+        part.visitor(&mut |p| {
+            if let AtomView::Var(v) = p
+                && depends(v.get_symbol())
+            {
+                found = true;
+            }
+            !found
+        });
+        found
+    };
+    let shown = |why: &str| Some(format!("{} ({why})", view.to_owned().to_canonical_string()));
+    match view {
+        AtomView::Add(a) => a.iter().find_map(|t| non_laurent_dependence(t, depends)),
+        AtomView::Mul(m) => m.iter().find_map(|t| non_laurent_dependence(t, depends)),
+        AtomView::Pow(p) => {
+            let (base, exponent) = p.get_base_exp();
+            if contains(exponent) {
+                shown("in an exponent")
+            } else if !contains(base) {
+                None
+            } else if symbolica::domains::integer::Integer::try_from(exponent).is_ok() {
+                non_laurent_dependence(base, depends)
+            } else {
+                shown("under a non-integer or symbolic power")
+            }
+        }
+        AtomView::Fun(_) if contains(view) => shown("inside a function argument"),
+        _ => None,
+    }
+}
+
 /// What an insertion's coefficient or factor may not contain: a colour
 /// object, a flavour symbol (`…::nf`) or the auxiliary `mUVexp`; the first
 /// one found, by name.
@@ -2246,6 +2293,28 @@ impl FactorizedNumerator {
                 .or_else(|| self.mass_symbol_in(&insertion.factor))
             {
                 return Err(error(format!("contains a mass symbol {name}")));
+            }
+            // The pole order (`insertion_pole_order`) is that of a Laurent
+            // expression in ε: ε (and, in the scalar coefficient, the
+            // dimension, which becomes 4 - 2ε there) may occur only through
+            // sums, products and integer powers. Inside a function's argument,
+            // in an exponent or under a non-integer power the expansion has
+            // no pole order (log ε would silently count as order 0).
+            let dimension = self.dimension;
+            let in_coefficient = |s: Symbol| is_epsilon_symbol(s) || s == dimension;
+            for (what, atom, depends) in [
+                (
+                    "coefficient",
+                    &insertion.coefficient,
+                    &in_coefficient as &dyn Fn(Symbol) -> bool,
+                ),
+                ("factor", &insertion.factor, &is_epsilon_symbol),
+            ] {
+                if let Some(found) = non_laurent_dependence(atom.as_view(), depends) {
+                    return Err(error(format!(
+                        "the dependence on ε is not a Laurent polynomial: {found} in the {what}"
+                    )));
+                }
             }
             check_scalar(
                 insertion.coefficient.as_view(),

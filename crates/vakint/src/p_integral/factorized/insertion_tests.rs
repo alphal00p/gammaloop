@@ -787,9 +787,16 @@ fn every_insertion_rule_has_its_refusal() {
     );
     let _ = super::evaluate::vakint_input(&settings(2), &good, &Atom::num(1))
         .expect("the pristine record's input");
-    // a fractional power of eps (pole order, the closure entry's depth)
+    // a fractional power of eps: refused at validation (not a Laurent
+    // polynomial); the pole order's own rule still answers for a value that
+    // was not validated (the public insertion_pole_order)
     let half = with(&|v| ins(v).coefficient = atom(&format!("{EPS}^(1/2)")));
-    half.validate().unwrap();
+    insertion_refusal(
+        &half.validate().unwrap_err(),
+        C0,
+        "the dependence on ε is not a Laurent polynomial",
+        "eps^(1/2) at validation",
+    );
     let eps_atom = atom(EPS);
     let AtomView::Var(epsilon) = eps_atom.as_view() else {
         unreachable!()
@@ -805,10 +812,13 @@ fn every_insertion_rule_has_its_refusal() {
         .expect("the pristine pole order");
 }
 
-/// The pole order's own Laurent expansion can fail (an essential singularity
-/// in ε, which validation does not look for): that is an INTERNAL failure,
-/// `Evaluation` with the vertex and symbolica's reason, not a refusal of the
-/// record (`Insertion`); the same record with a pole is accepted.
+/// The pole order's own Laurent expansion can fail: that is an INTERNAL
+/// failure, `Evaluation` with the vertex and symbolica's reason. An essential
+/// singularity (exp(1/ε)) is refused by validation first (not a Laurent
+/// polynomial) and reaches it only through the public `insertion_pole_order`
+/// on a value that was not validated; an integer power beyond i64 is a valid
+/// Laurent coefficient that symbolica does not expand, and reaches it after
+/// validation. The same record with a pole has order 1.
 #[test]
 fn a_failing_laurent_series_of_an_insertion_is_an_evaluation_failure() {
     let eps_atom = atom(EPS);
@@ -818,9 +828,12 @@ fn a_failing_laurent_series_of_an_insertion_is_an_evaluation_failure() {
     let epsilon = epsilon.get_symbol();
     let mut essential = gluon_surrogate(1);
     ins(&mut essential).coefficient = atom(&format!("exp(1/{EPS})"));
-    essential
-        .validate()
-        .expect("validation accepts exp(1/eps): it is a scalar");
+    insertion_refusal(
+        &essential.validate().unwrap_err(),
+        C0,
+        "the dependence on ε is not a Laurent polynomial",
+        "exp(1/eps) at validation",
+    );
     let error = essential.insertion_pole_order(epsilon).unwrap_err();
     let prefix = format!("insertion at vertex {C0}: the Laurent series in ε failed: ");
     match &error {
@@ -830,9 +843,84 @@ fn a_failing_laurent_series_of_an_insertion_is_an_evaluation_failure() {
         ),
         other => panic!("expected Evaluation, got {other:?}"),
     }
+    let mut huge = gluon_surrogate(1);
+    ins(&mut huge).coefficient = atom(&format!("{EPS}^(-10^30)"));
+    huge.validate()
+        .expect("an integer power of eps is a Laurent coefficient");
+    match &huge.insertion_pole_order(epsilon).unwrap_err() {
+        FactorizedError::Evaluation { detail } => {
+            assert!(detail.starts_with(&prefix), "{detail}")
+        }
+        other => panic!("expected Evaluation, got {other:?}"),
+    }
     let mut pole = gluon_surrogate(1);
     ins(&mut pole).coefficient = atom(&format!("{EPS}^-1"));
     assert_eq!(pole.insertion_pole_order(epsilon).unwrap(), 1);
+}
+
+/// An insertion's coefficient and factor are Laurent expressions in ε: ε (and,
+/// in the scalar coefficient, the dimension, which the pole order sets to
+/// 4 - 2ε) may occur only through sums, products and integer powers. Anything
+/// else has no pole order and is refused at validation, `Insertion` with the
+/// prefix `the dependence on ε is not a Laurent polynomial`: log ε, exp(1/ε),
+/// √ε, ε^x, ε inside the factor's function, the dimension inside a log. The
+/// defect-free twins are accepted with their pole order.
+#[test]
+fn a_non_laurent_dependence_on_epsilon_is_refused_at_validation() {
+    let eps_atom = atom(EPS);
+    let AtomView::Var(epsilon) = eps_atom.as_view() else {
+        unreachable!()
+    };
+    let epsilon = epsilon.get_symbol();
+    let good = gluon_surrogate(1);
+    let with_coefficient = |c: &str| {
+        let mut value = good.clone();
+        ins(&mut value).coefficient = atom(c);
+        value
+    };
+    let prefix = "the dependence on ε is not a Laurent polynomial";
+    for (what, value) in [
+        ("log(eps)", with_coefficient(&format!("log({EPS})"))),
+        ("exp(1/eps)", with_coefficient(&format!("exp(1/{EPS})"))),
+        ("sqrt(eps)", with_coefficient(&format!("sqrt({EPS})"))),
+        ("eps^x", with_coefficient(&format!("{EPS}^witness::x"))),
+        ("eps in an exponent", with_coefficient(&format!("2^{EPS}"))),
+        (
+            "log of the dimension in the coefficient",
+            with_coefficient(&format!("log({DIM}-4)")),
+        ),
+        ("eps in a function of the factor", {
+            let mut value = good.clone();
+            let factor = ins(&mut value).factor.clone();
+            ins(&mut value).factor = factor * atom(&format!("exp({EPS})"));
+            value
+        }),
+    ] {
+        let error = value.validate().unwrap_err();
+        insertion_refusal(&error, C0, prefix, what);
+    }
+    for (what, coefficient, order) in [
+        ("eps^-1", format!("{EPS}^-1"), 1),
+        ("3 eps^-1 + 1/2", format!("3*{EPS}^-1+1/2"), 1),
+        ("eps^-2 pi^2", format!("{EPS}^-2*𝜋^2"), 2),
+        ("zeta(3) eps", format!("zeta(3)*{EPS}"), 0),
+        ("a ratio in eps", format!("(1+{EPS})^-1*{EPS}^-1"), 1),
+        (
+            "a ratio in the dimension",
+            format!("({DIM}-4)/({DIM}-3)"),
+            0,
+        ),
+    ] {
+        let value = with_coefficient(&coefficient);
+        value
+            .validate()
+            .unwrap_or_else(|e| panic!("{what} is a Laurent coefficient: {e}"));
+        assert_eq!(
+            value.insertion_pole_order(epsilon).unwrap(),
+            order,
+            "{what}"
+        );
+    }
 }
 
 /// The surrogate coefficient vertex (`ins:`) carries exactly the two inner
