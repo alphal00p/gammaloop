@@ -957,6 +957,15 @@ pub(crate) fn check_prefactor_argument(
             spec.mass_squared
         )));
     }
+    if let FactorizedKind::Closure(spec) = &value.kind
+        && spec.auxiliary_mass_squared != spec.mass_squared
+        && closure::contains_atom(prefactor.as_view(), spec.auxiliary_mass_squared.as_view())
+    {
+        return Err(refuse(format!(
+            "the auxiliary mass {} (it may occur only as the taylor line's mass)",
+            spec.auxiliary_mass_squared
+        )));
+    }
     Ok(())
 }
 

@@ -1652,6 +1652,186 @@ fn the_result_check_catches_f1_and_f3_without_a_validation_rule() {
     );
 }
 
+// ===========================================================================
+// G2: the masses of a marked closure record by position and form
+// ===========================================================================
+
+fn closure_refusal(v: &FactorizedNumerator, prefix: &str, what: &str) {
+    match v.validate() {
+        Err(FactorizedError::Closure { detail }) => {
+            assert!(
+                detail.starts_with(prefix),
+                "{what}: {detail}\n(expected prefix {prefix:?})"
+            )
+        }
+        other => panic!("{what}: expected Closure {prefix:?}, got {other:?}"),
+    }
+}
+
+/// The reference mass in a factor or the projector (polynomially or in a
+/// function), the auxiliary mass in a factor, the projector or a prefactor
+/// field: refused at validation with the field named; the record without
+/// it is accepted.
+#[test]
+fn g2_the_masses_occur_only_in_their_positions() {
+    let base = record("wh-k1-root");
+    base.validate().unwrap();
+    let vertex_id = base
+        .vertices
+        .iter()
+        .find(|x| x.factor != Atom::num(1))
+        .unwrap()
+        .id;
+    let in_vertex = |extra: &str| {
+        let mut v = base.clone();
+        let vertex = v.vertices.iter_mut().find(|x| x.id == vertex_id).unwrap();
+        vertex.factor = &vertex.factor * atom(extra);
+        v
+    };
+    let r_prefix = format!(
+        "the reference mass {} in vertex {vertex_id} factor: it may occur only as the closure mass and as the closing edge's mass",
+        atom(R)
+    );
+    for form in [
+        R.to_string(),
+        format!("log({R})"),
+        format!("{R}^-1"),
+        format!("{R}^(1/2)"),
+        format!("({R}+{MAUX})^-1"),
+    ] {
+        closure_refusal(&in_vertex(&form), &r_prefix, &form);
+    }
+    let m_prefix = format!(
+        "the auxiliary mass {} in vertex {vertex_id} factor: it may occur only as the taylor line's mass",
+        atom(MAUX)
+    );
+    closure_refusal(&in_vertex(MAUX), &m_prefix, "M_aux in a factor");
+    let mut p = base.clone();
+    let projector = p.projector.as_mut().unwrap();
+    projector.tensor = &projector.tensor * atom(R);
+    closure_refusal(
+        &p,
+        &format!("the reference mass {} in projector: ", atom(R)),
+        "R in the projector",
+    );
+    let mut s = base.clone();
+    s.prefactor.scalars = &s.prefactor.scalars * atom(MAUX);
+    closure_refusal(
+        &s,
+        &format!("the auxiliary mass {} in prefactor_scalars: ", atom(MAUX)),
+        "M_aux in prefactor_scalars",
+    );
+    // the prefactor ARGUMENT
+    match closure(&base, &symbolic(), &(base.prefactor.total() * atom(MAUX))) {
+        Err(FactorizedError::NotScalar { location, detail }) => {
+            assert_eq!(location, "prefactor argument");
+            assert!(detail.starts_with("the auxiliary mass "), "{detail}");
+        }
+        other => panic!("M_aux in the argument: {other:?}"),
+    }
+}
+
+/// The auxiliary mass and an edge mass must be plain symbols (or 0): an
+/// expression in ε or the dimension (F-3, m-1), a polynomial that is zero
+/// ((m-3)^2-m^2+6m-9), a product: refused at validation.
+#[test]
+fn g2_masses_are_plain_symbols() {
+    let base = record("wh-k1-root");
+    let zero_polynomial = "(gammalooprs::m-3)^2-gammalooprs::m^2+6*gammalooprs::m-9";
+    for form in [
+        format!("{MAUX}*({DIM}-2)/2"),
+        format!("{MAUX}*(1+{EPS})"),
+        format!("{MAUX}*({DIM}-4+2*{EPS})"),
+        zero_polynomial.to_string(),
+        format!("2*{MAUX}"),
+    ] {
+        let mut v = base.clone();
+        if let FactorizedKind::Closure(spec) = &mut v.kind {
+            spec.auxiliary_mass_squared = atom(&form);
+        }
+        if atom(&form).expand().is_zero() && atom(&form).is_zero() {
+            continue; // a literal zero is the zero-mass rule's
+        }
+        closure_refusal(&v, "the auxiliary mass ", &form);
+        let detail = v.validate().unwrap_err().to_string();
+        assert!(detail.contains("is not a plain symbol"), "{form}: {detail}");
+    }
+    // an edge mass written as the zero polynomial (it was classified massive)
+    let mut v = base.clone();
+    let edge = v
+        .edges
+        .iter_mut()
+        .find(|e| !e.is_external() && e.mass_squared.is_zero())
+        .unwrap();
+    edge.mass_squared = atom(zero_polynomial);
+    let id = edge.id;
+    closure_refusal(
+        &v,
+        &format!("edge {id}: mass "),
+        "zero polynomial edge mass",
+    );
+    assert!(
+        v.validate()
+            .unwrap_err()
+            .to_string()
+            .contains("is neither 0 nor a plain symbol")
+    );
+}
+
+/// Every producer v3 record (all 75 under the wh-fixtures root, runs/
+/// excluded) and every vendored one is ACCEPTED by validation (from_text
+/// validates): the grammar rules refuse no real record.
+#[test]
+#[ignore = "external data: VAKINT_TEST_WH_FIXTURES"]
+fn every_real_record_validates() {
+    let mut files = Vec::new();
+    let mut stack = vec![wh_fixtures::fixture_root()];
+    while let Some(d) = stack.pop() {
+        for e in std::fs::read_dir(&d).unwrap() {
+            let p = e.unwrap().path();
+            let name = p.file_name().unwrap().to_string_lossy().to_string();
+            if p.is_dir() {
+                if name != "runs" {
+                    stack.push(p);
+                }
+            } else if name == "input.txt" || (name.contains("record") && name.ends_with(".txt")) {
+                files.push(p);
+            }
+        }
+    }
+    let vendored =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/p_integral/factorized/fixtures");
+    for e in std::fs::read_dir(&vendored).unwrap() {
+        let p = e.unwrap().path();
+        if p.file_name()
+            .unwrap()
+            .to_string_lossy()
+            .ends_with(".record.txt")
+        {
+            files.push(p);
+        }
+    }
+    init();
+    let mut accepted = 0;
+    let mut refused = Vec::new();
+    for p in files {
+        let text = wh_fixtures::read_fixture(&p);
+        if !text.starts_with("schema\tpint6.factorized-numerator.v3") {
+            continue;
+        }
+        match FactorizedNumerator::from_text(&text) {
+            Ok(_) => accepted += 1,
+            Err(e) => refused.push(format!("{}: {e}", p.display())),
+        }
+    }
+    assert!(
+        refused.is_empty(),
+        "refused real records:\n{}",
+        refused.join("\n")
+    );
+    wh_fixtures::assert_compared("REAL_RECORDS_VALIDATE", accepted, Some(85));
+}
+
 /// MARKED three-loop massive vacuum values through the vacuum entry in
 /// Symbolic and Numerical mode at 3 and 6 terms: the basketball (four lines
 /// of one mass between two vertices) and the all-massive mercedes (the

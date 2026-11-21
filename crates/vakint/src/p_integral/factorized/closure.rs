@@ -256,6 +256,31 @@ impl FactorizedNumerator {
                 "a closure record has at least one loop (a zero-loop term, e.g. an inserted counterterm alone, stays with the caller)",
             ));
         }
+        // MASSES ARE PLAIN SYMBOLS: the reference mass, the auxiliary mass
+        // (unless zero: refused below) and every nonzero edge mass
+        let plain = |a: &Atom| matches!(a.as_view(), AtomView::Var(_));
+        if !plain(&spec.mass_squared) {
+            return Err(refuse(format!(
+                "the reference mass {} is not a symbol (it is substituted everywhere)",
+                spec.mass_squared
+            )));
+        }
+        if !spec.auxiliary_mass_squared.is_zero() && !plain(&spec.auxiliary_mass_squared) {
+            return Err(refuse(format!(
+                "the auxiliary mass {} is not a plain symbol",
+                spec.auxiliary_mass_squared
+            )));
+        }
+        if let Some(edge) = self
+            .edges
+            .iter()
+            .find(|e| !e.mass_squared.is_zero() && !plain(&e.mass_squared))
+        {
+            return Err(refuse(format!(
+                "edge {}: mass {} is neither 0 nor a plain symbol",
+                edge.id, edge.mass_squared
+            )));
+        }
         // ids are written as Q(id, ..) (an i64), and a loop without a loop
         // edge gets the fresh id max + 1 + i ([`loop_vector_id`]): every id,
         // fresh ones included, must be an i64 (no wrap onto an existing id)
@@ -575,6 +600,29 @@ impl FactorizedNumerator {
             return Err(refuse(
                 "every line is massive: not a closure (after series merging the closing line is the only line)",
             ));
+        }
+        // MASSES BY POSITION: the reference mass only as the closure mass and
+        // the closing edge's mass, the auxiliary mass only as the taylor
+        // mass (the prefactor's and the insertions' own rules ran above)
+        for (field, atom) in self.record_atoms() {
+            if field.ends_with(" mass") || field.starts_with("insertion ") {
+                continue;
+            }
+            let prefactor = field.starts_with("prefactor_");
+            if !prefactor && contains_atom(atom.as_view(), spec.mass_squared.as_view()) {
+                return Err(refuse(format!(
+                    "the reference mass {} in {field}: it may occur only as the closure mass and as the closing edge's mass",
+                    spec.mass_squared
+                )));
+            }
+            if spec.auxiliary_mass_squared != spec.mass_squared
+                && contains_atom(atom.as_view(), spec.auxiliary_mass_squared.as_view())
+            {
+                return Err(refuse(format!(
+                    "the auxiliary mass {} in {field}: it may occur only as the taylor line's mass",
+                    spec.auxiliary_mass_squared
+                )));
+            }
         }
         Ok(())
     }

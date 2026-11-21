@@ -3390,13 +3390,13 @@ fn the_prefactor_argument_gets_the_record_prefactor_checks() {
         "gammalooprs::mUVexp (the producer maps it to mUV)",
     );
     not_scalar(R, "the reference mass ");
-    // accepted: the clean argument, vakint's epsilon, a colour invariant, the
-    // auxiliary mass, and the flavour factor of a record with nf_power > 0
+    // accepted: the clean argument, vakint's epsilon, a colour invariant and
+    // the flavour factor of a record with nf_power > 0 (the auxiliary mass
+    // may occur only as the taylor line's mass)
     for x in [
         "1",
         "vakint::ε",
         "spenso::cas(2,spenso::coad(8))",
-        MAUX,
         "witness::x",
     ] {
         check(x).unwrap_or_else(|e| panic!("{x}: {e}"));
