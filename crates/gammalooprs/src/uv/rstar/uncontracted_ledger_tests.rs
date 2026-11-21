@@ -10,6 +10,7 @@
 //! * U7a.4 (finding 4, R2-M2, R2-M3): one disposition line per diagram and
 //!   kind (also when nothing is expected), the summary per diagram, the
 //!   child records' evaluation path;
+//! * the timing note: unique occurrence keys that pair an off and an on run.
 //!
 //! The environment tests set the switch's variables in their own process
 //! (cargo nextest runs every test in one; they refuse to run elsewhere).
@@ -96,13 +97,14 @@ fn normalization(graph: &Graph) -> ClosedRootNormalization {
     }
 }
 
-/// One run: the root's value, its attempts, the ledger's lines printed
-/// inside it, and the dispositions of the diagram
+/// One run: the root's value, its attempts, the ledger's lines and the
+/// timing lines printed inside it, and the dispositions of the diagram
 /// ledger it was given (`diagram`).
 struct Run {
     value: Result<Atom>,
     captured: Vec<Captured>,
     lines: Vec<String>,
+    timing: Vec<String>,
     evidence: Option<serde_json::Value>,
 }
 
@@ -138,7 +140,7 @@ fn run_n(
         Ok(tensor.replace_multiple(&closed_root.external_routing) * &closed_root.factor)
     };
     let vakint = Vakint::new()?;
-    let _ = ledger::take_lines();
+    let _ = (ledger::take_lines(), ledger::take_timing_lines());
     let _ = uncontracted::take_summaries();
     let ((value, evidence), captured) = with_switch(switch, || {
         with_boundary_mode(BoundaryMode::On, false, || {
@@ -176,6 +178,7 @@ fn run_n(
         value,
         captured,
         lines: ledger::take_lines(),
+        timing: ledger::take_timing_lines(),
         evidence,
     })
 }
@@ -760,7 +763,7 @@ fn delta_cache_hits_count_the_fill() -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// U7a.4 (R2-M3)
+// U7a.4 (R2-M3) and the timing note
 // ---------------------------------------------------------------------------
 
 /// A child record's label names its evaluation path, the forest of its
@@ -789,6 +792,89 @@ fn child_records_name_their_parent_forest() -> Result<()> {
             kinds.insert(attempt.kind);
         }
         ensure!(kinds.contains(&Kind::Root) && kinds.contains(&Kind::Child));
+        Ok(())
+    })
+}
+
+/// The occurrence keys of `GAMMALOOP_UNCONTRACTED_TIMING`: unique within a
+/// run and the same in an off and an on run of one diagram, so that every
+/// occurrence pairs one to one, while graph and integration id alone repeat
+/// (Astra: "Those identifiers repeat").
+#[test]
+fn occurrences_pair_off_and_on_uniquely() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let keys = |timing: &[String]| -> Result<Vec<(String, String, String)>> {
+            timing
+                .iter()
+                .map(|line| {
+                    let get = |key| {
+                        field(line, key)
+                            .map(str::to_owned)
+                            .ok_or_else(|| eyre!("no {key} in {line}"))
+                    };
+                    Ok((get("kind")?, get("occurrence")?, get("route")?))
+                })
+                .collect()
+        };
+        let (off, on) = ledger::with_timing(true, || -> Result<(Run, Run)> {
+            Ok((
+                run(L3_36, Switch::OFF, None, Some("000036"))?,
+                run(
+                    L3_36,
+                    Switch::new(Mode::On, &ROOT_CHILD),
+                    None,
+                    Some("000036"),
+                )?,
+            ))
+        })?;
+        let _ = off.value?;
+        let _ = on.value?;
+        ensure!(off.captured.is_empty(), "off builds no record");
+        let (off_keys, on_keys) = (keys(&off.timing)?, keys(&on.timing)?);
+        let unique = |keys: &[(String, String, String)]| {
+            keys.iter()
+                .map(|(kind, key, _)| (kind.clone(), key.clone()))
+                .collect::<BTreeSet<_>>()
+        };
+        ensure!(
+            unique(&off_keys).len() == off_keys.len() && unique(&on_keys).len() == on_keys.len(),
+            "repeated occurrence keys: off {off_keys:#?} on {on_keys:#?}"
+        );
+        ensure!(
+            unique(&off_keys) == unique(&on_keys),
+            "the off and on occurrences differ:\noff {off_keys:#?}\non {on_keys:#?}"
+        );
+        ensure!(off_keys.iter().all(|(_, _, route)| route == "today"));
+        let records = on.captured.len();
+        let taken = on_keys
+            .iter()
+            .filter(|(_, _, route)| route == "uncontracted" || route == "zero")
+            .count();
+        ensure!(
+            records > 0
+                && taken
+                    + on_keys
+                        .iter()
+                        .filter(|(_, _, r)| r.starts_with("declined:"))
+                        .count()
+                    == records,
+            "{records} records, routes {on_keys:#?}"
+        );
+        // graph and integration id alone repeat among the child records
+        let ids = on
+            .timing
+            .iter()
+            .filter(|line| field(line, "kind") == Some("child"))
+            .map(|line| field(line, "id").unwrap_or_default())
+            .collect::<Vec<_>>();
+        ensure!(
+            ids.iter().collect::<BTreeSet<_>>().len() < ids.len(),
+            "no repeated child id to disambiguate: {ids:?}"
+        );
+        // without the timing lines mode off computes no key and prints nothing
+        let quiet = run(L3_36, Switch::OFF, None, None)?;
+        ensure!(quiet.timing.is_empty() && quiet.lines.is_empty());
         Ok(())
     })
 }

@@ -45,7 +45,8 @@
 //! compared, equal, declined, no-record, Δ-cache-hit, unchecked and error
 //! counts by code) with the switch on or check, and check mode fails a
 //! diagram its comparisons do not cover: the ledger,
-//! [`super::uncontracted_ledger`] (U7a delta, U7a.1 and U7a.4). The switch's
+//! [`super::uncontracted_ledger`] (U7a delta, U7a.1 and U7a.4), which also
+//! keys every record occurrence for paired off / on timings. The switch's
 //! initialisation ([`validate`]) refuses `GAMMALOOP_UNCONTRACTED_STRICT=0`,
 //! check mode with `PINT6_CLOSURE_DUMP`, a kind list without a kind this
 //! build emits and a bad exception list.
@@ -462,9 +463,10 @@ thread_local! {
 }
 
 /// Run `f` inside `scope` (restored on unwinding too). With the switch off it
-/// just calls `f`.
+/// just calls `f`, unless `GAMMALOOP_UNCONTRACTED_TIMING=1` keys the off
+/// run's occurrences, which then need the kinds an on run gives them.
 pub(super) fn scoped<T>(scope: Scope, f: impl FnOnce() -> T) -> T {
-    if switch().mode == Mode::Off {
+    if switch().mode == Mode::Off && !super::uncontracted_ledger::timing_enabled() {
         return f();
     }
     let slot = ScopedSlot::enter(&SCOPE, scope);
@@ -837,7 +839,7 @@ impl Attempt {
         matches!(self.outcome, Outcome::Error(_))
     }
 
-    fn outcome_name(&self) -> String {
+    pub(super) fn outcome_name(&self) -> String {
         match &self.outcome {
             Outcome::Value(_) => "uncontracted".into(),
             Outcome::Zero => "zero".into(),
@@ -1307,6 +1309,8 @@ pub(crate) fn take_summaries() -> Vec<String> {
 /// The log lines, the dump and the test capture of one attempt (and its
 /// check in check mode).
 pub(super) fn report(attempt: &Attempt, check: Option<&Check>) {
+    // the occurrence key (U7a delta, the timing note) and the record digest
+    let key = super::uncontracted_ledger::occurrence_fields(attempt.text.as_deref());
     let head = format!(
         "UNCONTRACTED kind={} graph={} id={} outcome={} closure={} loops={}",
         attempt.kind.as_str(),
@@ -1317,11 +1321,11 @@ pub(super) fn report(attempt: &Attempt, check: Option<&Check>) {
         attempt.loops
     );
     match &attempt.outcome {
-        Outcome::Value(_) => eprintln!("{head}{}", attempt.fields),
-        Outcome::Zero => eprintln!("{head}"),
+        Outcome::Value(_) => eprintln!("{head}{}{key}", attempt.fields),
+        Outcome::Zero => eprintln!("{head}{key}"),
         Outcome::Declined(decline) | Outcome::Error(decline) => {
             eprintln!(
-                "{head} build_s={:.3} evaluate_s={:.3} detail=\"{}\"",
+                "{head} build_s={:.3} evaluate_s={:.3} detail=\"{}\"{key}",
                 attempt.build_seconds,
                 attempt.evaluate_seconds,
                 escape(&decline.detail)
@@ -1331,7 +1335,7 @@ pub(super) fn report(attempt: &Attempt, check: Option<&Check>) {
     super::uncontracted_ledger::record(attempt, check, switch().mode);
     if let Some(check) = check {
         eprintln!(
-            "UNCONTRACTED_CHECK kind={} graph={} id={} identical={} equal={} full={} contracted_s={:.3} uncontracted_s={:.3} depth={} valid_through=eps^{} first_difference={}",
+            "UNCONTRACTED_CHECK kind={} graph={} id={} identical={} equal={} full={} contracted_s={:.3} uncontracted_s={:.3} depth={} valid_through=eps^{} first_difference={}{key}",
             attempt.kind.as_str(),
             attempt.graph,
             attempt.id,

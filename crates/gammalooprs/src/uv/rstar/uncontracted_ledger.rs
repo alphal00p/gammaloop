@@ -1,5 +1,5 @@
 //! The per-diagram accounting of `GAMMALOOP_UNCONTRACTED_NUMERATOR` (U7a
-//! delta: Astra's U7a verdict findings 1 and 4, helper
+//! delta: Astra's U7a verdict findings 1 and 4 and its timing note, helper
 //! VH's round 2 R2-I1, R2-M2 and R2-M3; the beta project's
 //! results/consolidation/U7-PLAN.md requirements 16 and 17).
 //!
@@ -63,15 +63,31 @@
 //! a saved record: matching evidence (the same switch identity, outcome ok)
 //! re-prints its lines with `source=checkpoint`; anything else is reported
 //! `outcome=unchecked`, never ok.
+//!
+//! # Occurrence keys and `UNCONTRACTED_TIMING`
+//!
+//! Every hook occurrence of a record has a key, the same in an off and an on
+//! run of one input: `occurrence=<digest>#<ordinal>`, the digest (FNV-1a
+//! 64) of the graph, the diagram key, the kind, the evaluation path
+//! (`root`, then `/child{<edges>}` per R* child fill), the integration id and
+//! the forest-term label (`rem{<remaining edges>}ct{<child supports>}`; K3:
+//! the correction, term, attempt and hard part), the ordinal counting equal
+//! digests in the diagram. The record lines carry it with the record text's
+//! digest (`record=`). `GAMMALOOP_UNCONTRACTED_TIMING=1` (any mode, off
+//! included; nothing is computed without it in mode off) prints one
+//! `UNCONTRACTED_TIMING` line per hook occurrence with the hook's wall time
+//! and its route, for timing claims from uniquely paired off / on
+//! occurrences only.
 
 use std::{
     any::Any,
     cell::RefCell,
     collections::BTreeMap,
     sync::{
-        Arc,
+        Arc, LazyLock,
         atomic::{AtomicUsize, Ordering},
     },
+    time::Instant,
 };
 
 use eyre::{Result, eyre};
@@ -86,14 +102,20 @@ use crate::{
     uv::counterterm_cache::{CacheLookup, CountertermCache},
 };
 
-use super::uncontracted::{self, Attempt, Check, Kind, Mode, Outcome, Switch};
+use super::{
+    plan::GraphRegion,
+    uncontracted::{self, Attempt, Check, Kind, Mode, Outcome, Switch},
+};
 
 // ---------------------------------------------------------------------------
-// The switches of the ledger: strict (a no-op) and the exceptions
+// The switches of the ledger: strict (a no-op), the exceptions, the timing
 // ---------------------------------------------------------------------------
 
 /// The exception list of a check run.
 pub(crate) const EXCEPTIONS_VARIABLE: &str = "GAMMALOOP_UNCONTRACTED_EXCEPTIONS";
+
+/// The per-occurrence timing lines.
+pub(crate) const TIMING_VARIABLE: &str = "GAMMALOOP_UNCONTRACTED_TIMING";
 
 /// `GAMMALOOP_UNCONTRACTED_STRICT` (R2-I1): on and check always fail a
 /// diagram on an error outcome, so `1` / `on` (and unset, empty) are
@@ -181,7 +203,7 @@ pub(crate) fn parse_exceptions(text: &str) -> std::result::Result<Exceptions, St
 /// ([`uncontracted::validate`]): `GAMMALOOP_UNCONTRACTED_STRICT`, check
 /// mode with the PINT6 dump (refused: every record would decline
 /// `pint6_dump`, a check that compares nothing), the exception list (check
-/// mode only; read here). `pint6` is whether
+/// mode only; read here), and the timing switch. `pint6` is whether
 /// `PINT6_CLOSURE_DUMP` is set; the values are the environment's.
 pub(crate) fn initialise(
     switch: Switch,
@@ -227,7 +249,23 @@ pub(crate) fn initialise(
     }
 }
 
+/// `GAMMALOOP_UNCONTRACTED_TIMING=1`: the per-occurrence timing lines.
+pub(crate) fn timing_enabled() -> bool {
+    static TIMING: LazyLock<bool> =
+        LazyLock::new(
+            || match std::env::var(TIMING_VARIABLE).as_deref().map(str::trim) {
+                Err(_) | Ok("" | "0" | "off") => false,
+                Ok("1" | "on") => true,
+                Ok(other) => panic!("{TIMING_VARIABLE} must be 0 or 1, not `{other}`"),
+            },
+        );
+    TEST_TIMING
+        .with(std::cell::Cell::get)
+        .unwrap_or_else(|| *TIMING)
+}
+
 thread_local! {
+    static TEST_TIMING: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
     static TEST_EXCEPTIONS: RefCell<Option<Exceptions>> = const { RefCell::new(None) };
 }
 
@@ -238,6 +276,21 @@ fn exceptions() -> Exceptions {
         .unwrap_or_else(uncontracted::exceptions)
 }
 
+/// Tests: run `f` with the timing lines `on` on this thread.
+#[cfg(test)]
+pub(crate) fn with_timing<T>(on: bool, f: impl FnOnce() -> T) -> T {
+    struct Restore(Option<bool>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let previous = self.0;
+            TEST_TIMING.with(|slot| slot.set(previous));
+        }
+    }
+    let _restore = Restore(TEST_TIMING.with(|slot| slot.replace(Some(on))));
+    f()
+}
+
+/// Tests: run `f` with the exception list `exceptions` on this thread.
 #[cfg(test)]
 pub(crate) fn with_exceptions<T>(exceptions: Exceptions, f: impl FnOnce() -> T) -> T {
     struct Restore(Option<Exceptions>);
@@ -372,8 +425,13 @@ impl Counts {
 
 /// A frame of this thread's ledger stack.
 enum Scope {
-    /// A diagram (closed by its [`DiagramLedger`]).
-    Diagram { graph: String, diagram: String },
+    /// A diagram (closed by its [`DiagramLedger`]), with the ordinals of its
+    /// occurrence digests.
+    Diagram {
+        graph: String,
+        diagram: String,
+        ordinals: BTreeMap<u64, usize>,
+    },
     /// A Δ-cache fill: its counts become the fill's note and join the frame
     /// below.
     Fill,
@@ -389,13 +447,15 @@ thread_local! {
     static FRAMES: RefCell<Vec<Frame>> = const { RefCell::new(Vec::new()) };
     /// The evaluation path (module doc), one entry per R* child fill.
     static PATH: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    /// The occurrences of the hooks in progress (innermost last).
+    static HOOKS: RefCell<Vec<Current>> = const { RefCell::new(Vec::new()) };
 }
 
 static FRAME_IDS: AtomicUsize = AtomicUsize::new(1);
 
-/// Whether the ledger runs: the switch on or check.
+/// Whether the ledger runs: the switch on or check, or the timing lines.
 fn active() -> bool {
-    uncontracted::switch().mode != Mode::Off
+    uncontracted::switch().mode != Mode::Off || timing_enabled()
 }
 
 fn push(scope: Scope) -> usize {
@@ -476,6 +536,27 @@ fn in_diagram() -> bool {
             .borrow()
             .iter()
             .any(|frame| matches!(frame.scope, Scope::Diagram { .. }))
+    })
+}
+
+/// The next ordinal of `digest` in the innermost diagram frame.
+fn next_ordinal(digest: u64) -> usize {
+    FRAMES.with(|frames| {
+        let mut frames = frames.borrow_mut();
+        match frames
+            .iter_mut()
+            .rev()
+            .find_map(|frame| match &mut frame.scope {
+                Scope::Diagram { ordinals, .. } => Some(ordinals),
+                Scope::Fill => None,
+            }) {
+            Some(ordinals) => {
+                let ordinal = ordinals.entry(digest).or_default();
+                *ordinal += 1;
+                *ordinal
+            }
+            None => 0,
+        }
     })
 }
 
@@ -654,7 +735,7 @@ fn hit(note: Option<&FillNote>, graph: &Graph, support: &SuBitGraph) {
 /// with the switch on or check, the fill is a ledger frame and leaves its
 /// note with the entry, and a hit counts the fill's records
 /// ([`hit`]); the evaluation path names the child inside the fill. Off
-/// (as without the ledger): exactly `cache.counterterm_with`.
+/// (without the timing lines): exactly `cache.counterterm_with`.
 pub(super) fn through_cache(
     cache: &CountertermCache,
     graph: &Graph,
@@ -664,7 +745,13 @@ pub(super) fn through_cache(
     compute: impl FnOnce() -> Result<Atom>,
 ) -> Result<Atom> {
     if uncontracted::switch().mode == Mode::Off {
-        return cache.counterterm_with(graph, support, model, settings_key, compute);
+        if !timing_enabled() {
+            return cache.counterterm_with(graph, support, model, settings_key, compute);
+        }
+        return cache.counterterm_with(graph, support, model, settings_key, || {
+            let _path = ChildPath::enter(graph, support);
+            compute()
+        });
     }
     let (value, lookup) = cache.counterterm_noted(graph, support, model, settings_key, || {
         let _path = ChildPath::enter(graph, support);
@@ -732,12 +819,13 @@ pub struct DiagramLedger {
 
 impl DiagramLedger {
     /// A ledger for the diagram `diagram` (the beta: its integral index) of
-    /// `graph`; `None` with the switch off.
+    /// `graph`; `None` with the switch off (and no timing lines).
     pub fn open(graph: &str, diagram: &str) -> Option<Self> {
         active().then(|| Self {
             id: push(Scope::Diagram {
                 graph: graph.to_owned(),
                 diagram: diagram.to_owned(),
+                ordinals: BTreeMap::new(),
             }),
             closed: false,
         })
@@ -1159,6 +1247,179 @@ pub fn resumed(graph: &str, diagram: &str, evidence: Option<&Value>) -> Resumed 
             Resumed::Unchecked(reason)
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Occurrences and UNCONTRACTED_TIMING
+// ---------------------------------------------------------------------------
+
+/// The key of the hook occurrence in progress (read by the record lines).
+#[derive(Clone, Debug)]
+pub(super) struct Current {
+    pub diagram: String,
+    pub path: String,
+    pub occurrence: String,
+}
+
+/// One hook occurrence: its key, and its `UNCONTRACTED_TIMING` line when
+/// the timing lines are on.
+pub(super) struct Hook {
+    started: Instant,
+    graph: String,
+    kind: Kind,
+    id: usize,
+    term: String,
+    current: Current,
+    done: bool,
+}
+
+/// The forest-term label of a K1 / K2 remainder:
+/// `rem{<remaining edges>}ct{<child supports, ';' separated>}`.
+pub(super) fn term_label(graph: &Graph, region: &GraphRegion) -> String {
+    let edges = |support: &SuBitGraph| {
+        super::plan::join_edge_ids(&super::plan::uv_child_edge_ids(graph, support))
+    };
+    format!(
+        "rem{{{}}}ct{{{}}}",
+        edges(&region.remaining),
+        region
+            .insertions
+            .iter()
+            .map(|slot| edges(&slot.support))
+            .collect::<Vec<_>>()
+            .join(";")
+    )
+}
+
+/// A hook occurrence of `kind` (integration id `id`) on `graph`; `None`
+/// when neither a record (`enabled`) nor a timing line needs its key.
+pub(super) fn hook(
+    graph: &Graph,
+    kind: Kind,
+    id: usize,
+    enabled: bool,
+    term: impl FnOnce() -> String,
+) -> Option<Hook> {
+    if !enabled && !timing_enabled() {
+        return None;
+    }
+    let started = Instant::now();
+    let term = term();
+    let path = current_path();
+    let (_, diagram) = diagram_key();
+    let id_text = id.to_string();
+    let digest = fnv64([
+        graph.name.as_bytes(),
+        diagram.as_bytes(),
+        kind.as_str().as_bytes(),
+        path.as_bytes(),
+        id_text.as_bytes(),
+        term.as_bytes(),
+    ]);
+    let current = Current {
+        diagram,
+        path,
+        occurrence: format!("{digest:016x}#{}", next_ordinal(digest)),
+    };
+    HOOKS.with(|hooks| hooks.borrow_mut().push(current.clone()));
+    Some(Hook {
+        started,
+        graph: graph.name.clone(),
+        kind,
+        id,
+        term,
+        current,
+        done: false,
+    })
+}
+
+impl Hook {
+    /// The occurrence ends by `route` (`today`, `uncontracted`, `zero`,
+    /// `check`, `declined:<code>`, `error:<code>`, `failed`): its timing
+    /// line, when on.
+    pub(super) fn finish(mut self, route: &str) {
+        self.done = true;
+        Self::pop();
+        if timing_enabled() {
+            let line = format!(
+                "UNCONTRACTED_TIMING graph={} diagram={} kind={} id={} path={} term={} occurrence={} mode={} route={route} seconds={:.6}",
+                self.graph,
+                self.current.diagram,
+                self.kind.as_str(),
+                self.id,
+                self.current.path,
+                self.term,
+                self.current.occurrence,
+                uncontracted::switch().mode.as_str(),
+                self.started.elapsed().as_secs_f64()
+            );
+            eprintln!("{line}");
+            #[cfg(test)]
+            TIMING_LINES.with(|lines| lines.borrow_mut().push(line));
+        }
+    }
+
+    fn pop() {
+        let _ = HOOKS.try_with(|hooks| {
+            if let Ok(mut hooks) = hooks.try_borrow_mut() {
+                hooks.pop();
+            }
+        });
+    }
+}
+
+impl Drop for Hook {
+    fn drop(&mut self) {
+        if !self.done {
+            Self::pop();
+        }
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    static TIMING_LINES: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Tests: the `UNCONTRACTED_TIMING` lines printed on this thread since the
+/// last call.
+#[cfg(test)]
+pub(crate) fn take_timing_lines() -> Vec<String> {
+    TIMING_LINES.with(|lines| std::mem::take(&mut *lines.borrow_mut()))
+}
+
+/// The key of the hook occurrence in progress on this thread.
+pub(super) fn current() -> Option<Current> {
+    HOOKS
+        .try_with(|hooks| {
+            hooks
+                .try_borrow()
+                .ok()
+                .and_then(|hooks| hooks.last().cloned())
+        })
+        .ok()
+        .flatten()
+}
+
+/// The ` diagram= path= occurrence= record=` fields of a record line.
+pub(super) fn occurrence_fields(text: Option<&str>) -> String {
+    let current = current();
+    format!(
+        " diagram={} path={} occurrence={} record={}",
+        current
+            .as_ref()
+            .map_or("-", |current| current.diagram.as_str()),
+        current
+            .as_ref()
+            .map_or("-", |current| current.path.as_str()),
+        current
+            .as_ref()
+            .map_or("-", |current| current.occurrence.as_str()),
+        text.map_or_else(
+            || "-".to_owned(),
+            |text| format!("{:016x}", fnv64([text.as_bytes()]))
+        )
+    )
 }
 
 // ---------------------------------------------------------------------------
