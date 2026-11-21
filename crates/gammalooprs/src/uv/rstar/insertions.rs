@@ -800,11 +800,13 @@ impl PropagatorInsertionEvaluator {
             shape.kind(),
             open.is_zero(),
         );
-        ensure!(
-            equal,
-            "INSERTION_CLOSURE_CHECK: the closed {loops}-loop {} insertion of {parent} differs from the open tensor\nclosed: {closed}\nopen: {open}",
-            shape.kind()
-        );
+        if !equal {
+            // A failed comparison, which no fallback declines.
+            return Err(super::ir_dirac::diagnostic_failure(eyre!(
+                "INSERTION_CLOSURE_CHECK: the closed {loops}-loop {} insertion of {parent} differs from the open tensor\nclosed: {closed}\nopen: {open}",
+                shape.kind()
+            )));
+        }
         Ok(closed)
     }
 

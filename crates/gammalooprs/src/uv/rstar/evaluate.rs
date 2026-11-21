@@ -1357,12 +1357,13 @@ impl<'a> Evaluation<'a> {
             let check = match (&analytic, &generic_value) {
                 (Some((Ok((value, _)), _)), Some(generic)) if outer == top_mass::IrOuter::Check => {
                     let difference = self.poles(&(generic - value))?;
-                    let equal = difference.is_zero();
-                    ensure!(
-                        equal,
-                        "GAMMALOOP_IR_OUTER=check: the analytic IR outer Taylor differs for {} corr={correction_index} term={term_index}: poles {difference}",
-                        self.graph.name
-                    );
+                    if !difference.is_zero() {
+                        // A failed comparison, which no fallback declines.
+                        return Err(super::ir_dirac::diagnostic_failure(eyre!(
+                            "GAMMALOOP_IR_OUTER=check: the analytic IR outer Taylor differs for {} corr={correction_index} term={term_index}: poles {difference}",
+                            self.graph.name
+                        )));
+                    }
                     " check=equal"
                 }
                 _ => "",
@@ -1652,8 +1653,13 @@ impl<'a> Evaluation<'a> {
             let reference =
                 self.ir_term_moments(correction_index, correction, term_index, term, &open, order)?;
             let open_seconds = open_started.elapsed().as_secs_f64();
-            let agreement =
-                super::ir_dirac::agree(&closed.moments, &rows, &reference.moments, &boundary)?;
+            let agreement = super::ir_dirac::agree(
+                &closed.moments,
+                &rows,
+                &reference.moments,
+                &boundary,
+                None,
+            )?;
             self.log_ir_dirac_check(
                 correction_index,
                 correction,
@@ -1690,7 +1696,8 @@ impl<'a> Evaluation<'a> {
     }
 
     /// One `IR_DIRAC_CHECK` line; an error when the closed moments differ
-    /// from the open ones.
+    /// from the open ones (a [`super::ir_dirac::DiagnosticFailure`], which no
+    /// fallback declines).
     #[allow(clippy::too_many_arguments)]
     fn log_ir_dirac_check(
         &self,
@@ -1706,7 +1713,7 @@ impl<'a> Evaluation<'a> {
         #[cfg(test)]
         super::ir_dirac::count_check(agreement);
         eprintln!(
-            "IR_DIRAC_CHECK graph={} corr={correction_index} term={term} path={path} hard_loops={} omega={} kind={} identical={} equal={} structure={} coefficients={} closed_s={closed_seconds:.3} open_s={open_seconds:.3}",
+            "IR_DIRAC_CHECK graph={} corr={correction_index} term={term} path={path} hard_loops={} omega={} kind={} identical={} equal={} structure={} coefficients={} closed_s={closed_seconds:.3} open_s={open_seconds:.3} through={} full={} first_difference={}",
             self.graph.name,
             self.graph.n_loops(&correction.hard),
             correction.taylor_order,
@@ -1715,12 +1722,19 @@ impl<'a> Evaluation<'a> {
             agreement.equal(),
             agreement.structure,
             agreement.coefficients,
+            agreement.through_label(),
+            agreement.full,
+            agreement.first_difference_label(),
         );
-        ensure!(
-            agreement.equal(),
-            "IR_DIRAC_CHECK: the Dirac-closed IR hard part of {} corr={correction_index} term={term} ({path}) differs from the open one: {agreement:?}",
-            self.graph.name
-        );
+        if !agreement.equal() {
+            return Err(super::ir_dirac::diagnostic_failure(eyre!(
+                "IR_DIRAC_CHECK: the Dirac-closed IR hard part of {} corr={correction_index} term={term} ({path}) differs from the open one: through={} first_difference={} full={}: {agreement:?}",
+                self.graph.name,
+                agreement.through_label(),
+                agreement.first_difference_label(),
+                agreement.full,
+            )));
+        }
         Ok(())
     }
 
@@ -1790,17 +1804,38 @@ impl<'a> Evaluation<'a> {
                 return Ok(None);
             }
         }
-        let attempt = if mode == super::closed::ChildMode::Check || !*GUARD {
+        #[cfg(test)]
+        let guard = super::ir_dirac::test_child_guard().unwrap_or(*GUARD);
+        #[cfg(not(test))]
+        let guard = *GUARD;
+        let attempt = if mode == super::closed::ChildMode::Check || !guard {
             self.ir_hard_child(correction_index, correction)?
         } else {
             // Fail-closed under the closed path's scoped budget
             // (GAMMALOOP_IR_HARD_BUDGET_GIB over the RSS now): an exhausted
-            // budget, an error or a panic declines the correction.
+            // budget, an error or a panic declines the correction; a failed
+            // comparison (a diagnostic failure) fails it as without the guard.
             let limit = super::closed::budget_extra_bytes()
                 .and_then(|extra| super::expression::process_rss_now().map(|rss| rss + extra));
-            super::closed::guarded(limit, super::expression::memory_release(), || {
-                self.ir_hard_child(correction_index, correction)
-            })
+            let guarded = super::ir_dirac::guarded_unless_diagnostic(
+                limit,
+                super::expression::memory_release(),
+                || self.ir_hard_child(correction_index, correction),
+            );
+            match guarded {
+                Ok(attempt) => attempt,
+                Err(error) => {
+                    eprintln!(
+                        "IR_HARD_CHILD graph={} corr={correction_index} hard_loops={} omega={} outcome=error:diagnostic seconds={:.3} edges={}",
+                        self.graph.name,
+                        self.graph.n_loops(&correction.hard),
+                        correction.taylor_order,
+                        started.elapsed().as_secs_f64(),
+                        self.edges(&correction.hard),
+                    );
+                    return Err(error);
+                }
+            }
         };
         let seconds = started.elapsed().as_secs_f64();
         let reduction = counted.elapsed().fields();
@@ -2035,6 +2070,12 @@ impl<'a> Evaluation<'a> {
             let Some(representative) = representative else {
                 return Ok(Ok((Atom::Zero, " terms=0".into())));
             };
+            #[cfg(test)]
+            if closure.is_some() {
+                for (loops, h) in groups.iter_mut() {
+                    *h = super::ir_dirac::mutate_closed(*loops, h)?;
+                }
+            }
             let mut rows = Vec::new();
             let mut h_bytes = 0;
             // Per loop count: the closed moments and their reassembly.
@@ -2107,8 +2148,19 @@ impl<'a> Evaluation<'a> {
                             )
                         })?
                     };
-                    let agreement =
-                        super::ir_dirac::agree(&closed_rows, &reassembled, &open_rows, boundary)?;
+                    // Through the justified order of H(γ): `extra` Laurent
+                    // terms beyond its own poles, `ε^(extra - 1)`, the K3
+                    // records' `valid_through` (today's integration of the
+                    // open arm carries more orders, which no product with
+                    // the quotient reaches).
+                    let through = super::uncontracted::valid_order(loops + extra, loops);
+                    let agreement = super::ir_dirac::agree(
+                        &closed_rows,
+                        &reassembled,
+                        &open_rows,
+                        boundary,
+                        Some(through),
+                    )?;
                     self.log_ir_dirac_check(
                         correction_index,
                         correction,
@@ -2243,7 +2295,9 @@ impl<'a> Evaluation<'a> {
             // a refusal that is not designed fails the diagram (review B1/B2)
             if attempt.is_error() {
                 uncontracted::report(&attempt, None);
-                return Err(uncontracted::error_failure(&attempt, switch.mode));
+                return Err(super::ir_dirac::diagnostic_failure(
+                    uncontracted::error_failure(&attempt, switch.mode),
+                ));
             }
             let today_started = Instant::now();
             let (today, routed_bytes) = match self.integrate_ir_hard_today(&call, remainder, soft) {
@@ -2267,13 +2321,17 @@ impl<'a> Evaluation<'a> {
             if let Some(check) = &check
                 && !check.equal
             {
-                return Err(uncontracted::check_failure(&attempt, check, self.epsilon));
+                return Err(super::ir_dirac::diagnostic_failure(
+                    uncontracted::check_failure(&attempt, check, self.epsilon),
+                ));
             }
             return Ok((today, routed_bytes));
         }
         uncontracted::report(&attempt, None);
         if attempt.is_error() && uncontracted::strict() {
-            return Err(uncontracted::error_failure(&attempt, switch.mode));
+            return Err(super::ir_dirac::diagnostic_failure(
+                uncontracted::error_failure(&attempt, switch.mode),
+            ));
         }
         match attempt.value() {
             Some(value) => {
@@ -3498,7 +3556,9 @@ impl<'a> Evaluation<'a> {
             // a refusal that is not designed fails the diagram (review B1/B2)
             if attempt.is_error() {
                 uncontracted::report(&attempt, None);
-                return Err(uncontracted::error_failure(&attempt, switch.mode));
+                return Err(super::ir_dirac::diagnostic_failure(
+                    uncontracted::error_failure(&attempt, switch.mode),
+                ));
             }
             let today_started = Instant::now();
             let today = match self.integrate_ordinary_today(term) {
@@ -3524,13 +3584,17 @@ impl<'a> Evaluation<'a> {
             if let Some(check) = &check
                 && !check.equal
             {
-                return Err(uncontracted::check_failure(&attempt, check, self.epsilon));
+                return Err(super::ir_dirac::diagnostic_failure(
+                    uncontracted::check_failure(&attempt, check, self.epsilon),
+                ));
             }
             return Ok(today);
         }
         uncontracted::report(&attempt, None);
         if attempt.is_error() && uncontracted::strict() {
-            return Err(uncontracted::error_failure(&attempt, switch.mode));
+            return Err(super::ir_dirac::diagnostic_failure(
+                uncontracted::error_failure(&attempt, switch.mode),
+            ));
         }
         match attempt.value() {
             Some(value) => {
@@ -4036,12 +4100,13 @@ impl<'a> Evaluation<'a> {
         }
         if report.mismatch(callback) {
             self.summary.errors += 1;
-            return Err(eyre!(
+            // A failed comparison, which no fallback declines.
+            return Err(super::ir_dirac::diagnostic_failure(eyre!(
                 "BOUNDARY_CHECK mismatch graph={} id={id}: input={} value={} callback={callback}",
                 self.graph.name,
                 report.input,
                 report.value
-            ));
+            )));
         }
         Ok(today)
     }

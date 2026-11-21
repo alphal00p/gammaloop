@@ -302,6 +302,26 @@ pub(crate) static DIRAC_CHECKS: [std::sync::atomic::AtomicUsize; 3] = [
     std::sync::atomic::AtomicUsize::new(0),
 ];
 
+#[cfg(test)]
+thread_local! {
+    static CHANGE_DIRAC_CLOSURE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Tests: run `f` with the closed Δ of every Dirac-closed child on this
+/// thread changed (by a seventh) before its `DIRAC_CLOSURE_CHECK`, a failed
+/// comparison in `dirac-check`.
+#[cfg(test)]
+pub(crate) fn with_dirac_closure_change<T>(change: bool, f: impl FnOnce() -> T) -> T {
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            CHANGE_DIRAC_CLOSURE.set(self.0);
+        }
+    }
+    let _restore = Restore(CHANGE_DIRAC_CLOSURE.replace(change));
+    f()
+}
+
 /// `GAMMALOOP_UV_CHILDREN_LOG` (default on; `0`, `off` or `false` turn it
 /// off): one stderr line per proper UV child request of an R*-route plan
 /// (route, loops, seconds, the child's edge ids). The progress notebook and
@@ -1311,6 +1331,12 @@ impl RStarPlan {
         }
         let started = Instant::now();
         let closed = plan.dirac_counterterm(graph, model, vakint, settings, boundary)?;
+        #[cfg(test)]
+        let closed = if CHANGE_DIRAC_CLOSURE.get() {
+            (&closed * &(Atom::num(8) / Atom::num(7))).expand()
+        } else {
+            closed
+        };
         if !mode.check {
             return Ok(closed);
         }
@@ -1333,11 +1359,13 @@ impl RStarPlan {
             plan.taylor_order,
             open.expand().is_zero(),
         );
-        ensure!(
-            equal,
-            "DIRAC_CLOSURE_CHECK: the Dirac closure of the {loops}-loop {kind} child {} differs from the open tensor\nclosed: {closed}\nopen: {open}",
-            support.string_label()
-        );
+        if !equal {
+            // A failed comparison, which no fallback declines.
+            return Err(super::ir_dirac::diagnostic_failure(eyre!(
+                "DIRAC_CLOSURE_CHECK: the Dirac closure of the {loops}-loop {kind} child {} differs from the open tensor\nclosed: {closed}\nopen: {open}",
+                support.string_label()
+            )));
+        }
         Ok(closed)
     }
 

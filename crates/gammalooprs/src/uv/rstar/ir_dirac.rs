@@ -59,7 +59,8 @@ pub enum IrDiracMode {
     On,
     /// `check`: as `on`, and also compute the open hard moments, which must
     /// equal the closed, reassembled ones (`IR_DIRAC_CHECK`, an error
-    /// otherwise). The closed moments are used.
+    /// otherwise; on the child route through the moments' justified order,
+    /// [`agree`]). The closed moments are used.
     Check,
 }
 
@@ -121,6 +122,85 @@ pub(crate) fn with_ir_dirac_mode<T>(mode: IrDiracMode, f: impl FnOnce() -> T) ->
     }
     let _restore = Restore(TEST_MODE.with(|slot| slot.replace(Some(mode))));
     f()
+}
+
+#[cfg(test)]
+thread_local! {
+    static TEST_CHILD_GUARD: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+    static TEST_MUTATION: std::cell::Cell<Option<(usize, i64)>> = const { std::cell::Cell::new(None) };
+}
+
+/// Tests: run `f` with `GAMMALOOP_IR_HARD_CHILD_GUARD` (the closed path's
+/// scoped budget around an IR hard part taking the child route) set to
+/// `guard` on this thread, never through the environment.
+#[cfg(test)]
+pub(crate) fn with_child_guard<T>(guard: bool, f: impl FnOnce() -> T) -> T {
+    struct Restore(Option<bool>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let previous = self.0;
+            TEST_CHILD_GUARD.with(|slot| slot.set(previous));
+        }
+    }
+    let _restore = Restore(TEST_CHILD_GUARD.with(|slot| slot.replace(Some(guard))));
+    f()
+}
+
+/// Tests: the guard set by [`with_child_guard`] on this thread.
+#[cfg(test)]
+pub(super) fn test_child_guard() -> Option<bool> {
+    TEST_CHILD_GUARD.with(std::cell::Cell::get)
+}
+
+/// Tests: run `f` with a controlled change of the Dirac-closed IR hard part
+/// `H(γ)` of the child route (the closed arm of `IR_DIRAC_CHECK`, used
+/// downstream too) on this thread: the group of `loops` remainder loops
+/// becomes `H (1 + ε^(order - t) / 7)`, `t` its leading Laurent order, so
+/// its `ε^order` coefficient changes (by a seventh of the leading one) and
+/// no coefficient below `ε^order`.
+#[cfg(test)]
+pub(crate) fn with_closed_mutation<T>(loops: usize, order: i64, f: impl FnOnce() -> T) -> T {
+    struct Restore(Option<(usize, i64)>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let previous = self.0;
+            TEST_MUTATION.with(|slot| slot.set(previous));
+        }
+    }
+    let _restore = Restore(TEST_MUTATION.with(|slot| slot.replace(Some((loops, order)))));
+    f()
+}
+
+/// Tests: the closed `H(γ)` group `h` of `loops` remainder loops after the
+/// change of [`with_closed_mutation`] (unchanged without one, or for another
+/// loop count). Counted as `mutated`.
+#[cfg(test)]
+pub(super) fn mutate_closed(loops: usize, h: &Atom) -> Result<Atom> {
+    let Some((target, order)) = TEST_MUTATION.with(std::cell::Cell::get) else {
+        return Ok(h.clone());
+    };
+    if target != loops || h.is_zero() {
+        return Ok(h.clone());
+    }
+    let series = h.series(
+        GS.dim_epsilon,
+        0,
+        symbolica::poly::series::SeriesDepth::relative(1),
+    )?;
+    let exponent = series.get_trailing_exponent();
+    let leading = exponent
+        .is_integer()
+        .then(|| exponent.numerator().to_i64())
+        .flatten()
+        .ok_or_else(|| eyre!("mutate_closed: a non-integer leading order {exponent}"))?;
+    let shift = order - leading;
+    eyre::ensure!(
+        shift >= 0,
+        "mutate_closed: the order {order} is below the leading order {leading}"
+    );
+    count("mutated".into());
+    let factor = Atom::var(GS.dim_epsilon).pow(Atom::num(shift)) / Atom::num(7);
+    Ok((h + &(h * &factor)).expand())
 }
 
 /// The Δ-cache key of an R* child under `mode`: unchanged when off, else
@@ -293,16 +373,89 @@ pub(super) struct Agreement {
     /// The reassembled rows are the open rows, atom by atom.
     pub identical: bool,
     /// Every open insertion is a multiple of the closed structure (the unique
-    /// structure the closure assumes).
+    /// structure the closure assumes), or its row vanishes through
+    /// [`Self::through`].
     pub structure: bool,
-    /// The closed coefficients equal the open ones projected on the structure.
+    /// The closed coefficients equal the open ones projected on the structure
+    /// (through [`Self::through`]).
     pub coefficients: bool,
+    /// The Laurent order `ε^k` through which structure and coefficients are
+    /// compared: the hard part's justified depth (the child route, `ε^(extra
+    /// - 1)` as the K3 records' `valid_through`); `None`: in full.
+    pub through: Option<i64>,
+    /// The whole projected difference vanishes (the comparison in full;
+    /// informational when [`Self::through`] is set).
+    pub full: bool,
+    /// The lowest order at which the projected coefficients differ, scanned
+    /// up to [`FIRST_DIFFERENCE_SCAN`] orders above [`Self::through`] when it
+    /// is set; `None`: no difference found (or not scanned).
+    pub first_difference: Option<i64>,
 }
 
 impl Agreement {
     pub fn equal(&self) -> bool {
         self.identical || (self.structure && self.coefficients)
     }
+
+    /// `eps^k`, or `all` for a comparison in full.
+    pub fn through_label(&self) -> String {
+        self.through
+            .map_or_else(|| "all".to_owned(), |order| format!("eps^{order}"))
+    }
+
+    /// `eps^k`, or `none`.
+    pub fn first_difference_label(&self) -> String {
+        self.first_difference
+            .map_or_else(|| "none".to_owned(), |order| format!("eps^{order}"))
+    }
+}
+
+/// The orders scanned above the justified one for the first difference.
+const FIRST_DIFFERENCE_SCAN: i64 = 8;
+
+/// The Laurent part of `value` (`d` regulated) through `ε^order`.
+fn laurent_through(value: &Atom, order: i64) -> Result<Atom> {
+    Ok(Integrated::dimensionally_regularized(value)
+        .series(GS.dim_epsilon, 0, order)?
+        .to_atom()
+        .expand())
+}
+
+/// Whether the projected difference `difference` vanishes through
+/// `ε^through` (in full for `None`, as before the justified order), whether
+/// it vanishes in full, and its lowest differing order (scanned only for a
+/// set `through` whose full difference does not vanish).
+fn coefficients_agree(
+    difference: &Atom,
+    through: Option<i64>,
+) -> Result<(bool, bool, Option<i64>)> {
+    let full = vanishes(difference)?;
+    let Some(order) = through else {
+        return Ok((full, full, None));
+    };
+    if full {
+        return Ok((true, true, None));
+    }
+    let regulated = Integrated::dimensionally_regularized(difference).expand();
+    let series = regulated.series(
+        GS.dim_epsilon,
+        0,
+        symbolica::poly::series::SeriesDepth::relative(1),
+    )?;
+    let exponent = series.get_trailing_exponent();
+    let start = exponent
+        .is_integer()
+        .then(|| exponent.numerator().to_i64())
+        .flatten()
+        .map_or(order - FIRST_DIFFERENCE_SCAN, |leading| {
+            leading.min(order + 1)
+        });
+    for k in start..=order + FIRST_DIFFERENCE_SCAN {
+        if !vanishes(&laurent_through(&regulated, k)?)? {
+            return Ok((k > order, false, Some(k)));
+        }
+    }
+    Ok((true, false, None))
 }
 
 /// Compare the closed moments `closed` (before [`reassemble`]) and their
@@ -310,12 +463,19 @@ impl Agreement {
 /// (`sum_j h_j E_j`). Each open insertion `E_o` is projected on the structure,
 /// `t = N Tr[closure E_o]` (a scalar, or a vector in `nu`), and must equal
 /// `t * structure` (unique structure); then `sum h_o t` must equal
-/// `sum h_c N E_c` (the closed coefficients).
+/// `sum h_c N E_c` (the closed coefficients). With `through = Some(k)` both
+/// through `ε^k`, the justified depth of the moments (an open row off the
+/// structure passes when `h_o (E_o - t structure)` vanishes through `ε^k`;
+/// the projected coefficients' difference is truncated at `ε^k`): the orders
+/// above it are incomplete in either arm (the K3 records stop at their
+/// `valid_through`, today's integration carries more), and never reach the
+/// counterterm. `None`: both in full (today's path, unchanged).
 pub(super) fn agree(
     closed: &[(Atom, Atom)],
     reassembled: &[(Atom, Atom)],
     open: &[(Atom, Atom)],
     boundary: &DiracBoundary,
+    through: Option<i64>,
 ) -> Result<Agreement> {
     let identical = {
         let key = |rows: &[(Atom, Atom)]| {
@@ -334,8 +494,15 @@ pub(super) fn agree(
     for (coefficient, insertion) in open {
         let trace = RStarIntegrand::simplify(&(insertion * &boundary.closure))?;
         let projection = Integrated::dimensionally_regularized(&(trace * &normalization));
-        if structure && !tensor_zero(&(insertion - &projection * &boundary.structure))? {
-            structure = false;
+        if structure {
+            let residual = insertion - &projection * &boundary.structure;
+            structure = tensor_zero(&residual)?
+                || match through {
+                    Some(order) => {
+                        tensor_zero(&laurent_through(&(coefficient * &residual), order)?)?
+                    }
+                    None => false,
+                };
         }
         projected_open += coefficient * projection;
     }
@@ -344,12 +511,68 @@ pub(super) fn agree(
         .fold(Atom::Zero, |sum, (coefficient, insertion)| {
             sum + Integrated::dimensionally_regularized(&(coefficient * &normalization)) * insertion
         });
-    let coefficients = vanishes(&(projected_closed - projected_open))?;
+    let (coefficients, full, first_difference) =
+        coefficients_agree(&(projected_closed - projected_open), through)?;
     Ok(Agreement {
         identical,
         structure,
         coefficients,
+        through,
+        full,
+        first_difference,
     })
+}
+
+/// A failure no fallback may decline: a failed identity comparison
+/// (`IR_DIRAC_CHECK`, `UNCONTRACTED_CHECK`, `DIRAC_CLOSURE_CHECK`,
+/// `INSERTION_CLOSURE_CHECK`, `BOUNDARY_CHECK`, `GAMMALOOP_IR_OUTER=check`) or
+/// a record refusal that is not designed in a strict or check run. Its text
+/// is the failure's. The Δ-cache keeps it one on every reuse of a stored
+/// failure (`uv::counterterm_cache`): a decorated quotient's R* runs
+/// inside the child guard.
+#[derive(Debug)]
+pub(super) struct DiagnosticFailure(String);
+
+impl std::fmt::Display for DiagnosticFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for DiagnosticFailure {}
+
+/// `report` (its whole text) as a [`DiagnosticFailure`].
+pub(crate) fn diagnostic_failure(report: eyre::Report) -> eyre::Report {
+    eyre::Report::new(DiagnosticFailure(format!("{report:#}")))
+}
+
+/// Whether `report` carries a [`DiagnosticFailure`].
+pub(crate) fn is_diagnostic_failure(report: &eyre::Report) -> bool {
+    report.chain().any(|cause| cause.is::<DiagnosticFailure>())
+}
+
+/// [`super::closed::guarded`] (`GAMMALOOP_IR_HARD_CHILD_GUARD=1`, the scoped
+/// budget around an IR hard part on the child route): an exhausted budget, a
+/// panic, an ordinary error or a decline of `work` declines (`Ok(Err)`), as
+/// before; a [`DiagnosticFailure`] is returned as the error, so a failed
+/// comparison fails the diagram whether the guard is on or off.
+pub(super) fn guarded_unless_diagnostic<T>(
+    limit: Option<u64>,
+    release: Option<fn()>,
+    work: impl FnOnce() -> Result<std::result::Result<T, String>>,
+) -> Result<std::result::Result<T, String>> {
+    let mut failure = None;
+    let outcome = super::closed::guarded(limit, release, || match work() {
+        Err(error) if is_diagnostic_failure(&error) => {
+            failure = Some(error);
+            Ok(Err("diagnostic".to_owned()))
+        }
+        other => other,
+    });
+    match failure {
+        Some(error) => Err(error),
+        None => Ok(outcome),
+    }
 }
 
 /// The bare Minkowski vector `Q(e, mink(d))` of soft edge `edge`.
@@ -386,6 +609,11 @@ pub(super) fn count_check(agreement: Agreement) {
     if agreement.equal() {
         count("check_equal".into());
     }
+    count(format!("check_through:{}", agreement.through_label()));
+    count(format!(
+        "check_first:{}",
+        agreement.first_difference_label()
+    ));
 }
 
 /// Tests: the outcomes counted on this thread since the last call.
