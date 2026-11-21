@@ -94,7 +94,7 @@ const ROUTE_SWITCHES: [&str; 12] = [
     "PINT6_DUMP",
 ];
 
-fn assume_defaults() -> Result<()> {
+pub(super) fn assume_defaults() -> Result<()> {
     let set = ROUTE_SWITCHES
         .iter()
         .filter(|name| std::env::var_os(name).is_some())
@@ -107,7 +107,7 @@ fn assume_defaults() -> Result<()> {
 }
 
 /// The fixture directory of the ignored tests (`GAMMALOOP_U7A_FIXTURES_DIR`).
-fn fixtures_dir() -> Result<std::path::PathBuf> {
+pub(super) fn fixtures_dir() -> Result<std::path::PathBuf> {
     let dir = std::env::var("GAMMALOOP_U7A_FIXTURES_DIR").map_err(|_| {
         eyre!("set GAMMALOOP_U7A_FIXTURES_DIR to the wh-fixtures directory (k1-quick, k1-l5)")
     })?;
@@ -116,28 +116,28 @@ fn fixtures_dir() -> Result<std::path::PathBuf> {
     Ok(dir)
 }
 
-fn read(path: &std::path::Path) -> Result<String> {
+pub(super) fn read(path: &std::path::Path) -> Result<String> {
     std::fs::read_to_string(path).wrap_err_with(|| format!("reading {}", path.display()))
 }
 
-fn parse(text: &str) -> Result<Atom> {
+pub(super) fn parse(text: &str) -> Result<Atom> {
     symbolica::try_parse!(text).map_err(|error| eyre!("{error}: {text:.200}"))
 }
 
-fn auxiliary_mass() -> Atom {
+pub(super) fn auxiliary_mass() -> Atom {
     parse("gammalooprs::{scalar}::rstar_mass_squared").expect("the auxiliary mass symbol")
 }
 
-fn minkowski() -> Atom {
+pub(super) fn minkowski() -> Atom {
     Minkowski {}.new_rep(GS.dim).to_symbolic([])
 }
 
-fn record(text: &str) -> Result<FactorizedNumerator> {
+pub(super) fn record(text: &str) -> Result<FactorizedNumerator> {
     FactorizedNumerator::from_text(text).map_err(|error| eyre!("{error}"))
 }
 
 /// The `value` line of a value file.
-fn fixture_value(text: &str) -> Result<Atom> {
+pub(super) fn fixture_value(text: &str) -> Result<Atom> {
     parse(
         text.lines()
             .find_map(|line| line.strip_prefix("value\t"))
@@ -146,7 +146,7 @@ fn fixture_value(text: &str) -> Result<Atom> {
 }
 
 /// `n` of the value file's `valid_through eps^n` line (required).
-fn valid_through(text: &str) -> Result<i64> {
+pub(super) fn valid_through(text: &str) -> Result<i64> {
     text.lines()
         .find_map(|line| line.strip_prefix("valid_through\t"))
         .and_then(|line| line.trim_start_matches("eps^").split_whitespace().next())
@@ -155,7 +155,7 @@ fn valid_through(text: &str) -> Result<i64> {
 }
 
 /// `a == b` through ε^order: the expanded difference, truncated.
-fn equal_through(a: &Atom, b: &Atom, order: i64) -> Result<bool> {
+pub(super) fn equal_through(a: &Atom, b: &Atom, order: i64) -> Result<bool> {
     let difference = (a - b).expand();
     if difference.is_zero() {
         return Ok(true);
@@ -169,7 +169,7 @@ fn equal_through(a: &Atom, b: &Atom, order: i64) -> Result<bool> {
 
 /// Two atoms agree: identical, or a zero expanded difference, or (dummy
 /// labels) the tensor canonical form of the difference.
-fn atoms_equal(a: &Atom, b: &Atom) -> bool {
+pub(super) fn atoms_equal(a: &Atom, b: &Atom) -> bool {
     a == b || (a - b).expand().is_zero() || uncontracted::agree(a, b).unwrap_or(false)
 }
 
@@ -179,7 +179,10 @@ fn atoms_equal(a: &Atom, b: &Atom) -> bool {
 
 /// Every difference between an emitted record and a fixture, line by line
 /// (the label is free text and ignored).
-fn record_differences(ours: &FactorizedNumerator, theirs: &FactorizedNumerator) -> Vec<String> {
+pub(super) fn record_differences(
+    ours: &FactorizedNumerator,
+    theirs: &FactorizedNumerator,
+) -> Vec<String> {
     let mut out = Vec::new();
     let mut want = |ok: bool, what: String| {
         if !ok {
@@ -373,7 +376,7 @@ fn record_differences(ours: &FactorizedNumerator, theirs: &FactorizedNumerator) 
 
 /// The oracle value of an emitted record text: vakint's reader, the closure
 /// entry with the R* settings at the record's depth, `finish_tensor`.
-fn oracle_value(vakint: &Vakint, text: &str, id: usize) -> Result<Atom> {
+pub(super) fn oracle_value(vakint: &Vakint, text: &str, id: usize) -> Result<Atom> {
     let value = record(text)?;
     let FactorizedKind::Closure(spec) = &value.kind else {
         return Err(eyre!("not a closure record"));
@@ -432,7 +435,7 @@ fn p_squared(x0: usize) -> Atom {
 
 /// The closed metric root of the beta: `c = transverse / (𝑖 p² (d - 1))`
 /// (graph prefactor 1 for these diagrams).
-fn metric_root(graph: &Graph) -> ClosedRootNormalization {
+pub(super) fn metric_root(graph: &Graph) -> ClosedRootNormalization {
     let (external, external_routing) = external_rules(graph);
     let factor = Atom::var(symbolica::symbol!("beta_projection::transverse"))
         * graph
@@ -454,7 +457,10 @@ fn metric_root(graph: &Graph) -> ClosedRootNormalization {
 /// gluon propagator where the first colour row of the DOT rule gives `-𝑖 g`,
 /// so the factors must come from the branch: the record's factor lines then
 /// test the emitter's pass-through, not its source.
-fn branch(dot: &str, bare: &FactorizedNumerator) -> Result<feynkit_graph::FeynmanDiagram> {
+pub(super) fn branch(
+    dot: &str,
+    bare: &FactorizedNumerator,
+) -> Result<feynkit_graph::FeynmanDiagram> {
     let diagram = colour_factored(&load(dot)?)?;
     let vertices = bare
         .vertices
@@ -535,7 +541,7 @@ fn check_root() -> Switch {
 }
 
 /// The internal edge ids and `ct:` rules of a record.
-fn key(value: &FactorizedNumerator) -> (Vec<usize>, Vec<String>) {
+pub(super) fn key(value: &FactorizedNumerator) -> (Vec<usize>, Vec<String>) {
     let edges = value
         .edges
         .iter()
