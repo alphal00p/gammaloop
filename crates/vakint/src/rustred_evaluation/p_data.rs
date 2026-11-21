@@ -2484,12 +2484,14 @@ mod tests {
     }
 
     /// A one- to four-loop evaluation without residual terminals through a
-    /// package that ships its own catalogue keeps the base's finalisation:
-    /// under the pole-bounded master basis (a five-loop setting) the two-loop
-    /// kite gives the value of the original basis, it is not refused for
-    /// want of a five-loop masters directory.
+    /// package that ships its own catalogue takes no catalogue, as before:
+    /// under the pole-bounded master basis the two-loop kite gives the value
+    /// of the original basis (with a catalogue it would be refused for want
+    /// of a five-loop masters directory). The guard of the basis for
+    /// one- to four-loop values WITH residual terminals is
+    /// [`finalize_reduced_resolves_three_and_four_loop_residual_terminals`].
     #[test]
-    fn the_pole_bounded_basis_leaves_one_to_four_loop_values_alone() {
+    fn a_one_to_four_loop_value_without_residual_terminals_takes_no_catalogue() {
         crate::Vakint::initialize_vakint_symbols();
         let root = tempfile::tempdir().unwrap();
         let probe = root.path().join("basis-package");
@@ -2509,5 +2511,149 @@ mod tests {
             .evaluate(&pole_bounded, kite.as_view())
             .unwrap_or_else(|error| panic!("pole-bounded basis: {error}"));
         assert_eq!(value, expected);
+    }
+
+    /// `finalize_reduced` (the finaliser of the ordinary p path) on a three-
+    /// and a four-loop residual terminal of a 1-5 package, `PResidual(P3L_NO,
+    /// 1,1,1,1,1,1,1,1,0)` (master `no`) and `PResidual(P4L_J1, 1,0,1,1,1,1,
+    /// 1,1,0,0,1,0,0,0)` (master `bebe`), once in the reduced value and once
+    /// in the spectator, in symbolic and numerical mode and symbolic under
+    /// the pole-bounded master basis, through the built-in catalogue chain
+    /// and through a package that ships its own catalogue (and a masters
+    /// directory). The value equals the same finalisation of the row's
+    /// Forcer-master combination, written out here (no residual terminal: no
+    /// catalogue, the Forcer table alone).
+    #[test]
+    fn finalize_reduced_resolves_three_and_four_loop_residual_terminals() {
+        use crate::p_integral::ReducedPropagatorValue;
+        use crate::rustred_evaluation::p_integral::finalize_reduced;
+        use std::collections::BTreeSet;
+        use symbolica::atom::AtomCore;
+        crate::Vakint::initialize_vakint_symbols();
+        for name in [P_LIBRARY_VARIABLE, P_MASTER_CATALOGUE_VARIABLE] {
+            assert!(
+                std::env::var_os(name).is_none(),
+                "{name} is set: this test needs the default catalogue chain"
+            );
+        }
+        let parse = |text: &str| crate::utils::vakint_macros::vk_parse!(text).unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let probe = root.path().join("finalize-package");
+        write_loader_package(&probe, "finalize-probe");
+        let mut package = Vakint::new().unwrap();
+        package.load_p_library_directory(&probe, false).unwrap();
+        let plain = Vakint::new().unwrap();
+        let d = "(4-2*ε)";
+        // (loops, the residual terminal, its row's combination at d = 4 - 2ε)
+        let cases = [
+            (
+                3,
+                "PResidual(P3L_NO,1,1,1,1,1,1,1,1,0)".to_owned(),
+                format!(
+                    "(1/(-27+27*{d}-9*{d}^2+{d}^3))*PGamma(-2)^(-3)*PGamma(-1)^(6)*PGamma(1)^(3)*PMaster(no)"
+                ),
+            ),
+            (
+                4,
+                "PResidual(P4L_J1,1,0,1,1,1,1,1,1,0,0,1,0,0,0)".to_owned(),
+                format!(
+                    "(1/(81-108*{d}+54*{d}^2-12*{d}^3+{d}^4))*PGamma(-2)^(-4)*PGamma(-1)^(8)*PGamma(1)^(4)*PMaster(bebe)"
+                ),
+            ),
+        ];
+        let head = parse("p(1)");
+        let finalize = |engine: &Vakint,
+                        settings: &crate::VakintSettings,
+                        loops: usize,
+                        reduced: Atom,
+                        spectator: Option<Atom>| {
+            let mode = match &settings.evaluation_order.0[0] {
+                crate::EvaluationMethod::RustRed(options) => options.master_mode,
+                _ => unreachable!(),
+            };
+            finalize_reduced(
+                engine,
+                settings,
+                BTreeMap::from([(
+                    (loops, head.clone()),
+                    vec![ReducedPropagatorValue {
+                        scale_power: 1,
+                        reduced,
+                        spectator,
+                    }],
+                )]),
+                &BTreeMap::from([(
+                    (loops, head.clone()),
+                    BTreeSet::from([format!("the {loops}-loop test integral")]),
+                )]),
+                mode,
+            )
+        };
+        let symbolic = crate::VakintSettings {
+            number_of_terms_in_epsilon_expansion: 6,
+            ..residual_settings(crate::RustRedMasterMode::Symbolic)
+        };
+        let numerical = crate::VakintSettings {
+            number_of_terms_in_epsilon_expansion: 6,
+            ..residual_settings(crate::RustRedMasterMode::Numerical)
+        };
+        let pole_bounded = crate::VakintSettings {
+            p_master_basis: crate::p_integral::PMasterBasis::PoleBounded,
+            ..symbolic.clone()
+        };
+        let factor = parse("3+ε");
+        let mut failures = Vec::new();
+        for (loops, residual, combination) in &cases {
+            let residual = parse(residual);
+            let combination = parse(combination);
+            for (placement, with_residual, with_combination) in [
+                (
+                    "reduced",
+                    (&factor * &residual, None),
+                    (&factor * &combination, None),
+                ),
+                (
+                    "spectator",
+                    (factor.clone(), Some(residual.clone())),
+                    (factor.clone(), Some(combination.clone())),
+                ),
+            ] {
+                for (what, settings) in [
+                    ("symbolic", &symbolic),
+                    ("numerical", &numerical),
+                    ("pole-bounded basis", &pole_bounded),
+                ] {
+                    let expected = finalize(
+                        &plain,
+                        settings,
+                        *loops,
+                        with_combination.0.clone(),
+                        with_combination.1.clone(),
+                    )
+                    .unwrap_or_else(|error| panic!("{loops} loops, {placement}, {what}: {error}"));
+                    assert!(!expected.is_zero());
+                    for (route, engine) in [("built-in chain", &plain), ("package", &package)] {
+                        match finalize(
+                            engine,
+                            settings,
+                            *loops,
+                            with_residual.0.clone(),
+                            with_residual.1.clone(),
+                        ) {
+                            Ok(value)
+                                if value == expected || (&value - &expected).expand().is_zero() => {
+                            }
+                            Ok(value) => failures.push(format!(
+                                "{loops} loops, {placement}, {what}, {route}: {value} != {expected}"
+                            )),
+                            Err(error) => failures.push(format!(
+                                "{loops} loops, {placement}, {what}, {route}: {error}"
+                            )),
+                        }
+                    }
+                }
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
     }
 }

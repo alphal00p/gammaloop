@@ -6212,7 +6212,9 @@ fn residual_terminals(expression: &Atom) -> BTreeSet<String> {
 /// (rows onto Forcer masters only), checked with the catalogue disabled; a
 /// row that no input reaches (the package presents that sector through
 /// another row with the same combination) must give the same value in that
-/// row's place, and every row is covered one way or the other. The same holds for the package's program INJECTED
+/// row's place, and every row is covered one way or the other. The
+/// built-in catalogue's one- to four-loop rows (what an injected program
+/// gets) must equal the package's, row by row, with the same normalisation. The same holds for the package's program INJECTED
 /// (no catalogue of its own: the engine's catalogue chain) and under the
 /// pole-bounded master basis. `VAKINT_TEST_P_PACKAGE_1_5_ROUTE=variable`
 /// takes the package from `VAKINT_P_LIBRARY` (which must name the same
@@ -6275,11 +6277,10 @@ fn one_to_four_loop_integrals_through_the_1_5_package_equal_the_1_4_library() {
         .inject_p_library(Arc::clone(&handle.library))
         .unwrap();
     disabled.disable_default_p_master_catalogue();
-    // the catalogue's rows onto Forcer masters only (the 1-4 loop ones)
+    // the catalogue's rows onto Forcer masters only (the 1-4 loop ones), by
+    // `PResidual(node,key..)`, with their combination
     let forcer = crate::p_integral::masters::p_master_names().unwrap();
-    let rows: BTreeMap<String, String> = {
-        let text = std::fs::read_to_string(package.join("p-master-catalogue.json")).unwrap();
-        let json: serde_json::Value = serde_json::from_str(&text).unwrap();
+    let forcer_rows = |json: &serde_json::Value| -> BTreeMap<String, String> {
         json["terminals"]
             .as_array()
             .unwrap()
@@ -6302,11 +6303,31 @@ fn one_to_four_loop_integrals_through_the_1_5_package_equal_the_1_4_library() {
                     .join(",");
                 (
                     format!("PResidual({},{key})", row["node"].as_str().unwrap()),
-                    row["combination"].to_string(),
+                    format!("{} {}", row["status"], row["combination"]),
                 )
             })
             .collect()
     };
+    let package_catalogue: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(package.join("p-master-catalogue.json")).unwrap(),
+    )
+    .unwrap();
+    let rows = forcer_rows(&package_catalogue);
+    // The injected program takes the built-in catalogue's rows (no check binds
+    // a catalogue to its library): they must equal the package's, row by row.
+    let built_in: serde_json::Value = serde_json::from_str(include_str!(
+        "../../data/p_master/p-master-catalogue-5l.json"
+    ))
+    .unwrap();
+    assert_eq!(
+        built_in["normalisation"], package_catalogue["normalisation"],
+        "normalisation of the built-in and the package catalogue"
+    );
+    assert_eq!(
+        forcer_rows(&built_in),
+        rows,
+        "the one- to four-loop rows of the built-in catalogue differ from the package's"
+    );
     assert!(!rows.is_empty());
     let terms = 6;
     let with_terms = |mode| VakintSettings {
