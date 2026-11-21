@@ -2383,37 +2383,46 @@ pub(crate) fn reduce_requests_eager(
     Ok(values)
 }
 
-/// The p master catalogue that finalizes the `loops`-loop channels of
-/// `vakint`. The five-loop dispatch renders residual terminals as
-/// `PResidual(node, k..)`; with a catalogue the finalizer maps them onto its
-/// masters and applies the catalogue guards (`p_integral::master_catalogue`);
-/// without one `Symbolic` and `Numerical` refuse them with
-/// `PMasterCatalogueError::NoCatalogue` and `Retain` returns them. vk5l WP4:
-/// the engine's catalogue (`Vakint::set_p_master_catalogue`) for five loops;
-/// one to four loops keep the Forcer table. No catalogue ships yet (decision
-/// Q3: Retain-only first); WP6 sets the catalogue of the loaded p area.
-fn p_master_catalogue(vakint: &Vakint, loops: usize) -> Option<Arc<PMasterCatalogue>> {
-    if loops >= 5 || package_ships_catalogue(vakint) {
+/// The p master catalogue that finalizes `loops`-loop values of `vakint`;
+/// `residual`: whether the values carry a residual terminal
+/// `PResidual(node, k..)` ([`carries_residual`]). With a catalogue the
+/// finalizer maps residual terminals onto its masters and applies the
+/// catalogue guards (`p_integral::master_catalogue`); without one `Symbolic`
+/// and `Numerical` refuse them with `PMasterCatalogueError::NoCatalogue` and
+/// `Retain` returns them. The engine's catalogue
+/// ([`Vakint::p_master_catalogue`]: the one set, `VAKINT_P_MASTER_CATALOGUE`,
+/// the loaded package's, the built-in one) serves every five-loop value, and
+/// every value of fewer loops that carries a residual terminal: a library
+/// whose masters are residual terminals at one to four loops too (a 1-5
+/// package, loaded, listed or injected) needs the catalogue's terminal rows,
+/// which map them onto the Forcer masters (values from the Forcer table,
+/// `PMasterSource::expansion`). A one- to four-loop value without one (every
+/// value of a 1-4 library, whose basis layer maps onto `PMaster`) keeps the
+/// Forcer table alone: there is nothing a catalogue could resolve.
+fn p_master_catalogue(
+    vakint: &Vakint,
+    loops: usize,
+    residual: bool,
+) -> Option<Arc<PMasterCatalogue>> {
+    if loops >= 5 || residual {
         vakint.p_master_catalogue()
     } else {
         None
     }
 }
 
-/// Whether the engine's loaded p library is a package that ships its own p
-/// master catalogue (`load_p_library_directory`, `VAKINT_P_LIBRARY` or a listed
-/// library with `p-master-catalogue.json`, e.g. the 1-5 package vk5l-s12349d-r3).
-/// In such a package the masters of EVERY loop count are residual terminals:
-/// its catalogue's terminal rows map the one- to four-loop ones onto the Forcer
-/// masters (values from the Forcer table, `PMasterSource::expansion`), so the
-/// one- to four-loop channels need the catalogue too; without it they stop at
-/// `PResidual` (NoCatalogue). Libraries without their own catalogue (the
-/// injected or listed 1-4 library, whose basis layer maps onto `PMaster`) keep
-/// the Forcer table alone at one to four loops.
-fn package_ships_catalogue(vakint: &Vakint) -> bool {
-    vakint
-        .loaded_p_library()
-        .is_some_and(|handle| handle.master_catalogue.is_some())
+/// Whether `expression` contains a residual terminal `PResidual(node, k..)`.
+fn carries_residual(expression: symbolica::atom::AtomView<'_>) -> bool {
+    let mut found = false;
+    expression.visitor(&mut |part| {
+        if let symbolica::atom::AtomView::Fun(function) = part
+            && function.get_symbol() == crate::p_integral::p_residual_symbol()
+        {
+            found = true;
+        }
+        !found
+    });
+    found
 }
 
 /// The vakint integrals of `requests` by loop count and external head
@@ -2440,8 +2449,8 @@ fn request_names(
 
 /// Finalize the reduced values of a batch (`reduce_requests`) in `mode`: per
 /// loop count and head, the shared p finalizer with the master source of
-/// that loop count ([`p_master_catalogue`]) and the request's vakint
-/// integrals in its messages.
+/// that loop count and values ([`p_master_catalogue`]) and the request's
+/// vakint integrals in its messages.
 pub(crate) fn finalize_reduced(
     vakint: &Vakint,
     settings: &VakintSettings,
@@ -2452,7 +2461,14 @@ pub(crate) fn finalize_reduced(
     let _timing = crate::timing::reduce();
     let mut result = Atom::Zero;
     for ((loops, head), values) in reduced {
-        let catalogue = p_master_catalogue(vakint, loops);
+        let residual = values.iter().any(|value| {
+            carries_residual(value.reduced.as_view())
+                || value
+                    .spectator
+                    .as_ref()
+                    .is_some_and(|spectator| carries_residual(spectator.as_view()))
+        });
+        let catalogue = p_master_catalogue(vakint, loops, residual);
         // lane vk5l-mastermap: the pole-bounded master basis reads its data
         // from the five-loop package (only when selected).
         let masters_directory = (loops >= 5
@@ -2509,7 +2525,7 @@ impl Vakint {
                 _ => None,
             })
             .unwrap_or(RustRedMasterMode::Symbolic);
-        let catalogue = p_master_catalogue(self, loops);
+        let catalogue = p_master_catalogue(self, loops, carries_residual(retained));
         let masters_directory = (loops >= 5
             && settings.p_master_basis == crate::p_integral::PMasterBasis::PoleBounded)
             .then(|| self.p_masters_directory())

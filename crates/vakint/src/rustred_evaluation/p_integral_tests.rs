@@ -769,7 +769,8 @@ fn typed_refusals_pass_through_with_node_key_bound_request_and_reproduction() {
 /// table, whose corner is a boxed terminal, an unknown integral). The corner
 /// comes back as `PResidual(KITE,1,1,1,1,1)` (coefficient 1 in the G-scheme
 /// reduction) under `master_mode=retain`; `symbolic` and `numerical` refuse
-/// it (vk5l WP4: through the p master source, `NoCatalogue` naming it); a key
+/// it through the p master source: the engine's catalogue has no row for it,
+/// and with the catalogue disabled `NoCatalogue` names it; a key
 /// outside the box is a typed refusal naming RustRed's box and the vakint
 /// integral.
 #[test]
@@ -810,8 +811,25 @@ fn a_boxed_node_returns_its_terminals_as_presidual_and_refuses_numbers() {
         vec![residual.clone()],
         "{reduced:?}"
     );
+    // With the default catalogue chain a catalogue is loaded (the built-in
+    // one) and the terminal has no row in it; with the catalogue disabled
+    // there is none.
+    let mut disabled = Vakint::new().unwrap();
+    disabled
+        .inject_p_library(rustred::propagator::testing::boxed_kite_library().unwrap())
+        .unwrap();
+    disabled.disable_default_p_master_catalogue();
     for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
         let error = engine
+            .evaluate(&settings(mode, None), corner.as_view())
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("without a master map row")
+                && error.contains("PResidual(KITE,1,1,1,1,1): not listed in the master map"),
+            "{mode}: {error}"
+        );
+        let error = disabled
             .evaluate(&settings(mode, None), corner.as_view())
             .unwrap_err()
             .to_string();
@@ -1978,13 +1996,17 @@ mod five_loop_guards {
         );
     }
 
-    /// One to four loops keep the Forcer table: the catalogue is a
-    /// five-loop source only.
+    /// The catalogue serves every five-loop value and, at one to four loops,
+    /// the values that carry a residual terminal; a one- to four-loop value
+    /// without one keeps the Forcer table alone.
     #[test]
-    fn the_catalogue_serves_five_loops_only() {
+    fn the_catalogue_serves_five_loops_and_residual_terminals() {
         let engine = engine(true);
-        assert!(p_master_catalogue(&engine, 5).is_some());
-        assert!(p_master_catalogue(&engine, 4).is_none());
+        assert!(p_master_catalogue(&engine, 5, false).is_some());
+        assert!(p_master_catalogue(&engine, 5, true).is_some());
+        assert!(p_master_catalogue(&engine, 4, false).is_none());
+        assert!(p_master_catalogue(&engine, 4, true).is_some());
+        assert!(p_master_catalogue(&engine, 1, true).is_some());
     }
 }
 
@@ -6132,3 +6154,4 @@ fn a_carried_alarm_fails_at_every_public_result() {
     }
     std::fs::remove_dir_all(&root).ok();
 }
+

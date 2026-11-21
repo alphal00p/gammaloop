@@ -224,10 +224,14 @@ pub(crate) fn finalize_with(
     }
     let reduced = source.resolve_terminals(&reduced, mode, epsilon)?;
     // The five-loop master basis (`settings.p_master_basis`): with the
-    // default `Original` nothing below runs and no symbol is created.
+    // default `Original` nothing below runs and no symbol is created. It is
+    // applied to five-loop values only: its exchanges replace five-loop
+    // GGPPSS masters, which a value of fewer loops (finalized with a
+    // catalogue for its residual terminals) does not contain, and its data
+    // is the five-loop package's.
     let extended;
     let (reduced, source) = match (settings.p_master_basis, source.catalogue()) {
-        (super::master_basis::PMasterBasis::PoleBounded, Some(catalogue)) => {
+        (super::master_basis::PMasterBasis::PoleBounded, Some(catalogue)) if loops >= 5 => {
             let basis = super::master_basis::load(source.masters_directory())?;
             extended = basis.extended_catalogue(catalogue)?;
             let rotated = super::phases::time("finalize.master_basis", || {
