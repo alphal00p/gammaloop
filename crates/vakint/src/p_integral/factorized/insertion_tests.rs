@@ -1027,12 +1027,16 @@ fn a_vanishing_denominator_is_refused_whatever_it_depends_on() {
     eprintln!("LARGE BASE validation: {:?}", started.elapsed());
 }
 
-/// Exponents that are not positive rational numbers, at validation: a nonzero
-/// base under -sqrt(2) is accepted; a vanishing base P (identically zero)
-/// under a positive rational, P^(1/2) and P^2, is accepted (the coefficient is
-/// 0: the insertion contributes zero, pole order 0); P^y (a symbol), f(1/P)
-/// (a caller function's argument is walked) and P^(1/Q) (Q identically zero
-/// inside the exponent: the exponent is walked) are refused.
+/// Exponents and function arguments, at validation: a vanishing base P
+/// (identically zero) under the integer 2 is accepted (the coefficient is 0:
+/// the insertion contributes zero, pole order 0); the zero test refuses P^y
+/// (a symbol), x^(1/Q) (Q identically zero inside the exponent: the exponent
+/// is walked) and f(1/P) (a caller function's argument is walked); the forms
+/// it passes, x^(-sqrt(2)) and P^(1/2), are refused by the integer-exponent
+/// rule. The zero test alone
+/// ([`vanishing_denominator`], the rule's second line): a vanishing base
+/// under -sqrt(2), -π, a symbol, or inside an exponent (x^(1/Q)) is found;
+/// x^(-sqrt(2)), P^(1/2), P^2 and (P+1)^(-sqrt(2)) are not.
 #[test]
 fn exponents_and_function_arguments_are_walked_for_vanishing_bases() {
     let eps_atom = atom(EPS);
@@ -1048,26 +1052,63 @@ fn exponents_and_function_arguments_are_walked_for_vanishing_bases() {
     };
     let p = |t: &str| format!("(({t}-3)^2-{t}^2+6*{t}-9)");
     let (x, q) = ("witness::x", "witness::q");
-    for (what, coefficient) in [
-        ("x^(-sqrt(2))", format!("{x}^(-2^(1/2))")),
-        ("P^(1/2)", format!("{}^(1/2)", p(x))),
-        ("P^2", format!("{}^2", p(x))),
-    ] {
-        let value = with_coefficient(&coefficient);
-        value.validate().unwrap_or_else(|e| panic!("{what}: {e}"));
-        assert_eq!(value.insertion_pole_order(epsilon).unwrap(), 0, "{what}");
-    }
-    let prefix = "a denominator vanishes identically";
-    for (what, coefficient) in [
-        ("P^y", format!("{}^witness::y", p(x))),
-        ("f(1/P)", format!("witness::f(1/{})", p(x))),
-        ("P^(1/Q)", format!("{x}^(1/{})", p(q))),
+    let value = with_coefficient(&format!("{}^2", p(x)));
+    value.validate().unwrap_or_else(|e| panic!("P^2: {e}"));
+    assert_eq!(value.insertion_pole_order(epsilon).unwrap(), 0, "P^2");
+    for (what, coefficient, prefix) in [
+        (
+            "x^(-sqrt(2))",
+            format!("{x}^(-2^(1/2))"),
+            "a non-integer exponent",
+        ),
+        (
+            "P^(1/2)",
+            format!("{}^(1/2)", p(x)),
+            "a non-integer exponent",
+        ),
+        (
+            "P^y",
+            format!("{}^witness::y", p(x)),
+            "a denominator vanishes identically",
+        ),
+        (
+            "x^(1/Q)",
+            format!("{x}^(1/{})", p(q)),
+            "a denominator vanishes identically",
+        ),
+        (
+            "f(1/P)",
+            format!("witness::f(1/{})", p(x)),
+            "a denominator vanishes identically",
+        ),
     ] {
         insertion_refusal(
             &with_coefficient(&coefficient).validate().unwrap_err(),
             C0,
             prefix,
             what,
+        );
+    }
+    let dimension = good.dimension;
+    for (what, expression, found) in [
+        ("P^(-sqrt(2))", format!("{}^(-2^(1/2))", p(x)), true),
+        ("P^(-π)", format!("{}^(-𝜋)", p(x)), true),
+        ("P^y", format!("{}^witness::y", p(x)), true),
+        ("x^(1/Q)", format!("{x}^(1/{})", p(q)), true),
+        ("x^(-sqrt(2))", format!("{x}^(-2^(1/2))"), false),
+        ("P^(1/2)", format!("{}^(1/2)", p(x)), false),
+        ("P^2", format!("{}^2", p(x)), false),
+        (
+            "(P+1)^(-sqrt(2))",
+            format!("({}+1)^(-2^(1/2))", p(x)),
+            false,
+        ),
+    ] {
+        let expression = atom(&expression);
+        assert_eq!(
+            vanishing_denominator(expression.as_view(), dimension, epsilon).is_some(),
+            found,
+            "{what}"
         );
     }
 }

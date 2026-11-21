@@ -2003,16 +2003,17 @@ fn zero_polynomial(t: &str) -> String {
     format!("(({t}-3)^2-{t}^2+6*{t}-9)")
 }
 
-/// inputs: on the real K2 record, ε^-1 P(x)^(-sqrt(2)),
-/// ε^-1 P(x)^(-π) and ε^-1 P(x)^(P(y)-1) in the insertion coefficient
-/// (the last exponent is identically -1 but not WRITTEN as an integer):
-/// refused at validation, `Insertion`, prefix `a non-integer exponent in
+/// inputs: on the real K2 record, ε^-1 (P(x)+1)^(-sqrt(2)),
+/// ε^-1 (P(x)+1)^(-π) and ε^-1 (P(x)+1)^(P(y)-1) in the insertion
+/// coefficient (the last exponent is identically -1 but not WRITTEN as an
+/// integer; the base is identically 1, so the zero test of a base passes
+/// it): refused at validation, `Insertion`, prefix `a non-integer exponent in
 /// insertion <v> coefficient: the exponent `; nothing is expanded to decide.
 #[test]
 fn exponents_identically_integer_but_not_written_so_are_refused() {
     let base = record("wh-k2-child-ins");
     let vertex = base.insertions[0].vertex;
-    let p = zero_polynomial("caller::x");
+    let p = format!("({}+1)", zero_polynomial("caller::x"));
     for exponent in [
         "-2^(1/2)".to_string(),
         "-𝜋".to_string(),
