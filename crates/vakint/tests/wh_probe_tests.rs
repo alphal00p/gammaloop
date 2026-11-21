@@ -173,8 +173,14 @@ fn p1_numerical_mode_k1_root_equals_symbolic_numerically() {
     let pi_value = atom("3.14159265358979323846264338327950288419716939937510582097494459");
     for (order, exact_c) in &e {
         let numerical_c = &n[order];
-        let difference = (exact_c.replace(pi.clone()).with(pi_value.clone()).to_float(60)
-            - numerical_c.replace(pi.clone()).with(pi_value.clone()).to_float(60))
+        let difference = (exact_c
+            .replace(pi.clone())
+            .with(pi_value.clone())
+            .to_float(60)
+            - numerical_c
+                .replace(pi.clone())
+                .with(pi_value.clone())
+                .to_float(60))
         .expand();
         // every remaining term is a float times symbols: tiny relative to 1
         let terms = match difference.as_view() {
@@ -243,12 +249,20 @@ fn p1_retain_k1_root_without_insertions_refinalises_to_symbolic() {
     // the retained value is exact in ε (Γ functions, powers M^(-2ε)): its
     // Laurent expansion through the Symbolic value's top order equals it
     let series = retained
-        .series(eps(), Atom::Zero.as_view(), symbolica::domains::rational::Rational::from(top))
+        .series(
+            eps(),
+            Atom::Zero.as_view(),
+            symbolica::domains::rational::Rational::from(top),
+        )
         .map(|s| s.to_atom().expand());
     match series {
         Ok(series) => {
             eprintln!("P1 RETAIN expanded: {series}");
-            assert_same(&truncate(&series, top), &exact, "Retain expanded vs Symbolic");
+            assert_same(
+                &truncate(&series, top),
+                &exact,
+                "Retain expanded vs Symbolic",
+            );
         }
         Err(e) => panic!("the Retain value cannot be expanded by symbolica: {e}"),
     }
@@ -274,8 +288,15 @@ fn p1_unknown_from_vakint_in_an_insertion_is_carried_linearly() {
     v.insertions[0].coefficient = &v.insertions[0].coefficient * (Atom::num(1) + &unknown);
     let got = closure(&v, &symbolic(), &v.prefactor.total());
     match got {
-        Ok(got) => assert_same(&got.value, &(&plain * (Atom::num(1) + &unknown)), "UNKNOWN linear"),
-        Err(e) => panic!("the insertion with vakint's UNKNOWN atom is refused: {}", detail(&e)),
+        Ok(got) => assert_same(
+            &got.value,
+            &(&plain * (Atom::num(1) + &unknown)),
+            "UNKNOWN linear",
+        ),
+        Err(e) => panic!(
+            "the insertion with vakint's UNKNOWN atom is refused: {}",
+            detail(&e)
+        ),
     }
 }
 
@@ -289,7 +310,11 @@ fn p1_unknown_caller_symbol_in_an_insertion_is_carried_linearly() {
     let mut v = base.clone();
     v.insertions[0].coefficient = &v.insertions[0].coefficient * (Atom::num(1) + &unknown);
     let got = closure(&v, &symbolic(), &v.prefactor.total()).unwrap();
-    assert_same(&got.value, &(&plain * (Atom::num(1) + &unknown)), "caller UNKNOWN linear");
+    assert_same(
+        &got.value,
+        &(&plain * (Atom::num(1) + &unknown)),
+        "caller UNKNOWN linear",
+    );
 }
 
 /// UNKNOWN in the PREFACTOR ARGUMENT, multiplying an order the depth CUTS:
@@ -310,7 +335,11 @@ fn p1_an_argument_power_beyond_depth_is_truncated() {
         .unwrap()
         .value;
     eprintln!("P1 ARGUMENT eps^2: plain top order {top}; got {got}");
-    assert_same(&truncate(&(&plain * &x), top), &got, "argument x eps^2 truncated");
+    assert_same(
+        &truncate(&(&plain * &x), top),
+        &got,
+        "argument x eps^2 truncated",
+    );
 }
 
 /// v1.4 §7 "zero: exact 0 for a scaleless remainder (as their Built::Zero)":
@@ -324,7 +353,11 @@ fn p1_a_scaleless_remainder_is_exactly_zero() {
     let got = closure(&v, &symbolic(), &v.prefactor.total())
         .unwrap_or_else(|e| panic!("refused: {}", detail(&e)));
     assert!(got.value.is_zero(), "not an exact zero: {}", got.value);
-    assert!(got.vakint_value.is_zero(), "not an exact zero: {}", got.vakint_value);
+    assert!(
+        got.vakint_value.is_zero(),
+        "not an exact zero: {}",
+        got.vakint_value
+    );
 }
 
 /// Two loops: a massless bubble of lines 1 (k1+q) and 2 (k1) between
@@ -390,7 +423,10 @@ fn p1_never_nf_with_original_cycles() {
     let v = record("wh-k1-root");
     let mut nf = v.clone();
     nf.prefactor.nf_power = 1;
-    assert!(nf.validate().is_err(), "nf_power=1 accepted with original_cycles");
+    assert!(
+        nf.validate().is_err(),
+        "nf_power=1 accepted with original_cycles"
+    );
     let got = value(&v, &symbolic());
     let mut bad = None;
     got.as_view().visitor(&mut |part| {
@@ -481,7 +517,11 @@ fn p2_z_in_a_field_scales_every_kind() {
         let expected = &plain * z();
         let mut s = v.clone();
         s.prefactor.scalars = &s.prefactor.scalars * z();
-        assert_same(&value(&s, &symbolic()), &expected, &format!("{name}: prefactor_scalars z"));
+        assert_same(
+            &value(&s, &symbolic()),
+            &expected,
+            &format!("{name}: prefactor_scalars z"),
+        );
         let mut f = v.clone();
         let vertex = f
             .vertices
@@ -489,11 +529,19 @@ fn p2_z_in_a_field_scales_every_kind() {
             .find(|x| x.factor != Atom::num(1))
             .expect("a vertex factor");
         vertex.factor = &vertex.factor * z();
-        assert_same(&value(&f, &symbolic()), &expected, &format!("{name}: vertex factor z"));
+        assert_same(
+            &value(&f, &symbolic()),
+            &expected,
+            &format!("{name}: vertex factor z"),
+        );
         if !v.insertions.is_empty() {
             let mut i = v.clone();
             i.insertions[0].coefficient = &i.insertions[0].coefficient * z();
-            assert_same(&value(&i, &symbolic()), &expected, &format!("{name}: insertion z"));
+            assert_same(
+                &value(&i, &symbolic()),
+                &expected,
+                &format!("{name}: insertion z"),
+            );
         }
     }
 }
@@ -513,7 +561,14 @@ fn p2_one_over_one_plus_z_eps_is_the_truncated_product() {
             // a * (1 - z eps + z^2 eps^2 - ...) through `top`
             let mut s = Atom::Zero;
             let e = Atom::var(eps());
-            for k in 0..=(top - wh_fixtures::epsilon_coefficients(a, eps()).keys().min().copied().unwrap() + 1) {
+            for k in 0..=(top
+                - wh_fixtures::epsilon_coefficients(a, eps())
+                    .keys()
+                    .min()
+                    .copied()
+                    .unwrap()
+                + 1)
+            {
                 s += (Atom::num(-1) * z() * &e).pow(Atom::num(k));
             }
             truncate(&(a * s).expand(), top)
@@ -522,17 +577,33 @@ fn p2_one_over_one_plus_z_eps_is_the_truncated_product() {
         let got = closure(&v, &symbolic(), &(v.prefactor.total() * &factor))
             .unwrap()
             .value;
-        assert_same(&truncate(&got, top), &expected, &format!("{name}: argument 1/(1+z eps)"));
-        assert_eq!(top_order(&got), top, "{name}: argument: the returned orders changed");
+        assert_same(
+            &truncate(&got, top),
+            &expected,
+            &format!("{name}: argument 1/(1+z eps)"),
+        );
+        assert_eq!(
+            top_order(&got),
+            top,
+            "{name}: argument: the returned orders changed"
+        );
         let mut s = v.clone();
         s.prefactor.scalars = &s.prefactor.scalars * &factor;
         let got = value(&s, &symbolic());
-        assert_same(&truncate(&got, top), &expected, &format!("{name}: prefactor_scalars 1/(1+z eps)"));
+        assert_same(
+            &truncate(&got, top),
+            &expected,
+            &format!("{name}: prefactor_scalars 1/(1+z eps)"),
+        );
         if !v.insertions.is_empty() {
             let mut i = v.clone();
             i.insertions[0].coefficient = &i.insertions[0].coefficient * &factor;
             let got = value(&i, &symbolic());
-            assert_same(&truncate(&got, top), &expected, &format!("{name}: insertion 1/(1+z eps)"));
+            assert_same(
+                &truncate(&got, top),
+                &expected,
+                &format!("{name}: insertion 1/(1+z eps)"),
+            );
         }
     }
 }
@@ -546,12 +617,22 @@ fn p2_z_scales_in_retain() {
         let v = record(name);
         let retain = site(RustRedMasterMode::Retain);
         let plain = value(&v, &retain);
-        let got = closure(&v, &retain, &(v.prefactor.total() * z())).unwrap().value;
+        let got = closure(&v, &retain, &(v.prefactor.total() * z()))
+            .unwrap()
+            .value;
         assert_same(&got, &(&plain * z()), &format!("{name}: Retain argument z"));
         let mut f = v.clone();
-        let vertex = f.vertices.iter_mut().find(|x| x.factor != Atom::num(1)).unwrap();
+        let vertex = f
+            .vertices
+            .iter_mut()
+            .find(|x| x.factor != Atom::num(1))
+            .unwrap();
         vertex.factor = &vertex.factor * z();
-        assert_same(&value(&f, &retain), &(&plain * z()), &format!("{name}: Retain factor z"));
+        assert_same(
+            &value(&f, &retain),
+            &(&plain * z()),
+            &format!("{name}: Retain factor z"),
+        );
     }
 }
 
@@ -566,7 +647,9 @@ fn p2_one_over_one_plus_z_eps_is_exact_in_retain_without_insertions() {
     for name in ["wh-k1-root", "wh-k2-child"] {
         let v = record(name);
         let plain = value(&v, &retain);
-        let got = closure(&v, &retain, &(v.prefactor.total() * &factor)).unwrap().value;
+        let got = closure(&v, &retain, &(v.prefactor.total() * &factor))
+            .unwrap()
+            .value;
         let at = |a: &Atom| {
             a.replace(Atom::var(eps()))
                 .with(atom("3/7"))
@@ -574,7 +657,11 @@ fn p2_one_over_one_plus_z_eps_is_exact_in_retain_without_insertions() {
                 .with(atom("5/11"))
                 .expand()
         };
-        assert_same(&at(&got), &at(&(&plain * &factor)), &format!("{name}: Retain 1/(1+z eps) at rational points"));
+        assert_same(
+            &at(&got),
+            &at(&(&plain * &factor)),
+            &format!("{name}: Retain 1/(1+z eps) at rational points"),
+        );
     }
 }
 
@@ -617,7 +704,11 @@ fn p2_a_unit_insertion_equals_its_factor_on_the_vertex() {
     let a = value(&unit, &symbolic());
     let b = value(&merged, &symbolic());
     let top = top_order(&a).min(top_order(&b));
-    assert_same(&truncate(&a, top), &truncate(&b, top), "unit insertion vs merged factor");
+    assert_same(
+        &truncate(&a, top),
+        &truncate(&b, top),
+        "unit insertion vs merged factor",
+    );
 }
 
 /// (e) records in another order in one call: the per-record values and the
@@ -785,7 +876,11 @@ fn p3_vakint_epsilon_under_another_settings_epsilon_is_refused() {
 fn p4_the_reference_mass_inside_a_function() {
     let base = record("wh-k1-root");
     let mut v = base.clone();
-    let vertex = v.vertices.iter_mut().find(|x| x.factor != Atom::num(1)).unwrap();
+    let vertex = v
+        .vertices
+        .iter_mut()
+        .find(|x| x.factor != Atom::num(1))
+        .unwrap();
     vertex.factor = &vertex.factor * atom(&format!("log({R})"));
     match closure(&v, &symbolic(), &v.prefactor.total()) {
         Err(e) => eprintln!("P4 log(R): refused: {}", detail(&e)),
@@ -844,7 +939,10 @@ fn p4_an_auxiliary_mass_zero_after_the_substitution() {
     }
     match closure(&v, &symbolic(), &v.prefactor.total()) {
         Err(e) => eprintln!("P4 M_aux zero after D->4-2eps: refused: {}", detail(&e)),
-        Ok(got) => panic!("an auxiliary mass zero after D -> 4-2eps is accepted: {}", got.value),
+        Ok(got) => panic!(
+            "an auxiliary mass zero after D -> 4-2eps is accepted: {}",
+            got.value
+        ),
     }
 }
 
@@ -879,7 +977,10 @@ fn p4_reference_mass_not_a_symbol_or_two_masses() {
     if let FactorizedKind::Closure(spec) = &mut v.kind {
         spec.mass_squared = atom("gammalooprs::{scalar}::other_mass");
     }
-    assert!(v.validate().is_err(), "a reference mass other than the closing edge's accepted");
+    assert!(
+        v.validate().is_err(),
+        "a reference mass other than the closing edge's accepted"
+    );
 }
 
 // ===========================================================================
@@ -906,7 +1007,10 @@ fn text_variant(clean: &str, variant: &str, what: &str) -> Result<(), String> {
                     eprintln!("P5 {what}: accepted, same value");
                     Ok(())
                 } else {
-                    Err(format!("{what}: ACCEPTED-BUT-DIFFERENT\n got {}\n clean {plain}", got.value))
+                    Err(format!(
+                        "{what}: ACCEPTED-BUT-DIFFERENT\n got {}\n clean {plain}",
+                        got.value
+                    ))
                 }
             }
         },
@@ -946,10 +1050,17 @@ fn p5_other_spellings_of_epsilon() {
             .lines()
             .find(|l| l.starts_with("insertion\t"))
             .unwrap();
-        let changed = line.replace("gammalooprs::{}::ε", &format!("gammalooprs::{{}}::{spelling}"));
+        let changed = line.replace(
+            "gammalooprs::{}::ε",
+            &format!("gammalooprs::{{}}::{spelling}"),
+        );
         assert_ne!(changed, line);
         let variant = clean.replace(line, &changed);
-        if let Err(f) = text_variant(&clean, &variant, &format!("epsilon spelled U+{:04X}", spelling as u32)) {
+        if let Err(f) = text_variant(
+            &clean,
+            &variant,
+            &format!("epsilon spelled U+{:04X}", spelling as u32),
+        ) {
             findings.push(f);
         }
     }
@@ -962,9 +1073,16 @@ fn p5_other_spellings_of_epsilon() {
 #[test]
 fn p5_other_spellings_of_pi_and_i() {
     let clean = fixture_text("wh-k2-child-ins.record.txt");
-    let line = clean.lines().find(|l| l.starts_with("insertion\t")).unwrap();
+    let line = clean
+        .lines()
+        .find(|l| l.starts_with("insertion\t"))
+        .unwrap();
     let mut findings = Vec::new();
-    for (what, from, to) in [("π U+03C0", "𝜋", "π"), ("bare i", "𝑖", "i"), ("pi alias", "𝜋", "pi")] {
+    for (what, from, to) in [
+        ("π U+03C0", "𝜋", "π"),
+        ("bare i", "𝑖", "i"),
+        ("pi alias", "𝜋", "pi"),
+    ] {
         let variant = clean.replace(line, &line.replace(from, to));
         if let Err(f) = text_variant(&clean, &variant, what) {
             findings.push(f);
@@ -985,35 +1103,47 @@ fn p5_sections_and_numbers() {
         ("depth +2", clean.replace(depth_line, "depth\t+2")),
         ("depth 02", clean.replace(depth_line, "depth\t02")),
         ("depth 2e0", clean.replace(depth_line, "depth\t2e0")),
-        ("power=+1", clean.replacen("power=1\tmomentum=1,0,0", "power=+1\tmomentum=1,0,0", 1)),
-        ("power=01", clean.replacen("power=1\tmomentum=1,0,0", "power=01\tmomentum=1,0,0", 1)),
-        ("momentum +1", clean.replacen("momentum=1,0,0\t", "momentum=+1,0,0\t", 1)),
+        (
+            "power=+1",
+            clean.replacen("power=1\tmomentum=1,0,0", "power=+1\tmomentum=1,0,0", 1),
+        ),
+        (
+            "power=01",
+            clean.replacen("power=1\tmomentum=1,0,0", "power=01\tmomentum=1,0,0", 1),
+        ),
+        (
+            "momentum +1",
+            clean.replacen("momentum=1,0,0\t", "momentum=+1,0,0\t", 1),
+        ),
         (
             "duplicated depth line",
             clean.replace(depth_line, &format!("{depth_line}\n{depth_line}")),
         ),
-        (
-            "prefactor_colour before prefactor_scalars",
-            {
-                let s = clean.lines().find(|l| l.starts_with("prefactor_scalars\t")).unwrap();
-                let c = clean.lines().find(|l| l.starts_with("prefactor_colour\t")).unwrap();
-                clean.replace(&format!("{s}\n{c}"), &format!("{c}\n{s}"))
-            },
-        ),
-        (
-            "a huge integer literal in prefactor_scalars",
-            {
-                let s = clean.lines().find(|l| l.starts_with("prefactor_scalars\t")).unwrap();
-                clean.replace(s, &format!("{s}*100000000000000000000000000000000000000/100000000000000000000000000000000000000"))
-            },
-        ),
-        (
-            "a leading + in prefactor_scalars",
-            {
-                let s = clean.lines().find(|l| l.starts_with("prefactor_scalars\t")).unwrap();
-                clean.replace(s, &s.replace("prefactor_scalars\t", "prefactor_scalars\t+"))
-            },
-        ),
+        ("prefactor_colour before prefactor_scalars", {
+            let s = clean
+                .lines()
+                .find(|l| l.starts_with("prefactor_scalars\t"))
+                .unwrap();
+            let c = clean
+                .lines()
+                .find(|l| l.starts_with("prefactor_colour\t"))
+                .unwrap();
+            clean.replace(&format!("{s}\n{c}"), &format!("{c}\n{s}"))
+        }),
+        ("a huge integer literal in prefactor_scalars", {
+            let s = clean
+                .lines()
+                .find(|l| l.starts_with("prefactor_scalars\t"))
+                .unwrap();
+            clean.replace(s, &format!("{s}*100000000000000000000000000000000000000/100000000000000000000000000000000000000"))
+        }),
+        ("a leading + in prefactor_scalars", {
+            let s = clean
+                .lines()
+                .find(|l| l.starts_with("prefactor_scalars\t"))
+                .unwrap();
+            clean.replace(s, &s.replace("prefactor_scalars\t", "prefactor_scalars\t+"))
+        }),
     ];
     for (what, variant) in variants {
         if let Err(f) = text_variant(&clean, &variant, what) {
@@ -1071,7 +1201,11 @@ fn p3_equal_factor_forms_give_equal_values() {
         format!("(-2*{EPS})*({DIM}-4)^-1"),
     ] {
         let mut f = v.clone();
-        let vertex = f.vertices.iter_mut().find(|x| x.factor != Atom::num(1)).unwrap();
+        let vertex = f
+            .vertices
+            .iter_mut()
+            .find(|x| x.factor != Atom::num(1))
+            .unwrap();
         vertex.factor = &vertex.factor * atom(&form);
         match closure(&f, &symbolic(), &f.prefactor.total()) {
             Ok(got) => assert_same(&got.value, &plain, &format!("factor form {form}")),
@@ -1123,7 +1257,11 @@ fn p2_k6_z_in_the_argument() {
     let dir = wh_fixtures::fixture_dir("k6-norm");
     let mut compared = 0;
     for path in std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().path()) {
-        let input = if path.is_dir() { path.join("input.txt") } else { path.clone() };
+        let input = if path.is_dir() {
+            path.join("input.txt")
+        } else {
+            path.clone()
+        };
         if !input.is_file() {
             continue;
         }
@@ -1131,7 +1269,8 @@ fn p2_k6_z_in_the_argument() {
         if !text.starts_with("schema\tpint6.factorized-numerator.v3") {
             continue;
         }
-        let v = FactorizedNumerator::from_text(&text).unwrap_or_else(|e| panic!("{}: {e}", input.display()));
+        let v = FactorizedNumerator::from_text(&text)
+            .unwrap_or_else(|e| panic!("{}: {e}", input.display()));
         let vakint = engine();
         let plain = evaluate_factorized_ports(&vakint, &symbolic(), &v, &v.prefactor.total())
             .unwrap_or_else(|e| panic!("{}: {e}", input.display()))
@@ -1144,4 +1283,130 @@ fn p2_k6_z_in_the_argument() {
     }
     assert!(compared > 0, "no k6 record");
     eprintln!("P2 K6 compared {compared}");
+}
+
+/// F-1 extended: R under a NEGATIVE or a non-integer power in a factor
+/// (`1/R`, `sqrt(R)`: FactorRules admits tensor-free scalars): refused, or a
+/// value free of vakint's internal symbols.
+#[test]
+#[ignore = "finding F-1: R under a negative or non-integer power in a factor leaks vakint::closure_lambda"]
+fn p4_the_reference_mass_under_a_power() {
+    let base = record("wh-k1-root");
+    let mut leaks = Vec::new();
+    for form in [
+        format!("{R}^-1"),
+        format!("{R}^(1/2)"),
+        format!("({R}+{MAUX})^-1"),
+    ] {
+        let mut v = base.clone();
+        let vertex = v
+            .vertices
+            .iter_mut()
+            .find(|x| x.factor != Atom::num(1))
+            .unwrap();
+        vertex.factor = &vertex.factor * atom(&form);
+        match closure(&v, &symbolic(), &v.prefactor.total()) {
+            Err(e) => eprintln!("P4 {form}: refused: {}", detail(&e)),
+            Ok(got) => {
+                let text = got.value.to_string();
+                eprintln!("P4 {form}: accepted: {text}");
+                if text.contains("closure_lambda") {
+                    leaks.push(form);
+                }
+            }
+        }
+    }
+    assert!(
+        leaks.is_empty(),
+        "vakint::closure_lambda in the value for {leaks:?}"
+    );
+}
+
+/// P3: the same record evaluated with the settings' epsilon under ANOTHER
+/// NAME (vakint's default `ε` = `vakint::ε`, the record's ε respelled to
+/// it): the same value up to the renaming of ε.
+#[test]
+fn p3_the_settings_epsilon_under_another_name() {
+    let base = record("wh-k2-child-ins");
+    let plain = value(&base, &symbolic());
+    let ours = atom("vakint::ε");
+    let mut v = base.clone();
+    v.insertions[0].coefficient = v.insertions[0]
+        .coefficient
+        .replace(Atom::var(eps()))
+        .with(ours.clone());
+    let settings = VakintSettings {
+        epsilon_symbol: "ε".into(),
+        ..symbolic()
+    };
+    let got = closure(&v, &settings, &v.prefactor.total())
+        .unwrap_or_else(|e| panic!("{}", detail(&e)))
+        .value
+        .replace(ours)
+        .with(Atom::var(eps()));
+    assert_same(&got, &plain, "epsilon renamed");
+}
+
+/// P2 (c): two insertions with coefficients a and b, and the same record
+/// with a*b on the first and 1 on the second: the same value (the
+/// coefficients are scalars of the integrand; the depth raise is the sum of
+/// the pole orders either way). A producer k5-stress record (four
+/// insertions), the smallest one.
+#[test]
+#[ignore = "external data: VAKINT_TEST_WH_FIXTURES"]
+fn p2_moving_a_coefficient_between_insertions_k5_stress() {
+    let dir = wh_fixtures::fixture_dir("k5-stress");
+    let mut records = wh_fixtures::record_dirs(&dir)
+        .into_iter()
+        .map(|d| wh_fixtures::read_fixture(&d.join("input.txt")))
+        .map(|t| FactorizedNumerator::from_text(&t).unwrap())
+        .filter(|v| v.loops() <= 4)
+        .collect::<Vec<_>>();
+    records.sort_by_key(|v| v.to_text().unwrap().len());
+    let v = records.remove(0);
+    assert!(v.insertions.len() >= 2);
+    let plain = value(&v, &symbolic());
+    let mut moved = v.clone();
+    let b = moved.insertions[1].coefficient.clone();
+    moved.insertions[0].coefficient = &moved.insertions[0].coefficient * &b;
+    moved.insertions[1].coefficient = Atom::num(1);
+    assert_same(&value(&moved, &symbolic()), &plain, "a*b on one insertion");
+}
+
+/// P1 Numerical mode with an INSERTION (k2-child-ins): the same orders and
+/// the Symbolic coefficients numerically.
+#[test]
+fn p1_numerical_mode_with_an_insertion() {
+    let v = record("wh-k2-child-ins");
+    let exact = value(&v, &symbolic());
+    let numerical = value(&v, &site(RustRedMasterMode::Numerical));
+    let e = wh_fixtures::epsilon_coefficients(&exact, eps());
+    let n = wh_fixtures::epsilon_coefficients(&numerical, eps());
+    assert_eq!(
+        e.keys().collect::<Vec<_>>(),
+        n.keys().collect::<Vec<_>>(),
+        "orders"
+    );
+    let pi = atom("𝜋");
+    let pi_value = atom("3.14159265358979323846264338327950288419716939937510582097494459");
+    for (order, exact_c) in &e {
+        let difference = (exact_c
+            .replace(pi.clone())
+            .with(pi_value.clone())
+            .to_float(60)
+            - n[order]
+                .replace(pi.clone())
+                .with(pi_value.clone())
+                .to_float(60))
+        .expand();
+        let terms = match difference.as_view() {
+            AtomView::Add(sum) => sum.iter().map(|t| t.to_owned()).collect::<Vec<_>>(),
+            _ if difference.is_zero() => Vec::new(),
+            _ => vec![difference.clone()],
+        };
+        for term in terms {
+            let magnitude = parse_magnitude(&term.to_string());
+            assert!(magnitude < 1e-12, "eps^{order}: {term}");
+        }
+    }
 }
