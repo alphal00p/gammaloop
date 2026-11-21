@@ -594,7 +594,9 @@ pub enum FactorizedError {
     Reserved { feature: String },
     #[error("closure: {detail}")]
     Closure { detail: String },
-    #[error("text line {line}: unknown schema {found:?} (this reader knows {FACTORIZED_SCHEMA})")]
+    #[error(
+        "text line {line}: unknown schema {found:?} (this reader knows {FACTORIZED_SCHEMA} and {FACTORIZED_SCHEMA_V3}, written exactly, without trailing whitespace)"
+    )]
     TextSchema { line: usize, found: String },
     #[error("text line {line}: `lines` asserts {asserted} lines, {found} were read")]
     TextLineCount {

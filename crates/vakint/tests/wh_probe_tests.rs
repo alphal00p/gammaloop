@@ -2149,13 +2149,9 @@ fn m2_a_v3_schema_with_trailing_whitespace_names_v3() {
             1,
         );
         match FactorizedNumerator::from_text(&variant) {
-            Err(FactorizedError::TextSyntax { line: 1, detail }) => {
-                assert!(
-                    detail.contains(
-                        "has trailing whitespace: write exactly pint6.factorized-numerator.v3"
-                    ),
-                    "{detail}"
-                )
+            Err(e @ FactorizedError::TextSchema { line: 1, .. }) => {
+                let text = e.to_string();
+                assert!(text.contains("pint6.factorized-numerator.v3, written exactly, without trailing whitespace"), "{text}")
             }
             other => panic!("{pad:?}: {other:?}"),
         }
