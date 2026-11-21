@@ -2885,7 +2885,7 @@ fn reserved_prefix(name: &str, field: &str) -> String {
         )
     } else {
         format!(
-            "reserved symbol {name} in {field}: symbols of a record must be namespace-qualified (a bare name is read into vakint::)"
+            "reserved symbol {name} in {field}: the vakint:: namespace is reserved for vakint's internal symbols; a name written without a namespace is read into vakint::"
         )
     }
 }
@@ -4145,7 +4145,7 @@ fn a_bare_name_in_a_marked_record_is_refused_with_advice() {
     match FactorizedNumerator::from_text(&bare) {
         Err(FactorizedError::Graph { detail }) => assert_eq!(
             detail,
-            "reserved symbol vakint::gs in prefactor_scalars: symbols of a record must be namespace-qualified (a bare name is read into vakint::)"
+            "reserved symbol vakint::gs in prefactor_scalars: the vakint:: namespace is reserved for vakint's internal symbols; a name written without a namespace is read into vakint::"
         ),
         other => panic!("{other:?}"),
     }

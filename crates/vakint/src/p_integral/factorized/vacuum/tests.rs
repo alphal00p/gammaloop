@@ -1132,7 +1132,7 @@ fn the_vacuum_mode_walks_a_marked_record() {
         assert_eq!(
             graph(run(&v)),
             format!(
-                "reserved symbol {head} in edge 1 factor: symbols of a record must be namespace-qualified (a bare name is read into vakint::)"
+                "reserved symbol {head} in edge 1 factor: the vakint:: namespace is reserved for vakint's internal symbols; a name written without a namespace is read into vakint::"
             )
         );
         // unmarked: not walked (the base behaviour)

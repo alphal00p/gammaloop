@@ -831,8 +831,10 @@ pub(crate) enum AtomSource {
 }
 
 /// The refusal of a [`ForbiddenSymbol`] in `field` (variant `Graph`): in a
-/// record field `reserved symbol <name> in <field>: symbols of a record must
-/// be namespace-qualified (a bare name is read into vakint::)`, in an
+/// record field `reserved symbol <name> in <field>: the vakint:: namespace is
+/// reserved for vakint's internal symbols; a name written without a
+/// namespace is read into vakint::` (true whether the caller wrote
+/// `vakint::x` or a bare `x`: the atom cannot tell them apart), in an
 /// argument `reserved symbol <name> in <field>: the vakint:: namespace is
 /// reserved for vakint's internal symbols`; or `a symbol ending in _ cannot
 /// be used as <field>: <name> is a pattern wildcard`.
@@ -843,7 +845,7 @@ pub(crate) fn forbidden_symbol_error(
 ) -> FactorizedError {
     let detail = match (found, source) {
         (ForbiddenSymbol::Reserved(name), AtomSource::Record) => format!(
-            "reserved symbol {name} in {field}: symbols of a record must be namespace-qualified (a bare name is read into vakint::)"
+            "reserved symbol {name} in {field}: the vakint:: namespace is reserved for vakint's internal symbols; a name written without a namespace is read into vakint::"
         ),
         (ForbiddenSymbol::Reserved(name), AtomSource::Argument) => format!(
             "reserved symbol {name} in {field}: the vakint:: namespace is reserved for vakint's internal symbols"
