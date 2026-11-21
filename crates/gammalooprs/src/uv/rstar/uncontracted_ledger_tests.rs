@@ -1451,6 +1451,23 @@ fn the_run_fails_a_kind_with_nothing_compared() -> Result<()> {
             true,
         );
         let failures = tally.failures();
+        // with a partial kind list the diagram rule does not apply (the
+        // kind-level rule does)
+        let partial = with_switch(Switch::new(Mode::Check, &[Kind::IrHard]), || {
+            let identity = ledger::current_identity();
+            let mut tally = ledger::RunTally::new().expect("a tally");
+            let empty = serde_json::json!({
+                "schema": "u7a-disposition.v2", "identity": identity, "graph": "z",
+                "diagram": "000009", "outcome": "ok", "inert": {},
+                "kinds": {"ir-hard": none},
+            });
+            tally.add("z/000009", Some(&empty), true);
+            tally.failures()
+        });
+        ensure!(
+            partial.len() == 1 && partial[0].contains("kind ir-hard: no record compared"),
+            "{partial:#?}"
+        );
         ensure!(
             failures.len() == 3
                 && failures[0].contains("z/000009: the counterterm is nonzero")
