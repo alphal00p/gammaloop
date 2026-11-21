@@ -24,15 +24,30 @@
 //!   (`not a boundary momentum of the insertion`).
 
 use eyre::{Result, ensure, eyre};
-use symbolica::atom::{Atom, AtomCore};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    function,
+};
 use vakint::{
     Vakint,
     p_integral::factorized::{FactorizedKind, FactorizedNumerator, evaluate_factorized_closure},
 };
 
-use crate::initialisation::test_initialise;
+use crate::{
+    feyngen::feynkit::FeynmanDiagramGammaLoopExt,
+    initialisation::test_initialise,
+    utils::{GS, W_},
+    uv::approx::streamed::with_production_piece_limit,
+};
 
-use super::{recursive_tests::settings, uncontracted_oracle_tests::atoms_equal};
+use super::{
+    RStarPlan,
+    boundary::{BoundaryMode, with_boundary_mode},
+    plan::{uv_child_edge_ids, with_child_taylor_order},
+    recursive_tests::{colour_factored, load, settings},
+    uncontracted::{self, Captured, Kind, Mode, Switch, with_capture, with_strict, with_switch},
+    uncontracted_oracle_tests::atoms_equal,
+};
 
 const RECORD: &str = include_str!("testdata/u7a/l5-006961-id5-paired-leg.record.txt");
 
@@ -54,7 +69,10 @@ fn with_degree(text: &str, degree: u32) -> String {
 }
 
 fn with_scaled(text: &str, scaled: &str) -> String {
-    let out = text.replace("\tscaled_edges=0,1,13\t", &format!("\tscaled_edges={scaled}\t"));
+    let out = text.replace(
+        "\tscaled_edges=0,1,13\t",
+        &format!("\tscaled_edges={scaled}\t"),
+    );
     assert!(out.contains(&format!("\tscaled_edges={scaled}\t")));
     out
 }
@@ -162,8 +180,15 @@ fn pick8_paired_leg_scales_like_its_partner_at_a_positive_degree() -> Result<()>
     // degree 0 (the record as written): the legs swapped agree too
     let base = evaluate(&vakint, RECORD).map_err(|e| eyre!("degree 0: {e}"))?;
     let base_swapped = evaluate(&vakint, &swapped(RECORD)).map_err(|e| eyre!("{e}"))?;
-    eprintln!("PICK8 degree 0: zero={} len={}", base.is_zero(), base.to_string().len());
-    ensure!(atoms_equal(&base, &base_swapped), "degree 0: swapped legs differ");
+    eprintln!(
+        "PICK8 degree 0: zero={} len={}",
+        base.is_zero(),
+        base.to_string().len()
+    );
+    ensure!(
+        atoms_equal(&base, &base_swapped),
+        "degree 0: swapped legs differ"
+    );
     let mut nonzero = false;
     for degree in [1, 2] {
         let text = with_degree(RECORD, degree);
@@ -177,16 +202,23 @@ fn pick8_paired_leg_scales_like_its_partner_at_a_positive_degree() -> Result<()>
         );
         for (what, variant) in [
             ("legs swapped", swapped(&text)),
-            ("scaled_edges=0,1,13,100013", with_scaled(&text, "0,1,13,100013")),
+            (
+                "scaled_edges=0,1,13,100013",
+                with_scaled(&text, "0,1,13,100013"),
+            ),
             ("scaled_edges=0,1,100013", with_scaled(&text, "0,1,100013")),
         ] {
-            let other = evaluate(&vakint, &variant).map_err(|e| eyre!("degree {degree} {what}: {e}"))?;
+            let other =
+                evaluate(&vakint, &variant).map_err(|e| eyre!("degree {degree} {what}: {e}"))?;
             let equal = atoms_equal(&value, &other);
             eprintln!("PICK8 degree {degree} {what}: equal={equal}");
             ensure!(equal, "degree {degree}: {what} differs");
         }
     }
-    ensure!(nonzero, "every positive-degree value is zero: the test shows nothing");
+    ensure!(
+        nonzero,
+        "every positive-degree value is zero: the test shows nothing"
+    );
     // an undeclared Q(100000 + e): refused at every degree
     for degree in [0, 1, 2] {
         let text = with_degree(RECORD, degree);
@@ -207,4 +239,398 @@ fn pick8_paired_leg_scales_like_its_partner_at_a_positive_degree() -> Result<()>
         )?;
     }
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// The emitter's guard (`uncontracted::declared_momenta`), refutation round of
+// pick 8: every momentum a record names is declared, an insertion names only
+// its boundary momenta, a `100000 + e` leg mirrors its partner.
+// ---------------------------------------------------------------------------
+
+fn guard(text: &str) -> std::result::Result<(), String> {
+    let value = FactorizedNumerator::from_text(text).map_err(|e| format!("reader: {e}"))?;
+    uncontracted::declared_momenta(&value).map_err(|d| format!("{}: {}", d.code, d.detail))
+}
+
+/// The leg 100013 given the momentum p(2) instead of its partner's p(3).
+fn leg_momentum_changed(text: &str) -> String {
+    let from = "edge\t100013\tsource=ext\ttarget=3\thedges=-,25\tparticle=Q\tline=vector\tpower=1\tmomentum=0,0,0,0,1\t";
+    let to = "edge\t100013\tsource=ext\ttarget=3\thedges=-,25\tparticle=Q\tline=vector\tpower=1\tmomentum=0,0,0,1,0\t";
+    assert!(text.contains(from));
+    text.replace(from, to)
+}
+
+fn guard_value(value: &FactorizedNumerator) -> std::result::Result<(), String> {
+    uncontracted::declared_momenta(value).map_err(|d| format!("{}: {}", d.code, d.detail))
+}
+
+fn value_refused(what: &str, value: &FactorizedNumerator, code: &str) -> Result<()> {
+    match guard_value(value) {
+        Ok(()) => Err(eyre!("{what}: the guard passed it")),
+        Err(error) => {
+            eprintln!("PICK8 GUARD {what}: {error:.300}");
+            ensure!(error.starts_with(&format!("{code}: ")), "{what}: {error}");
+            Ok(())
+        }
+    }
+}
+
+/// What vakint's READER says of a text form (`from_text` validates).
+fn reader_says(what: &str, text: &str) {
+    match FactorizedNumerator::from_text(text) {
+        Ok(_) => eprintln!("PICK8 READER {what}: read"),
+        Err(e) => eprintln!("PICK8 READER {what}: refused: {e:.200}"),
+    }
+}
+
+fn renamed_in_insertions(
+    value: &FactorizedNumerator,
+    from: usize,
+    to: usize,
+) -> FactorizedNumerator {
+    let mut value = value.clone();
+    for insertion in &mut value.insertions {
+        insertion.factor = insertion
+            .factor
+            .replace(function!(GS.emr_mom, from, W_.x___))
+            .with(function!(GS.emr_mom, to, W_.x___));
+    }
+    value
+}
+
+/// The guard on record VALUES mutated after reading (vakint's reader refuses
+/// most of these forms as text already: printed as `PICK8 READER`).
+#[test]
+fn pick8_guard_refuses_undeclared_and_unmirrored_legs() -> Result<()> {
+    test_initialise()?;
+    for degree in [0, 2] {
+        let text = with_degree(RECORD, degree);
+        for (what, form) in [
+            ("legs swapped", swapped(&text)),
+            ("Q(200013)", insertion_names(&text, 200_013)),
+            ("leg line dropped", leg_dropped(&text)),
+            ("pre-pick-8 Q(13) at vertex 3", insertion_names(&text, 13)),
+            ("leg momentum p(2)", leg_momentum_changed(&text)),
+            ("partner not scaled", with_scaled(&text, "0,1,100013")),
+        ] {
+            reader_says(&format!("degree {degree} {what}"), &form);
+        }
+        let good =
+            FactorizedNumerator::from_text(&text).map_err(|e| eyre!("degree {degree}: {e}"))?;
+        guard_value(&good).map_err(|e| eyre!("degree {degree}: {e}"))?;
+        let swapped_value = FactorizedNumerator::from_text(&swapped(&text))
+            .map_err(|e| eyre!("degree {degree} swapped: {e}"))?;
+        // vakint evaluates it equally, but it is not the emitter's form
+        // (100000 + e is always the INCOMING leg)
+        value_refused(
+            &format!("degree {degree} legs swapped"),
+            &swapped_value,
+            "paired_leg",
+        )?;
+        value_refused(
+            &format!("degree {degree} Q(200013)"),
+            &renamed_in_insertions(&good, 100_013, 200_013),
+            "undeclared_momentum",
+        )?;
+        let mut dropped = good.clone();
+        dropped.edges.retain(|edge| edge.id != 100_013);
+        value_refused(
+            &format!("degree {degree} leg line dropped"),
+            &dropped,
+            "undeclared_momentum",
+        )?;
+        value_refused(
+            &format!("degree {degree} pre-pick-8 Q(13) at vertex 3"),
+            &renamed_in_insertions(&good, 100_013, 13),
+            "insertion_momentum",
+        )?;
+        let mut moved = good.clone();
+        for edge in moved.edges.iter_mut().filter(|edge| edge.id == 100_013) {
+            edge.momentum = vec![0, 0, 0, 1, 0];
+        }
+        value_refused(
+            &format!("degree {degree} leg momentum p(2)"),
+            &moved,
+            "paired_leg",
+        )?;
+        let mut unscaled = good.clone();
+        if let FactorizedKind::Closure(spec) = &mut unscaled.kind
+            && let Some(taylor) = &mut spec.taylor
+        {
+            taylor.scaled_edges = vec![0, 1, 100_013];
+        }
+        value_refused(
+            &format!("degree {degree} partner not scaled"),
+            &unscaled,
+            "paired_leg",
+        )?;
+    }
+    Ok(())
+}
+
+/// The negative control the guard exists for: a leg that does NOT mirror its
+/// partner (100013 carrying p(2), not p(3)) is accepted by vakint (only the
+/// loop components of an independent-externals record must conserve) and at
+/// degree 2 its value silently differs; at degree 0 every external momentum
+/// is scaled to zero and the value is the same.
+#[test]
+fn pick8_an_unmirrored_leg_is_silent_in_vakint() -> Result<()> {
+    test_initialise()?;
+    let vakint = Vakint::new()?;
+    for degree in [0, 2] {
+        let text = with_degree(RECORD, degree);
+        let value = evaluate(&vakint, &text).map_err(|e| eyre!("degree {degree}: {e}"))?;
+        let changed = evaluate(&vakint, &leg_momentum_changed(&text));
+        match &changed {
+            Ok(other) => eprintln!(
+                "PICK8 SILENT degree {degree} leg momentum p(2): evaluated, equal={}",
+                atoms_equal(&value, other)
+            ),
+            Err(error) => {
+                eprintln!("PICK8 SILENT degree {degree} leg momentum p(2): refused: {error:.300}")
+            }
+        }
+        let other = changed.map_err(|e| eyre!("degree {degree}: vakint refused: {e}"))?;
+        if degree == 0 {
+            ensure!(
+                atoms_equal(&value, &other),
+                "degree 0: the changed leg differs"
+            );
+        } else {
+            ensure!(
+                !atoms_equal(&value, &other),
+                "degree {degree}: the changed leg agrees"
+            );
+        }
+    }
+    Ok(())
+}
+
+/// The guard over dumped records: `PICK8_GUARD_LIST` names a file of record
+/// paths (one per line); every v3 record must parse and pass.
+#[test]
+#[ignore = "reads record dumps outside the tree: PICK8_GUARD_LIST"]
+fn pick8_guard_passes_every_dumped_record() -> Result<()> {
+    test_initialise()?;
+    let list = std::env::var("PICK8_GUARD_LIST").map_err(|_| eyre!("PICK8_GUARD_LIST unset"))?;
+    let (mut v3, mut other, mut legs, mut failed) = (0usize, 0usize, 0usize, Vec::new());
+    for path in std::fs::read_to_string(&list)?
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+    {
+        let text = std::fs::read_to_string(path.trim())?;
+        if !text.starts_with("schema\tpint6.factorized-numerator.v3") {
+            other += 1;
+            continue;
+        }
+        v3 += 1;
+        if text.contains("\nedge\t1000") {
+            legs += 1;
+        }
+        if let Err(error) = guard(&text) {
+            eprintln!("PICK8 GUARD FAIL {path}: {error:.300}");
+            failed.push(path.to_owned());
+        }
+    }
+    eprintln!(
+        "PICK8 GUARD list={list} v3={v3} other={other} with_100000_leg={legs} failed={}",
+        failed.len()
+    );
+    ensure!(v3 > 0, "no v3 record");
+    ensure!(failed.is_empty(), "{} records fail the guard", failed.len());
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// A REAL positive-degree case: a physical child with a paired crown edge has
+// `local_dod <= 0`, so its Taylor order is forced (`with_child_taylor_order`)
+// on both paths: check compares today's contracted path with the record, on
+// takes the record.
+// ---------------------------------------------------------------------------
+
+const L2_22_DOT: &str = include_str!("testdata/u7a/l2-d22.dot");
+const L4_3966_DOT: &str = include_str!("testdata/u7a/l4-d3966.dot");
+
+fn forced_child_run(
+    diagram: &feynkit_graph::FeynmanDiagram,
+    support: &[usize],
+    order: Option<i32>,
+    switch: Switch,
+) -> Result<(Result<Atom>, Vec<Captured>)> {
+    let settings = settings();
+    let vakint = Vakint::new()?;
+    let graph = diagram.to_gamma_loop_graph(None, true)?;
+    let model = diagram.model();
+    let plan = RStarPlan::with_automatic_edge(&graph, model, &settings)?;
+    let child = plan
+        .counterterms
+        .iter()
+        .map(|call| &call.argument.support)
+        .find(|child| uv_child_edge_ids(&graph, child) == support)
+        .ok_or_else(|| eyre!("{}: no UV child {support:?}", graph.name))?;
+    let cache = std::sync::Arc::new(super::CountertermCache::default());
+    let run = || {
+        with_switch(switch, || {
+            with_strict(true, || {
+                with_boundary_mode(BoundaryMode::On, false, || {
+                    with_capture(|| {
+                        RStarPlan::rstar_child_counterterm(
+                            &cache,
+                            &graph,
+                            child,
+                            model,
+                            &vakint,
+                            &settings,
+                            plan.uv_children,
+                            plan.uv_child_closure,
+                        )
+                    })
+                })
+            })
+        })
+    };
+    Ok(match order {
+        Some(order) => with_child_taylor_order(support, order, run),
+        None => run(),
+    })
+}
+
+fn check_switch() -> Switch {
+    Switch::new(Mode::Check, &[Kind::Root, Kind::Child])
+}
+
+fn on_switch() -> Switch {
+    Switch::new(Mode::On, &[Kind::Root, Kind::Child])
+}
+
+/// The child of `diagram` with edge ids `support` at the forced Taylor order
+/// `order`: off, check (== off, every record compared equal) and on (equal
+/// to off); at least one evaluated record has `taylor degree=order`, a
+/// `100000 + e` leg, and (with `renamed`) an insertion factor naming it.
+/// Returns off.
+fn positive_degree(
+    name: &str,
+    dot: &str,
+    support: &[usize],
+    order: i32,
+    renamed: bool,
+) -> Result<Atom> {
+    let diagram = colour_factored(&load(dot)?)?;
+    let (off, nothing) = forced_child_run(&diagram, support, Some(order), Switch::OFF)?;
+    let off = off.map_err(|e| eyre!("{name} order {order} off: {e:#}"))?;
+    ensure!(nothing.is_empty());
+    for (mode, switch) in [("check", check_switch()), ("on", on_switch())] {
+        let (value, captured) = forced_child_run(&diagram, support, Some(order), switch)?;
+        let value = value.map_err(|e| eyre!("{name} order {order} {mode}: {e:#}"))?;
+        let mut paired = 0;
+        let mut named = 0;
+        for attempt in &captured {
+            eprintln!(
+                "PICK8 REAL {name} order={order} {mode} kind={} id={} outcome={} equal={:?} first={:?}",
+                attempt.kind.as_str(),
+                attempt.id,
+                attempt.outcome,
+                attempt.equal,
+                attempt.first_difference
+            );
+            ensure!(
+                attempt.outcome == "uncontracted" || attempt.outcome == "zero",
+                "{name} order {order} {mode}: id {} outcome {}",
+                attempt.id,
+                attempt.outcome
+            );
+            if mode == "check" && attempt.outcome == "uncontracted" {
+                ensure!(
+                    attempt.equal == Some(true),
+                    "{name} order {order} check: id {} not compared equal",
+                    attempt.id
+                );
+            }
+            let Some(text) = attempt.text.as_deref() else {
+                continue;
+            };
+            if attempt.kind == Kind::Child
+                && text.contains(&format!("\ntaylor\tdegree={order}\t"))
+                && text.contains("\nedge\t1000")
+            {
+                paired += 1;
+                guard(text)
+                    .map_err(|e| eyre!("{name} order {order} {mode} id {}: {e}", attempt.id))?;
+                if text
+                    .lines()
+                    .any(|l| l.starts_with("insertion_factor\t") && l.contains("::Q(1000"))
+                {
+                    named += 1;
+                    eprintln!(
+                        "PICK8 REAL {name} order={order} {mode} id={} RENAMED leg at degree {order}",
+                        attempt.id
+                    );
+                }
+            }
+        }
+        eprintln!(
+            "PICK8 REAL {name} order={order} {mode}: paired_records={paired} renamed={named} zero={}",
+            value.is_zero()
+        );
+        ensure!(
+            paired > 0,
+            "{name} order {order} {mode}: no evaluated record with a paired leg at that degree"
+        );
+        ensure!(
+            !renamed || named > 0,
+            "{name} order {order} {mode}: no renamed leg at that degree"
+        );
+        if mode == "check" {
+            ensure!(
+                value == off,
+                "{name} order {order}: check does not return today's value"
+            );
+        } else {
+            ensure!(
+                atoms_equal(&value, &off),
+                "{name} order {order}: on differs from off"
+            );
+        }
+    }
+    Ok(off)
+}
+
+/// L2 22, child {2,3,5} (crown 0, 1 and the paired gluon 4: legs 4 and
+/// 100004), at its own degree 0 and forced to 1 and 2.
+#[test]
+fn pick8_real_positive_degree_l2_22_child() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let support = [2, 3, 5];
+        let zero = positive_degree("L2 22", L2_22_DOT, &support, 0, false)?;
+        let one = positive_degree("L2 22", L2_22_DOT, &support, 1, false)?;
+        let two = positive_degree("L2 22", L2_22_DOT, &support, 2, false)?;
+        eprintln!(
+            "PICK8 REAL L2 22: order0 zero={} order1 zero={} order2 zero={} two==zero {}",
+            zero.is_zero(),
+            one.is_zero(),
+            two.is_zero(),
+            atoms_equal(&two, &zero)
+        );
+        ensure!(!two.is_zero(), "order 2 is zero: the test shows nothing");
+        ensure!(
+            !atoms_equal(&two, &zero),
+            "order 2 equals order 0: the test shows nothing"
+        );
+        Ok(())
+    })
+}
+
+/// L4 3966, child {2,3,4,5,6,8,9,10} with {9,10} contracted onto the `ct:`
+/// vertex 5 next to a `100000 + e` leg, whose insertion factor names it (pick
+/// 8's rename), forced to degree 2. About 6 s.
+#[test]
+fn pick8_real_positive_degree_l4_3966_renamed_child() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let support = [2, 3, 4, 5, 6, 8, 9, 10];
+        let two = positive_degree("L4 3966", L4_3966_DOT, &support, 2, true)?;
+        ensure!(!two.is_zero(), "order 2 is zero: the test shows nothing");
+        Ok(())
+    })
 }
