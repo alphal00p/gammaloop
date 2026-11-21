@@ -1,7 +1,7 @@
 //! The per-diagram accounting of `GAMMALOOP_UNCONTRACTED_NUMERATOR` (U7a
-//! delta: Astra's U7a verdict finding 4, helper VH's round 2 R2-I1, R2-M2
-//! and R2-M3; the beta project's results/consolidation/U7-PLAN.md
-//! requirements 16 and 17).
+//! delta: Astra's U7a verdict findings 1 and 4, helper
+//! VH's round 2 R2-I1, R2-M2 and R2-M3; the beta project's
+//! results/consolidation/U7-PLAN.md requirements 16 and 17).
 //!
 //! # The ledger of a diagram
 //!
@@ -11,14 +11,15 @@
 //! a root evaluation outside such a ledger opens its own
 //! (`diagram=root#<n>`, a process-wide ordinal), so that two root
 //! evaluations of one graph name never share or split a line (R2-M2). The
-//! ledger is a thread-local stack of frames: an evaluation and the R* of its
-//! UV children run on one thread (a plan computes its children in a serial
-//! loop, a Δ-cache fill runs on the claiming thread), so every record of the
-//! diagram lands in its frame, whichever of its root evaluations (insertion
-//! surrogates included) made it. The frames are restored on unwinding (a
-//! guard), so a panicking diagram never leaves a frame to the next diagram
-//! of its worker. A record outside every frame of its thread prints an
-//! `UNCONTRACTED_ORPHAN` line (never silently uncounted).
+//! ledger is a thread-local stack of frames: an evaluation, the R* of its UV
+//! children and their Δ-cache fills run on one thread (a plan computes its
+//! children in a serial loop, a fill runs on the claiming thread), so every
+//! record of the diagram lands in its frame, whichever of its root
+//! evaluations (insertion surrogates included) made it. The frames are
+//! restored on unwinding (a guard), so a panicking diagram never leaves a
+//! frame to the next diagram of its worker. A record outside every frame of
+//! its thread prints an `UNCONTRACTED_ORPHAN` line (never silently
+//! uncounted).
 //!
 //! Every EXPECTED record (a remainder of an enabled kind at the hook) is
 //! exactly one disposition:
@@ -28,7 +29,12 @@
 //! * `declined:<code>` (a designed refusal; today's path took it);
 //! * `error:<code>` (not designed: the diagram fails);
 //! * `unchecked` (reached the hook but never compared: check mode whose
-//!   today's path failed after our attempt, or a count the ledger misses).
+//!   today's path failed after our attempt, or a count the ledger misses);
+//! * `hit:<the fill's disposition>`: a Δ-cache hit serves a child Δ that
+//!   another evaluation filled; the hit counts the fill's records with the
+//!   fill's dispositions (so `expected` does not depend on the cache order),
+//!   and prints one `UNCONTRACTED_CACHE_HIT` line. A hit whose fill left no
+//!   note (a fill made with the switch off) is `hit:unchecked`.
 //!
 //! A K3 term that builds no record by design (`zero_loops`: Δ(γ) inserted,
 //! no vakint call today; `order_zero`: K8) is not expected; the lines list
@@ -36,27 +42,48 @@
 //!
 //! The close prints ONE `UNCONTRACTED_DISPOSITION` line per diagram and
 //! enabled kind (also when nothing was expected, so a missing line is a
-//! missing diagram) and one `UNCONTRACTED_SUMMARY` line per diagram. On and
-//! check are strict (the only behaviour, R2-I1): an error outcome fails the
-//! diagram.
+//! missing diagram) and one `UNCONTRACTED_SUMMARY` line per diagram.
+//!
+//! # Check mode coverage (U7a.1)
+//!
+//! Check mode is strict (the only behaviour: R2-I1): per diagram and kind,
+//! compared + declined + the hits whose fill compared or declined must be
+//! `expected`; and a diagram-kind with records but none
+//! compared (here or in a hit's fill) fails, unless every code of its
+//! declines is named for that graph and kind by the run's exception list,
+//! `GAMMALOOP_UNCONTRACTED_EXCEPTIONS=<file>` (lines
+//! `graph<TAB>kind<TAB>code<TAB>reason`, `#` comments; the reason is
+//! required). Mode on reports the same dispositions; an error outcome fails
+//! the diagram there too.
 
 use std::{
+    any::Any,
     cell::RefCell,
     collections::BTreeMap,
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 
 use eyre::{Result, eyre};
 use linnet::half_edge::subgraph::SuBitGraph;
 use symbolica::atom::Atom;
 
-use crate::{graph::Graph, model::Model, uv::counterterm_cache::CountertermCache};
+use crate::{
+    graph::Graph,
+    model::Model,
+    uv::counterterm_cache::{CacheLookup, CountertermCache},
+};
 
 use super::uncontracted::{self, Attempt, Check, Kind, Mode, Outcome, Switch};
 
 // ---------------------------------------------------------------------------
-// The switches of the ledger: strict (a no-op)
+// The switches of the ledger: strict (a no-op) and the exceptions
 // ---------------------------------------------------------------------------
+
+/// The exception list of a check run.
+pub(crate) const EXCEPTIONS_VARIABLE: &str = "GAMMALOOP_UNCONTRACTED_EXCEPTIONS";
 
 /// `GAMMALOOP_UNCONTRACTED_STRICT` (R2-I1): on and check always fail a
 /// diagram on an error outcome, so `1` / `on` (and unset, empty) are
@@ -78,11 +105,158 @@ pub(crate) fn parse_strict(value: Option<&str>) -> std::result::Result<(), Strin
     }
 }
 
+/// One named exception: the graph's `kind` may have no compared record
+/// when every one of its records is declined by `code`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Exception {
+    pub graph: String,
+    pub kind: Kind,
+    pub code: String,
+    /// (the list's documentation; the dispositions print the codes)
+    #[allow(dead_code)]
+    pub reason: String,
+}
+
+/// The exception list of a check run and the digest of its text.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Exceptions {
+    pub entries: Vec<Exception>,
+    /// FNV-1a 64 of the file's bytes (the run's identity), `None` without
+    /// a list.
+    pub digest: Option<String>,
+}
+
+impl Exceptions {
+    /// Whether `code` is named for `graph`'s `kind`.
+    fn names(&self, graph: &str, kind: Kind, code: &str) -> bool {
+        self.entries
+            .iter()
+            .any(|entry| entry.graph == graph && entry.kind == kind && entry.code == code)
+    }
+}
+
+/// The exceptions of a file's text (`graph<TAB>kind<TAB>code<TAB>reason`;
+/// blank lines and `#` comments skipped; every field required).
+pub(crate) fn parse_exceptions(text: &str) -> std::result::Result<Exceptions, String> {
+    let mut entries = Vec::new();
+    for (n, line) in text.lines().enumerate() {
+        let line = line.trim_end_matches('\r');
+        if line.trim().is_empty() || line.trim_start().starts_with('#') {
+            continue;
+        }
+        let fields = line.split('\t').map(str::trim).collect::<Vec<_>>();
+        let bad = |why: &str| format!("{EXCEPTIONS_VARIABLE} line {}: {why}: `{line}`", n + 1);
+        let [graph, kind, code, reason] = fields[..] else {
+            return Err(bad("expected graph<TAB>kind<TAB>code<TAB>reason"));
+        };
+        let kind = Kind::ALL
+            .into_iter()
+            .find(|candidate| candidate.as_str() == kind)
+            .ok_or_else(|| bad("unknown kind"))?;
+        if graph.is_empty() || code.is_empty() || reason.is_empty() {
+            return Err(bad("empty graph, code or reason"));
+        }
+        entries.push(Exception {
+            graph: graph.to_owned(),
+            kind,
+            code: code.to_owned(),
+            reason: reason.to_owned(),
+        });
+    }
+    Ok(Exceptions {
+        entries,
+        digest: Some(format!("{:016x}", fnv64([text.as_bytes()]))),
+    })
+}
+
 /// What the switch's initialisation checks besides the switch itself
-/// ([`uncontracted::validate`]): `GAMMALOOP_UNCONTRACTED_STRICT` (the
-/// environment's value), refused when `0` in every mode.
-pub(crate) fn initialise(_switch: Switch, strict: Option<&str>) -> std::result::Result<(), String> {
-    parse_strict(strict)
+/// ([`uncontracted::validate`]): `GAMMALOOP_UNCONTRACTED_STRICT`, check
+/// mode with the PINT6 dump (refused: every record would decline
+/// `pint6_dump`, a check that compares nothing), the exception list (check
+/// mode only; read here). `pint6` is whether
+/// `PINT6_CLOSURE_DUMP` is set; the values are the environment's.
+pub(crate) fn initialise(
+    switch: Switch,
+    strict: Option<&str>,
+    pint6: impl FnOnce() -> bool,
+    exceptions: Option<&str>,
+) -> std::result::Result<Exceptions, String> {
+    parse_strict(strict)?;
+    if switch.mode == Mode::Off {
+        return Ok(Exceptions::default());
+    }
+    if switch.enabled_kinds().is_empty() {
+        return Err(format!(
+            "{}: `{}` enables no kind this build emits (inert: {}); the switch would build no record",
+            uncontracted::VARIABLE,
+            switch.mode.as_str(),
+            switch
+                .inert_kinds()
+                .iter()
+                .map(|kind| kind.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
+        ));
+    }
+    if switch.mode == Mode::Check && pint6() {
+        return Err(format!(
+            "{}=check with PINT6_CLOSURE_DUMP set is refused: the PINT6 dump keeps today's records, so every record would decline (pint6_dump) and the check would compare nothing; unset one of them",
+            uncontracted::VARIABLE
+        ));
+    }
+    match exceptions.map(str::trim).filter(|path| !path.is_empty()) {
+        Some(path) if switch.mode == Mode::Check => {
+            let text = std::fs::read_to_string(path)
+                .map_err(|error| format!("{EXCEPTIONS_VARIABLE}={path}: {error}"))?;
+            parse_exceptions(&text)
+        }
+        Some(path) => Err(format!(
+            "{EXCEPTIONS_VARIABLE}={path} is a check-mode list; {}={} does not read it",
+            uncontracted::VARIABLE,
+            switch.mode.as_str()
+        )),
+        None => Ok(Exceptions::default()),
+    }
+}
+
+thread_local! {
+    static TEST_EXCEPTIONS: RefCell<Option<Exceptions>> = const { RefCell::new(None) };
+}
+
+/// The exception list in force (the environment's, or a test's).
+fn exceptions() -> Exceptions {
+    TEST_EXCEPTIONS
+        .with(|slot| slot.borrow().clone())
+        .unwrap_or_else(uncontracted::exceptions)
+}
+
+#[cfg(test)]
+pub(crate) fn with_exceptions<T>(exceptions: Exceptions, f: impl FnOnce() -> T) -> T {
+    struct Restore(Option<Exceptions>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let previous = self.0.take();
+            TEST_EXCEPTIONS.with(|slot| *slot.borrow_mut() = previous);
+        }
+    }
+    let _restore = Restore(TEST_EXCEPTIONS.with(|slot| slot.replace(Some(exceptions))));
+    f()
+}
+
+/// FNV-1a 64 of the concatenated parts (a field separator between them).
+pub(crate) fn fnv64<'a>(parts: impl IntoIterator<Item = &'a [u8]>) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for (n, part) in parts.into_iter().enumerate() {
+        if n > 0 {
+            hash ^= 0x1f;
+            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+        for byte in part {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    }
+    hash
 }
 
 // ---------------------------------------------------------------------------
@@ -93,7 +267,7 @@ pub(crate) fn initialise(_switch: Switch, strict: Option<&str>) -> std::result::
 /// doc) and what the attempts gave.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Counts {
-    /// Records that reached the hook.
+    /// Records that reached the hook (a hit: its fill's records).
     pub expected: usize,
     /// Records built and handed to vakint, or refused before (this frame).
     pub attempted: usize,
@@ -104,7 +278,7 @@ pub(crate) struct Counts {
     /// Comparisons that agreed.
     pub equal: usize,
     /// Disposition -> records (`compared`, `taken`, `declined:<code>`,
-    /// `error:<code>`, `unchecked`).
+    /// `error:<code>`, `unchecked`, `hit:<...>`).
     pub classes: BTreeMap<String, usize>,
     /// K3 terms of the kind that build no record by design, by code
     /// (`zero_loops`: Δ(γ) inserted, no vakint call today; `order_zero`: K8):
@@ -163,6 +337,9 @@ impl Counts {
 enum Scope {
     /// A diagram (closed by its [`DiagramLedger`]).
     Diagram { graph: String, diagram: String },
+    /// A Δ-cache fill: its counts become the fill's note and join the frame
+    /// below.
+    Fill,
 }
 
 struct Frame {
@@ -240,6 +417,22 @@ fn with_counts(kind: Kind, f: impl FnOnce(&mut Counts)) {
     }
 }
 
+/// The innermost diagram frame's graph and key (`-` outside one).
+fn diagram_key() -> (String, String) {
+    FRAMES
+        .try_with(|frames| {
+            frames.try_borrow().ok().and_then(|frames| {
+                frames.iter().rev().find_map(|frame| match &frame.scope {
+                    Scope::Diagram { graph, diagram, .. } => Some((graph.clone(), diagram.clone())),
+                    Scope::Fill => None,
+                })
+            })
+        })
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| ("-".to_owned(), "-".to_owned()))
+}
+
 fn in_diagram() -> bool {
     FRAMES.with(|frames| {
         frames
@@ -302,9 +495,129 @@ pub(super) fn record_no_record(kind: Kind, code: &str) {
     });
 }
 
+/// What a Δ-cache fill noted: the records it evaluated, by kind, and where.
+#[derive(Clone, Debug)]
+pub(crate) struct FillNote {
+    pub counts: BTreeMap<Kind, Counts>,
+    pub graph: String,
+    pub diagram: String,
+    pub path: String,
+}
+
+/// A Δ-cache fill in progress (with the switch on or check).
+struct FillFrame {
+    id: usize,
+    done: bool,
+}
+
+impl FillFrame {
+    fn push() -> Self {
+        Self {
+            id: push(Scope::Fill),
+            done: false,
+        }
+    }
+
+    /// The fill's counts join the frame below and become its note.
+    fn finish(mut self) -> FillNote {
+        self.done = true;
+        let counts = Self::merge_down(self.id);
+        let (graph, diagram) = diagram_key();
+        FillNote {
+            counts,
+            graph,
+            diagram,
+            path: current_path(),
+        }
+    }
+
+    fn merge_down(id: usize) -> BTreeMap<Kind, Counts> {
+        let counts = pop(id).map(|frame| frame.counts).unwrap_or_default();
+        for (kind, counts) in &counts {
+            let counts = counts.clone();
+            with_counts(*kind, |below| below.merge(&counts));
+        }
+        counts
+    }
+}
+
+impl Drop for FillFrame {
+    fn drop(&mut self) {
+        if !self.done {
+            Self::merge_down(self.id);
+        }
+    }
+}
+
+/// A Δ-cache hit on `support` of `graph`: the fill's records join this
+/// frame as `hit:<their disposition>` (`hit:unchecked` for one Δ whose fill
+/// left no note, under every enabled cacheable kind), and one
+/// `UNCONTRACTED_CACHE_HIT` line says what the hit stands for.
+fn hit(note: Option<&FillNote>, graph: &Graph, support: &SuBitGraph) {
+    let switch = uncontracted::switch();
+    let mut stands = BTreeMap::<Kind, Counts>::new();
+    match note {
+        Some(note) => {
+            for (kind, fill) in &note.counts {
+                let counts = stands.entry(*kind).or_default();
+                counts.expected += fill.expected;
+                for (class, n) in &fill.classes {
+                    let class = if class.starts_with("hit:") {
+                        class.clone()
+                    } else {
+                        format!("hit:{class}")
+                    };
+                    counts.add(class, *n);
+                }
+            }
+        }
+        None => {
+            for kind in switch.enabled_kinds() {
+                if kind != Kind::Root {
+                    let counts = stands.entry(kind).or_default();
+                    counts.expected += 1;
+                    counts.add("hit:unchecked", 1);
+                }
+            }
+        }
+    }
+    let records = stands.values().map(|counts| counts.expected).sum::<usize>();
+    for (kind, counts) in &stands {
+        with_counts(*kind, |below| below.merge(counts));
+    }
+    if records == 0 {
+        return;
+    }
+    let (here_graph, diagram) = diagram_key();
+    let fill = stands
+        .iter()
+        .flat_map(|(kind, counts)| {
+            counts.classes.iter().map(move |(class, n)| {
+                format!(
+                    "{}/{}:{n}",
+                    kind.as_str(),
+                    class.strip_prefix("hit:").unwrap_or(class)
+                )
+            })
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    print(format!(
+        "UNCONTRACTED_CACHE_HIT graph={here_graph} diagram={diagram} path={} support={{{}}} child_graph={} records={records} fill={fill} fill_graph={} fill_diagram={} fill_path={}",
+        current_path(),
+        super::plan::join_edge_ids(&super::plan::uv_child_edge_ids(graph, support)),
+        graph.name,
+        note.map_or("none", |note| note.graph.as_str()),
+        note.map_or("none", |note| note.diagram.as_str()),
+        note.map_or("none", |note| note.path.as_str()),
+    ));
+}
+
 /// `cache.counterterm_with` for an R* child Δ (`RStarPlan::rstar_child_counterterm`):
-/// with the switch on or check, the evaluation path names the child inside
-/// the fill (its records' labels). Off: exactly `cache.counterterm_with`.
+/// with the switch on or check, the fill is a ledger frame and leaves its
+/// note with the entry, and a hit counts the fill's records
+/// ([`hit`]); the evaluation path names the child inside the fill. Off
+/// (as without the ledger): exactly `cache.counterterm_with`.
 pub(super) fn through_cache(
     cache: &CountertermCache,
     graph: &Graph,
@@ -316,10 +629,22 @@ pub(super) fn through_cache(
     if uncontracted::switch().mode == Mode::Off {
         return cache.counterterm_with(graph, support, model, settings_key, compute);
     }
-    cache.counterterm_with(graph, support, model, settings_key, || {
+    let (value, lookup) = cache.counterterm_noted(graph, support, model, settings_key, || {
         let _path = ChildPath::enter(graph, support);
-        compute()
-    })
+        let fill = FillFrame::push();
+        let value = compute();
+        let note = fill.finish();
+        value.map(|value| (value, Arc::new(note) as Arc<dyn Any + Send + Sync>))
+    })?;
+    if let CacheLookup::Hit(note) = &lookup {
+        hit(
+            note.as_deref()
+                .and_then(|note| note.downcast_ref::<FillNote>()),
+            graph,
+            support,
+        );
+    }
+    Ok(value)
 }
 
 /// The evaluation path inside an R* child fill.
@@ -360,8 +685,8 @@ pub(super) fn current_path() -> String {
 // ---------------------------------------------------------------------------
 
 /// One diagram's ledger (module doc): opened by the beta per diagram job, or
-/// by a root evaluation outside one. [`Self::close`] prints its lines;
-/// dropped without a close (an error
+/// by a root evaluation outside one. [`Self::close`] prints its lines and
+/// applies check mode's coverage rule; dropped without a close (an error
 /// return or an unwind) it prints them with `outcome=error`.
 pub struct DiagramLedger {
     id: usize,
@@ -396,7 +721,8 @@ impl DiagramLedger {
 
     /// Close the ledger of a diagram whose evaluation succeeded (`ok`) or
     /// failed: one `UNCONTRACTED_DISPOSITION` line per enabled kind, one
-    /// `UNCONTRACTED_SUMMARY` line.
+    /// `UNCONTRACTED_SUMMARY` line; in check mode an `ok` diagram whose
+    /// coverage fails is an error.
     pub fn close(mut self, ok: bool) -> Result<()> {
         self.closed = true;
         let Some(frame) = pop(self.id) else {
@@ -421,6 +747,8 @@ impl Drop for DiagramLedger {
 /// The verdict on one diagram-kind.
 struct Verdict {
     outcome: &'static str,
+    excepted: BTreeMap<String, usize>,
+    failure: Option<String>,
 }
 
 fn list(map: &BTreeMap<String, usize>) -> String {
@@ -434,16 +762,77 @@ fn list(map: &BTreeMap<String, usize>) -> String {
     }
 }
 
-fn verdict(counts: &Counts, ok: bool) -> Verdict {
-    let outcome = if !ok || !counts.with_prefix("error:").is_empty() {
-        // the diagram fails with its own error
-        "error"
-    } else if counts.unchecked() > 0 {
-        "unchecked"
-    } else {
-        "ok"
+fn verdict(
+    counts: &Counts,
+    mode: Mode,
+    ok: bool,
+    graph: &str,
+    kind: Kind,
+    exceptions: &Exceptions,
+) -> Verdict {
+    let mut verdict = Verdict {
+        outcome: "ok",
+        excepted: BTreeMap::new(),
+        failure: None,
     };
-    Verdict { outcome }
+    let errors = counts.with_prefix("error:");
+    let hits = counts.with_prefix("hit:");
+    let unchecked = counts.unchecked();
+    if !ok || !errors.is_empty() || hits.keys().any(|class| class.starts_with("error:")) {
+        // the diagram fails with its own error
+        verdict.outcome = "error";
+        return verdict;
+    }
+    if mode != Mode::Check {
+        if unchecked > 0 || hits.contains_key("unchecked") {
+            verdict.outcome = "unchecked";
+        }
+        return verdict;
+    }
+    let declined = counts.with_prefix("declined:");
+    let covered_hits = hits
+        .iter()
+        .filter(|(class, _)| *class == "compared" || class.starts_with("declined:"))
+        .map(|(_, n)| *n)
+        .sum::<usize>();
+    let covered = counts.compared() + declined.values().sum::<usize>() + covered_hits;
+    if covered != counts.expected || unchecked > 0 {
+        verdict.outcome = "uncovered";
+        verdict.failure = Some(format!(
+            "expected {} records, accounted compared {} + declined {} + cache hits {} = {covered} (unchecked {unchecked}, cache hits by the fill's disposition {})",
+            counts.expected,
+            counts.compared(),
+            declined.values().sum::<usize>(),
+            covered_hits,
+            list(&hits)
+        ));
+        return verdict;
+    }
+    let evidence = counts.compared() + hits.get("compared").copied().unwrap_or(0);
+    if counts.expected > 0 && evidence == 0 {
+        // every record declined: accepted only when every code is named
+        let mut codes = BTreeMap::<String, usize>::new();
+        for (code, n) in &declined {
+            *codes.entry(code.clone()).or_default() += n;
+        }
+        for (class, n) in &hits {
+            if let Some(code) = class.strip_prefix("declined:") {
+                *codes.entry(code.to_owned()).or_default() += n;
+            }
+        }
+        if !codes.is_empty() && codes.keys().all(|code| exceptions.names(graph, kind, code)) {
+            verdict.outcome = "excepted";
+            verdict.excepted = codes;
+        } else {
+            verdict.outcome = "uncovered";
+            verdict.failure = Some(format!(
+                "all {} records declined, none compared (by code: {}); a named exception ({EXCEPTIONS_VARIABLE}: graph, kind, code, reason) is required",
+                counts.expected,
+                list(&codes)
+            ));
+        }
+    }
+    verdict
 }
 
 /// The `UNCONTRACTED_DISPOSITION` line of one diagram-kind.
@@ -455,8 +844,9 @@ fn disposition_line(
     counts: &Counts,
     verdict: &Verdict,
 ) -> String {
+    let hits = counts.with_prefix("hit:");
     format!(
-        "UNCONTRACTED_DISPOSITION graph={graph} diagram={diagram} mode={} kind={} expected={} attempted={} uncontracted={} zero={} compared={} equal={} declined={} no_record={} unchecked={} error={} outcome={}",
+        "UNCONTRACTED_DISPOSITION graph={graph} diagram={diagram} mode={} kind={} expected={} attempted={} uncontracted={} zero={} compared={} equal={} declined={} no_record={} cache_hit={} cache_hit_fill={} unchecked={} error={} excepted={} outcome={}",
         mode.as_str(),
         kind.as_str(),
         counts.expected,
@@ -467,8 +857,11 @@ fn disposition_line(
         counts.equal,
         list(&counts.with_prefix("declined:")),
         list(&counts.no_record),
+        hits.values().sum::<usize>(),
+        list(&hits),
         counts.unchecked(),
         list(&counts.with_prefix("error:")),
+        list(&verdict.excepted),
         verdict.outcome
     )
 }
@@ -483,7 +876,7 @@ fn summary_line(
     outcome: &str,
 ) -> String {
     format!(
-        "UNCONTRACTED_SUMMARY graph={graph} diagram={diagram} mode={} kinds={} attempted={} uncontracted={} zero={} compared={} equal={} declined={} error={} expected={} no_record={} unchecked={} outcome={outcome}",
+        "UNCONTRACTED_SUMMARY graph={graph} diagram={diagram} mode={} kinds={} attempted={} uncontracted={} zero={} compared={} equal={} declined={} error={} expected={} no_record={} cache_hit={} unchecked={} outcome={outcome}",
         mode.as_str(),
         kinds
             .iter()
@@ -499,19 +892,22 @@ fn summary_line(
         list(&total.with_prefix("error:")),
         total.expected,
         list(&total.no_record),
+        total.with_prefix("hit:").values().sum::<usize>(),
         total.unchecked(),
     )
 }
 
-/// The diagram outcome of its kinds' outcomes (the worst).
+/// The diagram outcome of its kinds' outcomes (the worst; `excepted` is ok).
 fn worst<'o>(outcomes: impl IntoIterator<Item = &'o str>) -> &'static str {
     let rank = |outcome: &str| match outcome {
-        "error" => 2,
+        "error" => 3,
+        "uncovered" => 2,
         "unchecked" => 1,
         _ => 0,
     };
     match outcomes.into_iter().map(rank).max().unwrap_or(0) {
-        2 => "error",
+        3 => "error",
+        2 => "uncovered",
         1 => "unchecked",
         _ => "ok",
     }
@@ -548,19 +944,23 @@ pub(crate) fn take_lines() -> Vec<String> {
     LINES.with(|lines| std::mem::take(&mut *lines.borrow_mut()))
 }
 
-/// The lines of a closed diagram frame.
+/// The lines and the coverage rule of a closed diagram frame.
 fn finish(frame: Frame, ok: bool) -> Result<()> {
     let switch = uncontracted::switch();
     if switch.mode == Mode::Off {
         return Ok(());
     }
-    let Scope::Diagram { graph, diagram } = frame.scope;
+    let Scope::Diagram { graph, diagram, .. } = frame.scope else {
+        return Ok(());
+    };
+    let exceptions = exceptions();
     let kinds = switch.enabled_kinds();
     let mut total = Counts::default();
     let mut outcomes = Vec::new();
+    let mut failures = Vec::new();
     for kind in &kinds {
         let counts = frame.counts.get(kind).cloned().unwrap_or_default();
-        let verdict = verdict(&counts, ok);
+        let verdict = verdict(&counts, switch.mode, ok, &graph, *kind, &exceptions);
         print(disposition_line(
             &graph,
             &diagram,
@@ -569,17 +969,28 @@ fn finish(frame: Frame, ok: bool) -> Result<()> {
             &counts,
             &verdict,
         ));
+        if let Some(failure) = &verdict.failure {
+            failures.push(format!("kind={}: {failure}", kind.as_str()));
+        }
         outcomes.push(verdict.outcome);
         total.merge(&counts);
     }
+    let outcome = worst(outcomes);
     print(summary_line(
         &graph,
         &diagram,
         switch.mode,
         &kinds,
         &total,
-        worst(outcomes),
+        outcome,
     ));
+    if ok && !failures.is_empty() {
+        return Err(eyre!(
+            "UNCONTRACTED_DISPOSITION graph={graph} diagram={diagram} mode={}: the check does not cover the diagram: {}",
+            switch.mode.as_str(),
+            failures.join("; ")
+        ));
+    }
     Ok(())
 }
 
