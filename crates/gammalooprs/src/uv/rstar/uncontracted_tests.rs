@@ -762,12 +762,10 @@ fn switch_parses_every_form() {
     );
     let root = Switch::parse(Some("on:root, root")).unwrap();
     assert_eq!(root.enabled_kinds(), vec![Kind::Root], "duplicates ignored");
-    let inert = Switch::parse(Some("on:quotient,surrogate,insertion")).unwrap();
+    // U7c: `surrogate` is built (listed only); quotient and insertion stay inert
+    let inert = Switch::parse(Some("on:quotient,insertion")).unwrap();
     assert!(inert.enabled_kinds().is_empty());
-    assert_eq!(
-        inert.inert_kinds(),
-        vec![Kind::Quotient, Kind::Surrogate, Kind::Insertion]
-    );
+    assert_eq!(inert.inert_kinds(), vec![Kind::Quotient, Kind::Insertion]);
     assert_eq!(
         inert.cache_key_suffix(),
         None,
@@ -995,8 +993,9 @@ fn designed_refusals_are_a_closed_list() {
         );
     }
     // U7b adds no designed refusal; the U7a delta adds `one_loop_tree_cut`
-    // R2-I3 removes `sigma`, `root_crown_paired`, `root_normalisation_momentum`
-    assert_eq!(DESIGNED_LOCAL.len(), 12, "{DESIGNED_LOCAL:?}");
+    // R2-I3 removes `sigma`, `root_crown_paired`, `root_normalisation_momentum`;
+    // U7c (K5) adds `surrogate_ir_hard`
+    assert_eq!(DESIGNED_LOCAL.len(), 13, "{DESIGNED_LOCAL:?}");
     assert_eq!(uncontracted::DESIGNED_VAKINT.len(), 8);
     for code in ["open_root", "insertion_mass_symbol", "one_loop_tree_cut"] {
         assert!(DESIGNED_LOCAL.contains(&code), "{code}");

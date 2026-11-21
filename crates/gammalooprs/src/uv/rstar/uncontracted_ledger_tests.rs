@@ -403,7 +403,7 @@ fn check_with_the_pint6_dump_and_inert_lists_are_refused() {
     // a list without a kind this build emits would build no record
     assert!(
         init(
-            Switch::new(Mode::Check, &[Kind::Quotient, Kind::Surrogate]),
+            Switch::new(Mode::Check, &[Kind::Quotient, Kind::Insertion]),
             None,
             None,
             || false,
