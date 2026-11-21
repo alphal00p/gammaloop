@@ -379,6 +379,21 @@ fn undefined_number(view: AtomView<'_>) -> Option<String> {
                     part.to_owned().to_canonical_string()
                 ));
             }
+            // a floating-point coefficient (Numerical mode) with a NaN or
+            // infinite real or imaginary part: Symbolica keeps it under its
+            // own Float tag, not as Infinity / Indeterminate
+            AtomView::Num(n)
+                if matches!(
+                    n.get_coeff_view(),
+                    CoefficientView::Float(re, im)
+                        if !re.to_float().is_finite() || !im.to_float().is_finite()
+                ) =>
+            {
+                found = Some(format!(
+                    "the non-finite float {}",
+                    part.to_owned().to_canonical_string()
+                ));
+            }
             AtomView::Pow(p) => {
                 let (base, exponent) = p.get_base_exp();
                 let positive = symbolica::domains::rational::Rational::try_from(exponent)
@@ -582,7 +597,9 @@ mod tests {
     /// result: the zero base under -sqrt(2) and -π (the forms an identically
     /// vanishing base under such an exponent leaves), 0^y, a division by a
     /// literal zero (complex infinity) and 0/0 (indeterminate); the twins with
-    /// a base 1 (1^(-sqrt(2)) = 1) pass.
+    /// a base 1 (1^(-sqrt(2)) = 1) pass. Floating-point coefficients (the
+    /// Numerical mode's): NaN, +inf and -inf (as real or imaginary part) are
+    /// refused ("the non-finite float"), 1.5 and 1e300 pass.
     #[test]
     fn a_number_that_is_no_value_is_refused() {
         let eps = "gammalooprs::ε";
@@ -603,6 +620,27 @@ mod tests {
         }
         for result in [format!("{eps}^-2*1^(-2^(1/2))"), format!("{eps}^-2*2^(-𝜋)")] {
             check(&result).unwrap_or_else(|e| panic!("{result}: {e}"));
+        }
+        let v = marked();
+        let pole = atom(&format!("{eps}^-2"));
+        let with =
+            |c: Atom| check_result(&v, &v.prefactor.total(), &settings(), &(&pole * c), false);
+        for (what, c) in [
+            ("NaN", Atom::num(f64::NAN)),
+            ("+inf", Atom::num(f64::INFINITY)),
+            ("-inf", Atom::num(f64::NEG_INFINITY)),
+            ("i NaN", Atom::num(f64::NAN) * Atom::i()),
+        ] {
+            match with(c) {
+                Err(FactorizedError::Evaluation { detail }) => assert!(
+                    detail.starts_with("result check: the non-finite float "),
+                    "{what}: {detail}"
+                ),
+                other => panic!("{what}: expected Evaluation, got {other:?}"),
+            }
+        }
+        for c in [1.5, 1e300] {
+            with(Atom::num(c)).unwrap_or_else(|e| panic!("{c}: {e}"));
         }
     }
 
