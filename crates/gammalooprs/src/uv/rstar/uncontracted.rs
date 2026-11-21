@@ -3403,7 +3403,13 @@ fn build(
         .chain(vertices.iter().map(|vertex| &vertex.factor))
         .chain(insertions.iter().map(|insertion| &insertion.factor))
         .collect::<Vec<_>>();
-    let ports = slots_of(&factor_atoms, &legs);
+    // K5: a surrogate record's spectator slots (a chain end's half-edge
+    // outside the record) are ports too
+    let mut port_hedges = legs.clone();
+    if let Some(k5) = &k5_cycles {
+        port_hedges.extend(k5.spectators.iter().copied());
+    }
+    let ports = slots_of(&factor_atoms, &port_hedges);
     let (projector, scalars) = match &frame {
         Frame::Root {
             closure,
@@ -3450,7 +3456,7 @@ fn build(
         closed_cycles(&table, &internal, LineKind::Fermion),
         closed_cycles(&table, &internal, LineKind::Ghost),
     );
-    let original_cycles = k5_cycles.unwrap_or(original_cycles);
+    let original_cycles = k5_cycles.map_or(original_cycles, |k5| k5.original_cycles);
     let degree = match &frame {
         Frame::IrHard { degree, .. } => u32::try_from(*degree)
             .map_err(|_| Decline::new("taylor", format!("hard Taylor order {degree}")))?,
