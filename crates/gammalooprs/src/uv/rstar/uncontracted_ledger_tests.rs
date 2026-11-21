@@ -989,6 +989,7 @@ fn a_kind_whose_route_is_off_is_refused() {
     let routes = |uv_children_rstar, ir_hard_child| ledger::Routes {
         uv_children_rstar,
         ir_hard_child,
+        ..ledger::Routes::PRODUCTION
     };
     for mode in [Mode::Check, Mode::On] {
         let child = Switch::new(mode, &[Kind::Child]);
@@ -1030,6 +1031,67 @@ fn a_kind_whose_route_is_off_is_refused() {
         )
         .is_ok()
     );
+}
+
+/// Helper VH's C7, settings exception E2 (c7-normalisation.md sections
+/// 7-8): with the switch on or check, every quotient route but `rstar` is
+/// refused at the initialisation, for every kind list (each kind's records
+/// carry child Δs whose R̄ sees the quotient), and so is a value
+/// `GAMMALOOP_IR_QUOTIENT` itself refuses; off reads no route.
+/// (`uncontracted_init_refusal_tests` has the environment's half.)
+#[test]
+fn a_quotient_route_other_than_rstar_is_refused() {
+    use super::top_mass::IrQuotient;
+    let routes = |ir_quotient| ledger::Routes {
+        ir_quotient,
+        ..ledger::Routes::PRODUCTION
+    };
+    for mode in [Mode::Check, Mode::On] {
+        for kinds in [
+            &[Kind::Root][..],
+            &[Kind::Child],
+            &[Kind::IrHard],
+            &ALL_KINDS,
+        ] {
+            let switch = Switch::new(mode, kinds);
+            for (route, name) in [
+                (IrQuotient::Massive, "massive"),
+                (IrQuotient::Off, "off"),
+                (IrQuotient::Check, "check"),
+                (IrQuotient::Auto, "auto"),
+            ] {
+                let error =
+                    ledger::initialise(switch, None, None, || routes(Ok(route)), || false, None)
+                        .unwrap_err();
+                assert!(
+                    error.contains(&format!("GAMMALOOP_IR_QUOTIENT={name} is refused"))
+                        && error.contains("E2"),
+                    "{error}"
+                );
+            }
+            assert!(
+                ledger::initialise(
+                    switch,
+                    None,
+                    None,
+                    || routes(Ok(IrQuotient::Rstar)),
+                    || false,
+                    None
+                )
+                .is_ok()
+            );
+            let error = ledger::initialise(
+                switch,
+                None,
+                None,
+                || routes(Err("GAMMALOOP_IR_QUOTIENT must be one of ...".into())),
+                || false,
+                None,
+            )
+            .unwrap_err();
+            assert!(error.contains("GAMMALOOP_IR_QUOTIENT must be"), "{error}");
+        }
+    }
 }
 
 /// values-and-off 2: the timing switch is validated at the initialisation in

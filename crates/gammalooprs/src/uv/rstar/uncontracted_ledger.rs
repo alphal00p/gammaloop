@@ -243,19 +243,35 @@ pub(crate) fn parse_timing(value: Option<&str>) -> std::result::Result<bool, Str
 /// zero-comparison lens, finding 2): `child` records exist only when UV
 /// children take the R* route (`GAMMALOOP_UV_CHILDREN` not `massive`),
 /// `ir-hard` records only on the IR hard child route (`GAMMALOOP_IR_HARD`
-/// `child` or `child-check`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// `child` or `child-check`). `ir_quotient` is the decorated IR quotient's
+/// route (`GAMMALOOP_IR_QUOTIENT`; `Err`: a value that variable refuses),
+/// which the records of every kind can see ([`initialise`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Routes {
     pub uv_children_rstar: bool,
     pub ir_hard_child: bool,
+    pub ir_quotient: std::result::Result<super::top_mass::IrQuotient, String>,
 }
 
 impl Routes {
-    /// The production routes (both on).
+    /// The production routes (both on, the quotient by R*).
     pub(crate) const PRODUCTION: Routes = Routes {
         uv_children_rstar: true,
         ir_hard_child: true,
+        ir_quotient: Ok(super::top_mass::IrQuotient::Rstar),
     };
+}
+
+/// The value of `GAMMALOOP_IR_QUOTIENT` that selects `route`.
+fn ir_quotient_name(route: super::top_mass::IrQuotient) -> &'static str {
+    use super::top_mass::IrQuotient;
+    match route {
+        IrQuotient::Off => "off",
+        IrQuotient::Massive => "massive",
+        IrQuotient::Rstar => "rstar",
+        IrQuotient::Auto => "auto",
+        IrQuotient::Check => "check",
+    }
 }
 
 /// What the switch's initialisation checks besides the switch itself
@@ -266,7 +282,9 @@ impl Routes {
 /// nothing), the PINT6 dump (refused in on and check: every record would
 /// decline `pint6_dump`; since the pre-review of the U7a delta, finding 7,
 /// mode on too) and the exception list (on and check: mode on applies the
-/// all-declined rule too; read here). With the switch off nothing else is
+/// all-declined rule too; read here), and `GAMMALOOP_IR_QUOTIENT` other
+/// than `rstar` (refused in on and check: helper VH's C7 settings
+/// exception E2). With the switch off nothing else is
 /// read, as before the switch existed. `pint6` is whether
 /// `PINT6_CLOSURE_DUMP` is set, `routes` the routes in force; the values
 /// are the environment's.
@@ -322,6 +340,39 @@ pub(crate) fn initialise(
                     .join(","),
                 kind.as_str()
             ));
+        }
+    }
+    // helper VH's C7, settings exception E2 (c7-normalisation.md sections
+    // 7-8): only the R* quotient route. The massive route's Z̃_F(G/γ)
+    // (`massive`, `off`, `check`, which uses the massive value, and `auto`,
+    // massive for every quotient of at most four loops) carries non-local
+    // log(m_uv_vacuum) pieces that cancel only in the complete sum
+    // (`ir_hard_child`'s `equal_mod_log_mUV`), and m_uv_vacuum is not a
+    // mass symbol of the records (no `insertion_mass_symbol`). Z̃ enters
+    // the R̄ of every UV child with an IR correction (the IR rearrangement
+    // of the child's R*), whose Δ the records of EVERY kind carry as `ct:`
+    // insertions (root: the root's children; child: the child's; ir-hard:
+    // the hard part's), and it multiplies the K3 values after the call. So
+    // refused for any kind list, at start-up: a per-record decline would be
+    // setting-wide (pre-review of the U7a delta, finding 7).
+    match &routes.ir_quotient {
+        Ok(super::top_mass::IrQuotient::Rstar) => {}
+        Ok(route) => {
+            return Err(format!(
+                "{}={}:{} with GAMMALOOP_IR_QUOTIENT={} is refused: the massive quotient route's Z̃_F carries non-local log(m_uv_vacuum) pieces that cancel only in the complete sum, and Z̃ enters the Δ of every UV child with an IR correction, which the records of every kind carry as insertions (C7 settings exception E2); unset GAMMALOOP_IR_QUOTIENT or set it to rstar (production)",
+                uncontracted::VARIABLE,
+                switch.mode.as_str(),
+                switch
+                    .enabled_kinds()
+                    .iter()
+                    .map(|kind| kind.as_str())
+                    .collect::<Vec<_>>()
+                    .join(","),
+                ir_quotient_name(*route)
+            ));
+        }
+        Err(error) => {
+            return Err(format!("{}: {error}", uncontracted::VARIABLE));
         }
     }
     if pint6() {
