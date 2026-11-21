@@ -401,7 +401,7 @@ fn the_beta_k1_l5_51_records_with_insertions_equal_their_values() {
 
 /// The depth of a marked value is a number of ε terms between 1 and
 /// MARKED_MAX_TERMS (128) with the closure entry's insertion raise. The
-/// gate's witness, the L2-22 K1 root (vendored k1-root, depth 2) with only
+/// witness, the L2-22 K1 root (vendored k1-root, depth 2) with only
 /// its depth set to usize::MAX, returned a zero double pole (the depth was
 /// cast to -1); now it is refused (Closure, "the depth .. is out of range"),
 /// by validation (text and typed records alike) and by the entry. Refused
@@ -639,7 +639,7 @@ fn retain_keeps_the_exact_product_with_two_insertions() {
 }
 
 /// An insertion UNDEFINED after D -> 4-2ε is refused; its two defined forms
-/// agree. The gate's witness: the K2 child of L3-036 with its coefficient's
+/// agree. The witness: the K2 child of L3-036 with its coefficient's
 /// 1/ε replaced by 1/(D-4+2ε) (identically zero denominator; the entry
 /// returned 0 before), refused (Insertion at vertex 4, "a denominator
 /// vanishes identically after D -> 4-2ε") by validation and by the entry. The

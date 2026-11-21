@@ -1644,9 +1644,9 @@ pub(crate) const INSERTION_MAX_EPSILON_POWER: u64 = 64;
 /// The cap on the SUM of the exact pole orders of a record's insertions, the
 /// closure entry's depth raise (the only entry that raises a depth by it: the
 /// direct, ports and vacuum entries hand the insertions to vakint inside the
-/// integrand): 64. Real records stay far below: the 83 insertions of the R*
-/// producer's fixture sets have totals of at most 3 per record (the five-loop
-/// k1-l5 records), with at most 4 insertions per record (k5-stress). An R*
+/// integrand): 64. Real records stay far below: the totals are at most 4 in
+/// the producer's records (L - 1 at L loops: the five-loop L5_000121), with
+/// at most 4 insertions per record (k5-stress). An R*
 /// record's children are disjoint subgraphs and an l-loop child's
 /// counterterm has poles up to ε^-l, so the total is at most L - 1, 5 at six
 /// loops; even the producer's largest six-loop pole part, ε^-6, on each of 4

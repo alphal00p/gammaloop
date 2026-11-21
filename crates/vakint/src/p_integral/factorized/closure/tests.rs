@@ -3181,7 +3181,7 @@ fn vakint_epsilon() -> symbolica::atom::Symbol {
     crate::utils::vakint_macros::vk_symbol!(&VakintSettings::default().epsilon_symbol)
 }
 
-/// The gate's F1: `vakint::closure_lambda` AND `vakint::closure_tensor_0` in
+/// F1: `vakint::closure_lambda` AND `vakint::closure_tensor_0` in
 /// EVERY atom of a closure record, one case per field, with the exact message.
 #[test]
 fn closure_lambda_and_closure_tensor_0_are_refused_in_every_field() {
@@ -3249,7 +3249,7 @@ fn closure_lambda_and_closure_tensor_0_are_refused_in_every_field() {
     }
 }
 
-/// The gate's F1 for the separately supplied prefactor ARGUMENT of every
+/// F1 for the separately supplied prefactor ARGUMENT of every
 /// entry (A-17): closure (l2_root), evaluate_factorized, the ports entry and
 /// the vacuum entry (a v3 direct record): refused with the exact message;
 /// the record with a clean argument passes the argument checks.
