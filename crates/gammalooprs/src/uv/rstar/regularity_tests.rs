@@ -639,3 +639,75 @@ fn a_refusal_is_a_fallback_under_the_guard_and_strict() -> Result<()> {
     }
     Ok(())
 }
+
+/// U7b: the uncontracted K3 path (`GAMMALOOP_UNCONTRACTED_NUMERATOR`, kind
+/// `IrHard`) integrates the remainders of H(γ) only after the round-5
+/// certificate, so it honours the same refusals and the same raised bounds:
+/// Astra's three −117/64 witnesses and the hard-vertex matrix row, with K3
+/// on and in check, the uncontracted strict switch on (a K3 error fails the
+/// run instead of falling back).
+mod k3 {
+    use super::super::super::uncontracted::{
+        Kind, Mode, Switch, with_capture, with_strict, with_switch,
+    };
+    use super::*;
+
+    /// The child route with K3 `mode`: the value, the depth counts and the
+    /// number of K3 attempts reported.
+    fn child_k3(case: &Case, mode: Mode) -> Result<(Atom, DepthCounts, usize)> {
+        let (result, captured) = with_switch(Switch::new(mode, &[Kind::IrHard]), || {
+            with_strict(true, || with_capture(|| projected(case, "child", FIXED)))
+        });
+        let (value, counts) = result?;
+        let k3 = captured
+            .iter()
+            .filter(|captured| captured.kind == Kind::IrHard)
+            .count();
+        Ok((value, counts, k3))
+    }
+
+    #[test]
+    fn the_uncontracted_k3_path_reads_the_certified_bound() -> Result<()> {
+        for (label, dot) in [
+            ("tensor-hidden", tensor_hidden()),
+            ("prefactor", hard_pole("numerator_prefactor")),
+            ("dim-quotient", dim_quotient()),
+        ] {
+            let case = Case::new(&dot, None)?;
+            let (today, _) = projected(&case, "closed", FIXED)?;
+            pinned(label, &today, &[(-1, q(-117, 64))], true)?;
+            for mode in [Mode::On, Mode::Check] {
+                let cell = format!("{label} K3 {mode:?}");
+                let (child, counts, k3) = child_k3(&case, mode)?;
+                eprintln!("IRH_R6_K3 {cell} k3_attempts={k3} counts={counts:?}");
+                ensure_same(&cell, &child, &today)?;
+                ensure_raised(&cell, &counts)?;
+                ensure!(k3 >= 1, "{cell}: the K3 path was not exercised");
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn the_uncontracted_k3_path_honours_the_refusals() -> Result<()> {
+        let expected = [None, Some("symbol_in_denominator"), Some("unresolved_tensor")];
+        for (spelling, reason) in SPELLINGS.into_iter().zip(expected) {
+            let base = scaled(L3_006, &[("v0", 4), ("v1", -1)]);
+            let dot = modify(&base, "v0", "numerator", times(&spelling.text()));
+            let dot = modify(&dot, "graph", "numerator", times(&spelling.text()));
+            let case = Case::new(&dot, None)?;
+            let (today, _) = projected(&case, "closed", FIXED)?;
+            for mode in [Mode::On, Mode::Check] {
+                let cell = format!("v0 {spelling:?} K3 {mode:?}");
+                let (child, counts, k3) = child_k3(&case, mode)?;
+                eprintln!("IRH_R6_K3 {cell} k3_attempts={k3} counts={counts:?}");
+                ensure_same(&cell, &child, &today)?;
+                ensure!(counts.exceeded == 0 && counts.reason == reason, "{cell}: {counts:?}");
+                if reason.is_some() {
+                    ensure!(counts.refused >= 1, "{cell}: {counts:?}");
+                }
+            }
+        }
+        Ok(())
+    }
+}

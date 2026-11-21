@@ -1810,7 +1810,8 @@ impl<'a> Evaluation<'a> {
                 let limit = super::closed::budget_extra_bytes()
                     .and_then(|extra| super::expression::process_rss_now().map(|rss| rss + extra));
                 // IRH-DEPTH: `guarded` declines every error but the strict
-                // alarm (super::depth::DepthAlarm), which stays fatal: raised by
+                // alarm (super::depth::DepthAlarm; on U7b also an uncontracted
+                // CHECK failure, super::uncontracted::Failure), which stays fatal: raised by
                 // this evaluation or by any nested one (a decorated quotient's
                 // or a UV child's R*, also replayed by the counterterm cache).
                 super::closed::guarded(limit, super::expression::memory_release(), || {

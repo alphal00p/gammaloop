@@ -348,10 +348,14 @@ pub(super) fn alarm(message: String) -> eyre::Report {
 }
 
 /// Whether `error` carries a [`DepthAlarm`] anywhere in its chain, also one
-/// replayed by the counterterm cache.
+/// replayed by the counterterm cache. U7b: also a failure of the
+/// uncontracted switch that fails the diagram by design
+/// ([`super::uncontracted::Failure`]: a K3 CHECK mismatch, an undesigned
+/// refusal), which stays fatal through the same boundaries.
 pub(super) fn is_alarm(error: &eyre::Report) -> bool {
     error.chain().any(|cause| {
         cause.is::<DepthAlarm>()
+            || cause.is::<super::uncontracted::Failure>()
             || cause
                 .downcast_ref::<crate::uv::counterterm_cache::CachedError>()
                 .is_some_and(|cached| is_alarm(cached.cause()))

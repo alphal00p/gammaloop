@@ -1135,6 +1135,15 @@ mod tests {
         });
         let error = alarm.expect_err("the alarm must not be declined");
         assert!(super::super::depth::is_alarm(&error), "{error:#}");
+        // U7b: a failure of the uncontracted switch that fails the diagram by
+        // design (a K3 CHECK mismatch) is not declined either, same text.
+        let check = guarded::<u8>(None, None, || {
+            Err(super::super::uncontracted::failure("UNCONTRACTED_CHECK: test".into()))
+                .map_err(|error| error.wrap_err("while applying R* to a quotient"))
+        });
+        let error = check.expect_err("a K3 CHECK mismatch must not be declined");
+        assert!(super::super::depth::is_alarm(&error), "{error:#}");
+        assert!(format!("{error:#}").contains("UNCONTRACTED_CHECK: test"), "{error:#}");
         Ok(())
     }
 }
