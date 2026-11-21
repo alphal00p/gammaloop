@@ -61,6 +61,8 @@ mod top_mass;
 mod uncontracted;
 #[cfg(test)]
 mod uncontracted_init_refusal_tests;
+#[cfg(test)]
+mod uncontracted_k5_tests;
 mod uncontracted_ledger;
 #[cfg(test)]
 mod uncontracted_ledger_tests;
