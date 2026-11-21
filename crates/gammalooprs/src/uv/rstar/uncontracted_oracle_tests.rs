@@ -709,8 +709,8 @@ fn diagram_from_graph(
 /// check equal, on == off. L4-49 record 7 carries two poled insertions: its
 /// value is nonzero and vakint's pole order is their SUM (R1). Every other
 /// root record (the one-loop remainders, no fixture) must be evaluated too,
-/// except L4-49's one-loop remainder, which vakint declines today
-/// (`closure: every line is massive`).
+/// except L4-49's one-loop remainder, which vakint declines today (see
+/// [`k1_quick_l4_49_one_loop_remainder_is_evaluated`]).
 #[test]
 #[ignore = "reads k1-quick from GAMMALOOP_U7A_FIXTURES_DIR (about 10 min single core)"]
 fn k1_quick_l4_40_42_49_from_the_graph() -> Result<()> {
@@ -1285,6 +1285,55 @@ fn site_zero_insertion_is_zero() -> Result<()> {
             attempt.outcome
         );
         ensure!(attempt.value() == Some(Atom::Zero), "value 0");
+        Ok(())
+    })
+}
+
+/// FINDING (review B1): a malformed child counterterm (an open slot on a
+/// half-edge that is not at its vertex) is an emitter bug, not a designed
+/// refusal. It must not end as a silent per-record fallback (`declined`);
+/// today it does.
+#[test]
+#[ignore = "review finding B1: a malformed record is declined (silent fallback) instead of being an error"]
+fn site_malformed_insertion_is_not_a_silent_fallback() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        assume_defaults()?;
+        let case = l4_40()?;
+        // a metric on two half-edges that are not at the ct: vertex
+        let stray = parse(
+            "spenso::{symmetric,linear,real,spenso::tensor}::g(spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(9100,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(9101,1)))",
+        )?;
+        let mut deltas = deltas_of(&case);
+        for delta in deltas.values_mut() {
+            *delta = &*delta * &stray;
+        }
+        let result = site_attempt(&case, &deltas, None, None);
+        match result {
+            Err(_) => Ok(()),
+            Ok(attempt) => Err(eyre!(
+                "a malformed record ends as {:?}: a fallback that hides the bug",
+                attempt.outcome
+            )),
+        }
+    })
+}
+
+/// FINDING: the one-loop root remainder of L4 diagram 49 (no fixture: today's
+/// path takes it whole, `one_loop_tree_cut`) is declined by vakint's closure
+/// entry, `closure: every line is massive: not a closure`. That refusal is
+/// not in the format's list; in on mode it is a silent per-record fallback.
+#[test]
+#[ignore = "finding: vakint declines L4-49's one-loop K1 remainder (every line is massive); reads GAMMALOOP_U7A_FIXTURES_DIR"]
+fn k1_quick_l4_49_one_loop_remainder_is_evaluated() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        assume_defaults()?;
+        let base = fixtures_dir()?.join("k1-quick/L4-49/1");
+        let bare = record(&read(&base.join("input.txt"))?)?;
+        let diagram = branch(&read(&base.join("raw/diagram-000049.dot"))?, &bare)?;
+        let (_, captured) = root_run(&diagram, Some(check_root()))?;
+        assert_accounted("L4-49", &captured, &[])?;
         Ok(())
     })
 }
