@@ -144,3 +144,10 @@ pub use top_mass::{
 };
 pub use uncontracted_ledger::DiagramLedger;
 pub use uv::MassiveUvEvaluator;
+
+/// `GAMMALOOP_UNCONTRACTED_NUMERATOR`'s initialisation (call at start-up for
+/// an early error): a bad value or `GAMMALOOP_UNCONTRACTED_STRICT=0` is
+/// refused.
+pub fn validate_uncontracted() -> eyre::Result<()> {
+    uncontracted::validate()
+}

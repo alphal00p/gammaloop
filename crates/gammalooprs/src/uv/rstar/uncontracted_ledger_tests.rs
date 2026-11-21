@@ -1,9 +1,14 @@
 //! U7a delta, lane A (accounting): the per-diagram ledger of
 //! `GAMMALOOP_UNCONTRACTED_NUMERATOR` ([`super::uncontracted_ledger`]):
 //!
+//! * R2-I1 (helper VH round 2): strict is the only behaviour of on and
+//!   check; `GAMMALOOP_UNCONTRACTED_STRICT=0` is refused;
 //! * U7a.4 (Astra's U7a verdict finding 4, R2-M2, R2-M3): one disposition line per diagram and
 //!   kind (also when nothing is expected), the summary per diagram, the
 //!   child records' evaluation path;
+//!
+//! The environment tests set the switch's variables in their own process
+//! (cargo nextest runs every test in one; they refuse to run elsewhere).
 
 use std::{collections::BTreeSet, sync::Arc};
 
@@ -203,6 +208,126 @@ fn disposition<'l>(lines: &'l [String], kind: Kind) -> Result<&'l str> {
         kind.as_str()
     );
     Ok(found[0])
+}
+
+fn agree(a: &Atom, b: &Atom) -> bool {
+    a == b || (a - b).expand().is_zero() || uncontracted::agree(a, b).unwrap_or(false)
+}
+
+/// Tests that set the switch's environment: only in a process of their own.
+fn own_process() -> Result<()> {
+    ensure!(
+        std::env::var_os("NEXTEST").is_some(),
+        "this test sets process environment variables: run it under cargo nextest (one process per test)"
+    );
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// R2-I1: strict is the only behaviour
+// ---------------------------------------------------------------------------
+
+#[test]
+fn strict_is_the_only_behaviour() {
+    for accepted in [None, Some(""), Some("1"), Some(" on ")] {
+        assert!(ledger::parse_strict(accepted).is_ok(), "{accepted:?}");
+    }
+    for refused in ["0", "off", " 0 ", "2", "yes"] {
+        let error = ledger::parse_strict(Some(refused)).unwrap_err();
+        assert!(error.contains(uncontracted::STRICT_VARIABLE), "{error}");
+    }
+    // refused in every mode, off included (the variable has no meaning left)
+    for switch in [
+        Switch::OFF,
+        Switch::new(Mode::On, &ROOT_CHILD),
+        Switch::new(Mode::Check, &ROOT_CHILD),
+    ] {
+        assert!(ledger::initialise(switch, Some("0")).is_err());
+        assert!(ledger::initialise(switch, Some("1")).is_ok());
+    }
+}
+
+/// `GAMMALOOP_UNCONTRACTED_STRICT=0` refuses the switch where it
+/// initialises: the beta's start-up check and the first read (at the base,
+/// on with STRICT=0 was the non-strict mode, whose errors fell back).
+#[test]
+fn strict_zero_in_the_environment_is_refused() -> Result<()> {
+    own_process()?;
+    unsafe {
+        std::env::set_var(uncontracted::VARIABLE, "on:root,child");
+        std::env::set_var(uncontracted::STRICT_VARIABLE, "0");
+    }
+    let error = super::validate_uncontracted()
+        .err()
+        .ok_or_else(|| eyre!("the switch initialised with STRICT=0"))?;
+    ensure!(
+        format!("{error}").contains("R2-I1"),
+        "the refusal does not say why: {error}"
+    );
+    let read = std::panic::catch_unwind(uncontracted::switch);
+    ensure!(read.is_err(), "the switch was read with STRICT=0: {read:?}");
+    Ok(())
+}
+
+/// An error outcome in mode on fails the diagram (at the base it fell back
+/// to today's path unless STRICT=1), and so in check mode; a designed
+/// decline still falls back to today's path.
+#[test]
+fn on_mode_error_fails_the_diagram() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let on = Switch::new(Mode::On, &ROOT_CHILD);
+        let off = run(L2_22, Switch::OFF, None, None)?.value?;
+        let clean = run(L2_22, on, None, None)?;
+        ensure!(agree(&clean.value?, &off), "on differs from off");
+        for mode in [Mode::On, Mode::Check] {
+            let failed = ledger::with_fault(Kind::Root, "routing", false, || {
+                run(L2_22, Switch::new(mode, &ROOT_CHILD), None, None)
+            })?;
+            let error = match failed.value {
+                Ok(value) => {
+                    return Err(eyre!(
+                        "{}: an error outcome took today's path: {value}",
+                        mode.as_str()
+                    ));
+                }
+                Err(error) => format!("{error:#}"),
+            };
+            ensure!(
+                error.contains("outcome=error:routing"),
+                "{}: {error}",
+                mode.as_str()
+            );
+            let summaries = lines_of(&failed.lines, "UNCONTRACTED_SUMMARY ");
+            ensure!(
+                summaries.len() == 1
+                    && field(summaries[0], "outcome") == Some("error")
+                    && field(summaries[0], "error") == Some("routing:1"),
+                "{}: the summary does not report the error: {summaries:#?}",
+                mode.as_str()
+            );
+            let root = disposition(&failed.lines, Kind::Root)?;
+            ensure!(
+                field(root, "outcome") == Some("error"),
+                "{}: {root}",
+                mode.as_str()
+            );
+        }
+        let declined = ledger::with_fault(Kind::Root, "zero_loops", true, || {
+            run(L2_22, on, None, None)
+        })?;
+        ensure!(
+            agree(&declined.value?, &off),
+            "a designed decline must take today's path"
+        );
+        let root = disposition(&declined.lines, Kind::Root)?;
+        ensure!(
+            field(root, "outcome") == Some("ok")
+                && field(root, "declined").is_some_and(|d| d.starts_with("zero_loops:")),
+            "{root}"
+        );
+        Ok(())
+    })
 }
 
 // ---------------------------------------------------------------------------
