@@ -1206,14 +1206,18 @@ fn the_closure_kind_refuses_what_it_does_not_support() {
     let mut v = l2_root(1, true);
     v.prefactor.scalars = atom(&format!("UFO::gs^2*{R}"));
     refused(&v, "reference mass");
-    // an open bispinor port
+    // a bispinor port in no factor: refused by the port rule (the open-slot
+    // rule itself: `refusal_open_spinor_slot`)
     let mut v = l2_child(1);
     v.ports.push(atom(&format!(
         "spenso::{{spenso::representation,spenso::self_dual}}::bis(4,{HEDGE}(150,1))"
     )));
     match v.validate() {
-        Err(FactorizedError::Closure { .. }) | Err(_) => {}
-        Ok(()) => panic!("an open bispinor port validated"),
+        Err(FactorizedError::Ports { detail }) => assert!(
+            detail.starts_with("port ") && detail.contains("does not occur in the factors"),
+            "{detail}"
+        ),
+        other => panic!("a bispinor port in no factor: {other:?}"),
     }
     // not a closure record
     let mut v = l2_root(1, true);
