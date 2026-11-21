@@ -3699,3 +3699,361 @@ fn refusal_compact_slash_under_a_taylor_step() {
         other => panic!("expected the compact-slash refusal, got {other:?}"),
     }
 }
+
+// Priority (3): every other designed refusal of the closure kind, the same
+// rule (variant + detail prefix on a minimal input, the twin accepted).
+
+/// `bad.validate()` = `Closure` whose detail starts with `prefix` and
+/// contains `contains`; `good.validate()` = Ok.
+fn assert_closure_refusal_with(
+    bad: &FactorizedNumerator,
+    good: &FactorizedNumerator,
+    prefix: &str,
+    contains: &str,
+) {
+    good.validate()
+        .unwrap_or_else(|e| panic!("the twin without the defect is refused: {e}"));
+    match bad.validate() {
+        Err(FactorizedError::Closure { detail }) => assert!(
+            detail.starts_with(prefix) && detail.contains(contains),
+            "{}: {detail}\n(expected prefix {prefix:?} containing {contains:?})",
+            bad.label
+        ),
+        other => panic!("{}: expected Closure {prefix:?}, got {other:?}", bad.label),
+    }
+}
+
+/// The record with one change.
+fn with(
+    base: &FactorizedNumerator,
+    change: impl FnOnce(&mut FactorizedNumerator),
+) -> FactorizedNumerator {
+    let mut v = base.clone();
+    change(&mut v);
+    v
+}
+
+#[test]
+fn refusal_original_cycles_weights() {
+    let good = l2_root(1, true);
+    let bad = with(&good, |v| v.prefactor.loop_sign = -1);
+    assert_closure_refusal(
+        &bad,
+        &good,
+        "with original_cycles the prefactor has loop_sign=1, nf_power=0, overall 1",
+    );
+}
+
+#[test]
+fn refusal_more_cycles_than_original_cycles() {
+    let value =
+        FactorizedNumerator::from_text(include_str!("../fixtures/wh-k2-child-ins.record.txt"))
+            .unwrap();
+    let good = with(&value, |v| {
+        spec(v).original_cycles = Some((1, 1));
+        v.insertions[0].cycles = (1, 0);
+    });
+    let bad = with(&good, |v| v.insertions[0].cycles = (2, 0));
+    assert_closure_refusal(&bad, &good, "the carried graph and its insertions have ");
+}
+
+/// Without original_cycles the record's own loop sign is checked (variant
+/// `LoopSign`, the contract's).
+#[test]
+fn refusal_loop_sign_without_original_cycles() {
+    let good = with(&l2_root(1, true), |v| spec(v).original_cycles = None);
+    good.validate().unwrap();
+    let bad = with(&good, |v| v.prefactor.loop_sign = -1);
+    assert!(
+        matches!(
+            bad.validate(),
+            Err(FactorizedError::LoopSign {
+                found: -1,
+                loops: 0
+            })
+        ),
+        "{:?}",
+        bad.validate()
+    );
+}
+
+#[test]
+fn refusal_weight_applied_by_vakint_differs() {
+    let base = l2_root(1, true);
+    let scalars = base.prefactor.scalars.clone();
+    let good = with(&base, |v| {
+        spec(v).weights = vec![("scalars".into(), true, scalars.clone())]
+    });
+    let bad = with(&base, |v| {
+        spec(v).weights = vec![("scalars".into(), true, &scalars * atom("UFO::two"))]
+    });
+    assert_closure_refusal(&bad, &good, "weight scalars applied_by=vakint is ");
+}
+
+#[test]
+fn refusal_flavour_symbol_in_the_record() {
+    let good = l2_root(1, true);
+    let bad = with(&good, |v| {
+        v.prefactor.scalars = &v.prefactor.scalars * atom("beta::nf")
+    });
+    assert_closure_refusal(
+        &bad,
+        &good,
+        "a flavour symbol in the record (n_f stays with the caller)",
+    );
+}
+
+#[test]
+fn refusal_muvexp_in_the_record() {
+    let good = l2_root(1, true);
+    let bad = with(&good, |v| {
+        v.vertices[0].factor = &v.vertices[0].factor * atom("gammalooprs::mUVexp")
+    });
+    assert_closure_refusal(
+        &bad,
+        &good,
+        "mUVexp in the record (the producer maps it to mUV)",
+    );
+}
+
+#[test]
+fn refusal_closing_edge_missing_external_massless_power() {
+    let good = l2_root(2, true);
+    assert_closure_refusal(
+        &with(&good, |v| spec(v).edge = 99),
+        &good,
+        "closing edge 99 does not exist",
+    );
+    assert_closure_refusal(
+        &with(&good, |v| spec(v).edge = 20),
+        &good,
+        "closing edge 20 is an external leg",
+    );
+    assert_closure_refusal(
+        &with(&good, |v| spec(v).edge = 1),
+        &good,
+        "closing edge 1: mass 0 is zero or differs from the closure line's",
+    );
+    assert_closure_refusal(
+        &with(&good, |v| spec(v).power = 2),
+        &good,
+        "closing edge 3: power 1 differs from the closure line's 2",
+    );
+}
+
+#[test]
+fn refusal_several_massive_lines() {
+    let good = l2_root(2, true);
+    let bad = with(&good, |v| v.edges[1].mass_squared = atom(R));
+    assert_closure_refusal(&bad, &good, "several massive lines ([2, 3])");
+}
+
+#[test]
+fn refusal_auxiliary_mass_zero() {
+    let good = l2_root(2, true);
+    let bad = with(&good, |v| spec(v).auxiliary_mass_squared = Atom::Zero);
+    assert_closure_refusal(&bad, &good, "the auxiliary mass is zero");
+}
+
+#[test]
+fn refusal_reference_mass_in_the_prefactor() {
+    let good = l2_root(1, true);
+    let bad = with(&good, |v| {
+        v.prefactor.scalars = &v.prefactor.scalars * atom(R)
+    });
+    assert_closure_refusal(
+        &bad,
+        &good,
+        &format!(
+            "the reference mass {} in the prefactor (it is substituted in the integrand only)",
+            atom(R)
+        ),
+    );
+}
+
+#[test]
+fn refusal_momentum_in_the_projector() {
+    let good = l2_root(1, true);
+    let bad = with(&good, |v| {
+        v.projector.as_mut().unwrap().tensor =
+            atom(&format!("{}*{}", q(20, &hedge(120)), q(20, &hedge(121))))
+    });
+    assert_closure_refusal(
+        &bad,
+        &good,
+        "the projector contains Q(20, ..): with a Taylor step",
+    );
+    // without a Taylor step, an internal edge's momentum: the contract's
+    // rule refuses a LOOP momentum first (the closure's "the projector
+    // contains the momentum of internal edge" is reachable only for an
+    // internal edge without loop momentum: a listed limit, by reasoning)
+    let good = l2_sector();
+    let bad = with(&good, |v| {
+        let p = v.projector.as_mut().unwrap();
+        p.tensor = &p.tensor * atom(&format!("{}*{}", q(1, &index(9, 1)), q(1, &index(9, 1))))
+    });
+    good.validate().unwrap();
+    match bad.validate() {
+        Err(FactorizedError::UnsupportedTensor { location, tensor }) => {
+            assert_eq!(location, "projector");
+            assert!(
+                tensor.ends_with("(loop momentum in the projector)"),
+                "{tensor}"
+            );
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+/// p2_power on a record without an external momentum (a vacuum record).
+#[test]
+fn refusal_p2_power_without_an_external_momentum() {
+    let vacuum = |p2_power: i64| {
+        record(
+            "vacuum sunrise",
+            2,
+            Vec::new(),
+            vec![
+                line(1, 1, 2, &[1, 0], "0"),
+                line(2, 1, 2, &[-1, 1], "0"),
+                line(3, 2, 1, &[0, 1], R),
+            ],
+            vec![vertex(1, ""), vertex(2, "")],
+            Vec::new(),
+            Some(Projector {
+                tensor: Atom::num(1),
+                p2_power,
+            }),
+            3,
+            None,
+            false,
+        )
+    };
+    let mut good = vacuum(0);
+    spec(&mut good).auxiliary_mass_squared = atom(R);
+    let mut bad = vacuum(-1);
+    spec(&mut bad).auxiliary_mass_squared = atom(R);
+    assert_closure_refusal(&bad, &good, "p2_power without an external momentum");
+}
+
+#[test]
+fn refusal_soft_line_mismatch() {
+    let soft = |edge: usize| super::super::SoftLeg {
+        external: 1,
+        edge,
+        root: false,
+    };
+    let good = with(&l2_root(1, true), |v| spec(v).softs = vec![soft(20)]);
+    let bad = with(&good, |v| spec(v).softs = vec![soft(21)]);
+    assert_closure_refusal(&bad, &good, "soft line 1 edge 21: not the leg of p(1)");
+}
+
+#[test]
+fn refusal_pre_expanded_sector_with_an_auxiliary_mass() {
+    let good = l2_sector();
+    let bad = with(&good, |v| spec(v).auxiliary_mass_squared = atom(MAUX));
+    assert_closure_refusal(
+        &bad,
+        &good,
+        "a pre-expanded sector (taylor none) has no auxiliary mass",
+    );
+}
+
+#[test]
+fn refusal_pre_expanded_sector_with_an_external_momentum_inside() {
+    let good = l2_sector();
+    let bad = with(&l2_root(1, true), |v| {
+        spec(v).taylor = None;
+        spec(v).auxiliary_mass_squared = atom(R);
+    });
+    assert_closure_refusal(
+        &bad,
+        &good,
+        "taylor none (lambda^0 denominators): internal edge 1 carries an external momentum",
+    );
+}
+
+#[test]
+fn refusal_scaled_edges() {
+    let good = l2_root(1, true);
+    assert_closure_refusal(
+        &with(&good, |v| {
+            spec(v).taylor.as_mut().unwrap().scaled_edges = vec![1, 20]
+        }),
+        &good,
+        "scaled_edges: 1 is not an external leg",
+    );
+    assert_closure_refusal(
+        &with(&good, |v| {
+            spec(v).taylor.as_mut().unwrap().scaled_edges = vec![20, 20]
+        }),
+        &good,
+        "scaled_edges: 20 twice",
+    );
+    let good = l2_child(1);
+    assert_closure_refusal_with(
+        &with(&good, |v| {
+            spec(v).taylor.as_mut().unwrap().scaled_edges = vec![20]
+        }),
+        &good,
+        "scaled_edges=[20] scale p",
+        "must be scaled",
+    );
+}
+
+#[test]
+fn refusal_constant_vector_under_a_taylor_step() {
+    let good = l2_root(1, true);
+    let bad = with(&good, |v| {
+        v.vertices[0].factor =
+            &v.vertices[0].factor * atom(&format!("{}*{}", q(99, &index(1, 9)), q(1, &index(1, 9))))
+    });
+    assert_closure_refusal(
+        &bad,
+        &good,
+        "constant external vectors [99] (edges outside the graph) with a Taylor step",
+    );
+}
+
+#[test]
+fn refusal_reference_mass_not_a_symbol() {
+    let good = l2_root(1, true);
+    let twice = atom(&format!("2*{R}"));
+    let bad = with(&good, |v| {
+        v.edges[2].mass_squared = twice.clone();
+        spec(v).mass_squared = twice.clone();
+    });
+    assert_closure_refusal(
+        &bad,
+        &good,
+        &format!("the reference mass {twice} is not a symbol (it is substituted everywhere)"),
+    );
+}
+
+/// The entry's own refusals of its arguments (before any record is read).
+#[test]
+fn refusal_entry_arguments() {
+    let vakint = Vakint::new().unwrap();
+    let v = l2_root(0, true);
+    let run = |records: &[FactorizedNumerator], prefactors: &[Atom]| {
+        evaluate_factorized_closure(&vakint, &settings(), records, prefactors).map(|_| ())
+    };
+    run(std::slice::from_ref(&v), &[v.prefactor.total()]).unwrap();
+    match run(std::slice::from_ref(&v), &[]) {
+        Err(FactorizedError::Closure { detail }) => {
+            assert!(detail.starts_with("1 records and 0 prefactors"), "{detail}")
+        }
+        other => panic!("{other:?}"),
+    }
+    let direct = with(&v, |v| v.kind = FactorizedKind::Direct);
+    match run(std::slice::from_ref(&direct), &[v.prefactor.total()]) {
+        Err(FactorizedError::Closure { detail }) => assert!(
+            detail.starts_with(&format!(
+                "{}: not a closure record (kind direct",
+                direct.label
+            )),
+            "{detail}"
+        ),
+        other => panic!("{other:?}"),
+    }
+}
