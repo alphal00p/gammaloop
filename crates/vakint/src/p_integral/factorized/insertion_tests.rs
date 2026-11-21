@@ -845,10 +845,11 @@ fn a_failing_laurent_series_of_an_insertion_is_an_evaluation_failure() {
     }
     let mut huge = gluon_surrogate(1);
     ins(&mut huge).coefficient = atom(&format!("{EPS}^(-10^30)"));
+    // an exponent beyond 64 is the atom rules' (refused before any count)
     insertion_refusal(
         &huge.validate().unwrap_err(),
         C0,
-        "an ε power out of range",
+        "a non-integer exponent in insertion",
         "eps^(-10^30) at validation",
     );
     match &huge.insertion_pole_order(epsilon).unwrap_err() {
@@ -1137,11 +1138,12 @@ fn an_epsilon_setting_of_another_name_gets_the_pole_order_rules_at_the_entry() {
         ),
         "log(user::ep)",
     );
-    for (what, coefficient, prefix) in [(
-        "user::ep^-40 (1+user::ep)^-30 (degree 70, every exponent within 64)",
-        "user::ep^-40*(1+user::ep)^-30",
-        "an ε power out of range",
-    )] {
+    {
+        let (what, coefficient, prefix) = (
+            "user::ep^-40 (1+user::ep)^-30 (degree 70, every exponent within 64)",
+            "user::ep^-40*(1+user::ep)^-30",
+            "an ε power out of range",
+        );
         let value = with(coefficient);
         value
             .validate()
@@ -1207,6 +1209,12 @@ fn an_epsilon_power_beyond_the_cap_is_refused_at_validation() {
             with(&format!("(1+{EPS})^4611686018427387904"), "1"),
         ),
     ] {
+        // an exponent beyond 64 is refused by the atom rules' bound first
+        let prefix = if what.contains("beyond i64") || what.contains("2^62") {
+            "a non-integer exponent in insertion"
+        } else {
+            prefix
+        };
         insertion_refusal(&value.validate().unwrap_err(), C0, prefix, what);
     }
     for (what, value, order) in [

@@ -98,11 +98,10 @@ pub const FACTORIZED_SCHEMA: &str = "pint6.factorized-numerator.v1";
 pub const FACTORIZED_SCHEMA_V3: &str = "pint6.factorized-numerator.v3";
 
 /// The schemas a TextSchema refusal names: the base's text (only v1) for any
-/// line that is not a v3 schema line written inexactly; for such a line (the
-/// v3 name with something around it, e.g. trailing whitespace) both, and how
-/// they must be written.
+/// line but the v3 name with surrounding whitespace (e.g. a trailing space);
+/// for that line both, and how they must be written.
 fn known_schemas(found: &str) -> String {
-    if found.contains(FACTORIZED_SCHEMA_V3) {
+    if found != FACTORIZED_SCHEMA_V3 && found.trim() == FACTORIZED_SCHEMA_V3 {
         format!(
             "{FACTORIZED_SCHEMA} and {FACTORIZED_SCHEMA_V3}, written exactly, without trailing whitespace"
         )
@@ -806,6 +805,7 @@ pub const UNKNOWN_MAX_ORDER: i64 = 64;
 ///   evaluated by `mzv`), 1 to 16 positive integers of at most 64, the first
 ///   at least 2: exactly the convergent ones vakint's evaluator accepts
 ///   (`mzv::evaluable_indices`; MZV(1, ..) diverges).
+///
 /// ζ(n) and π are Symbolica's own symbols (`symbolica::zeta`, `𝜋`), not
 /// vakint's.
 pub const VAKINT_DATA_ATOMS: [(&str, &str); 2] = [
@@ -1207,9 +1207,13 @@ pub(crate) fn check_epsilon_setting(value: &FactorizedNumerator, epsilon: Symbol
 /// INVARIANT: no rule that COMPUTES (a zero test, `together`, `expand`, a
 /// series) runs on an atom that has not passed the SHAPE rules (names, exact
 /// numbers, data atoms, exponents of at most 64, heads, structural shapes):
-/// the record's atoms get them here first ([`FactorizedNumerator::check_marked_atoms`]:
-/// the entries may run this before `validate`), the prefactor argument in
-/// [`check_prefactor_argument`], before the defined-and-finite checks.
+/// every entry calls [`check_master_modes`] (the settings) before this
+/// function and [`check_entry_names`] (the non-ASCII names: a walk, no
+/// computation) after it; here the record's atoms get
+/// the reserved-name walk and [`FactorizedNumerator::check_marked_atoms`]
+/// first (the entries may run this before `validate`), the prefactor argument
+/// its own in [`check_prefactor_argument`], before the defined-and-finite
+/// checks.
 pub(crate) fn check_marked_entry(
     value: &FactorizedNumerator,
     prefactor: &Atom,
@@ -1308,7 +1312,6 @@ pub(crate) fn check_entry_names(
     if !is_marked(value) {
         return Ok(());
     }
-    check_master_modes(settings)?;
     let epsilon = crate::utils::vakint_macros::vk_symbol!(&settings.epsilon_symbol);
     let scale = crate::utils::vakint_macros::vk_symbol!(&settings.mu_r_sq_symbol);
     // Symbolica's non-ASCII built-ins by name (correction 3): the constants
@@ -1658,6 +1661,19 @@ fn insertion_epsilon_rules(
     // argument, mink(D, ..), is not a dependence). Inside a function's
     // argument, in an exponent or under a non-integer power the
     // expansion has no pole order (log ε would silently count as 0).
+    // the exponent bound of the atom rules FIRST: the rules below compute
+    // (an integer point raised to each power, exactly), so a power beyond
+    // the bound is refused before any of them sees it
+    for (what, atom) in [
+        ("coefficient", &insertion.coefficient),
+        ("factor", &insertion.factor),
+    ] {
+        if let Some(found) = first_exponent_beyond_bound(atom.as_view()) {
+            return Err(error(format!(
+                "a non-integer exponent in insertion {v} {what}: {found}"
+            )));
+        }
+    }
     for (what, atom) in [
         ("coefficient", &insertion.coefficient),
         ("factor", &insertion.factor),
@@ -1720,10 +1736,12 @@ fn insertion_epsilon_rules(
 /// (about 1 s at ^-10, 50 s at ^-20, not finished in minutes at ^-40).
 pub(crate) const INSERTION_MAX_EPSILON_POWER: u64 = 64;
 
-/// The cap on the SUM of the exact pole orders of a record's insertions, the
-/// closure entry's depth raise (the only entry that raises a depth by it: the
+/// The cap on the SUM of the exact pole orders of a record's insertions (the
+/// closure entry raises the record's depth by it) (the only entry that raises a depth by it: the
 /// direct, ports and vacuum entries hand the insertions to vakint inside the
-/// integrand): 64. Real records stay far below: the totals are at most 4 in
+/// integrand): 64. UNREACHABLE behind the depth cap of a marked value
+/// ([`MARKED_MAX_TERMS`], 32: depth plus this raise), which refuses first;
+/// kept as defence. Real records stay far below: the totals are at most 4 in
 /// the producer's records (L - 1 at L loops: the five-loop L5_000121), with
 /// at most 4 insertions per record (k5-stress). An R*
 /// record's children are disjoint subgraphs and an l-loop child's
@@ -1911,6 +1929,68 @@ pub const MAX_CALLER_EXPONENT: i64 = 64;
 /// read as `x^-1` and accepted; an expression equal to an integer, `π`,
 /// `sqrt(2)`, a symbol, a rational `1/2` are refused; nothing is expanded
 /// to decide); with the exponent named.
+/// The largest numerator or denominator a marked value's numbers may have,
+/// in bits: far above the real records (whose largest number has 35 bits);
+/// it keeps a number that a text's literal power made huge at parse time
+/// (2^1000000000 is a 10^9-bit integer once parsed) out of the evaluation.
+pub const MAX_NUMBER_BITS: usize = 4096;
+
+/// The first number of `view` whose numerator or denominator has more than
+/// [`MAX_NUMBER_BITS`] bits, described by its decimal size.
+fn first_oversized_number(view: AtomView<'_>) -> Option<String> {
+    // 4096 bits are 1234 decimal digits at most
+    let max_digits = (MAX_NUMBER_BITS as f64 * std::f64::consts::LOG10_2).ceil() as usize;
+    let mut found = None;
+    view.visitor(&mut |part| {
+        if found.is_some() {
+            return false;
+        }
+        if let AtomView::Num(n) = part
+            && matches!(n.get_coeff_view(), CoefficientView::Large(..))
+        {
+            let text = part.to_owned().to_canonical_string();
+            let digits = text
+                .split(|c: char| !c.is_ascii_digit())
+                .map(str::len)
+                .max()
+                .unwrap_or(0);
+            if digits > max_digits {
+                found = Some(format!("a number of {digits} decimal digits"));
+            }
+        }
+        found.is_none()
+    });
+    found
+}
+
+/// The first integer exponent of `view` beyond [`MAX_CALLER_EXPONENT`] in
+/// modulus (the cheap part of [`first_non_integer_exponent`], for the rules
+/// that compute and must not see such a power), shown with its power.
+fn first_exponent_beyond_bound(view: AtomView<'_>) -> Option<String> {
+    let mut found = None;
+    view.visitor(&mut |part| {
+        if found.is_some() {
+            return false;
+        }
+        if let AtomView::Pow(p) = part {
+            let (_, exponent) = p.get_base_exp();
+            let beyond = match i64::try_from(exponent) {
+                Ok(n) => n.unsigned_abs() > MAX_CALLER_EXPONENT.unsigned_abs(),
+                Err(_) => symbolica::domains::integer::Integer::try_from(exponent).is_ok(),
+            };
+            if beyond {
+                found = Some(format!(
+                    "the exponent {} of {} exceeds {MAX_CALLER_EXPONENT} in modulus",
+                    exponent.to_owned().to_canonical_string(),
+                    part.to_owned().to_canonical_string()
+                ));
+            }
+        }
+        found.is_none()
+    });
+    found
+}
+
 fn first_non_integer_exponent(view: AtomView<'_>) -> Option<String> {
     let mut found = None;
     view.visitor(&mut |part| {
@@ -3070,6 +3150,20 @@ impl FactorizedNumerator {
             self.check_reserved_symbols()?;
         }
         self.check_marked_bounds(false)?;
+        if is_marked(self) {
+            self.check_marked_prefactor()?;
+            // a projector power of p^2 needs an external momentum (the
+            // closure kind's rule, for the direct kind too: with no external
+            // p, (p^2)^n has no value)
+            if matches!(self.kind, FactorizedKind::Direct)
+                && self.projector.as_ref().is_some_and(|p| p.p2_power != 0)
+                && self.externals() == 0
+            {
+                return Err(FactorizedError::Graph {
+                    detail: "p2_power without an external momentum".into(),
+                });
+            }
+        }
         if let FactorizedKind::Closure(spec) = &self.kind {
             self.validate_closure(spec)?;
         } else {
@@ -3188,6 +3282,146 @@ impl FactorizedNumerator {
             }
         }
         out
+    }
+
+    /// THE WEIGHTS of a marked value (the record format's OQ-17 rule, section
+    /// 3), for every kind and both weight sources (a closure's ClosureSpec,
+    /// a direct record): a weight `applied_by=vakint` must equal
+    /// prefactor_scalars (atom equality after normalisation); a weight applied
+    /// by the caller is 1 in the prefactor: `overall` -> prefactor_overall 1,
+    /// `colour` -> prefactor_colour 1, `loop_sign` -> loop_sign 1, `flavour`
+    /// -> nf_power 0 (a caller weight of another name has no counterpart).
+    /// And prefactor_scalars carries no flavour symbol (`nf`, `…::nf`: n_f
+    /// stays with the caller; section 3). `Closure` for the closure kind, else
+    /// `Graph`. Shared by `validate` and the vacuum mode's validation.
+    pub(crate) fn check_marked_prefactor(&self) -> Result<()> {
+        let closure = matches!(self.kind, FactorizedKind::Closure(_));
+        let refuse = |detail: String| {
+            if closure {
+                FactorizedError::Closure { detail }
+            } else {
+                FactorizedError::Graph { detail }
+            }
+        };
+        let p = &self.prefactor;
+        let mut flavour = false;
+        p.scalars.as_view().visitor(&mut |part| {
+            if let AtomView::Var(v) = part {
+                let symbol = v.get_symbol();
+                let name = symbol.get_name();
+                flavour |= name == names::NF || name.ends_with("::nf");
+            }
+            !flavour
+        });
+        if flavour {
+            return Err(refuse(format!(
+                "a flavour symbol in the record (n_f stays with the caller): in prefactor_scalars {}",
+                p.scalars
+            )));
+        }
+        let from_spec = match &self.kind {
+            FactorizedKind::Closure(spec) => spec.weights.as_slice(),
+            FactorizedKind::Direct => &[],
+        };
+        let from_record = self
+            .record
+            .as_ref()
+            .map_or(&[][..], |r| r.weights.as_slice());
+        for (name, by_vakint, atom) in from_spec.iter().chain(from_record) {
+            if *by_vakint {
+                if *atom != p.scalars {
+                    return Err(refuse(format!(
+                        "weight {name} applied_by=vakint is {atom}, prefactor_scalars is {}",
+                        p.scalars
+                    )));
+                }
+                continue;
+            }
+            let one = Atom::num(1);
+            let counterpart = match name.as_str() {
+                "overall" => (p.overall != one).then(|| format!("prefactor_overall {}", p.overall)),
+                "colour" => (p.colour != one).then(|| format!("prefactor_colour {}", p.colour)),
+                "loop_sign" => (p.loop_sign != 1).then(|| format!("loop_sign {}", p.loop_sign)),
+                "flavour" => (p.nf_power != 0).then(|| format!("nf_power {}", p.nf_power)),
+                _ => None,
+            };
+            if let Some(found) = counterpart {
+                return Err(refuse(format!(
+                    "weight {name} applied_by=beta, but the prefactor has {found} (a weight the caller applies is 1 in the prefactor)"
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// ORIGINAL CYCLES of a marked DIRECT record (the record format, section
+    /// 3, "every R* record"), for the vacuum mode, which does not run the
+    /// contract rules (`validate_contract` checks the same for the direct and
+    /// ports entries): with `original_cycles` the prefactor has loop_sign 1,
+    /// nf_power 0, prefactor_overall 1 (the caller applies the original
+    /// graph's weights), and the carried graph's closed cycles plus the
+    /// insertions' do not exceed the original's; without `original_cycles`
+    /// the loop sign and the n_f power are those of the carried graph's closed
+    /// loops (with the insertions' cycles). The text form of the same value
+    /// runs these rules through `validate`; the typed vacuum entry runs them
+    /// here, so the two cannot disagree.
+    pub(crate) fn check_vacuum_original_cycles(&self) -> Result<()> {
+        let p = &self.prefactor;
+        let Some(DirectRecord {
+            original_cycles: Some((fermion, ghost)),
+            ..
+        }) = &self.record
+        else {
+            // without original_cycles: the carried graph's closed loops (the
+            // contract's rule, which the text form of the same value runs)
+            let loops = self.closed_loops()?;
+            let (inner_fermion, inner_ghost) =
+                self.insertions.iter().fold((0usize, 0usize), |(f, g), i| {
+                    (f + i.cycles.0 as usize, g + i.cycles.1 as usize)
+                });
+            let n_loops = loops.len() + inner_fermion + inner_ghost;
+            let n_fermion =
+                loops.iter().filter(|l| l.line == LineKind::Fermion).count() + inner_fermion;
+            let sign = if n_loops % 2 == 0 { 1 } else { -1 };
+            if p.loop_sign != sign {
+                return Err(FactorizedError::LoopSign {
+                    found: p.loop_sign,
+                    loops: n_loops,
+                });
+            }
+            if p.nf_power as usize != n_fermion {
+                return Err(FactorizedError::NfPower {
+                    found: p.nf_power,
+                    loops: n_fermion,
+                });
+            }
+            return Ok(());
+        };
+        if p.loop_sign != 1 || p.nf_power != 0 || p.overall != Atom::num(1) {
+            return Err(FactorizedError::NotScalar {
+                location: "prefactor".into(),
+                detail: "with original_cycles the weights are the caller's: loop_sign=1, \
+                         nf_power=0, prefactor_overall 1"
+                    .into(),
+            });
+        }
+        let loops = self.closed_loops()?;
+        let (inner_fermion, inner_ghost) =
+            self.insertions.iter().fold((0usize, 0usize), |(f, g), i| {
+                (f + i.cycles.0 as usize, g + i.cycles.1 as usize)
+            });
+        let n_fermion =
+            loops.iter().filter(|l| l.line == LineKind::Fermion).count() + inner_fermion;
+        let n_ghost = loops.len() + inner_fermion + inner_ghost - n_fermion;
+        if n_fermion > *fermion as usize || n_ghost > *ghost as usize {
+            return Err(FactorizedError::Graph {
+                detail: format!(
+                    "the record and its insertions carry {n_fermion} fermion / {n_ghost} ghost cycles, more than \
+                     original_cycles fermion={fermion} ghost={ghost}"
+                ),
+            });
+        }
+        Ok(())
     }
 
     /// THE BOUNDS of a value with new features, shared by `validate` and the
@@ -3319,6 +3553,11 @@ impl FactorizedNumerator {
             .or_else(|| {
                 first_disallowed_head(atom.as_view())
                     .map(|found| format!("a function head that is not allowed in {field}: {found}"))
+            })
+            .or_else(|| {
+                first_oversized_number(atom.as_view()).map(|found| {
+                    format!("a number beyond {MAX_NUMBER_BITS} bits in {field}: {found}")
+                })
             })
             .or_else(|| {
                 first_out_of_shape(atom.as_view(), dimension, &depends).map(|found| {

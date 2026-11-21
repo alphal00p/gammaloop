@@ -41,9 +41,11 @@ refusal	Closure	the projector contains the momentum of internal edge <>
 refusal	Closure	the reference mass <> in the prefactor (it is substituted in the integrand only)
 refusal	Closure	the reference mass <> is not a symbol (it is substituted everywhere)
 refusal	Closure	vakint's internal Taylor parameter occurs in the record
-refusal	Closure	weight <> applied_by=vakint is <>, prefactor_scalars is <>
 refusal	Closure	with original_cycles the prefactor has loop_sign=1, nf_power=0, overall 1 (the original graph's weights stay with the caller); found loop_sign=<> nf_power=<> overall <>
+refusal	Closure|Graph	a flavour symbol in the record (n_f stays with the caller): in prefactor_scalars <>
 refusal	Closure|Graph	edge <>: power <> out of range (at most 2^31 in absolute value)
+refusal	Closure|Graph	weight <> applied_by=beta, but the prefactor has <> (a weight the caller applies is 1 in the prefactor)
+refusal	Closure|Graph	weight <> applied_by=vakint is <>, prefactor_scalars is <>
 refusal	Colour	<> open colour slots; v1 closes exactly two adjoint legs
 refusal	Colour	closed-network reducer failed: <>
 refusal	Colour	colour algebra: <>
@@ -83,7 +85,6 @@ refusal	Evaluation	line <>: carries no loop momentum
 refusal	Evaluation	line <>: momentum <> has no unit coefficient to solve for
 refusal	Evaluation	line <>: momentum <> vanishes or is not +-p(1) after the cut
 refusal	Evaluation	no massive line: a massless vacuum integral is scaleless
-refusal	Evaluation	open slot <>: only Lorentz slots mink(D, index) stay open in the vacuum scope
 refusal	Evaluation	outside the vacuum scope (metrics and momenta with open indices) after idenso: <>
 refusal	Evaluation	port <>: only Lorentz ports mink(D, index) are in the vacuum scope
 refusal	Evaluation	result check: <> in the value of <>
@@ -111,17 +112,20 @@ refusal	Graph	edge <>: the <> half-edge must be given exactly on a vertex side
 refusal	Graph	edge id <> occurs twice
 refusal	Graph	edges are not sorted by id
 refusal	Graph	half-edge <> occurs twice
+refusal	Graph	p2_power without an external momentum
 refusal	Graph	reserved symbol <> in <>: the settings' epsilon is <>, so vakint's epsilon would be a constant here (write the settings' epsilon)
 refusal	Graph	the depth <> of the record differs from the settings' number of terms <> (they must be equal)
 refusal	Graph	the evaluation methods mix master modes: <> (a marked value needs one mode for every RustRed and Forcer method)
 refusal	Graph	the label contains a TAB or a newline
 refusal	Graph	the record and its insertions carry <> fermion / <> ghost cycles, more than original_cycles fermion=<> ghost=<>
+refusal	Graph	vacuum: <>
 refusal	Graph	vertex <>: bad rule name
 refusal	Graph	vertex id <> occurs twice
 refusal	Graph	vertices are not sorted by id
 refusal	Insertion	a contracted vertex (rule <>) has hedges <>, its incident half-edges are <>
 refusal	Insertion	a denominator vanishes identically<> (undefined, not a pole of any order): <> in the <>
 refusal	Insertion	a fractional power of ε
+refusal	Insertion	a non-integer exponent in insertion <> <>: <>
 refusal	Insertion	a surrogate coefficient vertex (rule <>) has <> hedges, not the two inner boundary half-edges
 refusal	Insertion	an ε power out of range
 refusal	Insertion	an ε power out of range: the insertions' pole order overflows

@@ -2673,7 +2673,7 @@ fn a_non_laurent_insertion_is_refused_by_the_closure_entry_before_its_pole_order
     let huge = closure_insertion_error(&format!("{eps}^(-10^30)"));
     match &huge {
         FactorizedError::Insertion { vertex: 1, detail } => {
-            assert!(detail.starts_with("an ε power out of range"), "{detail}")
+            assert!(detail.contains("exceeds 64 in modulus"), "{detail}")
         }
         other => panic!("expected the Insertion refusal at vertex 1, got {other:?}"),
     }

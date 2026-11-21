@@ -252,9 +252,12 @@ fn the_pole_order_arithmetic_cannot_wrap() {
             .unwrap_err(),
         ] {
             match &error {
+                // the exponents beyond 64 are refused by the atom rules'
+                // bound before any count (the counts cannot wrap)
                 FactorizedError::Insertion { vertex: 5, detail } => {
                     assert!(
-                        detail.starts_with("an ε power out of range"),
+                        detail.starts_with("a non-integer exponent in insertion 5")
+                            && detail.contains("exceeds 64 in modulus"),
                         "{what}: {detail}"
                     )
                 }
@@ -1415,12 +1418,11 @@ fn every_caller_written_atom_gets_the_finite_check_and_the_grammar() {
             || field == "taylor auxiliary mass"
             || (closure && field == "prefactor_overall")
     };
-    // the producer's weights section (as on its real K2 records: overall 1,
-    // loop_sign -1, colour -cA^3/4)
+    // a weights section (overall 1, loop_sign -1: their prefactor
+    // counterparts are 1 on this record)
     let mut k2 = k2;
     if let FactorizedKind::Closure(spec) = &mut k2.kind {
         spec.weights = vec![
-            ("colour".into(), false, parsed("-1/4*beta::cA^3")),
             ("loop_sign".into(), false, parsed("-1")),
             ("overall".into(), false, parsed("1")),
         ];
@@ -1478,7 +1480,11 @@ fn every_caller_written_atom_gets_the_finite_check_and_the_grammar() {
     let reference = closure_value(&vakint, &site_settings(), &k2);
     let mut unit = k2.clone();
     if let FactorizedKind::Closure(spec) = &mut unit.kind {
-        let (_, _, atom) = &mut spec.weights[2];
+        let (_, _, atom) = spec
+            .weights
+            .iter_mut()
+            .find(|(n, _, _)| n == "overall")
+            .unwrap();
         *atom = &*atom * parsed("((witness::x-3)^2-witness::x^2+6*witness::x-9)+1");
     }
     unit.validate().unwrap();
@@ -1634,4 +1640,216 @@ fn the_producers_and_the_default_orders_have_one_master_mode() {
         ..site_settings()
     };
     check_master_modes(&producer).unwrap();
+}
+
+/// THE WEIGHTS of every marked kind (the record format's OQ-17 rule): on the
+/// real direct K5 record (L2-17, prefactor_scalars 1), `weight scalars
+/// applied_by=vakint 2` is refused by validation, through the text form and
+/// at the ports entry in Symbolic, Numerical and Retain mode and at the direct
+/// entry ("weight scalars applied_by=vakint is 2, prefactor_scalars is 1",
+/// `Graph`); a weight applied by the caller with its prefactor counterpart not
+/// 1 (overall with prefactor_overall 2) is refused; the twins (scalars = the
+/// prefactor_scalars, overall 1) are accepted and leave the value unchanged.
+/// The closure kind (the K2 child) refuses the same mismatch (`Closure`).
+#[test]
+fn the_weights_agree_with_the_prefactor_on_every_kind() {
+    let vakint = plain_engine();
+    let base =
+        FactorizedNumerator::from_text(include_str!("fixtures/wh-k5-direct.record.txt")).unwrap();
+    let depth = base.record.as_ref().unwrap().depth.unwrap() as i64;
+    let with_weights = |v: &FactorizedNumerator, weights: Vec<(String, bool, Atom)>| {
+        let mut v = v.clone();
+        v.record.as_mut().unwrap().weights = weights;
+        v
+    };
+    let mode = |m: RustRedMasterMode| VakintSettings {
+        evaluation_order: crate::EvaluationOrder(vec![crate::EvaluationMethod::RustRed(
+            RustRedEvaluationOptions { master_mode: m },
+        )]),
+        number_of_terms_in_epsilon_expansion: depth,
+        ..site_settings()
+    };
+    let bad = with_weights(&base, vec![("scalars".into(), true, parsed("2"))]);
+    let text = "weight scalars applied_by=vakint is 2, prefactor_scalars is 1";
+    let graph = |e: FactorizedError, what: &str| match e {
+        FactorizedError::Graph { detail } => assert!(detail.starts_with(text), "{what}: {detail}"),
+        other => panic!("{what}: expected Graph, got {other:?}"),
+    };
+    graph(bad.validate().unwrap_err(), "validate");
+    let written = bad.to_text().unwrap();
+    assert!(written.contains("applied_by=vakint\t2"), "{written}");
+    graph(
+        FactorizedNumerator::from_text(&written).unwrap_err(),
+        "from_text",
+    );
+    for m in [
+        RustRedMasterMode::Symbolic,
+        RustRedMasterMode::Numerical,
+        RustRedMasterMode::Retain,
+    ] {
+        graph(
+            evaluate_factorized_ports(&vakint, &mode(m), &bad, &bad.prefactor.total()).unwrap_err(),
+            &format!("ports {m:?}"),
+        );
+    }
+    graph(
+        evaluate_factorized(
+            &vakint,
+            &mode(RustRedMasterMode::Symbolic),
+            &bad,
+            &bad.prefactor.total(),
+        )
+        .unwrap_err(),
+        "direct",
+    );
+    let mut caller = with_weights(&base, vec![("overall".into(), false, parsed("1"))]);
+    caller.prefactor.overall = parsed("2");
+    match caller.validate() {
+        Err(e) => assert!(
+            e.to_string().contains("weight overall applied_by=beta"),
+            "{e}"
+        ),
+        Ok(()) => panic!("a caller weight with prefactor_overall 2: accepted"),
+    }
+    // the twins
+    let symbolic = mode(RustRedMasterMode::Symbolic);
+    let reference = evaluate_factorized_ports(&vakint, &symbolic, &base, &base.prefactor.total())
+        .unwrap()
+        .value;
+    for twin in [
+        with_weights(
+            &base,
+            vec![("scalars".into(), true, base.prefactor.scalars.clone())],
+        ),
+        with_weights(&base, vec![("overall".into(), false, parsed("1"))]),
+    ] {
+        twin.validate().unwrap();
+        let got = evaluate_factorized_ports(&vakint, &symbolic, &twin, &twin.prefactor.total())
+            .unwrap()
+            .value;
+        assert!(
+            (&got - &reference).expand().is_zero(),
+            "a consistent weight changed the value"
+        );
+    }
+    // no flavour symbol in prefactor_scalars, whatever the kind
+    let mut nf = base.clone();
+    nf.prefactor.scalars = parsed("UFO::nf");
+    match nf.validate() {
+        Err(e) => assert!(
+            e.to_string().contains("a flavour symbol in the record"),
+            "{e}"
+        ),
+        Ok(()) => panic!("nf in a direct record's prefactor_scalars: accepted"),
+    }
+    // the closure kind: unchanged
+    let mut k2 =
+        FactorizedNumerator::from_text(include_str!("fixtures/wh-k2-child-ins.record.txt"))
+            .unwrap();
+    if let FactorizedKind::Closure(spec) = &mut k2.kind {
+        spec.weights = vec![("scalars".into(), true, parsed("2"))];
+    }
+    match k2.validate() {
+        Err(FactorizedError::Closure { detail }) => {
+            assert!(
+                detail.starts_with("weight scalars applied_by=vakint is 2"),
+                "{detail}"
+            )
+        }
+        other => panic!("closure: expected Closure, got {other:?}"),
+    }
+}
+
+/// TEXT ROUND TRIP: a closure value that carries a direct record (refused by
+/// validation) cannot be written either: to_text refuses it (the writer would
+/// drop the record and its text would be accepted).
+#[test]
+fn a_closure_value_with_a_direct_record_is_not_written() {
+    let mut v = FactorizedNumerator::from_text(include_str!("fixtures/wh-k2-child-ins.record.txt"))
+        .unwrap();
+    v.record = Some(DirectRecord {
+        original_cycles: None,
+        depth: None,
+        weights: vec![("extra".into(), false, parsed("gammalooprs::ε^-1"))],
+    });
+    match v.to_text() {
+        Err(FactorizedError::Closure { detail }) => {
+            assert!(
+                detail.starts_with("a closure value carries a direct record"),
+                "{detail}"
+            )
+        }
+        other => panic!("expected the Closure refusal, got {other:?}"),
+    }
+}
+
+/// An unknown schema line keeps the base's text unless it is the v3 name with
+/// whitespace around it: "…v31" and "x…v3" get the base's text exactly.
+#[test]
+fn only_an_inexact_v3_schema_line_names_both_schemas() {
+    for schema in [
+        "pint6.factorized-numerator.v31",
+        "xpint6.factorized-numerator.v3",
+    ] {
+        let error =
+            FactorizedNumerator::from_text(&format!("schema\t{schema}\nlabel\tx\n")).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "text line 1: unknown schema \"{schema}\" (this reader knows pint6.factorized-numerator.v1)"
+            )
+        );
+    }
+}
+
+/// The exponent bound runs before the insertion rules that compute: on the
+/// real K2 child, ((1+x)^1000000000 - y)^(-1) times the insertion coefficient,
+/// or as the insertion factor's multiplier, is refused within a second by
+/// validation, through the text form and at the closure entry ("exceeds 64 in
+/// modulus"; the zero test of its base raised an integer point to that power
+/// exactly before, about two minutes).
+#[test]
+fn a_huge_power_in_an_insertion_is_refused_before_any_computation() {
+    let vakint = plain_engine();
+    let k2 = FactorizedNumerator::from_text(include_str!("fixtures/wh-k2-child-ins.record.txt"))
+        .unwrap();
+    let huge = parsed("((1+UFO::x)^1000000000-UFO::y)^(-1)");
+    for part in ["coefficient", "factor"] {
+        let mut v = k2.clone();
+        let atom = if part == "coefficient" {
+            &mut v.insertions[0].coefficient
+        } else {
+            &mut v.insertions[0].factor
+        };
+        *atom = &*atom * &huge;
+        let started = std::time::Instant::now();
+        let refusals = [
+            v.validate().map_err(|e| e.to_string()),
+            match v.to_text() {
+                Ok(text) => FactorizedNumerator::from_text(&text)
+                    .map(|_| ())
+                    .map_err(|e| e.to_string()),
+                Err(e) => Err(e.to_string()),
+            },
+            evaluate_factorized_closure(
+                &vakint,
+                &site_settings(),
+                std::slice::from_ref(&v),
+                &[v.prefactor.total()],
+            )
+            .map(|_| ())
+            .map_err(|e| e.to_string()),
+        ];
+        for (i, r) in refusals.iter().enumerate() {
+            match r {
+                Err(e) => assert!(e.contains("exceeds 64 in modulus"), "{part} #{i}: {e}"),
+                Ok(()) => panic!("{part} #{i}: accepted"),
+            }
+        }
+        assert!(
+            started.elapsed().as_secs_f64() < 3.0,
+            "{part}: {:?}",
+            started.elapsed()
+        );
+    }
 }

@@ -212,6 +212,11 @@ fn is_compact(rep: AtomView<'_>) -> bool {
 /// The checks of the vacuum mode (the contract's graph checks apply where they
 /// do not assume a propagator graph).
 fn validate_vacuum(value: &FactorizedNumerator) -> Result<()> {
+    // a value with new features: its shape refusals are the caller's
+    // mistakes (`Graph`, the same "vacuum: " text), not internal failures
+    let refuse = |detail: &str| FactorizedError::Graph {
+        detail: format!("vacuum: {detail}"),
+    };
     if !value.has_new_features() {
         return validate_vacuum_v1(value);
     }
@@ -230,6 +235,8 @@ fn validate_vacuum(value: &FactorizedNumerator) -> Result<()> {
     // coefficients, which `validate` checks in the contract's momentum rules
     value.check_marked_bounds(true)?;
     if super::is_marked(value) {
+        value.check_marked_prefactor()?;
+        value.check_vacuum_original_cycles()?;
         value.check_marked_atoms()?;
         // every caller field outside the insertions: defined, finite (the
         // entry repeats it with the settings' ε)
@@ -243,12 +250,12 @@ fn validate_vacuum(value: &FactorizedNumerator) -> Result<()> {
     }
     let loops = value.loops();
     if loops == 0 {
-        return Err(error("a vacuum value has at least one loop"));
+        return Err(refuse("a vacuum value has at least one loop"));
     }
     let mut mass = None::<&Atom>;
     for edge in &value.edges {
         if edge.momentum.len() != loops + value.externals() {
-            return Err(error(format!(
+            return Err(refuse(&format!(
                 "edge {}: momentum of the wrong length",
                 edge.id
             )));
@@ -257,7 +264,7 @@ fn validate_vacuum(value: &FactorizedNumerator) -> Result<()> {
             continue;
         }
         if edge.momentum[loops..].iter().any(|c| *c != 0) {
-            return Err(error(format!(
+            return Err(refuse(&format!(
                 "edge {} carries an external momentum (not a vacuum integral)",
                 edge.id
             )));
@@ -267,7 +274,7 @@ fn validate_vacuum(value: &FactorizedNumerator) -> Result<()> {
                 None => mass = Some(&edge.mass_squared),
                 Some(m) if *m == edge.mass_squared => {}
                 Some(m) => {
-                    return Err(error(format!(
+                    return Err(refuse(&format!(
                         "two mass scales ({m} and {}): single-scale vacua only",
                         edge.mass_squared
                     )));
@@ -276,7 +283,7 @@ fn validate_vacuum(value: &FactorizedNumerator) -> Result<()> {
         }
     }
     if mass.is_none() {
-        return Err(error(
+        return Err(refuse(
             "no massive line: a massless vacuum integral is scaleless",
         ));
     }
@@ -286,7 +293,7 @@ fn validate_vacuum(value: &FactorizedNumerator) -> Result<()> {
     for port in &value.open_slots()? {
         if !matches!(port.as_view(), AtomView::Fun(f) if f.get_symbol().get_name() == names::MINK && f.get_nargs() == 2)
         {
-            return Err(error(format!(
+            return Err(refuse(&format!(
                 "open slot {port}: only Lorentz slots mink(D, index) stay open in the vacuum scope"
             )));
         }
@@ -1033,6 +1040,10 @@ pub fn vakint_vacuum_input_streamed(
     // a marked value called here directly: the entry check too; the
     // record itself is walked by validate_vacuum
     if !matches!(value.kind, FactorizedKind::Closure(_)) {
+        if super::is_marked(value) {
+            // the settings' rule before any computing rule
+            super::check_master_modes(settings)?;
+        }
         super::check_marked_entry(
             value,
             prefactor,
@@ -1163,6 +1174,10 @@ pub fn evaluate_factorized_vacuum_streamed(
     // rule (no-ops for an unmarked value: the base behaviour; the closure
     // kind keeps its earlier refusal of this entry, `Reserved`)
     if !matches!(value.kind, super::FactorizedKind::Closure(_)) {
+        if super::is_marked(value) {
+            // the settings' rule before any computing rule
+            super::check_master_modes(settings)?;
+        }
         super::check_marked_entry(
             value,
             prefactor,

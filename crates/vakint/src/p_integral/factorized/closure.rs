@@ -371,14 +371,14 @@ impl FactorizedNumerator {
                 }
             }
         }
-        for (name, by_vakint, atom) in &spec.weights {
-            if *by_vakint && *atom != p.scalars {
-                return Err(refuse(format!(
-                    "weight {name} applied_by=vakint is {atom}, prefactor_scalars is {}",
-                    p.scalars
-                )));
-            }
-        }
+        // the weights' consistency with the prefactor: every kind, in
+        // `check_marked_prefactor`
+        // the flavour / mUVexp / closure_lambda rule below covers the atoms
+        // the evaluation multiplies (edge and vertex factors, the projector,
+        // insertion coefficients and factors, prefactor_scalars and
+        // prefactor_colour); prefactor_overall is 1 with original_cycles and
+        // the caller's weight otherwise, the masses are plain symbols (the
+        // atom rules), the weights are provenance only
         let all = self
             .edges
             .iter()
@@ -1591,6 +1591,10 @@ pub fn evaluate_factorized_closure(
         // a marked value: the separately supplied prefactor gets the checks of
         // the record's prefactor fields, the settings' epsilon the caller-symbol
         // rule (no-ops for an unmarked value: the base behaviour)
+        if super::is_marked(value) {
+            // the settings' rule before any computing rule
+            super::check_master_modes(settings)?;
+        }
         super::check_marked_entry(value, prefactor, vk_symbol!(&settings.epsilon_symbol), None)?;
         super::check_entry_names(value, prefactor, settings)?;
         super::check_data_atoms_catalogue(value, vakint)?;

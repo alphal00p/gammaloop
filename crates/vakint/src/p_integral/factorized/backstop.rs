@@ -42,7 +42,7 @@ use crate::VakintSettings;
 use crate::utils::vakint_macros::vk_symbol;
 
 /// vakint's internal names (without the `vakint::` namespace), exact.
-const INTERNAL_EXACT: [&str; 43] = [
+const INTERNAL_EXACT: [&str; 34] = [
     // the factorised entries
     "closure_lambda",
     "slash",
@@ -62,15 +62,6 @@ const INTERNAL_EXACT: [&str; 43] = [
     "coordinate_metadata",
     "VakintLambdaScalingAnalysis",
     "RustRedMaterializeSpectator",
-    "x",
-    "y",
-    "xa",
-    "ya",
-    "vec",
-    "vec1",
-    "vxs",
-    "mom",
-    "n_loops",
     "pySecDec_integral",
     "pysecdec_result",
     "Integral",
@@ -93,26 +84,20 @@ const INTERNAL_EXACT: [&str; 43] = [
     "n_props",
     // the alphaLoop / FMFT / MATAD mass stand-in and normalisation log,
     // substituted back before each backend returns (lib.rs, fmft/finalize.rs,
-    // matad.rs)
+    // matad.rs); no backend and option returns them (the result-check runs)
     "mUV",
     "logmUVmu",
 ];
 
 /// Families of internal names made with format strings: a prefix and a
 /// suffix around the formatted part (the code's pattern in the comment).
-const INTERNAL_FAMILIES: [(&str, &str); 12] = [
-    ("closure_tensor_", ""),                // closure_tensor_{n}
-    ("graph_entry_branch_", ""),            // graph_entry_branch_{i}
-    ("input_coefficient_placeholder_", ""), // input_coefficient_placeholder_{index}
-    ("coordinate_metadata_", ""),           // coordinate_metadata_{i}
-    ("momentum_match_source_", ""),         // momentum_match_source_{axis}
-    ("vakint_master_transport_", ""),       // vakint_master_transport_{axis}
-    ("rustred_family_", ""),                // rustred_family_{:x}
-    ("krotated", ""),                       // krotated{}
-    ("z", ""),                              // z{n} (with digits only, see internal)
-    ("k", ""),                              // k{} (with digits only, see internal)
-    ("", "_pinch_"),                        // {}_pinch_{} (contains)
-    ("msq", ""),                            // msq, msq{}_
+const INTERNAL_FAMILIES: [(&str, &str); 6] = [
+    ("closure_tensor_", ""), // closure_tensor_{n} (the closure entry's slot placeholders)
+    ("graph_entry_branch_", ""), // graph_entry_branch_{i} (the graph entry's colour branches)
+    ("input_coefficient_placeholder_", ""), // input_coefficient_placeholder_{index} (lib.rs)
+    ("coordinate_metadata_", ""), // coordinate_metadata_{i} (rational_series.rs)
+    ("momentum_match_source_", ""), // momentum_match_source_{axis} (momentum mapping)
+    ("vakint_master_transport_", ""), // vakint_master_transport_{axis} (five-loop transport)
 ];
 
 /// vakint's input-notation heads: internal in a value returned in the
@@ -140,7 +125,15 @@ const NOTATION_HEADS: [&str; 12] = [
 /// internal. Test code: the check itself allows every name that is not
 /// internal.
 #[cfg(test)]
-const REVIEWED_OUTPUT: [&str; 196] = [
+const REVIEWED_OUTPUT: [&str; 201] = [
+    // names a backend can keep in a returned value (out of the deny table):
+    // a Retain value's RustRed family tags, unsubstituted masters z<n>,
+    // loop-momentum and rotated-momentum names, pinched topology names
+    "rustred_family_1",
+    "z1",
+    "k1",
+    "krotated1",
+    "1_pinch_1",
     "D6",
     "EulerGamma",
     "GPLImag",
@@ -362,17 +355,12 @@ const CALLER_HEADS: [&str; 6] = [
 /// `_`), or an input-notation head where the entry returns the caller's
 /// notation.
 pub(crate) fn internal(name: &str, vakint_notation: bool) -> bool {
-    let digits = |rest: &str| !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit());
     name.ends_with('_')
         || INTERNAL_EXACT.contains(&name)
         || (!vakint_notation && NOTATION_HEADS.contains(&name))
         || INTERNAL_FAMILIES
             .iter()
-            .any(|(prefix, contains)| match (*prefix, *contains) {
-                ("z", _) | ("k", _) => name.strip_prefix(prefix).is_some_and(digits),
-                ("", inner) => name.contains(inner),
-                (prefix, _) => name.starts_with(prefix),
-            })
+            .any(|(prefix, _)| name.starts_with(prefix))
 }
 
 fn collect(atom: &Atom, out: &mut std::collections::BTreeSet<Symbol>) {
@@ -390,7 +378,11 @@ fn collect(atom: &Atom, out: &mut std::collections::BTreeSet<Symbol>) {
     });
 }
 
-/// The symbols of every atom of `value`, of `prefactor` and of the settings.
+/// The symbols of every atom of `value` that enters the evaluation (edge
+/// factors and masses, vertex factors, ports, the projector, the prefactor
+/// fields, insertions, the closure line), of `prefactor` and of the settings.
+/// The WEIGHTS are left out on purpose: provenance only, never multiplied into
+/// the value, so a symbol written only in a weight must not appear in it.
 fn inputs(
     value: &FactorizedNumerator,
     prefactor: &Atom,
@@ -455,7 +447,7 @@ fn offence(
                 "the dimension {name} outside a representation slot"
             ));
         }
-        if data_atom(&name) {
+        if data_atom(name) {
             // an unknown master coefficient: allowed by the settings, or
             // carried by an input
             if symbol == crate::truncation_guard::unknown_coefficient_symbol()
@@ -833,17 +825,19 @@ mod tests {
         }
     }
 
-    /// The deny table: the families made with format strings and the
-    /// wildcards are internal; vakint's output vocabulary, including the
-    /// massive-vacuum constants and the RustRed tags, passes a marked result.
+    /// The deny table: the series' own placeholders, the base's long
+    /// placeholder names and families, the wildcards and the input-notation
+    /// heads are internal; the names a backend can legitimately keep in a
+    /// returned value (a Retain value's rustred_family_<hash>, an
+    /// unsubstituted AlphaLoop master z<n>, short and topology names) and
+    /// vakint's output vocabulary (the massive-vacuum constants, the RustRed
+    /// tags) pass a marked result.
     #[test]
     fn internal_names_are_refused_and_the_output_vocabulary_passes() {
         for name in [
             "closure_tensor_12",
             "graph_entry_branch_3",
             "input_coefficient_placeholder_0",
-            "z7",
-            "k3",
             "pow_",
             "idx___",
             "topo",
@@ -864,6 +858,14 @@ mod tests {
             "RustRedMaster",
             "vakintFloat",
             "t105",
+            "rustred_family_1a2b",
+            "z3",
+            "k3",
+            "krotated1",
+            "I5L_32745_pinch_4_6",
+            "msq",
+            "x",
+            "vec",
         ] {
             assert!(!internal(name, false) || name == "k", "{name} is output");
         }
@@ -1317,6 +1319,10 @@ fn after() { let _ = symbol!("witness::kept_b"); }
         "rustred_evaluation/masters_series_tests.rs",
     ];
 
+    /// One non-test source file: its path under src/, its characters, and per
+    /// character whether it is blanked (a comment or a test item).
+    type Source = (String, Vec<char>, Vec<bool>);
+
     /// The tripwire's view of the crate's non-test sources: (path under src/,
     /// text). Skipped: files declared by a `#[cfg(test)]` or
     /// `#[cfg(all(test, ..))]` `mod x;` (x.rs, x/mod.rs and everything under
@@ -1325,7 +1331,7 @@ fn after() { let _ = symbol!("witness::kept_b"); }
     /// comments are blanked. Returned apart: the ORPHANS, files no `mod x;`
     /// declaration (with or without `#[path]`) of any file names, which the
     /// crate does not compile (they must be on [`REVIEWED_ORPHANS`]).
-    fn non_test_sources() -> (Vec<(String, Vec<char>, Vec<bool>)>, Vec<String>) {
+    fn non_test_sources() -> (Vec<Source>, Vec<String>) {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
         let mut files = Vec::new();
         let mut dirs = vec![root.clone()];
@@ -1564,10 +1570,10 @@ fn after() { let _ = symbol!("witness::kept_b"); }
         }
         // a literal or a format behind `.as_str()` / `.to_string()`
         for suffix in [".as_str()", ".to_string()"] {
-            if let Some(inner) = text.strip_suffix(suffix) {
-                if let resolved @ Resolved::Text(..) = resolve(inner, constants) {
-                    return resolved;
-                }
+            if let Some(inner) = text.strip_suffix(suffix)
+                && let resolved @ Resolved::Text(..) = resolve(inner, constants)
+            {
+                return resolved;
             }
         }
         if text.starts_with("b\"") || text.starts_with("br\"") || text.starts_with("br#") {
@@ -1675,14 +1681,12 @@ fn after() { let _ = symbol!("witness::kept_b"); }
                 if chars.get(i) == Some(&':') && chars.get(i + 1) == Some(&':') {
                     let mut k = i + 2;
                     // an attribute group ::{..}::
-                    if chars.get(k) == Some(&'{') {
-                        if let Some(close) = (k..chars.len()).find(|&j| chars[j] == '}') {
-                            if chars.get(close + 1) == Some(&':')
-                                && chars.get(close + 2) == Some(&':')
-                            {
-                                k = close + 3;
-                            }
-                        }
+                    if chars.get(k) == Some(&'{')
+                        && let Some(close) = (k..chars.len()).find(|&j| chars[j] == '}')
+                        && chars.get(close + 1) == Some(&':')
+                        && chars.get(close + 2) == Some(&':')
+                    {
+                        k = close + 3;
                     }
                     if chars.get(k).is_some_and(|&c| word(c)) {
                         i = k;
@@ -1732,8 +1736,11 @@ fn after() { let _ = symbol!("witness::kept_b"); }
     ///   table's `internal`), a data atom, a form or a native of the display
     ///   table (src/display_forms.json) or on [`REVIEWED_OUTPUT`]; an entry of
     ///   [`REVIEWED_OUTPUT`] no site creates fails.
+    ///
     /// Not read: symbols made from strings by any other function or macro,
-    /// and the names a reviewed site creates at run time.
+    /// the names a reviewed site creates at run time, and the names the
+    /// crate's DEPENDENCIES create (Symbolica, spenso, RustRed: out of this
+    /// test's view).
     #[test]
     fn listed_constructors_create_classified_names_and_other_arguments_are_reviewed() {
         crate::Vakint::initialize_vakint_symbols();
@@ -1991,7 +1998,7 @@ fn after() { let _ = symbol!("witness::kept_b"); }
                 failures.push(format!("STALE REVIEWED_OUTPUT: {name}"));
             }
         }
-        for (name, _) in &unclassified {
+        for name in unclassified.keys() {
             if !UNDECIDED.contains(&name.as_str()) {
                 failures.push(format!("UNCLASSIFIED: {}", unclassified[name]));
             }

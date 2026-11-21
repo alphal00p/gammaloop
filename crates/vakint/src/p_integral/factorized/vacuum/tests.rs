@@ -1375,6 +1375,21 @@ fn the_bounds_reach_the_vacuum_entry_typed_and_through_text() {
             "momentum coefficient",
         ),
         (
+            "original_cycles with a loop sign applied twice",
+            Box::new(|v| {
+                v.record.as_mut().unwrap().original_cycles = Some((0, 0));
+                v.prefactor.loop_sign = -1;
+            }),
+            "with original_cycles the weights are the caller's",
+        ),
+        (
+            "a weight applied by vakint other than prefactor_scalars",
+            Box::new(|v| {
+                v.record.as_mut().unwrap().weights = vec![("scalars".into(), true, Atom::num(2))]
+            }),
+            "weight scalars applied_by=vakint is 2",
+        ),
+        (
             "an exponent beyond 64 in a vertex factor",
             Box::new(|v| v.vertices[0].factor = atom("1/((1+UFO::x)^1000000000-UFO::y)")),
             "exceeds 64 in modulus",
@@ -1472,4 +1487,57 @@ fn the_bounds_reach_the_vacuum_entry_typed_and_through_text() {
     v.edges[0].power = 1 << 31;
     assert!(v.check_marked_bounds(true).is_ok());
     evaluate_factorized_vacuum(&vakint, &settings, &base, &Atom::num(1)).unwrap();
+}
+
+/// A marked DIRECT value whose projector carries a power of p^2 needs an
+/// external momentum: the massive sunrise (no external leg) with the
+/// projector 1 and p2_power -1 is refused by validation ("p2_power without an
+/// external momentum"); with p2_power 0 it is accepted.
+#[test]
+fn p2_power_needs_an_external_momentum_on_the_direct_kind() {
+    let edges = [
+        (1, 1, 2, vec![1, 0]),
+        (2, 1, 2, vec![0, 1]),
+        (3, 2, 1, vec![1, 1]),
+    ]
+    .iter()
+    .map(|(id, s, t, m)| {
+        let mut e = edge(
+            *id,
+            *s,
+            *t,
+            (2 * id, 2 * id + 1),
+            m,
+            LineKind::Scalar,
+            1,
+            Atom::num(1),
+        );
+        e.mass_squared = atom("witness::msq");
+        e
+    })
+    .collect();
+    let mut v = value(
+        vec![Some(1), Some(2)],
+        Vec::new(),
+        edges,
+        (1..=2).map(|i| vertex(i, Atom::num(1))).collect(),
+        Vec::new(),
+    );
+    v.record = Some(super::super::DirectRecord {
+        original_cycles: None,
+        depth: None,
+        weights: Vec::new(),
+    });
+    v.projector = Some(Projector {
+        tensor: Atom::num(1),
+        p2_power: -1,
+    });
+    match v.validate() {
+        Err(e) => assert!(
+            e.to_string()
+                .contains("p2_power without an external momentum"),
+            "{e}"
+        ),
+        Ok(()) => panic!("accepted"),
+    }
 }

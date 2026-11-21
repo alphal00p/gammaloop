@@ -2756,57 +2756,52 @@ fn numerical_mode_on_the_vacuum_entry() {
     assert!(skipped.len() < e.len(), "no coefficient compared");
 }
 
-/// UNKNOWN masters produced by the BACKEND through the closure entry: the
-/// five-loop K1 record L5-60 rr1 evaluated three Laurent terms deeper than
-/// its depth needs master coefficients the catalogue does not know: with
-/// allow-unknowns OFF the entry refuses (`Evaluation`, the unknown-master
-/// text); ON, the value carries `vakint::UNKNOWN(..)` linearly and the
-/// result check lets it through.
+/// NO UNKNOWN master from the BACKEND reaches the closure entry below six
+/// loops, and the test asserts that: a five-loop closure record evaluates
+/// only four-loop p-integrals, and the catalogues' UNKNOWN entries belong to
+/// five-loop masters. The five-loop K1 record L5-60 rr1 at its depth and six
+/// terms deeper (`VAKINT_TEST_EXTRA_DEPTH`), with the 1-4 package of
+/// `VAKINT_TEST_P_LIBRARY_1_4` (required): allow-unknowns OFF and ON both
+/// return a value, the two values are equal and carry no `vakint::UNKNOWN`.
+/// The strict half (OFF refuses, ON carries the atom linearly) becomes
+/// testable with a six-loop record.
 #[test]
 #[ignore = "external data: VAKINT_TEST_WH_FIXTURES + VAKINT_TEST_P_LIBRARY_1_4"]
-fn unknown_masters_from_the_backend_through_the_closure_entry() {
+fn no_backend_unknown_reaches_the_closure_entry_below_six_loops() {
     wh_fixtures::required_env("VAKINT_TEST_P_LIBRARY_1_4", "five loops");
     let dir = wh_fixtures::fixture_dir("k1-l5").join("L5-60").join("rr1");
-    let mut v =
+    let base =
         FactorizedNumerator::from_text(&wh_fixtures::read_fixture(&dir.join("input.txt"))).unwrap();
-    let FactorizedKind::Closure(spec) = &mut v.kind else {
-        unreachable!()
-    };
-    let depth = spec.depth.unwrap();
     let extra: usize = std::env::var("VAKINT_TEST_EXTRA_DEPTH")
         .ok()
         .and_then(|x| x.parse().ok())
         .unwrap_or(6);
-    spec.depth = Some(depth + extra);
-    // SAFETY: nextest runs each test in its own process
-    unsafe { std::env::remove_var("VAKINT_ALLOW_UNKNOWN_MASTER_COEFFICIENTS") };
-    let off = closure(&v, &symbolic(), &v.prefactor.total());
-    eprintln!(
-        "CONTRACT BACKEND UNKNOWN off: {:?}",
-        off.as_ref()
-            .map(|r| r.value.to_string().len())
-            .map_err(|e| e.to_string())
-    );
-    let mut settings = symbolic();
-    settings.allow_unknown_master_coefficients = true;
-    let on = closure(&v, &settings, &v.prefactor.total());
-    match (&off, &on) {
-        (Err(FactorizedError::Evaluation { detail }), Ok(on)) => {
-            assert!(detail.contains("expected master coefficient"), "{detail}");
-            assert!(
-                on.value.to_string().contains("UNKNOWN"),
-                "no UNKNOWN in {}",
-                on.value
-            );
-        }
-        (Ok(_), Ok(on)) => {
-            // depth + 3 still within the known coefficients: say so
-            assert!(!on.value.to_string().contains("UNKNOWN"));
-            panic!(
-                "depth + {extra} needs no unknown master coefficient on L5-60 rr1: choose a deeper depth"
-            );
-        }
-        other => panic!("{other:?}"),
+    for added in [0, extra] {
+        let mut v = base.clone();
+        let FactorizedKind::Closure(spec) = &mut v.kind else {
+            unreachable!()
+        };
+        spec.depth = Some(spec.depth.unwrap() + added);
+        // SAFETY: nextest runs each test in its own process
+        unsafe { std::env::remove_var("VAKINT_ALLOW_UNKNOWN_MASTER_COEFFICIENTS") };
+        let off = closure(&v, &symbolic(), &v.prefactor.total())
+            .unwrap_or_else(|e| panic!("depth + {added}, allow-unknowns off: {e}"));
+        let mut settings = symbolic();
+        settings.allow_unknown_master_coefficients = true;
+        let on = closure(&v, &settings, &v.prefactor.total())
+            .unwrap_or_else(|e| panic!("depth + {added}, allow-unknowns on: {e}"));
+        eprintln!(
+            "CONTRACT BACKEND UNKNOWN depth + {added}: off and on {} chars",
+            off.value.to_string().len()
+        );
+        assert!(
+            (&off.value - &on.value).expand().is_zero(),
+            "depth + {added}: off != on"
+        );
+        assert!(
+            !on.value.to_string().contains("UNKNOWN"),
+            "depth + {added}: an UNKNOWN atom"
+        );
     }
 }
 
@@ -4202,9 +4197,11 @@ fn the_inputs_per_rule_of_the_atom_grammar() {
 /// (`VAKINT_TEST_P_LIBRARY_1_5`, its own catalogue ggppss-5L-v4-rc4a with the
 /// UNKNOWN entries): the five-loop K1 record L5-60 rr1 through the closure
 /// entry at its depth and three terms deeper, allow-unknowns ON and OFF, in
-/// Symbolic and Retain. Reports each outcome (no expectation): whether the
-/// value carries `vakint::UNKNOWN(..)`, the ε orders it carries them at, or
-/// the refusal.
+/// Symbolic and Retain: every configuration returns a value without a
+/// `vakint::UNKNOWN(..)` atom (below six loops no backend UNKNOWN can reach the
+/// closure entry: the catalogue's UNKNOWN entries are five-loop masters'),
+/// OFF and ON give the same value, and Symbolic at the record's depth equals
+/// the fixture value.
 #[test]
 #[ignore = "external data: VAKINT_TEST_WH_FIXTURES + VAKINT_TEST_P_LIBRARY_1_5"]
 fn unknown_masters_from_the_backend_with_the_1_5_package() {
@@ -4236,6 +4233,7 @@ fn unknown_masters_from_the_backend_with_the_1_5_package() {
             };
             spec.depth = Some(spec.depth.unwrap() + extra);
             for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Retain] {
+                let mut previous: Option<Atom> = None;
                 for allow in [false, true] {
                     let mut settings = site(mode);
                     settings.allow_unknown_master_coefficients = allow;
@@ -4301,11 +4299,22 @@ fn unknown_masters_from_the_backend_with_the_1_5_package() {
                                 s.contains("PMaster")
                             )
                         }
-                        Err(e) => format!(
-                            "ERR {}",
-                            e.to_string().chars().take(400).collect::<String>()
-                        ),
+                        Err(e) => panic!("{graph}/{rr} depth+{extra} {mode:?} allow={allow}: {e}"),
                     };
+                    let value = got.unwrap().value;
+                    assert!(
+                        !value.to_string().contains("UNKNOWN"),
+                        "{graph}/{rr} depth+{extra} {mode:?} allow={allow}: an UNKNOWN atom"
+                    );
+                    if allow {
+                        let off = previous.take().expect("off before on");
+                        assert!(
+                            (&value - &off).expand().is_zero(),
+                            "{graph}/{rr} depth+{extra} {mode:?}: allow-unknowns changes the value"
+                        );
+                    } else {
+                        previous = Some(value);
+                    }
                     eprintln!(
                         "CONTRACT 1-5 {graph}/{rr} depth+{extra} {mode:?} allow={allow}: {shown} [{seconds:.1}s]"
                     );

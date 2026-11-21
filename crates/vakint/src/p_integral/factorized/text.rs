@@ -76,6 +76,14 @@ fn open_slots(value: &FactorizedNumerator) -> Result<Vec<String>> {
 /// Write one record: v1 for a value without new features (unchanged), v3
 /// for every other (kind closure, insertions, a direct record).
 pub(super) fn write_record(value: &FactorizedNumerator) -> Result<String> {
+    // a closure value's provenance is its ClosureSpec: a direct record next to
+    // it cannot be written (it would be dropped), so the text of a refused
+    // value is never an accepted text
+    if matches!(value.kind, FactorizedKind::Closure(_)) && value.record.is_some() {
+        return Err(FactorizedError::Closure {
+            detail: "a closure value carries a direct record (record must be None: a closure's provenance is its ClosureSpec)".into(),
+        });
+    }
     let closure = match &value.kind {
         FactorizedKind::Closure(spec) => Some(spec),
         FactorizedKind::Direct => None,

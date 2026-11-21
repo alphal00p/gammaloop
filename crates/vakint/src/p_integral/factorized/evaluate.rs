@@ -385,6 +385,10 @@ pub fn vakint_input(
         });
     }
     // a marked value called here directly: the entry check too
+    if super::is_marked(value) {
+        // the settings' rule before any computing rule
+        super::check_master_modes(settings)?;
+    }
     super::check_marked_entry(
         value,
         prefactor,
@@ -475,6 +479,10 @@ pub fn evaluate_factorized(
     // rule (no-ops for an unmarked value: the base behaviour; the closure
     // kind keeps its earlier refusal of this entry, `Reserved`)
     if !matches!(value.kind, super::FactorizedKind::Closure(_)) {
+        if super::is_marked(value) {
+            // the settings' rule before any computing rule
+            super::check_master_modes(settings)?;
+        }
         super::check_marked_entry(
             value,
             prefactor,
