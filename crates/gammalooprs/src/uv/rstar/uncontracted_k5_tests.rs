@@ -2376,3 +2376,64 @@ fn k5_hole_cut_mode_is_resolved_at_start_up_and_in_the_cache_key() -> Result<()>
     }
     Ok(())
 }
+
+/// U7c delta pre-review N3 (resume identity): the hole-cut mode is part of
+/// the resume identity when `surrogate` is enabled: a run resumed under the
+/// other mode recomputes (its evidence's identity differs), the same mode
+/// reuses it. Without `surrogate` the identity is the base's.
+#[test]
+fn k5_hole_cut_mode_is_in_the_resume_identity() -> Result<()> {
+    use k5::{HoleCut, with_hole_cut};
+    // identity
+    let identity = |switch: Switch, mode: HoleCut| {
+        with_switch(switch, || {
+            with_hole_cut(mode, uncontracted_ledger::current_identity)
+        })
+    };
+    let (decline, form) = (
+        identity(check_surrogate(), HoleCut::Decline),
+        identity(check_surrogate(), HoleCut::Form),
+    );
+    ensure!(
+        decline.as_deref() == Some("check:surrogate:strict:hole_cut=decline")
+            && form.as_deref() == Some("check:surrogate:strict:hole_cut=form"),
+        "{decline:?} {form:?}"
+    );
+    let default = Switch::parse(Some("check")).map_err(|error| eyre!(error))?;
+    ensure!(
+        identity(default, HoleCut::Decline).as_deref() == Some("check:root,child,ir-hard:strict")
+            && identity(default, HoleCut::Form) == identity(default, HoleCut::Decline),
+        "the default identity changed"
+    );
+    // a resumed run under the other mode recomputes, under the same mode it
+    // reuses the evidence
+    let evidence = with_switch(check_surrogate(), || {
+        with_hole_cut(HoleCut::Form, || -> Result<serde_json::Value> {
+            let ledger =
+                DiagramLedger::open("n3-graph", "000003").ok_or_else(|| eyre!("no ledger"))?;
+            uncontracted_ledger::expect(Kind::Surrogate);
+            uncontracted_ledger::record_value(Kind::Surrogate, Mode::Check);
+            ledger.close(true)?.ok_or_else(|| eyre!("no evidence"))
+        })
+    })?;
+    let resumed = |mode: HoleCut| {
+        with_switch(check_surrogate(), || {
+            with_hole_cut(mode, || {
+                uncontracted_ledger::resumed("n3-graph", "000003", Some(&evidence))
+            })
+        })
+    };
+    ensure!(resumed(HoleCut::Form) == uncontracted_ledger::Resumed::Checked);
+    match resumed(HoleCut::Decline) {
+        uncontracted_ledger::Resumed::Unchecked(reason) => ensure!(
+            reason.starts_with("identity:") && reason.contains("hole_cut=form"),
+            "{reason}"
+        ),
+        other => {
+            return Err(eyre!(
+                "the decline run reused the form run's evidence: {other:?}"
+            ));
+        }
+    }
+    Ok(())
+}

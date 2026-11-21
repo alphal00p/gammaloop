@@ -420,6 +420,14 @@ pub(crate) fn identity_of(switch: Switch, exceptions: &Exceptions) -> Option<Str
         .collect::<Vec<_>>()
         .join(",");
     let mut identity = format!("{}:{kinds}:strict", switch.mode.as_str());
+    // U7c (K5): the hole-cut mode decides which surrogate records exist (a
+    // resumed run under another mode recomputes; delta pre-review N3)
+    if switch.enabled(Kind::Surrogate) {
+        identity.push_str(&format!(
+            ":hole_cut={}",
+            uncontracted::k5::hole_cut_name(uncontracted::k5::hole_cut())
+        ));
+    }
     if let Some(witness) = witness() {
         identity.push_str(&format!(":witness={witness}"));
     }
