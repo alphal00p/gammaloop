@@ -1812,6 +1812,8 @@ pub(crate) struct Captured {
     pub loops: usize,
     pub depth: usize,
     pub order: i64,
+    /// A refusal's detail (declined or error; U7c tests name a decline's case).
+    pub detail: Option<String>,
 }
 
 #[cfg(test)]
@@ -1838,6 +1840,12 @@ fn capture(attempt: &Attempt, check: Option<&Check>) {
                 loops: attempt.loops,
                 depth: attempt.depth,
                 order: attempt.order,
+                detail: match &attempt.outcome {
+                    Outcome::Declined(decline) | Outcome::Error(decline) => {
+                        Some(decline.detail.clone())
+                    }
+                    _ => None,
+                },
             });
         }
     });
