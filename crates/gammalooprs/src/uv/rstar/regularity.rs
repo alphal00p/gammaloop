@@ -602,7 +602,8 @@ pub(super) fn certify_correction(
     factors: &CorrectionFactors<'_>,
 ) -> std::result::Result<Atom, Refused> {
     let quotient = normalise(Factor::QuotientVertexNumerator, factors.quotient)?;
-    normalise(Factor::HardNumerator, factors.hard)?;
+    // The hard numerator: its grammar only (its scalar poles are h_j's).
+    let _ = normalise(Factor::HardNumerator, factors.hard)?;
     let prefactor = normalise(Factor::GraphNumeratorPrefactor, factors.prefactor)?;
     let projector = normalise(Factor::GraphProjector, factors.projector)?;
     Ok(quotient * prefactor * projector)
