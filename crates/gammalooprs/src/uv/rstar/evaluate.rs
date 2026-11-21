@@ -932,6 +932,18 @@ impl RStarPlan {
     }
 }
 
+thread_local! {
+    /// Check mode: the value of the K3 record just compared (ours), taken by
+    /// the IR hard child route right after the term
+    /// ([`Evaluation::ir_route_on_values`]).
+    static K3_OURS: std::cell::RefCell<Option<Atom>> = const { std::cell::RefCell::new(None) };
+}
+
+/// The value [`K3_OURS`] holds (cleared).
+fn take_k3_ours() -> Option<Atom> {
+    K3_OURS.with(|slot| slot.borrow_mut().take())
+}
+
 /// End the hook occurrence of an uncontracted record (`GAMMALOOP_UNCONTRACTED_NUMERATOR`
 /// on / check, or `GAMMALOOP_UNCONTRACTED_TIMING=1`) by `route`; nothing
 /// without one ([`super::uncontracted_ledger::Hook::finish`]).
@@ -1871,10 +1883,9 @@ impl<'a> Evaluation<'a> {
         // records in a section of the diagram ledger, reclassified when the
         // correction declines (`None` off; dropped on an error: unchanged)
         let section = super::uncontracted_ledger::Section::open();
-        let close_section = |end: super::uncontracted_ledger::SectionEnd| {
-            if let Some(section) = section {
-                section.close(end);
-            }
+        let close_section = |end: super::uncontracted_ledger::SectionEnd| match section {
+            Some(section) => section.close(end),
+            None => Ok(()),
         };
         let mut route_returned = false;
         let attempt = if mode == super::closed::ChildMode::Check || !guard {
@@ -1915,7 +1926,11 @@ impl<'a> Evaluation<'a> {
         };
         let seconds = started.elapsed().as_secs_f64();
         let reduction = counted.elapsed().fields();
-        close_section(match &attempt {
+        // with the switch on or check, a route decline after taken K3
+        // values (on) and a panic or error the guard caught are failures
+        // (pre-review of the U7a delta, findings 3 and 4): the diagram
+        // fails, nothing falls back silently
+        if let Err(failure) = close_section(match &attempt {
             Ok(_) => super::uncontracted_ledger::SectionEnd::Kept,
             Err(reason) if route_returned => {
                 super::uncontracted_ledger::SectionEnd::RouteDeclined(reason.clone())
@@ -1924,7 +1939,22 @@ impl<'a> Evaluation<'a> {
                 super::uncontracted_ledger::SectionEnd::GuardBudget
             }
             Err(reason) => super::uncontracted_ledger::SectionEnd::GuardFailure(reason.clone()),
-        });
+        }) {
+            eprintln!(
+                "IR_HARD_CHILD graph={} corr={correction_index} hard_loops={} omega={} outcome=error:uncontracted:{} seconds={seconds:.3}{reduction} edges={}",
+                self.graph.name,
+                self.graph.n_loops(&correction.hard),
+                correction.taylor_order,
+                attempt.as_ref().err().map_or("?", String::as_str),
+                self.edges(&correction.hard),
+            );
+            return Err(super::ir_dirac::diagnostic_failure(failure.wrap_err(
+                format!(
+                    "the IR correction corr={correction_index} of {}",
+                    self.graph.name
+                ),
+            )));
+        }
         let (value, stats) = match attempt {
             Ok(outcome) => outcome,
             Err(reason) => {
@@ -2049,12 +2079,20 @@ impl<'a> Evaluation<'a> {
             .and_then(|boundary| boundary.as_ref().ok())
             .cloned();
         let dirac_check = closure.is_some() && self.ir_dirac == IrDiracMode::Check;
+        // GAMMALOOP_UNCONTRACTED_NUMERATOR=check: the K3 records' own values
+        // (today's where a term has none) are summed too, and the route's
+        // value-dependent steps run on them as well (pre-review of the U7a
+        // delta, finding 4: what mode on would do with the new values)
+        let k3_check = super::uncontracted::switch().mode == super::uncontracted::Mode::Check;
         let mut extra = quotient_loops;
         let mut attempts = 0_usize;
         loop {
             attempts += 1;
             let started = Instant::now();
             let mut groups = BTreeMap::<usize, Atom>::new();
+            // check mode: H(γ) per loop count from the K3 records' values
+            let mut on_groups = BTreeMap::<usize, Atom>::new();
+            let mut any_ours = false;
             // The open H(γ) per loop count and the times (IR_DIRAC_CHECK).
             let mut open_groups = BTreeMap::<usize, Atom>::new();
             let (mut closed_seconds, mut open_seconds) = (0.0, 0.0);
@@ -2096,6 +2134,12 @@ impl<'a> Evaluation<'a> {
                     remainder,
                     &soft,
                 )?;
+                let ours = take_k3_ours();
+                if k3_check {
+                    any_ours |= ours.is_some();
+                    *on_groups.entry(term.remainder.loops).or_insert(Atom::Zero) +=
+                        ours.unwrap_or_else(|| value.clone());
+                }
                 eprintln!(
                     "IR_HARD_CHILD_TERM graph={} corr={correction_index} term={term_index} attempt={attempts} hard_loops={hard_loops} rem_loops={} children={} omega={omega} edge={edge_basis} extra_depth={extra} routed_bytes={routed_bytes} h_bytes={} closures={} seconds={:.3}{} edges={}",
                     self.graph.name,
@@ -2214,6 +2258,26 @@ impl<'a> Evaluation<'a> {
                         .map(|(h, insertion)| (h, insertion, *loops)),
                 );
             }
+            if k3_check
+                && any_ours
+                && let Some(head) =
+                    self.ir_route_on_values(&on_groups, &soft, closure.as_ref(), &rows)?
+            {
+                let code = format!(
+                    "ir_hard_route:{}",
+                    head.split(':').next().unwrap_or_default()
+                );
+                super::uncontracted_ledger::record_error(super::uncontracted::Kind::IrHard, &code);
+                eprintln!(
+                    "IR_HARD_CHILD_ON_VALUES graph={} corr={correction_index} attempt={attempts} outcome=error:{code} reason={head} edges={}",
+                    self.graph.name,
+                    self.edges(&correction.hard),
+                );
+                return Err(super::ir_dirac::diagnostic_failure(eyre!(
+                    "UNCONTRACTED check: on the K3 records' values the IR hard child route of {} corr={correction_index} declines ({head}) where today's values pass: mode on would fall back to the closed path on a failure of the new path (error:{code})",
+                    self.graph.name
+                )));
+            }
             if let (true, Some(boundary)) = (dirac_check, &closure) {
                 let mut all_loops = groups
                     .keys()
@@ -2291,6 +2355,68 @@ impl<'a> Evaluation<'a> {
                 ),
             )));
         }
+    }
+
+    /// Check mode (pre-review of the U7a delta, finding 4): the value-
+    /// dependent steps of the IR hard child route ([`Self::ir_hard_child`])
+    /// on `on_groups`, the `H(γ)` per remainder loop count summed from the
+    /// K3 records' own values (today's for a term without one), given that
+    /// they passed on today's values (`rows`): the moment split
+    /// ([`hard_moments`], `moments:`), the Dirac reassembly (`dirac_*`), the
+    /// mass power of every coefficient (`mass_power`) and the insertions
+    /// (`rows`: an insertion today's split does not have would enter the
+    /// quotient, whose valuation decides the depth retry). The first step
+    /// that fails (where mode on, taking these values, would decline), or
+    /// `None`.
+    fn ir_route_on_values(
+        &self,
+        on_groups: &BTreeMap<usize, Atom>,
+        soft: &[EdgeIndex],
+        closure: Option<&super::expression::DiracBoundary>,
+        rows: &[(Atom, Atom, usize)],
+    ) -> Result<Option<String>> {
+        let mass = top_mass::auxiliary_mass_squared();
+        for (loops, h) in on_groups {
+            if h.is_zero() {
+                continue;
+            }
+            let moments = match hard_moments(h, soft) {
+                Ok(moments) => moments,
+                Err(error) => {
+                    let reason = format!("{error}")
+                        .chars()
+                        .map(|c| if c.is_whitespace() { '_' } else { c })
+                        .take(120)
+                        .collect::<String>();
+                    return Ok(Some(format!("moments:{reason}")));
+                }
+            };
+            let moments = match closure {
+                Some(boundary) => match super::ir_dirac::reassemble(&moments, boundary) {
+                    Ok(reassembled) => reassembled,
+                    Err(reason) => return Ok(Some(format!("dirac_{reason}"))),
+                },
+                None => moments,
+            };
+            for (coefficient, insertion) in &moments {
+                if coefficient.is_zero() || coefficient.expand().is_zero() {
+                    continue;
+                }
+                if top_mass::mass_power(coefficient, mass).is_none() {
+                    return Ok(Some("mass_power".into()));
+                }
+                let known = rows.iter().any(|(_, today, today_loops)| {
+                    today_loops == loops
+                        && (today == insertion
+                            || (today - insertion).expand().is_zero()
+                            || super::uncontracted::agree(today, insertion).unwrap_or(false))
+                });
+                if !known {
+                    return Ok(Some(format!("rows:loops={loops}")));
+                }
+            }
+        }
+        Ok(None)
     }
 
     /// One remainder term of an IR hard part `H(γ)` ([`Self::ir_hard_child`]),
@@ -2421,9 +2547,12 @@ impl<'a> Evaluation<'a> {
             let site = self.uncontracted_ir_hard_site(term, &call, &hard);
             uncontracted::attempt(&site, kind, id, switch.mode, || Ok(&remainder))?
         };
-        // tests: an injected outcome (the ledger's `with_fault`)
+        // tests: an injected outcome (the ledger's `with_fault`); tests and
+        // witness builds: a changed K3 value (`with_k3_mutation`)
         #[cfg(test)]
         let attempt = super::uncontracted_ledger::inject(attempt);
+        #[cfg(any(test, feature = "uncontracted-witness"))]
+        let attempt = super::uncontracted_ledger::mutate_k3(attempt);
         let uncontracted_elapsed = started.elapsed();
         if switch.mode == Mode::Check {
             // a refusal that is not designed fails the diagram (review B1/B2)
@@ -2468,6 +2597,11 @@ impl<'a> Evaluation<'a> {
                 return Err(super::ir_dirac::diagnostic_failure(
                     uncontracted::check_failure(&attempt, check, self.epsilon),
                 ));
+            }
+            // our value, for the route's steps on the K3 values
+            // ([`Self::ir_route_on_values`])
+            if let Some(ours) = attempt.value() {
+                K3_OURS.with(|slot| *slot.borrow_mut() = Some(ours));
             }
             return Ok((today, routed_bytes));
         }
@@ -2574,6 +2708,9 @@ impl<'a> Evaluation<'a> {
         rows: &[(Atom, Atom, usize)],
     ) -> Result<std::result::Result<(Atom, String, i64), String>> {
         use symbolica::{function, id::Replacement};
+        // tests: a panic after the hard part's records (`with_outer_panic`)
+        #[cfg(test)]
+        super::uncontracted_ledger::outer_panic();
         let projector = self.root_projector;
         let mode = self.top_mass.unwrap_or(TopMassTerms::Keep);
         let degree = usize::try_from(self.plan.taylor_order)?;

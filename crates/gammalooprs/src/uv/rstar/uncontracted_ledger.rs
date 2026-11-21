@@ -53,16 +53,24 @@
 //! declines is named for that graph and kind by the run's exception list,
 //! `GAMMALOOP_UNCONTRACTED_EXCEPTIONS=<file>` (lines
 //! `graph<TAB>kind<TAB>code<TAB>reason`, `#` comments; the reason is
-//! required). Mode on reports the same dispositions; an error outcome fails
-//! the diagram there too.
+//! required). Every comparison counted as done must have agreed
+//! (`equal == compared`, hits included). Mode on reports the same
+//! dispositions; an error outcome fails the diagram there too, and the
+//! all-declined rule applies to its taken records (a setting-wide decline
+//! never makes mode on fall back entirely with outcome ok). Over a run
+//! ([`RunTally`]), an enabled kind with no compared (check) / taken (on)
+//! record fails, unless a run-level exception row names it.
 //!
 //! # Resume evidence
 //!
-//! The close returns the dispositions as JSON (`u7a-disposition.v1`) for the
+//! The close returns the dispositions as JSON (`u7a-disposition.v2`) for the
 //! beta's integral record; [`resumed`] reads them back when the beta reuses
-//! a saved record: matching evidence (the same switch identity, outcome ok)
-//! re-prints its lines with `source=checkpoint`; anything else is reported
-//! `outcome=unchecked`, never ok.
+//! a saved record: matching evidence (the same switch identity, graph and
+//! diagram, counts that pass the verdict again) re-prints its lines with
+//! `source=checkpoint`; anything else makes the beta recompute the diagram.
+//! The code that wrote the evidence is bound by the beta's checkpoint
+//! identity (its pipeline fingerprint hashes every path dependency's
+//! sources), so a rebuilt binary never reuses another binary's records.
 //!
 //! # Occurrence keys and `UNCONTRACTED_TIMING`
 //!
@@ -165,13 +173,21 @@ impl Exceptions {
     }
 }
 
+/// The code of a run-level exception row (`*<TAB><kind><TAB>none_compared
+/// <TAB><reason>`): the run may end with no compared (check) or taken (on)
+/// record of `kind` ([`RunTally`]; pre-review of the U7a delta, finding 6).
+pub(crate) const NONE_COMPARED: &str = "none_compared";
+
 /// The exceptions of a file's text (`graph<TAB>kind<TAB>code<TAB>reason`;
 /// blank lines and `#` comments skipped; every field required). The code
 /// must be a designed refusal's ([`uncontracted::is_designed_code`]): an
 /// exception excuses only declined records, so a code that is an error
 /// (e.g. `vakint:all_massive` since requirement 13's interim rule; the
-/// single-propagator shape is now the emitter's `one_loop_tree_cut`) would
-/// name nothing and is refused instead.
+/// single-propagator shape is now the emitter's `one_loop_tree_cut`; the
+/// IR hard child route's `ir_hard_route:<head>` and the guard's
+/// `ir_hard_guard:<panic|error>`) would name nothing and is refused
+/// instead. The one run-level row is graph `*` with the code
+/// [`NONE_COMPARED`] (and that code only with graph `*`).
 pub(crate) fn parse_exceptions(text: &str) -> std::result::Result<Exceptions, String> {
     let mut entries = Vec::new();
     for (n, line) in text.lines().enumerate() {
@@ -191,7 +207,12 @@ pub(crate) fn parse_exceptions(text: &str) -> std::result::Result<Exceptions, St
         if graph.is_empty() || code.is_empty() || reason.is_empty() {
             return Err(bad("empty graph, code or reason"));
         }
-        if !uncontracted::is_designed_code(code) {
+        if (graph == "*") != (code == NONE_COMPARED) {
+            return Err(bad(&format!(
+                "graph `*` is the run-level row and takes exactly the code {NONE_COMPARED}"
+            )));
+        }
+        if code != NONE_COMPARED && !uncontracted::is_designed_code(code) {
             return Err(bad(
                 "the code is not a designed refusal (only declined records can be excepted; an error always fails its diagram)",
             ));
@@ -243,9 +264,10 @@ impl Routes {
 /// included: it keys an off run's occurrences), and with the switch on or
 /// check `GAMMALOOP_UNCONTRACTED_STRICT`, an enabled kind whose route is
 /// off (refused: the kind would expect nothing, a check that compares
-/// nothing), check mode with the PINT6 dump (refused: every record would
-/// decline `pint6_dump`, a check that compares nothing) and the exception
-/// list (check mode only; read here). With the switch off nothing else is
+/// nothing), the PINT6 dump (refused in on and check: every record would
+/// decline `pint6_dump`; since the pre-review of the U7a delta, finding 7,
+/// mode on too) and the exception list (on and check: mode on applies the
+/// all-declined rule too; read here). With the switch off nothing else is
 /// read, as before the switch existed. `pint6` is whether
 /// `PINT6_CLOSURE_DUMP` is set, `routes` the routes in force; the values
 /// are the environment's.
@@ -303,23 +325,26 @@ pub(crate) fn initialise(
             ));
         }
     }
-    if switch.mode == Mode::Check && pint6() {
+    if pint6() {
+        // mode on too since the pre-review of the U7a delta (finding 7): a
+        // setting-wide decline would make it fall back entirely
         return Err(format!(
-            "{}=check with PINT6_CLOSURE_DUMP set is refused: the PINT6 dump keeps today's records, so every record would decline (pint6_dump) and the check would compare nothing; unset one of them",
-            uncontracted::VARIABLE
+            "{}={} with PINT6_CLOSURE_DUMP set is refused: the PINT6 dump keeps today's records, so every record would decline (pint6_dump) and the run would {} nothing; unset one of them",
+            uncontracted::VARIABLE,
+            switch.mode.as_str(),
+            if switch.mode == Mode::Check {
+                "compare"
+            } else {
+                "take"
+            }
         ));
     }
     match exceptions.map(str::trim).filter(|path| !path.is_empty()) {
-        Some(path) if switch.mode == Mode::Check => {
+        Some(path) => {
             let text = std::fs::read_to_string(path)
                 .map_err(|error| format!("{EXCEPTIONS_VARIABLE}={path}: {error}"))?;
             parse_exceptions(&text)
         }
-        Some(path) => Err(format!(
-            "{EXCEPTIONS_VARIABLE}={path} is a check-mode list; {}={} does not read it",
-            uncontracted::VARIABLE,
-            switch.mode.as_str()
-        )),
         None => Ok(Exceptions::default()),
     }
 }
@@ -378,9 +403,12 @@ pub(crate) fn with_exceptions<T>(exceptions: Exceptions, f: impl FnOnce() -> T) 
 }
 
 /// The identity of the switch for a checkpoint (`None` off): the mode, the
-/// enabled kinds, strictness (always, R2-I1) and, in check mode, the
-/// exception list's digest; e.g. `check:root,child,ir-hard:strict`. The
-/// beta appends it to its computation fingerprint (U7a.1 (i)).
+/// enabled kinds, strictness (always, R2-I1) and the exception list's
+/// digest (on and check); e.g. `check:root,child,ir-hard:strict`. The
+/// beta appends it to its computation fingerprint (U7a.1 (i)); the code
+/// (gammaloop, vakint) is bound there by the beta's source provenance,
+/// which hashes the sources of every path dependency (pre-review of the
+/// U7a delta, finding 1).
 pub(crate) fn identity_of(switch: Switch, exceptions: &Exceptions) -> Option<String> {
     if switch.mode == Mode::Off {
         return None;
@@ -392,9 +420,10 @@ pub(crate) fn identity_of(switch: Switch, exceptions: &Exceptions) -> Option<Str
         .collect::<Vec<_>>()
         .join(",");
     let mut identity = format!("{}:{kinds}:strict", switch.mode.as_str());
-    if switch.mode == Mode::Check
-        && let Some(digest) = &exceptions.digest
-    {
+    if let Some(witness) = witness() {
+        identity.push_str(&format!(":witness={witness}"));
+    }
+    if let Some(digest) = &exceptions.digest {
         identity.push_str(&format!(":exceptions={digest}"));
     }
     Some(identity)
@@ -437,8 +466,13 @@ pub(crate) struct Counts {
     /// either mode (check mode compares them).
     pub uncontracted: usize,
     pub zero: usize,
-    /// Comparisons that agreed.
+    /// Comparisons that agreed (check mode: must be `compared`, the
+    /// verdict's rule; pre-review of the U7a delta, finding 5).
     pub equal: usize,
+    /// The agreeing comparisons the Δ-cache hits stand for (the fills'
+    /// `equal`): must be the `hit:compared` records.
+    #[serde(default)]
+    pub hit_equal: usize,
     /// Disposition -> records (`compared`, `taken`, `declined:<code>`,
     /// `error:<code>`, `unchecked`, `hit:<...>`).
     pub classes: BTreeMap<String, usize>,
@@ -469,6 +503,7 @@ impl Counts {
         self.uncontracted += other.uncontracted;
         self.zero += other.zero;
         self.equal += other.equal;
+        self.hit_equal += other.hit_equal;
         for (class, n) in &other.classes {
             self.add(class.clone(), *n);
         }
@@ -711,6 +746,19 @@ pub(crate) fn record_value(kind: Kind, mode: Mode) {
     });
 }
 
+/// Tests: one check-mode comparison of `kind` that agreed (`equal`) or not,
+/// as [`record`] counts it (a disagreeing one is otherwise a diagnostic
+/// failure of the hook: the verdict must not rely on that).
+#[cfg(test)]
+pub(crate) fn record_compared(kind: Kind, equal: bool) {
+    with_counts(kind, |counts| {
+        counts.attempted += 1;
+        counts.uncontracted += 1;
+        counts.equal += usize::from(equal);
+        counts.add("compared", 1);
+    });
+}
+
 /// Tests: one check-mode attempt of `kind` whose today's path failed
 /// (`unchecked`, as the hook reports it).
 #[cfg(test)]
@@ -728,6 +776,13 @@ pub(super) fn record_unknown_masters(kind: Kind) {
         counts.attempted += 1;
         counts.add("error:unknown_masters", 1);
     });
+}
+
+/// An error of the enabled `kind` that is not one record's outcome (check
+/// mode: the IR hard child route on our K3 values declines where today's
+/// pass, [`super::evaluate`]): `error:<code>`, the diagram fails.
+pub(super) fn record_error(kind: Kind, code: &str) {
+    with_counts(kind, |counts| counts.add(format!("error:{code}"), 1));
 }
 
 /// A K3 term of the enabled `kind` that builds no record by design (not
@@ -804,6 +859,7 @@ fn hit(note: Option<&FillNote>, graph: &Graph, support: &SuBitGraph) {
             for (kind, fill) in &note.counts {
                 let counts = stands.entry(*kind).or_default();
                 counts.expected += fill.expected;
+                counts.hit_equal += fill.equal + fill.hit_equal;
                 for (class, n) in &fill.classes {
                     let class = if class.starts_with("hit:") {
                         class.clone()
@@ -902,14 +958,19 @@ pub(super) enum SectionEnd {
     /// The correction's value is the child route's: the K3 records keep
     /// their dispositions.
     Kept,
-    /// The route declined the correction by its own designed reason
-    /// (`moments:`, `dirac_*`, `mass_power`, `depth:`, ...) after its K3
-    /// records ran; today's closed path computes the correction.
+    /// The route declined the correction by its own reason (`moments:`,
+    /// `dirac_*`, `mass_power`, `depth:`, ...) after its K3 records ran;
+    /// today's closed path computes the correction. Mode on with taken
+    /// records: an error (the decline follows the new values; pre-review of
+    /// the U7a delta, finding 4); check mode (the route had today's values):
+    /// the comparisons stand.
     RouteDeclined(String),
     /// `GAMMALOOP_IR_HARD_CHILD_GUARD=1`: the scoped budget was exhausted.
     GuardBudget,
     /// `GAMMALOOP_IR_HARD_CHILD_GUARD=1`: the guard caught a panic or an
-    /// ordinary error (`panic:..`, `error:..`).
+    /// ordinary error (`panic:..`, `error:..`): always an error with the
+    /// switch on or check, inside a record or not (pre-review of the U7a
+    /// delta, finding 3).
     GuardFailure(String),
 }
 
@@ -927,23 +988,25 @@ fn reason_head(reason: &str) -> String {
 
 /// One IR correction on the child route, a frame of the diagram ledger
 /// (review of the U7a delta: refusal-integrity findings 2 and 4,
-/// values-and-off finding 1). Its K3 records join the frame below when it
-/// closes; when the correction declines, they are reclassified first, so the
-/// lines never say `taken` for a value today's closed path replaced, and an
-/// interrupted record is never silently dropped:
+/// values-and-off finding 1; pre-review findings 3 and 4). Its K3 records
+/// join the frame below when it closes; when the correction declines, they
+/// are reclassified first, so the lines never say `taken` for a value
+/// today's closed path replaced, and an interrupted record is never
+/// silently dropped:
 ///
 /// * a route decline ([`SectionEnd::RouteDeclined`]): in mode on each
-///   `taken` record becomes `declined:ir_hard_route:<reason head>` (the
-///   value was discarded); check mode keeps `compared` (the comparison
-///   happened);
+///   `taken` record becomes the ERROR `error:ir_hard_route:<reason head>`
+///   and the close returns the failure (the route declined after it took
+///   the new values: a failure of the new path never falls back silently);
+///   check mode keeps `compared` (the route had today's values: the
+///   decline is today's; the route on our values is checked separately);
 /// * an exhausted guard budget ([`SectionEnd::GuardBudget`], a designed
 ///   decline of the whole correction): `taken` (on) and the interrupted
 ///   records become `declined:ir_hard_guard:budget`;
 /// * a panic or an error the guard caught ([`SectionEnd::GuardFailure`]):
-///   an interrupted record (expected, no disposition: the failure happened
-///   inside it) is `error:ir_hard_guard:<panic|error>` and fails the
-///   diagram; without one the failure was outside the records, and the
-///   decline is the route's (as a route decline, `ir_hard_route:<head>`).
+///   every record of the section (taken, compared, interrupted) becomes
+///   `error:ir_hard_guard:<panic|error>` and the close returns the failure,
+///   whether the failure happened inside a record or after them.
 ///
 /// An interrupted record is one that reached the hook with no disposition,
 /// or one counted `unchecked` (check mode: its today's path failed inside
@@ -965,55 +1028,89 @@ impl Section {
         })
     }
 
-    pub(super) fn close(mut self, end: SectionEnd) {
+    /// Close the section by `end`; `Err` (the correction's failure, already
+    /// in the counts as an error) when the end is not a designed one.
+    pub(super) fn close(mut self, end: SectionEnd) -> Result<()> {
         self.done = true;
         let mut counts = pop(self.id).map(|frame| frame.counts).unwrap_or_default();
         let mode = uncontracted::switch().mode;
-        for counts in counts.values_mut() {
-            reclassify(counts, mode, &end);
+        let mut errors = Vec::new();
+        for (kind, counts) in counts.iter_mut() {
+            if let Some(error) = reclassify(counts, mode, &end) {
+                errors.push(format!("kind={}: {error}", kind.as_str()));
+            }
         }
         for (kind, counts) in &counts {
             with_counts(*kind, |below| below.merge(counts));
         }
+        match (&end, errors.is_empty()) {
+            (SectionEnd::GuardFailure(reason), _) => Err(eyre!(
+                "UNCONTRACTED: GAMMALOOP_IR_HARD_CHILD_GUARD caught {reason} in an IR correction with {}={}: a failure, never a decline ({})",
+                uncontracted::VARIABLE,
+                mode.as_str(),
+                if errors.is_empty() {
+                    "no record of the correction".to_owned()
+                } else {
+                    errors.join("; ")
+                }
+            )),
+            (_, false) => Err(eyre!(
+                "UNCONTRACTED: the IR hard child route declined after it took the uncontracted K3 values ({}): mode on would fall back to the closed path on a failure of the new path; {}",
+                match &end {
+                    SectionEnd::RouteDeclined(reason) => reason.as_str(),
+                    _ => "?",
+                },
+                errors.join("; ")
+            )),
+            (_, true) => Ok(()),
+        }
     }
 }
 
-/// The reclassification of one kind's counts of a [`Section`] by its end.
-/// The interrupted records of a guard's end are those without a disposition
-/// and those `unchecked` (check mode: today's path of the record failed
-/// inside the guarded correction, e.g. on the exhausted budget).
-fn reclassify(counts: &mut Counts, mode: Mode, end: &SectionEnd) {
+/// The reclassification of one kind's counts of a [`Section`] by its end;
+/// the error it makes, if any. The interrupted records of a guard's end are
+/// those without a disposition and those `unchecked` (check mode: today's
+/// path of the record failed inside the guarded correction, e.g. on the
+/// exhausted budget).
+fn reclassify(counts: &mut Counts, mode: Mode, end: &SectionEnd) -> Option<String> {
     if matches!(end, SectionEnd::GuardBudget | SectionEnd::GuardFailure(_)) {
         // an `unchecked` record is one without a disposition from here on
         counts.classes.remove("unchecked");
     }
     let interrupted = counts.expected.saturating_sub(counts.accounted());
-    let (taken_to, interrupted_to) = match end {
-        SectionEnd::Kept => return,
-        SectionEnd::RouteDeclined(reason) => (
-            format!("declined:ir_hard_route:{}", reason_head(reason)),
-            None,
-        ),
-        SectionEnd::GuardBudget => (
-            "declined:ir_hard_guard:budget".to_owned(),
-            Some("declined:ir_hard_guard:budget".to_owned()),
-        ),
-        SectionEnd::GuardFailure(reason) if interrupted > 0 => (
-            format!("declined:ir_hard_route:{}", reason_head(reason)),
-            Some(format!("error:ir_hard_guard:{}", reason_head(reason))),
-        ),
-        SectionEnd::GuardFailure(reason) => (
-            format!("declined:ir_hard_route:{}", reason_head(reason)),
-            None,
-        ),
-    };
-    if mode == Mode::On
-        && let Some(taken) = counts.classes.remove("taken")
-    {
-        counts.add(taken_to, taken);
-    }
-    if let Some(class) = interrupted_to {
-        counts.add(class, interrupted);
+    match end {
+        SectionEnd::Kept => None,
+        SectionEnd::RouteDeclined(reason) => {
+            let taken = (mode == Mode::On)
+                .then(|| counts.classes.remove("taken"))
+                .flatten()?;
+            let class = format!("error:ir_hard_route:{}", reason_head(reason));
+            counts.add(class.clone(), taken);
+            Some(format!("{taken} taken records became {class}"))
+        }
+        SectionEnd::GuardBudget => {
+            let class = "declined:ir_hard_guard:budget";
+            if mode == Mode::On
+                && let Some(taken) = counts.classes.remove("taken")
+            {
+                counts.add(class, taken);
+            }
+            counts.add(class, interrupted);
+            None
+        }
+        SectionEnd::GuardFailure(reason) => {
+            let class = format!("error:ir_hard_guard:{}", reason_head(reason));
+            let mut records = interrupted;
+            for done in ["taken", "compared"] {
+                records += counts.classes.remove(done).unwrap_or(0);
+            }
+            if counts.compared() == 0 {
+                // the comparisons went with their records
+                counts.equal = 0;
+            }
+            counts.add(class.clone(), records);
+            (records > 0).then(|| format!("{records} records became {class}"))
+        }
     }
 }
 
@@ -1161,6 +1258,17 @@ fn list(map: &BTreeMap<String, usize>) -> String {
     }
 }
 
+/// The records of `counts` that are evidence of the new path in `mode`:
+/// compared (check) or taken (on), here and in the Δ-cache hits' fills.
+fn evidence_of(counts: &Counts, mode: Mode) -> usize {
+    let class = if mode == Mode::Check {
+        "compared"
+    } else {
+        "taken"
+    };
+    counts.class(class) + counts.class(&format!("hit:{class}"))
+}
+
 fn verdict(
     counts: &Counts,
     mode: Mode,
@@ -1182,34 +1290,51 @@ fn verdict(
         verdict.outcome = "error";
         return verdict;
     }
-    if mode != Mode::Check {
-        if unchecked > 0 || hits.contains_key("unchecked") {
-            verdict.outcome = "unchecked";
+    if mode == Mode::Check {
+        // every comparison counted as done agreed (a disagreeing one is a
+        // diagnostic failure of the hook today; the verdict does not rely on
+        // it: pre-review of the U7a delta, finding 5)
+        let hit_compared = hits.get("compared").copied().unwrap_or(0);
+        if counts.equal != counts.compared() || counts.hit_equal != hit_compared {
+            verdict.outcome = "error";
+            verdict.failure = Some(format!(
+                "comparisons that did not agree: compared {} equal {}, cache hits compared {hit_compared} equal {}",
+                counts.compared(),
+                counts.equal,
+                counts.hit_equal
+            ));
+            return verdict;
         }
+    } else if unchecked > 0 || hits.contains_key("unchecked") {
+        verdict.outcome = "unchecked";
         return verdict;
     }
     let declined = counts.with_prefix("declined:");
-    let covered_hits = hits
-        .iter()
-        .filter(|(class, _)| *class == "compared" || class.starts_with("declined:"))
-        .map(|(_, n)| *n)
-        .sum::<usize>();
-    let covered = counts.compared() + declined.values().sum::<usize>() + covered_hits;
-    if covered != counts.expected || unchecked > 0 {
-        verdict.outcome = "uncovered";
-        verdict.failure = Some(format!(
-            "expected {} records, accounted compared {} + declined {} + cache hits {} = {covered} (unchecked {unchecked}, cache hits by the fill's disposition {})",
-            counts.expected,
-            counts.compared(),
-            declined.values().sum::<usize>(),
-            covered_hits,
-            list(&hits)
-        ));
-        return verdict;
+    if mode == Mode::Check {
+        let covered_hits = hits
+            .iter()
+            .filter(|(class, _)| *class == "compared" || class.starts_with("declined:"))
+            .map(|(_, n)| *n)
+            .sum::<usize>();
+        let covered = counts.compared() + declined.values().sum::<usize>() + covered_hits;
+        if covered != counts.expected || unchecked > 0 {
+            verdict.outcome = "uncovered";
+            verdict.failure = Some(format!(
+                "expected {} records, accounted compared {} + declined {} + cache hits {} = {covered} (unchecked {unchecked}, cache hits by the fill's disposition {})",
+                counts.expected,
+                counts.compared(),
+                declined.values().sum::<usize>(),
+                covered_hits,
+                list(&hits)
+            ));
+            return verdict;
+        }
     }
-    let evidence = counts.compared() + hits.get("compared").copied().unwrap_or(0);
-    if counts.expected > 0 && evidence == 0 {
+    if counts.expected > 0 && evidence_of(counts, mode) == 0 {
         // every record declined: accepted only when every code is named
+        // (check, and since the pre-review of the U7a delta, finding 7, on:
+        // a setting-wide decline never makes mode on fall back entirely
+        // with outcome ok)
         let mut codes = BTreeMap::<String, usize>::new();
         for (code, n) in &declined {
             *codes.entry(code.clone()).or_default() += n;
@@ -1225,8 +1350,13 @@ fn verdict(
         } else {
             verdict.outcome = "uncovered";
             verdict.failure = Some(format!(
-                "all {} records declined, none compared (by code: {}); a named exception ({EXCEPTIONS_VARIABLE}: graph, kind, code, reason) is required",
+                "all {} records declined, none {} (by code: {}); a named exception ({EXCEPTIONS_VARIABLE}: graph, kind, code, reason) is required",
                 counts.expected,
+                if mode == Mode::Check {
+                    "compared"
+                } else {
+                    "taken"
+                },
                 list(&codes)
             ));
         }
@@ -1457,7 +1587,9 @@ fn finish(frame: Frame, ok: bool) -> Result<Option<Value>> {
 }
 
 /// The schema of the dispositions in a beta integral record.
-pub(crate) const EVIDENCE_SCHEMA: &str = "u7a-disposition.v1";
+/// v2 (pre-review of the U7a delta): `hit_equal` per kind, the verdict's
+/// agreement rule; v1 evidence never matches.
+pub(crate) const EVIDENCE_SCHEMA: &str = "u7a-disposition.v2";
 
 /// What a resumed (reused) diagram record says about the switch in force.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1467,7 +1599,10 @@ pub enum Resumed {
     /// The record carries matching dispositions (re-printed with
     /// `source=checkpoint`).
     Checked,
-    /// No matching evidence (`reason`): reported `outcome=unchecked`.
+    /// No matching evidence (`reason`): the beta must recompute the diagram
+    /// (one `UNCONTRACTED_RESUME ... outcome=recompute` line; pre-review of
+    /// the U7a delta, finding 2: a reused record is never reported without
+    /// matching evidence, and a run never passes on one).
     Unchecked(String),
 }
 
@@ -1480,9 +1615,18 @@ pub enum Resumed {
 /// counts, not read from the saved outcome: review of the U7a delta,
 /// zero-comparison lens, finding 5); then the saved lines are printed
 /// again with `source=checkpoint`.
-/// Otherwise one `outcome=unchecked` line per enabled kind and an
-/// unchecked summary: a reused graph is never reported ok without them
-/// (U7a.1 (ii)).
+/// Otherwise one `UNCONTRACTED_RESUME ... outcome=recompute reason=<why>`
+/// line, and the caller recomputes the diagram (which prints its own
+/// lines): a reused graph is never reported ok without matching evidence
+/// (U7a.1 (ii)), and a check run never ends on reused records it did not
+/// check (pre-review of the U7a delta, finding 2).
+///
+/// What matching evidence proves (pre-review finding 8): the saved counts
+/// are self-consistent and pass the verdict in force; they are bound to the
+/// switch identity, the graph and diagram key and, through the beta's
+/// checkpoint identity (pipeline fingerprint), to the code that wrote them,
+/// but not to the record's values: an edit that keeps the counts consistent
+/// is not detected here.
 pub fn resumed(graph: &str, diagram: &str, evidence: Option<&Value>) -> Resumed {
     let switch = uncontracted::switch();
     if switch.mode == Mode::Off {
@@ -1561,15 +1705,8 @@ pub fn resumed(graph: &str, diagram: &str, evidence: Option<&Value>) -> Resumed 
         }
         (reason, _) => {
             let reason = reason.unwrap_or_else(|| "no_evidence".to_owned());
-            for kind in &kinds {
-                print(format!(
-                    "UNCONTRACTED_DISPOSITION graph={graph} diagram={diagram} mode={} kind={} expected=unknown outcome=unchecked reason={reason} {source}",
-                    switch.mode.as_str(),
-                    kind.as_str()
-                ));
-            }
             print(format!(
-                "UNCONTRACTED_SUMMARY graph={graph} diagram={diagram} mode={} kinds={} outcome=unchecked reason={reason} {source}",
+                "UNCONTRACTED_RESUME graph={graph} diagram={diagram} mode={} kinds={} outcome=recompute reason={reason}",
                 switch.mode.as_str(),
                 kinds
                     .iter()
@@ -1579,6 +1716,159 @@ pub fn resumed(graph: &str, diagram: &str, evidence: Option<&Value>) -> Resumed 
             ));
             Resumed::Unchecked(reason)
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The run: per-kind totals and the run-level coverage rule
+// ---------------------------------------------------------------------------
+
+/// The totals of one enabled kind over a run.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct KindTotals {
+    expected: usize,
+    compared: usize,
+    hit_compared: usize,
+    taken: usize,
+    hit_taken: usize,
+    declined: usize,
+    errors: usize,
+}
+
+/// The dispositions of a run's diagram records, computed and reused (the
+/// beta adds every record it aggregates), for the `UNCONTRACTED_RUN` line
+/// (pre-review of the U7a delta, finding 6): per enabled kind the expected,
+/// compared / taken, hit and declined totals; and the run-level rules:
+///
+/// * an enabled kind with no compared (check) or taken (on) record, direct
+///   or through a Δ-cache hit, over the whole run fails the run, unless the
+///   exception list has the run-level row `*<TAB><kind><TAB>none_compared`
+///   (a run whose diagrams legitimately have no record of the kind, e.g.
+///   a subset without IR corrections of order ω >= 1);
+/// * a diagram whose counterterm is nonzero with no compared / taken record
+///   in any kind and no excepted kind fails the run;
+/// * a record without evidence (or evidence of another identity) fails it.
+pub struct RunTally {
+    mode: Mode,
+    kinds: Vec<Kind>,
+    totals: BTreeMap<Kind, KindTotals>,
+    diagrams: usize,
+    failures: Vec<String>,
+}
+
+impl RunTally {
+    /// A tally for the switch in force (`None` off).
+    pub fn new() -> Option<Self> {
+        let switch = uncontracted::switch();
+        (switch.mode != Mode::Off).then(|| Self {
+            mode: switch.mode,
+            kinds: switch.enabled_kinds(),
+            totals: BTreeMap::new(),
+            diagrams: 0,
+            failures: Vec::new(),
+        })
+    }
+
+    /// One diagram record: its `uncontracted` evidence and whether its
+    /// counterterm is nonzero.
+    pub fn add(&mut self, label: &str, evidence: Option<&Value>, nonzero: bool) {
+        self.diagrams += 1;
+        let identity = current_identity();
+        let Some(evidence) = evidence.filter(|evidence| {
+            evidence["schema"] == EVIDENCE_SCHEMA && evidence["identity"] == json!(identity)
+        }) else {
+            self.failures.push(format!(
+                "{label}: a record without the run's evidence ({})",
+                evidence.map_or("none".to_owned(), |evidence| format!(
+                    "schema {} identity {}",
+                    evidence["schema"], evidence["identity"]
+                ))
+            ));
+            return;
+        };
+        let mut evidence_any = 0;
+        let mut excepted = false;
+        for kind in &self.kinds {
+            let saved = &evidence["kinds"][kind.as_str()];
+            excepted |= saved["outcome"] == "excepted";
+            let counts = serde_json::from_value::<Counts>(saved.clone()).unwrap_or_default();
+            let totals = self.totals.entry(*kind).or_default();
+            totals.expected += counts.expected;
+            totals.compared += counts.class("compared");
+            totals.hit_compared += counts.class("hit:compared");
+            totals.taken += counts.class("taken");
+            totals.hit_taken += counts.class("hit:taken");
+            totals.declined += counts.with_prefix("declined:").values().sum::<usize>()
+                + counts.with_prefix("hit:declined:").values().sum::<usize>();
+            totals.errors += counts.with_prefix("error:").values().sum::<usize>()
+                + counts.with_prefix("hit:error:").values().sum::<usize>();
+            evidence_any += evidence_of(&counts, self.mode);
+        }
+        if nonzero && evidence_any == 0 && !excepted {
+            self.failures.push(format!(
+                "{label}: the counterterm is nonzero, and no record of any kind was {}",
+                self.verb()
+            ));
+        }
+    }
+
+    fn verb(&self) -> &'static str {
+        if self.mode == Mode::Check {
+            "compared"
+        } else {
+            "taken"
+        }
+    }
+
+    /// The ` kinds=<kind>:expected=..,...;...` field of the run line.
+    pub fn fields(&self) -> String {
+        format!(
+            " records={} kinds={}",
+            self.diagrams,
+            self.kinds
+                .iter()
+                .map(|kind| {
+                    let totals = self.totals.get(kind).cloned().unwrap_or_default();
+                    format!(
+                        "{}:expected={},compared={},hit_compared={},taken={},hit_taken={},declined={},error={}",
+                        kind.as_str(),
+                        totals.expected,
+                        totals.compared,
+                        totals.hit_compared,
+                        totals.taken,
+                        totals.hit_taken,
+                        totals.declined,
+                        totals.errors
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(";")
+        )
+    }
+
+    /// The run-level failures (empty: the run passes these rules).
+    pub fn failures(&self) -> Vec<String> {
+        let exceptions = exceptions();
+        let mut failures = self.failures.clone();
+        for kind in &self.kinds {
+            let totals = self.totals.get(kind).cloned().unwrap_or_default();
+            let evidence = if self.mode == Mode::Check {
+                totals.compared + totals.hit_compared
+            } else {
+                totals.taken + totals.hit_taken
+            };
+            if evidence == 0 && !exceptions.names("*", *kind, NONE_COMPARED) {
+                failures.push(format!(
+                    "kind {}: no record {} over the run ({} expected, {} declined); a run-level exception (*<TAB>{}<TAB>{NONE_COMPARED}<TAB>reason in {EXCEPTIONS_VARIABLE}) is required",
+                    kind.as_str(),
+                    self.verb(),
+                    totals.expected,
+                    totals.declined,
+                    kind.as_str()
+                ));
+            }
+        }
+        failures
     }
 }
 
@@ -1802,4 +2092,106 @@ pub(super) fn inject(mut attempt: Attempt) -> Attempt {
         }
     });
     attempt
+}
+
+// ---------------------------------------------------------------------------
+// Tests: a changed K3 value, a panic after the records (pre-review of the
+// U7a delta, findings 3 and 4)
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+thread_local! {
+    static K3_MUTATION: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static OUTER_PANIC: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The witness variable of a build with the `uncontracted-witness` feature.
+pub(crate) const WITNESS_VARIABLE: &str = "GAMMALOOP_UNCONTRACTED_WITNESS";
+
+/// A witness build's `GAMMALOOP_UNCONTRACTED_WITNESS=k3_beyond_order`: the
+/// change of [`with_k3_mutation`] on every K3 value of the run (never in a
+/// build without the feature; part of the switch identity).
+pub(crate) fn witness() -> Option<&'static str> {
+    #[cfg(feature = "uncontracted-witness")]
+    {
+        static WITNESS: LazyLock<bool> = LazyLock::new(|| {
+            std::env::var(WITNESS_VARIABLE).is_ok_and(|value| value.trim() == "k3_beyond_order")
+        });
+        if *WITNESS {
+            return Some("k3_beyond_order");
+        }
+    }
+    None
+}
+
+/// Whether the K3 values are changed ([`mutate_k3`]).
+#[cfg(any(test, feature = "uncontracted-witness"))]
+fn k3_mutation_on() -> bool {
+    #[cfg(test)]
+    if K3_MUTATION.with(std::cell::Cell::get) {
+        return true;
+    }
+    witness().is_some()
+}
+
+/// Tests: run `f` with every K3 value vakint returns changed ABOVE its valid
+/// order: `+ ε^(order+1) · u7a_mutation(Q(999))`, a term whose hard momentum
+/// is not projected, so the IR hard child route's moment split refuses the
+/// value (`moments:`) while the comparison through `ε^order` agrees.
+#[cfg(test)]
+pub(crate) fn with_k3_mutation<T>(f: impl FnOnce() -> T) -> T {
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let previous = self.0;
+            K3_MUTATION.with(|slot| slot.set(previous));
+        }
+    }
+    let _restore = Restore(K3_MUTATION.with(|slot| slot.replace(true)));
+    f()
+}
+
+/// Tests and witness builds: the attempt with the change of
+/// [`with_k3_mutation`] (a K3 value only).
+#[cfg(any(test, feature = "uncontracted-witness"))]
+pub(super) fn mutate_k3(mut attempt: Attempt) -> Attempt {
+    use spenso::structure::representation::{Minkowski, RepName};
+    use symbolica::{atom::AtomCore, function, symbol};
+    if k3_mutation_on()
+        && attempt.kind == Kind::IrHard
+        && let Outcome::Value(value) = &attempt.outcome
+    {
+        let vector = function!(
+            crate::utils::GS.emr_mom,
+            999,
+            Minkowski {}.new_rep(crate::utils::GS.dim).to_symbolic([])
+        );
+        let change = Atom::var(crate::utils::GS.dim_epsilon).pow(Atom::num(attempt.order + 1))
+            * function!(symbol!("u7a_mutation"), vector);
+        attempt.outcome = Outcome::Value(value + &change);
+    }
+    attempt
+}
+
+/// Tests: run `f` with a panic at the start of the IR hard child route's
+/// outer step (after every K3 record of the correction ran).
+#[cfg(test)]
+pub(crate) fn with_outer_panic<T>(f: impl FnOnce() -> T) -> T {
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let previous = self.0;
+            OUTER_PANIC.with(|slot| slot.set(previous));
+        }
+    }
+    let _restore = Restore(OUTER_PANIC.with(|slot| slot.replace(true)));
+    f()
+}
+
+/// Tests: the panic of [`with_outer_panic`].
+#[cfg(test)]
+pub(super) fn outer_panic() {
+    if OUTER_PANIC.with(std::cell::Cell::get) {
+        panic!("injected by the test: a panic in the IR hard child route's outer step");
+    }
 }
