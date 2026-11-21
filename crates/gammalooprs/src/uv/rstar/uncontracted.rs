@@ -385,6 +385,7 @@ static ENVIRONMENT: LazyLock<std::result::Result<Environment, String>> = LazyLoc
             ),
             ir_hard_child: super::closed::child_mode() != super::closed::ChildMode::Off,
             ir_quotient: super::top_mass::ir_quotient().map_err(|error| error.to_string()),
+            ir_dirac: super::ir_dirac::ir_dirac_mode().map_err(|error| error.to_string()),
         },
         || super::pint6_dump::settings().is_some(),
         read(super::uncontracted_ledger::EXCEPTIONS_VARIABLE)?.as_deref(),
@@ -770,9 +771,10 @@ pub(super) fn is_setting_code(code: &str) -> bool {
 ///
 /// K3 (U7b) adds NO row. Of these, a K3 record can legitimately hit
 /// `taylor_degree` (`ω > 2`; r6 has `ω <= 2`), `open_spinor` (a hard part
-/// whose open quark line the IR Dirac closure does not close:
-/// `GAMMALOOP_IR_DIRAC_CLOSURE=off`, or a declined shape other than r6's
-/// `no_spinor`), `insertion_mass_symbol`, `insertion_slots`, `gamma5` and
+/// whose open quark line the IR Dirac closure does not close: a declined
+/// shape other than r6's `no_spinor`; `GAMMALOOP_IR_DIRAC_CLOSURE=off`, a
+/// setting, is refused at the switch's initialisation with `ir-hard`
+/// enabled), `insertion_mass_symbol`, `insertion_slots`, `gamma5` and
 /// `levi_civita` (a one-loop term whose only remaining line is the closing
 /// one is the emitter's `one_loop_tree_cut`); `projector_momentum` and
 /// `compact_slash` cannot occur (the IR Dirac closure

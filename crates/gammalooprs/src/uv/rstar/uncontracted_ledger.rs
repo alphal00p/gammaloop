@@ -257,14 +257,18 @@ pub(crate) struct Routes {
     pub uv_children_rstar: bool,
     pub ir_hard_child: bool,
     pub ir_quotient: std::result::Result<super::top_mass::IrQuotient, String>,
+    /// `GAMMALOOP_IR_DIRAC_CLOSURE`.
+    pub ir_dirac: std::result::Result<super::ir_dirac::IrDiracMode, String>,
 }
 
 impl Routes {
-    /// The production routes (both on, the quotient by R*).
+    /// The production routes (both on, the quotient by R*, the IR Dirac
+    /// closure on).
     pub(crate) const PRODUCTION: Routes = Routes {
         uv_children_rstar: true,
         ir_hard_child: true,
         ir_quotient: Ok(super::top_mass::IrQuotient::Rstar),
+        ir_dirac: Ok(super::ir_dirac::IrDiracMode::On),
     };
 }
 
@@ -290,7 +294,9 @@ fn ir_quotient_name(route: super::top_mass::IrQuotient) -> &'static str {
 /// mode on too) and the exception list (on and check: mode on applies the
 /// all-declined rule too; read here), and `GAMMALOOP_IR_QUOTIENT` other
 /// than `rstar` (refused in on and check: helper VH's C7 settings
-/// exception E2). With the switch off nothing else is
+/// exception E2), and with `ir-hard` enabled `GAMMALOOP_IR_DIRAC_CLOSURE=off`
+/// (refused in on and check: quark-line K3 records would decline
+/// `vakint:open_spinor` by the setting). With the switch off nothing else is
 /// read, as before the switch existed. `pint6` is whether
 /// `PINT6_CLOSURE_DUMP` is set, `routes` the routes in force; the values
 /// are the environment's.
@@ -384,6 +390,33 @@ pub(crate) fn initialise(
         }
         Err(error) => {
             return Err(format!("{}: {error}", uncontracted::VARIABLE));
+        }
+    }
+    // review of the follow-ups (ledger lens, finding 3): without the IR
+    // Dirac closure a hard part's open quark line stays open, so every
+    // quark-line K3 record declines the designed `vakint:open_spinor`
+    // because of a setting, while gluon-line K3 records of the same class
+    // compare: a setting-caused decline of a sub-class that neither the
+    // kind-wide nor the class rule sees. Refused with `ir-hard` enabled.
+    if switch.enabled(Kind::IrHard) {
+        match &routes.ir_dirac {
+            Ok(super::ir_dirac::IrDiracMode::Off) => {
+                return Err(format!(
+                    "{}={}:{} with GAMMALOOP_IR_DIRAC_CLOSURE=off is refused: the hard part's open quark line stays open, so every quark-line K3 record would decline vakint:open_spinor because of the setting while the gluon-line records compare; unset GAMMALOOP_IR_DIRAC_CLOSURE or set it to on (production) or check, or drop ir-hard from the list",
+                    uncontracted::VARIABLE,
+                    switch.mode.as_str(),
+                    switch
+                        .enabled_kinds()
+                        .iter()
+                        .map(|kind| kind.as_str())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                ));
+            }
+            Ok(_) => {}
+            Err(error) => {
+                return Err(format!("{}: {error}", uncontracted::VARIABLE));
+            }
         }
     }
     if pint6() {
