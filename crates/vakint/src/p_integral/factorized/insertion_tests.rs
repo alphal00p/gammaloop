@@ -32,6 +32,9 @@ const EDGE: &str = "gammalooprs::{spenso::index,spenso::index-label:e}::edge";
 const DIM: &str = "gammalooprs::{}::dim";
 const EPS: &str = "vakint::{}::ε";
 
+#[path = "../../../tests/support/wh_fixtures.rs"]
+mod wh_fixtures;
+
 fn atom(text: &str) -> Atom {
     crate::Vakint::initialize_vakint_symbols();
     vk_parse!(text).unwrap_or_else(|e| panic!("{e}: {text}"))
@@ -970,12 +973,7 @@ fn the_beta_k5_direct_record_equals_its_contracted_value() {
     let record = include_str!("fixtures/wh-k5-direct.record.txt");
     let value_text = include_str!("fixtures/wh-k5-direct.value.txt");
     let value = FactorizedNumerator::from_text(record).unwrap_or_else(|e| panic!("{e}"));
-    let expected = atom(
-        value_text
-            .lines()
-            .find_map(|l| l.strip_prefix("value\t"))
-            .expect("a value line"),
-    );
+    let expected = atom(wh_fixtures::value_line(value_text));
     let settings = VakintSettings {
         epsilon_symbol: "gammalooprs::ε".into(),
         mu_r_sq_symbol: "gammalooprs::μᵣ²".into(),
@@ -991,18 +989,24 @@ fn the_beta_k5_direct_record_equals_its_contracted_value() {
         unreachable!()
     };
     let epsilon = epsilon.get_symbol();
-    let difference = (&got.value - &expected).expand();
-    if !difference.is_zero() {
-        let series = difference.series(epsilon, 0, 0).unwrap();
-        for (power, coefficient) in series.terms() {
-            let n = power.numerator().to_i64().unwrap();
-            assert!(
-                n > -1 || coefficient.expand().is_zero(),
-                "eps^{n} differs: {coefficient}\nentry {}\nbeta  {expected}",
-                got.value
-            );
-        }
-    }
+    // the shared comparator: exact through the file's valid_through (eps^-1)
+    // and no further, signed, with a nonzero reference
+    let through = wh_fixtures::valid_through(value_text);
+    assert_eq!(through, -1);
+    assert!(
+        wh_fixtures::assert_equal_through(&got.value, &expected, epsilon, through, "k5-direct") > 0
+    );
+    // a wrong oracle (the lowest coefficient doubled) fails
+    let coefficients = wh_fixtures::epsilon_coefficients(&expected, epsilon);
+    let (low, c) = coefficients.iter().next().expect("a nonzero reference");
+    let wrong = &expected + c * Atom::var(epsilon).pow(Atom::num(*low));
+    assert!(
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            wh_fixtures::assert_equal_through(&got.value, &wrong, epsilon, through, "k5-direct")
+        }))
+        .is_err(),
+        "a wrong k5-direct oracle passed"
+    );
     eprintln!("K5_DIRECT identical through eps^-1: {}", got.value);
 }
 

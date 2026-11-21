@@ -29,6 +29,8 @@
 #![cfg(feature = "feynkit-ingress")]
 #[path = "support/open_indices.rs"]
 mod open_indices;
+#[path = "support/wh_fixtures.rs"]
+mod wh_fixtures;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -1069,51 +1071,23 @@ fn direct_v3(text: &str) -> (FactorizedNumerator, i64) {
     (value, depth)
 }
 
+/// A fixture's value and its signed `valid_through` (the shared helper).
 fn fixture_value(text: &str) -> (Atom, i64) {
-    let value = text
-        .lines()
-        .find_map(|l| l.strip_prefix("value\t"))
-        .expect("a value line");
-    let through = text
-        .lines()
-        .find_map(|l| l.strip_prefix("valid_through\t"))
-        .expect("a valid_through line")
-        .trim_start_matches("eps^")
-        .split_whitespace()
-        .next()
-        .unwrap()
-        .parse()
-        .unwrap();
     init();
-    (symbolica::try_parse!(value).unwrap(), through)
+    (
+        symbolica::try_parse!(wh_fixtures::value_line(text)).unwrap(),
+        wh_fixtures::valid_through(text),
+    )
 }
 
-/// Exact equality coefficient by coefficient in `gammalooprs::ε` through
-/// `order` and no further (the fixtures' identity rule), algebraic.
-fn assert_equal_through(got: &Atom, expected: &Atom, order: i64, what: &str) {
-    let eps = sym("gammalooprs::ε");
-    let got = open_indices::epsilon_coefficients(got, eps);
-    let expected = open_indices::epsilon_coefficients(expected, eps);
-    let first = got
-        .keys()
-        .chain(expected.keys())
-        .copied()
-        .min()
-        .unwrap_or(0);
-    for n in first..=order {
-        let g = got.get(&n).cloned().unwrap_or(Atom::Zero);
-        let e = expected.get(&n).cloned().unwrap_or(Atom::Zero);
-        let difference = (&g - &e).expand();
-        assert!(
-            difference.is_zero(),
-            "{what}: eps^{n}: entry {g}\nbeta  {e}\ndifference {difference}"
-        );
-    }
-    assert!(
-        expected.keys().any(|n| *n <= order),
-        "{what}: the reference is zero through eps^{order}"
-    );
+/// The shared comparator in `gammalooprs::ε` (exact through `order`, signed,
+/// a nonzero reference): the number of orders compared.
+fn assert_equal_through(got: &Atom, expected: &Atom, order: i64, what: &str) -> usize {
+    wh_fixtures::assert_equal_through(got, expected, sym("gammalooprs::ε"), order, what)
 }
+
+/// The vendored K6 records (input, value).
+const K6: [&str; 4] = ["quark", "gluon", "gluon-qloop", "bubble"];
 
 /// K6 (f): each VERIFIED record (read as written: schema v3, kind direct)
 /// through `evaluate_factorized_ports` equals the value the beta's contracted
@@ -1125,11 +1099,10 @@ fn assert_equal_through(got: &Atom, expected: &Atom, order: i64, what: &str) {
 #[test]
 fn the_beta_k6_records_equal_their_contracted_values() {
     let vakint = engine();
-    for name in ["quark", "gluon", "gluon-qloop", "bubble"] {
-        let input =
-            std::fs::read_to_string(fixtures().join(format!("k6-{name}.input.txt"))).unwrap();
-        let reference =
-            std::fs::read_to_string(fixtures().join(format!("k6-{name}.value.txt"))).unwrap();
+    let mut compared = 0;
+    for name in K6 {
+        let input = wh_fixtures::read_fixture(&fixtures().join(format!("k6-{name}.input.txt")));
+        let reference = wh_fixtures::read_fixture(&fixtures().join(format!("k6-{name}.value.txt")));
         let (value, depth) = direct_v3(&input);
         // the comparison point: the return of the site's
         // integrate_propagator_with (no 1/p^2, no 1/Tr[1], no channel solve:
@@ -1145,10 +1118,37 @@ fn the_beta_k6_records_equal_their_contracted_values() {
             "K6 {name} entry {}\nK6 {name} beta  {}",
             got.value, expected
         );
-        assert_equal_through(&got.value, &expected, through, name);
+        assert!(assert_equal_through(&got.value, &expected, through, name) > 0);
+        compared += 1;
         eprintln!(
             "WH_PORTS_K6 record={name} identical_through=eps^{through} contract_s={:.3} evaluate_s={:.3}",
             got.contract_seconds, got.evaluate_seconds
+        );
+    }
+    wh_fixtures::assert_compared("K6", compared, Some(K6.len()));
+}
+
+/// The K6 comparator with a deliberately wrong oracle: each vendored value
+/// changed at its lowest order (doubled) must FAIL at once; the true value
+/// passes against itself.
+#[test]
+fn the_k6_comparator_fails_a_wrong_oracle() {
+    init();
+    for name in K6 {
+        let reference = wh_fixtures::read_fixture(&fixtures().join(format!("k6-{name}.value.txt")));
+        let (expected, through) = fixture_value(&reference);
+        assert!(assert_equal_through(&expected, &expected, through, name) > 0);
+        let eps = sym("gammalooprs::ε");
+        let coefficients = wh_fixtures::epsilon_coefficients(&expected, eps);
+        let (low, c) = coefficients.iter().next().expect("a nonzero reference");
+        assert!(*low <= through, "{name}");
+        let wrong = &expected + c * Atom::var(eps).pow(Atom::num(*low));
+        let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            assert_equal_through(&wrong, &expected, through, name)
+        }));
+        assert!(
+            failed.is_err(),
+            "{name}: a doubled eps^{low} coefficient passed"
         );
     }
 }
