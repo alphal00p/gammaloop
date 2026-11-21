@@ -4387,7 +4387,7 @@ fn vakint_input_checks_a_marked_value_s_argument() {
         &reserved_prefix("vakint::k", "prefactor argument"),
         "vakint_input",
     );
-    super::super::vakint_input(&settings(), &direct, &direct.prefactor.total()).unwrap();
+    let _ = super::super::vakint_input(&settings(), &direct, &direct.prefactor.total()).unwrap();
 }
 
 // ---------------------------------------------------------------------------
