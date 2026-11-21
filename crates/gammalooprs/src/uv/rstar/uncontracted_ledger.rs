@@ -55,6 +55,14 @@
 //! `graph<TAB>kind<TAB>code<TAB>reason`, `#` comments; the reason is
 //! required). Mode on reports the same dispositions; an error outcome fails
 //! the diagram there too.
+//!
+//! # Resume evidence
+//!
+//! The close returns the dispositions as JSON (`u7a-disposition.v1`) for the
+//! beta's integral record; [`resumed`] reads them back when the beta reuses
+//! a saved record: matching evidence (the same switch identity, outcome ok)
+//! re-prints its lines with `source=checkpoint`; anything else is reported
+//! `outcome=unchecked`, never ok.
 
 use std::{
     any::Any,
@@ -68,6 +76,8 @@ use std::{
 
 use eyre::{Result, eyre};
 use linnet::half_edge::subgraph::SuBitGraph;
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 use symbolica::atom::Atom;
 
 use crate::{
@@ -112,8 +122,6 @@ pub(crate) struct Exception {
     pub graph: String,
     pub kind: Kind,
     pub code: String,
-    /// (the list's documentation; the dispositions print the codes)
-    #[allow(dead_code)]
     pub reason: String,
 }
 
@@ -243,6 +251,34 @@ pub(crate) fn with_exceptions<T>(exceptions: Exceptions, f: impl FnOnce() -> T) 
     f()
 }
 
+/// The identity of the switch for a checkpoint (`None` off): the mode, the
+/// enabled kinds, strictness (always, R2-I1) and, in check mode, the
+/// exception list's digest; e.g. `check:root,child,ir-hard:strict`. The
+/// beta appends it to its computation fingerprint (U7a.1 (i)).
+pub(crate) fn identity_of(switch: Switch, exceptions: &Exceptions) -> Option<String> {
+    if switch.mode == Mode::Off {
+        return None;
+    }
+    let kinds = switch
+        .enabled_kinds()
+        .iter()
+        .map(|kind| kind.as_str())
+        .collect::<Vec<_>>()
+        .join(",");
+    let mut identity = format!("{}:{kinds}:strict", switch.mode.as_str());
+    if switch.mode == Mode::Check
+        && let Some(digest) = &exceptions.digest
+    {
+        identity.push_str(&format!(":exceptions={digest}"));
+    }
+    Some(identity)
+}
+
+/// The identity of the switch in force ([`identity_of`]).
+pub(crate) fn current_identity() -> Option<String> {
+    identity_of(uncontracted::switch(), &exceptions())
+}
+
 /// FNV-1a 64 of the concatenated parts (a field separator between them).
 pub(crate) fn fnv64<'a>(parts: impl IntoIterator<Item = &'a [u8]>) -> u64 {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
@@ -265,7 +301,7 @@ pub(crate) fn fnv64<'a>(parts: impl IntoIterator<Item = &'a [u8]>) -> u64 {
 
 /// The records of one kind in a frame: the dispositions (exclusive; module
 /// doc) and what the attempts gave.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Counts {
     /// Records that reached the hook (a hit: its fill's records).
     pub expected: usize,
@@ -283,6 +319,7 @@ pub(crate) struct Counts {
     /// K3 terms of the kind that build no record by design, by code
     /// (`zero_loops`: Δ(γ) inserted, no vakint call today; `order_zero`: K8):
     /// not expected and never compared, today's path takes them.
+    #[serde(default)]
     pub no_record: BTreeMap<String, usize>,
 }
 
@@ -722,8 +759,9 @@ impl DiagramLedger {
     /// Close the ledger of a diagram whose evaluation succeeded (`ok`) or
     /// failed: one `UNCONTRACTED_DISPOSITION` line per enabled kind, one
     /// `UNCONTRACTED_SUMMARY` line; in check mode an `ok` diagram whose
-    /// coverage fails is an error.
-    pub fn close(mut self, ok: bool) -> Result<()> {
+    /// coverage fails is an error. The dispositions as JSON (`None` with
+    /// the switch off).
+    pub fn close(mut self, ok: bool) -> Result<Option<Value>> {
         self.closed = true;
         let Some(frame) = pop(self.id) else {
             return Err(eyre!(
@@ -944,20 +982,21 @@ pub(crate) fn take_lines() -> Vec<String> {
     LINES.with(|lines| std::mem::take(&mut *lines.borrow_mut()))
 }
 
-/// The lines and the coverage rule of a closed diagram frame.
-fn finish(frame: Frame, ok: bool) -> Result<()> {
+/// The lines, the coverage rule and the evidence of a closed diagram frame.
+fn finish(frame: Frame, ok: bool) -> Result<Option<Value>> {
     let switch = uncontracted::switch();
     if switch.mode == Mode::Off {
-        return Ok(());
+        return Ok(None);
     }
     let Scope::Diagram { graph, diagram, .. } = frame.scope else {
-        return Ok(());
+        return Ok(None);
     };
     let exceptions = exceptions();
     let kinds = switch.enabled_kinds();
     let mut total = Counts::default();
     let mut outcomes = Vec::new();
     let mut failures = Vec::new();
+    let mut per_kind = serde_json::Map::new();
     for kind in &kinds {
         let counts = frame.counts.get(kind).cloned().unwrap_or_default();
         let verdict = verdict(&counts, switch.mode, ok, &graph, *kind, &exceptions);
@@ -972,6 +1011,23 @@ fn finish(frame: Frame, ok: bool) -> Result<()> {
         if let Some(failure) = &verdict.failure {
             failures.push(format!("kind={}: {failure}", kind.as_str()));
         }
+        let mut value = serde_json::to_value(&counts)?;
+        value["outcome"] = json!(verdict.outcome);
+        value["excepted"] = json!(verdict.excepted);
+        if !verdict.excepted.is_empty() {
+            // the reasons the run's list gives for the codes it accepted
+            value["excepted_reasons"] = json!(
+                exceptions
+                    .entries
+                    .iter()
+                    .filter(|entry| entry.graph == graph
+                        && entry.kind == *kind
+                        && verdict.excepted.contains_key(&entry.code))
+                    .map(|entry| format!("{}: {}", entry.code, entry.reason))
+                    .collect::<Vec<_>>()
+            );
+        }
+        per_kind.insert(kind.as_str().to_owned(), value);
         outcomes.push(verdict.outcome);
         total.merge(&counts);
     }
@@ -984,6 +1040,14 @@ fn finish(frame: Frame, ok: bool) -> Result<()> {
         &total,
         outcome,
     ));
+    let evidence = json!({
+        "schema": EVIDENCE_SCHEMA,
+        "identity": current_identity(),
+        "graph": graph,
+        "diagram": diagram,
+        "outcome": outcome,
+        "kinds": per_kind,
+    });
     if ok && !failures.is_empty() {
         return Err(eyre!(
             "UNCONTRACTED_DISPOSITION graph={graph} diagram={diagram} mode={}: the check does not cover the diagram: {}",
@@ -991,7 +1055,110 @@ fn finish(frame: Frame, ok: bool) -> Result<()> {
             failures.join("; ")
         ));
     }
-    Ok(())
+    Ok(Some(evidence))
+}
+
+/// The schema of the dispositions in a beta integral record.
+pub(crate) const EVIDENCE_SCHEMA: &str = "u7a-disposition.v1";
+
+/// What a resumed (reused) diagram record says about the switch in force.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Resumed {
+    /// The switch is off: nothing to say.
+    Off,
+    /// The record carries matching dispositions (re-printed with
+    /// `source=checkpoint`).
+    Checked,
+    /// No matching evidence (`reason`): reported `outcome=unchecked`.
+    Unchecked(String),
+}
+
+/// A diagram record reused by the beta (resume or import) under the switch
+/// in force: its saved dispositions (`evidence`, the record's
+/// `uncontracted` field) are matching evidence when they have this
+/// schema, this switch identity, outcome ok and a line per enabled kind;
+/// then the saved lines are printed again with `source=checkpoint`.
+/// Otherwise one `outcome=unchecked` line per enabled kind and an
+/// unchecked summary: a reused graph is never reported ok without them
+/// (U7a.1 (ii)).
+pub fn resumed(graph: &str, diagram: &str, evidence: Option<&Value>) -> Resumed {
+    let switch = uncontracted::switch();
+    if switch.mode == Mode::Off {
+        return Resumed::Off;
+    }
+    let kinds = switch.enabled_kinds();
+    let identity = current_identity();
+    let reason = match evidence {
+        None | Some(Value::Null) => Some("no_evidence".to_owned()),
+        Some(evidence) if evidence["schema"] != EVIDENCE_SCHEMA => {
+            Some(format!("schema:{}", evidence["schema"]))
+        }
+        Some(evidence) if evidence["identity"] != json!(identity) => Some(format!(
+            "identity:{}",
+            evidence["identity"].as_str().unwrap_or("none")
+        )),
+        Some(evidence) if evidence["outcome"] != "ok" => Some(format!(
+            "outcome:{}",
+            evidence["outcome"].as_str().unwrap_or("none")
+        )),
+        Some(evidence)
+            if kinds
+                .iter()
+                .any(|kind| !evidence["kinds"][kind.as_str()].is_object()) =>
+        {
+            Some("kinds".to_owned())
+        }
+        Some(_) => None,
+    };
+    let source = "source=checkpoint";
+    match (reason, evidence) {
+        (None, Some(evidence)) => {
+            let mut total = Counts::default();
+            for kind in &kinds {
+                let saved = &evidence["kinds"][kind.as_str()];
+                let counts = serde_json::from_value::<Counts>(saved.clone()).unwrap_or_default();
+                let verdict = Verdict {
+                    outcome: if saved["outcome"] == "excepted" {
+                        "excepted"
+                    } else {
+                        "ok"
+                    },
+                    excepted: serde_json::from_value(saved["excepted"].clone()).unwrap_or_default(),
+                    failure: None,
+                };
+                print(format!(
+                    "{} {source}",
+                    disposition_line(graph, diagram, switch.mode, *kind, &counts, &verdict)
+                ));
+                total.merge(&counts);
+            }
+            print(format!(
+                "{} {source}",
+                summary_line(graph, diagram, switch.mode, &kinds, &total, "ok")
+            ));
+            Resumed::Checked
+        }
+        (reason, _) => {
+            let reason = reason.unwrap_or_else(|| "no_evidence".to_owned());
+            for kind in &kinds {
+                print(format!(
+                    "UNCONTRACTED_DISPOSITION graph={graph} diagram={diagram} mode={} kind={} expected=unknown outcome=unchecked reason={reason} {source}",
+                    switch.mode.as_str(),
+                    kind.as_str()
+                ));
+            }
+            print(format!(
+                "UNCONTRACTED_SUMMARY graph={graph} diagram={diagram} mode={} kinds={} outcome=unchecked reason={reason} {source}",
+                switch.mode.as_str(),
+                kinds
+                    .iter()
+                    .map(|kind| kind.as_str())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ));
+            Resumed::Unchecked(reason)
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
