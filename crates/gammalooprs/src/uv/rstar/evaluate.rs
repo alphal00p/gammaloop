@@ -906,6 +906,15 @@ impl RStarPlan {
     }
 }
 
+/// End the hook occurrence of an uncontracted record (`GAMMALOOP_UNCONTRACTED_NUMERATOR`
+/// on / check, or `GAMMALOOP_UNCONTRACTED_TIMING=1`) by `route`; nothing
+/// without one ([`super::uncontracted_ledger::Hook::finish`]).
+fn finish_hook(hook: Option<super::uncontracted_ledger::Hook>, route: &str) {
+    if let Some(hook) = hook {
+        hook.finish(route);
+    }
+}
+
 /// One remainder term of an IR hard part as [`Evaluation::ir_hard_child`]
 /// integrates it: the correction, the term and the depth attempt, the hard
 /// part, its IR Dirac closure, `ω` (and as the degree), the quotient's extra
@@ -981,8 +990,8 @@ struct Evaluation<'a> {
     /// Dirac self-energy): read only by the uncontracted records
     /// (`GAMMALOOP_UNCONTRACTED_NUMERATOR`).
     closure_data: Option<super::uncontracted::ClosureData>,
-    /// The diagram ledger of a root evaluation that runs outside one (on or
-    /// check; [`super::uncontracted_ledger`]): closed
+    /// The diagram ledger of a root evaluation that runs outside one (on /
+    /// check, or the timing lines; [`super::uncontracted_ledger`]): closed
     /// with the evaluation's outcome by [`Self::close_ledger`].
     ledger: Option<super::uncontracted_ledger::DiagramLedger>,
 }
@@ -1031,7 +1040,7 @@ impl<'a> Evaluation<'a> {
     ) -> Result<Self> {
         let started = Instant::now();
         let counted = vakint::timing::Snapshot::now();
-        // GAMMALOOP_UNCONTRACTED_NUMERATOR (on / check):
+        // GAMMALOOP_UNCONTRACTED_NUMERATOR (on / check, or the timing lines):
         // a root evaluation outside a diagram ledger opens its own, before its
         // UV children are computed (their records are the diagram's); `None`
         // with the switch off and for a child plan
@@ -2182,9 +2191,10 @@ impl<'a> Evaluation<'a> {
     /// One remainder term of an IR hard part `H(γ)` ([`Self::ir_hard_child`]),
     /// its IR Dirac closure multiplied in, untruncated: with
     /// `GAMMALOOP_UNCONTRACTED_NUMERATOR` off (the default), today's path
-    /// ([`Self::integrate_ir_hard_today`]) and nothing else; on or check:
-    /// [`Self::integrate_ir_hard_uncontracted`]. The value and the routed
-    /// bytes of its `IR_HARD_CHILD_TERM` line.
+    /// ([`Self::integrate_ir_hard_today`]) and nothing else (with
+    /// `GAMMALOOP_UNCONTRACTED_TIMING=1` also its occurrence's timing line);
+    /// on or check: [`Self::integrate_ir_hard_uncontracted`]. The value and
+    /// the routed bytes of its `IR_HARD_CHILD_TERM` line.
     fn integrate_ir_hard(
         &mut self,
         call: IrHardTerm<'_>,
@@ -2194,9 +2204,38 @@ impl<'a> Evaluation<'a> {
     ) -> Result<(Atom, usize)> {
         let switch = super::uncontracted::switch();
         if switch.mode == super::uncontracted::Mode::Off {
-            return self.integrate_ir_hard_today(&call, remainder, soft);
+            if !super::uncontracted_ledger::timing_enabled() {
+                return self.integrate_ir_hard_today(&call, remainder, soft);
+            }
+            let hook =
+                self.ir_hard_hook(term, &call, super::uncontracted::classify_ir_hard(), false);
+            let value = self.integrate_ir_hard_today(&call, remainder, soft);
+            finish_hook(hook, if value.is_ok() { "today" } else { "failed" });
+            return value;
         }
         self.integrate_ir_hard_uncontracted(call, term, remainder, soft, switch)
+    }
+
+    /// The occurrence of a K3 hook ([`super::uncontracted_ledger::hook`]):
+    /// its forest-term label is the correction, the term, the depth attempt,
+    /// the hard part and the remainder's.
+    fn ir_hard_hook(
+        &self,
+        term: &UvPreparationTerm,
+        call: &IrHardTerm<'_>,
+        kind: super::uncontracted::Kind,
+        enabled: bool,
+    ) -> Option<super::uncontracted_ledger::Hook> {
+        super::uncontracted_ledger::hook(self.graph, kind, self.integration_id + 1, enabled, || {
+            format!(
+                "corr{}.term{}.try{}:hard{{{}}}:{}",
+                call.correction_index,
+                call.term_index,
+                call.attempt,
+                self.edges(call.hard),
+                super::uncontracted_ledger::term_label(self.graph, &term.remainder)
+            )
+        })
     }
 
     /// Today's path of one remainder term of an IR hard part: the graded
@@ -2244,8 +2283,11 @@ impl<'a> Evaluation<'a> {
         use super::uncontracted::{self as uncontracted, Mode, NoRecord};
         let kind = uncontracted::classify_ir_hard();
         let enabled = switch.enabled(kind);
+        let hook = self.ir_hard_hook(term, &call, kind, enabled);
         if !enabled {
-            return self.integrate_ir_hard_today(&call, remainder, soft);
+            let value = self.integrate_ir_hard_today(&call, remainder, soft);
+            finish_hook(hook, if value.is_ok() { "today" } else { "failed" });
+            return value;
         }
         let no_record = if term.remainder.loops == 0 {
             Some(NoRecord::ZeroLoops)
@@ -2261,7 +2303,9 @@ impl<'a> Evaluation<'a> {
             };
             super::uncontracted_ledger::record_no_record(kind, code);
             uncontracted::no_record(&self.graph.name, why);
-            return self.integrate_ir_hard_today(&call, remainder, soft);
+            let value = self.integrate_ir_hard_today(&call, remainder, soft);
+            finish_hook(hook, &format!("no_record:{code}"));
+            return value;
         }
         super::uncontracted_ledger::expect(kind);
         let id = self.integration_id + 1;
@@ -2279,6 +2323,7 @@ impl<'a> Evaluation<'a> {
             // a refusal that is not designed fails the diagram (review B1/B2)
             if attempt.is_error() {
                 uncontracted::report(&attempt, None);
+                finish_hook(hook, &attempt.outcome_name());
                 return Err(uncontracted::error_failure(&attempt, switch.mode));
             }
             let today_started = Instant::now();
@@ -2286,6 +2331,7 @@ impl<'a> Evaluation<'a> {
                 Ok(today) => today,
                 Err(error) => {
                     uncontracted::report(&attempt, None);
+                    finish_hook(hook, "failed");
                     return Err(error);
                 }
             };
@@ -2300,6 +2346,14 @@ impl<'a> Evaluation<'a> {
                 )
             });
             uncontracted::report(&attempt, check.as_ref());
+            finish_hook(
+                hook,
+                &if check.is_some() {
+                    "check".to_owned()
+                } else {
+                    attempt.outcome_name()
+                },
+            );
             if let Some(check) = &check
                 && !check.equal
             {
@@ -2310,6 +2364,7 @@ impl<'a> Evaluation<'a> {
         uncontracted::report(&attempt, None);
         if attempt.is_error() {
             // strict is the only behaviour of mode on (R2-I1)
+            finish_hook(hook, &attempt.outcome_name());
             return Err(uncontracted::error_failure(&attempt, switch.mode));
         }
         match attempt.value() {
@@ -2324,9 +2379,14 @@ impl<'a> Evaluation<'a> {
                     attempt.finish_seconds,
                 )
                 .log(self.graph, id, term.remainder.loops, "uncontracted");
+                finish_hook(hook, &attempt.outcome_name());
                 Ok((value, remainder.routed_bytes()))
             }
-            None => self.integrate_ir_hard_today(&call, remainder, soft),
+            None => {
+                let value = self.integrate_ir_hard_today(&call, remainder, soft);
+                finish_hook(hook, &attempt.outcome_name());
+                value
+            }
         }
     }
 
@@ -3499,14 +3559,36 @@ impl<'a> Evaluation<'a> {
 
     /// One root-scope ordinary remainder (the ordinary loop and the census
     /// bare-term loop). `GAMMALOOP_UNCONTRACTED_NUMERATOR` off (the default):
-    /// today's path, [`Self::integrate_ordinary_today`], and nothing else;
-    /// on or check: [`Self::integrate_ordinary_uncontracted`].
+    /// today's path, [`Self::integrate_ordinary_today`], and nothing else
+    /// (with `GAMMALOOP_UNCONTRACTED_TIMING=1` also its occurrence's timing
+    /// line, the off arm of a paired timing); on or check:
+    /// [`Self::integrate_ordinary_uncontracted`].
     fn integrate_ordinary(&mut self, term: &UvPreparationTerm) -> Result<Atom> {
         let switch = super::uncontracted::switch();
         if switch.mode == super::uncontracted::Mode::Off {
-            return self.integrate_ordinary_today(term);
+            if !super::uncontracted_ledger::timing_enabled() {
+                return self.integrate_ordinary_today(term);
+            }
+            let kind = super::uncontracted::classify(self.plan.root_boundary.is_some());
+            let hook = self.ordinary_hook(term, kind, false);
+            let value = self.integrate_ordinary_today(term);
+            finish_hook(hook, if value.is_ok() { "today" } else { "failed" });
+            return value;
         }
         self.integrate_ordinary_uncontracted(term, switch)
+    }
+
+    /// The occurrence of an ordinary hook ([`super::uncontracted_ledger::hook`]):
+    /// its forest-term label is the remainder's.
+    fn ordinary_hook(
+        &self,
+        term: &UvPreparationTerm,
+        kind: super::uncontracted::Kind,
+        enabled: bool,
+    ) -> Option<super::uncontracted_ledger::Hook> {
+        super::uncontracted_ledger::hook(self.graph, kind, self.integration_id + 1, enabled, || {
+            super::uncontracted_ledger::term_label(self.graph, &term.remainder)
+        })
     }
 
     /// `GAMMALOOP_UNCONTRACTED_NUMERATOR` on or check (U7a): the remainder as
@@ -3525,8 +3607,11 @@ impl<'a> Evaluation<'a> {
         use super::uncontracted::{self as uncontracted, Mode};
         let kind = uncontracted::classify(self.plan.root_boundary.is_some());
         let enabled = switch.enabled(kind);
+        let hook = self.ordinary_hook(term, kind, enabled);
         if !enabled {
-            return self.integrate_ordinary_today(term);
+            let value = self.integrate_ordinary_today(term);
+            finish_hook(hook, if value.is_ok() { "today" } else { "failed" });
+            return value;
         }
         super::uncontracted_ledger::expect(kind);
         let id = self.integration_id + 1;
@@ -3545,6 +3630,7 @@ impl<'a> Evaluation<'a> {
             // a refusal that is not designed fails the diagram (review B1/B2)
             if attempt.is_error() {
                 uncontracted::report(&attempt, None);
+                finish_hook(hook, &attempt.outcome_name());
                 return Err(uncontracted::error_failure(&attempt, switch.mode));
             }
             let today_started = Instant::now();
@@ -3554,6 +3640,7 @@ impl<'a> Evaluation<'a> {
                     // today's path fails the diagram; our attempt is still
                     // logged and counted (unchecked) in the diagram's ledger
                     uncontracted::report(&attempt, None);
+                    finish_hook(hook, "failed");
                     return Err(error);
                 }
             };
@@ -3568,6 +3655,14 @@ impl<'a> Evaluation<'a> {
                 )
             });
             uncontracted::report(&attempt, check.as_ref());
+            finish_hook(
+                hook,
+                &if check.is_some() {
+                    "check".to_owned()
+                } else {
+                    attempt.outcome_name()
+                },
+            );
             if let Some(check) = &check
                 && !check.equal
             {
@@ -3578,6 +3673,7 @@ impl<'a> Evaluation<'a> {
         uncontracted::report(&attempt, None);
         if attempt.is_error() {
             // strict is the only behaviour of mode on (R2-I1)
+            finish_hook(hook, &attempt.outcome_name());
             return Err(uncontracted::error_failure(&attempt, switch.mode));
         }
         match attempt.value() {
@@ -3606,9 +3702,14 @@ impl<'a> Evaluation<'a> {
                     attempt.finish_seconds,
                 )
                 .log(self.graph, id, term.remainder.loops, "uncontracted");
+                finish_hook(hook, &attempt.outcome_name());
                 Ok(value)
             }
-            None => self.integrate_ordinary_today(term),
+            None => {
+                let value = self.integrate_ordinary_today(term);
+                finish_hook(hook, &attempt.outcome_name());
+                value
+            }
         }
     }
 
