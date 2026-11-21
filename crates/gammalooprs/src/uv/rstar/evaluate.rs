@@ -109,6 +109,19 @@ impl RStarPlan {
         uv_settings: &UVgenerationSettings,
         root_projector: Option<&RootProjector<'_>>,
     ) -> Result<Vec<PreparedPhysicalUvTerm>> {
+        // The root remainders of these terms are integrated later, by
+        // `PhysicalUvGroup::integrate`, which has no uncontracted hook: under
+        // GAMMALOOP_UNCONTRACTED_NUMERATOR on / check a grouped diagram would
+        // pass with no root record and no diagram ledger (review of the U7a
+        // delta, zero-comparison lens, finding 1). Refused.
+        let switch = super::uncontracted::switch();
+        ensure!(
+            switch.mode == super::uncontracted::Mode::Off,
+            "{}={}: the grouped (physical UV term) preparation of {} is not supported: its root remainders bypass the uncontracted hook; run without skeleton grouping",
+            super::uncontracted::VARIABLE,
+            switch.mode.as_str(),
+            graph.name
+        );
         let evaluation = Evaluation::new(
             self,
             graph,
@@ -505,6 +518,19 @@ impl RStarPlan {
             evaluation = evaluation.closing_root()?;
         }
         evaluation.closed_root = closed_root;
+        // an implicit diagram ledger (a census call outside the beta's
+        // diagram ledger) is closed with the outcome, never dropped
+        let result = self.bare_terms_counted(&mut evaluation, graph);
+        let Some(ledger) = evaluation.ledger.take() else {
+            return result;
+        };
+        let closed = ledger.close(result.is_ok());
+        let count = result?;
+        closed?;
+        Ok(count)
+    }
+
+    fn bare_terms_counted(&self, evaluation: &mut Evaluation<'_>, graph: &Graph) -> Result<usize> {
         // GAMMALOOP_IR_HARD_CENSUS: the plan's IR corrections (`only`: and
         // nothing else; the bare terms are not integrated).
         if let Some(only) = ir_hard_census() {
@@ -1841,8 +1867,20 @@ impl<'a> Evaluation<'a> {
         let guard = super::ir_dirac::test_child_guard().unwrap_or(*GUARD);
         #[cfg(not(test))]
         let guard = *GUARD;
+        // GAMMALOOP_UNCONTRACTED_NUMERATOR on / check: the correction's K3
+        // records in a section of the diagram ledger, reclassified when the
+        // correction declines (`None` off; dropped on an error: unchanged)
+        let section = super::uncontracted_ledger::Section::open();
+        let close_section = |end: super::uncontracted_ledger::SectionEnd| {
+            if let Some(section) = section {
+                section.close(end);
+            }
+        };
+        let mut route_returned = false;
         let attempt = if mode == super::closed::ChildMode::Check || !guard {
-            self.ir_hard_child(correction_index, correction)?
+            let attempt = self.ir_hard_child(correction_index, correction)?;
+            route_returned = true;
+            attempt
         } else {
             // Fail-closed under the closed path's scoped budget
             // (GAMMALOOP_IR_HARD_BUDGET_GIB over the RSS now): an exhausted
@@ -1853,7 +1891,12 @@ impl<'a> Evaluation<'a> {
             let guarded = super::ir_dirac::guarded_unless_diagnostic(
                 limit,
                 super::expression::memory_release(),
-                || self.ir_hard_child(correction_index, correction),
+                || {
+                    let attempt = self.ir_hard_child(correction_index, correction);
+                    // the route's own value or decline (not a caught error)
+                    route_returned = attempt.is_ok();
+                    attempt
+                },
             );
             match guarded {
                 Ok(attempt) => attempt,
@@ -1872,6 +1915,16 @@ impl<'a> Evaluation<'a> {
         };
         let seconds = started.elapsed().as_secs_f64();
         let reduction = counted.elapsed().fields();
+        close_section(match &attempt {
+            Ok(_) => super::uncontracted_ledger::SectionEnd::Kept,
+            Err(reason) if route_returned => {
+                super::uncontracted_ledger::SectionEnd::RouteDeclined(reason.clone())
+            }
+            Err(reason) if reason == "budget" => {
+                super::uncontracted_ledger::SectionEnd::GuardBudget
+            }
+            Err(reason) => super::uncontracted_ledger::SectionEnd::GuardFailure(reason.clone()),
+        });
         let (value, stats) = match attempt {
             Ok(outcome) => outcome,
             Err(reason) => {
@@ -2337,6 +2390,7 @@ impl<'a> Evaluation<'a> {
         let enabled = switch.enabled(kind);
         let hook = self.ir_hard_hook(term, &call, kind, enabled);
         if !enabled {
+            super::uncontracted_ledger::inert(kind);
             let value = self.integrate_ir_hard_today(&call, remainder, soft);
             finish_hook(hook, if value.is_ok() { "today" } else { "failed" });
             return value;
@@ -3667,6 +3721,7 @@ impl<'a> Evaluation<'a> {
         let enabled = switch.enabled(kind);
         let hook = self.ordinary_hook(term, kind, enabled);
         if !enabled {
+            super::uncontracted_ledger::inert(kind);
             let value = self.integrate_ordinary_today(term);
             finish_hook(hook, if value.is_ok() { "today" } else { "failed" });
             return value;

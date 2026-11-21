@@ -69,6 +69,8 @@ mod uncontracted_oracle_tests;
 #[cfg(test)]
 mod uncontracted_refusal_tests;
 #[cfg(test)]
+mod uncontracted_review_tests;
+#[cfg(test)]
 mod uncontracted_tests;
 mod uv;
 
@@ -151,12 +153,21 @@ pub use uncontracted_ledger::{DiagramLedger, Resumed, resumed as uncontracted_re
 pub use uv::MassiveUvEvaluator;
 
 /// `GAMMALOOP_UNCONTRACTED_NUMERATOR`'s initialisation (call at start-up for
-/// an early error): a bad value, `GAMMALOOP_UNCONTRACTED_STRICT=0`, check
-/// mode with `PINT6_CLOSURE_DUMP`, a kind list without a kind this build
-/// emits or a bad exception list (`GAMMALOOP_UNCONTRACTED_EXCEPTIONS`) is
-/// refused.
+/// an early error): a bad value, `GAMMALOOP_UNCONTRACTED_STRICT=0` (on and
+/// check), a bad `GAMMALOOP_UNCONTRACTED_TIMING` (every mode), check mode
+/// with `PINT6_CLOSURE_DUMP`, a kind list without a kind this build emits,
+/// an enabled kind whose route is off (`child` with
+/// `GAMMALOOP_UV_CHILDREN=massive`, `ir-hard` off the IR hard child route)
+/// or a bad exception list (`GAMMALOOP_UNCONTRACTED_EXCEPTIONS`) is refused.
 pub fn validate_uncontracted() -> eyre::Result<()> {
     uncontracted::validate()
+}
+
+/// Whether a diagram ledger opens ([`DiagramLedger::open`] is `Some`): the
+/// switch on or check, or `GAMMALOOP_UNCONTRACTED_TIMING=1` (off included).
+pub fn uncontracted_ledger_active() -> eyre::Result<bool> {
+    uncontracted::validate()?;
+    Ok(uncontracted_ledger::active())
 }
 
 /// The identity of `GAMMALOOP_UNCONTRACTED_NUMERATOR` for a checkpoint
