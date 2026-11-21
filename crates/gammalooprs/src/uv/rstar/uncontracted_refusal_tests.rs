@@ -19,9 +19,10 @@
 //! * `one_loop_tree_cut` is the emitter's own decline of the single
 //!   propagator shape only (the closing line alone, a massive tadpole after
 //!   the Taylor step); every other one-loop record stays on the new path.
-//! * A vakint `Closure` refusal without a WH-RECORD-FORMAT section-8 prefix
-//!   is an error (requirement 13, interim until the rebase onto helper VH's
-//!   frozen REFUSALS list), "every line is massive" among them.
+//! * A vakint refusal is designed only by a row of `DESIGNED_VAKINT`, a
+//!   subset of the frozen REFUSALS list (U7-PLAN requirements 13 and 14):
+//!   four `Closure` rows and the `all_massive` backstop; every other
+//!   `Closure` detail is an error; `Evaluation` and `Oracle` always are.
 //! * The record builder's impossible states (`sigma`, `root_crown_paired`,
 //!   `root_normalisation_momentum`) are errors.
 //! * vakint's `open slot ` row needs `is not a Lorentz slot`.
@@ -827,19 +828,17 @@ fn single_propagator_is_the_closing_line_alone() {
 }
 
 // ---------------------------------------------------------------------------
-// U7-PLAN requirement 13 (interim): no section-8 prefix, no designed refusal
+// U7-PLAN requirements 13 and 14: the frozen REFUSALS list
 // ---------------------------------------------------------------------------
 
-/// U7-PLAN requirement 13, interim rule (until the rebase onto helper VH's
-/// frozen REFUSALS list): a vakint `Closure` refusal is designed only with a
-/// WH-RECORD-FORMAT section-8 prefix (`Taylor degree `, `the projector
-/// contains Q(`, the open-spinor port `open slot ` + `is not a Lorentz
-/// slot`); any other `Closure` detail is an error, among them the entry's
-/// wrapped internal failures and "every line is massive: not a closure" (no
-/// section-8 row: the emitter declines that shape itself,
-/// `one_loop_tree_cut`, so vakint never sees it on a correct record).
+/// U7-PLAN requirements 13 and 14: a vakint `Closure` refusal is designed
+/// only by a row of `DESIGNED_VAKINT` (`Taylor degree `, `the projector
+/// contains Q(`, the open-spinor port `open slot ` + `is not a Lorentz slot`,
+/// and the backstop `every line is massive: not a closure`, which the
+/// emitter declines first as `one_loop_tree_cut`); any other `Closure`
+/// detail is an error, among them the entry's wrapped internal failures.
 #[test]
-fn closure_without_a_section_8_prefix_is_an_error() {
+fn closure_refusals_are_designed_only_by_a_frozen_row() {
     let closure = |detail: &str| FactorizedError::Closure {
         detail: detail.into(),
     };
@@ -853,31 +852,95 @@ fn closure_without_a_section_8_prefix_is_an_error() {
             "open slot bis(4,hedge(3,1)) is not a Lorentz slot (open bispinor ports are not supported; close the line with the projector)",
             "vakint:open_spinor",
         ),
+        ("every line is massive: not a closure", "vakint:all_massive"),
     ] {
         let decline = Decline::vakint(&closure(detail));
         assert!(decline.designed, "{detail}: {decline:?}");
         assert_eq!(decline.code, code);
     }
     for detail in [
-        "every line is massive: not a closure",
         "lowering: no key plan",
         "the lines do not form one closing line among massless ones",
         "truncating the insertion product: x",
+        "the projector contains the momentum of internal edge 3",
+        "open slot bis(4,hedge(3,1)): only Lorentz slots stay open",
     ] {
         let decline = Decline::vakint(&closure(detail));
         assert!(!decline.designed, "{detail}: {decline:?}");
         assert_eq!(decline.code, "vakint:Closure", "{detail}");
     }
-    let prefixes = ["Taylor degree ", "the projector contains Q(", "open slot "];
+    let prefixes = [
+        "Taylor degree ",
+        "the projector contains Q(",
+        "open slot ",
+        "every line is massive: not a closure",
+    ];
     for row in uncontracted::DESIGNED_VAKINT
         .iter()
         .filter(|row| row.0 == "Closure")
     {
         assert!(
             prefixes.contains(&row.1),
-            "the Closure row {:?} has no section-8 prefix",
+            "the Closure row {:?} is not one of the four",
             row.1
         );
+    }
+}
+
+/// Our designed vakint rows are a SUBSET of the frozen REFUSALS list
+/// (`FROZEN_VAKINT_REFUSALS`, copied from the list "REFUSALS (variant, detail
+/// prefix)" of the document of sha256
+/// 947004186d96e5c79ba8b5bbffdee13fa7bdca58f503559f84f1122d051b3222): each
+/// row's variant and prefix are a frozen pair's (the row's prefix equal to
+/// the frozen one or narrower), except the open-spinor row, which no frozen
+/// row lists and which is designed by the variant rule (a `Closure` refusal,
+/// refused by the format); no row is `Evaluation` or `Oracle`, and those two
+/// are always errors.
+#[test]
+fn designed_vakint_rows_are_a_subset_of_the_frozen_refusals() {
+    let frozen = uncontracted::FROZEN_VAKINT_REFUSALS;
+    for (variant, _) in frozen {
+        assert!(
+            *variant != "Evaluation" && *variant != "Oracle",
+            "{variant} is not a format refusal"
+        );
+    }
+    let mut by_variant_rule = Vec::new();
+    for (variant, prefix, _, code) in uncontracted::DESIGNED_VAKINT {
+        assert!(
+            *variant != "Evaluation" && *variant != "Oracle",
+            "{code}: {variant} is never designed"
+        );
+        let listed = frozen
+            .iter()
+            .any(|(f_variant, f_prefix)| f_variant == variant && prefix.starts_with(f_prefix));
+        if !listed {
+            assert!(
+                frozen.iter().any(|(f_variant, _)| f_variant == variant),
+                "{code}: the variant {variant} is not in the frozen list"
+            );
+            by_variant_rule.push(*code);
+        }
+    }
+    assert_eq!(by_variant_rule, ["open_spinor"]);
+    assert_eq!(uncontracted::DESIGNED_VAKINT.len(), 9);
+    for (error, code) in [
+        (
+            FactorizedError::Evaluation {
+                detail: "Taylor degree 3 above 2".into(),
+            },
+            "vakint:Evaluation",
+        ),
+        (
+            FactorizedError::Oracle {
+                detail: "every line is massive: not a closure".into(),
+            },
+            "vakint:Oracle",
+        ),
+    ] {
+        let decline = Decline::vakint(&error);
+        assert!(!decline.designed, "{error}: {decline:?}");
+        assert_eq!(decline.code, code, "{error}");
     }
 }
 
