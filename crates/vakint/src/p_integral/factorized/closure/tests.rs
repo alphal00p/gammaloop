@@ -1023,8 +1023,13 @@ fn l2_root_remainder_equals_the_contracted_reference() {
     }
 }
 
+/// The Taylor order filters other than `orders=all` (the top-mass drop
+/// modes) are refused, by validation and by the entry, until a verified
+/// record exists; a record carrying one still parses. `orders=all` on the
+/// same record evaluates and equals the reference.
 #[test]
-fn l2_root_orders_filters() {
+fn l2_root_orders_filters_are_refused() {
+    let vakint = Vakint::new().unwrap();
     for orders in [TaylorOrders::DropZero, TaylorOrders::DropZeroOdd] {
         let mut value = l2_root(2, false);
         let FactorizedKind::Closure(spec) = &mut value.kind else {
@@ -1032,8 +1037,36 @@ fn l2_root_orders_filters() {
         };
         spec.taylor.as_mut().unwrap().orders = orders;
         value.label = format!("L2 root orders={}", orders.as_str());
-        check(&value, &L2_CUT);
+        let prefix = format!("orders={} is not supported: ", orders.as_str());
+        let refused = |result: std::result::Result<(), FactorizedError>, what: &str| match result {
+            Err(FactorizedError::Closure { detail }) => {
+                assert!(detail.starts_with(&prefix), "{what}: {detail}")
+            }
+            other => panic!("{what}: {other:?}"),
+        };
+        refused(value.validate(), "validate");
+        refused(
+            evaluate_factorized_closure(
+                &vakint,
+                &settings(),
+                std::slice::from_ref(&value),
+                &[value.prefactor.total()],
+            )
+            .map(|_| ()),
+            "entry",
+        );
+        // the text form keeps the field: parse_text reads it, from_text
+        // (which validates) refuses it
+        let text = value.to_text().unwrap();
+        assert!(text.contains(&format!("orders={}", orders.as_str())));
+        let parsed = FactorizedNumerator::parse_text(&text).unwrap();
+        refused(parsed.validate(), "parsed");
+        refused(
+            FactorizedNumerator::from_text(&text).map(|_| ()),
+            "from_text",
+        );
     }
+    check(&l2_root(2, false), &L2_CUT);
 }
 
 /// K3 shape: an IR hard part at FIXED mass (R -> M_aux, no compensation),

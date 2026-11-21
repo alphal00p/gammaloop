@@ -473,6 +473,12 @@ impl FactorizedNumerator {
                         taylor.degree
                     )));
                 }
+                if taylor.orders != super::TaylorOrders::All {
+                    return Err(refuse(format!(
+                        "orders={} is not supported: only orders=all is evaluated (the top-mass drop modes have no verified record)",
+                        taylor.orders.as_str()
+                    )));
+                }
                 if !orders_keep_any(taylor) {
                     return Err(refuse(format!(
                         "orders={} keeps no order up to degree {}",
