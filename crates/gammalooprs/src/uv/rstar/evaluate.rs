@@ -1182,11 +1182,11 @@ impl<'a> Evaluation<'a> {
             // The counts up to the failure, before the error propagates
             // (log_timing prints them on success).
             self.log_boundary_summary("error");
-        }
-        if self.plan.root_boundary.is_none() {
-            // GAMMALOOP_UNCONTRACTED_NUMERATOR on / check: the diagram root's
-            // UNCONTRACTED_SUMMARY (a no-op with the switch off)
-            super::uncontracted::log_summary(&self.graph.name, result.is_ok());
+            if self.plan.root_boundary.is_none() {
+                // the root's UNCONTRACTED_SUMMARY up to the failure (log_timing
+                // prints it on success; a no-op with the switch off)
+                super::uncontracted::log_summary(&self.graph.name, false);
+            }
         }
         result
     }
@@ -2886,6 +2886,12 @@ impl<'a> Evaluation<'a> {
 
     fn log_timing(&self) {
         self.log_boundary_summary("ok");
+        if self.plan.root_boundary.is_none() {
+            // GAMMALOOP_UNCONTRACTED_NUMERATOR on / check: the root-scope
+            // UNCONTRACTED_SUMMARY of every successful root evaluation
+            // (`counterterm` and `counterterm_from_pole_part`; a no-op off)
+            super::uncontracted::log_summary(&self.graph.name, true);
+        }
         let elapsed = self.started.elapsed();
         let preparation = elapsed.saturating_sub(
             self.proper_uv_elapsed + self.quotient_elapsed + self.integration_elapsed,
