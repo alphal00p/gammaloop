@@ -4053,3 +4053,123 @@ fn the_audit_inputs_per_rule() {
     }
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
+
+/// (records: `VAKINT_TEST_K1_L5_RECORDS`, comma-separated `<graph>/<rr>`,
+/// default `L5-60/rr1` (about 2 min); L5-51/rr1 costs about 270 s per call,
+/// eight calls.)
+/// UNKNOWN masters from the BACKEND with the 1-5 package loaded
+/// (`VAKINT_TEST_P_LIBRARY_1_5`, its own catalogue ggppss-5L-v4-rc4a with the
+/// UNKNOWN entries): the five-loop K1 record L5-60 rr1 through the closure
+/// entry at its depth and three terms deeper, allow-unknowns ON and OFF, in
+/// Symbolic and Retain. Reports each outcome (no expectation): whether the
+/// value carries `vakint::UNKNOWN(..)`, the ε orders it carries them at, or
+/// the refusal.
+#[test]
+#[ignore = "external data: VAKINT_TEST_WH_FIXTURES + VAKINT_TEST_P_LIBRARY_1_5"]
+fn unknown_masters_from_the_backend_with_the_1_5_package() {
+    let library = wh_fixtures::required_env("VAKINT_TEST_P_LIBRARY_1_5", "the 1-5 package");
+    init();
+    let started = std::time::Instant::now();
+    let mut vakint = Vakint::new().unwrap();
+    vakint.load_p_library_directory(&library, false).unwrap();
+    eprintln!(
+        "CONTRACT 1-5 loaded {} in {:.1}s",
+        library.display(),
+        started.elapsed().as_secs_f64()
+    );
+    let unknown = vakint::truncation_guard::unknown_coefficient_symbol();
+    let selected =
+        std::env::var("VAKINT_TEST_K1_L5_RECORDS").unwrap_or_else(|_| "L5-60/rr1".into());
+    for (graph, rr) in selected
+        .split(',')
+        .map(|s| s.split_once('/').expect("<graph>/<rr>"))
+    {
+        let dir = wh_fixtures::fixture_dir("k1-l5").join(graph).join(rr);
+        let base =
+            FactorizedNumerator::from_text(&wh_fixtures::read_fixture(&dir.join("input.txt")))
+                .unwrap();
+        for extra in [0usize, 3] {
+            let mut v = base.clone();
+            let FactorizedKind::Closure(spec) = &mut v.kind else {
+                unreachable!()
+            };
+            spec.depth = Some(spec.depth.unwrap() + extra);
+            for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Retain] {
+                for allow in [false, true] {
+                    let mut settings = site(mode);
+                    settings.allow_unknown_master_coefficients = allow;
+                    let started = std::time::Instant::now();
+                    let got = evaluate_factorized_closure(
+                        &vakint,
+                        &settings,
+                        std::slice::from_ref(&v),
+                        std::slice::from_ref(&v.prefactor.total()),
+                    );
+                    let seconds = started.elapsed().as_secs_f64();
+                    let shown = match &got {
+                        Ok(r) => {
+                            let count_in = |a: &Atom| {
+                                let mut count = 0;
+                                a.as_view().visitor(&mut |x| {
+                                    if let AtomView::Fun(f) = x {
+                                        if f.get_symbol() == unknown {
+                                            count += 1;
+                                        }
+                                    }
+                                    true
+                                });
+                                count
+                            };
+                            // by eps order where the value is a Laurent polynomial
+                            // (Retain keeps eps inside the retained masters)
+                            let orders =
+                                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                    wh_fixtures::epsilon_coefficients(&r.value, eps())
+                                        .into_iter()
+                                        .map(|(n, c)| (n, count_in(&c)))
+                                        .filter(|(_, c)| *c > 0)
+                                        .collect::<std::collections::BTreeMap<_, _>>()
+                                }))
+                                .map(|o| format!("{o:?}"))
+                                .unwrap_or_else(|_| {
+                                    format!(
+                                        "(not a Laurent polynomial) total {}",
+                                        count_in(&r.value)
+                                    )
+                                });
+                            if extra == 0 && matches!(mode, RustRedMasterMode::Symbolic) {
+                                let text = wh_fixtures::read_fixture(&dir.join("value.txt"));
+                                let expected = atom(wh_fixtures::value_line(&text));
+                                let through = wh_fixtures::valid_through(&text);
+                                let n = wh_fixtures::assert_equal_through(
+                                    &r.value,
+                                    &expected,
+                                    eps(),
+                                    through,
+                                    "1-5 vs the fixture",
+                                );
+                                eprintln!(
+                                    "CONTRACT 1-5 {graph}/{rr} Symbolic = the fixture value through eps^{through} ({n} orders)"
+                                );
+                            }
+                            let s = r.value.to_string();
+                            format!(
+                                "OK {} chars; UNKNOWN atoms by eps order {orders:?}; PResidual {}; PMaster {}",
+                                s.len(),
+                                s.contains("PResidual"),
+                                s.contains("PMaster")
+                            )
+                        }
+                        Err(e) => format!(
+                            "ERR {}",
+                            e.to_string().chars().take(400).collect::<String>()
+                        ),
+                    };
+                    eprintln!(
+                        "CONTRACT 1-5 {graph}/{rr} depth+{extra} {mode:?} allow={allow}: {shown} [{seconds:.1}s]"
+                    );
+                }
+            }
+        }
+    }
+}
