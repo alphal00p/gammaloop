@@ -593,6 +593,14 @@ pub(super) struct Decline {
 /// `vakint:Empty`, and K3's `ir_hard_site_missing`, `ir_dirac_closure`, ...)
 /// is a bug of the emitter or of the site: `outcome=error:<code>`.
 ///
+/// `one_loop_tree_cut` (U7-PLAN 14(d), narrowed as Astra U7a asks: "keep the
+/// rebase test narrow"): ONLY a remainder whose one internal propagator is
+/// the closing line ([`single_propagator`]; after the Taylor step a massive
+/// tadpole, which vakint's closure entry refuses as "every line is
+/// massive"; B_self_energy_L4_0049 id 8), of any kind. Every other one-loop
+/// remainder is a record, although today's route names each of them
+/// `one_loop_tree_cut` (it integrates them whole).
+///
 /// K3 (U7b) adds NO code: a K3 record can hit only rows already here,
 /// `insertion_mass_symbol` (a UV child's Δ with a mass symbol at a `ct:`
 /// node where independent crown legs meet, as K2) and
@@ -616,6 +624,7 @@ pub(super) const DESIGNED_LOCAL: &[&str] = &[
     "sigma",
     "no_closing_line",
     "root_crown_paired",
+    "one_loop_tree_cut",
 ];
 
 /// vakint's designed refusals, matched by the error variant AND the prefix of
@@ -624,9 +633,10 @@ pub(super) const DESIGNED_LOCAL: &[&str] = &[
 /// and `all_massive`, the explicit refusal of the closure entry for a
 /// remainder whose only line is the closing one (a massive tadpole: vakint
 /// closure.rs `prepare`, "every line is massive: not a closure"; NOT a
-/// section-8 row, flagged to helper VH). Every other vakint error (the
-/// internal failures the entry wraps as `Closure`, the reader's `Text*`,
-/// `IndexUncontracted`, `MomentumNotConserved`, ...) is an error:
+/// section-8 row, flagged to helper VH; the emitter now declines that shape
+/// itself, `one_loop_tree_cut`, before vakint sees it). Every other vakint
+/// error (the internal failures the entry wraps as `Closure`, the reader's
+/// `Text*`, `IndexUncontracted`, `MomentumNotConserved`, ...) is an error:
 /// `outcome=error:vakint:<Variant>`.
 ///
 /// K3 (U7b) adds NO row. Of these, a K3 record can legitimately hit
@@ -2093,6 +2103,20 @@ pub(super) fn conserve(
     ))
 }
 
+/// Whether a record's only internal propagator is its closing line
+/// `closing`: a one-loop remainder whose loop is the closing line alone
+/// (after the Taylor step a massive tadpole, which vakint's closure entry
+/// refuses: "every line is massive: not a closure"; U7-PLAN 14(d),
+/// B_self_energy_L4_0049 id 8). The emitter declines exactly this shape,
+/// `one_loop_tree_cut` (today's route integrates it whole). Every other
+/// one-loop remainder (two or more propagators; today's route names every
+/// one-loop remainder `one_loop_tree_cut`) is a record: Astra U7a, "keep the
+/// rebase test narrow".
+pub(super) fn single_propagator(edges: &[FactorizedEdge], closing: usize) -> bool {
+    let mut internal = edges.iter().filter(|edge| !edge.is_external());
+    matches!((internal.next(), internal.next()), (Some(edge), None) if edge.id == closing)
+}
+
 /// The mass symbols of a record whose occurrence in an insertion vakint
 /// refuses ("contains a mass symbol"), as vakint's `mass_symbol_in`
 /// (factorized.rs): every symbol of an edge's mass, and R*'s reference and
@@ -2864,6 +2888,20 @@ fn build(
         .to_text()
         .map_err(|error| Decline::new("text", error.to_string()))?;
     let record = FactorizedNumerator::from_text(&text).map_err(|error| Decline::vakint(&error))?;
+    // last, so that every error of the record above stays loud
+    if single_propagator(&record.edges, usize::from(marked)) {
+        return Err(Decline::new(
+            "one_loop_tree_cut",
+            format!(
+                "the remainder {}: its only propagator is the closing line {} (after the Taylor step a massive tadpole; today's route integrates it whole)",
+                super::plan::join_edge_ids(&super::plan::uv_child_edge_ids(
+                    graph,
+                    &region.remaining
+                )),
+                usize::from(marked)
+            ),
+        ));
+    }
     Ok(Some(Built {
         record,
         text,

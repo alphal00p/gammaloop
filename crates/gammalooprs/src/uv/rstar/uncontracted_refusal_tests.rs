@@ -14,6 +14,9 @@
 //! * A panic caught inside the dressed scope (or the quotient scope) leaves
 //!   no scope behind: the same thread's next root and child are classified
 //!   and executed as root and child.
+//! * `one_loop_tree_cut` is the emitter's own decline of the single
+//!   propagator shape only (the closing line alone, a massive tadpole after
+//!   the Taylor step); every other one-loop record stays on the new path.
 
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
@@ -29,7 +32,7 @@ use symbolica::{
 };
 use vakint::{
     Vakint,
-    p_integral::factorized::{Endpoint, FactorizedEdge},
+    p_integral::factorized::{Endpoint, FactorizedEdge, FactorizedNumerator},
 };
 
 use crate::{
@@ -620,4 +623,108 @@ fn a_caught_unwind_leaves_no_scope_behind() -> Result<()> {
         );
         Ok(())
     })
+}
+
+// ---------------------------------------------------------------------------
+// one_loop_tree_cut: the single-propagator shape only
+// ---------------------------------------------------------------------------
+
+const L2_25_DOT: &str = include_str!("testdata/u7a/l2-d25.dot");
+
+/// `keep the rebase test narrow` (Astra U7a; U7-PLAN 14(d)): the emitter
+/// declines with `one_loop_tree_cut` ONLY a remainder whose one internal
+/// propagator is the closing line (after the Taylor step a massive tadpole,
+/// which vakint's closure entry refuses as "every line is massive"; L2 25 has
+/// one, as L4 49 id 8 has). Every other one-loop record (today's route names
+/// every one-loop remainder `one_loop_tree_cut`: it integrates it whole;
+/// 137 roots and 410 children at L3) stays on the new path: evaluated,
+/// compared equal, with at least two internal propagators; L2 25 and L2 22
+/// carry such root and child neighbours.
+#[test]
+fn one_loop_tree_cut_is_the_single_propagator_shape_only() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let mut neighbours = BTreeMap::<Kind, usize>::new();
+        for (what, dot, shapes) in [("L2/25", L2_25_DOT, 1), ("L2/22", L2_22_DOT, 0)] {
+            let diagram = colour_factored(&load(dot)?)?;
+            let (value, captured) = root_run(&diagram, check())?;
+            let _ = value?;
+            evaluated_except(what, &captured, &["declined:one_loop_tree_cut"])?;
+            let declined = captured
+                .iter()
+                .filter(|a| a.outcome.starts_with("declined:") || a.outcome.starts_with("error:"))
+                .collect::<Vec<_>>();
+            ensure!(
+                declined.len() == shapes
+                    && declined
+                        .iter()
+                        .all(|a| a.outcome == "declined:one_loop_tree_cut" && a.loops == 1),
+                "{what}: the declines {:?} are not {shapes} single-propagator shape(s)",
+                declined
+                    .iter()
+                    .map(|a| (a.kind.as_str(), a.id, a.loops, a.outcome.clone()))
+                    .collect::<Vec<_>>()
+            );
+            for attempt in captured
+                .iter()
+                .filter(|a| a.loops == 1 && a.outcome == "uncontracted")
+            {
+                let text = attempt
+                    .text
+                    .as_ref()
+                    .ok_or_else(|| eyre!("{what}: an evaluated record without text"))?;
+                let record = FactorizedNumerator::from_text(text).map_err(|e| eyre!("{e}"))?;
+                let internal = record.edges.iter().filter(|e| !e.is_external()).count();
+                ensure!(
+                    internal >= 2,
+                    "{what}: an evaluated one-loop record with {internal} propagator(s)\n{text}"
+                );
+                *neighbours.entry(attempt.kind).or_default() += 1;
+            }
+        }
+        eprintln!("U7AD_B one-loop neighbours evaluated: {neighbours:?}");
+        ensure!(
+            neighbours.get(&Kind::Root).is_some_and(|n| *n > 0)
+                && neighbours.get(&Kind::Child).is_some_and(|n| *n > 0),
+            "one-loop root and child neighbours on the new path: {neighbours:?}"
+        );
+        Ok(())
+    })
+}
+
+/// The shape itself, on record edges: the closing line alone (a self-loop
+/// at a `ct:` node, the legs external) is the single-propagator shape; a
+/// one-loop remainder with a second propagator is not, nor one whose only
+/// internal edge is not the closing line.
+#[test]
+fn single_propagator_is_the_closing_line_alone() {
+    let edge = |id: usize, source: Endpoint, target: Endpoint| FactorizedEdge {
+        id,
+        source,
+        target,
+        source_hedge: None,
+        target_hedge: None,
+        particle: "g".into(),
+        line: vakint::p_integral::factorized::LineKind::Vector,
+        power: 1,
+        mass_squared: Atom::Zero,
+        momentum: vec![1, 0],
+        factor: Atom::num(1),
+    };
+    let (ct, v) = (Endpoint::Vertex(3), Endpoint::Vertex(0));
+    let legs = [
+        edge(0, Endpoint::External, ct),
+        edge(1, ct, Endpoint::External),
+    ];
+    let tadpole = [legs[0].clone(), legs[1].clone(), edge(8, ct, ct)];
+    assert!(uncontracted::single_propagator(&tadpole, 8));
+    assert!(!uncontracted::single_propagator(&tadpole, 7));
+    let bubble = [
+        legs[0].clone(),
+        legs[1].clone(),
+        edge(7, ct, v),
+        edge(8, v, ct),
+    ];
+    assert!(!uncontracted::single_propagator(&bubble, 8));
+    assert!(!uncontracted::single_propagator(&legs, 8));
 }

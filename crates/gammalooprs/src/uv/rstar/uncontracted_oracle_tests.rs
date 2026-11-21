@@ -753,11 +753,12 @@ fn k1_quick_l4_40_42_49_from_the_graph() -> Result<()> {
                     ))
                 })
                 .collect::<Result<Vec<_>>>()?;
-            // L4-49: its one-loop remainder (no fixture) is declined by vakint,
-            // `closure: every line is massive` (a finding, tested below); its
-            // designed code (U7a review B1) is `vakint:all_massive`
+            // L4-49: its one-loop remainder (no fixture) is the closing line
+            // alone, which vakint refuses (`closure: every line is massive`, a
+            // finding, tested below); the emitter declines that shape itself
+            // (U7a delta), the designed `one_loop_tree_cut`
             let allowed: &[&str] = if diagram == "L4-49" {
-                &["vakint:all_massive"]
+                &["one_loop_tree_cut"]
             } else {
                 &[]
             };
@@ -1340,11 +1341,12 @@ fn site_malformed_insertion_is_not_a_silent_fallback() -> Result<()> {
 /// diagram 49 (no fixture: today's path takes it whole, `one_loop_tree_cut`)
 /// is declined by vakint's closure entry, `closure: every line is massive:
 /// not a closure` (a massive tadpole: only the closing line is left). Until
-/// the entry serves it (or the format lists it), the emitter treats it as the
-/// designed refusal `vakint:all_massive` (on the B1 list, counted in
-/// UNCONTRACTED_SUMMARY); this test states the goal: the record evaluated.
+/// the entry serves it (or the format lists it), the emitter declines that
+/// shape itself as the designed `one_loop_tree_cut` (U7a delta; on the B1
+/// list, counted in UNCONTRACTED_SUMMARY); this test states the goal: the
+/// record evaluated.
 #[test]
-#[ignore = "vakint-side finding B3: the closure entry declines L4-49's one-loop massive tadpole remainder (vakint:all_massive); reads GAMMALOOP_U7A_FIXTURES_DIR"]
+#[ignore = "vakint-side finding B3: the closure entry declines L4-49's one-loop massive tadpole remainder (the emitter declines it as one_loop_tree_cut); reads GAMMALOOP_U7A_FIXTURES_DIR"]
 fn k1_quick_l4_49_one_loop_remainder_is_evaluated() -> Result<()> {
     with_production_piece_limit(|| -> Result<()> {
         test_initialise()?;
