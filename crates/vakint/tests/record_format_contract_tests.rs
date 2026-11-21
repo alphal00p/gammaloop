@@ -2611,7 +2611,7 @@ fn unknown_misused() {
 // ===========================================================================
 
 /// v1.4 §7 "open spinor chains only between the two declared bispinor
-/// ports (OQ-6)": the k3-dirac value has no bispinor slot other than its
+/// ports": the k3-dirac value has no bispinor slot other than its
 /// declared bispinor ports (here: none, the projector closes the quark
 /// line).
 #[test]
@@ -3788,13 +3788,14 @@ fn every_rule_on_every_field_and_entry() {
     assert!(misses.is_empty(), "accepted:\n{}", misses.join("\n"));
 }
 
-/// The audit's inputs per rule (six each for G1, G2, G3, the exponents and
+/// The inputs per rule (six each for the names, the masses, the structural
+/// heads, the exponents and
 /// UNKNOWN) not already a cell of `every_rule_on_every_field_and_entry`: each
 /// is REFUSED (at parse, validation or evaluation; never a panic), or, where
 /// it is a legitimate spelling, gives the SAME value as a control that differs
 /// only by a renaming, or (marked OBSERVE) is reported without an expectation.
 #[test]
-fn the_audit_inputs_per_rule() {
+fn the_inputs_per_rule_of_the_atom_grammar() {
     use vakint::p_integral::factorized::evaluate_factorized_vacuum;
     // SAFETY: nextest runs each test in its own process
     unsafe { std::env::set_var("VAKINT_ALLOW_UNKNOWN_MASTER_COEFFICIENTS", "1") };
@@ -3879,19 +3880,19 @@ fn the_audit_inputs_per_rule() {
     };
     let ok_master = "vakint::ggppss_int_1";
     let rows: Vec<(&str, Input, Expect)> = vec![
-        // G1
+        // names
         (
-            "G1-1 vertex x symbolica::ε^-1",
+            "names-1 vertex x symbolica::ε^-1",
             in_field(&k2_text, "vertex factor", "symbolica::ε^-1"),
             Expect::Refused,
         ),
         (
-            "G1-2 UFO::g<ZWSP>s in a vertex factor",
+            "names-2 UFO::g<ZWSP>s in a vertex factor",
             in_field(&k2_text, "vertex factor", "UFO::g\u{200B}s"),
             Expect::Refused,
         ),
         (
-            "G1-3 ε<U+0301> in an insertion coefficient",
+            "names-3 ε<U+0301> in an insertion coefficient",
             in_field(
                 &k2_text,
                 "insertion coefficient",
@@ -3900,17 +3901,17 @@ fn the_audit_inputs_per_rule() {
             Expect::Refused,
         ),
         (
-            "G1-4 the dimension named gammalooprs::𝒟",
+            "names-4 the dimension named gammalooprs::𝒟",
             parse(&k2_text.replace(DIM, "gammalooprs::{}::𝒟")).and_then(plain),
             Expect::Refused,
         ),
         (
-            "G1-5 the settings' μ as a function head μᵣ²(UFO::x) (a function head that is not allowed)",
+            "names-5 the settings' μ as a function head μᵣ²(UFO::x) (a function head that is not allowed)",
             in_field(&k2_text, "vertex factor", "gammalooprs::μᵣ²(UFO::x)"),
             Expect::Refused,
         ),
         (
-            "G1-6 UNKNOWN(UFO::μ, 0) in an insertion",
+            "names-6 UNKNOWN(UFO::μ, 0) in an insertion",
             in_field(
                 &k2_text,
                 "insertion coefficient",
@@ -3918,9 +3919,9 @@ fn the_audit_inputs_per_rule() {
             ),
             Expect::Refused,
         ),
-        // G2
+        // masses
         (
-            "G2-1 the auxiliary mass named UFO::maux, x eps^-1 in an insertion",
+            "masses-1 the auxiliary mass named UFO::maux, x eps^-1 in an insertion",
             in_field(
                 &k2_text.replace(MAUX, "UFO::maux"),
                 "insertion coefficient",
@@ -3929,43 +3930,43 @@ fn the_audit_inputs_per_rule() {
             Expect::Refused,
         ),
         (
-            "G2-1c control: the auxiliary mass named UFO::maux",
+            "masses-1c control: the auxiliary mass named UFO::maux",
             parse(&k2_text.replace(MAUX, "UFO::maux")).and_then(plain),
             Expect::Observe,
         ),
         (
-            "G2-2 R in prefactor_overall without original_cycles (typed)",
+            "masses-2 R in prefactor_overall without original_cycles (typed)",
             no_cycles(R),
             Expect::Refused,
         ),
         (
-            "G2-2c control: no original_cycles (typed), overall x caller::c",
+            "masses-2c control: no original_cycles (typed), overall x caller::c",
             no_cycles("caller::c"),
             Expect::Observe,
         ),
         (
-            "G2-3 R in a weight",
+            "masses-3 R in a weight",
             in_field(&k2_text, "weights", R),
             Expect::Refused,
         ),
         (
-            "G2-4a vacuum edge mass UFO::m^(1/2)",
+            "masses-4a vacuum edge mass UFO::m^(1/2)",
             vacuum("UFO::m^(1/2)", "1"),
             Expect::Refused,
         ),
         (
-            "G2-4b vacuum edge mass log(UFO::m)",
+            "masses-4b vacuum edge mass log(UFO::m)",
             vacuum("log(UFO::m)", "1"),
             Expect::Refused,
         ),
         (
-            "G2-5 a massless line with mass 0.0",
+            "masses-5 a massless line with mass 0.0",
             parse(&k2_text.replacen("momentum=-1,-1,0\t0", "momentum=-1,-1,0\t0.0", 1))
                 .and_then(plain),
             Expect::Observe,
         ),
         (
-            "G2-6a the closing edge's mass written R^1",
+            "masses-6a the closing edge's mass written R^1",
             parse(&edge5_r(&format!("{R}^1"))).and_then(plain),
             Expect::Same(
                 parse(&k2_text).and_then(plain),
@@ -3974,7 +3975,7 @@ fn the_audit_inputs_per_rule() {
             ),
         ),
         (
-            "G2-6b the closing edge's mass written 1*R",
+            "masses-6b the closing edge's mass written 1*R",
             parse(&edge5_r(&format!("1*{R}"))).and_then(plain),
             Expect::Same(
                 parse(&k2_text).and_then(plain),
@@ -3982,9 +3983,9 @@ fn the_audit_inputs_per_rule() {
                 "caller::none",
             ),
         ),
-        // G3
+        // structural heads
         (
-            "G3-1 hedge(ε, 1) in a vertex factor",
+            "heads-1 hedge(ε, 1) in a vertex factor",
             in_field(
                 &k2_text,
                 "vertex factor",
@@ -3993,7 +3994,7 @@ fn the_audit_inputs_per_rule() {
             Expect::Refused,
         ),
         (
-            "G3-2 g(mink(D, a), R) in a vertex factor",
+            "heads-2 g(mink(D, a), R) in a vertex factor",
             in_field(
                 &k2_text,
                 "vertex factor",
@@ -4004,22 +4005,22 @@ fn the_audit_inputs_per_rule() {
             Expect::Refused,
         ),
         (
-            "G3-3 UFO::f(UFO::g(ε)) in the prefactor argument",
+            "heads-3 UFO::f(UFO::g(ε)) in the prefactor argument",
             in_argument(&k2_text, &format!("UFO::f(UFO::g({EPS}))")),
             Expect::Refused,
         ),
         (
-            "G3-4 user::Q(1, ε) in a vertex factor",
+            "heads-4 user::Q(1, ε) in a vertex factor",
             in_field(&k2_text, "vertex factor", &format!("user::Q(1,{EPS})")),
             Expect::Refused,
         ),
         (
-            "G3-5 vacuum vertex factor x log(ε)",
+            "heads-5 vacuum vertex factor x log(ε)",
             vacuum("caller::m2", &format!("log({EPS})")),
             Expect::Refused,
         ),
         (
-            "G3-6 UFO::f(μᵣ²) in a vertex factor (a function head that is not allowed)",
+            "heads-6 UFO::f(μᵣ²) in a vertex factor (a function head that is not allowed)",
             in_field(&k2_text, "vertex factor", "UFO::f(gammalooprs::μᵣ²)"),
             Expect::Refused,
         ),
@@ -4759,7 +4760,7 @@ fn zeta_only_at_an_integer_literal_of_at_least_two() {
     }
 }
 
-/// The gate reviewer's three inputs on the real K2 record (L3-036, the
+/// Three inputs on the real K2 record (L3-036, the
 /// insertion coefficient times log(P(x)), gamma(P(x)), zeta(1+P(x)) with P(x)
 /// = (x-3)^2 - x^2 + 6x - 9, identically zero but not written so): REFUSED
 /// at validation and at the closure entry, `Insertion`, prefix `a function
@@ -4767,7 +4768,7 @@ fn zeta_only_at_an_integer_literal_of_at_least_two() {
 /// literal twins as Symbolica normalises them (1+log(1), gamma(1),
 /// zeta(2)/zeta(2): the number 1) are accepted, the value the record's.
 #[test]
-fn the_reviewers_hidden_singular_functions_are_refused_by_name() {
+fn hidden_singular_functions_are_refused_by_name() {
     let base = record("wh-k2-child-ins");
     let vertex = base.insertions[0].vertex;
     let plain = value(&base, &symbolic());

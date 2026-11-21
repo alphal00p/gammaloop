@@ -266,7 +266,7 @@ fn refusal_projector_index_in_the_factors_not_a_port() {
     );
 }
 
-/// A port that occurs only in the projector, never in a factor (A-1).
+/// A port that occurs only in the projector, never in a factor.
 /// Twin: the projector without that port.
 #[test]
 fn refusal_port_only_in_the_projector() {

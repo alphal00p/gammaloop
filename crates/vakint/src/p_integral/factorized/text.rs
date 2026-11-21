@@ -676,8 +676,8 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
     // schema v1: the base's reader, verbatim (a v1 record has no new
     // features; insertions and the closure kind are Reserved there)
     {
-        let mut probe = reader.clone();
-        if let Ok(schema) = probe.raw()
+        let mut lookahead = reader.clone();
+        if let Ok(schema) = lookahead.raw()
             && schema.key == "schema"
             && schema.fields.join("\t") == FACTORIZED_SCHEMA
         {

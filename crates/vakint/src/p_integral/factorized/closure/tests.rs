@@ -745,7 +745,7 @@ fn independent_vacuum_map(value: &FactorizedNumerator, contracted: &Atom) -> Ato
     mapped
 }
 
-/// THE INDEPENDENT REFERENCE (A-25 ii): the contracted reference chain
+/// THE INDEPENDENT REFERENCE: the contracted reference chain
 /// sharing NONE of `TaylorOrders::keeps`, `map_to_vakint_vacuum` and
 /// `Prefactor::total` with the entry (orders written out, the mapping
 /// [`independent_vacuum_map`], the prefactor ARGUMENT multiplied in by plain
@@ -2167,7 +2167,7 @@ fn p2_power_zero_and_minus_one_projectors_agree() {
 #[test]
 #[ignore]
 fn closure_contraction_probe() {
-    let path = wh_fixtures::required_env("VAKINT_CLOSURE_PROBE_RECORD", "the probe's record");
+    let path = wh_fixtures::required_env("VAKINT_CLOSURE_PROBE_RECORD", "the record");
     let reps = std::env::var("VAKINT_CLOSURE_TIMING_REPS")
         .ok()
         .and_then(|v| v.parse().ok())
@@ -3011,7 +3011,7 @@ fn reserved_symbols_are_refused_in_projector_ports_masses_weights() {
         ));
         if name.starts_with("vakint::slash(") {
             // the reader's own dummy slot form mink(D, vakint::slash(..)) is
-            // exempt from the namespace (A-18): a forged one is refused by
+            // exempt from the namespace: a forged one is refused by
             // the index rules (here: a port that occurs in no factor)
             match v.validate() {
                 Err(FactorizedError::Ports { detail }) => {
@@ -3250,7 +3250,7 @@ fn closure_lambda_and_closure_tensor_0_are_refused_in_every_field() {
 }
 
 /// F1 for the separately supplied prefactor ARGUMENT of every
-/// entry (A-17): closure (l2_root), evaluate_factorized, the ports entry and
+/// entry: closure (l2_root), evaluate_factorized, the ports entry and
 /// the vacuum entry (a v3 direct record): refused with the exact message;
 /// the record with a clean argument passes the argument checks.
 #[test]
@@ -3339,7 +3339,7 @@ fn the_prefactor_argument_is_checked_at_every_entry() {
     .unwrap();
 }
 
-/// A-17: every item of the prefactor argument's checks, on the closure
+/// every item of the prefactor argument's checks, on the closure
 /// entry's l2_root (variant AND detail prefix; the clean argument accepted).
 #[test]
 fn the_prefactor_argument_gets_the_record_prefactor_checks() {
@@ -3470,7 +3470,7 @@ fn the_k1_root_collision_witness_is_refused_and_its_control_is_exact() {
     );
 }
 
-/// A-16: a symbol whose name ends in `_` is a symbolica WILDCARD when an
+/// a symbol whose name ends in `_` is a symbolica WILDCARD when an
 /// atom is used as a replacement pattern (witness: `replace(R_)` rewrites a
 /// sum that does not contain R_), so it is refused in a marked record and as
 /// the settings' epsilon; an unmarked value keeps the base behaviour.
@@ -3610,7 +3610,7 @@ fn renumber(value: &FactorizedNumerator, old: usize, new: usize) -> FactorizedNu
     v
 }
 
-/// A-20: edge ids are written as `Q(id, ..)` (i64) and a loop without a loop
+/// edge ids are written as `Q(id, ..)` (i64) and a loop without a loop
 /// edge gets the fresh id max + 1 + i: an id near usize::MAX (which used to
 /// wrap the fresh id onto an existing edge) is refused, an id whose fresh ids
 /// stay at or below i64::MAX is accepted.
@@ -3640,7 +3640,7 @@ fn edge_ids_beyond_i64_are_refused() {
         .unwrap();
 }
 
-/// A-21 / A-71: a marked value's edge power is at most 2^31 in absolute
+/// a marked value's edge power is at most 2^31 in absolute
 /// value (powers are summed when lines are merged in series): a power of
 /// i64::MAX / 2 and -(2^31 + 1) are refused by validate ("edge 1: power ..
 /// out of range"), 2^31 and 3 are accepted with a Taylor step of degree 2. With
@@ -3674,7 +3674,7 @@ fn powers_that_overflow_the_taylor_coefficients_are_refused() {
     assert!(super::taylor_coefficient_bound(huge, 2).is_none());
 }
 
-/// A-70: a closure-kind value's VERTEX ids are i64 too (they are written as
+/// a closure-kind value's VERTEX ids are i64 too (they are written as
 /// edge(source, target)): a vertex renumbered to usize::MAX or i64::MAX + 1 is
 /// refused by validate ("id <n>: the edge and vertex ids"), i64::MAX is
 /// accepted (no fresh ids are counted on vertices).
@@ -3711,7 +3711,7 @@ fn closure_vertex_ids_beyond_i64_are_refused() {
         .unwrap_or_else(|e| panic!("i64::MAX: {e}"));
 }
 
-/// A-21: a degree read off an exponent saturates (a degree is only compared
+/// a degree read off an exponent saturates (a degree is only compared
 /// with w <= 2) instead of truncating `x^(2^32)` to order 0.
 #[test]
 fn degree_exponents_saturate() {
@@ -3729,7 +3729,7 @@ fn degree_exponents_saturate() {
     assert_eq!(exponent("-2"), 0);
 }
 
-/// A-21b: the insertions' cycles are summed with checked arithmetic (two
+/// the insertions' cycles are summed with checked arithmetic (two
 /// insertions of u32::MAX and 1 fermion cycles used to wrap to 0).
 #[test]
 fn insertion_cycles_do_not_wrap() {
@@ -3795,7 +3795,7 @@ fn integer_indices_in_the_port_range_do_not_collide() {
     );
 }
 
-/// A-18: a FORGED `vakint::slash` dummy: as a bare symbol it is reserved; in
+/// a FORGED `vakint::slash` dummy: as a bare symbol it is reserved; in
 /// the reader's slot form it is refused by the index rules (it can only meet
 /// a reader dummy), never evaluated.
 #[test]
@@ -3860,7 +3860,7 @@ fn every_kind_equals_the_independent_reference() {
     check_independent(&l2_root(1, false), &L2_CUT, &argument);
     check_independent(&l2_child(2), &L2_CUT, &argument);
     check_independent(&l2_sector(), &L2_CUT, &argument);
-    // the order filters BELOW the validation (A-40: the public path refuses
+    // the order filters BELOW the validation (the public path refuses
     // the non-`all` filters on the stacked branch; the retained evaluation
     // code stays covered by the independent reference)
     for orders in [TaylorOrders::DropZero, TaylorOrders::DropZeroOdd] {
@@ -3914,7 +3914,7 @@ fn the_collision_controls_equal_the_independent_reference() {
 }
 
 // ---------------------------------------------------------------------------
-// REFUSAL TESTS THAT CAN FAIL (A-27): `validate` of a MINIMAL input (a valid
+// REFUSAL TESTS THAT CAN FAIL: `validate` of a MINIMAL input (a valid
 // record with one defect) gives the variant AND the detail prefix of the
 // REFUSALS list, and the same input without the defect is ACCEPTED.
 // Priority (2): the refusals the R* emitter can reach.
@@ -3935,7 +3935,7 @@ fn assert_closure_refusal(bad: &FactorizedNumerator, good: &FactorizedNumerator,
     }
 }
 
-/// A closure record with no loop (OQ-25: an inserted counterterm alone).
+/// A closure record with no loop (an inserted counterterm alone).
 fn zero_loop_record() -> FactorizedNumerator {
     record(
         "zero loops",
@@ -3972,7 +3972,7 @@ fn refusal_taylor_degree_above_two() {
     assert_closure_refusal(&bad, &good, "Taylor degree 3 above 2");
 }
 
-/// The order filter that keeps nothing (A-40: by a UNIT test of the function
+/// The order filter that keeps nothing (by a UNIT test of the function
 /// the rule lives in, `orders_keep_any`, so that it stays covered when the
 /// non-`all` filters are refused earlier in validate_closure): drop0-odd at
 /// degree 1 keeps nothing, at degree 2 order 2; drop0 at degree 0 nothing,
@@ -4459,10 +4459,10 @@ fn refusal_entry_arguments() {
 }
 
 // ---------------------------------------------------------------------------
-// Delta review of 4f3f54110 (A-36, A-41, A-37, A-38, A-21b, A-27(e)).
+// Delta review of 4f3f54110.
 // ---------------------------------------------------------------------------
 
-/// A-36: a BARE name in a marked record text is read into `vakint::` and
+/// a BARE name in a marked record text is read into `vakint::` and
 /// refused with the advice to qualify it.
 #[test]
 fn a_bare_name_in_a_marked_record_is_refused_with_advice() {
@@ -4485,7 +4485,7 @@ fn a_bare_name_in_a_marked_record_is_refused_with_advice() {
     FactorizedNumerator::from_text(&qualified).unwrap();
 }
 
-/// A-36 (ii): an UNMARKED v1 record with bare names parses, validates and
+/// an UNMARKED v1 record with bare names parses, validates and
 /// evaluates as on the base (bare names are read into `vakint::` there too):
 /// its value is the qualified record's value with the symbol renamed.
 #[test]
@@ -4514,7 +4514,7 @@ fn an_unmarked_v1_record_with_bare_names_is_unchanged() {
     );
 }
 
-/// A-41: `vakint::ε` in a marked record is exempt ONLY when it is the
+/// `vakint::ε` in a marked record is exempt ONLY when it is the
 /// settings' epsilon; with another epsilon it is refused (record and
 /// argument), with vakint's own it is accepted.
 #[test]
@@ -4550,7 +4550,7 @@ fn vakint_epsilon_is_exempt_only_as_the_settings_epsilon() {
     super::super::check_prefactor_argument(&root, &argument, vakint_epsilon()).unwrap();
 }
 
-/// A-37: a FORMAT defect found by the lines' back end inside validate (a
+/// a FORMAT defect found by the lines' back end inside validate (a
 /// closing line whose loop momentum has no unit coefficient) is a `Closure`
 /// refusal, not `Evaluation`.
 #[test]
@@ -4573,7 +4573,7 @@ fn a_closing_line_without_a_unit_coefficient_is_a_closure_refusal() {
     );
 }
 
-/// A-38: the fresh loop-vector id of loop i is max + 1 + i: the bound uses
+/// the fresh loop-vector id of loop i is max + 1 + i: the bound uses
 /// the LARGEST index without a loop edge (here loop 1 of the sector, whose
 /// loop 0 has its edge), not their count.
 #[test]
@@ -4597,7 +4597,7 @@ fn the_fresh_id_bound_uses_the_top_loop_index() {
         .unwrap();
 }
 
-/// A-21b: without original_cycles the insertions' cycles enter the loop-sign
+/// without original_cycles the insertions' cycles enter the loop-sign
 /// parity in exact arithmetic (a u32 sum wrapped at 2^32): the refusal names
 /// the true count.
 #[test]
@@ -4666,7 +4666,7 @@ fn two_poled_root() -> FactorizedNumerator {
     with
 }
 
-/// A-27(e): each of the four internal-failure CALL SITES of the evaluation:
+/// each of the four internal-failure CALL SITES of the evaluation:
 /// the test-only fault injection makes the WRAPPED call itself return its
 /// native error (a `VakintError` from the boundary, the lowering, the
 /// ordinary closure; a `SeriesError` from the truncation), and the site's
@@ -4716,7 +4716,7 @@ fn every_internal_failure_site_reports_evaluation() {
     }
 }
 
-/// A-17 remainder: `vakint_input` (public) called DIRECTLY with a marked
+/// `vakint_input` (public) called DIRECTLY with a marked
 /// value checks the prefactor argument too; unmarked, it does not.
 #[test]
 fn vakint_input_checks_a_marked_value_s_argument() {
@@ -4738,7 +4738,7 @@ fn vakint_input_checks_a_marked_value_s_argument() {
 }
 
 // ---------------------------------------------------------------------------
-// A-36 (built-ins): names Symbolica's parser resolves to BUILT-IN symbols are
+// names Symbolica's parser resolves to BUILT-IN symbols are
 // not in vakint's namespace and are accepted in a marked record. Symbolica
 // (rev 394f6e1, `State::BUILTIN_NAMES_AND_ALIASES`): arg, coeff, exp, log,
 // sin, cos, sqrt, conj, abs, if, der, 𝑒, 𝜋, ‖, opt, alt, and the aliases

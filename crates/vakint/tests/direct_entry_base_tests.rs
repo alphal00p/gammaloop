@@ -53,7 +53,7 @@ fn marked(value: &FactorizedNumerator) -> FactorizedNumerator {
     }
 }
 
-/// The base build's output for the reviewer's three records (integrand of
+/// The base build's output for the three records (integrand of
 /// `vakint_input`, value of `evaluate_factorized`, settings
 /// `refpath::vakint_settings(1)`, prefactor `prefactor.total()`), printed by
 /// the base dea282615.
@@ -197,7 +197,7 @@ fn is_text_error(error: &FactorizedError) -> bool {
     )
 }
 
-/// A declared count of a new section is never an allocation size (A-11):
+/// A declared count of a new section is never an allocation size:
 /// each huge count is a text refusal; the control with the true count reads.
 #[test]
 fn huge_counts_of_the_new_sections_are_refused_not_allocated() {
@@ -249,7 +249,7 @@ fn huge_counts_of_the_new_sections_are_refused_not_allocated() {
     }
 }
 
-/// A port that occurs only in the projector, never in a factor (A-1): the
+/// A port that occurs only in the projector, never in a factor: the
 /// base refuses it as `Ports`; a marked value too. Without the absent port
 /// (the defect removed) both validate.
 #[test]
@@ -364,7 +364,7 @@ fn a_marked_value_keeps_the_open_slot_ceiling() {
     assert!(vakint_input(&settings, &unmarked, &Atom::num(1)).is_ok());
 }
 
-/// Reading a many-record text is linear in its length (A-42): 2,000 records
+/// Reading a many-record text is linear in its length: 2,000 records
 /// take at most a fixed multiple of 20 times the time of 100 (a quadratic
 /// reader takes about 400 times).
 #[test]

@@ -547,8 +547,8 @@ mod tests {
         );
         refused(&format!("UFO::gs^2*{dim}"), "the dimension");
         refused(
-            "UFO::gs^2*probe::nowhere",
-            "the symbol probe::nowhere, which is neither",
+            "UFO::gs^2*elsewhere::nowhere",
+            "the symbol elsewhere::nowhere, which is neither",
         );
         refused(
             "vakint::UNKNOWN(vakint::m1,0)*UFO::gs^2",

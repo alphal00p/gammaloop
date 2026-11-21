@@ -1441,7 +1441,7 @@ fn a_marked_value_refuses_integers_out_of_range() {
 }
 
 /// The surrogate coefficient vertex (`ins:`) carries exactly the two inner
-/// boundary half-edges (format section 8, A-34): a third half-edge of the
+/// boundary half-edges (format section 8): a third half-edge of the
 /// vertex (the first bubble line's source, 60) is refused by THAT rule; the
 /// pristine record (two hedges) is accepted.
 #[test]

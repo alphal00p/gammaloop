@@ -1096,7 +1096,7 @@ fn sunrise_value() -> FactorizedNumerator {
     v
 }
 
-/// A-35: the vacuum mode walks a MARKED value's own atoms (it never calls
+/// the vacuum mode walks a MARKED value's own atoms (it never calls
 /// `validate`): a reserved head inside an edge factor and a wildcard
 /// dimension are refused; the marked value without the defect evaluates to
 /// the unmarked one's value; an UNMARKED value is not walked (base).

@@ -384,7 +384,7 @@ pub fn vakint_input(
             feature: "the closure kind (R* remainder with a closing line)".into(),
         });
     }
-    // a marked value called here directly: the entry check too (A-17)
+    // a marked value called here directly: the entry check too
     super::check_marked_entry(
         value,
         prefactor,

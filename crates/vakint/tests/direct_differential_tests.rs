@@ -9,8 +9,8 @@
 //! `FactorizedNumerator::from_text` (+ `validate`), `vakint_input`,
 //! `evaluate_factorized` (or `evaluate_factorized_vacuum`, `evaluate_graph`),
 //! and the text round trip `parse_text` -> `to_text`, and is reduced to rows
-//! `(case, stage, ok | err, canonical text)`. The reviewer's bubble with 0..7
-//! external spectators (a vendored v1 text) and the audit's witnesses (vacuum
+//! `(case, stage, ok | err, canonical text)`. The bubble with 0..7
+//! external spectators (a vendored v1 text) and the witnesses (vacuum
 //! values with a projector, unsorted ports, a port only in the projector,
 //! amputated fermion legs, compact slashes, absent spinor ports) are cases.
 //!
@@ -206,7 +206,7 @@ struct Topology {
 fn topologies(power: i64) -> Vec<Topology> {
     let s = |v: usize| v.to_string();
     vec![
-        // one loop: k, -k-p (as the reviewer's witness)
+        // one loop: k, -k-p (as the witness)
         Topology {
             name: "bubble",
             loops: 1,
@@ -543,7 +543,7 @@ fn edge_cases(out: &mut Vec<(String, String)>) {
         )),
     );
     out.push((r.label.clone(), r.text()));
-    // the same with a COMPACT slash in the projector (audit A-2 (c), A-4: the
+    // the same with a COMPACT slash in the projector (the
     // base kept the text as written and refused the projector)
     let r = self_energy(
         "v1-compact-slash-projector",
@@ -558,7 +558,7 @@ fn edge_cases(out: &mut Vec<(String, String)>) {
         )),
     );
     out.push((r.label.clone(), r.text()));
-    // amputated fermion legs without a projector (audit A-3)
+    // amputated fermion legs without a projector
     let r = self_energy("v1-amputated-legs-open", None);
     out.push((r.label.clone(), r.text()));
     // a projector closing one of two ports (the base refused it)
@@ -602,7 +602,7 @@ fn edge_cases(out: &mut Vec<(String, String)>) {
         None,
     );
     out.push((r.label.clone(), r.text()));
-    // a port that occurs only in the projector, never in a factor (audit A-1)
+    // a port that occurs only in the projector, never in a factor
     let absent = mink(&hedge(99, 0));
     let r = base(
         "edge-port-only-in-projector",
@@ -611,7 +611,7 @@ fn edge_cases(out: &mut Vec<(String, String)>) {
         Some((0, format!("{}*{}", q(0, &pb), q(0, &absent)))),
     );
     out.push((r.label.clone(), r.text()));
-    // spinor ports on a half-edge the graph lacks, no projector (audit A-6)
+    // spinor ports on a half-edge the graph lacks, no projector
     let (s0, s1) = (
         format!("{BIS}(4,{})", hedge(99, 0)),
         format!("{BIS}(4,{})", hedge(99, 1)),
@@ -623,16 +623,16 @@ fn edge_cases(out: &mut Vec<(String, String)>) {
         None,
     );
     out.push((r.label.clone(), r.text()));
-    // the reviewer's bubble with 0..7 external spectators (a vendored v1
+    // the bubble with 0..7 external spectators (a vendored v1
     // text; ranks below 7 drop the last factors and ports)
     for rank in 0..=7 {
         out.push((format!("spectators-rank{rank}"), spectators(rank)));
     }
 }
 
-/// The reviewer's v1 bubble with `rank` external spectators
+/// The v1 bubble with `rank` external spectators
 /// `Q(0, mink(D, hedge(0, i)))`, i = 1..rank (vendored texts; 0, 6 and 7 are
-/// the reviewer's files, the others drop the last factors and ports of 7).
+/// the files, the others drop the last factors and ports of 7).
 fn spectators(rank: usize) -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!(
         "tests/fixtures/direct_differential/rank{rank}-v1.txt"
@@ -683,11 +683,11 @@ fn vacuum_cases(out: &mut Vec<(String, String)>) {
 }
 
 /// Vacuum values the vacuum entry takes WITHOUT the contract's checks (read
-/// by `parse_text`, as a caller hands a value over): the audit's A-9
+/// by `parse_text`, as a caller hands a value over): the
 /// witnesses: (a) a projector of the loop momentum on both ports, (b) the
 /// same with the edges in descending id order, (c) a spinor metric in the
 /// projector closing a trace of the factors; and two ports on distinct
-/// constant vectors in both orders (A-10).
+/// constant vectors in both orders.
 fn vacuum_raw_cases(out: &mut Vec<(String, String)>) {
     let m2 = "vakint_diff::{}::msq";
     let (a, b) = (mink(&hedge(0, 1)), mink(&hedge(0, 2)));
@@ -764,7 +764,7 @@ fn vacuum_raw_cases(out: &mut Vec<(String, String)>) {
     );
     out.push((r.label.clone(), r.text()));
     // two open ports carried by two different constant vectors, no projector,
-    // listed in and against canonical order (audit A-10: the raw index
+    // listed in and against canonical order (the raw index
     // PORT + i follows the stored order)
     for (label, reversed) in [
         ("vacuum-raw-two-vectors", false),

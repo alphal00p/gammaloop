@@ -220,7 +220,7 @@ fn validate_vacuum(value: &FactorizedNumerator) -> Result<()> {
             feature: "the closure kind in the vacuum mode".into(),
         });
     }
-    // MARKED SIDE (A-35): a marked vacuum value's own atoms get the reserved
+    // MARKED SIDE: a marked vacuum value's own atoms get the reserved
     // namespace and wildcard walk of `validate` (the vacuum mode never calls
     // `validate`); an unmarked value is not walked (the base behaviour)
     if super::is_marked(value) {
@@ -1030,7 +1030,7 @@ pub fn vakint_vacuum_input_streamed(
     prefactor: &Atom,
     streaming: Streaming,
 ) -> Result<(Atom, f64, usize)> {
-    // a marked value called here directly: the entry check too (A-17); the
+    // a marked value called here directly: the entry check too; the
     // record itself is walked by validate_vacuum
     if !matches!(value.kind, FactorizedKind::Closure(_)) {
         super::check_marked_entry(
