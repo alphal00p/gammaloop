@@ -73,9 +73,9 @@ use super::{
     boundary::{BoundaryMode, ClosedRootNormalization, with_boundary_mode},
     recursive_tests::{colour_factored, load, settings},
     uncontracted::{
-        self, Captured, DESIGNED_LOCAL, Decline, Kind, Mode, NoRecord, Switch, agree, conserve,
-        is_unknown_master_text, split_insertion, split_root_factor, with_capture, with_strict,
-        with_switch,
+        self, Captured, Conservation, DESIGNED_LOCAL, Decline, Kind, Mode, NoRecord, Switch, agree,
+        conserve, is_unknown_master_text, split_insertion, split_root_factor, with_capture,
+        with_strict, with_switch,
     },
 };
 
@@ -1135,7 +1135,10 @@ fn conservation_removes_zero_mass_logs() {
         + &g * Atom::var(symbol!("u7a_test_d")))
     .expand();
     assert!(delta.contains_symbol(mass.get_symbol().unwrap()));
-    let rewritten = conserve(&delta, 5, &edges).expect("a conserving node");
+    // K1: every component conserves (one loop, one external)
+    let Ok(Conservation::Rewritten(rewritten)) = conserve(&delta, 5, &edges, 2) else {
+        panic!("a conserving node")
+    };
     assert!(
         !rewritten.contains_symbol(mass.get_symbol().unwrap()),
         "the zero-mass log survives: {rewritten}"
@@ -1145,13 +1148,19 @@ fn conservation_removes_zero_mass_logs() {
             .expand()
             .is_zero()
     );
-    // a K2 crown vertex where independent legs meet: unchanged (None)
+    // a K2 crown vertex where independent legs meet (k in, k + p1 out, legs
+    // p1 and p2 in): the loop component conserves, p2 does not; only the
+    // loop component must (independent externals): unchanged
     let independent = [
         edge(1, Endpoint::External, v, &[0, 1, 0]),
         edge(2, Endpoint::External, v, &[0, 0, 1]),
-        edge(3, v, Endpoint::Vertex(1), &[1, 0, 0]),
+        edge(3, Endpoint::Vertex(0), v, &[1, 0, 0]),
+        edge(4, v, Endpoint::Vertex(1), &[1, 1, 0]),
     ];
-    assert!(conserve(&delta, 5, &independent).is_none());
+    assert_eq!(
+        conserve(&delta, 5, &independent, 1),
+        Ok(Conservation::Independent)
+    );
 }
 
 /// The real case (WH-OQ-ANSWERS-ADDENDUM OQ-28): the Δ of the child
@@ -1175,7 +1184,9 @@ fn conservation_removes_the_l3_016_zero() {
         edge(2, Endpoint::Vertex(0), node, &[1, 0]),
         edge(3, Endpoint::Vertex(0), node, &[-1, 1]),
     ];
-    let rewritten = conserve(&delta, 3, &edges).expect("the ct: node conserves");
+    let Ok(Conservation::Rewritten(rewritten)) = conserve(&delta, 3, &edges, 2) else {
+        panic!("the ct: node conserves")
+    };
     assert!(
         !rewritten.contains_symbol(mass),
         "a mass symbol survives: {rewritten}"

@@ -1641,6 +1641,42 @@ pub(crate) fn take_no_records() -> Vec<(String, NoRecord)> {
     NO_RECORDS.with(|list| std::mem::take(&mut *list.borrow_mut()))
 }
 
+/// Tests: a change of one record's emitted edges and of the Δ at one of its
+/// `ct:` nodes, applied by [`build`] before the Δ momentum-conservation step
+/// (the contracted source and today's path untouched): `(kind, node, Δ,
+/// edges)`. E.g. a signed mutation of an emitted loop momentum, or a zero by
+/// momentum conservation added to a Δ (Astra U7a finding 2).
+#[cfg(test)]
+pub(crate) type InsertionHook = std::rc::Rc<dyn Fn(Kind, usize, &mut Atom, &mut [FactorizedEdge])>;
+
+#[cfg(test)]
+thread_local! {
+    static INSERTION_HOOK: RefCell<Option<InsertionHook>> = const { RefCell::new(None) };
+}
+
+/// Tests: run `f` with `hook` applied to every insertion of every record
+/// built on this thread (restored on unwinding too).
+#[cfg(test)]
+pub(crate) fn with_insertion_hook<T>(hook: InsertionHook, f: impl FnOnce() -> T) -> T {
+    struct Restore(Option<InsertionHook>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let previous = self.0.take();
+            INSERTION_HOOK.with(|slot| *slot.borrow_mut() = previous);
+        }
+    }
+    let _restore = Restore(INSERTION_HOOK.with(|slot| slot.borrow_mut().replace(hook)));
+    f()
+}
+
+#[cfg(test)]
+fn insertion_hook(kind: Kind, node: usize, delta: &mut Atom, edges: &mut [FactorizedEdge]) {
+    let hook = INSERTION_HOOK.with(|slot| slot.borrow().clone());
+    if let Some(hook) = hook {
+        hook(kind, node, delta, edges);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // The record (K1)
 // ---------------------------------------------------------------------------
@@ -1964,12 +2000,41 @@ pub(super) fn split_insertion(delta: &Atom) -> (Atom, Atom) {
     (coefficient, factor.expand())
 }
 
+/// What the Δ momentum-conservation step did at one `ct:` node
+/// ([`conserve`]).
+#[derive(Clone, Debug, PartialEq)]
+pub(super) enum Conservation {
+    /// The Δ with the eliminated momentum rewritten, expanded.
+    Rewritten(Atom),
+    /// The node's record momenta do not conserve, but only in independent
+    /// external components (crown legs a K2 / K3 record keeps independent,
+    /// `externals=independent`): no relation holds in the record; the Δ is
+    /// unchanged.
+    Independent,
+    /// No momentum of the node occurs in the Δ: unchanged.
+    Absent,
+}
+
 /// The Δ momentum-conservation step (U7a-DESIGN section 10): at a `ct:` node
 /// whose record momenta conserve, eliminate the largest edge momentum of
-/// the node that occurs in `delta` through `Σ σ_e Q(e) = 0` and expand. `None`
-/// when the node does not conserve (independent crown legs) or no momentum
-/// of the node occurs.
-pub(super) fn conserve(delta: &Atom, node: usize, edges: &[FactorizedEdge]) -> Option<Atom> {
+/// the node that occurs in `delta` through `Σ σ_e Q(e) = 0` and expand.
+///
+/// `conserved`: the leading momentum components (loop components first)
+/// that the record must conserve at every vertex, as vakint's reader checks
+/// them (`validate_closure`: every component of a record with a Taylor step
+/// and conserved externals, K1; the loop components of one with independent
+/// externals, K2 / K3). A nonzero residual there is a MISROUTED record (the
+/// reader would refuse it as `MomentumNotConserved`): `Err`, the routing
+/// error `outcome=error:routing` (Astra U7a finding 2), never the designed
+/// `insertion_mass_symbol` the caller gives a Δ whose mass symbol stays. A
+/// residual in independent external components only is
+/// [`Conservation::Independent`].
+pub(super) fn conserve(
+    delta: &Atom,
+    node: usize,
+    edges: &[FactorizedEdge],
+    conserved: usize,
+) -> std::result::Result<Conservation, Decline> {
     let mut net = BTreeMap::<usize, i64>::new();
     for edge in edges {
         let mut sign = 0;
@@ -1983,7 +2048,9 @@ pub(super) fn conserve(delta: &Atom, node: usize, edges: &[FactorizedEdge]) -> O
             net.insert(edge.id, sign);
         }
     }
-    let length = edges.first()?.momentum.len();
+    let Some(length) = edges.first().map(|edge| edge.momentum.len()) else {
+        return Ok(Conservation::Absent);
+    };
     let mut residual = vec![0i64; length];
     for edge in edges {
         if let Some(sign) = net.get(&edge.id) {
@@ -1992,13 +2059,25 @@ pub(super) fn conserve(delta: &Atom, node: usize, edges: &[FactorizedEdge]) -> O
             }
         }
     }
-    if residual.iter().any(|c| *c != 0) {
-        return None;
+    if residual.iter().take(conserved).any(|c| *c != 0) {
+        return Err(Decline::new(
+            "routing",
+            format!(
+                "the record momenta at the ct: node {node} do not conserve: residual {residual:?} is nonzero in the first {conserved} components (loop components first), which the record must conserve (vakint's reader: MomentumNotConserved); a misrouted record, not a mass refusal"
+            ),
+        ));
     }
-    let star = *net
+    if residual.iter().any(|c| *c != 0) {
+        return Ok(Conservation::Independent);
+    }
+    let Some(star) = net
         .keys()
         .rev()
-        .find(|edge| mentions_momentum(delta, **edge))?;
+        .find(|edge| mentions_momentum(delta, **edge))
+        .copied()
+    else {
+        return Ok(Conservation::Absent);
+    };
     let sign = net[&star];
     let mut image = Atom::Zero;
     for (edge, s) in &net {
@@ -2006,12 +2085,12 @@ pub(super) fn conserve(delta: &Atom, node: usize, edges: &[FactorizedEdge]) -> O
             image += Atom::num(-sign * s) * function!(GS.emr_mom, *edge, W_.x___);
         }
     }
-    Some(
+    Ok(Conservation::Rewritten(
         delta
             .replace(function!(GS.emr_mom, star, W_.x___))
             .with(image)
             .expand(),
-    )
+    ))
 }
 
 /// The mass symbols of a record whose occurrence in an insertion vakint
@@ -2312,6 +2391,10 @@ fn build(
         }
     };
     let independent = matches!(frame, Frame::Child { .. } | Frame::IrHard { .. });
+    // the momentum components every vertex of the record conserves, as
+    // vakint's reader checks them (`validate_closure`): all of them with
+    // conserved externals (K1), the loop components with independent ones
+    let conserved_components = if independent { loops } else { width };
     let vector = |edge: EdgeIndex| -> std::result::Result<Vec<i64>, Decline> {
         let mut out = vec![0i64; width];
         let loop_part = basis.loop_atom::<Atom>(edge, GS.emr_mom, &[], true);
@@ -2522,9 +2605,12 @@ fn build(
             return Ok(None);
         }
         let mut delta = delta.clone();
+        #[cfg(test)]
+        insertion_hook(kind, *node, &mut delta, &mut edges);
         if mentions_mass(&delta, &masses) {
-            match conserve(&delta, *node, &edges) {
-                Some(rewritten) if !mentions_mass(&rewritten, &masses) => {
+            // a misrouted node is an error (`?`), never the mass refusal
+            match conserve(&delta, *node, &edges, conserved_components)? {
+                Conservation::Rewritten(rewritten) if !mentions_mass(&rewritten, &masses) => {
                     if rewritten.is_zero() {
                         return Ok(None);
                     }
