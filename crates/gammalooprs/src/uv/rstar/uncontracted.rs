@@ -637,19 +637,35 @@ pub(super) struct Decline {
 
 /// The emitter's designed refusals (U7a review B1), a CLOSED list: a record
 /// the format or this build does not state. Every other local code
-/// (`routing`, `missing_child`, `product_mismatch`, `text`, `taylor`,
-/// `closure_data_missing`, `normalisation_mismatch`, `finish_tensor`,
-/// `vakint:Empty`, and K3's `ir_hard_site_missing`, `ir_dirac_closure`, ...)
-/// is a bug of the emitter or of the site: `outcome=error:<code>`.
+/// (`routing`, `crown` (a K2 / K3 crown that is not the remainder's soft
+/// edges, or a graph whose edge ids reach [`PAIRED_LEG_OFFSET`]; helper VH
+/// round 2, R2-M4 / R2-M5), `missing_child`, `product_mismatch`, `text`,
+/// `taylor`, `closure_data_missing`, `normalisation_mismatch`,
+/// `finish_tensor`, `vakint:Empty`, and K3's `ir_hard_site_missing`,
+/// `ir_dirac_closure`, ...) is a bug of the emitter or of the site:
+/// `outcome=error:<code>`. So are the record builder's states `sigma` (σ
+/// does not fold a root leg onto ±p(1)), `root_crown_paired` (a K1 crown
+/// edge with both ends in the root) and `root_normalisation_momentum` (a
+/// closed-root factor that is not a scalar times a power of p²): they never
+/// occur on a correct site (helper VH round 2, R2-I3).
+///
+/// `one_loop_tree_cut` (U7-PLAN 14(d), narrowed as Astra U7a asks: "keep the
+/// rebase test narrow"): ONLY a remainder whose one internal propagator is
+/// the closing line ([`single_propagator`]; after the Taylor step a massive
+/// tadpole, which vakint's closure entry refuses as "every line is
+/// massive"; B_self_energy_L4_0049 id 8), of any kind. Every other one-loop
+/// remainder is a record, although today's route names each of them
+/// `one_loop_tree_cut` (it integrates them whole).
 ///
 /// K3 (U7b) adds NO code: a K3 record can hit only rows already here,
 /// `insertion_mass_symbol` (a UV child's Δ with a mass symbol at a `ct:`
-/// node where independent crown legs meet, as K2) and
-/// `insertions_share_a_vertex`, `pint6_dump`; its zero-loop terms and its
-/// order-0 corrections are not attempted at all ([`NoRecord`]); the root-only
-/// codes (`open_root`, `root_normalisation_*`, `sigma`, `root_crown_paired`)
-/// and `top_mass_mode` cannot occur (its crown is independent, its mass is
-/// fixed whatever the top-mass mode).
+/// node where independent crown legs meet, as K2),
+/// `insertions_share_a_vertex`, `pint6_dump` and `one_loop_tree_cut` (a
+/// one-loop term whose only line is the closing one); its zero-loop terms
+/// and its order-0 corrections are not attempted at all ([`NoRecord`]); the
+/// root-only codes (`open_root`, `root_normalisation_opaque`) and
+/// `top_mass_mode` cannot occur (its crown is independent, its mass is fixed
+/// whatever the top-mass mode).
 pub(super) const DESIGNED_LOCAL: &[&str] = &[
     "pint6_dump",
     "zero_loops",
@@ -657,54 +673,68 @@ pub(super) const DESIGNED_LOCAL: &[&str] = &[
     "child_not_built",
     "open_root",
     "root_normalisation_opaque",
-    "root_normalisation_momentum",
     "additional_normalization",
     "top_mass_mode",
     "insertion_mass_symbol",
     "insertions_share_a_vertex",
-    "sigma",
     "no_closing_line",
-    "root_crown_paired",
+    "one_loop_tree_cut",
 ];
 
 /// vakint's designed refusals, matched by the error variant AND the prefix of
-/// its detail (`(variant, detail prefix, code)`; the code is `vakint:<code>`):
-/// the rows of WH-RECORD-FORMAT v1.4 section 8 a K1 / K2 record can reach,
-/// and `all_massive`, the explicit refusal of the closure entry for a
-/// remainder whose only line is the closing one (a massive tadpole: vakint
-/// closure.rs `prepare`, "every line is massive: not a closure"; NOT a
-/// section-8 row, flagged to helper VH). Every other vakint error (the
-/// internal failures the entry wraps as `Closure`, the reader's `Text*`,
-/// `IndexUncontracted`, `MomentumNotConserved`, ...) is an error:
+/// its detail AND a phrase the detail must contain (`(variant, detail prefix,
+/// phrase, code)`, phrase `""`: none; the code is `vakint:<code>`): the rows
+/// of WH-RECORD-FORMAT v1.4 section 8 a K1 / K2 record can reach. The
+/// open-spinor row needs its phrase `is not a Lorentz slot` (helper VH round
+/// 2, R2-I4): the prefix `open slot ` alone also starts vakint's vacuum-scope
+/// refusal "open slot <port>: only Lorentz slots ... stay open".
+///
+/// Interim rule (U7-PLAN requirement 13, until the rebase onto helper VH's
+/// frozen REFUSALS list): a `Closure` refusal is designed ONLY with a
+/// section-8 prefix (`Taylor degree `, `the projector contains Q(`, the
+/// open-spinor port `open slot `); any other `Closure` detail is an error,
+/// among them the entry's wrapped internal failures and "every line is
+/// massive: not a closure" (vakint closure.rs `prepare`: a remainder whose
+/// only line is the closing one; NOT a section-8 row; the emitter declines
+/// that shape itself, `one_loop_tree_cut`, so vakint refusing it means the
+/// emitter's shape test missed one). Every other vakint error (the reader's
+/// `Text*`, `IndexUncontracted`, `MomentumNotConserved`, ...) is an error:
 /// `outcome=error:vakint:<Variant>`.
 ///
 /// K3 (U7b) adds NO row. Of these, a K3 record can legitimately hit
 /// `taylor_degree` (`ω > 2`; r6 has `ω <= 2`), `open_spinor` (a hard part
 /// whose open quark line the IR Dirac closure does not close:
 /// `GAMMALOOP_IR_DIRAC_CLOSURE=off`, or a declined shape other than r6's
-/// `no_spinor`), `insertion_mass_symbol`, `insertion_slots`, `all_massive`
-/// (a one-loop term whose only remaining line is the closing one), `gamma5`
-/// and `levi_civita`; `projector_momentum` and `compact_slash` cannot occur
-/// (the IR Dirac closure `gamma(c, r, mink(D, nu))` is momentum free, and a
-/// local check makes a momentum in it an error, `ir_dirac_closure`).
-pub(super) const DESIGNED_VAKINT: &[(&str, &str, &str)] = &[
-    ("Closure", "Taylor degree ", "taylor_degree"),
-    ("Closure", "the projector contains Q(", "projector_momentum"),
-    ("Ports", "a compact slash gamma(", "compact_slash"),
-    ("Closure", "open slot ", "open_spinor"),
+/// `no_spinor`), `insertion_mass_symbol`, `insertion_slots`, `gamma5` and
+/// `levi_civita` (a one-loop term whose only remaining line is the closing
+/// one is the emitter's `one_loop_tree_cut`); `projector_momentum` and
+/// `compact_slash` cannot occur (the IR Dirac closure
+/// `gamma(c, r, mink(D, nu))` is momentum free, and a local check makes a
+/// momentum in it an error, `ir_dirac_closure`).
+pub(super) const DESIGNED_VAKINT: &[(&str, &str, &str, &str)] = &[
+    ("Closure", "Taylor degree ", "", "taylor_degree"),
+    (
+        "Closure",
+        "the projector contains Q(",
+        "",
+        "projector_momentum",
+    ),
+    ("Ports", "a compact slash gamma(", "", "compact_slash"),
+    (
+        "Closure",
+        "open slot ",
+        "is not a Lorentz slot",
+        "open_spinor",
+    ),
     (
         "Insertion",
         "contains a mass symbol",
+        "",
         "insertion_mass_symbol",
     ),
-    ("Insertion", "the factor has ", "insertion_slots"),
-    (
-        "Closure",
-        "every line is massive: not a closure",
-        "all_massive",
-    ),
-    ("Gamma5", "", "gamma5"),
-    ("LeviCivita", "", "levi_civita"),
+    ("Insertion", "the factor has ", "", "insertion_slots"),
+    ("Gamma5", "", "", "gamma5"),
+    ("LeviCivita", "", "", "levi_civita"),
 ];
 
 impl Decline {
@@ -718,15 +748,17 @@ impl Decline {
     }
 
     /// A refusal of vakint's frozen reader or entry: designed when its
-    /// variant and detail prefix are a row of [`DESIGNED_VAKINT`], else an
-    /// error by variant.
+    /// variant, detail prefix and phrase are a row of [`DESIGNED_VAKINT`],
+    /// else an error by variant.
     pub(super) fn vakint(error: &FactorizedError) -> Self {
         let (name, detail) = variant_detail(error);
-        let row = DESIGNED_VAKINT.iter().find(|(variant, prefix, _)| {
-            *variant == name && detail.is_some_and(|detail| detail.starts_with(prefix))
+        let row = DESIGNED_VAKINT.iter().find(|(variant, prefix, phrase, _)| {
+            *variant == name
+                && detail
+                    .is_some_and(|detail| detail.starts_with(prefix) && detail.contains(phrase))
         });
         match row {
-            Some((_, _, code)) => Self {
+            Some((_, _, _, code)) => Self {
                 code: format!("vakint:{code}"),
                 detail: error.to_string(),
                 designed: true,
@@ -1564,6 +1596,42 @@ pub(crate) fn take_no_records() -> Vec<(String, NoRecord)> {
     NO_RECORDS.with(|list| std::mem::take(&mut *list.borrow_mut()))
 }
 
+/// Tests: a change of one record's emitted edges and of the Δ at one of its
+/// `ct:` nodes, applied by [`build`] before the Δ momentum-conservation step
+/// (the contracted source and today's path untouched): `(kind, node, Δ,
+/// edges)`. E.g. a signed mutation of an emitted loop momentum, or a zero by
+/// momentum conservation added to a Δ (Astra U7a finding 2).
+#[cfg(test)]
+pub(crate) type InsertionHook = std::rc::Rc<dyn Fn(Kind, usize, &mut Atom, &mut [FactorizedEdge])>;
+
+#[cfg(test)]
+thread_local! {
+    static INSERTION_HOOK: RefCell<Option<InsertionHook>> = const { RefCell::new(None) };
+}
+
+/// Tests: run `f` with `hook` applied to every insertion of every record
+/// built on this thread (restored on unwinding too).
+#[cfg(test)]
+pub(crate) fn with_insertion_hook<T>(hook: InsertionHook, f: impl FnOnce() -> T) -> T {
+    struct Restore(Option<InsertionHook>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let previous = self.0.take();
+            INSERTION_HOOK.with(|slot| *slot.borrow_mut() = previous);
+        }
+    }
+    let _restore = Restore(INSERTION_HOOK.with(|slot| slot.borrow_mut().replace(hook)));
+    f()
+}
+
+#[cfg(test)]
+fn insertion_hook(kind: Kind, node: usize, delta: &mut Atom, edges: &mut [FactorizedEdge]) {
+    let hook = INSERTION_HOOK.with(|slot| slot.borrow().clone());
+    if let Some(hook) = hook {
+        hook(kind, node, delta, edges);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // The record (K1)
 // ---------------------------------------------------------------------------
@@ -1887,12 +1955,41 @@ pub(super) fn split_insertion(delta: &Atom) -> (Atom, Atom) {
     (coefficient, factor.expand())
 }
 
+/// What the Δ momentum-conservation step did at one `ct:` node
+/// ([`conserve`]).
+#[derive(Clone, Debug, PartialEq)]
+pub(super) enum Conservation {
+    /// The Δ with the eliminated momentum rewritten, expanded.
+    Rewritten(Atom),
+    /// The node's record momenta do not conserve, but only in independent
+    /// external components (crown legs a K2 / K3 record keeps independent,
+    /// `externals=independent`): no relation holds in the record; the Δ is
+    /// unchanged.
+    Independent,
+    /// No momentum of the node occurs in the Δ: unchanged.
+    Absent,
+}
+
 /// The Δ momentum-conservation step (U7a-DESIGN section 10): at a `ct:` node
 /// whose record momenta conserve, eliminate the largest edge momentum of
-/// the node that occurs in `delta` through `Σ σ_e Q(e) = 0` and expand. `None`
-/// when the node does not conserve (independent crown legs) or no momentum
-/// of the node occurs.
-pub(super) fn conserve(delta: &Atom, node: usize, edges: &[FactorizedEdge]) -> Option<Atom> {
+/// the node that occurs in `delta` through `Σ σ_e Q(e) = 0` and expand.
+///
+/// `conserved`: the leading momentum components (loop components first)
+/// that the record must conserve at every vertex, as vakint's reader checks
+/// them (`validate_closure`: every component of a record with a Taylor step
+/// and conserved externals, K1; the loop components of one with independent
+/// externals, K2 / K3). A nonzero residual there is a MISROUTED record (the
+/// reader would refuse it as `MomentumNotConserved`): `Err`, the routing
+/// error `outcome=error:routing` (Astra U7a finding 2), never the designed
+/// `insertion_mass_symbol` the caller gives a Δ whose mass symbol stays. A
+/// residual in independent external components only is
+/// [`Conservation::Independent`].
+pub(super) fn conserve(
+    delta: &Atom,
+    node: usize,
+    edges: &[FactorizedEdge],
+    conserved: usize,
+) -> std::result::Result<Conservation, Decline> {
     let mut net = BTreeMap::<usize, i64>::new();
     for edge in edges {
         let mut sign = 0;
@@ -1906,7 +2003,9 @@ pub(super) fn conserve(delta: &Atom, node: usize, edges: &[FactorizedEdge]) -> O
             net.insert(edge.id, sign);
         }
     }
-    let length = edges.first()?.momentum.len();
+    let Some(length) = edges.first().map(|edge| edge.momentum.len()) else {
+        return Ok(Conservation::Absent);
+    };
     let mut residual = vec![0i64; length];
     for edge in edges {
         if let Some(sign) = net.get(&edge.id) {
@@ -1915,13 +2014,25 @@ pub(super) fn conserve(delta: &Atom, node: usize, edges: &[FactorizedEdge]) -> O
             }
         }
     }
-    if residual.iter().any(|c| *c != 0) {
-        return None;
+    if residual.iter().take(conserved).any(|c| *c != 0) {
+        return Err(Decline::new(
+            "routing",
+            format!(
+                "the record momenta at the ct: node {node} do not conserve: residual {residual:?} is nonzero in the first {conserved} components (loop components first), which the record must conserve (vakint's reader: MomentumNotConserved); a misrouted record, not a mass refusal"
+            ),
+        ));
     }
-    let star = *net
+    if residual.iter().any(|c| *c != 0) {
+        return Ok(Conservation::Independent);
+    }
+    let Some(star) = net
         .keys()
         .rev()
-        .find(|edge| mentions_momentum(delta, **edge))?;
+        .find(|edge| mentions_momentum(delta, **edge))
+        .copied()
+    else {
+        return Ok(Conservation::Absent);
+    };
     let sign = net[&star];
     let mut image = Atom::Zero;
     for (edge, s) in &net {
@@ -1929,12 +2040,26 @@ pub(super) fn conserve(delta: &Atom, node: usize, edges: &[FactorizedEdge]) -> O
             image += Atom::num(-sign * s) * function!(GS.emr_mom, *edge, W_.x___);
         }
     }
-    Some(
+    Ok(Conservation::Rewritten(
         delta
             .replace(function!(GS.emr_mom, star, W_.x___))
             .with(image)
             .expand(),
-    )
+    ))
+}
+
+/// Whether a record's only internal propagator is its closing line
+/// `closing`: a one-loop remainder whose loop is the closing line alone
+/// (after the Taylor step a massive tadpole, which vakint's closure entry
+/// refuses: "every line is massive: not a closure"; U7-PLAN 14(d),
+/// B_self_energy_L4_0049 id 8). The emitter declines exactly this shape,
+/// `one_loop_tree_cut` (today's route integrates it whole). Every other
+/// one-loop remainder (two or more propagators; today's route names every
+/// one-loop remainder `one_loop_tree_cut`) is a record: Astra U7a, "keep the
+/// rebase test narrow".
+pub(super) fn single_propagator(edges: &[FactorizedEdge], closing: usize) -> bool {
+    let mut internal = edges.iter().filter(|edge| !edge.is_external());
+    matches!((internal.next(), internal.next()), (Some(edge), None) if edge.id == closing)
 }
 
 /// The mass symbols of a record whose occurrence in an insertion vakint
@@ -2025,12 +2150,12 @@ fn ir_hard_frame<'s>(
         .collect::<BTreeSet<_>>();
     if soft != boundary {
         return Err(Decline::new(
-            "routing",
+            "crown",
             format!("the soft edges {soft:?} are not the hard part's crown {boundary:?}"),
         ));
     }
     if soft.is_empty() {
-        return Err(Decline::new("routing", "a hard part without crown legs"));
+        return Err(Decline::new("crown", "a hard part without crown legs"));
     }
     let projector = match ir_hard.closure {
         None => None,
@@ -2084,7 +2209,7 @@ fn child_frame<'s>(
         .collect::<BTreeSet<_>>();
     if soft != externals.iter().copied().collect::<BTreeSet<_>>() {
         return Err(Decline::new(
-            "routing",
+            "crown",
             format!(
                 "the crown {externals:?} is not the remainder's soft edges {:?}",
                 soft
@@ -2092,7 +2217,7 @@ fn child_frame<'s>(
         ));
     }
     if externals.is_empty() {
-        return Err(Decline::new("routing", "a child without crown edges"));
+        return Err(Decline::new("crown", "a child without crown edges"));
     }
     let projector = match (site.root_closure, site.root_projector, site.closure_data) {
         (None, false, _) => None,
@@ -2127,6 +2252,29 @@ fn child_frame<'s>(
         externals,
         projector,
     })
+}
+
+/// The record id offset of the INCOMING leg of a crown edge with both ends
+/// in the scope (K2 / K3, `HedgePair::Paired`): the outgoing leg keeps the
+/// edge's id `id`, the incoming one is `PAIRED_LEG_OFFSET + id` (the
+/// VERIFIED wh-fixtures/k2-child states legs 4 and 100004). Unique only
+/// while every edge id of the graph stays below the offset
+/// ([`paired_leg_id`]; helper VH round 2, R2-M4).
+pub(super) const PAIRED_LEG_OFFSET: usize = 100_000;
+
+/// The record id of the incoming leg of the paired crown edge `id` in a
+/// graph whose largest edge id is `last_edge`; the `crown` error when an
+/// edge id reaches [`PAIRED_LEG_OFFSET`] (the ids could collide).
+pub(super) fn paired_leg_id(id: usize, last_edge: usize) -> std::result::Result<usize, Decline> {
+    if last_edge >= PAIRED_LEG_OFFSET {
+        return Err(Decline::new(
+            "crown",
+            format!(
+                "the graph's edge {last_edge} reaches the paired-leg offset {PAIRED_LEG_OFFSET}: the incoming leg of crown edge {id} could collide with an edge id"
+            ),
+        ));
+    }
+    Ok(PAIRED_LEG_OFFSET + id)
 }
 
 /// The record of one K1 root or K2 child remainder (`Ok(None)`: a zero
@@ -2235,6 +2383,10 @@ fn build(
         }
     };
     let independent = matches!(frame, Frame::Child { .. } | Frame::IrHard { .. });
+    // the momentum components every vertex of the record conserves, as
+    // vakint's reader checks them (`validate_closure`): all of them with
+    // conserved externals (K1), the loop components with independent ones
+    let conserved_components = if independent { loops } else { width };
     let vector = |edge: EdgeIndex| -> std::result::Result<Vec<i64>, Decline> {
         let mut out = vec![0i64; width];
         let loop_part = basis.loop_atom::<Atom>(edge, GS.emr_mom, &[], true);
@@ -2263,6 +2415,7 @@ fn build(
         Ok(out)
     };
     let table = edge_table(graph, site.model);
+    let last_edge = table.keys().next_back().copied().unwrap_or(0);
     // contracted supports -> ct: nodes (mkfixture-k1 rule)
     let mut contracted: SuBitGraph = graph.empty_subgraph();
     for slot in &region.insertions {
@@ -2331,7 +2484,10 @@ fn build(
                 Flow::Source => vec![(id, source, false)],
             },
             HedgePair::Paired { source, sink } if independent => {
-                vec![(id, source, false), (100_000 + id, sink, true)]
+                vec![
+                    (id, source, false),
+                    (paired_leg_id(id, last_edge)?, sink, true),
+                ]
             }
             _ => {
                 return Err(Decline::new(
@@ -2445,9 +2601,12 @@ fn build(
             return Ok(None);
         }
         let mut delta = delta.clone();
+        #[cfg(test)]
+        insertion_hook(kind, *node, &mut delta, &mut edges);
         if mentions_mass(&delta, &masses) {
-            match conserve(&delta, *node, &edges) {
-                Some(rewritten) if !mentions_mass(&rewritten, &masses) => {
+            // a misrouted node is an error (`?`), never the mass refusal
+            match conserve(&delta, *node, &edges, conserved_components)? {
+                Conservation::Rewritten(rewritten) if !mentions_mass(&rewritten, &masses) => {
                     if rewritten.is_zero() {
                         return Ok(None);
                     }
@@ -2704,6 +2863,20 @@ fn build(
         .to_text()
         .map_err(|error| Decline::new("text", error.to_string()))?;
     let record = FactorizedNumerator::from_text(&text).map_err(|error| Decline::vakint(&error))?;
+    // last, so that every error of the record above stays loud
+    if single_propagator(&record.edges, usize::from(marked)) {
+        return Err(Decline::new(
+            "one_loop_tree_cut",
+            format!(
+                "the remainder {}: its only propagator is the closing line {} (after the Taylor step a massive tadpole; today's route integrates it whole)",
+                super::plan::join_edge_ids(&super::plan::uv_child_edge_ids(
+                    graph,
+                    &region.remaining
+                )),
+                usize::from(marked)
+            ),
+        ));
+    }
     Ok(Some(Built {
         record,
         text,
