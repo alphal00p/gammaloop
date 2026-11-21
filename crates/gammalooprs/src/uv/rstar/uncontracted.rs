@@ -373,8 +373,6 @@ fn join_kinds(kinds: &[Kind]) -> String {
 struct Environment {
     switch: Switch,
     exceptions: super::uncontracted_ledger::Exceptions,
-    /// U7c (K5): the hole-cut mode, resolved at start-up (delta pre-review N3).
-    hole_cut: k5::HoleCut,
 }
 
 /// The switch of the environment, read and checked once
@@ -407,12 +405,13 @@ static ENVIRONMENT: LazyLock<std::result::Result<Environment, String>> = LazyLoc
         || super::pint6_dump::settings().is_some(),
         read(super::uncontracted_ledger::EXCEPTIONS_VARIABLE)?.as_deref(),
     )?;
-    // U7c (K5): the hole-cut mode, read and resolved here (a bad value refuses
-    // the run at start-up; with the switch off nothing is read)
+    // U7c (K5): the hole-cut mode, read and resolved here, the only reader of
+    // the variable (a bad value refuses the run at start-up; with the switch
+    // off nothing is read)
     let hole_cut = if switch.mode == Mode::Off {
         k5::HoleCut::Decline
     } else {
-        k5::parse_hole_cut(
+        k5::resolve_hole_cut(
             read(k5::HOLE_CUT_VARIABLE)?.as_deref(),
             switch.enabled(Kind::Surrogate),
         )?
@@ -437,11 +436,7 @@ static ENVIRONMENT: LazyLock<std::result::Result<Environment, String>> = LazyLoc
             );
         }
     }
-    Ok(Environment {
-        switch,
-        exceptions,
-        hole_cut,
-    })
+    Ok(Environment { switch, exceptions })
 });
 
 fn environment() -> Switch {
@@ -460,10 +455,11 @@ pub(crate) fn validate() -> Result<()> {
     }
 }
 
-/// The hole-cut mode of the environment (U7c, [`k5::hole_cut`]).
+/// The hole-cut mode of the environment (U7c, [`k5::hole_cut`]): the one
+/// resolved at the switch's initialisation (`decline` with the switch off).
 pub(super) fn environment_hole_cut() -> k5::HoleCut {
     match &*ENVIRONMENT {
-        Ok(environment) => environment.hole_cut,
+        Ok(_) => k5::resolved_hole_cut().unwrap_or(k5::HoleCut::Decline),
         Err(error) => panic!("{error}"),
     }
 }
@@ -525,15 +521,6 @@ pub(crate) fn cache_key_suffix() -> Option<String> {
             suffix
                 .get_or_insert_with(String::new)
                 .push_str(&format!("#uncontracted-inert={}", kind.as_str()));
-        }
-        // U7c (K5): inside a surrogate's R* the records (and in mode on the
-        // values) depend on the hole-cut mode: a fill of one mode never
-        // serves the other (delta pre-review N3)
-        if kind == Kind::Surrogate && switch.enabled(Kind::Surrogate) {
-            suffix.get_or_insert_with(String::new).push_str(&format!(
-                "#k5-hole-cut={}",
-                k5::hole_cut_name(k5::hole_cut())
-            ));
         }
     }
     suffix
