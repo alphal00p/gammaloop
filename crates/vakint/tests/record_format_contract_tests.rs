@@ -7861,3 +7861,596 @@ fn what_the_text_parser_does_with_a_huge_literal_power() {
         peak()
     );
 }
+
+// ===========================================================================
+// THE WEIGHTS, THE WRITER AND THE NUMBER BOUND of marked values
+// ===========================================================================
+
+/// One weight case: the weight's name, how it is applied (`Some(true)`
+/// vakint, `Some(false)` the caller (`beta`), `None` an unknown token: text
+/// only), and the value of the weight's own prefactor field.
+#[derive(Clone, Copy, Debug)]
+enum WField {
+    Equal,
+    Neutral,
+    Third,
+}
+
+/// The format's weight names and the prefactor field each provenance belongs
+/// to (section 9: `colour, flavour, loop_sign, overall (beta), scalars
+/// (vakint)`; OQ-17: an `applied_by=vakint` weight equals its field, the
+/// others leave it neutral).
+const WEIGHT_NAMES: [&str; 5] = ["scalars", "overall", "colour", "loop_sign", "flavour"];
+
+/// `base` with one weight `name` and its own field set: (the record, the
+/// weight line's applied_by token, whether the field is neutral after the
+/// setting, whether another rule needs the field neutral). None when the
+/// field has no such value (loop_sign has no third value).
+fn with_weight_case(
+    base: &XInput,
+    name: &str,
+    by: Option<bool>,
+    field: WField,
+) -> Option<(XInput, String)> {
+    let mut i = base.clone();
+    let (weight, equal, neutral, third): (
+        Atom,
+        Box<dyn Fn(&mut Prefactor)>,
+        Box<dyn Fn(&mut Prefactor)>,
+        Option<Box<dyn Fn(&mut Prefactor)>>,
+    ) = match name {
+        "scalars" => (
+            atom("caller::w"),
+            Box::new(|p| p.scalars = atom("caller::w")),
+            Box::new(|p| p.scalars = Atom::num(1)),
+            Some(Box::new(|p| p.scalars = atom("caller::other"))),
+        ),
+        "overall" => (
+            atom("caller::w"),
+            Box::new(|p| p.overall = atom("caller::w")),
+            Box::new(|p| p.overall = Atom::num(1)),
+            Some(Box::new(|p| p.overall = atom("caller::other"))),
+        ),
+        "colour" => (
+            atom("caller::w"),
+            Box::new(|p| p.colour = atom("caller::w")),
+            Box::new(|p| p.colour = Atom::num(1)),
+            Some(Box::new(|p| p.colour = atom("caller::other"))),
+        ),
+        "loop_sign" => (
+            Atom::num(-1),
+            Box::new(|p| p.loop_sign = -1),
+            Box::new(|p| p.loop_sign = 1),
+            None,
+        ),
+        _ => (
+            Atom::num(2),
+            Box::new(|p| p.nf_power = 2),
+            Box::new(|p| p.nf_power = 0),
+            Some(Box::new(|p| p.nf_power = 1)),
+        ),
+    };
+    match field {
+        WField::Equal => equal(&mut i.0.prefactor),
+        WField::Neutral => neutral(&mut i.0.prefactor),
+        WField::Third => (third?)(&mut i.0.prefactor),
+    }
+    let entry = (name.to_string(), by.unwrap_or(true), weight);
+    match &mut i.0.kind {
+        FactorizedKind::Closure(spec) => spec.weights.push(entry),
+        _ => i.0.record.as_mut().unwrap().weights.push(entry),
+    }
+    i.2 = i.0.prefactor.total();
+    let token = match by {
+        Some(true) => "vakint".to_string(),
+        Some(false) => "beta".to_string(),
+        None => "caller_unknown".to_string(),
+    };
+    Some((i, token))
+}
+
+use vakint::p_integral::factorized::Prefactor;
+
+/// Through text with the weight line's applied_by token replaced.
+fn x_run_text_token(entry: XEntry, (v, s, arg): XInput, token: &str) -> Result<(), String> {
+    let t = v
+        .to_text()
+        .map_err(|e| format!("TEXT CANNOT WRITE IT: {e}"))?;
+    let t = t.replace("applied_by=vakint", &format!("applied_by={token}"));
+    let v = FactorizedNumerator::from_text(&t).map_err(|e| e.to_string())?;
+    let arg2 = v.prefactor.total();
+    let _ = arg;
+    let vakint = engine();
+    match entry {
+        XEntry::Closure => {
+            evaluate_factorized_closure(&vakint, &s, std::slice::from_ref(&v), &[arg2]).map(|_| ())
+        }
+        XEntry::Direct => {
+            vakint::p_integral::factorized::evaluate_factorized(&vakint, &s, &v, &arg2).map(|_| ())
+        }
+        XEntry::Ports => evaluate_factorized_ports(&vakint, &s, &v, &arg2).map(|_| ()),
+        XEntry::Vacuum => {
+            vakint::p_integral::factorized::evaluate_factorized_vacuum(&vakint, &s, &v, &arg2)
+                .map(|_| ())
+        }
+    }
+    .map_err(|e| e.to_string())
+}
+
+/// The cells of the weights table whose outcome differs from the format's
+/// expectation on 930d4e239 (kind, name, applied_by token, field, text).
+const WEIGHT_FAILURES: &[&str] = &[
+    "closure K2 L3-036 | a duplicated weight name | text",
+    "closure K2 L3-036 | a duplicated weight name | typed",
+    "closure K2 L3-036 | an unknown weight name | text",
+    "closure K2 L3-036 | an unknown weight name | typed",
+    "closure K2 L3-036 | colour | applied_by=vakint | field Equal | text",
+    "closure K2 L3-036 | colour | applied_by=vakint | field Equal | typed",
+    "closure K2 L3-036 | scalars | applied_by=beta | field Equal | text",
+    "closure K2 L3-036 | scalars | applied_by=beta | field Equal | typed",
+    "closure K2 L3-036 | scalars | applied_by=beta | field Third | text",
+    "closure K2 L3-036 | scalars | applied_by=beta | field Third | typed",
+    "direct L2-17 | a duplicated weight name | text",
+    "direct L2-17 | a duplicated weight name | typed",
+    "direct L2-17 | an unknown weight name | text",
+    "direct L2-17 | an unknown weight name | typed",
+    "direct L2-17 | colour | applied_by=vakint | field Equal | text",
+    "direct L2-17 | colour | applied_by=vakint | field Equal | typed",
+    "direct L2-17 | scalars | applied_by=beta | field Equal | text",
+    "direct L2-17 | scalars | applied_by=beta | field Equal | typed",
+    "direct L2-17 | scalars | applied_by=beta | field Third | text",
+    "direct L2-17 | scalars | applied_by=beta | field Third | typed",
+    "ports L2-17 | a duplicated weight name | text",
+    "ports L2-17 | a duplicated weight name | typed",
+    "ports L2-17 | an unknown weight name | text",
+    "ports L2-17 | an unknown weight name | typed",
+    "ports L2-17 | colour | applied_by=vakint | field Equal | text",
+    "ports L2-17 | colour | applied_by=vakint | field Equal | typed",
+    "ports L2-17 | scalars | applied_by=beta | field Equal | text",
+    "ports L2-17 | scalars | applied_by=beta | field Equal | typed",
+    "ports L2-17 | scalars | applied_by=beta | field Third | text",
+    "ports L2-17 | scalars | applied_by=beta | field Third | typed",
+    "vacuum sunrise | a duplicated weight name | text",
+    "vacuum sunrise | a duplicated weight name | typed",
+    "vacuum sunrise | an unknown weight name | text",
+    "vacuum sunrise | an unknown weight name | typed",
+    "vacuum sunrise | colour | applied_by=vakint | field Equal | text",
+    "vacuum sunrise | colour | applied_by=vakint | field Equal | typed",
+    "vacuum sunrise | overall | applied_by=vakint | field Equal | text",
+    "vacuum sunrise | overall | applied_by=vakint | field Equal | typed",
+    "vacuum sunrise | scalars | applied_by=beta | field Equal | text",
+    "vacuum sunrise | scalars | applied_by=beta | field Equal | typed",
+    "vacuum sunrise | scalars | applied_by=beta | field Third | text",
+    "vacuum sunrise | scalars | applied_by=beta | field Third | typed",
+];
+
+/// THE WEIGHTS TABLE: every weight name x applied_by (vakint, beta, an
+/// unknown token) x its own prefactor field (equal to the weight, neutral, a
+/// third value) x kind (closure K2 L3-036; v3 direct L2-17 through the direct
+/// and the ports entries; a marked vacuum value) x form (typed, text). The
+/// format's expectation: applied_by=vakint accepted iff the field equals the
+/// weight; applied_by=beta accepted iff the field is neutral; an unknown token
+/// refused; and the other rules of the record (with original_cycles the
+/// prefactor has loop_sign 1, nf_power 0, overall 1; without, loop_sign and
+/// nf_power follow the closed loops) still hold. Plus an unknown weight name
+/// and a duplicated weight name: refused. The table is printed; a cell in
+/// `WEIGHT_FAILURES` is expected to differ (the ignored companion asserts it).
+#[test]
+fn the_weights_table() {
+    let failures = weights_table(false);
+    assert!(failures.is_empty(), "{failures:#?}");
+}
+
+/// The cells of `WEIGHT_FAILURES` behave as the record format expects.
+#[test]
+#[ignore = "expected by the record format: a weight is checked against its own prefactor field (applied_by=vakint equal, applied_by=beta neutral), an unknown or duplicated weight name is refused"]
+fn the_weights_table_failing_cells() {
+    let failures = weights_table(true);
+    assert!(failures.is_empty(), "{failures:#?}");
+}
+
+fn weights_table(only_known_failures: bool) -> Vec<String> {
+    let bases: Vec<(XEntry, &str, fn() -> XInput)> = vec![
+        (XEntry::Closure, "closure K2 L3-036", || {
+            let v = record("wh-k2-child-ins");
+            let a = v.prefactor.total();
+            (v, symbolic(), a)
+        }),
+        (XEntry::Direct, "direct L2-17", x_direct_base),
+        (XEntry::Ports, "ports L2-17", x_direct_base),
+        (XEntry::Vacuum, "vacuum sunrise", x_vacuum_base),
+    ];
+    let mut out = Vec::new();
+    for (entry, kind, base) in &bases {
+        let b = base();
+        let original_cycles = match &b.0.kind {
+            FactorizedKind::Closure(spec) => spec.original_cycles.is_some(),
+            _ => {
+                b.0.record
+                    .as_ref()
+                    .is_some_and(|r| r.original_cycles.is_some())
+            }
+        };
+        for name in WEIGHT_NAMES {
+            for by in [Some(true), Some(false), None] {
+                for field in [WField::Equal, WField::Neutral, WField::Third] {
+                    let Some((input, token)) = with_weight_case(&b, name, by, field) else {
+                        continue;
+                    };
+                    // the format: the weight's own rule, then the record's other rules
+                    let weight_ok = match (by, field) {
+                        (Some(true), WField::Equal) => true,
+                        (Some(false), WField::Neutral) => true,
+                        _ => false,
+                    };
+                    let field_neutral = matches!(field, WField::Neutral);
+                    let other_ok = match name {
+                        "overall" => !original_cycles || field_neutral,
+                        "loop_sign" | "flavour" => field_neutral,
+                        _ => true,
+                    };
+                    let expected_accept = weight_ok && other_ok;
+                    for text in [false, true] {
+                        if by.is_none() && !text {
+                            continue;
+                        }
+                        let label = format!(
+                            "{kind} | {name} | applied_by={token} | field {field:?} | {}",
+                            if text { "text" } else { "typed" }
+                        );
+                        let known = WEIGHT_FAILURES.contains(&label.as_str());
+                        if only_known_failures != known {
+                            continue;
+                        }
+                        let got = if text {
+                            x_run_text_token(*entry, input.clone(), &token)
+                        } else {
+                            x_run(*entry, false, input.clone())
+                        };
+                        let ok = got.is_ok() == expected_accept;
+                        eprintln!(
+                            "CONTRACT WEIGHT | {label} | expected {} | got {}{}",
+                            if expected_accept {
+                                "ACCEPTED"
+                            } else {
+                                "REFUSED"
+                            },
+                            match &got {
+                                Ok(()) => "ACCEPTED".to_string(),
+                                Err(e) =>
+                                    format!("REFUSED {}", e.chars().take(110).collect::<String>()),
+                            },
+                            if ok { "" } else { " | DIFFERS" }
+                        );
+                        if !ok {
+                            out.push(label);
+                        }
+                    }
+                }
+            }
+        }
+        // an unknown and a duplicated weight name, applied_by=vakint, the field equal
+        let (mut unknown, _) = with_weight_case(&b, "scalars", Some(true), WField::Equal).unwrap();
+        match &mut unknown.0.kind {
+            FactorizedKind::Closure(spec) => spec.weights[0].0 = "scalarz".into(),
+            _ => unknown.0.record.as_mut().unwrap().weights[0].0 = "scalarz".into(),
+        }
+        let (mut duplicate, _) =
+            with_weight_case(&b, "scalars", Some(true), WField::Equal).unwrap();
+        match &mut duplicate.0.kind {
+            FactorizedKind::Closure(spec) => {
+                let w = spec.weights[0].clone();
+                spec.weights.push(w)
+            }
+            _ => {
+                let r = duplicate.0.record.as_mut().unwrap();
+                let w = r.weights[0].clone();
+                r.weights.push(w)
+            }
+        }
+        for (what, input) in [
+            ("an unknown weight name", unknown),
+            ("a duplicated weight name", duplicate),
+        ] {
+            for text in [false, true] {
+                let label = format!("{kind} | {what} | {}", if text { "text" } else { "typed" });
+                let known = WEIGHT_FAILURES.contains(&label.as_str());
+                if only_known_failures != known {
+                    continue;
+                }
+                let got = x_run(*entry, text, input.clone());
+                let ok = got.is_err();
+                eprintln!(
+                    "CONTRACT WEIGHT | {label} | expected REFUSED | got {}{}",
+                    match &got {
+                        Ok(()) => "ACCEPTED".to_string(),
+                        Err(e) => format!("REFUSED {}", e.chars().take(110).collect::<String>()),
+                    },
+                    if ok { "" } else { " | DIFFERS" }
+                );
+                if !ok {
+                    out.push(label);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// THE WRITER PROPERTY of a marked value v: `to_text(v)` is Err exactly when
+/// `validate(v)` is Err, and when Ok, `from_text(to_text(v))` equals v
+/// structurally; printed per case (agreement, and the fields the writer
+/// changes); the cases whose writer and validation disagree, or whose text
+/// reads back different, are returned.
+fn writer_property(label: &str, v: &FactorizedNumerator) -> Option<String> {
+    let valid = v.validate().map_err(|e| e.to_string());
+    let text = v.to_text().map_err(|e| e.to_string());
+    let back = text
+        .as_ref()
+        .ok()
+        .map(|t| FactorizedNumerator::from_text(t).map_err(|e| e.to_string()));
+    let mut changed = Vec::new();
+    if let Some(Ok(w)) = &back {
+        if w.label != v.label {
+            changed.push("label");
+        }
+        if w.kind != v.kind {
+            changed.push("kind");
+        }
+        if w.dimension != v.dimension {
+            changed.push("dimension");
+        }
+        if w.loop_edges != v.loop_edges {
+            changed.push("loop_edges");
+        }
+        if w.external_edges != v.external_edges {
+            changed.push("external_edges");
+        }
+        if w.edges != v.edges {
+            changed.push("edges");
+        }
+        if w.vertices != v.vertices {
+            changed.push("vertices");
+        }
+        if w.ports != v.ports {
+            changed.push("ports");
+        }
+        if w.projector != v.projector {
+            changed.push("projector");
+        }
+        if w.prefactor != v.prefactor {
+            changed.push("prefactor");
+        }
+        if w.insertions != v.insertions {
+            changed.push("insertions");
+        }
+        if w.record != v.record {
+            changed.push("record");
+        }
+    }
+    let agree = valid.is_err() == text.is_err();
+    let verdict = match (&valid, &text, &back) {
+        (Err(e), Ok(_), Some(Ok(_))) => format!(
+            "DISAGREE: validate refuses ({}), the writer writes a text that validates",
+            e.chars().take(100).collect::<String>()
+        ),
+        (Err(e), Ok(_), Some(Err(r))) => format!(
+            "DISAGREE: validate refuses ({}), the writer writes a text the reader refuses ({})",
+            e.chars().take(80).collect::<String>(),
+            r.chars().take(80).collect::<String>()
+        ),
+        (Ok(()), Err(e), _) => format!(
+            "DISAGREE: validate accepts, the writer refuses ({})",
+            e.chars().take(100).collect::<String>()
+        ),
+        (Ok(()), Ok(_), Some(Err(r))) => format!(
+            "DISAGREE: validate accepts, the text does not read back ({})",
+            r.chars().take(100).collect::<String>()
+        ),
+        (Ok(()), Ok(_), Some(Ok(_))) if !changed.is_empty() => format!("NORMALISED: {changed:?}"),
+        (Ok(()), Ok(_), _) => "ok (identical)".into(),
+        (Err(_), Err(_), _) => "ok (both refuse)".into(),
+        _ => "?".into(),
+    };
+    eprintln!("CONTRACT WRITER | {label} | {verdict}");
+    (!agree || verdict.starts_with("DISAGREE") || verdict.starts_with("NORMALISED"))
+        .then(|| format!("{label}: {verdict}"))
+}
+
+/// The writer property over the violating inputs of the tables (the rule x
+/// field table, the cross-field table) and the named cases.
+#[test]
+#[ignore = "expected by the record format: to_text refuses exactly what validate refuses and a written text reads back equal; on 930d4e239 the writer writes 144 of the 192 invalid values, two of them (insertions out of vertex order, a pre-expanded closure with another auxiliary mass) as a text that validates"]
+fn the_writer_agrees_with_validation() {
+    let mut cases: Vec<(String, FactorizedNumerator)> = Vec::new();
+    for name in ["wh-k1-root", "wh-k2-child-ins", "wh-k5-direct"] {
+        let base = record(name);
+        cases.push((format!("{name} as read"), base.clone()));
+        for (field, put) in field_setters(&base) {
+            for (rule, text) in [
+                ("reserved namespace", "vakint::closure_lambda"),
+                ("non-ASCII", "caller::𝜀"),
+                ("caller function", "caller::f(caller::x)"),
+                ("non-integer exponent", "caller::x^(1/2)"),
+                ("exponent above 64", "caller::x^65"),
+                (
+                    "zero denominator",
+                    "((caller::x-3)^2-caller::x^2+6*caller::x-9)^-1",
+                ),
+            ] {
+                let mut v = base.clone();
+                put(&mut v, &atom(text));
+                cases.push((format!("{name} {rule} in {field}"), v));
+            }
+        }
+    }
+    for c in x_cells() {
+        if !c.text {
+            cases.push((
+                format!("cross-field violating {} {:?}", c.rule, c.entry),
+                (c.bad)().0,
+            ));
+        }
+    }
+    // named cases
+    let k2 = record("wh-k2-child-ins");
+    let k5 = record("wh-k5-direct");
+    // two insertions on the K1 root (the factors of two vertices moved), typed
+    // out of vertex order
+    let k1 = record("wh-k1-root");
+    let ids = k1
+        .vertices
+        .iter()
+        .filter(|x| x.factor != Atom::num(1))
+        .map(|x| x.id)
+        .take(2)
+        .collect::<Vec<_>>();
+    let mut two = with_insertion_at(
+        &with_insertion_at(&k1, ids[0], &format!("{EPS}^-1")),
+        ids[1],
+        "1",
+    );
+    cases.push(("two insertions in vertex order".into(), two.clone()));
+    two.insertions.reverse();
+    cases.push(("two insertions out of vertex order".into(), two));
+    // a pre-expanded closure (taylor none) from the K2 record: the internal
+    // edges carry no external momentum; the auxiliary mass the closing mass
+    // (valid) or another (refused by validation)
+    let mut pre = k2.clone();
+    let loops = pre.loop_edges.len();
+    if let FactorizedKind::Closure(spec) = &mut pre.kind {
+        spec.taylor = None;
+        spec.auxiliary_mass_squared = spec.mass_squared.clone();
+    }
+    for e in pre.edges.iter_mut().filter(|e| !e.is_external()) {
+        for c in e.momentum[loops..].iter_mut() {
+            *c = 0;
+        }
+    }
+    cases.push((
+        "a pre-expanded closure (taylor none), the auxiliary mass the closing mass".into(),
+        pre.clone(),
+    ));
+    if let FactorizedKind::Closure(spec) = &mut pre.kind {
+        spec.auxiliary_mass_squared = atom(MAUX);
+    }
+    cases.push((
+        "a pre-expanded closure (taylor none), another auxiliary mass".into(),
+        pre,
+    ));
+    let mut v = with_weight(with_weight(x_direct_base(), true, "1"), false, "1").0;
+    v.record.as_mut().unwrap().weights.reverse();
+    cases.push(("weights in another order".into(), v));
+    let mut v = k2.clone();
+    let h = v.insertions[0].hedges[0];
+    v.insertions[0].hedges.insert(0, h);
+    cases.push(("duplicated insertion hedges".into(), v));
+    let mut v = record("wh-k1-root");
+    v.ports = k5.ports.clone();
+    cases.push(("a closure value with ports of another record".into(), v));
+    let mut failures = Vec::new();
+    for (label, v) in &cases {
+        if let Some(f) = writer_property(label, v) {
+            failures.push(f);
+        }
+    }
+    eprintln!(
+        "CONTRACT WRITER {} cases, {} disagree or normalise",
+        cases.len(),
+        failures.len()
+    );
+    assert!(failures.is_empty(), "{failures:#?}");
+}
+
+/// The writer property over every real v3 record (`VAKINT_TEST_RECORD_ROOTS`
+/// and the vendored fixtures): validation and writing only.
+#[test]
+#[ignore = "external data: VAKINT_TEST_RECORD_ROOTS; expected by the record format: the writer refuses what validate refuses; on 930d4e239 it writes the 22 all-massive tadpole records"]
+fn the_writer_agrees_with_validation_on_every_real_record() {
+    let (texts, _) = real_record_sources();
+    let mut failures = Vec::new();
+    let mut n = 0;
+    for (path, text) in &texts {
+        let Ok(v) = FactorizedNumerator::parse_text(text) else {
+            continue;
+        };
+        n += 1;
+        if let Some(f) = writer_property(path, &v) {
+            failures.push(f);
+        }
+    }
+    eprintln!(
+        "CONTRACT WRITER real records: {n} read, {} disagree or normalise",
+        failures.len()
+    );
+    for f in failures.iter().take(20) {
+        eprintln!("CONTRACT WRITER real {f}");
+    }
+    assert!(failures.is_empty(), "{} cases", failures.len());
+}
+
+/// THE NUMBER BOUND: an integer of 4,095, 4,096, 4,097, 4,100 and 4,101
+/// bits as a numerator and as a denominator, both signs, real and imaginary,
+/// in a vertex factor of the K1 root, typed and through text: at most 4,096
+/// bits accepted, more refused. The outcome of each printed; the cells that
+/// differ are returned.
+fn number_bound_table() -> Vec<String> {
+    let mut out = Vec::new();
+    for bits in [4095u32, 4096, 4097, 4100, 4101] {
+        for (shape, f) in [
+            ("numerator", "{n}"),
+            ("denominator", "1/{n}"),
+            ("negative numerator", "-{n}"),
+            ("imaginary numerator", "𝑖*{n}"),
+            ("imaginary denominator", "𝑖/{n}"),
+        ] {
+            let n = format!("2^{}", bits - 1);
+            let text_atom = f.replace("{n}", &format!("({n})"));
+            for text in [false, true] {
+                let mut v = record("wh-k1-root");
+                let x = v
+                    .vertices
+                    .iter_mut()
+                    .find(|x| x.factor != Atom::num(1))
+                    .unwrap();
+                x.factor = &x.factor * atom(&text_atom);
+                let got = if text {
+                    v.to_text().map_err(|e| e.to_string()).and_then(|t| {
+                        FactorizedNumerator::from_text(&t)
+                            .map(|_| ())
+                            .map_err(|e| e.to_string())
+                    })
+                } else {
+                    v.validate().map_err(|e| e.to_string())
+                };
+                let expected_accept = bits <= 4096;
+                let ok = got.is_ok() == expected_accept;
+                eprintln!(
+                    "CONTRACT NUMBER | {bits} bits | {shape} | {} | expected {} | got {}{}",
+                    if text { "text" } else { "typed" },
+                    if expected_accept {
+                        "ACCEPTED"
+                    } else {
+                        "REFUSED"
+                    },
+                    match &got {
+                        Ok(()) => "ACCEPTED".to_string(),
+                        Err(e) => format!("REFUSED {}", e.chars().take(90).collect::<String>()),
+                    },
+                    if ok { "" } else { " | DIFFERS" }
+                );
+                if !ok {
+                    out.push(format!("{bits} bits {shape} text={text}"));
+                }
+            }
+        }
+    }
+    out
+}
+
+#[test]
+#[ignore = "expected: a number of more than 4096 bits is refused; on 930d4e239 the bound counts decimal digits (1234), so 4097 to 4100 bits pass"]
+fn the_number_bound_is_4096_bits() {
+    let failures = number_bound_table();
+    assert!(failures.is_empty(), "{failures:#?}");
+}
