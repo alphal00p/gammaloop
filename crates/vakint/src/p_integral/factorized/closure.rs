@@ -1675,4 +1675,30 @@ mod internal_failure_tests {
         }
         assert!(matches!(refuse("x"), FactorizedError::Closure { .. }));
     }
+
+    /// The four internal-failure CALL SITES use `internal(..)`, not
+    /// `refuse(..)` (none can be triggered from a valid record by a cheap
+    /// input: the boundary, the lowering / reduction, the ordinary closure and
+    /// the truncation fail only on an inconsistent internal state): a site
+    /// reverted to a refusal fails this test.
+    #[test]
+    fn the_internal_failure_sites_return_evaluation() {
+        let source = include_str!("closure.rs");
+        let code = source
+            .split("#[cfg(test)]")
+            .next()
+            .expect("the non-test part");
+        for stage in [
+            "internal(\"boundary\", e)",
+            "internal(\"lowering and reduction\", e)",
+            "internal(\"ordinary closure\", e)",
+            "internal(\"truncation of the insertion product\", e)",
+        ] {
+            assert_eq!(code.matches(stage).count(), 1, "{stage}");
+        }
+        assert!(
+            !code.contains("map_err(|e| refuse("),
+            "an evaluation failure mapped to a refusal"
+        );
+    }
 }

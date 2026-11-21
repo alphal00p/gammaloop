@@ -268,6 +268,115 @@ fn contracted_route(
     (value, started.elapsed().as_secs_f64())
 }
 
+/// The INDEPENDENT reference of the insertion identities: it shares no code
+/// with the factorised entry beyond idenso's contraction and vakint's
+/// evaluation. Written here: the product of every edge and vertex factor, of
+/// each insertion's coefficient x factor and of the projector (plain
+/// multiplication); idenso contracts it (`contract_with_idenso`, the base's
+/// oracle); every scalar product of two edge momenta `g(Q(a, mink(D)), Q(b,
+/// mink(D)))` / `dot(..)` becomes vakint's `dot` of the edges' momenta over
+/// `k(i)`, `p(1)`; the topology; `D -> 4 - 2 eps`; `Vakint::evaluate`.
+/// Valid for closed two-point values (a projector closing every port).
+fn independent_reference(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    value: &FactorizedNumerator,
+) -> Atom {
+    use crate::symbols::S;
+    let mut product = Atom::num(1);
+    for edge in &value.edges {
+        product = product * &edge.factor;
+    }
+    for vertex in &value.vertices {
+        product = product * &vertex.factor;
+    }
+    for insertion in &value.insertions {
+        product = product * &insertion.coefficient * &insertion.factor;
+    }
+    let projector = value.projector.as_ref().expect("a closed value");
+    product = product * &projector.tensor;
+    let contracted = contract_with_idenso(&product, false).unwrap();
+    let loops = value.loops();
+    let momentum = |id: i64| -> Atom {
+        let edge = value
+            .edges
+            .iter()
+            .find(|e| e.id as i64 == id)
+            .unwrap_or_else(|| panic!("edge {id}"));
+        let mut out = Atom::Zero;
+        for (i, c) in edge.momentum.iter().enumerate() {
+            if *c != 0 {
+                let vector = if i < loops {
+                    S.k.call(i as i64 + 1)
+                } else {
+                    S.p.call(i as i64 - loops as i64 + 1)
+                };
+                out += Atom::num(*c) * vector;
+            }
+        }
+        out
+    };
+    let compact = |view: AtomView<'_>| -> Option<i64> {
+        let AtomView::Fun(q) = view else { return None };
+        if q.get_symbol().get_name() != "gammalooprs::Q" || q.get_nargs() != 2 {
+            return None;
+        }
+        let mut args = q.iter();
+        let e = i64::try_from(args.next()?).ok()?;
+        matches!(args.next()?, AtomView::Fun(r) if r.get_nargs() == 1).then_some(e)
+    };
+    let mapped = contracted.replace_map(|part, _, out| {
+        let AtomView::Fun(f) = part else { return };
+        let symbol = f.get_symbol();
+        let name = symbol.get_name();
+        if (name == "spenso::g" || name == "spenso::dot") && f.get_nargs() == 2 {
+            let args = f.iter().collect::<Vec<_>>();
+            if let (Some(a), Some(b)) = (compact(args[0]), compact(args[1])) {
+                **out = S.dot.call((&momentum(a), &momentum(b)));
+            }
+        }
+    });
+    let mut leftover = false;
+    mapped.visitor(&mut |part| {
+        if let AtomView::Fun(f) = part
+            && matches!(
+                f.get_symbol().get_name(),
+                "gammalooprs::Q" | "spenso::g" | "spenso::gamma"
+            )
+        {
+            leftover = true;
+        }
+        !leftover
+    });
+    assert!(!leftover, "{}: tensor notation left: {mapped}", value.label);
+    let mut topology = Atom::num(1);
+    for edge in value.edges.iter().filter(|e| !e.is_external()) {
+        let (Endpoint::Vertex(s), Endpoint::Vertex(t)) = (edge.source, edge.target) else {
+            unreachable!()
+        };
+        topology = topology
+            * S.prop.call((
+                edge.id as i64,
+                S.edge.call((s as i64, t as i64)),
+                &momentum(edge.id as i64),
+                Atom::Zero,
+                Atom::num(edge.power),
+            ));
+    }
+    let head = S.p.call(1);
+    let epsilon = Atom::var(crate::utils::vakint_macros::vk_symbol!(
+        &settings.epsilon_symbol
+    ));
+    let input = (mapped
+        * S.dot
+            .call((&head, &head))
+            .pow(Atom::num(projector.p2_power))
+        * S.topo.call(topology))
+    .replace(Atom::var(value.dimension))
+    .with(Atom::num(4) - Atom::num(2) * epsilon);
+    vakint.evaluate(settings, input.as_view()).unwrap()
+}
+
 fn settings(terms: i64) -> VakintSettings {
     VakintSettings {
         evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
@@ -303,9 +412,11 @@ fn engine() -> (Vakint, bool) {
     (engine, true)
 }
 
-/// The insertion route equals the contracted route exactly; also the text
-/// round trip of the record. Prints one timing line (median of 3 paired
-/// repetitions, single core).
+/// The entry equals the INDEPENDENT reference ([`independent_reference`])
+/// exactly; also the text round trip of the record. Prints one timing line
+/// (median of 3 paired repetitions, single core) against the hand-contracted
+/// route (the insertions multiplied into their vertex factors, evaluated
+/// without the contract checks: a timing baseline, not a reference).
 fn identical(vakint: &Vakint, settings: &VakintSettings, value: &FactorizedNumerator) {
     value
         .validate()
@@ -327,11 +438,12 @@ fn identical(vakint: &Vakint, settings: &VakintSettings, value: &FactorizedNumer
         got = Some(value_ours.value);
         reference = Some(value_theirs);
     }
-    let (got, reference) = (got.unwrap(), reference.unwrap());
+    let (got, _contracted) = (got.unwrap(), reference.unwrap());
+    let reference = independent_reference(vakint, settings, value);
     assert!(!reference.is_zero(), "{}: zero reference", value.label);
     assert!(
         (&got - &reference).expand().is_zero(),
-        "{}:\ninsertion  {got}\ncontracted {reference}",
+        "{}:\ninsertion   {got}\nindependent {reference}",
         value.label
     );
     let median = |v: &mut Vec<f64>| {
@@ -349,27 +461,36 @@ fn identical(vakint: &Vakint, settings: &VakintSettings, value: &FactorizedNumer
 }
 
 #[test]
-fn gluon_surrogates_at_two_three_and_four_loops_equal_the_contracted_route() {
-    let (vakint, four) = engine();
+fn gluon_surrogates_at_two_and_three_loops_equal_the_independent_reference() {
+    let (vakint, _) = engine();
     let settings = settings(3);
-    for bubbles in [1, 2, 3] {
-        if bubbles == 3 && !four {
-            eprintln!("INSERTION_IDENTITY SKIPPED L4: VAKINT_TEST_P_LIBRARY_1_4 not set");
-            continue;
-        }
+    for bubbles in [1, 2] {
         identical(&vakint, &settings, &gluon_surrogate(bubbles));
     }
 }
 
-#[test]
-fn quark_surrogates_with_a_dirac_line_through_the_chain_equal_the_contracted_route() {
+/// The 1-4 loop package (`VAKINT_TEST_P_LIBRARY_1_4`, outside the
+/// repository) is REQUIRED: without it the test fails.
+fn four_loop_engine() -> Vakint {
     let (vakint, four) = engine();
+    assert!(four, "four loops need VAKINT_TEST_P_LIBRARY_1_4");
+    vakint
+}
+
+#[test]
+#[ignore = "needs the 1-4 loop package of VAKINT_TEST_P_LIBRARY_1_4"]
+fn four_loop_surrogates_equal_the_independent_reference() {
+    let vakint = four_loop_engine();
     let settings = settings(3);
-    for bubbles in [1, 2, 3] {
-        if bubbles == 3 && !four {
-            eprintln!("INSERTION_IDENTITY SKIPPED L4: VAKINT_TEST_P_LIBRARY_1_4 not set");
-            continue;
-        }
+    identical(&vakint, &settings, &gluon_surrogate(3));
+    identical(&vakint, &settings, &quark_surrogate(3));
+}
+
+#[test]
+fn quark_surrogates_with_a_dirac_line_through_the_chain_equal_the_independent_reference() {
+    let (vakint, _) = engine();
+    let settings = settings(3);
+    for bubbles in [1, 2] {
         let value = quark_surrogate(bubbles);
         // the fermion loop runs through the chain (one node for the flow)
         let loops = value.closed_loops().unwrap();
@@ -380,7 +501,7 @@ fn quark_surrogates_with_a_dirac_line_through_the_chain_equal_the_contracted_rou
 }
 
 #[test]
-fn a_contracted_child_with_poles_and_a_surrogate_in_one_record_equal_the_contracted_route() {
+fn a_contracted_child_with_poles_and_a_surrogate_in_one_record_equal_the_independent_reference() {
     let (vakint, _) = engine();
     let settings = settings(3);
     for bubbles in [1, 2] {
@@ -388,24 +509,58 @@ fn a_contracted_child_with_poles_and_a_surrogate_in_one_record_equal_the_contrac
     }
 }
 
-/// With no insertion, the text form and every value are those of the
-/// unchanged records (the fixtures keep `insertions 0`).
+/// Two LOCAL contracted children (`ct:`) with poles on the L1 gluon bubble:
+/// against the BASE's entry on the UNMARKED record (no insertion), each
+/// coefficient x factor multiplied into its vertex's own factor by plain
+/// multiplication here, through `evaluate_factorized` of a value without any
+/// new-feature marker.
 #[test]
-fn records_without_insertions_are_unchanged() {
-    for text in [GLUON, QUARK] {
-        let value = read(text);
-        assert!(value.insertions.is_empty());
-        assert_eq!(value.to_text().unwrap(), text);
-        let product = value.factor_product();
-        let mut by_hand = Atom::num(1);
-        for edge in &value.edges {
-            by_hand *= &edge.factor;
-        }
-        for vertex in &value.vertices {
-            by_hand *= &vertex.factor;
-        }
-        assert_eq!(product, by_hand);
+fn local_contracted_children_equal_the_base_entry_on_the_unmarked_record() {
+    let (vakint, _) = engine();
+    let settings = settings(3);
+    let unmarked = read(GLUON);
+    let mut marked = unmarked.clone();
+    let mut reference_record = unmarked.clone();
+    for (vertex, coefficient) in [
+        (0usize, atom(&format!("{EPS}^-1"))),
+        (1, atom(&format!("3*{EPS}^-1+1/2"))),
+    ] {
+        let hedges = marked
+            .local_hedges(Location::Vertex(vertex))
+            .into_iter()
+            .collect::<Vec<_>>();
+        let v = marked.vertices.iter_mut().find(|v| v.id == vertex).unwrap();
+        let factor = std::mem::replace(&mut v.factor, Atom::num(1));
+        v.rule = format!("ct:child{vertex}");
+        let r = reference_record
+            .vertices
+            .iter_mut()
+            .find(|v| v.id == vertex)
+            .unwrap();
+        r.factor = &coefficient * &factor;
+        marked.insertions.push(Insertion {
+            vertex,
+            hedges,
+            cycles: (0, 0),
+            coefficient,
+            factor,
+        });
     }
+    marked.validate().unwrap();
+    assert!(reference_record.insertions.is_empty() && reference_record.record.is_none());
+    let got = evaluate_factorized(&vakint, &settings, &marked, &Atom::num(1)).unwrap();
+    let reference =
+        evaluate_factorized(&vakint, &settings, &reference_record, &Atom::num(1)).unwrap();
+    assert!(!reference.value.is_zero());
+    assert!(
+        (&got.value - &reference.value).expand().is_zero(),
+        "marked {}\nunmarked {}",
+        got.value,
+        reference.value
+    );
+    // and the independent reference agrees
+    let independent = independent_reference(&vakint, &settings, &marked);
+    assert!((&got.value - &independent).expand().is_zero());
 }
 
 fn refused(value: &FactorizedNumerator) -> FactorizedError {
@@ -418,48 +573,89 @@ fn ins(value: &mut FactorizedNumerator) -> &mut Insertion {
     &mut value.insertions[0]
 }
 
-fn is_insertion(error: &FactorizedError) -> bool {
-    matches!(error, FactorizedError::Insertion { .. })
+fn c0(v: &mut FactorizedNumerator) -> &mut FactorizedVertex {
+    v.vertices.iter_mut().find(|x| x.id == C0).unwrap()
 }
 
+/// `error` is an `Insertion` refusal at `vertex` whose detail starts with
+/// `prefix` (the frozen REFUSALS list).
+fn insertion_refusal(error: &FactorizedError, vertex: usize, prefix: &str, what: &str) {
+    match error {
+        FactorizedError::Insertion { vertex: v, detail } => {
+            assert_eq!(*v, vertex, "{what}: {error}");
+            assert!(
+                detail.starts_with(prefix),
+                "{what}: {detail:?} does not start with {prefix:?}"
+            );
+        }
+        other => panic!("{what}: not an Insertion refusal: {other:?}"),
+    }
+}
+
+/// Every structural insertion rule, each on an input that the PRISTINE
+/// surrogate record (accepted, asserted first) turns into by ONE change: the
+/// refusal's variant and detail prefix are asserted (the frozen REFUSALS
+/// list), so the test fails if the rule is removed (the next rule that might
+/// catch the input has another prefix or none).
 #[test]
 fn every_insertion_rule_has_its_refusal() {
     let good = gluon_surrogate(1);
-    good.validate().unwrap();
+    good.validate().expect("the pristine record is accepted");
     let with = |change: &dyn Fn(&mut FactorizedNumerator)| {
         let mut value = good.clone();
         change(&mut value);
         value
     };
-    // structure
-    for (what, value) in [
-        ("missing vertex", with(&|v| ins(v).vertex = 999)),
+    // the chain's second vertex holds H_OUT and the target half-edge 61 of the
+    // first bubble line; 60 is that line's source half-edge, at C0
+    for (what, value, vertex, prefix) in [
+        (
+            "missing vertex",
+            with(&|v| ins(v).vertex = 999),
+            999,
+            "the vertex does not exist",
+        ),
         (
             "vertex factor not 1",
-            with(&|v| v.vertices.iter_mut().find(|x| x.id == C0).unwrap().factor = Atom::num(2)),
+            with(&|v| c0(v).factor = Atom::num(2)),
+            C0,
+            "the vertex factor must be 1",
         ),
-        ("empty hedges", with(&|v| ins(v).hedges.clear())),
+        (
+            "empty hedges",
+            with(&|v| ins(v).hedges.clear()),
+            C0,
+            "hedges must be non-empty, sorted and distinct",
+        ),
         (
             "unsorted hedges",
             with(&|v| ins(v).hedges = vec![H_OUT, H_IN]),
+            C0,
+            "hedges must be non-empty, sorted and distinct",
         ),
         (
             "unknown hedge",
-            with(&|v| ins(v).hedges = vec![H_IN, H_OUT, 999]),
+            with(&|v| ins(v).hedges = vec![H_IN, 999]),
+            C0,
+            "half-edge 999 is not in the graph",
         ),
         (
             "no hedge at the vertex",
-            with(&|v| {
-                ins(v).hedges = vec![H_OUT];
-            }),
+            with(&|v| ins(v).hedges = vec![H_OUT, 61]),
+            C0,
+            "no boundary half-edge sits at the vertex",
         ),
         (
             "rule neither ct: nor ins:",
-            with(&|v| v.vertices.iter_mut().find(|x| x.id == C0).unwrap().rule = "V_x".into()),
+            with(&|v| c0(v).rule = "V_x".into()),
+            C0,
+            "the vertex rule V_x is neither",
         ),
         (
             "ct: with hedges other than the incident ones",
-            with(&|v| v.vertices.iter_mut().find(|x| x.id == C0).unwrap().rule = "ct:x".into()),
+            with(&|v| c0(v).rule = "ct:x".into()),
+            C0,
+            "a contracted vertex (rule ct:x) has hedges",
         ),
         (
             "two insertions on one vertex",
@@ -467,73 +663,165 @@ fn every_insertion_rule_has_its_refusal() {
                 let copy = v.insertions[0].clone();
                 v.insertions.push(copy);
             }),
+            C0,
+            "insertions are not sorted by vertex, or two share a vertex",
         ),
         (
             "degree four",
             with(&|v| ins(v).factor = &ins(v).factor * atom(&format!("{}^2", q(3, &dummy(3, 8))))),
+            C0,
+            "the factor has degree 4 in the boundary momenta",
+        ),
+        (
+            "a mass symbol",
+            with(&|v| {
+                ins(v).coefficient =
+                    &ins(v).coefficient * atom("gammalooprs::rstar_reference_mass_squared")
+            }),
+            C0,
+            "contains a mass symbol ",
         ),
     ] {
-        let error = refused(&value);
-        assert!(is_insertion(&error), "{what}: {error}");
-        eprintln!("INSERTION_REFUSAL {what}: {error}");
+        insertion_refusal(&refused(&value), vertex, prefix, what);
+        eprintln!("INSERTION_REFUSAL {what}: {}", refused(&value));
     }
     // five open slots: the contracted child at vertex 1 (three half-edges)
-    // with two more spinor slots
+    // with two more spinor slots; its pristine record is accepted
     let mut five = gluon_surrogate_and_child(1);
-    five.validate().unwrap();
+    five.validate().expect("pristine child record");
     ins(&mut five).factor = &ins(&mut five).factor * atom(&metric(&bis(0), &bis(3)));
-    let error = refused(&five);
-    assert!(is_insertion(&error), "five slots: {error}");
-    eprintln!("INSERTION_REFUSAL five open slots: {error}");
+    insertion_refusal(
+        &refused(&five),
+        1,
+        "the factor has 5 open slots, at most 4 are supported",
+        "five slots",
+    );
     // colour, flavour and mUVexp inside an insertion: the format's variants
-    let colour = with(&|v| ins(v).coefficient = atom("spenso::cas(2,spenso::coad(spenso::dA))"));
-    assert!(matches!(
-        refused(&colour),
-        FactorizedError::ColourInFactor { .. }
-    ));
-    let flavour = with(&|v| ins(v).coefficient = atom("vakint::nf"));
-    assert!(matches!(refused(&flavour), FactorizedError::Graph { .. }));
-    let muvexp = with(&|v| ins(v).factor = &ins(v).factor * atom("gammalooprs::mUVexp"));
-    assert!(matches!(refused(&muvexp), FactorizedError::Graph { .. }));
-    // a non-scalar coefficient, a non-boundary momentum, a non-local slot
-    let error = refused(&with(&|v| {
-        ins(v).coefficient = atom(&format!("{}^2", q(3, &dummy(3, 8))))
-    }));
-    assert!(
-        matches!(error, FactorizedError::NotScalar { .. }),
-        "{error}"
-    );
-    let error = refused(&with(&|v| {
-        ins(v).factor = atom(&format!("{}*{}", q(2, &mink(H_IN)), q(OUT, &mink(H_OUT))))
-    }));
-    assert!(
-        matches!(error, FactorizedError::UnsupportedTensor { .. }),
-        "{error}"
-    );
-    let error = refused(&with(&|v| {
-        ins(v).factor = atom(&format!("{}*{}", q(3, &mink(H_IN)), q(OUT, &mink(4))))
-    }));
-    assert!(
-        matches!(
-            error,
-            FactorizedError::IndexNotLocal { .. } | FactorizedError::IndexOverContracted { .. }
+    match refused(&with(&|v| {
+        ins(v).coefficient = atom("spenso::cas(2,spenso::coad(spenso::dA))")
+    })) {
+        FactorizedError::ColourInFactor { location, tensor } => {
+            assert_eq!(location, format!("insertion at vertex {C0} coefficient"));
+            assert!(tensor.starts_with("the colour object "), "{tensor}");
+        }
+        other => panic!("colour: {other:?}"),
+    }
+    match refused(&with(&|v| ins(v).coefficient = atom("vakint::nf"))) {
+        FactorizedError::Graph { detail } => assert!(
+            detail.starts_with(&format!(
+                "insertion at vertex {C0} coefficient contains the flavour symbol "
+            )),
+            "{detail}"
         ),
+        other => panic!("flavour: {other:?}"),
+    }
+    match refused(&with(&|v| {
+        ins(v).factor = &ins(v).factor * atom("gammalooprs::mUVexp")
+    })) {
+        FactorizedError::Graph { detail } => assert!(
+            detail.starts_with(&format!(
+                "insertion at vertex {C0} factor contains the auxiliary mass symbol "
+            )),
+            "{detail}"
+        ),
+        other => panic!("mUVexp: {other:?}"),
+    }
+    // a momentum in the coefficient, a non-boundary momentum, a non-local slot
+    match refused(&with(&|v| {
+        ins(v).coefficient = atom(&format!("{}^2", q(3, &dummy(3, 8))))
+    })) {
+        FactorizedError::NotScalar { location, detail } => {
+            assert_eq!(location, format!("insertion at vertex {C0} coefficient"));
+            assert!(
+                detail.starts_with("must be free of indices and momenta"),
+                "{detail}"
+            );
+        }
+        other => panic!("momentum in the coefficient: {other:?}"),
+    }
+    match refused(&with(&|v| {
+        ins(v).factor = atom(&format!("{}*{}", q(2, &mink(H_IN)), q(OUT, &mink(H_OUT))))
+    })) {
+        FactorizedError::UnsupportedTensor { location, tensor } => {
+            assert_eq!(location, format!("insertion at vertex {C0}"));
+            assert!(
+                tensor.ends_with("(not a boundary momentum of the insertion)"),
+                "{tensor}"
+            );
+        }
+        other => panic!("non-boundary momentum: {other:?}"),
+    }
+    match refused(&with(&|v| {
+        ins(v).factor = atom(&format!("{}*{}", q(3, &mink(H_IN)), q(OUT, &mink(4))))
+    })) {
+        FactorizedError::IndexNotLocal { location, .. } => {
+            assert_eq!(location, format!("insertion at vertex {C0}"))
+        }
+        other => panic!("non-local slot: {other:?}"),
+    }
+    // weights (standalone direct record): a closed cycle inside the insertion
+    let error = refused(&with(&|v| ins(v).cycles = (1, 0)));
+    assert!(
+        matches!(error, FactorizedError::LoopSign { found: 1, loops: 1 }),
         "{error}"
     );
-    // weights: a closed cycle inside the insertion changes the loop sign
-    let error = refused(&with(&|v| ins(v).cycles = (1, 0)));
-    assert!(matches!(error, FactorizedError::LoopSign { .. }), "{error}");
     let mut balanced = with(&|v| ins(v).cycles = (1, 0));
     balanced.prefactor.loop_sign = -1;
     let error = refused(&balanced);
-    assert!(matches!(error, FactorizedError::NfPower { .. }), "{error}");
+    assert!(
+        matches!(error, FactorizedError::NfPower { found: 0, loops: 1 }),
+        "{error}"
+    );
     balanced.prefactor.nf_power = 1;
-    balanced.validate().unwrap();
-    // a second epsilon at evaluation
+    balanced
+        .validate()
+        .expect("the balanced weights are accepted");
+    // a second epsilon at evaluation (the record itself validates)
     let wrong = with(&|v| ins(v).coefficient = atom("gammalooprs::ε^-1"));
     wrong.validate().unwrap();
     let error = super::evaluate::vakint_input(&settings(2), &wrong, &Atom::num(1)).unwrap_err();
-    assert!(is_insertion(&error), "{error}");
+    insertion_refusal(
+        &error,
+        C0,
+        "the symbol gammalooprs::ε is not the evaluation's epsilon",
+        "second eps",
+    );
+    let _ = super::evaluate::vakint_input(&settings(2), &good, &Atom::num(1))
+        .expect("the pristine record's input");
+    // a fractional power of eps (pole order, the closure entry's depth)
+    let half = with(&|v| ins(v).coefficient = atom(&format!("{EPS}^(1/2)")));
+    half.validate().unwrap();
+    let eps_atom = atom(EPS);
+    let AtomView::Var(epsilon) = eps_atom.as_view() else {
+        unreachable!()
+    };
+    let epsilon = epsilon.get_symbol();
+    insertion_refusal(
+        &half.insertion_pole_order(epsilon).unwrap_err(),
+        C0,
+        "a fractional power of ε",
+        "eps^(1/2)",
+    );
+    good.insertion_pole_order(epsilon)
+        .expect("the pristine pole order");
+}
+
+/// The surrogate coefficient vertex (`ins:`) carries exactly the two inner
+/// boundary half-edges (format section 8, A-34): a third half-edge of the
+/// vertex (the first bubble line's source, 60) is refused by THAT rule; the
+/// pristine record (two hedges) is accepted.
+#[test]
+fn a_surrogate_vertex_needs_exactly_two_hedges() {
+    let good = gluon_surrogate(1);
+    good.validate().expect("the pristine record is accepted");
+    let mut three = good.clone();
+    ins(&mut three).hedges = vec![H_IN, H_OUT, 60];
+    insertion_refusal(
+        &refused(&three),
+        C0,
+        "a surrogate coefficient vertex (rule ins:se) has 3 hedges",
+        "ins: three hedges",
+    );
 }
 
 #[test]
@@ -703,7 +991,12 @@ fn the_beta_threads_real_insertion_lines_pass_the_rules() {
     ));
     let mut wrong = value.clone();
     wrong.insertions[1].hedges = vec![9];
-    assert!(is_insertion(&wrong.validate().unwrap_err()));
+    insertion_refusal(
+        &wrong.validate().unwrap_err(),
+        2,
+        "a contracted vertex (rule ct:edges-6-7) has hedges [9]",
+        "real record, a hedge dropped",
+    );
 }
 
 /// Ruling OQ-23: the imaginary unit and the UFO couplings may sit INSIDE edge,
@@ -749,7 +1042,12 @@ fn a_dot_of_boundary_momenta_inside_an_insertion_is_accepted() {
     // degree: dot counts two momenta
     let mut high = value.clone();
     ins(&mut high).factor = &ins(&mut high).factor * atom(&dot);
-    assert!(is_insertion(&refused(&high)));
+    insertion_refusal(
+        &refused(&high),
+        C0,
+        "the factor has degree 4 in the boundary momenta",
+        "dot x dot",
+    );
     // a dot with a non-boundary momentum
     let mut bad = value.clone();
     ins(&mut bad).factor = atom(&format!(
@@ -758,10 +1056,16 @@ fn a_dot_of_boundary_momenta_inside_an_insertion_is_accepted() {
         q(2, &compact),
         q(3, &compact)
     ));
-    assert!(matches!(
-        refused(&bad),
-        FactorizedError::UnsupportedTensor { .. }
-    ));
+    match refused(&bad) {
+        FactorizedError::UnsupportedTensor { location, tensor } => {
+            assert_eq!(location, format!("insertion at vertex {C0}"));
+            assert!(
+                tensor.ends_with("(not a boundary momentum of the insertion)"),
+                "{tensor}"
+            );
+        }
+        other => panic!("a dot with a non-boundary momentum: {other:?}"),
+    }
 }
 
 /// OQ-28: the reference / closing mass inside an insertion is refused (a
@@ -775,12 +1079,20 @@ fn a_reference_mass_inside_an_insertion_is_refused() {
     ] {
         let mut value = gluon_surrogate(1);
         ins(&mut value).coefficient = &ins(&mut value).coefficient * atom(name);
-        let error = refused(&value);
-        assert!(is_insertion(&error), "{error}");
-        assert!(error.to_string().contains("mass symbol"), "{error}");
+        insertion_refusal(
+            &refused(&value),
+            C0,
+            &format!("contains a mass symbol {name}"),
+            name,
+        );
         let mut value = gluon_surrogate(1);
         ins(&mut value).factor = &ins(&mut value).factor * atom(&format!("1+{name}"));
-        assert!(is_insertion(&refused(&value)));
+        insertion_refusal(
+            &refused(&value),
+            C0,
+            &format!("contains a mass symbol {name}"),
+            name,
+        );
     }
     // an edge's own mass symbol
     let mut value = gluon_surrogate(1);
@@ -791,7 +1103,12 @@ fn a_reference_mass_inside_an_insertion_is_refused() {
         .unwrap()
         .mass_squared = atom("helper_test::m2");
     ins(&mut value).coefficient = atom("helper_test::m2");
-    assert!(is_insertion(&refused(&value)));
+    insertion_refusal(
+        &refused(&value),
+        C0,
+        "contains a mass symbol ",
+        "an edge's mass",
+    );
 }
 
 /// The pole order the closure entry raises its depth by.
@@ -935,7 +1252,8 @@ fn direct_records_with_original_cycles_leave_the_weights_to_the_caller() {
     let prefactor = value.prefactor.total();
     let got = evaluate_factorized(&vakint, &settings, &value, &prefactor).unwrap();
     assert!(!got.value.contains_symbol(symbolica::symbol!(names::NF)));
-    let (reference, _) = contracted_route(&vakint, &settings, &value);
+    let reference = independent_reference(&vakint, &settings, &value);
+    assert!(!reference.is_zero());
     assert!(
         (&got.value - &reference * &prefactor).expand().is_zero(),
         "{}\n{}",
@@ -945,10 +1263,25 @@ fn direct_records_with_original_cycles_leave_the_weights_to_the_caller() {
     // the record's own sign under (B) is refused, more cycles than the original too
     let mut signed = value.clone();
     signed.prefactor.loop_sign = -1;
-    assert!(signed.validate().is_err());
+    match signed.validate() {
+        Err(FactorizedError::NotScalar { location, detail }) => {
+            assert_eq!(location, "prefactor");
+            assert!(
+                detail.starts_with("with original_cycles the weights are the caller's"),
+                "{detail}"
+            );
+        }
+        other => panic!("a sign under (B): {other:?}"),
+    }
     let mut more = value.clone();
     ins(&mut more).cycles = (2, 0);
-    assert!(more.validate().is_err());
+    match more.validate() {
+        Err(FactorizedError::Graph { detail }) => assert!(
+            detail.starts_with("the record and its insertions carry "),
+            "{detail}"
+        ),
+        other => panic!("more cycles than original: {other:?}"),
+    }
     // v1 standalone (no original_cycles): the inner quark loop must be in the
     // record's own weights
     let mut standalone = value.clone();
