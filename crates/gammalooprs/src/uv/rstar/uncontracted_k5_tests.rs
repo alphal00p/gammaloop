@@ -2408,6 +2408,10 @@ fn k5_hole_cut_mode_is_resolved_once_at_start_up_and_not_in_the_cache_key() -> R
         "not exactly one call of the resolver"
     );
     ensure!(
+        count("start_up_hole_cut(") == 2,
+        "not exactly one start-up call"
+    );
+    ensure!(
         count("parse_hole_cut(") == 2,
         "parse_hole_cut called outside the resolver"
     );
@@ -2695,4 +2699,52 @@ fn k5_stray_open_slots_are_errors_not_ports() -> Result<()> {
         expect_error(attempt, "(b) mink on a propagator")?;
         Ok(())
     })
+}
+
+/// The coordinator's decision (21 Nov, on beta's observation): a K5 variable
+/// must not affect a run in which `surrogate` is not enabled. At start-up the
+/// hole-cut variable is read and resolved ONLY with the kind enabled
+/// (`k5::start_up_hole_cut`, the one call in uncontracted.rs `ENVIRONMENT`):
+/// - a garbage value with `check:root,child,ir-hard` (and with the switch
+///   off): the variable is not even read, nothing is resolved, the run
+///   proceeds, the identity is the base's;
+/// - a garbage value with `surrogate` listed: a start-up refusal naming the
+///   variable, and nothing stored.
+#[test]
+fn k5_hole_cut_variable_is_ignored_without_the_kind() -> Result<()> {
+    let before = k5::resolved_hole_cut();
+    for value in ["off", "check:root,child,ir-hard", "on", "check"] {
+        let switch = Switch::parse(Some(value)).map_err(|error| eyre!(error))?;
+        let read = std::cell::Cell::new(false);
+        let mode = k5::start_up_hole_cut(switch, || {
+            read.set(true);
+            Ok(Some("froms".to_owned()))
+        });
+        ensure!(mode == Ok(None), "{value}: {mode:?}");
+        ensure!(
+            !read.get(),
+            "{value}: the variable was read without the kind"
+        );
+    }
+    let default = Switch::parse(Some("check:root,child,ir-hard")).map_err(|error| eyre!(error))?;
+    ensure!(
+        with_switch(default, uncontracted_ledger::current_identity).as_deref()
+            == Some("check:root,child,ir-hard:strict"),
+        "the identity of a run without the kind changed"
+    );
+    for value in ["check:surrogate", "on:root,child,ir-hard,surrogate"] {
+        let switch = Switch::parse(Some(value)).map_err(|error| eyre!(error))?;
+        let refused = k5::start_up_hole_cut(switch, || Ok(Some("froms".to_owned())));
+        ensure!(
+            refused
+                .as_ref()
+                .is_err_and(|error| error.contains(k5::HOLE_CUT_VARIABLE)),
+            "{value}: a garbage value was not refused: {refused:?}"
+        );
+    }
+    ensure!(
+        k5::resolved_hole_cut() == before,
+        "a refused value was stored"
+    );
+    Ok(())
 }

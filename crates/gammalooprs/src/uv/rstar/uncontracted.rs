@@ -406,16 +406,10 @@ static ENVIRONMENT: LazyLock<std::result::Result<Environment, String>> = LazyLoc
         read(super::uncontracted_ledger::EXCEPTIONS_VARIABLE)?.as_deref(),
     )?;
     // U7c (K5): the hole-cut mode, read and resolved here, the only reader of
-    // the variable (a bad value refuses the run at start-up; with the switch
-    // off nothing is read)
-    let hole_cut = if switch.mode == Mode::Off {
-        k5::HoleCut::Decline
-    } else {
-        k5::resolve_hole_cut(
-            read(k5::HOLE_CUT_VARIABLE)?.as_deref(),
-            switch.enabled(Kind::Surrogate),
-        )?
-    };
+    // the variable, and ONLY with the kind `surrogate` enabled: a K5 variable
+    // never affects a run without the kind (a bad value refuses a K5 run at
+    // start-up and is ignored otherwise, as with the switch off)
+    let hole_cut = k5::start_up_hole_cut(switch, || read(k5::HOLE_CUT_VARIABLE))?;
     if switch.mode != Mode::Off {
         eprintln!(
             "{} strict=1 exceptions={}{}",
@@ -428,7 +422,7 @@ static ENVIRONMENT: LazyLock<std::result::Result<Environment, String>> = LazyLoc
             super::uncontracted_ledger::witness()
                 .map_or_else(String::new, |witness| format!(" witness={witness}"))
         );
-        if switch.enabled(Kind::Surrogate) {
+        if let Some(hole_cut) = hole_cut {
             eprintln!(
                 "UNCONTRACTED_K5_HOLE_CUT mode={} reader_single_hedge={}",
                 k5::hole_cut_name(hole_cut),
