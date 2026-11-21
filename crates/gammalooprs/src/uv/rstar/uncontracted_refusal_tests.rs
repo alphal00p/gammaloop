@@ -26,6 +26,8 @@
 //! * A K2 / K3 crown mismatch is its own error `crown` (not `routing`); the
 //!   second leg of a paired crown edge has the record id
 //!   `PAIRED_LEG_OFFSET + id`, every edge id below the offset.
+//! * Requirement 15 on K1 / K2: the depth check passes the real ε^0-only K2
+//!   records (U7a-EPS0-EVIDENCE) and fails a pole difference.
 
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
@@ -1073,4 +1075,78 @@ fn paired_crown_leg_ids_stay_below_the_offset() {
     let decline = uncontracted::paired_leg_id(4, 100_000).unwrap_err();
     assert_eq!(decline.code, "crown");
     assert!(!decline.designed, "{decline:?}");
+}
+
+// ---------------------------------------------------------------------------
+// Requirement 15 on K1 / K2: the real ε^0-only records
+// ---------------------------------------------------------------------------
+
+/// U7-PLAN requirement 15 for K1 / K2: the needed order of a K1 root or K2
+/// child value is its poles (`valid_order(depth = loops, loops) = -1`: the
+/// consumer adds it with coefficient one, then -K); a first difference
+/// above it passes, at or below it fails. On two of U7a's 158 ε^0-only K2
+/// records as the gated binary dumped them in check mode
+/// (results/consolidation/U7a-EPS0-EVIDENCE/records, byte-identical copies:
+/// L3 016 id 2 sha256 0b0ab27e..., L4 0042 id 4 sha256 95503f38...): the
+/// poles are identical, today's value carries an ε^0 that vakint's (stopping
+/// at ε^-1) does not; the check records `first_difference=eps^0` and passes.
+/// A pole changed by `c/ε` fails at `eps^-1`.
+#[test]
+fn k1_k2_depth_check_on_the_eps0_only_records() -> Result<()> {
+    test_initialise()?;
+    let epsilon = GS.dim_epsilon;
+    for (what, text) in [
+        (
+            "L3 016 id 2",
+            include_str!("testdata/u7a/eps0-L3-016-id2.value.txt"),
+        ),
+        (
+            "L4 0042 id 4",
+            include_str!("testdata/u7a/eps0-L4-0042-id4.value.txt"),
+        ),
+    ] {
+        let field = |key: &str| {
+            text.lines()
+                .find_map(|line| line.strip_prefix(key)?.strip_prefix('\t'))
+                .ok_or_else(|| eyre!("{what}: no {key} line"))
+        };
+        ensure!(field("kind")? == "child" && field("equal")? == "true");
+        let depth = field("depth")?.parse::<usize>()?;
+        // K1 / K2: depth = the remainder's loops, so the order is the poles
+        let order = uncontracted::valid_order(depth, depth);
+        ensure!(order == -1, "{what}: the needed order eps^{order}");
+        let today = parse(field("contracted")?)?;
+        let ours = parse(field("uncontracted")?)?;
+        let check = uncontracted::compare(&today, &ours, epsilon, order, 0.0, 0.0);
+        eprintln!(
+            "U7AD_B {what}: identical={} equal={} full={} first_difference={}",
+            check.identical,
+            check.equal,
+            check.full,
+            check.first_difference.as_text()
+        );
+        ensure!(
+            !check.identical && check.equal && !check.full,
+            "{what}: identical={} equal={} full={} error={:?}",
+            check.identical,
+            check.equal,
+            check.full,
+            check.error
+        );
+        ensure!(
+            check.first_difference == uncontracted::FirstDifference::At(0),
+            "{what}: first difference {}",
+            check.first_difference.as_text()
+        );
+        // a pole changed: fails, at eps^-1
+        let wrong = &ours + Atom::var(symbol!("u7ad_b_pole")) / Atom::var(epsilon);
+        let failed = uncontracted::compare(&today, &wrong, epsilon, order, 0.0, 0.0);
+        ensure!(
+            !failed.equal && failed.first_difference == uncontracted::FirstDifference::At(-1),
+            "{what}: a changed pole: equal={} first difference {}",
+            failed.equal,
+            failed.first_difference.as_text()
+        );
+    }
+    Ok(())
 }
