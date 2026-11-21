@@ -1030,6 +1030,7 @@ pub fn vakint_vacuum_input_streamed(
             vk_symbol!(&settings.epsilon_symbol),
             Some(settings.number_of_terms_in_epsilon_expansion),
         )?;
+        super::check_entry_names(value, prefactor, settings)?;
     }
     value.check_insertion_epsilon(vk_symbol!(&settings.epsilon_symbol).get_name())?;
     let (scalar, seconds, pieces) = match streaming {
@@ -1159,6 +1160,7 @@ pub fn evaluate_factorized_vacuum_streamed(
             vk_symbol!(&settings.epsilon_symbol),
             Some(settings.number_of_terms_in_epsilon_expansion),
         )?;
+        super::check_entry_names(value, prefactor, settings)?;
     }
     // the new record kinds do not depend on the caller's tensor reduction or
     // notation (evaluate::is_new_kind); values accepted before keep them

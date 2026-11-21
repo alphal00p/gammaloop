@@ -390,6 +390,7 @@ pub fn vakint_input(
         vk_symbol!(&settings.epsilon_symbol),
         Some(settings.number_of_terms_in_epsilon_expansion),
     )?;
+    super::check_entry_names(value, prefactor, settings)?;
     value.validate()?;
     check_open_ports(value)?;
     value.check_insertion_epsilon(vk_symbol!(&settings.epsilon_symbol).get_name())?;
@@ -479,6 +480,7 @@ pub fn evaluate_factorized(
             vk_symbol!(&settings.epsilon_symbol),
             Some(settings.number_of_terms_in_epsilon_expansion),
         )?;
+        super::check_entry_names(value, prefactor, settings)?;
     }
     let pinned;
     let settings = if is_new_kind(value) {

@@ -1026,6 +1026,67 @@ pub(crate) fn check_marked_entry(
     Ok(())
 }
 
+/// IDENTIFIERS of a marked value at an entry (where the settings are known):
+/// a symbol or function head whose name has a character outside ASCII is
+/// refused (`Graph`, detail prefix `a non-ASCII name `) unless it is the
+/// settings' epsilon, the settings' scale symbol or one of Symbolica's own
+/// symbols (`symbolica::…`: 𝜋, 𝑒); the imaginary unit 𝑖 is a number. A
+/// lookalike of the epsilon (ϵ, 𝜀, 𝜖, or ε in another namespace) is thereby
+/// refused instead of being read as a constant. A no-op for an unmarked value.
+pub(crate) fn check_entry_names(
+    value: &FactorizedNumerator,
+    prefactor: &Atom,
+    settings: &crate::VakintSettings,
+) -> Result<()> {
+    if !is_marked(value) {
+        return Ok(());
+    }
+    let epsilon = crate::utils::vakint_macros::vk_symbol!(&settings.epsilon_symbol);
+    let scale = crate::utils::vakint_macros::vk_symbol!(&settings.mu_r_sq_symbol);
+    let allowed = |name: &str| {
+        name.is_ascii()
+            || name == epsilon.get_name()
+            || name == scale.get_name()
+            || name.starts_with("symbolica::")
+    };
+    let mut atoms = value.record_atoms();
+    atoms.push(("prefactor argument".to_string(), prefactor));
+    for (field, atom) in atoms {
+        // an insertion: an epsilon spelled ε of another name is the
+        // insertion rule's (section 8, `Insertion`); a lookalike is refused
+        // here with the insertion's variant
+        let insertion = field
+            .strip_prefix("insertion ")
+            .and_then(|rest| rest.split(' ').next())
+            .and_then(|v| v.parse::<usize>().ok());
+        let mut found = None;
+        atom.as_view().visitor(&mut |part| {
+            let name = match part {
+                AtomView::Var(v) => v.get_symbol().get_name().to_string(),
+                AtomView::Fun(f) => f.get_symbol().get_name().to_string(),
+                _ => return true,
+            };
+            let insertion_epsilon = insertion.is_some() && (name == "ε" || name.ends_with("::ε"));
+            if !allowed(&name) && !insertion_epsilon {
+                found = Some(name);
+            }
+            found.is_none()
+        });
+        if let Some(name) = found {
+            let detail = format!(
+                "a non-ASCII name {name} in {field}: outside ASCII only the settings' epsilon {} and scale {} and Symbolica's built-ins (𝜋, 𝑒) are accepted",
+                epsilon.get_name(),
+                scale.get_name()
+            );
+            return Err(match insertion {
+                Some(vertex) => FactorizedError::Insertion { vertex, detail },
+                None => FactorizedError::Graph { detail },
+            });
+        }
+    }
+    Ok(())
+}
+
 /// Whether `value` is a MARKED value (a record kind of the R* interface:
 /// kind closure, insertions, or a v3 direct record), to which the reserved
 /// namespace applies.
@@ -2371,6 +2432,54 @@ impl FactorizedNumerator {
     /// offending atom is reported ([`forbidden_symbol_error`]).
     pub(crate) fn check_reserved_symbols(&self) -> Result<()> {
         self.check_reserved_symbols_except(&[ALLOWED_VAKINT_SYMBOL])
+    }
+
+    /// Every caller atom of the record with its field name (the fields of
+    /// [`Self::check_reserved_symbols_except`]).
+    pub(crate) fn record_atoms(&self) -> Vec<(String, &Atom)> {
+        let mut out = Vec::new();
+        for edge in &self.edges {
+            out.push((format!("edge {} factor", edge.id), &edge.factor));
+            out.push((format!("edge {} mass", edge.id), &edge.mass_squared));
+        }
+        for vertex in &self.vertices {
+            out.push((format!("vertex {} factor", vertex.id), &vertex.factor));
+        }
+        for port in &self.ports {
+            out.push(("ports".to_string(), port));
+        }
+        if let Some(projector) = &self.projector {
+            out.push(("projector".to_string(), &projector.tensor));
+        }
+        out.push(("prefactor_overall".to_string(), &self.prefactor.overall));
+        out.push(("prefactor_scalars".to_string(), &self.prefactor.scalars));
+        out.push(("prefactor_colour".to_string(), &self.prefactor.colour));
+        for insertion in &self.insertions {
+            out.push((
+                format!("insertion {} coefficient", insertion.vertex),
+                &insertion.coefficient,
+            ));
+            out.push((
+                format!("insertion {} factor", insertion.vertex),
+                &insertion.factor,
+            ));
+        }
+        let weights = match (&self.kind, &self.record) {
+            (FactorizedKind::Closure(spec), _) => {
+                out.push(("closure mass".to_string(), &spec.mass_squared));
+                out.push((
+                    "taylor auxiliary mass".to_string(),
+                    &spec.auxiliary_mass_squared,
+                ));
+                spec.weights.as_slice()
+            }
+            (_, Some(record)) => record.weights.as_slice(),
+            _ => &[],
+        };
+        for (name, _, atom) in weights {
+            out.push((format!("weight {name}"), atom));
+        }
+        out
     }
 
     /// [`Self::check_reserved_symbols`] with the exempt `vakint::` names

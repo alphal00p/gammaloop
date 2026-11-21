@@ -1039,7 +1039,6 @@ fn p5_line_ends_bom_trailing_whitespace_final_newline() {
 /// (U+03B5): refused (v1.4 §8 "an eps symbol other than the settings'
 /// epsilon_symbol: Insertion / Evaluation"), never a constant.
 #[test]
-#[ignore = "finding F-2: epsilon spelled U+1D700 / U+1D716 is accepted as a constant"]
 fn p5_other_spellings_of_epsilon() {
     let clean = fixture_text("wh-k2-child-ins.record.txt");
     let mut findings = Vec::new();
@@ -1151,19 +1150,62 @@ fn p5_sections_and_numbers() {
     assert!(findings.is_empty(), "{}", findings.join("\n\n"));
 }
 
-/// Non-ASCII names in a namespace-qualified caller symbol: accepted with
-/// the same value up to the renaming.
+/// G1: a non-ASCII name in a namespace-qualified caller symbol is refused at
+/// the entry (outside ASCII only the settings' epsilon and scale and
+/// Symbolica's built-ins), never read as a constant; the ASCII twin is
+/// accepted.
 #[test]
 fn p5_non_ascii_names() {
     let clean = fixture_text("wh-k1-root.record.txt");
     let variant = clean.replace("UFO::{}::gs_minus", "UFO::{}::gs_mïnüs");
     assert_ne!(variant, clean);
-    let base = FactorizedNumerator::from_text(&clean).unwrap();
     let v = FactorizedNumerator::from_text(&variant).unwrap();
-    let renamed = value(&base, &symbolic())
-        .replace(atom("UFO::gs_minus"))
-        .with(atom("UFO::gs_mïnüs"));
-    assert_same(&value(&v, &symbolic()), &renamed, "non-ASCII name");
+    match closure(&v, &symbolic(), &v.prefactor.total()) {
+        Err(FactorizedError::Graph { detail }) => assert!(
+            detail.starts_with("a non-ASCII name UFO::gs_mïnüs in vertex "),
+            "{detail}"
+        ),
+        other => panic!("non-ASCII name: {other:?}"),
+    }
+    let ascii = FactorizedNumerator::from_text(
+        &clean.replace("UFO::{}::gs_minus", "UFO::{}::gs_minus_ascii"),
+    )
+    .unwrap();
+    closure(&ascii, &symbolic(), &ascii.prefactor.total()).unwrap();
+}
+
+/// G1: an epsilon of the right spelling in ANOTHER namespace (`probe::ε`) in
+/// a vertex factor is not the settings' epsilon: refused at the entry; the
+/// settings' own `gammalooprs::ε` there is accepted (and the value differs
+/// from the plain one only by that factor).
+#[test]
+fn g1_an_epsilon_of_another_namespace_is_refused() {
+    let base = record("wh-k1-root");
+    let mut v = base.clone();
+    let vertex = v
+        .vertices
+        .iter_mut()
+        .find(|x| x.factor != Atom::num(1))
+        .unwrap();
+    vertex.factor = &vertex.factor * atom("1+probe::ε");
+    let id = vertex.id;
+    match closure(&v, &symbolic(), &v.prefactor.total()) {
+        Err(FactorizedError::Graph { detail }) => assert!(
+            detail.starts_with(&format!(
+                "a non-ASCII name probe::ε in vertex {id} factor: "
+            )),
+            "{detail}"
+        ),
+        other => panic!("probe::ε: {other:?}"),
+    }
+    let mut ok = base.clone();
+    let vertex = ok
+        .vertices
+        .iter_mut()
+        .find(|x| x.factor != Atom::num(1))
+        .unwrap();
+    vertex.factor = &vertex.factor * atom(&format!("1+{EPS}"));
+    closure(&ok, &symbolic(), &ok.prefactor.total()).unwrap();
 }
 
 /// The direct / ports entry for a marked K5 direct record: z in the argument
