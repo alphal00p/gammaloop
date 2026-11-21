@@ -30,8 +30,11 @@
 //!   the diagram (on in the tests and the gate runs). Unknown master
 //!   coefficients are a hard error (the format: an ALARM fails the diagram).
 //! * Check: our attempt first (it changes no state), then today's path; the
-//!   pole parts are compared algebraically (`UNCONTRACTED_CHECK`); a
-//!   difference fails the diagram, and so does an error outcome (a designed
+//!   parts through the record's order (the poles for K1 / K2, `ε^(extra-1)`
+//!   for K3) are compared algebraically (`UNCONTRACTED_CHECK`, which also
+//!   records the record's depth, that order and the order of the first
+//!   difference: U7-PLAN requirement 15); a difference at or below that
+//!   order fails the diagram, and so does an error outcome (a designed
 //!   refusal is the only way a record goes uncompared); today's value is
 //!   returned. Check-mode times are NOT a timing comparison (our attempt runs
 //!   first and warms vakint's caches): use paired off / on runs.
@@ -1029,6 +1032,11 @@ pub(super) struct Check {
     pub equal: bool,
     /// The whole values agree (informational: ε^0 pieces are incomplete).
     pub full: bool,
+    /// The lowest Laurent order at which the values differ (U7-PLAN
+    /// requirement 15, the built-in depth check): recorded for every
+    /// `identical=false` comparison; at or below the compared order it fails
+    /// the check.
+    pub first_difference: FirstDifference,
     pub contracted: Atom,
     pub contracted_seconds: f64,
     pub uncontracted_seconds: f64,
@@ -1036,10 +1044,79 @@ pub(super) struct Check {
     pub error: Option<String>,
 }
 
+/// The lowest Laurent order at which today's value and ours differ.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum FirstDifference {
+    /// The values agree in full (or are identical).
+    None,
+    /// The lowest order `ε^k` whose parts through it differ.
+    At(i64),
+    /// They differ only above `ε^k`, the last order scanned.
+    Above(i64),
+}
+
+impl FirstDifference {
+    /// The `first_difference=` value of the check line: `none`, `eps^k` or
+    /// `above:eps^k`.
+    pub(crate) fn as_text(self) -> String {
+        match self {
+            Self::None => "none".to_owned(),
+            Self::At(order) => format!("eps^{order}"),
+            Self::Above(order) => format!("above:eps^{order}"),
+        }
+    }
+}
+
+/// The orders scanned above the compared one for the first difference of two
+/// values that agree through it (a record's value carries at most a few more).
+const FIRST_DIFFERENCE_SCAN: i64 = 8;
+
 /// The Laurent part through ε^order (the pole part, as `Evaluation::poles`,
 /// for `order = -1`).
 pub(super) fn through(value: &Atom, epsilon: Symbol, order: i64) -> Result<Atom> {
     Ok(value.series(epsilon, 0, order)?.to_atom().expand())
+}
+
+/// The lowest order at which `today` and `ours` (not equal in full) differ:
+/// above `order` when they agree through it (`equal`), else from the lowest
+/// order of their expanded difference (below which every part agrees term by
+/// term), each order by [`through`] and [`agree`].
+fn first_difference(
+    today: &Atom,
+    ours: &Atom,
+    epsilon: Symbol,
+    order: i64,
+    equal: bool,
+) -> Result<FirstDifference> {
+    let start = if equal {
+        order + 1
+    } else {
+        let difference = (today - ours).expand();
+        let series = difference.series(
+            epsilon,
+            0,
+            symbolica::poly::series::SeriesDepth::relative(1),
+        )?;
+        if series.is_zero() {
+            order + 1
+        } else {
+            let exponent = series.get_trailing_exponent();
+            exponent
+                .is_integer()
+                .then(|| exponent.numerator().to_i64())
+                .flatten()
+                .map_or(order - FIRST_DIFFERENCE_SCAN, |trailing| {
+                    trailing.min(order + 1)
+                })
+        }
+    };
+    let end = order + FIRST_DIFFERENCE_SCAN;
+    for k in start..=end {
+        if !agree(&through(today, epsilon, k)?, &through(ours, epsilon, k)?)? {
+            return Ok(FirstDifference::At(k));
+        }
+    }
+    Ok(FirstDifference::Above(end))
 }
 
 /// Whether two values agree after expansion, `together` and the tensor
@@ -1080,10 +1157,22 @@ pub(super) fn compare(
             }
         };
     let full = identical || agree(today, ours).unwrap_or(false);
+    // requirement 15: the order of the first difference of every
+    // identical=false comparison; at or below `order` the check fails
+    let first = if full {
+        FirstDifference::None
+    } else {
+        first_difference(today, ours, epsilon, order, equal).unwrap_or_else(|e| {
+            error.get_or_insert_with(|| format!("first difference: {e:#}"));
+            FirstDifference::Above(order)
+        })
+    };
+    let equal = equal && !matches!(first, FirstDifference::At(k) if k <= order);
     Check {
         identical,
         equal,
         full,
+        first_difference: first,
         contracted: today.clone(),
         contracted_seconds,
         uncontracted_seconds,
@@ -1100,11 +1189,13 @@ pub(super) fn check_failure(attempt: &Attempt, check: &Check, epsilon: Symbol) -
             .unwrap_or_else(|e| format!("error:{e:#}"))
     };
     eyre!(
-        "UNCONTRACTED_CHECK: kind={} graph={} id={}: the uncontracted value differs from the contracted one through eps^{}{}\ncontracted: {}\nuncontracted: {}",
+        "UNCONTRACTED_CHECK: kind={} graph={} id={}: the uncontracted value differs from the contracted one through eps^{} (depth {}, first difference {}){}\ncontracted: {}\nuncontracted: {}",
         attempt.kind.as_str(),
         attempt.graph,
         attempt.id,
         attempt.order,
+        attempt.depth,
+        check.first_difference.as_text(),
         check
             .error
             .as_ref()
@@ -1321,7 +1412,7 @@ pub(super) fn report(attempt: &Attempt, check: Option<&Check>) {
     tally(attempt, check);
     if let Some(check) = check {
         eprintln!(
-            "UNCONTRACTED_CHECK kind={} graph={} id={} identical={} equal={} full={} contracted_s={:.3} uncontracted_s={:.3}",
+            "UNCONTRACTED_CHECK kind={} graph={} id={} identical={} equal={} full={} contracted_s={:.3} uncontracted_s={:.3} depth={} valid_through=eps^{} first_difference={}",
             attempt.kind.as_str(),
             attempt.graph,
             attempt.id,
@@ -1329,7 +1420,10 @@ pub(super) fn report(attempt: &Attempt, check: Option<&Check>) {
             check.equal,
             check.full,
             check.contracted_seconds,
-            check.uncontracted_seconds
+            check.uncontracted_seconds,
+            attempt.depth,
+            attempt.order,
+            check.first_difference.as_text()
         );
     }
     dump(attempt, check);
@@ -1378,6 +1472,10 @@ pub(super) fn value_text(attempt: &Attempt, check: Option<&Check>) -> String {
     if let Some(check) = check {
         lines.push(format!("identical\t{}", check.identical));
         lines.push(format!("equal\t{}", check.equal));
+        lines.push(format!(
+            "first_difference\t{}",
+            check.first_difference.as_text()
+        ));
     }
     if let Outcome::Declined(decline) | Outcome::Error(decline) = &attempt.outcome {
         lines.push(format!("detail\t{}", escape(&decline.detail)));
@@ -1463,6 +1561,7 @@ pub(crate) struct Captured {
     pub contracted: Option<Atom>,
     pub identical: Option<bool>,
     pub equal: Option<bool>,
+    pub first_difference: Option<FirstDifference>,
     pub conserved: usize,
     /// The remainder loops, the depth and the order through which the value
     /// is complete.
@@ -1490,6 +1589,7 @@ fn capture(attempt: &Attempt, check: Option<&Check>) {
                 contracted: check.map(|check| check.contracted.clone()),
                 identical: check.map(|check| check.identical),
                 equal: check.map(|check| check.equal),
+                first_difference: check.map(|check| check.first_difference),
                 conserved: attempt.conserved,
                 loops: attempt.loops,
                 depth: attempt.depth,

@@ -329,6 +329,24 @@ fn expect_outcomes(
                         attempt.id,
                         attempt.equal
                     );
+                    // requirement 15: an identical=false record records its
+                    // first difference (none: a respelling), above the
+                    // record's order
+                    use uncontracted::FirstDifference;
+                    let first = attempt.first_difference;
+                    let recorded = match (attempt.identical, first) {
+                        (Some(_), Some(FirstDifference::None)) => true,
+                        (Some(false), Some(FirstDifference::At(k))) => k > attempt.order,
+                        _ => false,
+                    };
+                    ensure!(
+                        recorded,
+                        "{what}: {} id {} first difference {first:?} with identical={:?} order {}",
+                        attempt.kind.as_str(),
+                        attempt.id,
+                        attempt.identical,
+                        attempt.order
+                    );
                 }
             }
             outcome => {
@@ -2231,6 +2249,29 @@ fn k3_check_compares_through_its_order() {
     assert!(!order0.equal, "a different eps^0 part");
     let beyond = uncontracted::compare(&today, &higher, epsilon(), 0, 0.0, 0.0);
     assert!(beyond.equal, "eps^1 is beyond the order");
+    // requirement 15: the order of the first difference, recorded for every
+    // identical=false comparison; at or below the order it fails the check
+    use uncontracted::FirstDifference;
+    assert_eq!(poles.first_difference, FirstDifference::At(0));
+    assert_eq!(order0.first_difference, FirstDifference::At(0));
+    assert_eq!(beyond.first_difference, FirstDifference::At(1));
+    let pole = &(Atom::num(2) * &a) / &e + Atom::num(3) + Atom::num(5) * &e;
+    let wrong = uncontracted::compare(&today, &pole, epsilon(), 0, 0.0, 0.0);
+    assert!(!wrong.equal);
+    assert_eq!(wrong.first_difference, FirstDifference::At(-1));
+    let same = uncontracted::compare(&today, &today, epsilon(), 0, 0.0, 0.0);
+    assert!(same.identical && same.equal);
+    assert_eq!(same.first_difference, FirstDifference::None);
+    let respelled = &(&a / &e) + Atom::num(5) * &e + Atom::num(3);
+    let spelled = uncontracted::compare(&today, &respelled.expand(), epsilon(), 0, 0.0, 0.0);
+    assert!(spelled.equal && spelled.full);
+    assert_eq!(spelled.first_difference, FirstDifference::None);
+    // a value that stops at the compared order (vakint's) against one with
+    // one more order (today's): equal, the difference above the order
+    let short = &a / &e + Atom::num(3);
+    let stops = uncontracted::compare(&today, &short, epsilon(), 0, 0.0, 0.0);
+    assert!(stops.equal && !stops.full);
+    assert_eq!(stops.first_difference, FirstDifference::At(1));
 }
 
 /// k3-hs: the open gluonic hard part h_s of L3 36 (correction 0, term 0,
