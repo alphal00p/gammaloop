@@ -2682,3 +2682,23 @@ pub(crate) fn record_compared_unequal(kind: Kind) {
         counts.add("compared", 1);
     });
 }
+
+/// The expected records of `kind` in the innermost frame of this thread (0
+/// outside every frame): a K5 site compares it before and after its
+/// surrogate's evaluation (one surrogate's missed records cannot hide behind
+/// another's; pre-review of U7c, finding 4).
+pub(super) fn expected_now(kind: Kind) -> usize {
+    FRAMES
+        .try_with(|frames| {
+            frames
+                .try_borrow()
+                .ok()
+                .and_then(|frames| {
+                    frames
+                        .last()
+                        .map(|frame| frame.counts.get(&kind).map_or(0, |c| c.expected))
+                })
+                .unwrap_or(0)
+        })
+        .unwrap_or(0)
+}

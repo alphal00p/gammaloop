@@ -73,6 +73,14 @@ slow-timeout = { period = "60s", terminate-after = 15 }
 retries = 0
 
 [[profile.default.overrides]]
+# U7c (K5): whole L5 surrogates through the evaluator in off, check and on
+# mode (the multi-loop-hole set: 54 s on eight test threads; L5 3793: 73 s,
+# L5 22807: ignored, minutes); per test, no retry, fifteen minutes.
+filter = "test(/^uv::rstar::uncontracted_k5_tests::k5_l5_/)"
+slow-timeout = { period = "60s", terminate-after = 15 }
+retries = 0
+
+[[profile.default.overrides]]
 # Mark integration tests as slow
 filter = "test(integration)"
 test-group = "integration"

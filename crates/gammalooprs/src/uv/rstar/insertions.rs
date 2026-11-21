@@ -622,7 +622,7 @@ impl PropagatorInsertionEvaluator {
                 );
             }
             // U7c: the surrogate's records (kind surrogate; off: just the call)
-            super::uncontracted::k5::scoped(prepared.k5.as_ref(), &graph.name, || {
+            super::uncontracted::k5::scoped(prepared.k5.as_ref(), &graph.name, closed, &self.settings, || {
                 super::expression::in_dressed_scope(|| {
                     if closed {
                         plan.closed_pole_part(&graph, surrogate.model(), vakint, &self.settings)
