@@ -946,6 +946,121 @@ fn k5_run_with_zero_comparisons_fails() -> Result<()> {
     })
 }
 
+/// U7c delta pre-review N1 (BLOCKING): RunTally's diagram rule ("the
+/// counterterm is nonzero, and no record of any kind was compared / taken")
+/// holds for the DEFAULT kind lists (`check`, `on`) and for every list that
+/// holds the default kinds, with or without `surrogate` (a kind built only
+/// when listed). Base 292b5362a7 applied it to `check` / `on`; U7c d5070e583
+/// had switched it off for every list without `surrogate`. A partial list
+/// (not every default kind) keeps only the kind-level rule, as on the base.
+#[test]
+fn k5_tally_diagram_rule_holds_for_the_default_kind_lists() -> Result<()> {
+    let run = |value: &str| -> Result<Vec<String>> {
+        let switch = Switch::parse(Some(value)).map_err(|error| eyre!(error))?;
+        with_switch(switch, || -> Result<Vec<String>> {
+            let mut tally = RunTally::new().ok_or_else(|| eyre!("no tally"))?;
+            // a diagram whose records all missed their hooks: nothing
+            // expected in any kind, its counterterm nonzero
+            let ledger =
+                DiagramLedger::open("n1-empty", "k5-test").ok_or_else(|| eyre!("no ledger"))?;
+            let evidence = ledger.close(true)?;
+            tally.add("n1/000001", evidence.as_ref(), true);
+            // another diagram compares (takes) one record of every enabled kind
+            let ledger =
+                DiagramLedger::open("n1-full", "k5-test").ok_or_else(|| eyre!("no ledger"))?;
+            for kind in switch.enabled_kinds() {
+                uncontracted_ledger::expect(kind);
+                uncontracted_ledger::record_value(kind, switch.mode);
+            }
+            let evidence = ledger.close(true)?;
+            tally.add("n1/000002", evidence.as_ref(), true);
+            Ok(tally.failures())
+        })
+    };
+    for value in [
+        "check",
+        "on",
+        "1",
+        "check:root,child,ir-hard",
+        "on:root,child,ir-hard,quotient",
+        "check:root,child,ir-hard,surrogate",
+        "on:a,b,c,e",
+    ] {
+        let verb = if value.starts_with("check") {
+            "compared"
+        } else {
+            "taken"
+        };
+        let failures = run(value)?;
+        ensure!(
+            failures
+                == vec![format!(
+                    "n1/000001: the counterterm is nonzero, and no record of any kind was {verb}"
+                )],
+            "{value}: {failures:#?}"
+        );
+    }
+    for value in ["check:ir-hard", "on:root,surrogate", "check:surrogate"] {
+        let failures = run(value)?;
+        ensure!(
+            failures.is_empty(),
+            "{value} (a partial list): {failures:#?}"
+        );
+    }
+    Ok(())
+}
+
+/// The base's run-tally test with `surrogate` LISTED in addition to the
+/// default kinds (the variant U7c had edited the base's test into; the base's
+/// own test stands unchanged): a nonzero diagram with nothing compared in any
+/// kind fails the run, a surrogate kind that compared nothing fails it.
+#[test]
+fn k5_tally_with_surrogate_listed() -> Result<()> {
+    test_initialise()?;
+    let check = Switch::new(
+        Mode::Check,
+        &[Kind::Root, Kind::Child, Kind::IrHard, Kind::Surrogate],
+    );
+    let kind = |compared: usize| {
+        serde_json::json!({"expected": compared, "attempted": compared, "uncontracted": compared,
+                           "zero": 0, "equal": compared,
+                           "classes": if compared > 0 { serde_json::json!({"compared": compared}) } else { serde_json::json!({}) },
+                           "outcome": "ok"})
+    };
+    with_switch(check, || -> Result<()> {
+        let identity = uncontracted_ledger::current_identity();
+        let evidence = |graph: &str, root: usize, surrogate: usize| {
+            serde_json::json!({
+                "schema": uncontracted_ledger::EVIDENCE_SCHEMA, "identity": identity, "graph": graph,
+                "diagram": "000001", "outcome": "ok", "inert": {},
+                "kinds": {"root": kind(root), "child": kind(root), "ir-hard": kind(root),
+                          "surrogate": kind(surrogate)},
+            })
+        };
+        let mut tally = RunTally::new().ok_or_else(|| eyre!("no tally"))?;
+        tally.add("g/000001", Some(&evidence("g", 1, 1)), true);
+        ensure!(tally.failures().is_empty(), "{:#?}", tally.failures());
+        tally.add("z/000009", Some(&evidence("z", 0, 0)), true);
+        let failures = tally.failures();
+        ensure!(
+            failures
+                == vec![
+                    "z/000009: the counterterm is nonzero, and no record of any kind was compared"
+                        .to_owned()
+                ],
+            "{failures:#?}"
+        );
+        let mut tally = RunTally::new().ok_or_else(|| eyre!("no tally"))?;
+        tally.add("g/000001", Some(&evidence("g", 1, 0)), true);
+        let failures = tally.failures();
+        ensure!(
+            failures.len() == 1 && failures[0].starts_with("kind surrogate: no record compared"),
+            "{failures:#?}"
+        );
+        Ok(())
+    })
+}
+
 #[test]
 fn k5_surrogate_must_be_listed() {
     for value in ["on", "check", "1"] {
