@@ -5451,7 +5451,6 @@ fn a_128_term_evaluation_finishes() {
 /// (`evaluate_factorized_vacuum`): refused, "exceeds 64 in modulus", within
 /// 20 s (a time-out FAILS the test instead of hanging).
 #[test]
-#[ignore = "expected: a typed marked direct or vacuum value with the vertex factor 1/((1+x)^1000000000 - y) is refused by the exponent bound within 20 s; on 08db06bcf the finiteness check runs first and does not finish"]
 fn a_huge_power_is_refused_before_any_algebra_at_the_direct_and_vacuum_entries() {
     let huge = "1/((1+UFO::x)^1000000000-UFO::y)";
     let (mut direct, settings) = direct_record_and_settings();
@@ -5502,7 +5501,6 @@ fn a_huge_power_is_refused_before_any_algebra_at_the_direct_and_vacuum_entries()
 /// leg of power 2^31 + 1, a vertex id 2^63, a momentum coefficient i64::MIN:
 /// each refused like at the other entries, never a panic or a time-out.
 #[test]
-#[ignore = "expected: at the vacuum entry an edge power above 2^31 (two series edges of power 2^62, an external leg of power 2^31 + 1), a vertex id 2^63 and a momentum coefficient i64::MIN are refused; on 08db06bcf the vacuum entry has none of these bounds"]
 fn the_integer_bounds_hold_at_the_vacuum_entry() {
     use vakint::p_integral::factorized::{Endpoint, FactorizedEdge, FactorizedVertex};
     let base = marked_vacuum_sunrise("caller::m2", "1");
@@ -5582,7 +5580,6 @@ fn the_integer_bounds_hold_at_the_vacuum_entry() {
 /// its refusal is the base's, word for word (dea282615: "text line {line}:
 /// unknown schema {found:?} (this reader knows pint6.factorized-numerator.v1)").
 #[test]
-#[ignore = "expected: an unmarked text with an unknown schema line is refused with the base's message (this reader knows pint6.factorized-numerator.v1); on 08db06bcf the message also names the v3 schema"]
 fn an_unknown_schema_keeps_the_base_message() {
     init();
     let text = fixture_text("l1-gluon-bubble.txt").replacen(
@@ -5846,7 +5843,6 @@ fn data_atoms_taylor_weights_epsilon_and_tensor_rules() {
 /// MZV in an insertion coefficient: MZV(1) and MZV(1, 2) (divergent: the
 /// first argument 1) refused.
 #[test]
-#[ignore = "expected: vakint::MZV(1) and vakint::MZV(1,2) (a first argument 1: divergent) are refused in an insertion coefficient; on 08db06bcf the data-atom shape admits every argument from 1 to 64"]
 fn a_divergent_mzv_is_refused() {
     let k2 = record("wh-k2-child-ins");
     for c in ["vakint::MZV(1)", "vakint::MZV(1,2)"] {
@@ -6005,7 +6001,6 @@ fn an_unknown_atom_is_returned_unchanged_in_numerical_mode() {
 /// The exponent `i64::MIN` of a caller power and the order `i64::MIN` of an
 /// UNKNOWN atom: refused at validation, never a panic.
 #[test]
-#[ignore = "expected: x^(i64::MIN) in a vertex factor and UNKNOWN(master, i64::MIN) in an insertion coefficient are refused at validation; on 08db06bcf both panic (attempt to negate with overflow)"]
 fn the_most_negative_integer_is_refused_without_a_panic() {
     let k1 = record("wh-k1-root");
     let k2 = record("wh-k2-child-ins");
