@@ -2571,6 +2571,52 @@ pub(super) fn settings_refusal(
     Ok(())
 }
 
+/// A paired crown edge of a K2 / K3 record: graph edge `edge` with both ends
+/// in the scope, emitted as its outgoing leg `edge` (at `source_hedge`) and
+/// its incoming leg `incoming` = [`paired_leg_id`] (at `sink_hedge`), both
+/// with the edge's momentum.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct PairedCrown {
+    pub(super) edge: usize,
+    pub(super) source_hedge: usize,
+    pub(super) incoming: usize,
+    pub(super) sink_hedge: usize,
+}
+
+/// The Δ of the `ct:` node `node` with the momentum of every paired crown
+/// edge whose INCOMING leg (and not its outgoing one) sits on that node
+/// written as that leg's momentum: `Q(e, ..)` -> `Q(PAIRED_LEG_OFFSET + e, ..)`
+/// (`ends`: the record's (vertex, half-edge) incidences).
+///
+/// The Δ cache restores a counterterm in the momenta of its support's
+/// boundary edges in the GRAPH, where a crown edge `e` keeps its own id at
+/// both ends; the record splits it into two legs, and vakint's insertion
+/// entry accepts only the momenta of the legs on the insertion's vertex.
+/// Both legs carry `e`'s momentum in `e`'s orientation (into its sink), so
+/// the rename is exact. Which boundary momenta a cached Δ uses is the
+/// FILLER's choice (a vertex counterterm is linear in any two of its three
+/// boundary momenta): a Δ filled by another graph may avoid `Q(e)`, the same
+/// Δ filled by this graph may not (L5 101213 / 102671 run alone,
+/// `error:vakint:UnsupportedTensor` "Q(7 | 8, ..) (not a boundary momentum of
+/// the insertion)" on the insertion at vertex 6; the set compared).
+pub(super) fn crown_legs_at_node(
+    delta: &Atom,
+    node: usize,
+    ends: &[(usize, usize)],
+    crowns: &[PairedCrown],
+) -> Atom {
+    let at = |hedge: usize| ends.iter().any(|(v, h)| *v == node && *h == hedge);
+    let mut delta = delta.clone();
+    for crown in crowns {
+        if at(crown.sink_hedge) && !at(crown.source_hedge) {
+            delta = delta
+                .replace(function!(GS.emr_mom, crown.edge, W_.x___))
+                .with(function!(GS.emr_mom, crown.incoming, W_.x___));
+        }
+    }
+    delta
+}
+
 /// The record of one K1 root or K2 child remainder (`Ok(None)`: a zero
 /// insertion).
 fn build(
@@ -2761,6 +2807,9 @@ fn build(
     let mut edges = Vec::new();
     let mut ends = Vec::<(usize, usize)>::new();
     let mut legs = BTreeSet::new();
+    // the paired crown edges: (edge id, its outgoing leg's crown half-edge,
+    // its incoming leg's record id and crown half-edge)
+    let mut paired_crowns = Vec::<PairedCrown>::new();
     for (pair, edge, _) in graph.iter_edges_of(&region.boundary) {
         let id = usize::from(edge);
         let info = &table[&id];
@@ -2779,10 +2828,14 @@ fn build(
                 Flow::Source => vec![(id, source, false)],
             },
             HedgePair::Paired { source, sink } if independent => {
-                vec![
-                    (id, source, false),
-                    (paired_leg_id(id, last_edge)?, sink, true),
-                ]
+                let incoming = paired_leg_id(id, last_edge)?;
+                paired_crowns.push(PairedCrown {
+                    edge: id,
+                    source_hedge: usize::from(source),
+                    incoming,
+                    sink_hedge: usize::from(sink),
+                });
+                vec![(id, source, false), (incoming, sink, true)]
             }
             _ => {
                 return Err(Decline::new(
@@ -2898,6 +2951,7 @@ fn build(
         let mut delta = delta.clone();
         #[cfg(test)]
         insertion_hook(kind, *node, &mut delta, &mut edges);
+        delta = crown_legs_at_node(&delta, *node, &ends, &paired_crowns);
         if mentions_mass(&delta, &masses) {
             // a misrouted node is an error (`?`), never the mass refusal
             match conserve(&delta, *node, &edges, conserved_components)? {
