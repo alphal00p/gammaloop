@@ -57,6 +57,9 @@ mod taylor;
 mod tests;
 mod top_mass;
 mod uncontracted;
+mod uncontracted_ledger;
+#[cfg(test)]
+mod uncontracted_ledger_tests;
 #[cfg(test)]
 mod uncontracted_oracle_k2_tests;
 #[cfg(test)]
@@ -139,4 +142,5 @@ pub use top_mass::{
     split_enabled as top_mass_split_enabled, top_level_switches_line,
     top_level_switches_provenance, top_mass_terms, validate_top_level_switches,
 };
+pub use uncontracted_ledger::DiagramLedger;
 pub use uv::MassiveUvEvaluator;
