@@ -2185,7 +2185,8 @@ fn insertion_cycles_count_towards_original_cycles_at_most() {
 /// through valid_through, its seconds printed beside the RR_CONTRACT of
 /// meta.json. Heavy (five-loop reductions): runs only when
 /// `VAKINT_TEST_WH_K1_L5` names a graph directory (e.g. .../k1-l5/L5-60), with
-/// the 1-4 loop package of `VAKINT_TEST_P_LIBRARY_1_4`.
+/// the 1-4 loop package of `VAKINT_TEST_P_LIBRARY_1_4`;
+/// `VAKINT_TEST_WH_K1_L5_INSERTIONS_ONLY` skips the records without insertions.
 #[test]
 fn the_beta_k1_l5_records_equal_their_values() {
     let Some(root) = std::env::var_os("VAKINT_TEST_WH_K1_L5") else {
@@ -2217,6 +2218,15 @@ fn the_beta_k1_l5_records_equal_their_values() {
         let value_text = std::fs::read_to_string(record.join("value.txt")).unwrap();
         let value = FactorizedNumerator::from_text(&input)
             .unwrap_or_else(|e| panic!("{}: {e}", record.display()));
+        if value.insertions.is_empty()
+            && std::env::var_os("VAKINT_TEST_WH_K1_L5_INSERTIONS_ONLY").is_some()
+        {
+            eprintln!(
+                "K1_L5 {} SKIP: no insertion (VAKINT_TEST_WH_K1_L5_INSERTIONS_ONLY)",
+                record.display()
+            );
+            continue;
+        }
         let meta = std::fs::read_to_string(record.join("meta.json")).unwrap_or_default();
         let their_seconds = meta
             .split("\"rr_contract_seconds\": ")
