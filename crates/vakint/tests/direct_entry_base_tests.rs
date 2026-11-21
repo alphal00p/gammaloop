@@ -291,6 +291,9 @@ fn a_port_only_in_the_projector_is_refused() {
     }
 }
 
+/// A section's count line rewritten with a given count.
+type LineEdit = Box<dyn Fn(&str) -> String>;
+
 /// PRE-EXISTING (the base aborted here too): a declared count of the base's
 /// own sections (loops, externals, edges, vertices, ports) is no allocation
 /// size either; each huge count of a v1 text is a section refusal.
@@ -298,7 +301,7 @@ fn a_port_only_in_the_projector_is_refused() {
 fn huge_counts_of_the_base_sections_are_refused_not_allocated() {
     let text = rank(1);
     assert!(FactorizedNumerator::parse_text(&text).is_ok());
-    let edits: [(&str, &str, Box<dyn Fn(&str) -> String>); 5] = [
+    let edits: [(&str, &str, LineEdit); 5] = [
         (
             "loops",
             "momenta\tloops=1\texternals=1",
