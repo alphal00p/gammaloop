@@ -274,51 +274,48 @@ pub(crate) enum HoleCut {
     Decline,
 }
 
-static HOLE_CUT: std::sync::LazyLock<std::result::Result<HoleCut, String>> =
-    std::sync::LazyLock::new(|| {
-        let value = std::env::var(HOLE_CUT_VARIABLE).ok();
-        let mode = match value.as_deref().map(str::trim) {
-            None | Some("" | "decline") => HoleCut::Decline,
-            Some("auto") => {
-                if reader_accepts_single_hedge() {
-                    HoleCut::Form
-                } else {
-                    HoleCut::Decline
-                }
-            }
-            Some("form") => HoleCut::Form,
-            Some(other) => {
-                return Err(format!(
-                    "{HOLE_CUT_VARIABLE} must be decline (the default), form or auto, not `{other}`"
-                ));
-            }
-        };
-        if switch().mode != Mode::Off && switch().enabled(Kind::Surrogate) {
-            eprintln!(
-                "UNCONTRACTED_K5_HOLE_CUT mode={} reader_single_hedge={}",
-                match mode {
-                    HoleCut::Form => "form",
-                    HoleCut::Decline => "decline",
-                },
-                reader_accepts_single_hedge()
-            );
-        }
-        Ok(mode)
-    });
+/// The hole-cut mode of the value `value` of [`HOLE_CUT_VARIABLE`] (`None`:
+/// unset): resolved ONCE, at the switch's initialisation (an `Err` refuses
+/// the run at start-up; U7c delta pre-review N3). `probe`: whether `auto`
+/// may probe the reader (the kind `surrogate` enabled); without it `auto`
+/// stands for `decline` (the mode is then never used).
+pub(crate) fn parse_hole_cut(
+    value: Option<&str>,
+    probe: bool,
+) -> std::result::Result<HoleCut, String> {
+    match value.map(str::trim) {
+        None | Some("" | "decline") => Ok(HoleCut::Decline),
+        Some("auto") => Ok(if probe && reader_accepts_single_hedge() {
+            HoleCut::Form
+        } else {
+            HoleCut::Decline
+        }),
+        Some("form") => Ok(HoleCut::Form),
+        Some(other) => Err(format!(
+            "{HOLE_CUT_VARIABLE} must be decline (the default), form or auto, not `{other}`"
+        )),
+    }
+}
+
+/// The name of a hole-cut mode (identity, cache key, lines).
+pub(crate) fn hole_cut_name(mode: HoleCut) -> &'static str {
+    match mode {
+        HoleCut::Form => "form",
+        HoleCut::Decline => "decline",
+    }
+}
 
 thread_local! {
     static TEST_HOLE_CUT: std::cell::Cell<Option<HoleCut>> = const { std::cell::Cell::new(None) };
 }
 
-/// The mode in force (a test's, or the environment's; a bad value panics at
-/// the first use, as the other switches of the uncontracted records do).
+/// The mode in force: a test's, or the environment's, resolved at the
+/// switch's initialisation ([`parse_hole_cut`]); it is part of the resume
+/// identity and of the Δ-cache key inside a surrogate's R*.
 pub(crate) fn hole_cut() -> HoleCut {
     TEST_HOLE_CUT
         .with(std::cell::Cell::get)
-        .unwrap_or_else(|| match &*HOLE_CUT {
-            Ok(mode) => *mode,
-            Err(error) => panic!("{error}"),
-        })
+        .unwrap_or_else(super::environment_hole_cut)
 }
 
 /// Tests: run `f` with the hole-cut mode `mode` on this thread.

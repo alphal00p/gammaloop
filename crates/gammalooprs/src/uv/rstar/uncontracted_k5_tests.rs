@@ -1090,9 +1090,11 @@ fn k5_inert_cache_key_with_surrogate_enabled() {
             Some("#uncontracted=surrogate#uncontracted-inert=child")
         );
         in_dressed_scope(|| {
+            // since the delta pre-review N3 the key inside the surrogate's
+            // R* also carries the hole-cut mode (the default here)
             assert_eq!(
                 uncontracted::cache_key_suffix().as_deref(),
-                Some("#uncontracted=surrogate")
+                Some("#uncontracted=surrogate#k5-hole-cut=decline")
             );
         });
     });
@@ -2308,4 +2310,69 @@ fn k5_contracted_cut_quark_holes_are_never_emitted() -> Result<()> {
         );
         Ok(())
     })
+}
+
+/// U7c delta pre-review N3 (start-up and Delta-cache key): the hole-cut
+/// mode is resolved at the switch's initialisation (a bad value is an error
+/// there, not a panic mid-run), and inside a surrogate's R* it is part of the
+/// Delta-cache key: a fill of one mode never serves the other. Outside the
+/// surrogate scope, and without `surrogate` enabled, the keys are the base's.
+#[test]
+fn k5_hole_cut_mode_is_resolved_at_start_up_and_in_the_cache_key() -> Result<()> {
+    use k5::{HoleCut, parse_hole_cut, with_hole_cut};
+    // start-up parsing
+    for (value, mode) in [
+        (None, HoleCut::Decline),
+        (Some(""), HoleCut::Decline),
+        (Some("decline"), HoleCut::Decline),
+        (Some(" form "), HoleCut::Form),
+    ] {
+        ensure!(parse_hole_cut(value, true) == Ok(mode), "{value:?}");
+    }
+    // this build's reader accepts the single-hedge form: auto probes it only
+    // with the kind enabled
+    ensure!(parse_hole_cut(Some("auto"), true) == Ok(HoleCut::Form));
+    ensure!(parse_hole_cut(Some("auto"), false) == Ok(HoleCut::Decline));
+    let error = parse_hole_cut(Some("froms"), true).expect_err("a typo is refused");
+    ensure!(error.contains(k5::HOLE_CUT_VARIABLE), "{error}");
+    // Delta-cache key
+    let key = |switch: Switch, mode: HoleCut, inside: bool| {
+        with_switch(switch, || {
+            with_hole_cut(mode, || {
+                if inside {
+                    in_dressed_scope(uncontracted::cache_key_suffix)
+                } else {
+                    uncontracted::cache_key_suffix()
+                }
+            })
+        })
+    };
+    for (switch, inside_decline, inside_form, outside) in [
+        (
+            on_surrogate(),
+            "#uncontracted=surrogate#k5-hole-cut=decline",
+            "#uncontracted=surrogate#k5-hole-cut=form",
+            Some("#uncontracted=surrogate#uncontracted-inert=child"),
+        ),
+        (
+            check_surrogate(),
+            "#k5-hole-cut=decline",
+            "#k5-hole-cut=form",
+            Some("#uncontracted-inert=child"),
+        ),
+    ] {
+        ensure!(key(switch, HoleCut::Decline, true).as_deref() == Some(inside_decline));
+        ensure!(key(switch, HoleCut::Form, true).as_deref() == Some(inside_form));
+        for mode in [HoleCut::Decline, HoleCut::Form] {
+            ensure!(key(switch, mode, false).as_deref() == outside, "{mode:?}");
+        }
+    }
+    let default_on = Switch::parse(Some("on")).map_err(|error| eyre!(error))?;
+    for mode in [HoleCut::Decline, HoleCut::Form] {
+        ensure!(
+            key(default_on, mode, true) == key(default_on, HoleCut::Decline, true),
+            "the default key depends on the hole-cut mode"
+        );
+    }
+    Ok(())
 }
