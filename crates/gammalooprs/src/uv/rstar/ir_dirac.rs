@@ -546,29 +546,37 @@ pub(crate) fn diagnostic_failure(report: eyre::Report) -> eyre::Report {
     eyre::Report::new(DiagnosticFailure(format!("{report:#}")))
 }
 
-/// Whether `report` carries a [`DiagnosticFailure`].
+/// Whether `report` carries a [`DiagnosticFailure`], also one replayed by the
+/// counterterm cache (its [`crate::uv::counterterm_cache::CachedError`]).
 pub(crate) fn is_diagnostic_failure(report: &eyre::Report) -> bool {
-    report.chain().any(|cause| cause.is::<DiagnosticFailure>())
+    report.chain().any(|cause| {
+        cause.is::<DiagnosticFailure>()
+            || cause
+                .downcast_ref::<crate::uv::counterterm_cache::CachedError>()
+                .is_some_and(|cached| is_diagnostic_failure(cached.cause()))
+    })
 }
 
 /// [`super::closed::guarded`] (`GAMMALOOP_IR_HARD_CHILD_GUARD=1`, the scoped
 /// budget around an IR hard part on the child route): an exhausted budget, a
 /// panic, an ordinary error or a decline of `work` declines (`Ok(Err)`), as
 /// before; a [`DiagnosticFailure`] is returned as the error, so a failed
-/// comparison fails the diagram whether the guard is on or off.
+/// comparison fails the diagram whether the guard is on or off, and so is the
+/// strict IRH-DEPTH alarm (`super::depth::DepthAlarm`, by `guarded` itself).
 pub(super) fn guarded_unless_diagnostic<T>(
     limit: Option<u64>,
     release: Option<fn()>,
     work: impl FnOnce() -> Result<std::result::Result<T, String>>,
 ) -> Result<std::result::Result<T, String>> {
     let mut failure = None;
+    // IRH-DEPTH round 4: `guarded` returns the strict depth alarm as its error
     let outcome = super::closed::guarded(limit, release, || match work() {
         Err(error) if is_diagnostic_failure(&error) => {
             failure = Some(error);
             Ok(Err("diagnostic".to_owned()))
         }
         other => other,
-    });
+    })?;
     match failure {
         Some(error) => Err(error),
         None => Ok(outcome),
