@@ -40,14 +40,35 @@
 //! (attempted, uncontracted, compared, equal, declined and error counts by
 //! code) with the switch on or check.
 //!
-//! Kinds (`root` = K1 root remainders, `child` = K2 UV children, and the
-//! inert `ir-hard`, `quotient`, `surrogate`, `insertion`): the record's kind
-//! is the innermost special scope, else root / child. In this build `root`
-//! and `child` build records (K1: one external folded by σ, the root
-//! closure as projector; K2: every crown edge an independent external, the
-//! closed child's closure as projector or none for an open child).
-//! In mode on the Δ-cache key carries `#uncontracted=<enabled cacheable
-//! kinds>` ([`cache_key_suffix`]; `child` in this build).
+//! Kinds (`root` = K1 root remainders, `child` = K2 UV children, `ir-hard` =
+//! K3 IR hard parts, and the inert `quotient`, `surrogate`, `insertion`):
+//! the record's kind is the innermost special scope, else root / child. In
+//! this build `root`, `child` and `ir-hard` build records (K1: one external
+//! folded by σ, the root closure as projector; K2: every crown edge an
+//! independent external, the closed child's closure as projector or none for
+//! an open child; K3: below). In mode on the Δ-cache key carries
+//! `#uncontracted=<enabled cacheable kinds>` ([`cache_key_suffix`]).
+//!
+//! K3 (U7b): one record per remainder term of an IR hard part `H(γ)` on the
+//! child route (`GAMMALOOP_IR_HARD=child`; `evaluate.rs` `ir_hard_child`, at
+//! its call of `integrate_ir_hard_term`): the hard part as its own support
+//! root, every crown leg (`region.boundary`: soft lines and the scope's root
+//! legs) an independent external whose `soft` line says `role=root` when it
+//! is a root leg of the scope, the closing line at the FIXED reference mass
+//! (`compensate_mass=0`, `orders=all`; the compensation is the caller's),
+//! degree `ω`, depth = remainder loops + the quotient's extra loops (raised
+//! on a depth retry), the UV children inside γ as `ct:` insertions. Its
+//! ports are the open crown slots: Lorentz ones with no projector (gluonic
+//! `h_s`), or the two bispinor slots of the open quark line closed by the IR
+//! Dirac closure `gamma(c, r, mink(D, ir_dirac_closure_nu))` as the projector
+//! (`GAMMALOOP_IR_DIRAC_CLOSURE`, slash kind; `nu` stays open, `1/Tr[1]` and
+//! the reassembly stay the caller's, `ir_dirac::reassemble`). The value
+//! replaces the return of `integrate_ir_hard_term`; check mode compares
+//! through `ε^(depth - loops - 1)`, the orders the quotient product needs.
+//! No record is built for a zero-loop term (Δ(γ) inserted, no vakint call
+//! today) nor for a correction of order `ω = 0` (the `ir_term_today` path,
+//! K8, out of scope; under the production
+//! `GAMMALOOP_IR_HARD_CHILD_SELECT=omega1` it never reaches the child route).
 //!
 //! `GAMMALOOP_UNCONTRACTED_DUMP=<dir>` writes every record
 //! (`<dir>/<kind>/<graph>-id<id>-<pid>-<seq>.record.txt`, a drop-in
@@ -134,7 +155,8 @@ pub(crate) enum Kind {
     Root,
     /// K2: an ordinary remainder of a proper UV child evaluated by R* (`b`).
     Child,
-    /// Inside an IR hard part `H(γ)` (`c`; U7b, inert here).
+    /// K3: a remainder term of an IR hard part `H(γ)` on the child route
+    /// (`c`; U7b).
     IrHard,
     /// Inside the R* of a decorated IR quotient (`d`; inert here).
     Quotient,
@@ -185,7 +207,7 @@ impl Kind {
     /// Whether this build emits records of this kind (the others are
     /// accepted and inert).
     pub(crate) fn implemented(self) -> bool {
-        matches!(self, Self::Root | Self::Child)
+        matches!(self, Self::Root | Self::Child | Self::IrHard)
     }
 
     fn bit(self) -> u8 {
@@ -405,6 +427,22 @@ fn in_scope(scope: Scope) -> bool {
     SCOPE.with(|slot| *slot.borrow() == Some(scope))
 }
 
+/// The kind of a K3 record (the IR hard part hook of `ir_hard_child`):
+/// `ir-hard`, unless the hard part belongs to the R* of a decorated IR
+/// quotient or of an insertion surrogate, whose kinds take every record
+/// inside them (U7c / U7d enable those, with their own vertices); so
+/// `ir-hard` alone never reaches a graph that carries a decorated or
+/// surrogate vertex.
+pub(super) fn classify_ir_hard() -> Kind {
+    if in_scope(Scope::Quotient) {
+        Kind::Quotient
+    } else if super::expression::dressed_scope() {
+        Kind::Surrogate
+    } else {
+        Kind::IrHard
+    }
+}
+
 /// The kind of a record at the hook: the innermost special scope, else root
 /// (a diagram root, `root_boundary` none) or child (a proper UV child).
 pub(super) fn classify(support_root: bool) -> Kind {
@@ -495,8 +533,43 @@ pub(super) struct Site<'a> {
     #[allow(dead_code)]
     pub epsilon: Symbol,
     /// Which route today's path takes (`boundary`, `whole`,
-    /// `declined:<admission reason>`), for the log.
+    /// `declined:<admission reason>`; `ir_hard` for K3), for the log.
     pub today: String,
+    /// A K3 record's IR hard part (`None` at the ordinary hook).
+    pub ir_hard: Option<IrHardSite<'a>>,
+}
+
+/// What the IR hard part hook (`ir_hard_child`) adds to a [`Site`] for one
+/// remainder term of `H(γ)`.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct IrHardSite<'a> {
+    /// The correction, its term and the depth attempt (the label).
+    pub correction: usize,
+    pub term: usize,
+    pub attempt: usize,
+    /// The hard part's edge ids (the label).
+    pub hard: &'a str,
+    /// `ω`, the Taylor degree.
+    pub degree: usize,
+    /// The Laurent terms of the returned value: the remainder's loops plus
+    /// the quotient's extra loops (`integrate_ir_hard_term`).
+    pub depth: usize,
+    /// The IR Dirac closure multiplied into the remainder (the projector).
+    pub closure: Option<&'a super::expression::DiracBoundary>,
+}
+
+impl Site<'_> {
+    /// The record's depth: K3 its own, else the remainder's loops.
+    fn depth(&self) -> usize {
+        self.ir_hard
+            .map_or(self.term.remainder.loops, |ir_hard| ir_hard.depth)
+    }
+}
+
+/// The Laurent order through which a value of `depth` terms over `loops`
+/// loops is complete (`ε^(depth - loops - 1)`; `ε^-1` for K1 / K2).
+pub(super) fn valid_order(depth: usize, loops: usize) -> i64 {
+    depth as i64 - loops as i64 - 1
 }
 
 /// A record that is not built or not evaluated: today's path takes it when
@@ -514,8 +587,17 @@ pub(super) struct Decline {
 /// the format or this build does not state. Every other local code
 /// (`routing`, `missing_child`, `product_mismatch`, `text`, `taylor`,
 /// `closure_data_missing`, `normalisation_mismatch`, `finish_tensor`,
-/// `vakint:Empty`, ...) is a bug of the emitter or of the site:
-/// `outcome=error:<code>`.
+/// `vakint:Empty`, and K3's `ir_hard_site_missing`, `ir_dirac_closure`, ...)
+/// is a bug of the emitter or of the site: `outcome=error:<code>`.
+///
+/// K3 (U7b) adds NO code: a K3 record can hit only rows already here,
+/// `insertion_mass_symbol` (a UV child's Δ with a mass symbol at a `ct:`
+/// node where independent crown legs meet, as K2) and
+/// `insertions_share_a_vertex`, `pint6_dump`; its zero-loop terms and its
+/// order-0 corrections are not attempted at all ([`NoRecord`]); the root-only
+/// codes (`open_root`, `root_normalisation_*`, `sigma`, `root_crown_paired`)
+/// and `top_mass_mode` cannot occur (its crown is independent, its mass is
+/// fixed whatever the top-mass mode).
 pub(super) const DESIGNED_LOCAL: &[&str] = &[
     "pint6_dump",
     "zero_loops",
@@ -543,6 +625,16 @@ pub(super) const DESIGNED_LOCAL: &[&str] = &[
 /// internal failures the entry wraps as `Closure`, the reader's `Text*`,
 /// `IndexUncontracted`, `MomentumNotConserved`, ...) is an error:
 /// `outcome=error:vakint:<Variant>`.
+///
+/// K3 (U7b) adds NO row. Of these, a K3 record can legitimately hit
+/// `taylor_degree` (`ω > 2`; r6 has `ω <= 2`), `open_spinor` (a hard part
+/// whose open quark line the IR Dirac closure does not close:
+/// `GAMMALOOP_IR_DIRAC_CLOSURE=off`, or a declined shape other than r6's
+/// `no_spinor`), `insertion_mass_symbol`, `insertion_slots`, `all_massive`
+/// (a one-loop term whose only remaining line is the closing one), `gamma5`
+/// and `levi_civita`; `projector_momentum` and `compact_slash` cannot occur
+/// (the IR Dirac closure `gamma(c, r, mink(D, nu))` is momentum free, and a
+/// local check makes a momentum in it an error, `ir_dirac_closure`).
 pub(super) const DESIGNED_VAKINT: &[(&str, &str, &str)] = &[
     ("Closure", "Taylor degree ", "taylor_degree"),
     ("Closure", "the projector contains Q(", "projector_momentum"),
@@ -659,6 +751,10 @@ pub(super) struct Attempt {
     pub graph: String,
     pub id: usize,
     pub loops: usize,
+    /// The record's depth and the order `ε^order` through which its value
+    /// is complete (and compared in check mode).
+    pub depth: usize,
+    pub order: i64,
     pub closure: &'static str,
     /// The record's text (what vakint read), when built.
     pub text: Option<String>,
@@ -703,22 +799,26 @@ impl Attempt {
 
 /// Our attempt at one remainder of `kind` (integration id `id`). The routed
 /// remainder is built by `remainder` (the untruncated `new_with_closure`
-/// remainder today's path routes) only when a record is built. `Err`: a hard
-/// error (unknown masters), which fails the diagram.
-pub(super) fn attempt(
+/// remainder today's path routes; K3: the one `ir_hard_child` holds) only
+/// when a record is built. `Err`: a hard error (unknown masters), which fails
+/// the diagram.
+pub(super) fn attempt<R: std::borrow::Borrow<RStarIntegrand>>(
     site: &Site<'_>,
     kind: Kind,
     id: usize,
     mode: Mode,
-    remainder: impl FnOnce() -> Result<RStarIntegrand>,
+    remainder: impl FnOnce() -> Result<R>,
 ) -> Result<Attempt> {
     let started = Instant::now();
     let region = &site.term.remainder;
+    let depth = site.depth();
     let mut attempt = Attempt {
         kind,
         graph: site.graph.name.clone(),
         id,
         loops: region.loops,
+        depth,
+        order: valid_order(depth, region.loops),
         closure: closure_name(site, kind),
         text: None,
         outcome: Outcome::Error(Decline::new("unbuilt", "")),
@@ -734,13 +834,13 @@ pub(super) fn attempt(
             "pint6_dump",
             "PINT6 dumps keep today's records",
         ))
-    } else if !matches!(kind, Kind::Root | Kind::Child) {
+    } else if !kind.implemented() {
         Err(Decline::new("kind_not_built", kind.as_str()))
     } else if region.loops == 0 {
         Err(Decline::new("zero_loops", "a zero-loop remainder"))
     } else {
         match remainder() {
-            Ok(remainder) => build(site, &remainder, kind, id, mode),
+            Ok(remainder) => build(site, remainder.borrow(), kind, id, mode),
             Err(error) => Err(Decline::new("routing", format!("{error:#}"))),
         }
     };
@@ -761,7 +861,7 @@ pub(super) fn attempt(
     attempt.text = Some(built.text.clone());
     attempt.conserved = built.conserved;
     let mut settings = site.settings.clone();
-    settings.number_of_terms_in_epsilon_expansion = i64::try_from(region.loops)?;
+    settings.number_of_terms_in_epsilon_expansion = i64::try_from(depth)?;
     let prefactor = built.record.prefactor.total();
     let counted = vakint::timing::Snapshot::now();
     let evaluate_started = Instant::now();
@@ -828,7 +928,7 @@ pub(super) fn attempt(
                 kind.as_str(),
                 &built.record.label,
                 region.loops,
-                Some(i64::try_from(region.loops)?),
+                Some(i64::try_from(depth)?),
                 Some(record.patterns),
                 &delta,
                 evaluate_seconds,
@@ -848,6 +948,15 @@ fn closure_name(site: &Site<'_>, kind: Kind) -> &'static str {
         matches!(closure.as_view(), AtomView::Fun(f)
             if f.get_nargs() == 2 && f.get_symbol().get_name().ends_with("::g"))
     };
+    if kind == Kind::IrHard {
+        return match site.ir_hard.and_then(|ir_hard| ir_hard.closure) {
+            Some(boundary) => match boundary.kind {
+                super::expression::DiracKind::SelfEnergy => "ir_dirac_slash",
+                super::expression::DiracKind::Vertex => "ir_dirac_vertex",
+            },
+            None => "none",
+        };
+    }
     match (kind, site.closure_data, site.root_closure) {
         (Kind::Child, Some(data), _) => data.kind.as_str(),
         (_, _, Some(closure)) if metric(closure) => "metric",
@@ -876,7 +985,7 @@ fn timing_fields(
         );
     format!(
         " depth={} degree={} externals={} insertions={} conserved={} today={} patterns={} blocks={} key_plans={} lowered_entries={} build_s={build_seconds:.3} finish_s={finish_seconds:.3}{}{} wall_s={wall_seconds:.3} rss_gib={rss} record_bytes={}",
-        site.term.remainder.loops,
+        site.depth(),
         built.degree,
         built.externals,
         built.insertions,
@@ -914,8 +1023,9 @@ fn escape(text: &str) -> String {
 pub(super) struct Check {
     /// Structurally equal.
     pub identical: bool,
-    /// The pole parts agree (expanded difference, `together`, the tensor
-    /// canonical form): the criterion, since only poles reach a consumer.
+    /// The parts through ε^order agree (expanded difference, `together`,
+    /// the tensor canonical form): the criterion, since only those reach a
+    /// consumer (the poles for K1 / K2).
     pub equal: bool,
     /// The whole values agree (informational: ε^0 pieces are incomplete).
     pub full: bool,
@@ -926,9 +1036,10 @@ pub(super) struct Check {
     pub error: Option<String>,
 }
 
-/// The pole part through ε^-1, as `Evaluation::poles`.
-pub(super) fn poles(value: &Atom, epsilon: Symbol) -> Result<Atom> {
-    Ok(value.series(epsilon, 0, -1)?.to_atom().expand())
+/// The Laurent part through ε^order (the pole part, as `Evaluation::poles`,
+/// for `order = -1`).
+pub(super) fn through(value: &Atom, epsilon: Symbol, order: i64) -> Result<Atom> {
+    Ok(value.series(epsilon, 0, order)?.to_atom().expand())
 }
 
 /// Whether two values agree after expansion, `together` and the tensor
@@ -941,18 +1052,24 @@ pub(super) fn agree(a: &Atom, b: &Atom) -> Result<bool> {
 }
 
 /// Compare today's value `today` with ours `ours` (both after
-/// `finish_tensor` under the same id).
+/// `finish_tensor` under the same id) through ε^order: the poles (`-1`) for
+/// K1 / K2, whose consumers take only those; K3 through `ε^(extra - 1)`,
+/// the orders its product with the quotient counterterms reaches
+/// ([`Attempt::order`]).
 pub(super) fn compare(
     today: &Atom,
     ours: &Atom,
     epsilon: Symbol,
+    order: i64,
     contracted_seconds: f64,
     uncontracted_seconds: f64,
 ) -> Check {
     let identical = today == ours;
     let mut error = None;
     let equal = identical
-        || match poles(today, epsilon).and_then(|a| poles(ours, epsilon).map(|b| (a, b))) {
+        || match through(today, epsilon, order)
+            .and_then(|a| through(ours, epsilon, order).map(|b| (a, b)))
+        {
             Ok((a, b)) => agree(&a, &b).unwrap_or_else(|e| {
                 error = Some(format!("{e:#}"));
                 false
@@ -978,15 +1095,16 @@ pub(super) fn compare(
 pub(super) fn check_failure(attempt: &Attempt, check: &Check, epsilon: Symbol) -> eyre::Report {
     let ours = attempt.value().unwrap_or_default();
     let show = |value: &Atom| {
-        poles(value, epsilon)
+        through(value, epsilon, attempt.order)
             .map(|p| p.to_canonical_string())
             .unwrap_or_else(|e| format!("error:{e:#}"))
     };
     eyre!(
-        "UNCONTRACTED_CHECK: kind={} graph={} id={}: the uncontracted value differs from the contracted one{}\ncontracted poles: {}\nuncontracted poles: {}",
+        "UNCONTRACTED_CHECK: kind={} graph={} id={}: the uncontracted value differs from the contracted one through eps^{}{}\ncontracted: {}\nuncontracted: {}",
         attempt.kind.as_str(),
         attempt.graph,
         attempt.id,
+        attempt.order,
         check
             .error
             .as_ref()
@@ -1241,9 +1359,9 @@ pub(super) fn value_text(attempt: &Attempt, check: Option<&Check>) -> String {
         format!("kind\t{}", attempt.kind.as_str()),
         format!("graph\t{}", attempt.graph),
         format!("id\t{}", attempt.id),
-        format!("depth\t{}", attempt.loops),
+        format!("depth\t{}", attempt.depth),
         format!("outcome\t{}", attempt.outcome_name()),
-        "valid_through\teps^-1".to_owned(),
+        format!("valid_through\teps^{}", attempt.order),
     ];
     if let Some(check) = check {
         lines.push(format!("value\t{}", check.contracted.to_canonical_string()));
@@ -1346,6 +1464,11 @@ pub(crate) struct Captured {
     pub identical: Option<bool>,
     pub equal: Option<bool>,
     pub conserved: usize,
+    /// The remainder loops, the depth and the order through which the value
+    /// is complete.
+    pub loops: usize,
+    pub depth: usize,
+    pub order: i64,
 }
 
 #[cfg(test)]
@@ -1368,6 +1491,9 @@ fn capture(attempt: &Attempt, check: Option<&Check>) {
                 identical: check.map(|check| check.identical),
                 equal: check.map(|check| check.equal),
                 conserved: attempt.conserved,
+                loops: attempt.loops,
+                depth: attempt.depth,
+                order: attempt.order,
             });
         }
     });
@@ -1382,6 +1508,37 @@ pub(crate) fn with_capture<T>(f: impl FnOnce() -> T) -> (T, Vec<Captured>) {
         .with(|slot| slot.replace(previous))
         .unwrap_or_default();
     (out, captured)
+}
+
+/// Why the K3 hook builds no record for a remainder term of an IR hard part
+/// whose kind is enabled (today's path takes it, no line is printed): a
+/// zero-loop term (Δ(γ) inserted, no vakint call today, OQ-25) or a
+/// correction of order `ω = 0` (K8, out of scope).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum NoRecord {
+    ZeroLoops,
+    OrderZero,
+}
+
+#[cfg(test)]
+thread_local! {
+    static NO_RECORDS: RefCell<Vec<(String, NoRecord)>> = const { RefCell::new(Vec::new()) };
+}
+
+/// The K3 hook gives no record for a term of `graph` (tests: noted on this
+/// thread; nothing otherwise).
+pub(super) fn no_record(graph: &str, why: NoRecord) {
+    #[cfg(test)]
+    NO_RECORDS.with(|list| list.borrow_mut().push((graph.to_owned(), why)));
+    #[cfg(not(test))]
+    let _ = (graph, why);
+}
+
+/// Tests: the terms the K3 hook gave no record on this thread since the last
+/// call.
+#[cfg(test)]
+pub(crate) fn take_no_records() -> Vec<(String, NoRecord)> {
+    NO_RECORDS.with(|list| std::mem::take(&mut *list.borrow_mut()))
 }
 
 // ---------------------------------------------------------------------------
@@ -1809,6 +1966,74 @@ enum Frame<'s> {
         externals: Vec<usize>,
         projector: Option<(Atom, Atom)>,
     },
+    /// K3: every crown leg of the hard part `x_j` its own independent `p(j)`
+    /// (sorted), `role=root` for the scope's root legs (`roots`); the IR
+    /// Dirac closure as projector (`p2_power=0`, its `1/Tr[1]` the caller's)
+    /// or none; degree `ω`, fixed mass, the site's depth.
+    IrHard {
+        externals: Vec<usize>,
+        roots: BTreeSet<usize>,
+        projector: Option<Atom>,
+        degree: usize,
+    },
+}
+
+/// The K3 frame of one remainder term of an IR hard part: its crown legs
+/// (the remainder's soft edges, `region.boundary`) and the IR Dirac closure.
+fn ir_hard_frame<'s>(
+    site: &Site<'s>,
+    remainder: &RStarIntegrand,
+) -> std::result::Result<Frame<'s>, Decline> {
+    let Some(ir_hard) = site.ir_hard else {
+        return Err(Decline::new(
+            "ir_hard_site_missing",
+            "a K3 record outside the IR hard part hook",
+        ));
+    };
+    let soft = remainder
+        .soft_edges()
+        .iter()
+        .map(|edge| usize::from(*edge))
+        .collect::<BTreeSet<_>>();
+    let boundary = site
+        .graph
+        .iter_edges_of(&site.term.remainder.boundary)
+        .map(|(_, edge, _)| usize::from(edge))
+        .collect::<BTreeSet<_>>();
+    if soft != boundary {
+        return Err(Decline::new(
+            "routing",
+            format!("the soft edges {soft:?} are not the hard part's crown {boundary:?}"),
+        ));
+    }
+    if soft.is_empty() {
+        return Err(Decline::new("routing", "a hard part without crown legs"));
+    }
+    let projector = match ir_hard.closure {
+        None => None,
+        Some(boundary) => {
+            if boundary.closure.contains_symbol(GS.emr_mom) {
+                return Err(Decline::new(
+                    "ir_dirac_closure",
+                    format!(
+                        "the IR Dirac closure {} carries a momentum",
+                        boundary.closure
+                    ),
+                ));
+            }
+            Some(boundary.closure.clone())
+        }
+    };
+    Ok(Frame::IrHard {
+        externals: soft.into_iter().collect(),
+        roots: site
+            .root_edges
+            .iter()
+            .map(|edge| usize::from(*edge))
+            .collect(),
+        projector,
+        degree: ir_hard.degree,
+    })
 }
 
 /// The K2 frame of a child remainder: its crown and its closure.
@@ -1921,11 +2146,12 @@ fn build(
             }
         }
         Kind::Child => child_frame(site, remainder)?,
+        Kind::IrHard => ir_hard_frame(site, remainder)?,
         other => return Err(Decline::new("kind_not_built", other.as_str())),
     };
     let externals = match &frame {
         Frame::Root { closed_root, .. } => vec![usize::from(closed_root.external)],
-        Frame::Child { externals, .. } => externals.clone(),
+        Frame::Child { externals, .. } | Frame::IrHard { externals, .. } => externals.clone(),
     };
     let basis = remainder.basis();
     let loop_edges = basis
@@ -1973,7 +2199,7 @@ fn build(
                     ))
                 }
             }
-            Frame::Child { externals, .. } => externals
+            Frame::Child { externals, .. } | Frame::IrHard { externals, .. } => externals
                 .iter()
                 .position(|x| *x == edge)
                 .map(|j| (loops + j, 1))
@@ -1985,6 +2211,7 @@ fn build(
                 }),
         }
     };
+    let independent = matches!(frame, Frame::Child { .. } | Frame::IrHard { .. });
     let vector = |edge: EdgeIndex| -> std::result::Result<Vec<i64>, Decline> {
         let mut out = vec![0i64; width];
         let loop_part = basis.loop_atom::<Atom>(edge, GS.emr_mom, &[], true);
@@ -2070,20 +2297,17 @@ fn build(
         let mut momentum = vec![0i64; width];
         momentum[slot] = sign;
         // (record id, the crown half-edge, whether the leg enters the scope)
-        let pieces = match (pair, &frame) {
-            (HedgePair::Unpaired { hedge, flow }, _) => vec![(id, hedge, flow == Flow::Sink)],
-            (
-                HedgePair::Split {
-                    source,
-                    sink,
-                    split,
-                },
-                Frame::Child { .. },
-            ) => match split {
+        let pieces = match pair {
+            HedgePair::Unpaired { hedge, flow } => vec![(id, hedge, flow == Flow::Sink)],
+            HedgePair::Split {
+                source,
+                sink,
+                split,
+            } if independent => match split {
                 Flow::Sink => vec![(id, sink, true)],
                 Flow::Source => vec![(id, source, false)],
             },
-            (HedgePair::Paired { source, sink }, Frame::Child { .. }) => {
+            HedgePair::Paired { source, sink } if independent => {
                 vec![(id, source, false), (100_000 + id, sink, true)]
             }
             _ => {
@@ -2310,6 +2534,14 @@ fn build(
         Frame::Child {
             projector: None, ..
         } => (None, Atom::num(1)),
+        // the IR Dirac closure's 1/Tr[1] is the caller's (ir_dirac::reassemble)
+        Frame::IrHard { projector, .. } => (
+            projector.as_ref().map(|tensor| Projector {
+                tensor: tensor.clone(),
+                p2_power: 0,
+            }),
+            Atom::num(1),
+        ),
     };
     let internal = table
         .iter()
@@ -2320,8 +2552,13 @@ fn build(
         closed_cycles(&table, &internal, LineKind::Fermion),
         closed_cycles(&table, &internal, LineKind::Ghost),
     );
-    let degree = u32::try_from(site.plan.taylor_order)
-        .map_err(|_| Decline::new("taylor", format!("Taylor order {}", site.plan.taylor_order)))?;
+    let degree = match &frame {
+        Frame::IrHard { degree, .. } => u32::try_from(*degree)
+            .map_err(|_| Decline::new("taylor", format!("hard Taylor order {degree}")))?,
+        _ => u32::try_from(site.plan.taylor_order).map_err(|_| {
+            Decline::new("taylor", format!("Taylor order {}", site.plan.taylor_order))
+        })?,
+    };
     let contracted_label = if nodes.is_empty() {
         "none".to_owned()
     } else {
@@ -2336,24 +2573,46 @@ fn build(
             .collect::<Vec<_>>()
             .join(";")
     };
-    let label = format!(
-        "u7a kind={} graph={} scope={}:{} term={} remaining={} contracted={contracted_label} marked_edge={} closure={} id={id}",
-        kind.as_str(),
-        graph.name,
-        kind.as_str(),
-        super::plan::join_edge_ids(&super::plan::uv_child_edge_ids(graph, &region.support)),
-        if region.insertions.is_empty() {
-            "bare".to_owned()
-        } else {
-            format!("remainder_loops={}", region.loops)
-        },
-        super::plan::join_edge_ids(&super::plan::uv_child_edge_ids(graph, &region.remaining)),
-        usize::from(marked),
-        closure_name(site, kind)
-    );
-    let independent = matches!(frame, Frame::Child { .. });
-    let softs = if independent {
-        externals
+    let scope = match site.plan.root_boundary {
+        Some(_) => "child",
+        None => "root",
+    };
+    let label = match site.ir_hard {
+        Some(ir_hard) if kind == Kind::IrHard => format!(
+            "u7b kind=ir-hard graph={} scope={scope}:{} corr={} term={} attempt={} hard={} remaining={} contracted={contracted_label} marked_edge={} omega={} depth={} closure={} id={id}",
+            graph.name,
+            super::plan::join_edge_ids(&super::plan::uv_child_edge_ids(graph, &site.plan.support)),
+            ir_hard.correction,
+            ir_hard.term,
+            ir_hard.attempt,
+            ir_hard.hard,
+            super::plan::join_edge_ids(&super::plan::uv_child_edge_ids(graph, &region.remaining)),
+            usize::from(marked),
+            ir_hard.degree,
+            ir_hard.depth,
+            closure_name(site, kind)
+        ),
+        _ => format!(
+            "u7a kind={} graph={} scope={}:{} term={} remaining={} contracted={contracted_label} marked_edge={} closure={} id={id}",
+            kind.as_str(),
+            graph.name,
+            kind.as_str(),
+            super::plan::join_edge_ids(&super::plan::uv_child_edge_ids(graph, &region.support)),
+            if region.insertions.is_empty() {
+                "bare".to_owned()
+            } else {
+                format!("remainder_loops={}", region.loops)
+            },
+            super::plan::join_edge_ids(&super::plan::uv_child_edge_ids(graph, &region.remaining)),
+            usize::from(marked),
+            closure_name(site, kind)
+        ),
+    };
+    // K2: every crown leg is a root leg of the child; K3: a root leg of the
+    // scope (`role=root`) or a soft line of it (`role=soft`)
+    let softs = match &frame {
+        Frame::Root { .. } => Vec::new(),
+        Frame::Child { .. } => externals
             .iter()
             .enumerate()
             .map(|(j, edge)| SoftLeg {
@@ -2361,10 +2620,21 @@ fn build(
                 edge: *edge,
                 root: true,
             })
-            .collect()
-    } else {
-        Vec::new()
+            .collect(),
+        Frame::IrHard { roots, .. } => externals
+            .iter()
+            .enumerate()
+            .map(|(j, edge)| SoftLeg {
+                external: j + 1,
+                edge: *edge,
+                root: roots.contains(edge),
+            })
+            .collect(),
     };
+    // K1 / K2: the reference mass compensated (ChildMass::Reference); K3: an
+    // IR hard part is integrated at the fixed reference mass, every order
+    // kept, the root's compensation applied by the caller afterwards
+    let compensate_mass = !matches!(frame, Frame::IrHard { .. });
     let n_insertions = insertions.len();
     let n_externals = externals.len();
     let record = FactorizedNumerator {
@@ -2378,12 +2648,12 @@ fn build(
             taylor: Some(TaylorSpec {
                 degree,
                 scaled_edges: externals.clone(),
-                compensate_mass: true,
+                compensate_mass,
                 orders: TaylorOrders::All,
             }),
             softs,
             original_cycles: Some(original_cycles),
-            depth: Some(region.loops),
+            depth: Some(site.depth()),
             weights: Vec::new(),
         }),
         dimension: GS.dim,
