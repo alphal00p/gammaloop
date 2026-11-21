@@ -23,6 +23,7 @@
 //! `result check: `, never a value.
 
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
+use symbolica::coefficient::CoefficientView;
 
 use super::{FactorizedError, FactorizedKind, FactorizedNumerator, Result, names};
 use crate::VakintSettings;
@@ -199,6 +200,47 @@ fn offence(
 /// THE RESULT CHECK (module documentation) of the value `result` an entry is
 /// about to return for the MARKED value `value` (`vakint_notation`: the
 /// direct entry's vakint-notation value). A no-op for an unmarked value.
+/// A number that is no value: a non-finite or indeterminate number
+/// (symbolica's complex infinity ⧞, indeterminate ¿, from a division by zero
+/// or 0/0), or a power of a literal ZERO base whose exponent is not a positive
+/// rational number (0^(-1), 0^(-sqrt(2)), 0^(-π), 0^y: kept unevaluated by the
+/// normaliser): the first one found.
+fn undefined_number(view: AtomView<'_>) -> Option<String> {
+    let mut found = None;
+    view.visitor(&mut |part| {
+        if found.is_some() {
+            return false;
+        }
+        match part {
+            AtomView::Num(n)
+                if matches!(
+                    n.get_coeff_view(),
+                    CoefficientView::Infinity(..) | CoefficientView::Indeterminate
+                ) =>
+            {
+                found = Some(format!(
+                    "the non-finite number {}",
+                    part.to_owned().to_canonical_string()
+                ));
+            }
+            AtomView::Pow(p) => {
+                let (base, exponent) = p.get_base_exp();
+                let positive = symbolica::domains::rational::Rational::try_from(exponent)
+                    .is_ok_and(|r| !r.is_negative() && !r.is_zero());
+                if base.is_zero() && !positive {
+                    found = Some(format!(
+                        "the undefined power {} (a zero base)",
+                        part.to_owned().to_canonical_string()
+                    ));
+                }
+            }
+            _ => {}
+        }
+        found.is_none()
+    });
+    found
+}
+
 pub(crate) fn check_result(
     value: &FactorizedNumerator,
     prefactor: &Atom,
@@ -208,6 +250,11 @@ pub(crate) fn check_result(
 ) -> Result<()> {
     if !super::is_marked(value) {
         return Ok(());
+    }
+    if let Some(found) = undefined_number(result.as_view()) {
+        return Err(FactorizedError::Evaluation {
+            detail: format!("result check: {found} in the value of {}", value.label),
+        });
     }
     let known = inputs(value, prefactor, settings);
     match offence(
@@ -355,5 +402,33 @@ mod tests {
             false,
         )
         .unwrap();
+    }
+
+    /// The backstop alone refuses a number that is no value in a marked
+    /// result: the zero base under -sqrt(2) and -π (the forms an identically
+    /// vanishing base under such an exponent leaves), 0^y, a division by a
+    /// literal zero (complex infinity) and 0/0 (indeterminate); the twins with
+    /// a base 1 (1^(-sqrt(2)) = 1) pass.
+    #[test]
+    fn a_number_that_is_no_value_is_refused() {
+        let eps = "gammalooprs::ε";
+        for result in [
+            format!("{eps}^-2*0^(-2^(1/2))"),
+            format!("{eps}^-2*0^(-𝜋)"),
+            format!("{eps}^-2*0^witness::y"),
+            format!("{eps}^-2*(witness::x-witness::x)^-1"),
+            format!("{eps}^-2*0/0"),
+        ] {
+            let error = check(&result).unwrap_err();
+            match &error {
+                FactorizedError::Evaluation { detail } => {
+                    assert!(detail.starts_with("result check: "), "{result}: {detail}")
+                }
+                other => panic!("{result}: expected Evaluation, got {other:?}"),
+            }
+        }
+        for result in [format!("{eps}^-2*1^(-2^(1/2))"), format!("{eps}^-2*2^(-𝜋)")] {
+            check(&result).unwrap_or_else(|e| panic!("{result}: {e}"));
+        }
     }
 }
