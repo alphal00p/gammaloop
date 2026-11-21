@@ -918,7 +918,7 @@ struct Evaluation<'a> {
     /// of `no_closed_root`); `None` with the switch off.
     child_decline: Option<&'static str>,
     /// IRH-DEPTH counts of the child-route IR corrections
-    /// (`IR_HARD_CHILD_DEPTH_SUMMARY`).
+    /// (`IR_HARD_DEPTH_SUMMARY`).
     depth: super::depth::DepthCounts,
 }
 
@@ -1869,18 +1869,41 @@ impl<'a> Evaluation<'a> {
             .graph
             .numerator(&self.plan.support, &correction.hard)
             .get_single_atom()?;
-        let bound = super::depth::quotient_pole_bound(
+        let bound = super::depth::planner_bound(super::depth::quotient_pole_bound(
             quotient_loops,
             &quotient_numerator,
             self.root_closure.as_ref(),
-        );
+        ));
         drop(quotient_numerator);
-        self.depth.corrections += 1;
-        super::depth::count(&super::depth::CORRECTIONS);
-        if bound.is_none_or(|bound| bound > quotient_loops) {
-            self.depth.bounded += 1;
+        super::depth::note(&mut self.depth, |counts| &mut counts.corrections);
+        let nested = self.plan.root_boundary.is_some();
+        if nested {
+            super::depth::note(&mut self.depth, |counts| &mut counts.nested);
         }
-        let mut extra = super::depth::start_extra(quotient_loops);
+        if bound.is_none_or(|bound| bound > quotient_loops) {
+            super::depth::note(&mut self.depth, |counts| &mut counts.bounded);
+            if nested {
+                super::depth::note(&mut self.depth, |counts| &mut counts.nested_bounded);
+            }
+        }
+        // The first depth reaches B: below it every attempt would be raised
+        // to B after a whole integration of H.
+        let mut extra = super::depth::start_extra(quotient_loops, bound);
+        if bound.is_none() && super::depth::guards() {
+            // Unknown B: nothing certifies the rows the moment extraction
+            // will drop, so the child route is refused before H is integrated.
+            return Ok(self.refuse_depth(
+                correction_index,
+                correction,
+                0,
+                quotient_loops,
+                None,
+                extra,
+                0,
+                "unbounded",
+                &super::depth::Truncation::default(),
+            ));
+        }
         let mut attempts = 0_usize;
         loop {
             attempts += 1;
@@ -2098,6 +2121,37 @@ impl<'a> Evaluation<'a> {
             let row_bound = rows.iter().fold(bound, |largest, (_, insertion, _)| {
                 Some(largest?.max(super::depth::row_bound(bound, insertion)?))
             });
+            let truncation = super::depth::Truncation {
+                groups: groups.len(),
+                vanished_groups,
+                rows: rows.len(),
+                zero_rows: zero_rows.len(),
+            };
+            // A measured row above B: the proof of B failed (module doc).
+            // Refused at once (no retry to a depth nothing certifies), with
+            // its own count; an error under GAMMALOOP_IR_HARD_DEPTH_STRICT=1.
+            if super::depth::guards()
+                && let Some(row_bound) = row_bound
+                && needed > row_bound
+            {
+                super::depth::note(&mut self.depth, |counts| &mut counts.exceeded);
+                ensure!(
+                    !super::depth::strict(),
+                    "IRH-DEPTH: a measured quotient pole exceeds the quotient bound in {} corr={correction_index}: needed={needed} bound={row_bound} (GAMMALOOP_IR_HARD_DEPTH_STRICT=1)",
+                    self.graph.name
+                );
+                return Ok(self.refuse_depth(
+                    correction_index,
+                    correction,
+                    attempts,
+                    quotient_loops,
+                    Some(row_bound),
+                    extra,
+                    needed,
+                    "bound_exceeded",
+                    &truncation,
+                ));
+            }
             // IRH-DEPTH: a vanished group shows no insertion to measure, nor
             // does a row of a nonzero group whose coefficient vanished (the
             // moment extraction drops it); the bound stands for their
@@ -2105,12 +2159,16 @@ impl<'a> Evaluation<'a> {
             // such a group or row is either shown (and measured) or cannot
             // reach a pole (its valuation is at least the bound).
             let target = match row_bound {
-                Some(row_bound) if row_bound > extra => needed.max(row_bound),
+                Some(row_bound) if row_bound > extra && super::depth::raises() => {
+                    needed.max(row_bound)
+                }
                 _ => needed,
             };
             if target > extra {
+                // `needed=` is the measured need (its meaning before
+                // IRH-DEPTH), `target=` the depth of the next attempt.
                 eprintln!(
-                    "IR_HARD_CHILD_DEPTH graph={} corr={correction_index} attempt={attempts} extra_depth={extra} needed={target} measured={needed} bound={} vanished_groups={vanished_groups}/{} zero_rows={}/{}",
+                    "IR_HARD_CHILD_DEPTH graph={} corr={correction_index} attempt={attempts} extra_depth={extra} needed={needed} target={target} bound={} vanished_groups={vanished_groups}/{} zero_rows={}/{}",
                     self.graph.name,
                     super::depth::bound_label(row_bound),
                     groups.len(),
@@ -2121,38 +2179,31 @@ impl<'a> Evaluation<'a> {
                     return Ok(Err(format!("depth:{target}")));
                 }
                 if target > needed {
-                    self.depth.raised += 1;
-                    super::depth::count(&super::depth::RAISED);
+                    super::depth::note(&mut self.depth, |counts| &mut counts.raised);
                 }
                 extra = target;
                 continue;
             }
             if attempts > 1 {
-                self.depth.retried += 1;
-                super::depth::count(&super::depth::RETRIED);
+                super::depth::note(&mut self.depth, |counts| &mut counts.retried);
             }
             // IRH-DEPTH guard (a backstop since the depth reaches the bound):
             // the depth accepted here must reach the bound of every group and
             // row that could hide a pole.
-            let truncation = super::depth::Truncation {
-                groups: groups.len(),
-                vanished_groups,
-                rows: rows.len(),
-                zero_rows: zero_rows.len(),
-            };
-            if let Some(reason) = super::depth::refusal(row_bound, extra, needed, &truncation) {
-                eprintln!(
-                    "IR_HARD_CHILD_DEPTH_REFUSED graph={} corr={correction_index} attempt={attempts} hard_loops={hard_loops} quotient_loops={quotient_loops} bound={} extra_depth={extra} needed={needed} reason={reason} vanished_groups={vanished_groups}/{} zero_rows={}/{} edges={}",
-                    self.graph.name,
-                    super::depth::bound_label(row_bound),
-                    groups.len(),
-                    zero_rows.len(),
-                    rows.len(),
-                    self.edges(&correction.hard),
-                );
-                self.depth.refused += 1;
-                super::depth::count(&super::depth::REFUSED);
-                return Ok(Err(format!("depth_refused:{reason}")));
+            if super::depth::guards()
+                && let Some(reason) = super::depth::refusal(row_bound, extra, needed, &truncation)
+            {
+                return Ok(self.refuse_depth(
+                    correction_index,
+                    correction,
+                    attempts,
+                    quotient_loops,
+                    row_bound,
+                    extra,
+                    needed,
+                    reason,
+                    &truncation,
+                ));
             }
             return Ok(Ok((
                 value,
@@ -2168,6 +2219,36 @@ impl<'a> Evaluation<'a> {
                 ),
             )));
         }
+    }
+
+    /// IRH-DEPTH ([`super::depth`]): refuse the child route for one
+    /// correction (`IR_HARD_DEPTH_REFUSED`, counted); today's terms follow.
+    #[allow(clippy::too_many_arguments)]
+    fn refuse_depth(
+        &mut self,
+        correction_index: usize,
+        correction: &IrCorrection,
+        attempt: usize,
+        quotient_loops: usize,
+        bound: Option<usize>,
+        extra: usize,
+        needed: usize,
+        reason: &'static str,
+        truncation: &super::depth::Truncation,
+    ) -> std::result::Result<(Atom, String), String> {
+        let hard_loops = self.graph.n_loops(&correction.hard);
+        eprintln!(
+            "IR_HARD_DEPTH_REFUSED graph={} corr={correction_index} attempt={attempt} hard_loops={hard_loops} quotient_loops={quotient_loops} bound={} extra_depth={extra} needed={needed} reason={reason} vanished_groups={}/{} zero_rows={}/{} edges={}",
+            self.graph.name,
+            super::depth::bound_label(bound),
+            truncation.vanished_groups,
+            truncation.groups,
+            truncation.zero_rows,
+            truncation.rows,
+            self.edges(&correction.hard),
+        );
+        super::depth::refused(&mut self.depth, reason);
+        Err(format!("depth_refused:{reason}"))
     }
 
     /// One remainder of an IR hard part `H(γ)` ([`Self::ir_hard_child`]):
@@ -2273,7 +2354,9 @@ impl<'a> Evaluation<'a> {
                     // IRH-DEPTH: a row whose h_j vanishes at this depth adds
                     // nothing, but its quotient factors are measured all the
                     // same: their pole may need a deeper h_j (the retry).
-                    if let Some(pole) = self.ir_quotient_valuation(hard, forest, insertion, degree)
+                    if super::depth::guards()
+                        && let Some(pole) =
+                            self.ir_quotient_valuation(hard, forest, insertion, degree)
                     {
                         valuation = valuation.min(pole);
                     }
@@ -2985,15 +3068,18 @@ impl<'a> Evaluation<'a> {
     fn log_timing(&self) {
         self.log_boundary_summary("ok");
         if self.depth.corrections > 0 {
-            // IRH-DEPTH: this evaluation's child-route IR corrections.
+            // IRH-DEPTH: this evaluation's child-route IR corrections. Not
+            // an IR_HARD_CHILD* line: the census parsers count every line
+            // with the IR_HARD_CHILD_DEPTH prefix as a depth retry.
             eprintln!(
-                "IR_HARD_CHILD_DEPTH_SUMMARY graph={} child={} corrections={} bounded={} retried={} raised={} refused={}",
+                "IR_HARD_DEPTH_SUMMARY graph={} child={} corrections={} bounded={} retried={} raised={} exceeded={} refused={}",
                 self.graph.name,
                 self.plan.root_boundary.is_some(),
                 self.depth.corrections,
                 self.depth.bounded,
                 self.depth.retried,
                 self.depth.raised,
+                self.depth.exceeded,
                 self.depth.refused,
             );
         }

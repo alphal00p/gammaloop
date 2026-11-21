@@ -3,28 +3,87 @@
 //! (vertex v0) and a one-loop quotient (vertex v1, an external vertex), and
 //! takes the child route (omega 1). The variations multiply the numerator of
 //! v0 or v1 by a power of epsilon (and the aggregate graph numerator by
-//! their product), exactly as the review's fixtures do. Every test compares
-//! the complete counterterm of the graph on the child route with today's
-//! path (`GAMMALOOP_IR_HARD=closed`) on the same proper UV children.
+//! their product), exactly as the review's fixtures do, or replace v0's
+//! Lorentz factor by a row-level combination (the IRH-DEPTH grid's rA/rB,
+//! `grid/scripts/rowfix.py`). Every test compares the complete counterterm of
+//! the graph on the child route with today's path
+//! (`GAMMALOOP_IR_HARD=closed`) and pins its pole part in the units of the
+//! beta record (`zb`, the coefficient of C_A³; [`record`]) to the values of
+//! the IRH-DEPTH grid (results/consolidation/irh-depth/grid.json), where the
+//! third method (massive UV-only R, MATAD) agrees with them. The planner
+//! before IRH-DEPTH ([`Planner::Legacy`]) is run next to it and pinned to its
+//! wrong value, so each test fails on the old planner.
+//!
+//! The counts are per test ([`depth::collect`], thread-local and scoped):
+//! the tests hold under `cargo test`'s parallel threads.
 
-use eyre::{Result, ensure};
-use symbolica::atom::{Atom, AtomCore};
+use std::sync::OnceLock;
+
+use eyre::{Result, ensure, eyre};
+use idenso::{
+    CookMode, CookSettings, IndexTooling,
+    color::ColorSimplifySettings,
+    tensor::{AlgebraContraction, AlgebraSettings, SymbolicTensor},
+};
+use linnet::half_edge::involution::EdgeIndex;
+use spenso::{
+    network::library::symbolic::ETS,
+    structure::{
+        abstract_index::AbstractIndex,
+        representation::{LibrarySlot, Minkowski},
+        slot::IsAbstractSlot,
+    },
+};
+use symbolica::atom::{Atom, AtomCore, AtomView};
 use vakint::Vakint;
 
-use crate::{feyngen::feynkit::FeynmanDiagramGammaLoopExt, initialisation::test_initialise};
+use crate::{
+    feyngen::feynkit::FeynmanDiagramGammaLoopExt,
+    graph::Graph,
+    initialisation::test_initialise,
+    model::Model,
+    utils::GS,
+    uv::{UVgenerationSettings, approx::integrated::Integrated},
+};
 
 use super::{
     RStarPlan,
     closed::with_ir_hard,
-    depth::{self, HookSite, RowHook},
+    depth::{self, BoundOverride, DepthCounts, DepthTest, HookSite, Planner, RowHook},
     recursive_tests::{colour_factored, load, settings},
     tests::canonical_tensor,
 };
 
 const L3_006: &str = include_str!("testdata/l3-d6.dot");
+const EPS: &str = "gammalooprs::{}::ε";
 
 fn epsilon() -> Atom {
-    Atom::var(crate::utils::GS.dim_epsilon)
+    Atom::var(GS.dim_epsilon)
+}
+
+/// The rational `n/d`.
+fn q(n: i64, d: i64) -> Atom {
+    Atom::num(n) / Atom::num(d)
+}
+
+/// The span `(body, end)` of the first `numerator="…"` of `line` that is not
+/// one of `…_numerator=`, as the fixture scripts' regex
+/// `(?<![a-z_])numerator="([^"]+)"`.
+fn first_numerator(line: &str) -> Option<(usize, usize)> {
+    let key = "numerator=\"";
+    let mut from = 0;
+    while let Some(found) = line[from..].find(key) {
+        let start = from + found;
+        let before = line[..start].chars().last();
+        if before.is_some_and(|c| c.is_ascii_lowercase() || c == '_') {
+            from = start + key.len();
+            continue;
+        }
+        let body = start + key.len();
+        let end = body + line[body..].find('"')?;
+        return Some((body, end));
+    }
+    None
 }
 
 /// The review's fixture: the first `numerator="…"` of the `v<k>` line and of
@@ -34,25 +93,13 @@ fn scaled(dot: &str, powers: &[(&str, i64)]) -> String {
         if power == 0 {
             return line.to_owned();
         }
-        let key = "numerator=\"";
-        let mut from = 0;
-        while let Some(found) = line[from..].find(key) {
-            let start = from + found;
-            let before = line[..start].chars().last();
-            if before.is_some_and(|c| c.is_ascii_lowercase() || c == '_') {
-                from = start + key.len();
-                continue;
-            }
-            let body = start + key.len();
-            let end = body + line[body..].find('"').expect("a closed numerator string");
-            return format!(
-                "{}({})*(gammalooprs::{{}}::ε)^({power}){}",
-                &line[..body],
-                &line[body..end],
-                &line[end..]
-            );
-        }
-        panic!("no numerator on {line}");
+        let (body, end) = first_numerator(line).expect("a numerator");
+        format!(
+            "{}({})*({EPS})^({power}){}",
+            &line[..body],
+            &line[body..end],
+            &line[end..]
+        )
     };
     let total = powers.iter().map(|(_, power)| power).sum();
     dot.split_inclusive('\n')
@@ -70,6 +117,112 @@ fn scaled(dot: &str, powers: &[(&str, i64)]) -> String {
         .collect()
 }
 
+/// The first balanced `(…)` group at the start of `text`.
+fn lead_group(text: &str) -> &str {
+    let mut depth = 0_i64;
+    for (i, c) in text.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return &text[..=i];
+                }
+            }
+            _ => {}
+        }
+    }
+    panic!("no group in {text}")
+}
+
+/// The IRH-DEPTH grid's row-level fixture (`grid/scripts/rowfix.py`, byte
+/// for byte): v0's Lorentz factor `L0` becomes `ε^a L0 + ε^w X` with
+/// `X = Q1^μ1 g^μ2μ4` (v0's external index and two internal ones, with v0's
+/// colour and coupling; `None` drops a term), v1's numerator is multiplied
+/// by `ε^-j`, and the aggregate graph numerator gets both. X feeds only the
+/// row `Q1^μ1 g^μ7μ9` of correction 1, whose quotient pole is one lower than
+/// the other five rows': it stays measured while the other ten rows vanish
+/// inside nonzero groups.
+fn rowed(dot: &str, a: Option<i64>, w: Option<i64>, j: i64) -> String {
+    const MINK: &str = "spenso::{spenso::representation,spenso::self_dual}::mink";
+    const HEDGE: &str = "gammalooprs::{spenso::index}::hedge";
+    const METRIC: &str = "spenso::{symmetric,linear,real,spenso::tensor}::g";
+    let lines = dot.split_inclusive('\n').collect::<Vec<_>>();
+    let v0 = lines
+        .iter()
+        .find(|line| line.starts_with("  v0 ["))
+        .expect("v0");
+    let (body, end) = first_numerator(v0).expect("v0's numerator");
+    let n0 = &v0[body..end];
+    let l0 = lead_group(n0);
+    let q_end = l0.find("::Q(1,").expect("Q(1, …) in L0");
+    let q_start = l0[..q_end].rfind("gammalooprs::{").expect("Q's namespace");
+    let momentum = &l0[q_start..q_end + "::Q".len()];
+    assert!(l0.contains(&format!("{MINK}(4,")) && l0.contains(HEDGE) && l0.contains(METRIC));
+    let index = |h: usize| format!("{MINK}(4,{HEDGE}({h},1))");
+    let x = format!(
+        "{momentum}(1,{})*{METRIC}({},{})",
+        index(1),
+        index(2),
+        index(4)
+    );
+    let parts = a
+        .map(|a| format!("({EPS})^({a})*{l0}"))
+        .into_iter()
+        .chain(w.map(|w| format!("({EPS})^({w})*{x}")))
+        .collect::<Vec<_>>();
+    let new = format!("({})", parts.join("+"));
+    let replace_numerator = |line: &str, numerator: &str| -> String {
+        let (body, end) = first_numerator(line).expect("a numerator");
+        format!("{}{numerator}{}", &line[..body], &line[end..])
+    };
+    lines
+        .iter()
+        .map(|line| {
+            if line.starts_with("  graph [") {
+                let (body, end) = first_numerator(line).expect("the graph numerator");
+                let aggregate = &line[body..end];
+                assert!(aggregate.starts_with(&format!("{l0}*")));
+                let mut scaled = aggregate.replacen(l0, &new, 1);
+                if j != 0 {
+                    scaled = format!("({scaled})*({EPS})^({})", -j);
+                }
+                replace_numerator(line, &scaled)
+            } else if line.starts_with("  v0 [") {
+                replace_numerator(line, &n0.replacen(l0, &new, 1))
+            } else if line.starts_with("  v1 [") && j != 0 {
+                let (body, end) = first_numerator(line).expect("v1's numerator");
+                replace_numerator(line, &format!("({})*({EPS})^({})", &line[body..end], -j))
+            } else {
+                (*line).to_owned()
+            }
+        })
+        .collect()
+}
+
+/// The IRH-DEPTH grid's points (grid.md; `kKjJ`: v0·ε^K, v1·ε^-J).
+fn k(power_v0: i64, power_v1: i64) -> String {
+    scaled(L3_006, &[("v0", power_v0), ("v1", -power_v1)])
+}
+fn r_a() -> String {
+    rowed(L3_006, Some(3), Some(2), 1)
+}
+fn r_b() -> String {
+    rowed(L3_006, Some(4), Some(2), 2)
+}
+fn x_a() -> String {
+    rowed(L3_006, None, Some(2), 1)
+}
+fn x_b() -> String {
+    rowed(L3_006, None, Some(2), 2)
+}
+fn r_a0() -> String {
+    rowed(L3_006, Some(3), Some(0), 1)
+}
+fn x_a0() -> String {
+    rowed(L3_006, None, Some(0), 1)
+}
+
 /// FNV-1a (64 bits) of a fixture.
 fn fnv(text: &str) -> u64 {
     text.bytes().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
@@ -78,7 +231,8 @@ fn fnv(text: &str) -> u64 {
 }
 
 /// The variations are byte for byte the review's inputs
-/// (`depth/<run>/input/L3/diagram-000006.dot`).
+/// (`depth/<run>/input/L3/diagram-000006.dot`) and the IRH-DEPTH grid's
+/// (`/common/build-cache/ben/consol/irh-depth/grid/inputs/<point>`).
 #[test]
 fn the_variations_are_the_reviewed_inputs() {
     for (powers, hash, length) in [
@@ -92,6 +246,21 @@ fn the_variations_are_the_reviewed_inputs() {
         let fixture = scaled(L3_006, powers);
         assert_eq!((fnv(&fixture), fixture.len()), (hash, length), "{powers:?}");
     }
+    for (name, fixture, hash, length) in [
+        ("k0j0", L3_006.to_owned(), 0x6dbf_495b_b56b_d4ab, 47276),
+        ("k2j1", k(2, 1), 0xf02f_0a91_b993_d102, 47361),
+        ("k3j2", k(3, 2), 0xe311_9a84_8214_70d8, 47361),
+        ("k4j2", k(4, 2), 0x97fe_8627_189e_7688, 47361),
+        ("k4j3", k(4, 3), 0x0eb7_0a54_e2ab_4b12, 47361),
+        ("rA", r_a(), 0x7ad7_f31f_a2bb_7cc5, 48366),
+        ("rB", r_b(), 0xc79a_8e14_db57_aca1, 48366),
+        ("xA", x_a(), 0xd409_5318_1fb3_9eb1, 45100),
+        ("xB", x_b(), 0xed0e_4da0_6da8_6baf, 45100),
+        ("rA0", r_a0(), 0x4dd7_7cbc_349a_65f9, 48366),
+        ("xA0", x_a0(), 0xee3b_0b70_1fa0_71a5, 45100),
+    ] {
+        assert_eq!((fnv(&fixture), fixture.len()), (hash, length), "{name}");
+    }
 }
 
 /// Whether two counterterms are the same tensor.
@@ -100,155 +269,692 @@ fn same(actual: &Atom, expected: &Atom) -> Result<bool> {
     Ok(difference.together().is_zero())
 }
 
-struct Routes {
-    today: Atom,
-    child: Atom,
-    /// IRH-DEPTH counts of the child-route evaluation.
-    counts: Counts,
+/// The metric trace `g_μν T^μν` of a counterterm's two open Lorentz slots
+/// over `d - 1` (the transverse projection of the beta engine's metric
+/// projector, up to the constant normalisation fixed by [`unit`]).
+fn traced(counterterm: &Atom) -> Result<Atom> {
+    let tensor = canonical_tensor(counterterm)?;
+    if tensor.is_zero() {
+        return Ok(Atom::Zero);
+    }
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let cooked = cooking.try_cook(tensor.as_view())?;
+    let ports = cooked
+        .list_dangling::<AbstractIndex>()?
+        .iter()
+        .map(|port| LibrarySlot::<AbstractIndex>::try_from(port.as_view()))
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let lorentz = ports
+        .iter()
+        .filter(|port| port.rep_name() == (Minkowski {}).into())
+        .collect::<Vec<_>>();
+    ensure!(
+        lorentz.len() == 2 && ports.len() == 2,
+        "a counterterm with two open Lorentz slots: {ports:?}"
+    );
+    let metric = ETS.metric(lorentz[0].to_atom(), lorentz[1].to_atom());
+    let contracted = SymbolicTensor::infer_indexed(cooked * &metric)?
+        .undo_trace()?
+        .undo_chain()?
+        .simplify_algebra(&AlgebraSettings {
+            gamma: Some(Default::default()),
+            color: Some(ColorSimplifySettings::default()),
+            contract: AlgebraContraction::Dots,
+            ..Default::default()
+        })?;
+    ensure!(
+        contracted
+            .expression()
+            .list_dangling::<AbstractIndex>()?
+            .is_empty(),
+        "the trace left open slots"
+    );
+    // Momentum conservation of the two-point function: the incoming edge 0
+    // (ext0 -> v1) and the outgoing edge 1 (v0 -> ext1) carry the same Q.
+    let conserved = cooking
+        .uncook(contracted.expression().as_view())
+        .replace_map(|view, _, out| {
+            if let AtomView::Fun(momentum) = view
+                && momentum.get_symbol() == GS.emr_mom
+                && momentum.get_nargs() == 2
+                && momentum.get(0) == Atom::num(1).as_view()
+            {
+                **out = symbolica::function!(GS.emr_mom, Atom::num(0), momentum.get(1));
+            }
+        });
+    let scalar = conserved / (Atom::var(GS.dim) - 1);
+    Ok(Integrated::dimensionally_regularized(&scalar))
 }
 
-#[derive(Clone, Copy, Debug)]
-struct Counts {
-    corrections: usize,
-    retried: usize,
-    /// Retries to the bound beyond the measured need.
-    raised: usize,
-    refused: usize,
+/// The coefficient of `ε^order` of the Laurent expansion of `value`.
+fn laurent(value: &Atom, order: i64) -> Result<Atom> {
+    let poles = value
+        .series(GS.dim_epsilon, 0, -1)
+        .map_err(|error| eyre!("{error}"))?
+        .to_atom()
+        .expand();
+    Ok(poles.coefficient(epsilon().pow(order)).together())
 }
 
-/// The counterterm of `dot` on today's path and on the child route (with
-/// `hook` rewriting its rows and its first depth at least `start`), on the
-/// same proper UV children (computed on today's path).
-fn routes(dot: &str, hook: Option<RowHook>, start: usize) -> Result<Routes> {
-    test_initialise()?;
-    let vakint = Vakint::new()?;
-    let diagram = colour_factored(&load(dot)?)?;
-    let graph = diagram.to_gamma_loop_graph(None, true)?;
-    let model = diagram.model();
-    let settings = settings();
-    let plan = RStarPlan::with_automatic_edge(&graph, model, &settings)?;
-    let mass = Atom::var(*super::REFERENCE_MASS_SQUARED).sqrt();
-    let children = with_ir_hard("closed", || {
-        plan.evaluate_uv_children(&graph, model, &mass, &vakint, &settings)
-    })?;
-    let today = with_ir_hard("closed", || {
-        plan.counterterm_with_children(&graph, model, &vakint, &settings, children.clone())
-    })?;
-    let before = depth::totals();
-    let run = || {
-        depth::with_start_extra(start, || {
-            with_ir_hard("child", || {
-                plan.counterterm_with_children(&graph, model, &vakint, &settings, children.clone())
+/// The record units: the unmodified graph's leading pole is 117/32 C_A³/ε³
+/// in the beta record (grid.json k0j0, all three methods). This is the
+/// trace of its counterterm at ε⁻³ over 117/32, computed once per process
+/// (on today's path; [`the_unmodified_graph_fixes_the_record_units`] checks
+/// its other two orders, so the normalisation is a constant).
+fn unit() -> Result<Atom> {
+    static UNIT: OnceLock<Atom> = OnceLock::new();
+    if let Some(unit) = UNIT.get() {
+        return Ok(unit.clone());
+    }
+    let today = Case::new(L3_006, None)?.today()?;
+    let unit = laurent(&traced(&today)?, -3)? / q(117, 32);
+    ensure!(!unit.is_zero(), "the unmodified graph has a triple pole");
+    Ok(UNIT.get_or_init(|| unit).clone())
+}
+
+/// A counterterm in record units: the coefficient of C_A³ of the beta
+/// record's `zb`, as a Laurent series in ε.
+fn record(counterterm: &Atom) -> Result<Atom> {
+    Ok(traced(counterterm)? / unit()?)
+}
+
+/// `counterterm` in record units has the pole coefficients `pins`
+/// (`(order, value)`) and, when `complete`, no other pole.
+fn pinned(label: &str, counterterm: &Atom, pins: &[(i64, Atom)], complete: bool) -> Result<()> {
+    let value = record(counterterm)?;
+    let mut rest = value
+        .series(GS.dim_epsilon, 0, -1)
+        .map_err(|error| eyre!("{error}"))?
+        .to_atom()
+        .expand();
+    for (order, expected) in pins {
+        let actual = laurent(&value, *order)?;
+        eprintln!("IRH_DEPTH_PIN {label} order={order} value={actual}");
+        ensure!(
+            (&actual - expected).together().is_zero(),
+            "{label}: ε^{order} is {actual}, pinned {expected}"
+        );
+        rest -= expected * epsilon().pow(*order);
+    }
+    if complete {
+        let rest = rest.expand().together();
+        ensure!(
+            rest.is_zero(),
+            "{label}: poles beyond the pinned ones: {rest}"
+        );
+    }
+    Ok(())
+}
+
+/// One prepared graph (colour factored, the automatic marked line or
+/// `marked`) with its proper UV children on today's path.
+struct Case {
+    graph: Graph,
+    plan: RStarPlan,
+    diagram: feynkit_graph::FeynmanDiagram,
+    vakint: Vakint,
+    settings: UVgenerationSettings,
+    children: std::collections::BTreeMap<linnet::half_edge::subgraph::SuBitGraph, Atom>,
+}
+
+/// One child-route run of a [`Case`].
+#[derive(Default)]
+struct Run {
+    /// Rewrites the rows of every attempt.
+    hook: Option<RowHook>,
+    /// The first depth is at least this.
+    start: usize,
+    /// The planner (default: production).
+    test: DepthTest,
+    /// The proper UV children are computed on the child route too (with
+    /// the same planner), so the child calls nested in their R* run on it.
+    nested: bool,
+}
+
+struct ChildRun {
+    value: Atom,
+    /// The counts of the root evaluation's child-route corrections.
+    root: DepthCounts,
+    /// The counts of the child calls nested in the UV children (`nested`).
+    nested: DepthCounts,
+}
+
+impl Case {
+    fn new(dot: &str, marked: Option<usize>) -> Result<Self> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let diagram = colour_factored(&load(dot)?)?;
+        let graph = diagram.to_gamma_loop_graph(None, true)?;
+        let settings = settings();
+        let plan = match marked {
+            Some(edge) => {
+                RStarPlan::new(&graph, diagram.model(), EdgeIndex::from(edge), &settings)?
+            }
+            None => RStarPlan::with_automatic_edge(&graph, diagram.model(), &settings)?,
+        };
+        let children = with_ir_hard("closed", || {
+            plan.evaluate_uv_children(&graph, diagram.model(), &mass(), &vakint, &settings)
+        })?;
+        Ok(Self {
+            graph,
+            plan,
+            diagram,
+            vakint,
+            settings,
+            children,
+        })
+    }
+
+    fn model(&self) -> &Model {
+        self.diagram.model()
+    }
+
+    /// The counterterm on today's path.
+    fn today(&self) -> Result<Atom> {
+        with_ir_hard("closed", || {
+            self.plan.counterterm_with_children(
+                &self.graph,
+                self.model(),
+                &self.vakint,
+                &self.settings,
+                self.children.clone(),
+            )
+        })
+    }
+
+    /// The counterterm on the child route.
+    fn child(&self, run: Run) -> Result<ChildRun> {
+        let Run {
+            hook,
+            start,
+            test,
+            nested,
+        } = run;
+        depth::with_depth_test(test, || {
+            let (children, nested) = if nested {
+                let (children, counts) = depth::collect(|| {
+                    with_ir_hard("child", || {
+                        self.plan.evaluate_uv_children(
+                            &self.graph,
+                            self.model(),
+                            &mass(),
+                            &self.vakint,
+                            &self.settings,
+                        )
+                    })
+                });
+                (children?, counts)
+            } else {
+                (self.children.clone(), DepthCounts::default())
+            };
+            let evaluate = || {
+                depth::with_start_extra(start, || {
+                    with_ir_hard("child", || {
+                        self.plan.counterterm_with_children(
+                            &self.graph,
+                            self.model(),
+                            &self.vakint,
+                            &self.settings,
+                            children,
+                        )
+                    })
+                })
+            };
+            let (value, root) = depth::collect(|| match hook {
+                Some(hook) => depth::with_row_hook(hook, evaluate),
+                None => evaluate(),
+            });
+            eprintln!("IRH_DEPTH_TEST {test:?} root={root:?} nested={nested:?}");
+            Ok(ChildRun {
+                value: value?,
+                root,
+                nested,
             })
         })
-    };
-    let child = match hook {
-        Some(hook) => depth::with_row_hook(hook, run),
-        None => run(),
-    }?;
-    let after = depth::totals();
-    let [corrections, retried, raised, refused] = [0, 1, 2, 3].map(|k| after[k] - before[k]);
-    let counts = Counts {
-        corrections,
-        retried,
-        raised,
-        refused,
-    };
-    eprintln!("IRH_DEPTH_TEST {counts:?}");
-    Ok(Routes {
-        today,
-        child,
-        counts,
-    })
+    }
 }
 
-/// The review's counterexample: v0·ε³ makes every group of the hard part
-/// vanish at the first depth (its valuation is 1), v1·ε⁻¹ gives the quotient
-/// a double pole (bound 2). The pole of their product was lost on the child
-/// route (+117/32 against -117/64 C_A³/ε in the review's units).
+fn mass() -> Atom {
+    Atom::var(*super::REFERENCE_MASS_SQUARED).sqrt()
+}
+
+const FIXED: DepthTest = DepthTest {
+    planner: Planner::Fixed,
+    bound: BoundOverride::Computed,
+    strict: None,
+};
+const LEGACY: DepthTest = DepthTest {
+    planner: Planner::Legacy,
+    ..FIXED
+};
+const NO_RAISE: DepthTest = DepthTest {
+    planner: Planner::NoRaise,
+    ..FIXED
+};
+
+fn run(test: DepthTest) -> Run {
+    Run {
+        test,
+        ..Run::default()
+    }
+}
+
+/// The child route equals today's path exactly.
+fn ensure_same(label: &str, child: &Atom, today: &Atom) -> Result<()> {
+    ensure!(
+        same(child, today)?,
+        "{label}: child route {child} differs from today's {today}"
+    );
+    Ok(())
+}
+
+/// One grid point whose child route was wrong (grid.md 2.5): the fixed
+/// child route equals today's path, starts at the quotient bound (no retry,
+/// no refusal) and has the pinned poles (the third method's at its safe
+/// orders); the legacy planner has the review's wrong poles.
+fn grid_point(
+    label: &str,
+    dot: &str,
+    pins: &[(i64, Atom)],
+    complete: bool,
+    legacy_pins: &[(i64, Atom)],
+    legacy_complete: bool,
+) -> Result<()> {
+    let case = Case::new(dot, None)?;
+    let today = case.today()?;
+    let child = case.child(run(FIXED))?;
+    ensure_same(label, &child.value, &today)?;
+    let DepthCounts {
+        corrections,
+        bounded,
+        retried,
+        raised,
+        exceeded,
+        refused,
+        ..
+    } = child.root;
+    ensure!(
+        corrections >= 1
+            && bounded >= 1
+            && retried == 0
+            && raised == 0
+            && exceeded == 0
+            && refused == 0,
+        "{label}: {:?}",
+        child.root
+    );
+    pinned(label, &today, pins, complete)?;
+    let legacy = case.child(run(LEGACY))?;
+    ensure!(
+        !same(&legacy.value, &today)?,
+        "{label}: the legacy planner must miss the pole"
+    );
+    pinned(
+        &format!("{label} legacy"),
+        &legacy.value,
+        legacy_pins,
+        legacy_complete,
+    )
+}
+
+/// The record units: the unmodified graph has the pole part of all three
+/// methods, 117/32 ε⁻³ − 1339/192 ε⁻² + (1369/288 + 3ζ3) ε⁻¹ (grid.json
+/// k0j0), on both routes.
+#[test]
+fn the_unmodified_graph_fixes_the_record_units() -> Result<()> {
+    let case = Case::new(L3_006, None)?;
+    let today = case.today()?;
+    let child = case.child(run(FIXED))?;
+    ensure_same("k0j0", &child.value, &today)?;
+    ensure!(
+        child.root.corrections >= 1 && child.root.bounded == 0 && child.root.refused == 0,
+        "{:?}",
+        child.root
+    );
+    // ε⁻¹: 1369/288 + 3ζ3 (symbolica's zeta(3)).
+    let z3 = symbolica::parse!("zeta(3)");
+    pinned(
+        "k0j0",
+        &today,
+        &[
+            (-3, q(117, 32)),
+            (-2, q(-1339, 192)),
+            (-1, q(1369, 288) + Atom::num(3) * z3),
+        ],
+        true,
+    )
+}
+
+/// The review's counterexample (k3j1): v0·ε³ makes every group of the hard
+/// part vanish at the first depth (its valuation is 1), v1·ε⁻¹ gives the
+/// quotient a double pole (bound 2). The pole of their product was lost on
+/// the child route (+117/32 against -117/64 C_A³/ε). The fixed planner
+/// starts at the bound, 2, where the hard part is shown.
 #[test]
 fn a_hard_part_vanishing_at_the_first_depth_keeps_its_quotient_pole() -> Result<()> {
-    let routes = routes(&scaled(L3_006, &[("v0", 3), ("v1", -1)]), None, 0)?;
-    ensure!(!routes.today.is_zero(), "the variation must have poles");
-    ensure!(
-        same(&routes.child, &routes.today)?,
-        "child route {} differs from today's {}",
-        routes.child,
-        routes.today
-    );
-    // The vanished groups show no insertion: the bound stands for their
-    // valuation and raises the depth to 2, where the hard part is shown and
-    // the child route itself gets the pole; the guard never fires.
-    let Counts {
-        corrections,
-        retried,
-        raised,
-        refused,
-    } = routes.counts;
-    ensure!(
-        corrections >= 1 && retried >= 1 && raised >= 1 && refused == 0,
-        "{:?}",
-        routes.counts
-    );
-    Ok(())
+    grid_point(
+        "k3j1",
+        &k(3, 1),
+        &[(-1, q(-117, 64))],
+        true,
+        &[(-1, q(117, 32))],
+        true,
+    )
 }
 
-/// Positive control (review: quotient-v1): v1·ε⁻¹ alone. The shown rows
-/// measure the double quotient pole and the planner retries at depth 2.
+/// k3j2 (v0·ε³, v1·ε⁻²): leading -117/64 ε⁻² (massive -117/64; ε⁻¹ carries
+/// logs); the old child record (+117/32 ε⁻² − 1339/192 ε⁻¹) is log-free and
+/// passes the MS-locality check.
+#[test]
+fn grid_k3j2() -> Result<()> {
+    grid_point(
+        "k3j2",
+        &k(3, 2),
+        &[(-2, q(-117, 64))],
+        false,
+        &[(-2, q(117, 32)), (-1, q(-1339, 192))],
+        true,
+    )
+}
+
+/// k3j3 (v0·ε³, v1·ε⁻³): leading -117/64 ε⁻³ (massive -117/64).
+#[test]
+fn grid_k3j3() -> Result<()> {
+    grid_point(
+        "k3j3",
+        &k(3, 3),
+        &[(-3, q(-117, 64))],
+        false,
+        &[(-3, q(117, 32)), (-2, q(-1339, 192))],
+        false,
+    )
+}
+
+/// k4j2 (v0·ε⁴, v1·ε⁻²): -117/64 ε⁻¹ exactly (massive -117/64, all orders).
+#[test]
+fn grid_k4j2() -> Result<()> {
+    grid_point(
+        "k4j2",
+        &k(4, 2),
+        &[(-1, q(-117, 64))],
+        true,
+        &[(-1, q(117, 32))],
+        true,
+    )
+}
+
+/// k4j3 (v0·ε⁴, v1·ε⁻³): leading -117/64 ε⁻² (massive -117/64).
+#[test]
+fn grid_k4j3() -> Result<()> {
+    grid_point(
+        "k4j3",
+        &k(4, 3),
+        &[(-2, q(-117, 64))],
+        false,
+        &[(-2, q(117, 32)), (-1, q(-1339, 192))],
+        true,
+    )
+}
+
+/// A row-level point (grid rA, rB): the rows of a NONZERO group vanish
+/// inside it (the moment extraction drops them, no count sees them) while
+/// the X-fed row stays measured. Decided through linearity in v0's
+/// numerator: `point − control` (the X-only control) is the pure-L0 point
+/// (k3j1, k4j2), -117/64 C_A³/ε exactly for the generic and the massive
+/// method; the legacy child route gave +117/32.
+fn row_point(
+    label: &str,
+    dot: &str,
+    control: &str,
+    pins: &[(i64, Atom)],
+    complete: bool,
+) -> Result<()> {
+    let case = Case::new(dot, None)?;
+    let today = case.today()?;
+    let child = case.child(run(FIXED))?;
+    ensure_same(label, &child.value, &today)?;
+    ensure!(
+        child.root.corrections >= 1
+            && child.root.bounded >= 1
+            && child.root.exceeded == 0
+            && child.root.refused == 0,
+        "{label}: {:?}",
+        child.root
+    );
+    pinned(label, &today, pins, complete)?;
+    let control = Case::new(control, None)?.today()?;
+    pinned(
+        &format!("{label} - control"),
+        &(&child.value - &control),
+        &[(-1, q(-117, 64))],
+        true,
+    )?;
+    let legacy = case.child(run(LEGACY))?;
+    pinned(
+        &format!("{label} legacy - control"),
+        &(&legacy.value - &control),
+        &[(-1, q(117, 32))],
+        true,
+    )
+}
+
+/// rA: v0 = ε³ L0 + ε² X, v1·ε⁻¹: -169/64 ε⁻¹ (generic; massive -91/64 at
+/// this rearrangement-unsafe order), rA − xA = -117/64 ε⁻¹.
+#[test]
+fn grid_row_level_a() -> Result<()> {
+    row_point("rA", &r_a(), &x_a(), &[(-1, q(-169, 64))], true)
+}
+
+/// rA0: v0 = ε³ L0 + X, v1·ε⁻¹: every group is nonzero at the first depth
+/// (3 of 13 rows shown, the 10 rows with o = 1 and P = 2 dropped inside
+/// them): 13/32 ε⁻³ (ε⁻² and ε⁻¹ carry logs), rA0 − xA0 = -117/64 ε⁻¹.
+#[test]
+fn grid_row_level_a0() -> Result<()> {
+    row_point("rA0", &r_a0(), &x_a0(), &[(-3, q(13, 32))], false)
+}
+
+/// rB: v0 = ε⁴ L0 + ε² X, v1·ε⁻²: -13/16 ε⁻² (ε⁻¹ carries logs),
+/// rB − xB = -117/64 ε⁻¹.
+#[test]
+fn grid_row_level_b() -> Result<()> {
+    row_point("rB", &r_b(), &x_b(), &[(-2, q(-13, 16))], false)
+}
+
+/// Positive control (review: quotient-v1, k0j1): v1·ε⁻¹ alone. The bound
+/// (2) is the double quotient pole: the fixed planner starts there; without
+/// the raise the shown rows measure it and the planner retries to 2.
 #[test]
 fn a_measured_quotient_pole_still_retries() -> Result<()> {
-    let routes = routes(&scaled(L3_006, &[("v1", -1)]), None, 0)?;
+    let case = Case::new(&k(0, 1), None)?;
+    let today = case.today()?;
+    let child = case.child(run(FIXED))?;
+    ensure_same("k0j1", &child.value, &today)?;
     ensure!(
-        same(&routes.child, &routes.today)?,
-        "child route {} differs from today's {}",
-        routes.child,
-        routes.today
+        child.root.bounded >= 1 && child.root.retried == 0 && child.root.refused == 0,
+        "{:?}",
+        child.root
     );
-    let Counts {
+    let measured = case.child(run(NO_RAISE))?;
+    ensure_same("k0j1 no raise", &measured.value, &today)?;
+    ensure!(
+        measured.root.retried >= 1 && measured.root.raised == 0 && measured.root.refused == 0,
+        "{:?}",
+        measured.root
+    );
+    // 117/32 ε⁻⁴ (massive 117/32 at this safe order).
+    pinned("k0j1", &today, &[(-4, q(117, 32))], false)
+}
+
+/// Hard-only control (review: single-softer, k3j0): v0·ε³ alone. The hard
+/// part vanishes at the first depth, but the quotient bound is its single
+/// loop: nothing can hide, no retry, no refusal; the value is 0 (all three
+/// methods).
+#[test]
+fn a_vanishing_hard_part_under_a_simple_pole_needs_nothing() -> Result<()> {
+    let case = Case::new(&k(3, 0), None)?;
+    let today = case.today()?;
+    let child = case.child(run(FIXED))?;
+    ensure_same("k3j0", &child.value, &today)?;
+    let DepthCounts {
         corrections,
+        bounded,
         retried,
         raised,
         refused,
-    } = routes.counts;
+        ..
+    } = child.root;
     ensure!(
-        corrections >= 1 && retried >= 1 && raised == 0 && refused == 0,
+        corrections >= 1 && bounded == 0 && retried == 0 && raised == 0 && refused == 0,
         "{:?}",
-        routes.counts
+        child.root
+    );
+    pinned("k3j0", &today, &[], true)
+}
+
+/// The guard fires (pre-review 2(e)): k3j1 with the raise disabled. The
+/// accepted depth 1 stays below the bound 2 with every group vanished: the
+/// correction is refused (`vanished`), and the WHOLE correction falls back
+/// to today's path, so the value is today's, -117/64 ε⁻¹.
+#[test]
+fn the_guard_refuses_a_vanished_hard_part_below_the_bound() -> Result<()> {
+    let case = Case::new(&k(3, 1), None)?;
+    let today = case.today()?;
+    let child = case.child(run(NO_RAISE))?;
+    ensure_same("k3j1 no raise", &child.value, &today)?;
+    ensure!(
+        child.root.refused == 1 && child.root.reason == Some("vanished"),
+        "{:?}",
+        child.root
+    );
+    pinned("k3j1 no raise", &child.value, &[(-1, q(-117, 64))], true)
+}
+
+/// The guard on the realistic hidden rows (pre-review finding 1): rA0
+/// shows every group at the first depth (nothing vanished: the rows dropped
+/// inside them are in no count). With the raise disabled it is refused
+/// `unverified`; with the bound unknown it is refused `unbounded` before the
+/// hard part is integrated (the blocking case: before, an unknown bound with
+/// nothing vanished was accepted, the old planner's value, which misses
+/// +351/64 ε⁻¹). Both fall back to today's value.
+#[test]
+fn the_guard_refuses_a_hidden_row_without_a_known_bound() -> Result<()> {
+    let case = Case::new(&r_a0(), None)?;
+    let today = case.today()?;
+    let unverified = case.child(run(NO_RAISE))?;
+    ensure_same("rA0 no raise", &unverified.value, &today)?;
+    ensure!(
+        unverified.root.refused == 1 && unverified.root.reason == Some("unverified"),
+        "{:?}",
+        unverified.root
+    );
+    let unbounded = case.child(run(DepthTest {
+        bound: BoundOverride::Unknown,
+        ..FIXED
+    }))?;
+    ensure_same("rA0 unknown bound", &unbounded.value, &today)?;
+    ensure!(
+        unbounded.root.refused >= 1
+            && unbounded.root.reason == Some("unbounded")
+            && unbounded.root.retried == 0,
+        "{:?}",
+        unbounded.root
+    );
+    pinned(
+        "rA0 unknown bound",
+        &unbounded.value,
+        &[(-3, q(13, 32))],
+        false,
+    )
+}
+
+/// A measured need above the bound (pre-review note 3): k0j1 (true need 2)
+/// with the bound forced to 1. Refused at once (`bound_exceeded`, counted
+/// as exceeded, no retry) into today's value; an error under
+/// GAMMALOOP_IR_HARD_DEPTH_STRICT=1.
+#[test]
+fn a_measured_pole_above_the_bound_is_an_alarm() -> Result<()> {
+    let case = Case::new(&k(0, 1), None)?;
+    let today = case.today()?;
+    let below = DepthTest {
+        bound: BoundOverride::Fixed(1),
+        ..FIXED
+    };
+    let child = case.child(run(below))?;
+    ensure_same("k0j1 bound 1", &child.value, &today)?;
+    ensure!(
+        child.root.exceeded >= 1
+            && child.root.refused >= 1
+            && child.root.reason == Some("bound_exceeded")
+            && child.root.retried == 0,
+        "{:?}",
+        child.root
+    );
+    let strict = case.child(run(DepthTest {
+        strict: Some(true),
+        ..below
+    }));
+    let error = match strict {
+        Ok(_) => return Err(eyre!("GAMMALOOP_IR_HARD_DEPTH_STRICT=1 must fail")),
+        Err(error) => format!("{error:#}"),
+    };
+    ensure!(
+        error.contains("IRH-DEPTH") && error.contains("bound=1"),
+        "{error}"
     );
     Ok(())
 }
 
-/// Hard-only control (review: single-softer): v0·ε³ alone. The hard part
-/// vanishes at the first depth, but the quotient bound is its single loop:
-/// nothing can hide, no retry, no refusal.
+/// Nested child calls (pre-review 2(a)): c2-m9, k2j1 (v0·ε², v1·ε⁻¹) with
+/// the marked line 9. No top-level child call hides a pole; the condition
+/// holds only in the child calls nested in the R* evaluation of the
+/// two-loop UV subgraphs (hard edges {2,3,8}, every group zero at depth 1,
+/// quotient bound 2; IRH-DEPTH.md 2.6). Here the UV children themselves are
+/// computed on the child route: the nested calls start at their bound and
+/// the counterterm equals today's exactly (the legacy planner differs by
+/// [(351/32) log(M²/μ²) − 697/64] C_A³/ε in the record); -117/64 ε⁻² at the
+/// safe order (massive -117/64).
 #[test]
-fn a_vanishing_hard_part_under_a_simple_pole_needs_nothing() -> Result<()> {
-    let routes = routes(&scaled(L3_006, &[("v0", 3)]), None, 0)?;
+fn nested_child_calls_keep_their_quotient_pole() -> Result<()> {
+    let case = Case::new(&k(2, 1), Some(9))?;
+    let today = case.today()?;
+    let child = case.child(Run {
+        nested: true,
+        ..run(FIXED)
+    })?;
+    ensure_same("c2-m9 nested", &child.value, &today)?;
+    // The nested calls: child-route corrections of evaluations on a proper
+    // support (the UV children's R*, the decorated quotients' R*, among them
+    // hard {2,3,8} with bound 2 > its quotient's loop), wherever they run.
+    let mut all = child.root;
+    all.nested += child.nested.nested;
+    all.nested_bounded += child.nested.nested_bounded;
+    all.exceeded += child.nested.exceeded;
+    all.refused += child.nested.refused;
     ensure!(
-        same(&routes.child, &routes.today)?,
-        "child route {} differs from today's {}",
-        routes.child,
-        routes.today
+        all.nested >= 1 && all.nested_bounded >= 1 && all.exceeded == 0 && all.refused == 0,
+        "root {:?} nested {:?}",
+        child.root,
+        child.nested
     );
-    let Counts {
-        corrections,
-        retried,
-        raised,
-        refused,
-    } = routes.counts;
+    pinned("c2-m9", &today, &[(-2, q(-117, 64))], false)?;
+    let legacy = case.child(Run {
+        nested: true,
+        ..run(LEGACY)
+    })?;
     ensure!(
-        corrections >= 1 && retried == 0 && raised == 0 && refused == 0,
-        "{:?}",
-        routes.counts
+        !same(&legacy.value, &today)?,
+        "c2-m9: the legacy planner must miss the nested pole"
     );
-    Ok(())
+    pinned("c2-m9 legacy", &legacy.value, &[(-2, q(-117, 64))], false)
 }
 
 /// The trailing ε order of `value` (`None` when zero).
 fn order(value: &Atom) -> Option<i64> {
     let series = value
         .series(
-            crate::utils::GS.dim_epsilon,
+            GS.dim_epsilon,
             0,
             symbolica::poly::series::SeriesDepth::relative(1),
         )
@@ -293,7 +999,7 @@ fn vanished_row(target: Atom, shown: bool) -> RowHook {
 }
 
 /// The rows of the top-level correction at the first depth.
-fn first_rows() -> Result<Vec<(Atom, Atom, usize)>> {
+fn first_rows(case: &Case) -> Result<Vec<(Atom, Atom, usize)>> {
     let rows = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
     let record = rows.clone();
     let hook: RowHook = Box::new(
@@ -303,58 +1009,70 @@ fn first_rows() -> Result<Vec<(Atom, Atom, usize)>> {
             }
         },
     );
-    routes(L3_006, Some(hook), 0)?;
+    case.child(Run {
+        hook: Some(hook),
+        ..run(FIXED)
+    })?;
     Ok(std::rc::Rc::try_unwrap(rows)
-        .map_err(|_| eyre::eyre!("the hook outlived its run"))?
+        .map_err(|_| eyre!("the hook outlived its run"))?
         .into_inner())
 }
 
 #[test]
 fn a_vanished_row_of_a_nonzero_group_keeps_its_quotient_pole() -> Result<()> {
-    let rows = first_rows()?;
+    let case = Case::new(L3_006, None)?;
+    let rows = first_rows(&case)?;
     let top = rows.iter().map(|(_, _, loops)| *loops).max().unwrap_or(0);
     let group = rows
         .iter()
         .filter(|(h, _, loops)| *loops == top && !h.is_zero())
         .collect::<Vec<_>>();
     ensure!(group.len() >= 2, "the top group needs two rows: {rows:?}");
+    let hooked = |target: &Atom, shown: bool, start: usize| {
+        case.child(Run {
+            hook: Some(vanished_row(target.clone(), shown)),
+            start,
+            ..run(FIXED)
+        })
+    };
     for (h, target, _) in group {
         if order(h) != Some(-2) {
             continue;
         }
         // The value of the hooked correction: from depth 3 on, every row's
         // coefficient is shown through the order its quotient needs.
-        let reference = routes(L3_006, Some(vanished_row(target.clone(), true)), 3)?;
+        let reference = hooked(target, true, 3)?;
         // The same without the row's contribution: the row must reach the
         // pole part.
-        let without = routes(L3_006, Some(vanished_row(target.clone(), false)), 3)?;
-        if same(&reference.child, &without.child)? {
+        let without = hooked(target, false, 3)?;
+        if same(&reference.value, &without.value)? {
             continue;
         }
-        let routes = routes(L3_006, Some(vanished_row(target.clone(), true)), 0)?;
+        let child = hooked(target, true, 0)?;
         ensure!(
-            same(&routes.child, &reference.child)?,
+            same(&child.value, &reference.value)?,
             "child route {} differs from the reference {}",
-            routes.child,
-            reference.child
+            child.value,
+            reference.value
         );
-        // The vanished row's quotient factor is measured (no raise to a
-        // bound): the planner retries at depth 3 and the child route gets the
-        // reference; the guard never fires.
-        let Counts {
+        // The vanished row's quotient factor is measured (no raise beyond
+        // the measured need): the planner retries at depth 3 and the child
+        // route gets the reference; the guard never fires.
+        let DepthCounts {
             corrections,
             retried,
             raised,
             refused,
-        } = routes.counts;
+            ..
+        } = child.root;
         ensure!(
             corrections >= 1 && retried >= 1 && raised == 0 && refused == 0,
             "{:?}",
-            routes.counts
+            child.root
         );
         return Ok(());
     }
-    Err(eyre::eyre!(
+    Err(eyre!(
         "no row of the top group reaches the pole part: {rows:?}"
     ))
 }
