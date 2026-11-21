@@ -1147,6 +1147,68 @@ fn a_non_laurent_dependence_on_epsilon_is_refused_at_validation() {
     }
 }
 
+/// Integers a marked direct value carries are checked before use: an edge or
+/// vertex id above i64::MAX (written as Q(id, ..) and edge(source, target):
+/// it wrapped to a negative id) is refused (Graph, "id .."); a momentum
+/// coefficient above 2^31 in absolute value (multiplied by ±1 and summed per
+/// vertex: it could wrap) is refused (MomentumBasis); a tensor power
+/// above 2 of a slot-carrying factor (Q(3, ..)^(10^12): the rules copied its
+/// slots n times before checking them) is refused at once as the
+/// over-contraction it is; the settings' number of terms outside 1..=128 is
+/// refused by the entries' input check (Graph, "the depth .. is out of
+/// range"), 2 accepted.
+#[test]
+fn a_marked_value_refuses_integers_out_of_range() {
+    let good = gluon_surrogate(1);
+    good.validate().unwrap();
+    let mut edge = good.clone();
+    edge.edges[0].id = usize::MAX;
+    let mut vertex = good.clone();
+    vertex.vertices[0].id = usize::MAX;
+    for (what, value) in [("edge id", edge), ("vertex id", vertex)] {
+        match value.validate().unwrap_err() {
+            FactorizedError::Graph { detail } => assert!(
+                detail.starts_with(&format!("id {}:", usize::MAX)),
+                "{what}: {detail}"
+            ),
+            other => panic!("{what}: expected the Graph id refusal, got {other:?}"),
+        }
+    }
+    let mut coefficient = good.clone();
+    coefficient.edges[0].momentum[0] = (1 << 31) + 1;
+    match coefficient.validate().unwrap_err() {
+        FactorizedError::MomentumBasis { detail } => assert!(
+            detail.contains("momentum coefficient 2147483649 out of range"),
+            "{detail}"
+        ),
+        other => panic!("expected the momentum-coefficient refusal, got {other:?}"),
+    }
+    let mut power = good.clone();
+    let tensor = atom(&format!("{}^1000000000000", q(3, &mink(40))));
+    let factor = &power.vertices[0].factor * &tensor;
+    power.vertices[0].factor = factor;
+    assert!(
+        matches!(
+            power.validate().unwrap_err(),
+            FactorizedError::IndexOverContracted { .. }
+        ),
+        "a huge tensor power"
+    );
+    for terms in [-1i64, 0, 129] {
+        let mut settings = settings(2);
+        settings.number_of_terms_in_epsilon_expansion = terms;
+        match super::evaluate::vakint_input(&settings, &good, &Atom::num(1)).unwrap_err() {
+            FactorizedError::Graph { detail } => assert!(
+                detail.starts_with(&format!("the depth {terms} is out of range")),
+                "{terms}: {detail}"
+            ),
+            other => panic!("{terms}: expected the Graph depth refusal, got {other:?}"),
+        }
+    }
+    let _accepted =
+        super::evaluate::vakint_input(&settings(2), &good, &Atom::num(1)).expect("2 terms");
+}
+
 /// The surrogate coefficient vertex (`ins:`) carries exactly the two inner
 /// boundary half-edges (format section 8, A-34): a third half-edge of the
 /// vertex (the first bubble line's source, 60) is refused by THAT rule; the

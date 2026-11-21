@@ -398,3 +398,91 @@ fn the_beta_k1_l5_51_records_with_insertions_equal_their_values() {
     let dirs = wh_fixtures::record_dirs(&wh_fixtures::fixture_dir("k1-l5/L5-51"));
     compare_set(&package_engine(), &dirs, 6, Some(5), "L5-51");
 }
+
+/// The depth of a marked value is a number of ε terms between 1 and
+/// MARKED_MAX_TERMS (128) with the closure entry's insertion raise. The
+/// gate's witness, the L2-22 K1 root (vendored k1-root, depth 2) with only
+/// its depth set to usize::MAX, returned a zero double pole (the depth was
+/// cast to -1); now it is refused (Closure, "the depth .. is out of range"),
+/// by validation (text and typed records alike) and by the entry. Refused
+/// too: i64::MAX and i64::MAX + 1 as record depths, 0, and 129 (checked at
+/// validation, never evaluated); the settings' number of terms (record depth
+/// none) -1, 0, i64::MIN (which overflowed in the truncation) and 129; with
+/// an insertion of pole order 1 (k2-child-ins), depth 128 (raised to 129).
+/// Accepted at validation: depth 128 (the cap). The ordinary control keeps
+/// both poles: k1-root at depth 2 equals its value.
+#[test]
+fn an_out_of_range_depth_is_refused() {
+    let vakint = plain_engine();
+    let root = include_str!("fixtures/wh-k1-root.record.txt");
+    let k2 = include_str!("fixtures/wh-k2-child-ins.record.txt");
+    let with_depth = |text: &str, depth: Option<usize>| {
+        let mut value = FactorizedNumerator::from_text(text).unwrap();
+        let FactorizedKind::Closure(spec) = &mut value.kind else {
+            unreachable!()
+        };
+        spec.depth = depth;
+        value
+    };
+    let refused = |error: FactorizedError, depth: &str, what: &str| match &error {
+        FactorizedError::Closure { detail } => assert!(
+            detail.starts_with(&format!("the depth {depth} is out of range")),
+            "{what}: {detail}"
+        ),
+        other => panic!("{what}: expected the Closure depth refusal, got {other:?}"),
+    };
+    let entry = |value: &FactorizedNumerator, settings: &VakintSettings| {
+        evaluate_factorized_closure(
+            &vakint,
+            settings,
+            std::slice::from_ref(value),
+            &[value.prefactor.total()],
+        )
+    };
+    let huge = usize::try_from(i64::MAX).unwrap();
+    for depth in [usize::MAX, huge, huge + 1, 0, 129] {
+        let value = with_depth(root, Some(depth));
+        refused(
+            value.validate().unwrap_err(),
+            &depth.to_string(),
+            "record depth",
+        );
+        refused(
+            entry(&value, &site_settings()).unwrap_err(),
+            &depth.to_string(),
+            "record depth through the entry",
+        );
+        // the text form: the vendored text with only its depth line changed,
+        // refused by the reader (which validates)
+        let text = root.replace("\ndepth\t2\n", &format!("\ndepth\t{depth}\n"));
+        assert_ne!(text, root);
+        refused(
+            FactorizedNumerator::from_text(&text).unwrap_err(),
+            &depth.to_string(),
+            "record depth from text",
+        );
+    }
+    with_depth(root, Some(128))
+        .validate()
+        .expect("depth 128 is at the cap");
+    for terms in [-1i64, 0, i64::MIN, 129] {
+        let mut settings = site_settings();
+        settings.number_of_terms_in_epsilon_expansion = terms;
+        refused(
+            entry(&with_depth(root, None), &settings).unwrap_err(),
+            &terms.to_string(),
+            "the settings' number of terms",
+        );
+    }
+    refused(
+        entry(&with_depth(k2, Some(128)), &site_settings()).unwrap_err(),
+        "128",
+        "depth 128 raised by the insertion's pole order 1",
+    );
+    compare(
+        &vakint,
+        root,
+        include_str!("fixtures/wh-k1-root.value.txt"),
+        "k1-root at depth 2 (control)",
+    );
+}

@@ -1012,9 +1012,17 @@ pub(crate) fn check_marked_entry(
     value: &FactorizedNumerator,
     prefactor: &Atom,
     epsilon: Symbol,
+    terms: Option<i64>,
 ) -> Result<()> {
     check_prefactor_argument(value, prefactor, epsilon)?;
-    check_epsilon_setting(value, epsilon)
+    check_epsilon_setting(value, epsilon)?;
+    // the settings' number of terms (an entry that does not take it from the
+    // record), by the depth rule of [`MARKED_MAX_TERMS`]; marked values only
+    // (the vacuum entries call this for every value)
+    if let Some(terms) = terms.filter(|_| is_marked(value)) {
+        marked_depth(i128::from(terms)).map_err(|detail| FactorizedError::Graph { detail })?;
+    }
+    Ok(())
 }
 
 /// Whether `value` is a MARKED value (a record kind of the R* interface:
@@ -1193,6 +1201,29 @@ fn epsilon_power_bound(view: AtomView<'_>, depends: &dyn Fn(Symbol) -> bool) -> 
         }
         _ => Some(0),
     }
+}
+
+/// The most ε terms a marked value may ask for: its depth (the record's
+/// `depth`, or the settings' number of terms) is at least 1 and, with the
+/// closure entry's insertion raise added, at most 128 (a depth of 64 plus the
+/// raise cap [`INSERTION_MAX_TOTAL_POLE_ORDER`]). The R* sites ask for at
+/// most 12 (six-loop K1 / K2 at depth 6, K3 with a quotient's retries). Below
+/// 1 the entries returned an empty (zero) value; far above, an evaluation that
+/// does not end; beyond i64 the depth wrapped.
+pub(crate) const MARKED_MAX_TERMS: i64 = 128;
+
+/// The depth rule of a marked value ([`MARKED_MAX_TERMS`]): `depth` (any
+/// integer type, widened without loss) as the number of terms, or the detail
+/// of the refusal.
+pub(crate) fn marked_depth(depth: i128) -> std::result::Result<i64, String> {
+    i64::try_from(depth)
+        .ok()
+        .filter(|d| (1..=MARKED_MAX_TERMS).contains(d))
+        .ok_or_else(|| {
+            format!(
+                "the depth {depth} is out of range: a marked value asks for at least 1 and at most {MARKED_MAX_TERMS} ε terms"
+            )
+        })
 }
 
 /// A symbol named `ε` in any namespace (the evaluation's epsilon; which one is
@@ -1633,6 +1664,18 @@ impl FactorRules<'_> {
                         ),
                     });
                 };
+                // a power above 2 of a tensor with free slots repeats each
+                // slot n times: over-contracted, refused before the n copies
+                if base_free.is_empty() {
+                    return Ok(Vec::new());
+                }
+                if n > 2 {
+                    return Err(FactorizedError::IndexOverContracted {
+                        slot: base_free[0].key(),
+                        count: usize::try_from(n).unwrap_or(usize::MAX),
+                        location: self.loc(),
+                    });
+                }
                 let mut all = Vec::new();
                 for _ in 0..n {
                     all.extend(base_free.iter().cloned());
@@ -2102,10 +2145,67 @@ impl FactorizedNumerator {
         if is_marked(self) {
             self.check_reserved_symbols()?;
         }
+        let closure = matches!(self.kind, FactorizedKind::Closure(_));
+        let in_kind = |detail: String| {
+            if closure {
+                FactorizedError::Closure { detail }
+            } else {
+                FactorizedError::Graph { detail }
+            }
+        };
+        // the record's depth (text or typed), checked without a cast
+        let depth = match &self.kind {
+            FactorizedKind::Closure(spec) => spec.depth,
+            _ => self.record.as_ref().and_then(|r| r.depth),
+        };
+        if let Some(depth) = depth {
+            marked_depth(i128::try_from(depth).unwrap_or(i128::MAX)).map_err(in_kind)?;
+        }
+        // ids are written as Q(id, ..) and edge(source, target): i64 (the
+        // closure kind has its own bound, with its own text, in
+        // validate_closure)
+        if !closure && let Some(detail) = self.marked_id_overflow() {
+            return Err(in_kind(detail));
+        }
         if let FactorizedKind::Closure(spec) = &self.kind {
             return self.validate_closure(spec);
         }
         self.validate_contract(None)
+    }
+
+    /// A marked value's ids must be i64 (they are written as Q(id, ..),
+    /// edge(source, target), with fresh loop-vector ids max + 1 + i above the
+    /// largest): the detail of the refusal when one is not.
+    fn marked_id_overflow(&self) -> Option<String> {
+        let fresh = self
+            .loop_edges
+            .iter()
+            .rposition(|e| e.is_none())
+            .map_or(0, |i| i + 1);
+        let top = self
+            .edges
+            .iter()
+            .flat_map(|e| {
+                let vertex = |end: &Endpoint| match end {
+                    Endpoint::Vertex(v) => Some(*v),
+                    Endpoint::External => None,
+                };
+                [Some(e.id), vertex(&e.source), vertex(&e.target)]
+                    .into_iter()
+                    .flatten()
+            })
+            .chain(self.vertices.iter().map(|v| v.id))
+            .chain(self.constant_vectors())
+            .max()
+            .unwrap_or(0);
+        let limit = usize::try_from(i64::MAX).unwrap_or(usize::MAX);
+        top.checked_add(fresh)
+            .is_none_or(|last| last > limit)
+            .then(|| {
+                format!(
+                    "id {top}: the edge and vertex ids (with fresh loop-vector ids up to {top} + {fresh} above them) must not exceed i64::MAX"
+                )
+            })
     }
 
     /// RESERVED SYMBOLS: no atom of the record (factors, masses, ports,
@@ -2711,6 +2811,16 @@ impl FactorizedNumerator {
                     edge: edge.id,
                     expected: n,
                     found: edge.momentum.len(),
+                });
+            }
+            // coefficients are multiplied by ±1 and summed per vertex: bounded
+            // so that no product or sum of fewer than 2^32 edges can wrap
+            if let Some(c) = edge.momentum.iter().find(|c| c.unsigned_abs() > 1 << 31) {
+                return Err(FactorizedError::MomentumBasis {
+                    detail: format!(
+                        "edge {}: momentum coefficient {c} out of range (at most 2^31 in absolute value)",
+                        edge.id
+                    ),
                 });
             }
         }

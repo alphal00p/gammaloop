@@ -1514,7 +1514,7 @@ pub fn evaluate_factorized_closure(
         // a marked value: the separately supplied prefactor gets the checks of
         // the record's prefactor fields, the settings' epsilon the caller-symbol
         // rule (no-ops for an unmarked value: the base behaviour)
-        super::check_marked_entry(value, prefactor, vk_symbol!(&settings.epsilon_symbol))?;
+        super::check_marked_entry(value, prefactor, vk_symbol!(&settings.epsilon_symbol), None)?;
         let record = evaluate_validated(vakint, settings, value, spec, prefactor)?;
         out.value += &record.value;
         out.vakint_value += &record.vakint_value;
@@ -1540,9 +1540,13 @@ pub(super) fn evaluate_validated(
     let mut local = settings.clone();
     local.tensor_reduction_method = crate::TensorReductionMethod::FeynKit;
     local.use_dot_product_notation = true;
-    if let Some(depth) = spec.depth {
-        local.number_of_terms_in_epsilon_expansion = depth as i64;
-    }
+    // the record's depth, else the settings' number of terms, by the depth
+    // rule of a marked value (no cast: a depth beyond i64 is refused)
+    let requested = match spec.depth {
+        Some(depth) => i128::try_from(depth).unwrap_or(i128::MAX),
+        None => i128::from(settings.number_of_terms_in_epsilon_expansion),
+    };
+    local.number_of_terms_in_epsilon_expansion = super::marked_depth(requested).map_err(refuse)?;
     // `depth` counts the terms of the RETURNED product: insertions with
     // poles of total order n promote n more orders of the integral, which
     // is evaluated n terms deeper and the product truncated back
@@ -1553,11 +1557,12 @@ pub(super) fn evaluate_validated(
     local.number_of_terms_in_epsilon_expansion = i64::try_from(pole_order)
         .ok()
         .and_then(|n| returned_terms.checked_add(n))
-        .ok_or_else(|| FactorizedError::Insertion {
-            vertex: value.insertions.first().map_or(0, |i| i.vertex),
-            detail: format!(
-                "an ε power out of range: the insertions' pole order {pole_order} does not fit the depth {returned_terms}"
-            ),
+        .filter(|terms| *terms <= super::MARKED_MAX_TERMS)
+        .ok_or_else(|| {
+            refuse(format!(
+                "the depth {returned_terms} is out of range: with the insertions' raise {pole_order} a marked value asks for at most {} ε terms",
+                super::MARKED_MAX_TERMS
+            ))
         })?;
     let prepared = prepare(vakint, &local, value, spec, prefactor)?;
     let started = Instant::now();
@@ -1610,7 +1615,16 @@ pub(super) fn evaluate_validated(
         vakint_value = vakint_value.replace(symbol.clone()).with(tensor.clone());
     }
     let vakint_value = if pole_order > 0 {
-        let target = returned_terms - value.loops() as i64 - 1;
+        let target = i64::try_from(value.loops())
+            .ok()
+            .and_then(|loops| returned_terms.checked_sub(loops))
+            .and_then(|t| t.checked_sub(1))
+            .ok_or_else(|| {
+                refuse(format!(
+                    "the depth {returned_terms} is out of range: no truncation order for {} loops",
+                    value.loops()
+                ))
+            })?;
         injected(
             "truncation of the insertion product",
             || symbolica::poly::series::SeriesError::NonPositiveRelativeDepth {

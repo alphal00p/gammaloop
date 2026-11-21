@@ -1024,7 +1024,12 @@ pub fn vakint_vacuum_input_streamed(
     // a marked value called here directly: the entry check too (A-17); the
     // record itself is walked by validate_vacuum
     if !matches!(value.kind, FactorizedKind::Closure(_)) {
-        super::check_marked_entry(value, prefactor, vk_symbol!(&settings.epsilon_symbol))?;
+        super::check_marked_entry(
+            value,
+            prefactor,
+            vk_symbol!(&settings.epsilon_symbol),
+            Some(settings.number_of_terms_in_epsilon_expansion),
+        )?;
     }
     value.check_insertion_epsilon(vk_symbol!(&settings.epsilon_symbol).get_name())?;
     let (scalar, seconds, pieces) = match streaming {
@@ -1148,7 +1153,12 @@ pub fn evaluate_factorized_vacuum_streamed(
     // rule (no-ops for an unmarked value: the base behaviour; the closure
     // kind keeps its earlier refusal of this entry, `Reserved`)
     if !matches!(value.kind, super::FactorizedKind::Closure(_)) {
-        super::check_marked_entry(value, prefactor, vk_symbol!(&settings.epsilon_symbol))?;
+        super::check_marked_entry(
+            value,
+            prefactor,
+            vk_symbol!(&settings.epsilon_symbol),
+            Some(settings.number_of_terms_in_epsilon_expansion),
+        )?;
     }
     // the new record kinds do not depend on the caller's tensor reduction or
     // notation (evaluate::is_new_kind); values accepted before keep them
