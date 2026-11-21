@@ -1867,3 +1867,59 @@ fn evidence_without_record_classes_is_not_reused() -> Result<()> {
         Ok(())
     })
 }
+
+/// Review of the follow-ups (ledger lens, finding 2): a [`Section`]'s
+/// reclassification moves the records in the record classes too. Mode on,
+/// one kind with two classes: K1 taken outside the section (the kind-wide
+/// rule sees a taken record), and inside an IR correction whose guard
+/// budget ran out one K2 record declined by a setting's code (`open_root`)
+/// and one K2 record taken. The budget makes the taken K2 record
+/// `declined:ir_hard_guard:budget`; with the class map left at `taken`
+/// the K2 class looked evidenced and the diagram passed. Now every K2
+/// record declined, one by a setting's code: the class rule fails it. The
+/// saved evidence carries the moved classes. Control: the same with the
+/// K2 decline a graph code passes.
+#[test]
+fn a_section_reclassifies_the_record_classes_too() -> Result<()> {
+    use super::uncontracted_ledger::{Section, SectionEnd};
+    test_initialise()?;
+    with_switch(Switch::new(Mode::On, &ROOT_CHILD), || -> Result<()> {
+        for (code, fails) in [("open_root", true), ("one_loop_tree_cut", false)] {
+            let _ = ledger::take_lines();
+            let diagram = DiagramLedger::open("section_shapes", "000005")
+                .ok_or_else(|| eyre!("no ledger"))?;
+            ledger::record_shaped(Kind::Root, "K1", None, Mode::On);
+            ledger::record_shaped(Kind::Child, "K2", None, Mode::On);
+            let section = Section::open().ok_or_else(|| eyre!("no section"))?;
+            ledger::record_shaped(Kind::Root, "K2", Some(code), Mode::On);
+            ledger::record_shaped(Kind::Root, "K2", None, Mode::On);
+            section.close(SectionEnd::GuardBudget)?;
+            let closed = diagram.close(true);
+            let lines = ledger::take_lines();
+            let root = disposition(&lines, Kind::Root)?;
+            if fails {
+                let error = format!(
+                    "{:#}",
+                    closed
+                        .err()
+                        .ok_or_else(|| eyre!("{code}: the diagram passed: {root}"))?
+                );
+                ensure!(
+                    error.contains("K2-shaped records declined")
+                        && field(root, "outcome") == Some("uncovered"),
+                    "{code}: {error} / {root}"
+                );
+            } else {
+                let evidence = closed?.ok_or_else(|| eyre!("no evidence"))?;
+                let k2 = &evidence["kinds"]["root"]["shapes"]["K2"];
+                ensure!(
+                    field(root, "outcome") == Some("ok")
+                        && k2["declined:ir_hard_guard:budget"] == 1
+                        && k2["taken"].is_null(),
+                    "{code}: {root} / {k2}"
+                );
+            }
+        }
+        Ok(())
+    })
+}
