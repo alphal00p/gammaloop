@@ -1736,3 +1736,51 @@ fn k5_cut_child_taylor_degree_is_the_local_dod() -> Result<()> {
         Ok(())
     })
 }
+
+/// The v1.5 test cases (kept and cut holes, single-hedge `ins:` with a
+/// spectator port; one directory per case with `input.txt` / `value.txt`)
+/// under `GAMMALOOP_U7C_V15_DIR`: each record is read by vakint's reader,
+/// evaluated by its closure entry at the record's depth and finished as the
+/// hook finishes it; the value equals the case's reference (today's) value
+/// through its valid_through.
+#[test]
+#[ignore = "reads GAMMALOOP_U7C_V15_DIR"]
+fn k5_v15_cases_oracle() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let dir = std::path::PathBuf::from(
+            std::env::var("GAMMALOOP_U7C_V15_DIR")
+                .map_err(|_| eyre!("set GAMMALOOP_U7C_V15_DIR"))?,
+        );
+        let vakint = Vakint::new()?;
+        let mut cases = std::fs::read_dir(&dir)?
+            .map(|entry| entry.map(|entry| entry.path()))
+            .collect::<std::io::Result<Vec<_>>>()?;
+        cases.sort();
+        let mut checked = 0;
+        for case in cases.iter().filter(|path| path.join("input.txt").is_file()) {
+            let text = std::fs::read_to_string(case.join("input.txt"))?;
+            let value_text = std::fs::read_to_string(case.join("value.txt"))?;
+            let ours = record(&text)?;
+            let single = ours.insertions.iter().any(|insertion| {
+                insertion.hedges.len() == 1
+                    && ours
+                        .vertices
+                        .iter()
+                        .any(|v| v.id == insertion.vertex && v.rule.starts_with("ins:"))
+            });
+            ensure!(single, "{}: no single-hedge ins:", case.display());
+            let value = oracle_value(&vakint, &text, 1)?;
+            let expected = fixture_value(&value_text)?;
+            ensure!(
+                equal_through(&value, &expected, valid_through(&value_text)?)?,
+                "{}: the oracle value differs from the reference",
+                case.display()
+            );
+            eprintln!("K5_V15_CASE {} PASS value={value}", case.display());
+            checked += 1;
+        }
+        ensure!(checked > 0, "no case under {}", dir.display());
+        Ok(())
+    })
+}
