@@ -1,0 +1,56 @@
+# Fixture files vendored for the factorized entries' tests: path (relative to crates/vakint), sha256 of the file, origin.
+# Checked by tests/fixture_manifest_tests.rs: every listed file has its sha256, and the three fixture directories hold
+# exactly the listed files. Origins:
+#   wh-fixtures:<path>        the R* producer's fixture export (the directory VAKINT_TEST_WH_FIXTURES names), byte for byte
+#   l3-hard-dump:<path>       the producer's three-loop caller dump with hard parts (VAKINT_TEST_L3_HARD_DUMP), byte for byte
+#   review-probe:<path>       the inputs of an external review's port probe (VAKINT_TEST_REVIEW_PROBE), byte for byte
+#   recorded:<how>            written by a test on a named commit
+#   derived:<how> / written:<how>   made for these tests; the label line of the file says what it is
+#   base:<note>               present before these fixtures were vendored
+src/p_integral/factorized/fixtures/wh-k1-root.record.txt	91dd00e090dda732f625d7ff076967af05a40092373e90a65693918799f3ca35	wh-fixtures:k1-root/input.txt
+src/p_integral/factorized/fixtures/wh-k1-root.value.txt	5c07a6181fa1d68217b398804a13f6ef88fdef75a3c84e8c3bdf3a864ae9de16	wh-fixtures:k1-root/value.txt
+src/p_integral/factorized/fixtures/wh-k1-root-rc.record.txt	3704a8806435cf5bb14ebffd33273a0ff7bbfbf92b53893fc286fe3faed22307	wh-fixtures:k1-root-rc/input.txt
+src/p_integral/factorized/fixtures/wh-k1-root-rc.value.txt	a9e529a39d5fef07a375a6c5ad5a95a5bb64dedd3cbcc648d1334f62d22d5426	wh-fixtures:k1-root-rc/value.txt
+src/p_integral/factorized/fixtures/wh-k2-child.record.txt	b0c3fb79edf2df0f0e8b352f06297b1b5fadeed3875ddf5cd4f04f492526e8d1	wh-fixtures:k2-child/input.txt
+src/p_integral/factorized/fixtures/wh-k2-child.value.txt	0e1e36221ac3f83f677f5b9a2642a420af1399b0c5e9c4458afa419e73ce8d34	wh-fixtures:k2-child/value.txt
+src/p_integral/factorized/fixtures/wh-k2-child-ins.record.txt	80eaa98270d00b7c3d4c4894800f135173f2104501e80651b7d2c757e36c1058	wh-fixtures:k2-child-ins/input.txt
+src/p_integral/factorized/fixtures/wh-k2-child-ins.value.txt	4fbb49248aba3e8eb42024968f49714c63b83b0c47983c80901e9bd9c51f4739	wh-fixtures:k2-child-ins/value.txt
+src/p_integral/factorized/fixtures/wh-k3-dirac.record.txt	6baf8b8cb45c0dc07f90566cb484aec7c8b729bd23ebee0a8c296b383dd8e458	wh-fixtures:k3-dirac/input.txt
+src/p_integral/factorized/fixtures/wh-k3-dirac.value.txt	12916e1bdafac7c11e60c2f796b50196a2057da5b49561623693629d4147afaa	wh-fixtures:k3-dirac/value.txt
+src/p_integral/factorized/fixtures/wh-k3-hs.record.txt	25f06704eeca442c405908182b3d2c5ecd4150d208f634b9fc186582145c130b	wh-fixtures:k3-hs/input.txt
+src/p_integral/factorized/fixtures/wh-k3-hs.value.txt	048c93b0526159bac2a8fd5aa926b13c2fde645461f6ef62a473e54844e08c91	wh-fixtures:k3-hs/value.txt
+src/p_integral/factorized/fixtures/wh-k4-quotient.record.txt	d2eae36d5649961e83d1bba63d6a1b8e91976ab9ab714341276abecd3c569b71	wh-fixtures:k4-quotient/input.txt
+src/p_integral/factorized/fixtures/wh-k4-quotient.value.txt	a6dc7e47705c2f33f379fe63dad3e536ffa99b20f5e46e5ca768a108d07f2409	wh-fixtures:k4-quotient/value.txt
+src/p_integral/factorized/fixtures/wh-k5-direct.record.txt	f387d24f756796efb38b1bde8502eeaf0d71edd31b3d4b77627d7a65f2e1ec82	wh-fixtures:k5-direct/input.txt
+src/p_integral/factorized/fixtures/wh-k5-direct.value.txt	c6810c7c9da67b51fdcc1fba20ea2d59c10832441e0bd0badf177ebc65f69a98	wh-fixtures:k5-direct/value.txt
+src/p_integral/factorized/fixtures/wh-k5-surrogate.record.txt	8cd1b0353d038b7430c1466c6798e265b0c3496395d3fe43b9d67bd849f0959f	wh-fixtures:k5-surrogate/input.txt
+src/p_integral/factorized/fixtures/wh-k5-surrogate.value.txt	e3dbc8c697ad0fb101fd30de82e9cc82a1ccb693e72e0e3454e629a9e4cc69f1	wh-fixtures:k5-surrogate/value.txt
+src/p_integral/factorized/fixtures/wh-k1-root-rc0.record.txt	09fc5f0b13507d60ae4d95125ad5963727614a12fcc185e48d29e30df8ceafb6	wh-fixtures:k1-root-rc/raw/control-rc0-input.txt
+src/p_integral/factorized/fixtures/wh-k1-root-rc0.value.txt	ce250b6971aa3cfa44ebc16565abf1026800b884a11d0b8c317a243fb35b9244	wh-fixtures:k1-root-rc/raw/control-rc0-value.txt
+src/p_integral/factorized/fixtures/l3-185-insertions.txt	2501f5a1b5e73f7edfc6ab15b3aea32658028c464e36067a4dcfe8eb1673ebfe	derived:the producer's three-loop record B_self_energy_L3_185 remainder 3 (two contracted children) as a direct-kind v3 record, closure section removed
+tests/fixtures/wh_ports/k3-dirac.input.txt	6baf8b8cb45c0dc07f90566cb484aec7c8b729bd23ebee0a8c296b383dd8e458	wh-fixtures:k3-dirac/input.txt
+tests/fixtures/wh_ports/k3-hs.input.txt	25f06704eeca442c405908182b3d2c5ecd4150d208f634b9fc186582145c130b	wh-fixtures:k3-hs/input.txt
+tests/fixtures/wh_ports/k6-bubble.input.txt	e2c2e09aa9b0cdfe43f4830d20767e16479bc28be5168b7b7cb16e5a8c71ebc2	wh-fixtures:k6-norm/bubble/input.txt
+tests/fixtures/wh_ports/k6-bubble.value.txt	4c83a2a954804c9375135f4a0211c9cb6012968cd1f15fe0677c34b983aef0c0	wh-fixtures:k6-norm/bubble/value.txt
+tests/fixtures/wh_ports/k6-gluon.input.txt	d1a52758164d98bc55f11097385fa90e9f9c569aed9fb24c4a518a7def561a50	wh-fixtures:k6-norm/gluon/input.txt
+tests/fixtures/wh_ports/k6-gluon.value.txt	7f93c1a7472e37265ce7d223b6c52ef13bd655e15104fec43c38748d070b0720	wh-fixtures:k6-norm/gluon/value.txt
+tests/fixtures/wh_ports/k6-gluon-qloop.input.txt	59cd2949334d5770fe287febe07d4ef3cac161a15ff403435acf5b9fe7d4b2de	wh-fixtures:k6-norm/gluon-qloop/input.txt
+tests/fixtures/wh_ports/k6-gluon-qloop.value.txt	68199a7e568d52448d9c8d3c5f7d3c7cb3574503d7426ed6f3aeb147236978d6	wh-fixtures:k6-norm/gluon-qloop/value.txt
+tests/fixtures/wh_ports/k6-quark.input.txt	b83e013b34091555290f68888e10edb92c7a10eff2ab1c10dd54a93507566f2d	wh-fixtures:k6-norm/quark/input.txt
+tests/fixtures/wh_ports/k6-quark.value.txt	eb1c9b6477ffcad74424bc86959d185f3800ae5e9b0dcf86c5f1b3d3467d26da	wh-fixtures:k6-norm/quark/value.txt
+tests/fixtures/wh_ports/hard-L3-000993.txt	8d9a9e2e386e880bae9d0685c38ae3ad401f3a47374ed466b2ee38b1b219c5d0	l3-hard-dump:closure-v2-3025037-000993.txt
+tests/fixtures/wh_ports/hard-L3-006078.txt	eec739bbc5cff7f9ce816e46875b8b96c72081ae09c98da22b332e92f04c0cd6	l3-hard-dump:closure-v2-3025037-006078.txt
+tests/fixtures/wh_ports/hard-L3-008385.txt	a40f2213b2f471127b1ec0a745281b1b2623d0b613cf382857c1eb05e400f788	l3-hard-dump:closure-v2-3025037-008385.txt
+tests/fixtures/wh_ports/hard-L3-010933.txt	871382a79daaf4b1b0c60caf85f301ad4c42255bd643481e28d450bcd9fe0966	l3-hard-dump:closure-v2-3025037-010933.txt
+tests/fixtures/wh_ports/hard-L3-012034.txt	585bd54709c1d5b6af21e7c618de6bdd4be90b460f2926fc987bb1df2ee1ada4	l3-hard-dump:closure-v2-3025037-012034.txt
+tests/fixtures/direct_differential/base.tsv	2776323640a321024ed1da2ec77aff5f892ba3a04692b353f03a8aa1bfe20469	recorded:on dea282615 by tests/direct_differential_tests.rs with VAKINT_DIFF_RECORD (recorded a second time on a clean dea282615 checkout with its own build directory: byte-identical)
+tests/fixtures/direct_differential/rank0-v1.txt	3f1deb253a384713565ae1b6afcf7005d1b36136c44063f513810e359f0a49e2	review-probe:rank0-v1.txt
+tests/fixtures/direct_differential/rank6-v1.txt	5f51540c755df41f8c46a24d5d536e6c42af30f43fc27c0bf9d5e7fa3ed1a8b5	review-probe:rank6-v1.txt
+tests/fixtures/direct_differential/rank7-v1.txt	d59b5df03ea4a5b74562be831d92bf05dea792730c02dabcdefbba83186cab88	review-probe:rank7-v1.txt
+tests/fixtures/direct_differential/rank1-v1.txt	1edf22df3b3cd6529987a728f2c83e598caa786c2e1442450559e2c6bb8b9ca5	written:the bubble of rank0-v1.txt with 1 external spectators, as rank6-v1.txt / rank7-v1.txt
+tests/fixtures/direct_differential/rank2-v1.txt	09de6a64879a9be893753682ea6b7334431e7ef993bd2258c252a60114acac89	written:the bubble of rank0-v1.txt with 2 external spectators, as rank6-v1.txt / rank7-v1.txt
+tests/fixtures/direct_differential/rank3-v1.txt	4a7faccd7c692aa1598d6a7b888000019170208944798f6169b22e745269d2e0	written:the bubble of rank0-v1.txt with 3 external spectators, as rank6-v1.txt / rank7-v1.txt
+tests/fixtures/direct_differential/rank4-v1.txt	f57954c778eaba35dd09632544ebb0bc6529e9e6fb9efd06d8d4923b6150443b	written:the bubble of rank0-v1.txt with 4 external spectators, as rank6-v1.txt / rank7-v1.txt
+tests/fixtures/direct_differential/rank5-v1.txt	0dc83224d43b888eea00b12c31e5b933a5a0f10878aa6a32542492d9f7994b3c	written:the bubble of rank0-v1.txt with 5 external spectators, as rank6-v1.txt / rank7-v1.txt
+src/p_integral/factorized/fixtures/l1-gluon-bubble.txt	977fd204f11e1ce05e9f41193d6d8fb34e6e199f7c6d6be1b976b598004e2dcf	base:in the tree before these tests, unchanged
+src/p_integral/factorized/fixtures/l1-quark-bubble.txt	aaed68157ea2c220894955483d0f6ad58c69347208fe2c4df2e349d906d338f8	base:in the tree before these tests, unchanged
