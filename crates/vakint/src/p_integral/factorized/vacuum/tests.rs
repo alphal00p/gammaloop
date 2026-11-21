@@ -1167,3 +1167,110 @@ fn the_vacuum_mode_walks_a_marked_record() {
         Err(FactorizedError::Graph { .. })
     ));
 }
+
+/// THE RESULT CHECK on MARKED massive vacuum values: the unit-mass two-loop
+/// sunrise, the three-loop banana and the three-loop six-line parent, every
+/// line massive (mass witness::msq), marked as v3 direct records, through the
+/// vacuum entry in Symbolic and in Numerical mode: no result-check error (the
+/// massive-vacuum constants are vakint's output vocabulary); the vakint
+/// symbols of the values are printed (`VACUUM_SYMBOLS`).
+#[test]
+#[ignore = "massive two- and three-loop vacuum values in two modes"]
+fn marked_massive_vacuum_values_pass_the_result_check() {
+    /// A graph: its name, its lines (id, source, target, loop momentum
+    /// coefficients) and its loop count.
+    type Graph = (&'static str, Vec<(usize, usize, usize, Vec<i64>)>, usize);
+    let graphs: [Graph; 3] = [
+        (
+            "2L sunrise",
+            vec![
+                (1, 1, 2, vec![1, 0]),
+                (2, 1, 2, vec![0, 1]),
+                (3, 2, 1, vec![1, 1]),
+            ],
+            2,
+        ),
+        (
+            "3L banana",
+            vec![
+                (1, 1, 2, vec![1, 0, 0]),
+                (2, 1, 2, vec![0, 1, 0]),
+                (3, 1, 2, vec![0, 0, 1]),
+                (4, 2, 1, vec![1, 1, 1]),
+            ],
+            2,
+        ),
+        (
+            "3L six-line parent",
+            vec![
+                (1, 1, 2, vec![1, 0, 0]),
+                (2, 2, 3, vec![0, 1, 0]),
+                (3, 3, 1, vec![0, 0, 1]),
+                (4, 1, 4, vec![-1, 0, 1]),
+                (5, 2, 4, vec![1, -1, 0]),
+                (6, 3, 4, vec![0, 1, -1]),
+            ],
+            4,
+        ),
+    ];
+    let vakint = Vakint::new().unwrap();
+    let mut seen = std::collections::BTreeSet::new();
+    for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
+        let settings = VakintSettings {
+            evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
+                RustRedEvaluationOptions { master_mode: mode },
+            )]),
+            ..no_form_settings()
+        };
+        for (name, routes, vertices) in &graphs {
+            let loops = routes[0].3.len();
+            let edges = routes
+                .iter()
+                .map(|(id, s, t, m)| {
+                    let mut e = edge(
+                        *id,
+                        *s,
+                        *t,
+                        (2 * id, 2 * id + 1),
+                        m,
+                        LineKind::Scalar,
+                        1,
+                        Atom::num(1),
+                    );
+                    e.mass_squared = atom("witness::msq");
+                    e
+                })
+                .collect();
+            let mut v = value(
+                (1..=loops).map(Some).collect(),
+                Vec::new(),
+                edges,
+                (1..=*vertices).map(|i| vertex(i, Atom::num(1))).collect(),
+                Vec::new(),
+            );
+            v.label = format!("{name}, every line massive");
+            v.record = Some(super::super::DirectRecord {
+                original_cycles: None,
+                depth: None,
+                weights: Vec::new(),
+            });
+            let got = evaluate_factorized_vacuum(&vakint, &settings, &v, &Atom::num(1))
+                .unwrap_or_else(|e| panic!("{mode:?} {name}: {e}"));
+            assert!(!got.value.is_zero(), "{mode:?} {name}");
+            got.value.as_view().visitor(&mut |part| {
+                let symbol = match part {
+                    AtomView::Var(x) => Some(x.get_symbol()),
+                    AtomView::Fun(f) => Some(f.get_symbol()),
+                    _ => None,
+                };
+                if let Some(symbol) = symbol
+                    && symbol.get_name().starts_with("vakint::")
+                {
+                    seen.insert(format!("{mode:?} {}", symbol.get_name()));
+                }
+                true
+            });
+        }
+    }
+    eprintln!("VACUUM_SYMBOLS {seen:?}");
+}
