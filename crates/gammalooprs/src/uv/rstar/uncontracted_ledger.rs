@@ -1745,8 +1745,11 @@ struct KindTotals {
 ///   exception list has the run-level row `*<TAB><kind><TAB>none_compared`
 ///   (a run whose diagrams legitimately have no record of the kind, e.g.
 ///   a subset without IR corrections of order ω >= 1);
-/// * a diagram whose counterterm is nonzero with no compared / taken record
-///   in any kind and no excepted kind fails the run;
+/// * with every kind this build emits enabled (`root,child,ir-hard`), a
+///   diagram whose counterterm is nonzero with no compared / taken record in
+///   any kind and no excepted kind fails the run (with a partial kind list a
+///   diagram legitimately has no record of the listed kinds: the kind-level
+///   rule covers it);
 /// * a record without evidence (or evidence of another identity) fails it.
 pub struct RunTally {
     mode: Mode,
@@ -1804,7 +1807,11 @@ impl RunTally {
                 + counts.with_prefix("hit:error:").values().sum::<usize>();
             evidence_any += evidence_of(&counts, self.mode);
         }
-        if nonzero && evidence_any == 0 && !excepted {
+        let every_kind = Kind::ALL
+            .into_iter()
+            .filter(|kind| kind.implemented())
+            .all(|kind| self.kinds.contains(&kind));
+        if every_kind && nonzero && evidence_any == 0 && !excepted {
             self.failures.push(format!(
                 "{label}: the counterterm is nonzero, and no record of any kind was {}",
                 self.verb()
