@@ -1,11 +1,10 @@
-//! PROBES of the agreed record format against the code (tests only). Each
-//! probe states the EXPECTED behaviour from the agreed text
-//! (`WH-RECORD-FORMAT.md` v1.4, "v1.4 §n", and `WH-RECORD-FORMAT-CORRECTIONS.md`,
-//! "corr. n") and asserts it through the PUBLIC entries on real records (the
-//! vendored fixtures; the producer's fixtures under `VAKINT_TEST_WH_FIXTURES`
-//! for the `#[ignore]`d ones). A probe that documents a FINDING (the code does
-//! something else) is `#[ignore = "finding: ..."]`, so that the suite stays
-//! green; the finding is described in the lane's probe report.
+//! The CONTRACT of the record format (`WH-RECORD-FORMAT.md` v1.4, "v1.4 §n",
+//! and its corrections, "corr. n") through the PUBLIC entries on real
+//! records (the vendored fixtures; the producer's fixtures under
+//! `VAKINT_TEST_WH_FIXTURES` for the `#[ignore]`d ones): what comes back,
+//! linearity and scaling identities, the same function written differently,
+//! the masses, text quirks, and the validation rules of marked records on
+//! every field and entry.
 
 use std::path::PathBuf;
 
@@ -35,7 +34,7 @@ fn init() {
     .unwrap();
 }
 
-/// A fully qualified expression (the probes write every name with its
+/// A fully qualified expression (the checks write every name with its
 /// namespace: the test crate's default namespace is never used).
 fn atom(text: &str) -> Atom {
     init();
@@ -158,7 +157,7 @@ fn detail(e: &FactorizedError) -> String {
 /// orders, with the Symbolic coefficients evaluated numerically (here to
 /// 1e-12 relative).
 #[test]
-fn p1_numerical_mode_k1_root_equals_symbolic_numerically() {
+fn numerical_mode_k1_root_equals_symbolic_numerically() {
     let v = record("wh-k1-root");
     let exact = value(&v, &symbolic());
     let numerical = value(&v, &site(RustRedMasterMode::Numerical));
@@ -238,14 +237,14 @@ fn parse_magnitude(text: &str) -> f64 {
 /// retained value, re-finalised by vakint's own re-finaliser in Symbolic,
 /// equals the Symbolic value (the retained value is the exact object).
 #[test]
-fn p1_retain_k1_root_without_insertions_refinalises_to_symbolic() {
+fn retain_k1_root_without_insertions_refinalises_to_symbolic() {
     let v = record("wh-k1-root");
     let exact = value(&v, &symbolic());
     let top = top_order(&exact);
     let retained = closure(&v, &site(RustRedMasterMode::Retain), &v.prefactor.total())
         .unwrap_or_else(|e| panic!("Retain: {e}"))
         .value;
-    eprintln!("P1 RETAIN k1-root value: {retained}");
+    eprintln!("CONTRACT RETAIN k1-root value: {retained}");
     // the retained value is exact in ε (Γ functions, powers M^(-2ε)): its
     // Laurent expansion through the Symbolic value's top order equals it
     let series = retained
@@ -257,7 +256,7 @@ fn p1_retain_k1_root_without_insertions_refinalises_to_symbolic() {
         .map(|s| s.to_atom().expand());
     match series {
         Ok(series) => {
-            eprintln!("P1 RETAIN expanded: {series}");
+            eprintln!("CONTRACT RETAIN expanded: {series}");
             assert_same(
                 &truncate(&series, top),
                 &exact,
@@ -277,7 +276,7 @@ fn p1_retain_k1_root_without_insertions_refinalises_to_symbolic() {
 /// + UNKNOWN(..) value(c) (allow-unknowns ON, as the producer's runs that
 /// need it).
 #[test]
-fn p1_unknown_from_vakint_in_an_insertion_is_carried_linearly() {
+fn unknown_from_vakint_in_an_insertion_is_carried_linearly() {
     // SAFETY: nextest runs each test in its own process
     unsafe { std::env::set_var("VAKINT_ALLOW_UNKNOWN_MASTER_COEFFICIENTS", "1") };
     let base = record("wh-k2-child-ins");
@@ -302,7 +301,7 @@ fn p1_unknown_from_vakint_in_an_insertion_is_carried_linearly() {
 /// The same with the caller's own UNKNOWN symbol (`gammalooprs::UNKNOWN`,
 /// outside vakint's namespace): carried linearly.
 #[test]
-fn p1_unknown_caller_symbol_in_an_insertion_is_carried_linearly() {
+fn unknown_caller_symbol_in_an_insertion_is_carried_linearly() {
     let base = record("wh-k2-child-ins");
     let plain = value(&base, &symbolic());
     let unknown = atom("gammalooprs::UNKNOWN(gammalooprs::m53,0)");
@@ -322,10 +321,10 @@ fn p1_unknown_caller_symbol_in_an_insertion_is_carried_linearly() {
 /// orders are fixed by the record's depth (v1.4 §7 "depth": truncated at
 /// eps^(depth-L-1)). Expected: the value is the product truncated there,
 /// i.e. ZERO for an argument ε^2 (the argument rides inside the boundary
-/// coefficients, before the truncation). The probe records which: exact
+/// coefficients, before the truncation). The check records which: exact
 /// product (no truncation of the argument's orders) or truncated.
 #[test]
-fn p1_an_argument_power_beyond_depth_is_truncated() {
+fn an_argument_power_beyond_depth_is_truncated() {
     let v = record("wh-k1-root");
     let plain = value(&v, &symbolic());
     let top = top_order(&plain);
@@ -333,7 +332,7 @@ fn p1_an_argument_power_beyond_depth_is_truncated() {
     let got = closure(&v, &symbolic(), &(v.prefactor.total() * &x))
         .unwrap()
         .value;
-    eprintln!("P1 ARGUMENT eps^2: plain top order {top}; got {got}");
+    eprintln!("CONTRACT ARGUMENT eps^2: plain top order {top}; got {got}");
     assert_same(
         &truncate(&(&plain * &x), top),
         &got,
@@ -346,7 +345,7 @@ fn p1_an_argument_power_beyond_depth_is_truncated() {
 /// depend on the closing line (after the Taylor step a massless bubble at
 /// zero external momentum: scaleless) returns EXACTLY 0.
 #[test]
-fn p1_a_scaleless_remainder_is_exactly_zero() {
+fn a_scaleless_remainder_is_exactly_zero() {
     let text = scaleless_record_text();
     let v = FactorizedNumerator::from_text(&text).unwrap_or_else(|e| panic!("{e}"));
     let got = closure(&v, &symbolic(), &v.prefactor.total())
@@ -369,7 +368,7 @@ fn scaleless_record_text() -> String {
     let g = "spenso::{symmetric,linear,real,spenso::tensor}::g";
     let lines = vec![
         "schema\tpint6.factorized-numerator.v3".to_string(),
-        "label\tprobe scaleless remainder".into(),
+        "label\ta scaleless remainder".into(),
         "kind\tclosure\texternals=conserved".into(),
         format!("dimension\t{DIM}"),
         "momenta\tloops=2\texternals=1".into(),
@@ -418,7 +417,7 @@ fn scaleless_record_text() -> String {
 /// (`nf_power=0` is required) and the returned value contains no flavour
 /// symbol and no vakint symbol.
 #[test]
-fn p1_never_nf_with_original_cycles() {
+fn never_nf_with_original_cycles() {
     let v = record("wh-k1-root");
     let mut nf = v.clone();
     nf.prefactor.nf_power = 1;
@@ -447,9 +446,9 @@ fn p1_never_nf_with_original_cycles() {
 /// record must say nf_power=1, and `Prefactor::total()` (the documented
 /// argument, closure.rs) writes `vakint::nf`: the returned value then
 /// carries n_f, in vakint's reserved namespace. Expected by v1.4 §7: never
-/// n_f in the value (and no vakint:: symbol, corr. 1). The probe records it.
+/// n_f in the value (and no vakint:: symbol, corr. 1). The check records it.
 #[test]
-fn p1_never_nf_without_original_cycles() {
+fn never_nf_without_original_cycles() {
     let base = record("wh-k1-root");
     let mut v = base.clone();
     if let FactorizedKind::Closure(spec) = &mut v.kind {
@@ -459,7 +458,7 @@ fn p1_never_nf_without_original_cycles() {
     match v.validate() {
         Ok(()) => {}
         Err(e) => {
-            eprintln!("P1 NEVER-NF: without original_cycles the record is refused: {e}");
+            eprintln!("CONTRACT NEVER-NF: without original_cycles the record is refused: {e}");
             return;
         }
     }
@@ -476,7 +475,7 @@ fn p1_never_nf_without_original_cycles() {
 
 /// A fresh caller scalar.
 fn z() -> Atom {
-    atom("probe::z")
+    atom("caller::z")
 }
 
 /// One closure record of each kind (vendored): K1 root, K1 root rc, K2 child,
@@ -495,7 +494,7 @@ const CLOSURE_KINDS: [&str; 8] = [
 /// (a) z in the prefactor ARGUMENT scales the value by z exactly (Symbolic),
 /// every kind.
 #[test]
-fn p2_z_in_the_argument_scales_every_kind() {
+fn z_in_the_argument_scales_every_kind() {
     for name in CLOSURE_KINDS {
         let v = record(name);
         let plain = value(&v, &symbolic());
@@ -509,7 +508,7 @@ fn p2_z_in_the_argument_scales_every_kind() {
 /// (a) z in prefactor_scalars, in an edge or vertex FACTOR (the first one
 /// that is not 1) and in an INSERTION coefficient scales the value by z.
 #[test]
-fn p2_z_in_a_field_scales_every_kind() {
+fn z_in_a_field_scales_every_kind() {
     for name in CLOSURE_KINDS {
         let v = record(name);
         let plain = value(&v, &symbolic());
@@ -550,8 +549,8 @@ fn p2_z_in_a_field_scales_every_kind() {
 /// product truncated at the record's top order (v1.4 §7 "Laurent series in
 /// eps through depth"), every kind (Symbolic).
 #[test]
-fn p2_one_over_one_plus_z_eps_is_the_truncated_product() {
-    let factor = atom(&format!("(1+probe::z*{EPS})^-1"));
+fn one_over_one_plus_z_eps_is_the_truncated_product() {
+    let factor = atom(&format!("(1+caller::z*{EPS})^-1"));
     for name in CLOSURE_KINDS {
         let v = record(name);
         let plain = value(&v, &symbolic());
@@ -611,7 +610,7 @@ fn p2_one_over_one_plus_z_eps_is_the_truncated_product() {
 /// retained value by z exactly (records without insertions: no truncation
 /// is involved, v1.4 §7).
 #[test]
-fn p2_z_scales_in_retain() {
+fn z_scales_in_retain() {
     for name in ["wh-k1-root", "wh-k2-child", "wh-k3-hs"] {
         let v = record(name);
         let retain = site(RustRedMasterMode::Retain);
@@ -640,9 +639,9 @@ fn p2_z_scales_in_retain() {
 /// the value times the factor exactly (checked at rational points of ε and
 /// z, where both sides are exact).
 #[test]
-fn p2_one_over_one_plus_z_eps_is_exact_in_retain_without_insertions() {
+fn one_over_one_plus_z_eps_is_exact_in_retain_without_insertions() {
     let retain = site(RustRedMasterMode::Retain);
-    let factor = atom(&format!("(1+probe::z*{EPS})^-1"));
+    let factor = atom(&format!("(1+caller::z*{EPS})^-1"));
     for name in ["wh-k1-root", "wh-k2-child"] {
         let v = record(name);
         let plain = value(&v, &retain);
@@ -668,7 +667,7 @@ fn p2_one_over_one_plus_z_eps_is_exact_in_retain_without_insertions() {
 /// to the record's value (the entry sums its records, v1.4 §7 via the
 /// closure entry's ClosureValue).
 #[test]
-fn p2_two_halves_sum_to_the_whole() {
+fn two_halves_sum_to_the_whole() {
     let v = record("wh-k2-child-ins");
     let whole = value(&v, &symbolic());
     let half = v.prefactor.total() * atom("1/2");
@@ -687,7 +686,7 @@ fn p2_two_halves_sum_to_the_whole() {
 /// insertion is a local factor at its vertex; the contracted route of the
 /// assembler's tests).
 #[test]
-fn p2_a_unit_insertion_equals_its_factor_on_the_vertex() {
+fn a_unit_insertion_equals_its_factor_on_the_vertex() {
     let base = record("wh-k2-child-ins");
     let mut unit = base.clone();
     unit.insertions[0].coefficient = Atom::num(1);
@@ -713,7 +712,7 @@ fn p2_a_unit_insertion_equals_its_factor_on_the_vertex() {
 /// (e) records in another order in one call: the per-record values and the
 /// sum are unchanged.
 #[test]
-fn p2_record_order_is_irrelevant() {
+fn record_order_is_irrelevant() {
     let a = record("wh-k1-root");
     let b = record("wh-k2-child");
     let ab = evaluate_factorized_closure(
@@ -737,10 +736,10 @@ fn p2_record_order_is_irrelevant() {
 /// (e) two insertions in another order (the two poled children of the
 /// assembler's L2 test, built from k1-root's vertices is not available
 /// here: the producer's k5-stress records carry four; vendored: none with
-/// two) -- covered by the external probe below.
+/// two) -- covered by the external check below.
 #[test]
 #[ignore = "external data: VAKINT_TEST_WH_FIXTURES"]
-fn p2_insertion_order_is_irrelevant_k5_stress() {
+fn insertion_order_is_irrelevant_k5_stress() {
     let dir = wh_fixtures::fixture_dir("k5-stress");
     let records = wh_fixtures::record_dirs(&dir);
     let input = wh_fixtures::read_fixture(&records[0].join("input.txt"));
@@ -752,7 +751,7 @@ fn p2_insertion_order_is_irrelevant_k5_stress() {
     // (never a different value)
     match r.validate() {
         Err(FactorizedError::Insertion { detail, .. }) => {
-            eprintln!("P2 insertion order: refused: {detail}")
+            eprintln!("CONTRACT insertion order: refused: {detail}")
         }
         other => panic!("reversed insertions: {other:?}"),
     }
@@ -762,7 +761,7 @@ fn p2_insertion_order_is_irrelevant_k5_stress() {
 /// factor, `edge(e, k)` labels) and renumbering an INTERNAL edge: the value
 /// is invariant.
 #[test]
-fn p2_relabelling_dummies_and_internal_edges_is_irrelevant() {
+fn relabelling_dummies_and_internal_edges_is_irrelevant() {
     let v = record("wh-k1-root");
     let plain = value(&v, &symbolic());
     // the edge ids: the last internal edge 5 (loop edge of loop 2) -> 50
@@ -784,7 +783,7 @@ fn p2_relabelling_dummies_and_internal_edges_is_irrelevant() {
         let r = FactorizedNumerator::from_text(&relabelled);
         match r {
             Ok(r) => assert_same(&value(&r, &symbolic()), &plain, "dummy labels"),
-            Err(e) => eprintln!("P2 relabel: refused: {e}"),
+            Err(e) => eprintln!("CONTRACT relabel: refused: {e}"),
         }
     }
 }
@@ -796,7 +795,7 @@ fn p2_relabelling_dummies_and_internal_edges_is_irrelevant() {
 /// An insertion coefficient c ε^-1 written as -2 c/(D-4) and as c (D-4+2ε+1)/ε
 /// (all equal after D -> 4-2ε, v1.4 §5 / corr. 4): the same value.
 #[test]
-fn p3_equal_coefficients_give_equal_values() {
+fn equal_coefficients_give_equal_values() {
     let base = record("wh-k2-child-ins");
     let plain = value(&base, &symbolic());
     let c = base.insertions[0].coefficient.clone();
@@ -819,7 +818,7 @@ fn p3_equal_coefficients_give_equal_values() {
 /// The same forms of a pole-free factor 1 in the prefactor ARGUMENT
 /// ((D-4+2ε)/... is undefined; here forms of 1): equal values.
 #[test]
-fn p3_equal_arguments_give_equal_values() {
+fn equal_arguments_give_equal_values() {
     let v = record("wh-k1-root");
     let plain = value(&v, &symbolic());
     for form in [
@@ -837,7 +836,7 @@ fn p3_equal_arguments_give_equal_values() {
 /// The text form and the typed form of every vendored record: to_text ->
 /// from_text gives the same value.
 #[test]
-fn p3_text_round_trip_gives_the_same_value() {
+fn text_round_trip_gives_the_same_value() {
     for name in ["wh-k1-root", "wh-k2-child-ins", "wh-k3-hs"] {
         let v = record(name);
         let r = FactorizedNumerator::from_text(&v.to_text().unwrap()).unwrap();
@@ -849,7 +848,7 @@ fn p3_text_round_trip_gives_the_same_value() {
 /// epsilon `gammalooprs::ε`: refused (corr. 3, "accepted only when it is the
 /// settings' epsilon"), never a different value.
 #[test]
-fn p3_vakint_epsilon_under_another_settings_epsilon_is_refused() {
+fn vakint_epsilon_under_another_settings_epsilon_is_refused() {
     let base = record("wh-k2-child-ins");
     let mut v = base.clone();
     v.insertions[0].coefficient = v.insertions[0]
@@ -857,7 +856,7 @@ fn p3_vakint_epsilon_under_another_settings_epsilon_is_refused() {
         .replace(Atom::var(eps()))
         .with(atom("vakint::ε"));
     match closure(&v, &symbolic(), &v.prefactor.total()) {
-        Err(e) => eprintln!("P3 vakint::ε: refused: {}", detail(&e)),
+        Err(e) => eprintln!("CONTRACT vakint::ε: refused: {}", detail(&e)),
         Ok(got) => panic!("vakint::ε accepted under gammalooprs::ε: {}", got.value),
     }
 }
@@ -871,7 +870,7 @@ fn p3_vakint_epsilon_under_another_settings_epsilon_is_refused() {
 /// namespace rule (no vakint symbol in the value, corr. 1): either refused
 /// or a value free of vakint's internal symbols (the Taylor parameter).
 #[test]
-fn p4_the_reference_mass_inside_a_function() {
+fn the_reference_mass_inside_a_function() {
     let base = record("wh-k1-root");
     let mut v = base.clone();
     let vertex = v
@@ -881,7 +880,7 @@ fn p4_the_reference_mass_inside_a_function() {
         .unwrap();
     vertex.factor = &vertex.factor * atom(&format!("log({R})"));
     match closure(&v, &symbolic(), &v.prefactor.total()) {
-        Err(e) => eprintln!("P4 log(R): refused: {}", detail(&e)),
+        Err(e) => eprintln!("CONTRACT log(R): refused: {}", detail(&e)),
         Ok(got) => {
             let text = got.value.to_string();
             assert!(
@@ -897,7 +896,7 @@ fn p4_the_reference_mass_inside_a_function() {
 /// expected: refused, or a value equal to the plain-symbol value with the
 /// substitution M_aux² -> M_aux² (1+ε) re-expanded (never a different one).
 #[test]
-fn p4_an_epsilon_dependent_auxiliary_mass() {
+fn an_epsilon_dependent_auxiliary_mass() {
     let base = record("wh-k1-root");
     let plain = value(&base, &symbolic());
     let mut v = base.clone();
@@ -906,9 +905,9 @@ fn p4_an_epsilon_dependent_auxiliary_mass() {
         spec.auxiliary_mass_squared = shifted.clone();
     }
     match closure(&v, &symbolic(), &v.prefactor.total()) {
-        Err(e) => eprintln!("P4 M_aux(1+eps): refused: {}", detail(&e)),
+        Err(e) => eprintln!("CONTRACT M_aux(1+eps): refused: {}", detail(&e)),
         Ok(got) => {
-            eprintln!("P4 M_aux(1+eps): accepted: {}", got.value);
+            eprintln!("CONTRACT M_aux(1+eps): accepted: {}", got.value);
             let top = top_order(&plain);
             // the plain value with M -> M(1+eps): log(M(1+eps)) = log M + log(1+eps)
             let m = atom(MAUX);
@@ -930,13 +929,16 @@ fn p4_an_epsilon_dependent_auxiliary_mass() {
 /// expected: refused (a zero auxiliary mass is refused, `the auxiliary mass
 /// is zero`), never evaluated.
 #[test]
-fn p4_an_auxiliary_mass_zero_after_the_substitution() {
+fn an_auxiliary_mass_zero_after_the_substitution() {
     let mut v = record("wh-k1-root");
     if let FactorizedKind::Closure(spec) = &mut v.kind {
         spec.auxiliary_mass_squared = atom(&format!("{MAUX}*({DIM}-4+2*{EPS})"));
     }
     match closure(&v, &symbolic(), &v.prefactor.total()) {
-        Err(e) => eprintln!("P4 M_aux zero after D->4-2eps: refused: {}", detail(&e)),
+        Err(e) => eprintln!(
+            "CONTRACT M_aux zero after D->4-2eps: refused: {}",
+            detail(&e)
+        ),
         Ok(got) => panic!(
             "an auxiliary mass zero after D -> 4-2eps is accepted: {}",
             got.value
@@ -947,13 +949,13 @@ fn p4_an_auxiliary_mass_zero_after_the_substitution() {
 /// A D-dependent auxiliary mass M_aux² (D-2)/2 (not zero): expected refused
 /// or the substituted value; recorded.
 #[test]
-fn p4_a_dimension_dependent_auxiliary_mass() {
+fn a_dimension_dependent_auxiliary_mass() {
     let mut v = record("wh-k1-root");
     if let FactorizedKind::Closure(spec) = &mut v.kind {
         spec.auxiliary_mass_squared = atom(&format!("{MAUX}*({DIM}-2)/2"));
     }
     match closure(&v, &symbolic(), &v.prefactor.total()) {
-        Err(e) => eprintln!("P4 M_aux (D-2)/2: refused: {}", detail(&e)),
+        Err(e) => eprintln!("CONTRACT M_aux (D-2)/2: refused: {}", detail(&e)),
         Ok(got) => panic!("a D-dependent auxiliary mass is accepted: {}", got.value),
     }
 }
@@ -962,12 +964,12 @@ fn p4_a_dimension_dependent_auxiliary_mass() {
 /// (`the reference mass ... is not a symbol`); a reference mass that is a
 /// different symbol than the closing edge's is refused.
 #[test]
-fn p4_reference_mass_not_a_symbol_or_two_masses() {
+fn reference_mass_not_a_symbol_or_two_masses() {
     let base = record("wh-k1-root");
     let text = base.to_text().unwrap();
     let doubled = text.replace(R, &format!("(2*{R})"));
     match FactorizedNumerator::from_text(&doubled) {
-        Err(e) => eprintln!("P4 2R: refused: {e}"),
+        Err(e) => eprintln!("CONTRACT 2R: refused: {e}"),
         Ok(v) => panic!("2R as the reference mass accepted: {:?}", v.kind),
     }
     let mut v = base.clone();
@@ -985,23 +987,23 @@ fn p4_reference_mass_not_a_symbol_or_two_masses() {
 // ===========================================================================
 
 /// The outcome of a text variant: the same value as the clean form, a
-/// refusal, or a DIFFERENT value (a finding).
+/// refusal, or a DIFFERENT value (a defect).
 fn text_variant(clean: &str, variant: &str, what: &str) -> Result<(), String> {
     let base = FactorizedNumerator::from_text(clean).unwrap();
     let plain = value(&base, &symbolic());
     match FactorizedNumerator::from_text(variant) {
         Err(e) => {
-            eprintln!("P5 {what}: refused: {e}");
+            eprintln!("CONTRACT {what}: refused: {e}");
             Ok(())
         }
         Ok(v) => match closure(&v, &symbolic(), &v.prefactor.total()) {
             Err(e) => {
-                eprintln!("P5 {what}: read, refused by the entry: {e}");
+                eprintln!("CONTRACT {what}: read, refused by the entry: {e}");
                 Ok(())
             }
             Ok(got) => {
                 if (&got.value - &plain).expand().is_zero() {
-                    eprintln!("P5 {what}: accepted, same value");
+                    eprintln!("CONTRACT {what}: accepted, same value");
                     Ok(())
                 } else {
                     Err(format!(
@@ -1015,9 +1017,9 @@ fn text_variant(clean: &str, variant: &str, what: &str) -> Result<(), String> {
 }
 
 #[test]
-fn p5_line_ends_bom_trailing_whitespace_final_newline() {
+fn line_ends_bom_trailing_whitespace_final_newline() {
     let clean = fixture_text("wh-k2-child-ins.record.txt");
-    let mut findings = Vec::new();
+    let mut mismatches = Vec::new();
     for (what, variant) in [
         ("CRLF", clean.replace('\n', "\r\n")),
         ("BOM", format!("\u{feff}{clean}")),
@@ -1027,10 +1029,10 @@ fn p5_line_ends_bom_trailing_whitespace_final_newline() {
         ("an extra empty final line", format!("{clean}\n")),
     ] {
         if let Err(f) = text_variant(&clean, &variant, what) {
-            findings.push(f);
+            mismatches.push(f);
         }
     }
-    assert!(findings.is_empty(), "{}", findings.join("\n\n"));
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n\n"));
 }
 
 /// Other Unicode spellings of ε in the insertion coefficient (U+03F5 ϵ,
@@ -1038,9 +1040,9 @@ fn p5_line_ends_bom_trailing_whitespace_final_newline() {
 /// (U+03B5): refused (v1.4 §8 "an eps symbol other than the settings'
 /// epsilon_symbol: Insertion / Evaluation"), never a constant.
 #[test]
-fn p5_other_spellings_of_epsilon() {
+fn other_spellings_of_epsilon() {
     let clean = fixture_text("wh-k2-child-ins.record.txt");
-    let mut findings = Vec::new();
+    let mut mismatches = Vec::new();
     for spelling in ['\u{03f5}', '\u{1d700}', '\u{1d716}'] {
         let line = clean
             .lines()
@@ -1057,23 +1059,23 @@ fn p5_other_spellings_of_epsilon() {
             &variant,
             &format!("epsilon spelled U+{:04X}", spelling as u32),
         ) {
-            findings.push(f);
+            mismatches.push(f);
         }
     }
-    assert!(findings.is_empty(), "{}", findings.join("\n\n"));
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n\n"));
 }
 
 /// Other spellings of 𝜋 / 𝑖: `π` (U+03C0) and `i` are not Symbolica's
 /// built-ins (corr. 3): read into vakint:: and refused, never a different
 /// constant.
 #[test]
-fn p5_other_spellings_of_pi_and_i() {
+fn other_spellings_of_pi_and_i() {
     let clean = fixture_text("wh-k2-child-ins.record.txt");
     let line = clean
         .lines()
         .find(|l| l.starts_with("insertion\t"))
         .unwrap();
-    let mut findings = Vec::new();
+    let mut mismatches = Vec::new();
     for (what, from, to) in [
         ("π U+03C0", "𝜋", "π"),
         ("bare i", "𝑖", "i"),
@@ -1081,18 +1083,18 @@ fn p5_other_spellings_of_pi_and_i() {
     ] {
         let variant = clean.replace(line, &line.replace(from, to));
         if let Err(f) = text_variant(&clean, &variant, what) {
-            findings.push(f);
+            mismatches.push(f);
         }
     }
-    assert!(findings.is_empty(), "{}", findings.join("\n\n"));
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n\n"));
 }
 
 /// Duplicated / reordered sections and numeric-field spellings: refused, or
 /// accepted with the same value.
 #[test]
-fn p5_sections_and_numbers() {
+fn sections_and_numbers() {
     let clean = fixture_text("wh-k1-root.record.txt");
-    let mut findings = Vec::new();
+    let mut mismatches = Vec::new();
     let depth_line = "depth\t2";
     assert!(clean.contains(depth_line));
     let variants = vec![
@@ -1143,18 +1145,18 @@ fn p5_sections_and_numbers() {
     ];
     for (what, variant) in variants {
         if let Err(f) = text_variant(&clean, &variant, what) {
-            findings.push(f);
+            mismatches.push(f);
         }
     }
-    assert!(findings.is_empty(), "{}", findings.join("\n\n"));
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n\n"));
 }
 
-/// G1: a non-ASCII name in a namespace-qualified caller symbol is refused at
+/// a non-ASCII name in a namespace-qualified caller symbol is refused at
 /// the entry (outside ASCII only the settings' epsilon and scale and
 /// Symbolica's built-ins), never read as a constant; the ASCII twin is
 /// accepted.
 #[test]
-fn p5_non_ascii_names() {
+fn non_ascii_names() {
     let clean = fixture_text("wh-k1-root.record.txt");
     let variant = clean.replace("UFO::{}::gs_minus", "UFO::{}::gs_mïnüs");
     assert_ne!(variant, clean);
@@ -1173,12 +1175,12 @@ fn p5_non_ascii_names() {
     closure(&ascii, &symbolic(), &ascii.prefactor.total()).unwrap();
 }
 
-/// G1: an epsilon of the right spelling in ANOTHER namespace (`probe::ε`) in
+/// an epsilon of the right spelling in ANOTHER namespace (`caller::ε`) in
 /// a vertex factor is not the settings' epsilon: refused at the entry; the
 /// settings' own `gammalooprs::ε` there is accepted (and the value differs
 /// from the plain one only by that factor).
 #[test]
-fn g1_an_epsilon_of_another_namespace_is_refused() {
+fn an_epsilon_of_another_namespace_is_refused() {
     let base = record("wh-k1-root");
     let mut v = base.clone();
     let vertex = v
@@ -1186,16 +1188,16 @@ fn g1_an_epsilon_of_another_namespace_is_refused() {
         .iter_mut()
         .find(|x| x.factor != Atom::num(1))
         .unwrap();
-    vertex.factor = &vertex.factor * atom("1+probe::ε");
+    vertex.factor = &vertex.factor * atom("1+caller::ε");
     let id = vertex.id;
     match closure(&v, &symbolic(), &v.prefactor.total()) {
         Err(FactorizedError::Graph { detail }) => assert!(
             detail.starts_with(&format!(
-                "a non-ASCII name probe::ε in vertex {id} factor: "
+                "a non-ASCII name caller::ε in vertex {id} factor: "
             )),
             "{detail}"
         ),
-        other => panic!("probe::ε: {other:?}"),
+        other => panic!("caller::ε: {other:?}"),
     }
     let mut ok = base.clone();
     let vertex = ok
@@ -1210,7 +1212,7 @@ fn g1_an_epsilon_of_another_namespace_is_refused() {
 /// The direct / ports entry for a marked K5 direct record: z in the argument
 /// scales the value (P2 for the direct kind).
 #[test]
-fn p2_direct_record_z_in_the_argument() {
+fn direct_record_z_in_the_argument() {
     let v = record("wh-k5-direct");
     let vakint = engine();
     let plain = evaluate_factorized_ports(&vakint, &symbolic(), &v, &v.prefactor.total())
@@ -1231,7 +1233,7 @@ fn p2_direct_record_z_in_the_argument() {
 /// P3: equal forms of 1 multiplied into a VERTEX FACTOR (FactorRules admits
 /// tensor-free scalars rational in D and ε): the same value.
 #[test]
-fn p3_equal_factor_forms_give_equal_values() {
+fn equal_factor_forms_give_equal_values() {
     let v = record("wh-k1-root");
     let plain = value(&v, &symbolic());
     for form in [
@@ -1256,7 +1258,7 @@ fn p3_equal_factor_forms_give_equal_values() {
 /// v1.4 §7 "value: ... in the caller's notation" + corr. 1: no vakint
 /// symbol in the returned value of any kind.
 #[test]
-fn p1_every_kind_returns_the_callers_notation() {
+fn every_kind_returns_the_callers_notation() {
     for name in CLOSURE_KINDS {
         let got = value(&record(name), &symbolic());
         let mut bad = None;
@@ -1279,7 +1281,7 @@ fn p1_every_kind_returns_the_callers_notation() {
 /// returned linear, never expanded into": the K1 value is homogeneous of
 /// degree 1 in the marker.
 #[test]
-fn p1_linear_spectator_marker() {
+fn linear_spectator_marker() {
     let got = value(&record("wh-k1-root"), &symbolic());
     let marker = atom("beta_projection::{}::transverse");
     let doubled = got.replace(marker.clone()).with(Atom::num(2) * &marker);
@@ -1292,7 +1294,7 @@ fn p1_linear_spectator_marker() {
 /// entry): z in the argument scales the value.
 #[test]
 #[ignore = "external data: VAKINT_TEST_WH_FIXTURES"]
-fn p2_k6_z_in_the_argument() {
+fn k6_z_in_the_argument() {
     let dir = wh_fixtures::fixture_dir("k6-norm");
     let mut compared = 0;
     for path in std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().path()) {
@@ -1321,14 +1323,14 @@ fn p2_k6_z_in_the_argument() {
         compared += 1;
     }
     assert!(compared > 0, "no k6 record");
-    eprintln!("P2 K6 compared {compared}");
+    eprintln!("CONTRACT K6 compared {compared}");
 }
 
-/// F-1 extended: R under a NEGATIVE or a non-integer power in a factor
+/// R under a NEGATIVE or a non-integer power in a factor
 /// (`1/R`, `sqrt(R)`: FactorRules admits tensor-free scalars): refused, or a
 /// value free of vakint's internal symbols.
 #[test]
-fn p4_the_reference_mass_under_a_power() {
+fn the_reference_mass_under_a_power() {
     let base = record("wh-k1-root");
     let mut leaks = Vec::new();
     for form in [
@@ -1344,10 +1346,10 @@ fn p4_the_reference_mass_under_a_power() {
             .unwrap();
         vertex.factor = &vertex.factor * atom(&form);
         match closure(&v, &symbolic(), &v.prefactor.total()) {
-            Err(e) => eprintln!("P4 {form}: refused: {}", detail(&e)),
+            Err(e) => eprintln!("CONTRACT {form}: refused: {}", detail(&e)),
             Ok(got) => {
                 let text = got.value.to_string();
-                eprintln!("P4 {form}: accepted: {text}");
+                eprintln!("CONTRACT {form}: accepted: {text}");
                 if text.contains("closure_lambda") {
                     leaks.push(form);
                 }
@@ -1364,7 +1366,7 @@ fn p4_the_reference_mass_under_a_power() {
 /// NAME (vakint's default `ε` = `vakint::ε`, the record's ε respelled to
 /// it): the same value up to the renaming of ε.
 #[test]
-fn p3_the_settings_epsilon_under_another_name() {
+fn the_settings_epsilon_under_another_name() {
     let base = record("wh-k2-child-ins");
     let plain = value(&base, &symbolic());
     let ours = atom("vakint::ε");
@@ -1392,7 +1394,7 @@ fn p3_the_settings_epsilon_under_another_name() {
 /// insertions), the smallest one.
 #[test]
 #[ignore = "external data: VAKINT_TEST_WH_FIXTURES"]
-fn p2_moving_a_coefficient_between_insertions_k5_stress() {
+fn moving_a_coefficient_between_insertions_k5_stress() {
     let dir = wh_fixtures::fixture_dir("k5-stress");
     let mut records = wh_fixtures::record_dirs(&dir)
         .into_iter()
@@ -1414,7 +1416,7 @@ fn p2_moving_a_coefficient_between_insertions_k5_stress() {
 /// P1 Numerical mode with an INSERTION (k2-child-ins): the same orders and
 /// the Symbolic coefficients numerically.
 #[test]
-fn p1_numerical_mode_with_an_insertion() {
+fn numerical_mode_with_an_insertion() {
     let v = record("wh-k2-child-ins");
     let exact = value(&v, &symbolic());
     let numerical = value(&v, &site(RustRedMasterMode::Numerical));
@@ -1571,7 +1573,7 @@ fn inventory_producer_records() {
     let root = wh_fixtures::fixture_root();
     let mut closures = Vec::new();
     let mut directs = Vec::new();
-    let only = std::env::var("PROBE_INVENTORY_SETS")
+    let only = std::env::var("VAKINT_TEST_INVENTORY_SETS")
         .unwrap_or_else(|_| "k1-quick,k5-stress,k6-norm".into());
     for set in only.split(',') {
         let dir = root.join(set);
@@ -1609,7 +1611,7 @@ fn inventory_producer_records() {
     inventory(&directs, false);
 }
 
-/// THE RESULT CHECK ALONE catches F-1 and F-3 through the public closure
+/// THE RESULT CHECK ALONE catches  and  through the public closure
 /// entry (with no validation rule for the masses' positions): an internal
 /// `Evaluation` error naming the symbol, prefix `result check: `.
 #[test]
@@ -1652,7 +1654,7 @@ fn the_result_check_catches_f1_and_f3_without_a_validation_rule() {
 }
 
 // ===========================================================================
-// G2: the masses of a marked closure record by position and form
+// the masses of a marked closure record by position and form
 // ===========================================================================
 
 fn closure_refusal(v: &FactorizedNumerator, prefix: &str, what: &str) {
@@ -1672,7 +1674,7 @@ fn closure_refusal(v: &FactorizedNumerator, prefix: &str, what: &str) {
 /// field: refused at validation with the field named; the record without
 /// it is accepted.
 #[test]
-fn g2_the_masses_occur_only_in_their_positions() {
+fn the_masses_occur_only_in_their_positions() {
     let base = record("wh-k1-root");
     base.validate().unwrap();
     let vertex_id = base
@@ -1731,10 +1733,10 @@ fn g2_the_masses_occur_only_in_their_positions() {
 }
 
 /// The auxiliary mass and an edge mass must be plain symbols (or 0): an
-/// expression in ε or the dimension (F-3, m-1), a polynomial that is zero
-/// ((m-3)^2-m^2+6m-9), a product: refused at validation.
+/// expression in ε or the dimension, a polynomial that is zero
+/// (^2-m^2+6m-9), a product: refused at validation.
 #[test]
-fn g2_masses_are_plain_symbols() {
+fn masses_are_plain_symbols() {
     let base = record("wh-k1-root");
     let zero_polynomial = "(gammalooprs::m-3)^2-gammalooprs::m^2+6*gammalooprs::m-9";
     for form in [
@@ -1832,7 +1834,7 @@ fn every_real_record_validates() {
 }
 
 // ===========================================================================
-// G3: opaque caller scalars depend on nothing the evaluation transforms
+// opaque caller scalars depend on nothing the evaluation transforms
 // ===========================================================================
 
 /// A function other than the structural heads, or a non-integer power, whose
@@ -1841,7 +1843,7 @@ fn every_real_record_validates() {
 /// (`Graph`, prefix `a non-polynomial dependence in <field>: `); the same
 /// function of a caller scalar is accepted.
 #[test]
-fn g3_opaque_functions_and_powers_are_free_of_eps_dimension_masses_momenta() {
+fn opaque_functions_and_powers_are_free_of_eps_dimension_masses_momenta() {
     let base = record("wh-k1-root");
     let vertex_id = base
         .vertices
@@ -1859,10 +1861,10 @@ fn g3_opaque_functions_and_powers_are_free_of_eps_dimension_masses_momenta() {
     let exponent = format!("a non-integer exponent in vertex {vertex_id} factor: ");
     for (bad, prefix) in [
         (format!("log(1+{EPS})"), &dependence),
-        (format!("probe::f({DIM})"), &dependence),
-        (format!("sin({DIM}*probe::x)"), &dependence),
+        (format!("caller::f({DIM})"), &dependence),
+        (format!("sin({DIM}*caller::x)"), &dependence),
         (format!("(1+{EPS})^(1/2)"), &exponent),
-        (format!("probe::x^{EPS}"), &exponent),
+        (format!("caller::x^{EPS}"), &exponent),
     ] {
         match with(&bad).validate() {
             Err(FactorizedError::Graph { detail }) => {
@@ -1873,8 +1875,8 @@ fn g3_opaque_functions_and_powers_are_free_of_eps_dimension_masses_momenta() {
     }
     for good in [
         format!("(1+{EPS})"),
-        "probe::f(probe::x)".to_string(),
-        "log(probe::x)".to_string(),
+        "caller::f(caller::x)".to_string(),
+        "log(caller::x)".to_string(),
         "symbolica::zeta(3)".to_string(),
         format!("({DIM}-1)^-2"),
     ] {
@@ -1906,7 +1908,7 @@ fn g3_opaque_functions_and_powers_are_free_of_eps_dimension_masses_momenta() {
     closure(
         &base,
         &symbolic(),
-        &(base.prefactor.total() * atom("log(probe::x)")),
+        &(base.prefactor.total() * atom("log(caller::x)")),
     )
     .unwrap();
 }
@@ -1993,7 +1995,7 @@ fn only_vakint_unknown_in_its_exact_shape_is_allowed() {
 }
 
 // ===========================================================================
-// G3: every exponent a caller writes is an integer literal
+// every exponent a caller writes is an integer literal
 // ===========================================================================
 
 /// P(t) = (t-3)^2 - t^2 + 6t - 9, identically zero but not a literal zero.
@@ -2001,21 +2003,21 @@ fn zero_polynomial(t: &str) -> String {
     format!("(({t}-3)^2-{t}^2+6*{t}-9)")
 }
 
-/// The gate reviewer's inputs: on the real K2 record, ε^-1 P(x)^(-sqrt(2)),
+/// inputs: on the real K2 record, ε^-1 P(x)^(-sqrt(2)),
 /// ε^-1 P(x)^(-π) and ε^-1 P(x)^(P(y)-1) in the insertion coefficient
 /// (the last exponent is identically -1 but not WRITTEN as an integer):
 /// refused at validation, `Insertion`, prefix `a non-integer exponent in
 /// insertion <v> coefficient: the exponent `; nothing is expanded to decide.
 #[test]
-fn g3_the_reviewers_exponents_are_refused() {
+fn exponents_identically_integer_but_not_written_so_are_refused() {
     let base = record("wh-k2-child-ins");
     let vertex = base.insertions[0].vertex;
-    let p = zero_polynomial("probe::x");
+    let p = zero_polynomial("caller::x");
     for exponent in [
         "-2^(1/2)".to_string(),
         "-𝜋".to_string(),
-        format!("{}-1", zero_polynomial("probe::y")),
-        "(probe::y-3)^2-probe::y^2+6*probe::y-10".to_string(),
+        format!("{}-1", zero_polynomial("caller::y")),
+        "(caller::y-3)^2-caller::y^2+6*caller::y-10".to_string(),
     ] {
         let mut v = base.clone();
         v.insertions[0].coefficient = atom(&format!("{EPS}^-1*{p}^({exponent})"));
@@ -2039,7 +2041,7 @@ fn g3_the_reviewers_exponents_are_refused() {
 /// argument): x^(1/2) and x^y of a caller scalar are refused; x^-3, and
 /// x^(2-3) which the parser normalises to x^-1, are accepted.
 #[test]
-fn g3_exponents_are_integer_literals_in_every_field() {
+fn exponents_are_integer_literals_in_every_field() {
     let base = record("wh-k2-child-ins");
     base.validate().unwrap();
     let edge_id = base
@@ -2087,7 +2089,7 @@ fn g3_exponents_are_integer_literals_in_every_field() {
         ),
     ];
     for (field, put) in &fields {
-        for bad in ["probe::x^(1/2)", "probe::x^probe::y"] {
+        for bad in ["caller::x^(1/2)", "caller::x^caller::y"] {
             let mut v = base.clone();
             put(&mut v, &atom(bad));
             let detail = v
@@ -2099,7 +2101,7 @@ fn g3_exponents_are_integer_literals_in_every_field() {
                 "{field} {bad}: {detail}"
             );
         }
-        for good in ["probe::x^-3", "probe::x^(2-3)"] {
+        for good in ["caller::x^-3", "caller::x^(2-3)"] {
             let mut v = base.clone();
             put(&mut v, &atom(good));
             v.validate()
@@ -2110,7 +2112,7 @@ fn g3_exponents_are_integer_literals_in_every_field() {
     let root = record("wh-k1-root");
     let mut v = root.clone();
     let projector = v.projector.as_mut().unwrap();
-    projector.tensor = &projector.tensor * atom("probe::x^(1/2)");
+    projector.tensor = &projector.tensor * atom("caller::x^(1/2)");
     assert!(
         v.validate()
             .unwrap_err()
@@ -2120,7 +2122,7 @@ fn g3_exponents_are_integer_literals_in_every_field() {
     match closure(
         &root,
         &symbolic(),
-        &(root.prefactor.total() * atom("probe::x^probe::y")),
+        &(root.prefactor.total() * atom("caller::x^caller::y")),
     ) {
         Err(FactorizedError::Graph { detail }) => assert!(
             detail.starts_with("a non-integer exponent in prefactor argument: "),
@@ -2131,16 +2133,16 @@ fn g3_exponents_are_integer_literals_in_every_field() {
     closure(
         &root,
         &symbolic(),
-        &(root.prefactor.total() * atom("probe::x^-3")),
+        &(root.prefactor.total() * atom("caller::x^-3")),
     )
     .unwrap();
 }
 
-/// m-2: a v3 schema line with trailing spaces or a tab is refused with
+/// a v3 schema line with trailing spaces or a tab is refused with
 /// advice that names v3 (`TextSyntax`), not as an unknown schema of a reader
 /// that "knows v1"; a v1 text keeps its earlier error.
 #[test]
-fn m2_a_v3_schema_with_trailing_whitespace_names_v3() {
+fn a_v3_schema_with_trailing_whitespace_names_v3() {
     let clean = fixture_text("wh-k1-root.record.txt");
     for pad in ["  ", "\t"] {
         let variant = clean.replacen(
@@ -2243,7 +2245,7 @@ fn field_setters(v: &FactorizedNumerator) -> Vec<(&'static str, Setter)> {
     out.push((
         "weights",
         Box::new(|v, x| {
-            let w = ("probe".to_string(), false, x.clone());
+            let w = ("extra".to_string(), false, x.clone());
             match &mut v.kind {
                 FactorizedKind::Closure(spec) => spec.weights.push(w),
                 _ => v.record.as_mut().unwrap().weights.push(w),
@@ -2267,20 +2269,20 @@ fn field_setters(v: &FactorizedNumerator) -> Vec<(&'static str, Setter)> {
 /// field of a closure record with a projector (k1-root), one with an
 /// insertion (k2-child-ins) and a v3 direct record (k5-direct), and in the
 /// prefactor argument: refused (any variant), never a value. The table is
-/// printed; a "no" is a finding.
+/// printed; a "no" is a defect.
 #[test]
-fn round2_every_rule_on_every_field() {
+fn every_rule_on_every_field() {
     let settings = symbolic();
     let rules: Vec<(&str, String)> = vec![
         ("reserved namespace", "vakint::closure_lambda".into()),
-        ("wildcard name", "probe::x_".into()),
-        ("non-ASCII name", "probe::𝜀".into()),
+        ("wildcard name", "caller::x_".into()),
+        ("non-ASCII name", "caller::𝜀".into()),
         ("reference mass", R.into()),
         ("auxiliary mass", MAUX.into()),
-        ("opaque function of D", format!("probe::f({DIM})")),
-        ("opaque function of eps", format!("probe::f({EPS})")),
-        ("non-integer exponent", "probe::x^(1/2)".into()),
-        ("symbolic exponent", "probe::x^probe::y".into()),
+        ("opaque function of D", format!("caller::f({DIM})")),
+        ("opaque function of eps", format!("caller::f({EPS})")),
+        ("non-integer exponent", "caller::x^(1/2)".into()),
+        ("symbolic exponent", "caller::x^caller::y".into()),
         (
             "UNKNOWN bad shape",
             "vakint::UNKNOWN(vakint::m53,1/2)".into(),
@@ -2297,7 +2299,7 @@ fn round2_every_rule_on_every_field() {
         let mut controls = Vec::new();
         for (field, put) in field_setters(&base) {
             let mut v = base.clone();
-            put(&mut v, &atom("probe::harmless"));
+            put(&mut v, &atom("caller::harmless"));
             let ok = through_entry(&v, &v.prefactor.total(), &settings).is_ok();
             controls.push(format!(
                 "{field}: {}",
@@ -2308,7 +2310,7 @@ fn round2_every_rule_on_every_field() {
                 }
             ));
         }
-        eprintln!("ROUND2 {name} | CONTROL | {}", controls.join(" | "));
+        eprintln!("CONTRACT {name} | CONTROL | {}", controls.join(" | "));
         for (rule, text) in &rules {
             if !closure_kind && (*rule == "reference mass" || *rule == "auxiliary mass") {
                 continue; // a direct record has no reference / auxiliary mass
@@ -2333,7 +2335,7 @@ fn round2_every_rule_on_every_field() {
         }
     }
     for row in &table {
-        eprintln!("ROUND2 {row}");
+        eprintln!("CONTRACT {row}");
     }
     assert!(misses.is_empty(), "accepted:\n{}", misses.join("\n"));
 }
@@ -2342,7 +2344,7 @@ fn round2_every_rule_on_every_field() {
 /// after the parser), caller heads named like Symbolica's or like the
 /// structural heads in another namespace with ε or D inside: refused.
 #[test]
-fn round2_function_and_exponent_bypasses() {
+fn function_and_exponent_bypasses() {
     let base = record("wh-k1-root");
     let id = base
         .vertices
@@ -2354,13 +2356,13 @@ fn round2_function_and_exponent_bypasses() {
     for bad in [
         format!("sqrt(1+{EPS})"),
         format!("exp({EPS})"),
-        format!("probe::sqrt(1+{EPS})"),
-        format!("probe::root({DIM},2)"),
-        format!("probe::mink({DIM},{EPS})"),
-        format!("probe::Q(1,{EPS})"),
-        format!("probe::dot({EPS},probe::x)"),
-        format!("probe::g({DIM},{DIM})"),
-        format!("probe::gamma({EPS})"),
+        format!("caller::sqrt(1+{EPS})"),
+        format!("caller::root({DIM},2)"),
+        format!("caller::mink({DIM},{EPS})"),
+        format!("caller::Q(1,{EPS})"),
+        format!("caller::dot({EPS},caller::x)"),
+        format!("caller::g({DIM},{DIM})"),
+        format!("caller::gamma({EPS})"),
     ] {
         let mut v = base.clone();
         let vertex = v.vertices.iter_mut().find(|x| x.id == id).unwrap();
@@ -2376,12 +2378,12 @@ fn round2_function_and_exponent_bypasses() {
 /// different symbol: accepted as an opaque scalar and carried linearly
 /// (no substitution reaches it).
 #[test]
-fn round2_mass_names_in_another_namespace_are_plain_scalars() {
+fn mass_names_in_another_namespace_are_plain_scalars() {
     let base = record("wh-k1-root");
     let plain = value(&base, &symbolic());
     for name in [
-        "probe::rstar_reference_mass_squared",
-        "probe::rstar_mass_squared",
+        "caller::rstar_reference_mass_squared",
+        "caller::rstar_mass_squared",
     ] {
         let mut v = base.clone();
         v.prefactor.scalars = &v.prefactor.scalars * atom(name);
@@ -2393,7 +2395,7 @@ fn round2_mass_names_in_another_namespace_are_plain_scalars() {
 /// space, an ASCII name carrying a zero-width joiner or a combining mark,
 /// in an insertion coefficient (typed) and through the text form: refused.
 #[test]
-fn round2_combining_marks_and_zero_width_characters() {
+fn combining_marks_and_zero_width_characters() {
     let base = record("wh-k2-child-ins");
     let mut accepted = Vec::new();
     for name in [
@@ -2429,7 +2431,7 @@ fn round2_combining_marks_and_zero_width_characters() {
 /// to the renaming; the record in the real `gammalooprs::ε` under that
 /// setting is refused.
 #[test]
-fn round2_a_lookalike_settings_epsilon() {
+fn a_lookalike_settings_epsilon() {
     let base = record("wh-k2-child-ins");
     let plain = value(&base, &symbolic());
     init();
@@ -2457,7 +2459,7 @@ fn round2_a_lookalike_settings_epsilon() {
 /// prefactor field (must be refused or evaluated within seconds: a value
 /// computed by expanding (3-2ε)^(10^30) would not finish).
 #[test]
-fn round2_typed_exponents() {
+fn typed_exponents() {
     let base = record("wh-k1-root");
     let mut v = base.clone();
     let vertex = v
@@ -2465,7 +2467,7 @@ fn round2_typed_exponents() {
         .iter_mut()
         .find(|x| x.factor != Atom::num(1))
         .unwrap();
-    vertex.factor = &vertex.factor * atom("probe::x^0.5");
+    vertex.factor = &vertex.factor * atom("caller::x^0.5");
     assert!(
         through_entry(&v, &v.prefactor.total(), &symbolic()).is_err(),
         "float exponent accepted"
@@ -2480,7 +2482,7 @@ fn round2_typed_exponents() {
         let _ = send.send(r);
     });
     match receive.recv_timeout(std::time::Duration::from_secs(60)) {
-        Ok(Err(e)) => eprintln!("ROUND2 (D-1)^(10^30): refused: {e}"),
+        Ok(Err(e)) => eprintln!("CONTRACT (D-1)^(10^30): refused: {e}"),
         Ok(Ok(())) => panic!("(D-1)^(10^30) in prefactor_scalars: accepted and evaluated"),
         Err(_) => panic!(
             "(D-1)^(10^30) in prefactor_scalars: no answer within 60 s (accepted, the evaluation does not finish)"
@@ -2492,7 +2494,7 @@ fn round2_typed_exponents() {
 /// index, a momentum, dot, gamma): refused (by the exponent / function
 /// rules or by the index rules), never a value.
 #[test]
-fn round2_inside_structural_heads() {
+fn inside_structural_heads() {
     let base = record("wh-k1-root");
     let id = base
         .vertices
@@ -2504,11 +2506,11 @@ fn round2_inside_structural_heads() {
     let q = "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q";
     let mut accepted = Vec::new();
     for bad in [
-        format!("{mink}({DIM},probe::i^(1/2))*{mink}({DIM},probe::i^(1/2))"),
+        format!("{mink}({DIM},caller::i^(1/2))*{mink}({DIM},caller::i^(1/2))"),
         format!("{mink}({DIM},log({EPS}))*{mink}({DIM},log({EPS}))"),
         format!("spenso::dot({q}(2,{mink}({DIM})),{q}(2,{mink}({DIM})))^(1/2)"),
         format!("spenso::dot({q}(2,{mink}({DIM})),log({EPS}))"),
-        format!("{q}(2,{mink}({DIM},probe::j))*{q}(2,{mink}({DIM},probe::j))*{EPS}^(1/2)"),
+        format!("{q}(2,{mink}({DIM},caller::j))*{q}(2,{mink}({DIM},caller::j))*{EPS}^(1/2)"),
     ] {
         let mut v = base.clone();
         let vertex = v.vertices.iter_mut().find(|x| x.id == id).unwrap();
@@ -2522,9 +2524,9 @@ fn round2_inside_structural_heads() {
 
 /// vakint::UNKNOWN misused: squared, in a denominator, inside a slot, with
 /// ε or a mass in its arguments. Expected by C8 ("linear"): refused except a
-/// linear occurrence; the probe records which are accepted.
+/// linear occurrence; the check records which are accepted.
 #[test]
-fn round2_unknown_misused() {
+fn unknown_misused() {
     // SAFETY: nextest runs each test in its own process
     unsafe { std::env::set_var("VAKINT_ALLOW_UNKNOWN_MASTER_COEFFICIENTS", "1") };
     let base = record("wh-k2-child-ins");
@@ -2559,12 +2561,12 @@ fn round2_unknown_misused() {
     if through_entry(&v, &v.prefactor.total(), &symbolic()).is_ok() {
         accepted.push("inside a slot".into());
     }
-    eprintln!("ROUND2 UNKNOWN accepted: {accepted:?}");
+    eprintln!("CONTRACT UNKNOWN accepted: {accepted:?}");
     assert!(accepted.is_empty(), "accepted: {accepted:?}");
 }
 
 // ===========================================================================
-// The three probes owed from round 1
+// The three checks owed from round 1
 // ===========================================================================
 
 /// v1.4 §7 "open spinor chains only between the two declared bispinor
@@ -2572,7 +2574,7 @@ fn round2_unknown_misused() {
 /// declared bispinor ports (here: none, the projector closes the quark
 /// line).
 #[test]
-fn p1_open_spinor_chains_only_between_declared_ports_k3_dirac() {
+fn open_spinor_chains_only_between_declared_ports_k3_dirac() {
     let v = record("wh-k3-dirac");
     let got = value(&v, &symbolic());
     let declared = v
@@ -2593,7 +2595,7 @@ fn p1_open_spinor_chains_only_between_declared_ports_k3_dirac() {
     });
     let stray = found.difference(&declared).collect::<Vec<_>>();
     eprintln!(
-        "P1 OPEN SPINOR k3-dirac: declared bispinor ports {declared:?}, bispinor slots in the value {found:?}"
+        "CONTRACT OPEN SPINOR k3-dirac: declared bispinor ports {declared:?}, bispinor slots in the value {found:?}"
     );
     assert!(
         stray.is_empty(),
@@ -2605,7 +2607,7 @@ fn p1_open_spinor_chains_only_between_declared_ports_k3_dirac() {
 /// massive sunrise, v3 direct record): the same orders as Symbolic, the
 /// Symbolic coefficients numerically.
 #[test]
-fn p1_numerical_mode_on_the_vacuum_entry() {
+fn numerical_mode_on_the_vacuum_entry() {
     use vakint::p_integral::factorized::{
         DirectRecord, Endpoint, FactorizedEdge, FactorizedVertex, LineKind, Prefactor,
         evaluate_factorized_vacuum,
@@ -2621,12 +2623,12 @@ fn p1_numerical_mode_on_the_vacuum_entry() {
             particle: "x".into(),
             line: LineKind::Scalar,
             power: 1,
-            mass_squared: atom("probe::m2"),
+            mass_squared: atom("caller::m2"),
             momentum: momentum.to_vec(),
             factor: Atom::num(1),
         };
     let v = FactorizedNumerator {
-        label: "probe vacuum sunrise".into(),
+        label: "vacuum sunrise".into(),
         kind: FactorizedKind::Direct,
         dimension: symbolica::symbol!("gammalooprs::dim"),
         loop_edges: vec![Some(1), Some(2)],
@@ -2670,7 +2672,7 @@ fn p1_numerical_mode_on_the_vacuum_entry() {
     };
     let exact = run(RustRedMasterMode::Symbolic);
     let numerical = run(RustRedMasterMode::Numerical);
-    eprintln!("P1 VACUUM symbolic {exact}\nP1 VACUUM numerical {numerical}");
+    eprintln!("CONTRACT VACUUM symbolic {exact}\nP1 VACUUM numerical {numerical}");
     let e = wh_fixtures::epsilon_coefficients(&exact, eps());
     let n = wh_fixtures::epsilon_coefficients(&numerical, eps());
     assert_eq!(
@@ -2708,7 +2710,7 @@ fn p1_numerical_mode_on_the_vacuum_entry() {
         }
     }
     eprintln!(
-        "P1 VACUUM numerical = symbolic at every order but {skipped:?} (vakint constants HI / HR there)"
+        "CONTRACT VACUUM numerical = symbolic at every order but {skipped:?} (vakint constants HI / HR there)"
     );
     assert!(skipped.len() < e.len(), "no coefficient compared");
 }
@@ -2721,7 +2723,7 @@ fn p1_numerical_mode_on_the_vacuum_entry() {
 /// result check lets it through.
 #[test]
 #[ignore = "external data: VAKINT_TEST_WH_FIXTURES + VAKINT_TEST_P_LIBRARY_1_4"]
-fn p1_unknown_masters_from_the_backend_through_the_closure_entry() {
+fn unknown_masters_from_the_backend_through_the_closure_entry() {
     wh_fixtures::required_env("VAKINT_TEST_P_LIBRARY_1_4", "five loops");
     let dir = wh_fixtures::fixture_dir("k1-l5").join("L5-60").join("rr1");
     let mut v =
@@ -2730,7 +2732,7 @@ fn p1_unknown_masters_from_the_backend_through_the_closure_entry() {
         unreachable!()
     };
     let depth = spec.depth.unwrap();
-    let extra: usize = std::env::var("PROBE_EXTRA_DEPTH")
+    let extra: usize = std::env::var("VAKINT_TEST_EXTRA_DEPTH")
         .ok()
         .and_then(|x| x.parse().ok())
         .unwrap_or(6);
@@ -2739,7 +2741,7 @@ fn p1_unknown_masters_from_the_backend_through_the_closure_entry() {
     unsafe { std::env::remove_var("VAKINT_ALLOW_UNKNOWN_MASTER_COEFFICIENTS") };
     let off = closure(&v, &symbolic(), &v.prefactor.total());
     eprintln!(
-        "P1 BACKEND UNKNOWN off: {:?}",
+        "CONTRACT BACKEND UNKNOWN off: {:?}",
         off.as_ref()
             .map(|r| r.value.to_string().len())
             .map_err(|e| e.to_string())
@@ -2866,7 +2868,7 @@ fn data_atoms_in_an_insertion_are_carried_linearly() {
 fn data_atoms_have_their_exact_shape() {
     for bad in [
         "vakint::MZV(vakint::closure_tensor_0)",
-        "vakint::MZV(probe::x)",
+        "vakint::MZV(caller::x)",
         "vakint::MZV(5/2,3)",
         "vakint::MZV(0,3)",
         "vakint::MZV(65)",
@@ -2874,7 +2876,7 @@ fn data_atoms_have_their_exact_shape() {
         "vakint::UNKNOWN(vakint::m53,0)",
         "vakint::UNKNOWN(vakint::ggppss_int_x,0)",
         "vakint::UNKNOWN(vakint::closure_tensor_0,0)",
-        "vakint::UNKNOWN(vakint::ggppss_int_53,probe::k)",
+        "vakint::UNKNOWN(vakint::ggppss_int_53,caller::k)",
     ] {
         let detail = k2_coefficient_times(bad)
             .validate()
@@ -2929,8 +2931,8 @@ fn data_atoms_only_in_insertions_and_not_inside_functions_or_exponents() {
         }
         assert!(m.validate().is_err(), "{data} as the auxiliary mass");
         for misplaced in [
-            format!("probe::f({data})"),
-            format!("probe::x^{data}"),
+            format!("caller::f({data})"),
+            format!("caller::x^{data}"),
             format!("log({data})"),
         ] {
             let detail = k2_coefficient_times(&misplaced)
@@ -3104,25 +3106,25 @@ fn the_vacuum_entry_applies_the_marked_atom_rules() {
     let run = |v: &FactorizedNumerator| {
         evaluate_factorized_vacuum(&vakint, &symbolic(), v, &v.prefactor.total()).map(|r| r.value)
     };
-    run(&marked_vacuum_sunrise("probe::m2", "1")).unwrap();
+    run(&marked_vacuum_sunrise("caller::m2", "1")).unwrap();
     for (mass, factor, prefix) in [
         (
-            "probe::m2",
+            "caller::m2",
             format!("log({EPS})"),
             "a non-polynomial dependence in vertex 1 factor: ",
         ),
         (
-            "probe::m2",
-            "probe::x^(1/2)".to_string(),
+            "caller::m2",
+            "caller::x^(1/2)".to_string(),
             "a non-integer exponent in vertex 1 factor: ",
         ),
         (
-            "probe::m2",
-            "probe::x^probe::y".to_string(),
+            "caller::m2",
+            "caller::x^caller::y".to_string(),
             "a non-integer exponent in vertex 1 factor: ",
         ),
-        ("probe::m2^(1/2)", "1".to_string(), "edge 1: mass "),
-        ("log(probe::m2)", "1".to_string(), "edge 1: mass "),
+        ("caller::m2^(1/2)", "1".to_string(), "edge 1: mass "),
+        ("log(caller::m2)", "1".to_string(), "edge 1: mass "),
     ] {
         match run(&marked_vacuum_sunrise(mass, &factor)) {
             Err(FactorizedError::Graph { detail }) => {
@@ -3178,7 +3180,7 @@ fn non_ascii_names_only_the_settings_and_symbolica_constants() {
 }
 
 /// The masses by ROLE: an auxiliary mass with another name than the
-/// producer's (`probe::maux`) inside an insertion coefficient, and the
+/// producer's (`caller::maux`) inside an insertion coefficient, and the
 /// reference mass in prefactor_overall of a record without original_cycles:
 /// refused; the literal 0 stays the massless lines' mass (accepted), a mass
 /// written as a zero polynomial is refused.
@@ -3187,16 +3189,16 @@ fn the_masses_are_identified_by_their_role() {
     let base = record("wh-k2-child-ins");
     let mut v = base.clone();
     if let FactorizedKind::Closure(spec) = &mut v.kind {
-        spec.auxiliary_mass_squared = atom("probe::maux");
+        spec.auxiliary_mass_squared = atom("caller::maux");
     }
     v.validate().unwrap();
     let mut bad = v.clone();
-    bad.insertions[0].coefficient = &bad.insertions[0].coefficient * atom("probe::maux");
+    bad.insertions[0].coefficient = &bad.insertions[0].coefficient * atom("caller::maux");
     match bad.validate() {
         Err(FactorizedError::Insertion { detail, .. }) => assert!(
             detail.starts_with(&format!(
                 "the auxiliary mass {} in insertion ",
-                atom("probe::maux")
+                atom("caller::maux")
             )),
             "{detail}"
         ),
@@ -3240,14 +3242,18 @@ fn exponents_are_bounded_and_structural_arguments_are_checked() {
         vertex.factor = &vertex.factor * atom(extra);
         v
     };
-    for bad in ["(1+probe::x)^65", "probe::x^-65", &format!("{DIM}^1000000")] {
+    for bad in [
+        "(1+caller::x)^65",
+        "caller::x^-65",
+        &format!("{DIM}^1000000"),
+    ] {
         let detail = with(bad).validate().expect_err(bad).to_string();
         assert!(detail.contains("exceeds 64 in modulus"), "{bad}: {detail}");
     }
-    with("probe::x^64").validate().unwrap();
+    with("caller::x^64").validate().unwrap();
     match through_entry(
         &base,
-        &(base.prefactor.total() * atom("(1+probe::x)^1000000000")),
+        &(base.prefactor.total() * atom("(1+caller::x)^1000000000")),
         &symbolic(),
     ) {
         Err(e) => assert!(e.contains("exceeds 64 in modulus"), "{e}"),
