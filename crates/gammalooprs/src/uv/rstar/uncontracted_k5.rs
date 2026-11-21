@@ -251,6 +251,173 @@ fn missing_context(graph: &str) -> eyre::Report {
 }
 
 // ---------------------------------------------------------------------------
+// GAMMALOOP_UNCONTRACTED_K5_HOLE_CUT: how a kept and cut hole is written
+// ---------------------------------------------------------------------------
+
+/// The switch of a kept and cut hole (a record that holds a hole's anchor
+/// but not its far end): `form` writes the single-hedge `ins:` with the far
+/// end's slot as a spectator port (WH-RECORD-FORMAT v1.5 proposal (a), beta's
+/// ruling of 21 Nov; for the vakint step after G-D), `decline` (unset, the
+/// DEFAULT: the v1.5 rules stay out of the G-D gate) declines such a record
+/// by design (`surrogate_hole_cut`, today's path), `auto` probes the reader
+/// once: `form` when vakint's reader accepts a single-hedge `ins:`, else
+/// `decline` (the gated reader ccba5e0c8a requires exactly two hedges).
+pub(crate) const HOLE_CUT_VARIABLE: &str = "GAMMALOOP_UNCONTRACTED_K5_HOLE_CUT";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum HoleCut {
+    Form,
+    Decline,
+}
+
+static HOLE_CUT: std::sync::LazyLock<std::result::Result<HoleCut, String>> =
+    std::sync::LazyLock::new(|| {
+        let value = std::env::var(HOLE_CUT_VARIABLE).ok();
+        let mode = match value.as_deref().map(str::trim) {
+            None | Some("" | "decline") => HoleCut::Decline,
+            Some("auto") => {
+                if reader_accepts_single_hedge() {
+                    HoleCut::Form
+                } else {
+                    HoleCut::Decline
+                }
+            }
+            Some("form") => HoleCut::Form,
+            Some(other) => {
+                return Err(format!(
+                    "{HOLE_CUT_VARIABLE} must be decline (the default), form or auto, not `{other}`"
+                ));
+            }
+        };
+        if switch().mode != Mode::Off && switch().enabled(Kind::Surrogate) {
+            eprintln!(
+                "UNCONTRACTED_K5_HOLE_CUT mode={} reader_single_hedge={}",
+                match mode {
+                    HoleCut::Form => "form",
+                    HoleCut::Decline => "decline",
+                },
+                reader_accepts_single_hedge()
+            );
+        }
+        Ok(mode)
+    });
+
+thread_local! {
+    static TEST_HOLE_CUT: std::cell::Cell<Option<HoleCut>> = const { std::cell::Cell::new(None) };
+}
+
+/// The mode in force (a test's, or the environment's; a bad value panics at
+/// the first use, as the other switches of the uncontracted records do).
+pub(crate) fn hole_cut() -> HoleCut {
+    TEST_HOLE_CUT
+        .with(std::cell::Cell::get)
+        .unwrap_or_else(|| match &*HOLE_CUT {
+            Ok(mode) => *mode,
+            Err(error) => panic!("{error}"),
+        })
+}
+
+/// Tests: run `f` with the hole-cut mode `mode` on this thread.
+#[cfg(test)]
+pub(crate) fn with_hole_cut<T>(mode: HoleCut, f: impl FnOnce() -> T) -> T {
+    struct Restore(Option<HoleCut>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let previous = self.0;
+            TEST_HOLE_CUT.with(|slot| slot.set(previous));
+        }
+    }
+    let _restore = Restore(TEST_HOLE_CUT.with(|slot| slot.replace(Some(mode))));
+    f()
+}
+
+/// Whether vakint's reader accepts an `ins:` insertion with ONE hedge (a
+/// minimal one-loop direct record: two scalar lines between an `ins:`
+/// vertex and a plain one, a leg at each).
+pub(crate) fn reader_accepts_single_hedge() -> bool {
+    static ACCEPTS: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+        let leg = |id, source, target, source_hedge, target_hedge| FactorizedEdge {
+            id,
+            source,
+            target,
+            source_hedge,
+            target_hedge,
+            particle: "c".into(),
+            line: LineKind::Scalar,
+            power: 1,
+            mass_squared: Atom::Zero,
+            momentum: vec![0, 1],
+            factor: Atom::num(1),
+        };
+        let line = |id, source_hedge, target_hedge, momentum: Vec<i64>| FactorizedEdge {
+            id,
+            source: Endpoint::Vertex(0),
+            target: Endpoint::Vertex(1),
+            source_hedge: Some(source_hedge),
+            target_hedge: Some(target_hedge),
+            particle: "c".into(),
+            line: LineKind::Scalar,
+            power: 1,
+            mass_squared: Atom::Zero,
+            momentum,
+            factor: Atom::num(1),
+        };
+        let record = FactorizedNumerator {
+            label: "u7c reader probe: single-hedge ins:".into(),
+            kind: FactorizedKind::Direct,
+            dimension: GS.dim,
+            loop_edges: vec![Some(2)],
+            external_edges: vec![Some(0)],
+            edges: vec![
+                leg(0, Endpoint::External, Endpoint::Vertex(0), None, Some(0)),
+                leg(1, Endpoint::Vertex(1), Endpoint::External, Some(1), None),
+                line(2, 2, 3, vec![1, 0]),
+                line(3, 4, 5, vec![-1, 1]),
+            ],
+            vertices: vec![
+                FactorizedVertex {
+                    id: 0,
+                    rule: "ins:scalar_insertion_0".into(),
+                    factor: Atom::num(1),
+                },
+                FactorizedVertex {
+                    id: 1,
+                    rule: "scalar_insertion_1".into(),
+                    factor: Atom::num(1),
+                },
+            ],
+            ports: Vec::new(),
+            projector: None,
+            prefactor: Prefactor {
+                overall: Atom::num(1),
+                loop_sign: 1,
+                nf_power: 0,
+                scalars: Atom::num(1),
+                colour: Atom::num(1),
+            },
+            colour_branch: None,
+            insertions: vec![Insertion {
+                vertex: 0,
+                hedges: vec![0],
+                cycles: (0, 0),
+                coefficient: Atom::num(1),
+                factor: Atom::num(1),
+            }],
+            record: Some(DirectRecord {
+                original_cycles: Some((0, 0)),
+                depth: Some(1),
+                weights: Vec::new(),
+            }),
+        };
+        record
+            .to_text()
+            .ok()
+            .is_some_and(|text| FactorizedNumerator::from_text(&text).is_ok())
+    });
+    *ACCEPTS
+}
+
+// ---------------------------------------------------------------------------
 // The frame and the K5 rewrite of a K1 / K2 record
 // ---------------------------------------------------------------------------
 
@@ -311,6 +478,9 @@ pub(super) struct Chain {
     pub bubbles: BTreeSet<usize>,
     /// The inner boundary half-edges at chain[0] and chain[L].
     pub inner: [usize; 2],
+    /// Their edges (e_in at chain[0], e_out at chain[L]) and whether each
+    /// half-edge is its edge's sink (the edge enters the chain there).
+    pub inner_edges: [(usize, bool); 2],
     /// The closed cycles inside the excised region.
     pub cycles: (u32, u32),
 }
@@ -332,6 +502,7 @@ pub(super) fn chains(
     let mut nodes = BTreeMap::<usize, NodeIndex>::new();
     let mut dummy = BTreeSet::new();
     let mut unit = BTreeSet::new();
+    let mut hedge_edge = BTreeMap::<usize, (usize, bool)>::new();
     for (pair, edge, data) in graph.iter_edges() {
         let e = usize::from(edge);
         if data.data.is_dummy {
@@ -342,13 +513,18 @@ pub(super) fn chains(
         }
         let hedges = match pair {
             HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => {
+                hedge_edge.insert(usize::from(source), (e, false));
+                hedge_edge.insert(usize::from(sink), (e, true));
                 let (s, t) = (graph.node_id(source), graph.node_id(sink));
                 nodes.insert(usize::from(s), s);
                 nodes.insert(usize::from(t), t);
                 ends.insert(e, (usize::from(s), usize::from(t)));
                 vec![source, sink]
             }
-            HedgePair::Unpaired { hedge, .. } => vec![hedge],
+            HedgePair::Unpaired { hedge, flow } => {
+                hedge_edge.insert(usize::from(hedge), (e, flow == Flow::Sink));
+                vec![hedge]
+            }
         };
         for hedge in hedges {
             let node = graph.node_id(hedge);
@@ -422,10 +598,18 @@ pub(super) fn chains(
             }
         };
         let inner = [inner_at(vertices[0])?, inner_at(*vertices.last().unwrap())?];
+        let edge_of = |h: usize| {
+            hedge_edge
+                .get(&h)
+                .copied()
+                .ok_or_else(|| chain_error(format!("half-edge {h} has no edge")))
+        };
+        let inner_edges = [edge_of(inner[0])?, edge_of(inner[1])?];
         out.push(Chain {
             vertices,
             bubbles,
             inner,
+            inner_edges,
             cycles: hole.cycles,
         });
     }
@@ -599,6 +783,21 @@ fn finish_with(
             ));
         }
         let factor = std::mem::replace(&mut vertex.factor, Atom::num(1));
+        // C_H carries the momentum of the excised diagram's FIRST external
+        // edge (insertions.rs normalized_insertion), e_in or e_out: write it in
+        // e_in, the anchor's own edge (the chain conserves the momentum: Q(e_out)
+        // = s Q(e_in), s = +1 when one end enters the chain and the other
+        // leaves it), so that an absent e_out never stands as a constant vector
+        let [(e_in, in_sink), (e_out, out_sink)] = chain.inner_edges;
+        let factor = if e_out != e_in && factor.contains_symbol(GS.emr_mom) {
+            let sign = if in_sink != out_sink { 1 } else { -1 };
+            factor.replace_multiple(&[symbolica::id::Replacement::new(
+                function!(GS.emr_mom, e_out, crate::utils::W_.x___).to_pattern(),
+                (Atom::num(sign) * function!(GS.emr_mom, e_in, crate::utils::W_.x___)).to_pattern(),
+            )])
+        } else {
+            factor
+        };
         vertex.rule = format!("ins:{}", vertex.rule);
         let mut hedges = chain
             .inner
@@ -608,6 +807,22 @@ fn finish_with(
             .collect::<Vec<_>>();
         hedges.sort_unstable();
         hedges.dedup();
+        // a KEPT and CUT hole (the anchor in the record, the far end's inner
+        // half-edge not): the single-hedge ins: with the far-end slot as a
+        // spectator port (WH-RECORD-FORMAT v1.5 proposal (a)), or, on a reader
+        // that refuses that form, the designed decline `surrogate_hole_cut`
+        // ([`hole_cut`])
+        if !record_hedges.contains(&chain.inner[1]) && hole_cut() == HoleCut::Decline {
+            return Err(Decline::new(
+                "surrogate_hole_cut",
+                format!(
+                    "the record holds the anchor {start} of a {}-loop hole but not its far end (inner half-edge {}): the single-hedge ins: form is off ({})",
+                    chain.vertices.len() - 1,
+                    chain.inner[1],
+                    HOLE_CUT_VARIABLE
+                ),
+            ));
+        }
         insertions.push(Insertion {
             vertex: start,
             hedges,
@@ -707,9 +922,13 @@ fn finish_with(
         .iter()
         .map(|(_, atom)| hedge_slots(atom))
         .collect::<Vec<_>>();
+    let mut bispinor = BTreeSet::new();
     for (n, slots) in per_atom.iter().enumerate() {
-        for h in slots {
+        for (h, bis) in slots {
             owners.entry(*h).or_default().insert(n);
+            if *bis {
+                bispinor.insert(*h);
+            }
         }
     }
     let mut spectators = BTreeSet::new();
@@ -740,6 +959,21 @@ fn finish_with(
                     ),
                 ));
             }
+            let contracted = vertices
+                .iter()
+                .any(|v| v.id == insertions[index].vertex && v.rule.starts_with("ct:"));
+            if contracted && bispinor.contains(h) {
+                // a contracted cut QUARK hole: its far-end bispinor slot would
+                // be an open spinor port no projector of the record closes
+                // (beta's checked rule, point 4)
+                return Err(Decline::new(
+                    "surrogate_split_chain",
+                    format!(
+                        "the ct: child at {} carries the far-end bispinor slot of half-edge {h} of a hole it cuts (a contracted cut quark hole)",
+                        insertions[index].vertex
+                    ),
+                ));
+            }
             spectators.insert(*h);
         } else if holders.len() == 1 {
             // a free slot of an edge, vertex or own insertion slot whose
@@ -765,10 +999,10 @@ pub(super) struct Finished {
 
 /// The half-edges `h` of the slots `mink(.., hedge(h, k))` / `bis(..,
 /// hedge(h, k))` in `atom`.
-fn hedge_slots(atom: &Atom) -> BTreeSet<usize> {
+fn hedge_slots(atom: &Atom) -> BTreeMap<usize, bool> {
     let mink = symbolica::symbol!("spenso::mink");
     let bis = symbolica::symbol!("spenso::bis");
-    let mut found = BTreeSet::new();
+    let mut found = BTreeMap::new();
     atom.as_view().visitor(&mut |view| {
         if let AtomView::Fun(function) = view
             && (function.get_symbol() == mink || function.get_symbol() == bis)
@@ -778,7 +1012,7 @@ fn hedge_slots(atom: &Atom) -> BTreeSet<usize> {
             && let Some(h) = index.iter().next()
             && let Ok(h) = usize::try_from(h)
         {
-            found.insert(h);
+            *found.entry(h).or_insert(false) |= function.get_symbol() == bis;
             return false;
         }
         true
