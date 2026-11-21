@@ -1295,12 +1295,33 @@ fn the_v3_text_form_round_trips_every_fixture() {
         FactorizedNumerator::from_text(&with_cut).unwrap(),
         l2_root(2, true)
     );
-    // a wrong open-slot list, kind direct in v3, kind closure in v1
-    let wrong = text.replace(
-        "open\t0\n",
-        &format!("open\t1\nopen_slot\t{}\n", hedge(120)),
-    );
-    assert!(FactorizedNumerator::parse_text(&wrong).is_err());
+    // a wrong open-slot list (one line more, the `lines` count raised with
+    // it: only the open list is wrong): refused by the open-slot rule; the
+    // same record with its true (empty) list reads
+    assert!(FactorizedNumerator::parse_text(&text).is_ok());
+    let wrong = text
+        .replace(
+            "open\t0\n",
+            &format!("open\t1\nopen_slot\t{}\n", hedge(120)),
+        )
+        .lines()
+        .map(|l| match l.strip_prefix("lines\t") {
+            Some(n) => format!("lines\t{}", n.parse::<usize>().unwrap() + 1),
+            None => l.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    assert_eq!(wrong.lines().count(), text.lines().count() + 1);
+    match FactorizedNumerator::parse_text(&wrong) {
+        Err(FactorizedError::TextSyntax { detail, .. }) => assert!(
+            detail.starts_with("open slots ")
+                && detail.contains("differ from the ports the projector leaves open"),
+            "{detail}"
+        ),
+        other => panic!("a wrong open-slot list: {other:?}"),
+    }
+    // kind direct in v3, kind closure in v1
     // kind direct is a v3 kind too; with a closure line that is not `none`
     // the record is refused
     let direct = text.replace("kind\tclosure", "kind\tdirect");
