@@ -805,6 +805,36 @@ fn every_insertion_rule_has_its_refusal() {
         .expect("the pristine pole order");
 }
 
+/// The pole order's own Laurent expansion can fail (an essential singularity
+/// in ε, which validation does not look for): that is an INTERNAL failure,
+/// `Evaluation` with the vertex and symbolica's reason, not a refusal of the
+/// record (`Insertion`); the same record with a pole is accepted.
+#[test]
+fn a_failing_laurent_series_of_an_insertion_is_an_evaluation_failure() {
+    let eps_atom = atom(EPS);
+    let AtomView::Var(epsilon) = eps_atom.as_view() else {
+        unreachable!()
+    };
+    let epsilon = epsilon.get_symbol();
+    let mut essential = gluon_surrogate(1);
+    ins(&mut essential).coefficient = atom(&format!("exp(1/{EPS})"));
+    essential
+        .validate()
+        .expect("validation accepts exp(1/eps): it is a scalar");
+    let error = essential.insertion_pole_order(epsilon).unwrap_err();
+    let prefix = format!("insertion at vertex {C0}: the Laurent series in ε failed: ");
+    match &error {
+        FactorizedError::Evaluation { detail } => assert!(
+            detail.starts_with(&prefix) && detail.len() > prefix.len(),
+            "{detail}"
+        ),
+        other => panic!("expected Evaluation, got {other:?}"),
+    }
+    let mut pole = gluon_surrogate(1);
+    ins(&mut pole).coefficient = atom(&format!("{EPS}^-1"));
+    assert_eq!(pole.insertion_pole_order(epsilon).unwrap(), 1);
+}
+
 /// The surrogate coefficient vertex (`ins:`) carries exactly the two inner
 /// boundary half-edges (format section 8, A-34): a third half-edge of the
 /// vertex (the first bubble line's source, 60) is refused by THAT rule; the

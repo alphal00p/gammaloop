@@ -2488,6 +2488,48 @@ fn two_poled_insertions_raise_the_depth_by_their_sum() {
     eprintln!("TWO_POLED identical through eps^{target}: {}", got.value);
 }
 
+/// The closure entry is the only caller of `insertion_pole_order` (its depth
+/// raise): an insertion whose Laurent series in ε fails (exp(1/ε), an
+/// essential singularity that validation does not look for) reaches the caller
+/// as `Evaluation` from that site, before any reduction, not as a refusal.
+#[test]
+fn a_failing_insertion_series_reaches_the_closure_caller_as_evaluation() {
+    let eps = "gammalooprs::ε";
+    let mut with = l2_root(1, true);
+    with.vertices.iter_mut().find(|v| v.id == 1).unwrap().factor = atom(&q(1, &hedge(120)));
+    let hedges = with
+        .local_hedges(super::super::Location::Vertex(1))
+        .into_iter()
+        .collect::<Vec<_>>();
+    let v = with.vertices.iter_mut().find(|v| v.id == 1).unwrap();
+    let factor = std::mem::replace(&mut v.factor, Atom::num(1));
+    v.rule = "ct:child1".into();
+    with.insertions.push(super::super::Insertion {
+        vertex: 1,
+        hedges,
+        cycles: (0, 0),
+        coefficient: atom(&format!("exp(1/{eps})")),
+        factor,
+    });
+    with.validate()
+        .expect("validation accepts exp(1/eps): it is a scalar");
+    let vakint = Vakint::new().unwrap();
+    let error = evaluate_factorized_closure(
+        &vakint,
+        &rstar_site_settings(),
+        std::slice::from_ref(&with),
+        &[with.prefactor.total()],
+    )
+    .unwrap_err();
+    let prefix = "insertion at vertex 1: the Laurent series in ε failed: ";
+    match &error {
+        FactorizedError::Evaluation { detail } => {
+            assert!(detail.starts_with(prefix), "{detail}")
+        }
+        other => panic!("expected Evaluation, got {other:?}"),
+    }
+}
+
 /// Weights with insertions: carried cycles + the insertions' cycles may be
 /// FEWER than `original_cycles` (a scope misses a loop of the diagram), never
 /// more.
