@@ -2357,6 +2357,13 @@ fn mentions_mass(atom: &Atom, masses: &BTreeSet<String>) -> bool {
 /// it is not local (an incomplete R̄, a massive quotient's log(m_uv_vacuum),
 /// a normalisation other than MSbar), as K5's coefficients assert
 /// (insertions.rs).
+///
+/// m_uv_vacuum (`GS.m_uv_vacuum`, in any power, not only in a log) is one
+/// too: it is the massive quotient route's auxiliary mass, not a mass symbol
+/// of the record (so never `insertion_mass_symbol`), and it reaches a Δ also
+/// under `GAMMALOOP_IR_QUOTIENT=rstar` when the R* route declines a quotient
+/// and falls back to the massive Z̃ (`massive_declined`); its pieces cancel
+/// only in the complete sum (review of the C7 init refusals, F1).
 fn nonlocal_form(delta: &Atom) -> Option<String> {
     let mut found = None;
     delta.as_view().visitor(&mut |part| {
@@ -2374,6 +2381,8 @@ fn nonlocal_form(delta: &Atom) -> Option<String> {
                 let name = symbol.get_name();
                 if symbol == GS.mu_r_sq || name.ends_with("log_mu_sq") {
                     Some("the renormalisation scale")
+                } else if symbol == GS.m_uv_vacuum {
+                    Some("the massive quotient's m_uv_vacuum")
                 } else if name.ends_with("EulerGamma") {
                     Some("EulerGamma")
                 } else {
