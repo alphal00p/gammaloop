@@ -1891,16 +1891,21 @@ fn k5_v15_cases_oracle() -> Result<()> {
     })
 }
 
-/// A FAILING TEST FOR BETA (ignored here; U7C-SITE hands it over): with the
-/// surrogate root NOT closed (the evaluator's open-root entry `pole_part`, as
-/// under GAMMALOOP_SURROGATE_CLOSED_ROOT=0) and the K5 site's settings check
-/// bypassed, every surrogate ROOT record of L5 3793 declines `open_root`
-/// while the surrogate's children compare: the ledger's generic rules (the
-/// all-declined rule counts the kind as a whole) let the diagram pass.
-/// Expected: the diagram fails. On 86de2ec899 + U7c it passes (the test
-/// fails); the K5 site check `surrogate_settings` is what catches it today.
+/// Handed to beta as a FAILING test (patch 0010, ignored on 292b5362a7);
+/// beta's follow-up tip 0484ddd9f6 (0c61cb1f1, item B: a setting-caused
+/// decline of every record of one record class fails the diagram) makes it
+/// PASS, so it runs by default since the rebase onto that tip. With the
+/// surrogate root NOT closed (the evaluator's open-root entry `pole_part`,
+/// as under GAMMALOOP_SURROGATE_CLOSED_ROOT=0) on L5 3793:
+/// (1) with the K5 site's settings check (production): the site's error
+///     `surrogate_settings` fires FIRST, at the surrogate's site, before any
+///     record exists (none is captured), and the evaluation fails;
+/// (2) with that check bypassed: every surrogate ROOT (K1-shaped) record
+///     declines `open_root` while the surrogate's children (K2-shaped)
+///     compare, and beta's ledger rule fails the diagram at its close
+///     ("... setting-caused ..."). The two do not conflict: the K5 check is
+///     earlier, beta's rule is the general one behind it.
 #[test]
-#[ignore = "a failing test for beta: a setting-wide decline of the surrogate roots passes the ledger's rules"]
 fn k5_beta_ledger_misses_settings_wide_root_declines() -> Result<()> {
     with_production_piece_limit(|| -> Result<()> {
         test_initialise()?;
@@ -1908,6 +1913,26 @@ fn k5_beta_ledger_misses_settings_wide_root_declines() -> Result<()> {
         let original = colour_factored(&load(L5_3793_DOT)?)?;
         let evaluator = PropagatorInsertionEvaluator::new(settings());
         with_switch(check_surrogate(), || -> Result<()> {
+            // (1) the K5 site check fires first
+            let ledger = DiagramLedger::open(original.name(), "k5-open-root-site")
+                .ok_or_else(|| eyre!("no ledger"))?;
+            let (value, captured) = with_capture(|| evaluator.pole_part(&original, &vakint));
+            let Err(error) = value else {
+                return Err(eyre!("the open surrogate root passed the K5 site check"));
+            };
+            ensure!(
+                format!("{error:#}").contains("surrogate_settings"),
+                "not the K5 site error: {error:#}"
+            );
+            ensure!(
+                captured
+                    .iter()
+                    .all(|attempt| attempt.kind != Kind::Surrogate),
+                "{} surrogate records exist before the site check",
+                captured.len()
+            );
+            let _ = ledger.close(false);
+            // (2) bypassed: beta's ledger rule
             let ledger = DiagramLedger::open(original.name(), "k5-open-root")
                 .ok_or_else(|| eyre!("no ledger"))?;
             let (value, captured) = k5::without_settings_check(|| {
@@ -1924,10 +1949,17 @@ fn k5_beta_ledger_misses_settings_wide_root_declines() -> Result<()> {
             eprintln!("K5_OPEN_ROOT roots_declined={roots} compared={compared}");
             ensure!(roots > 0, "no root declined open_root");
             let closed = ledger.close(value.is_ok());
-            ensure!(
-                closed.is_err(),
-                "the diagram passed with every surrogate root declined by a setting ({roots} open_root, {compared} children compared)"
-            );
+            match closed {
+                Err(error) => ensure!(
+                    format!("{error:#}").contains("setting-caused"),
+                    "the diagram failed for another reason: {error:#}"
+                ),
+                Ok(_) => {
+                    return Err(eyre!(
+                        "the diagram passed with every surrogate root declined by a setting ({roots} open_root, {compared} children compared)"
+                    ));
+                }
+            }
             Ok(())
         })
     })
