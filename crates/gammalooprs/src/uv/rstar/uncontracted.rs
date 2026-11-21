@@ -631,8 +631,12 @@ pub(super) const DESIGNED_LOCAL: &[&str] = &[
 ];
 
 /// vakint's designed refusals, matched by the error variant AND the prefix of
-/// its detail (`(variant, detail prefix, code)`; the code is `vakint:<code>`):
-/// the rows of WH-RECORD-FORMAT v1.4 section 8 a K1 / K2 record can reach.
+/// its detail AND a phrase the detail must contain (`(variant, detail prefix,
+/// phrase, code)`, phrase `""`: none; the code is `vakint:<code>`): the rows
+/// of WH-RECORD-FORMAT v1.4 section 8 a K1 / K2 record can reach. The
+/// open-spinor row needs its phrase `is not a Lorentz slot` (helper VH round
+/// 2, R2-I4): the prefix `open slot ` alone also starts vakint's vacuum-scope
+/// refusal "open slot <port>: only Lorentz slots ... stay open".
 ///
 /// Interim rule (U7-PLAN requirement 13, until the rebase onto helper VH's
 /// frozen REFUSALS list): a `Closure` refusal is designed ONLY with a
@@ -656,19 +660,30 @@ pub(super) const DESIGNED_LOCAL: &[&str] = &[
 /// `compact_slash` cannot occur (the IR Dirac closure
 /// `gamma(c, r, mink(D, nu))` is momentum free, and a local check makes a
 /// momentum in it an error, `ir_dirac_closure`).
-pub(super) const DESIGNED_VAKINT: &[(&str, &str, &str)] = &[
-    ("Closure", "Taylor degree ", "taylor_degree"),
-    ("Closure", "the projector contains Q(", "projector_momentum"),
-    ("Ports", "a compact slash gamma(", "compact_slash"),
-    ("Closure", "open slot ", "open_spinor"),
+pub(super) const DESIGNED_VAKINT: &[(&str, &str, &str, &str)] = &[
+    ("Closure", "Taylor degree ", "", "taylor_degree"),
+    (
+        "Closure",
+        "the projector contains Q(",
+        "",
+        "projector_momentum",
+    ),
+    ("Ports", "a compact slash gamma(", "", "compact_slash"),
+    (
+        "Closure",
+        "open slot ",
+        "is not a Lorentz slot",
+        "open_spinor",
+    ),
     (
         "Insertion",
         "contains a mass symbol",
+        "",
         "insertion_mass_symbol",
     ),
-    ("Insertion", "the factor has ", "insertion_slots"),
-    ("Gamma5", "", "gamma5"),
-    ("LeviCivita", "", "levi_civita"),
+    ("Insertion", "the factor has ", "", "insertion_slots"),
+    ("Gamma5", "", "", "gamma5"),
+    ("LeviCivita", "", "", "levi_civita"),
 ];
 
 impl Decline {
@@ -682,15 +697,17 @@ impl Decline {
     }
 
     /// A refusal of vakint's frozen reader or entry: designed when its
-    /// variant and detail prefix are a row of [`DESIGNED_VAKINT`], else an
-    /// error by variant.
+    /// variant, detail prefix and phrase are a row of [`DESIGNED_VAKINT`],
+    /// else an error by variant.
     pub(super) fn vakint(error: &FactorizedError) -> Self {
         let (name, detail) = variant_detail(error);
-        let row = DESIGNED_VAKINT.iter().find(|(variant, prefix, _)| {
-            *variant == name && detail.is_some_and(|detail| detail.starts_with(prefix))
+        let row = DESIGNED_VAKINT.iter().find(|(variant, prefix, phrase, _)| {
+            *variant == name
+                && detail
+                    .is_some_and(|detail| detail.starts_with(prefix) && detail.contains(phrase))
         });
         match row {
-            Some((_, _, code)) => Self {
+            Some((_, _, _, code)) => Self {
                 code: format!("vakint:{code}"),
                 detail: error.to_string(),
                 designed: true,
