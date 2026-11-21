@@ -445,7 +445,7 @@ pub(super) fn finish(
     edges: &mut [FactorizedEdge],
     vertices: &mut [FactorizedVertex],
     insertions: &mut Vec<Insertion>,
-) -> std::result::Result<(u32, u32), Decline> {
+) -> std::result::Result<Finished, Decline> {
     let provenance = context().ok_or_else(|| {
         Decline::new(
             "surrogate_context_missing",
@@ -519,39 +519,8 @@ fn finish_with(
     vertices: &mut [FactorizedVertex],
     insertions: &mut Vec<Insertion>,
     direct: bool,
-) -> std::result::Result<(u32, u32), Decline> {
+) -> std::result::Result<Finished, Decline> {
     let chains = chains(graph, provenance)?;
-    // a chain the record splits (a hole of two or more loops: a UV child of
-    // the surrogate, or a contracted child, that holds only part of the
-    // chain): its coefficient's slots would be non-local in the record
-    // (pre-review of U7c, finding 2): declined by design, before the record
-    for chain in &chains {
-        let state = |vertex: usize| {
-            if let Some(node) = merge.get(&vertex) {
-                (1, *node)
-            } else if vertices.iter().any(|v| v.id == vertex) {
-                (0, 0)
-            } else {
-                (2, 0)
-            }
-        };
-        let states = chain
-            .vertices
-            .iter()
-            .map(|vertex| state(*vertex))
-            .collect::<BTreeSet<_>>();
-        if states.len() > 1 {
-            return Err(Decline::new(
-                "surrogate_split_chain",
-                format!(
-                    "the record holds only part of the {}-loop chain {:?} of the hole at {} (a UV child of the surrogate or a contracted child splits it)",
-                    chain.vertices.len() - 1,
-                    chain.vertices,
-                    chain.vertices[0]
-                ),
-            ));
-        }
-    }
     let bubbles = chains
         .iter()
         .flat_map(|chain| chain.bubbles.iter().copied())
@@ -611,12 +580,15 @@ fn finish_with(
             // contain it)
             continue;
         };
-        for h in chain.inner {
-            if !record_hedges.contains(&h) {
-                return Err(chain_error(format!(
-                    "the inner half-edge {h} of the hole at {start} is not a half-edge of the record"
-                )));
-            }
+        // the anchor's own inner half-edge is always in the record (its edge
+        // is a remaining edge or a crown leg there); the far end's is when
+        // the record holds the chain's far end (else its slot is a
+        // spectator port, below)
+        if !record_hedges.contains(&chain.inner[0]) {
+            return Err(chain_error(format!(
+                "the anchor's inner half-edge {} of the hole at {start} is not a half-edge of the record",
+                chain.inner[0]
+            )));
         }
         if mentions_mass(&vertex.factor, &masses) {
             return Err(Decline::new(
@@ -628,8 +600,14 @@ fn finish_with(
         }
         let factor = std::mem::replace(&mut vertex.factor, Atom::num(1));
         vertex.rule = format!("ins:{}", vertex.rule);
-        let mut hedges = chain.inner.to_vec();
+        let mut hedges = chain
+            .inner
+            .iter()
+            .copied()
+            .filter(|h| record_hedges.contains(h))
+            .collect::<Vec<_>>();
         hedges.sort_unstable();
+        hedges.dedup();
         insertions.push(Insertion {
             vertex: start,
             hedges,
@@ -699,9 +677,113 @@ fn finish_with(
             }
         }
     }
+    // A hole cut by a child boundary (a chain of two or more loops): a slot
+    // of the coefficient, or of a chain end's edge, whose partner lies outside
+    // the record is a SPECTATOR: free in the record's product and of a
+    // half-edge the record does not have (a port, as vakint admits it), or
+    // of a half-edge the record has without a factor that contracts it
+    // (a port too). A free slot of an INSERTION that is a half-edge of the
+    // record but not one of its own (`hedges`) cannot be stated (a ct:
+    // child that contracts a hole's anchor but not its far end): declined
+    // by design, `surrogate_split_chain`, before the record exists.
+    let legs = edges
+        .iter()
+        .filter(|edge| edge.is_external())
+        .flat_map(|edge| [edge.source_hedge, edge.target_hedge])
+        .flatten()
+        .collect::<BTreeSet<_>>();
+    let mut atoms = Vec::new();
+    for edge in edges.iter() {
+        atoms.push((None, &edge.factor));
+    }
+    for vertex in vertices.iter() {
+        atoms.push((None, &vertex.factor));
+    }
+    for (index, insertion) in insertions.iter().enumerate() {
+        atoms.push((Some(index), &insertion.factor));
+    }
+    let mut owners = BTreeMap::<usize, BTreeSet<usize>>::new();
+    let per_atom = atoms
+        .iter()
+        .map(|(_, atom)| hedge_slots(atom))
+        .collect::<Vec<_>>();
+    for (n, slots) in per_atom.iter().enumerate() {
+        for h in slots {
+            owners.entry(*h).or_default().insert(n);
+        }
+    }
+    let mut spectators = BTreeSet::new();
+    for (h, holders) in &owners {
+        if legs.contains(h) {
+            continue;
+        }
+        let foreign = holders
+            .iter()
+            .filter_map(|n| atoms[*n].0)
+            .find(|index| !insertions[*index].hedges.contains(h));
+        if let Some(index) = foreign {
+            if record_hedges.contains(h) {
+                return Err(Decline::new(
+                    "surrogate_split_chain",
+                    format!(
+                        "the insertion at {} carries the slot of half-edge {h}, a half-edge of the record that is not its own (a child that contracts a hole's anchor but not its far end)",
+                        insertions[index].vertex
+                    ),
+                ));
+            }
+            if holders.len() > 1 {
+                return Err(Decline::new(
+                    "surrogate_split_chain",
+                    format!(
+                        "the slot of half-edge {h} (not in the record) is shared by the insertion at {} and another factor (the two ends of one hole in different contracted children)",
+                        insertions[index].vertex
+                    ),
+                ));
+            }
+            spectators.insert(*h);
+        } else if holders.len() == 1 {
+            // a free slot of an edge, vertex or own insertion slot whose
+            // partner lies outside the record (a chain end's edge without the
+            // anchor, or the anchor without the chain end's edge)
+            spectators.insert(*h);
+        }
+    }
     vertices.sort_by_key(|vertex| vertex.id);
     insertions.sort_by_key(|insertion| insertion.vertex);
-    Ok(provenance.original_cycles)
+    Ok(Finished {
+        original_cycles: provenance.original_cycles,
+        spectators,
+    })
+}
+
+/// What [`finish`] gives the record builder: the record's
+/// `original_cycles` and its spectator ports (half-edges).
+pub(super) struct Finished {
+    pub original_cycles: (u32, u32),
+    pub spectators: BTreeSet<usize>,
+}
+
+/// The half-edges `h` of the slots `mink(.., hedge(h, k))` / `bis(..,
+/// hedge(h, k))` in `atom`.
+fn hedge_slots(atom: &Atom) -> BTreeSet<usize> {
+    let mink = symbolica::symbol!("spenso::mink");
+    let bis = symbolica::symbol!("spenso::bis");
+    let mut found = BTreeSet::new();
+    atom.as_view().visitor(&mut |view| {
+        if let AtomView::Fun(function) = view
+            && (function.get_symbol() == mink || function.get_symbol() == bis)
+            && function.get_nargs() == 2
+            && let Some(AtomView::Fun(index)) = function.iter().nth(1)
+            && index.get_symbol() == GS.hedgeaind
+            && let Some(h) = index.iter().next()
+            && let Ok(h) = usize::try_from(h)
+        {
+            found.insert(h);
+            return false;
+        }
+        true
+    });
+    found
 }
 
 // ---------------------------------------------------------------------------
@@ -888,7 +970,7 @@ fn build_direct(
         })
         .collect::<Vec<_>>();
     let mut insertions = Vec::new();
-    let original_cycles = finish_with(
+    let finished = finish_with(
         provenance,
         graph,
         &table,
@@ -906,7 +988,10 @@ fn build_direct(
         .chain(vertices.iter().map(|vertex| &vertex.factor))
         .chain(insertions.iter().map(|insertion| &insertion.factor))
         .collect::<Vec<_>>();
-    let ports = slots_of(&factor_atoms, &legs);
+    let mut port_hedges = legs.clone();
+    port_hedges.extend(finished.spectators.iter().copied());
+    let ports = slots_of(&factor_atoms, &port_hedges);
+    let original_cycles = finished.original_cycles;
     let n_insertions = insertions.len();
     let record = FactorizedNumerator {
         label: format!(
