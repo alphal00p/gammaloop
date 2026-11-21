@@ -3386,3 +3386,114 @@ fn a_marked_three_loop_massive_tadpole_through_the_vacuum_entry() {
     // the witness is live: a value did carry the constant
     assert!(d6bar1, "no value carried D6bar1");
 }
+
+/// Every unique v3 record under the roots of `VAKINT_TEST_RECORD_ROOTS`
+/// (colon-separated; files `*.record.txt` and `input.txt`) through
+/// validation only (`from_text`): the number accepted and the refusals by
+/// detail prefix. A refusal of a production record fails the test.
+#[test]
+#[ignore = "external data: VAKINT_TEST_RECORD_ROOTS"]
+fn every_production_record_validates() {
+    let roots =
+        wh_fixtures::required_env("VAKINT_TEST_RECORD_ROOTS", "the producer's record roots");
+    let mut files = Vec::new();
+    for root in roots.to_string_lossy().split(':') {
+        let mut stack = vec![PathBuf::from(root)];
+        while let Some(d) = stack.pop() {
+            let Ok(entries) = std::fs::read_dir(&d) else {
+                continue;
+            };
+            for e in entries {
+                let p = e.unwrap().path();
+                let name = p.file_name().unwrap().to_string_lossy().to_string();
+                if p.is_dir() {
+                    stack.push(p);
+                } else if name == "input.txt" || name.ends_with(".record.txt") {
+                    files.push(p);
+                }
+            }
+        }
+    }
+    init();
+    let started = std::time::Instant::now();
+    let mut seen = std::collections::BTreeSet::new();
+    let (mut accepted, mut refused) = (
+        0usize,
+        std::collections::BTreeMap::<String, Vec<String>>::new(),
+    );
+    for p in &files {
+        let Ok(text) = std::fs::read_to_string(p) else {
+            continue;
+        };
+        if !text.starts_with("schema\tpint6.factorized-numerator.v3") || !seen.insert(text.clone())
+        {
+            continue;
+        }
+        match FactorizedNumerator::from_text(&text) {
+            Ok(_) => accepted += 1,
+            Err(e) => {
+                let detail = e.to_string();
+                let prefix = detail.split(':').take(2).collect::<Vec<_>>().join(":");
+                refused
+                    .entry(prefix)
+                    .or_default()
+                    .push(p.display().to_string());
+            }
+        }
+    }
+    eprintln!(
+        "PRODUCTION files={} unique_v3={} accepted={accepted} refused={} seconds={:.1}",
+        files.len(),
+        seen.len(),
+        refused.values().map(Vec::len).sum::<usize>(),
+        started.elapsed().as_secs_f64()
+    );
+    for (prefix, paths) in &refused {
+        eprintln!(
+            "PRODUCTION REFUSED {} x {prefix}: e.g. {}",
+            paths.len(),
+            paths[0]
+        );
+    }
+    assert!(refused.is_empty(), "production records refused");
+}
+
+/// The producer's plain caller scalars stay opaque coefficients: UFO
+/// couplings, beta_projection::transverse, uv_isotropic_channel_n,
+/// insertion_closure_metric / _longitudinal in an insertion coefficient and
+/// in a vertex factor validate and evaluate (input symbols for the result
+/// check), the value linear in each.
+#[test]
+fn the_producers_plain_scalars_are_accepted() {
+    let base = record("wh-k2-child-ins");
+    let plain = value(&base, &symbolic());
+    for name in [
+        "UFO::gs_minus",
+        "UFO::gs2_i",
+        "beta_projection::transverse",
+        "gammalooprs::uv_isotropic_channel_1",
+        "gammalooprs::insertion_closure_metric",
+        "gammalooprs::insertion_closure_longitudinal",
+    ] {
+        let x = atom(name);
+        let mut c = base.clone();
+        c.insertions[0].coefficient = &c.insertions[0].coefficient * &x;
+        assert_same(
+            &value(&c, &symbolic()),
+            &(&plain * &x),
+            &format!("{name} in the coefficient"),
+        );
+        let mut f = base.clone();
+        let vertex = f
+            .vertices
+            .iter_mut()
+            .find(|v| v.factor != Atom::num(1))
+            .unwrap();
+        vertex.factor = &vertex.factor * &x;
+        assert_same(
+            &value(&f, &symbolic()),
+            &(&plain * &x),
+            &format!("{name} in a vertex factor"),
+        );
+    }
+}
