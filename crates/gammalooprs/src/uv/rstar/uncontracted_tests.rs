@@ -1,7 +1,8 @@
-//! U7a (`GAMMALOOP_UNCONTRACTED_NUMERATOR`, [`super::uncontracted`]): the
-//! switch, the Δ-cache suffix, the record pieces (insertion split, the Δ
-//! momentum-conservation step), the comparator, and the K1 records of real
-//! beta diagrams against the VERIFIED fixtures of the beta project
+//! U7a / U7b (`GAMMALOOP_UNCONTRACTED_NUMERATOR`, [`super::uncontracted`]):
+//! the switch, the Δ-cache suffix, the record pieces (insertion split, the Δ
+//! momentum-conservation step), the comparator, and the K1, K2 and K3 (IR
+//! hard part, section "K3" at the end) records of real beta diagrams
+//! against the VERIFIED fixtures of the beta project
 //! (results/consolidation/wh-fixtures): the emitted record equals the
 //! fixture's `input.txt` up to canonical order (atoms by expanded
 //! difference), its value equals `value.txt` through `valid_through`, and
@@ -72,7 +73,7 @@ use super::{
     boundary::{BoundaryMode, ClosedRootNormalization, with_boundary_mode},
     recursive_tests::{colour_factored, load, settings},
     uncontracted::{
-        self, Captured, DESIGNED_LOCAL, Decline, Kind, Mode, Switch, agree, conserve,
+        self, Captured, DESIGNED_LOCAL, Decline, Kind, Mode, NoRecord, Switch, agree, conserve,
         is_unknown_master_text, split_insertion, split_root_factor, with_capture, with_strict,
         with_switch,
     },
@@ -724,46 +725,53 @@ fn switch_parses_every_form() {
     for off in [None, Some(""), Some("0"), Some("off"), Some(" off ")] {
         assert_eq!(Switch::parse(off), Ok(Switch::OFF), "{off:?}");
     }
+    // without a list: the kinds this build implements (U7b: K1, K2, K3)
     let on = Switch::parse(Some("on")).unwrap();
     assert_eq!(on.mode, Mode::On);
-    assert!(on.enabled(Kind::Root) && on.enabled(Kind::Child));
-    assert!(!on.enabled(Kind::IrHard) && !on.enabled(Kind::Quotient));
+    assert!(on.enabled(Kind::Root) && on.enabled(Kind::Child) && on.enabled(Kind::IrHard));
+    assert!(!on.enabled(Kind::Quotient) && !on.enabled(Kind::Surrogate));
     assert_eq!(Switch::parse(Some("1")), Ok(on));
     let check = Switch::parse(Some("check")).unwrap();
     assert_eq!(check.mode, Mode::Check);
-    assert_eq!(check.enabled_kinds(), vec![Kind::Root, Kind::Child]);
     assert_eq!(
-        Switch::parse(Some("check:a,b")),
+        check.enabled_kinds(),
+        vec![Kind::Root, Kind::Child, Kind::IrHard]
+    );
+    assert_eq!(
+        Switch::parse(Some("check:a,b,c")),
         Ok(check),
         "letter aliases"
     );
     let root = Switch::parse(Some("on:root, root")).unwrap();
     assert_eq!(root.enabled_kinds(), vec![Kind::Root], "duplicates ignored");
-    let inert = Switch::parse(Some("on:ir-hard,quotient,surrogate,insertion")).unwrap();
+    let inert = Switch::parse(Some("on:quotient,surrogate,insertion")).unwrap();
     assert!(inert.enabled_kinds().is_empty());
     assert_eq!(
         inert.inert_kinds(),
-        vec![
-            Kind::IrHard,
-            Kind::Quotient,
-            Kind::Surrogate,
-            Kind::Insertion
-        ]
+        vec![Kind::Quotient, Kind::Surrogate, Kind::Insertion]
     );
     assert_eq!(
         inert.cache_key_suffix(),
         None,
         "nothing enabled, today's key"
     );
-    let mixed = Switch::parse(Some("check:c,root")).unwrap();
-    assert_eq!(mixed.enabled_kinds(), vec![Kind::Root]);
+    let ir_hard = Switch::parse(Some("on:ir-hard,quotient")).unwrap();
+    assert_eq!(ir_hard.enabled_kinds(), vec![Kind::IrHard]);
+    assert_eq!(ir_hard.inert_kinds(), vec![Kind::Quotient]);
+    assert_eq!(
+        ir_hard.cache_key_suffix().as_deref(),
+        Some("#uncontracted=ir-hard"),
+        "an IR hard part's value reaches the Δ of its child"
+    );
+    let mixed = Switch::parse(Some("check:c,root,d")).unwrap();
+    assert_eq!(mixed.enabled_kinds(), vec![Kind::Root, Kind::IrHard]);
     assert_eq!(
         mixed.line(),
-        "UNCONTRACTED_SWITCH mode=check kinds=root inert=ir-hard"
+        "UNCONTRACTED_SWITCH mode=check kinds=root,ir-hard inert=quotient"
     );
     assert_eq!(
         on.line(),
-        "UNCONTRACTED_SWITCH mode=on kinds=root,child inert=none"
+        "UNCONTRACTED_SWITCH mode=on kinds=root,child,ir-hard inert=none"
     );
     for bad in [
         "yes",
@@ -796,6 +804,16 @@ fn cache_suffix_only_when_enabled() {
     // the Δ cache; review M2)
     let on = with_switch(Switch::new(Mode::On, &[Kind::Root, Kind::Child]), key);
     assert_eq!(on, format!("{off}#uncontracted=child"));
+    let all = with_switch(
+        Switch::new(Mode::On, &[Kind::IrHard, Kind::Root, Kind::Child]),
+        key,
+    );
+    assert_eq!(all, format!("{off}#uncontracted=child,ir-hard"));
+    let check_all = with_switch(
+        Switch::new(Mode::Check, &[Kind::Root, Kind::Child, Kind::IrHard]),
+        key,
+    );
+    assert_eq!(check_all, off, "check mode leaves the key alone (K3 too)");
     let root = with_switch(Switch::new(Mode::On, &[Kind::Root]), key);
     assert_eq!(root, off, "on:root leaves the key alone");
     // check mode: every value is today's, the key too
@@ -942,12 +960,18 @@ fn designed_refusals_are_a_closed_list() {
         "normalisation_mismatch",
         "finish_tensor",
         "vakint:Empty",
+        // K3 (U7b): no new designed code; these two are bugs
+        "ir_hard_site_missing",
+        "ir_dirac_closure",
     ] {
         assert!(
             !DESIGNED_LOCAL.contains(&code),
             "{code} is a bug, not designed"
         );
     }
+    // U7b adds no designed refusal: the closed lists are U7a's
+    assert_eq!(DESIGNED_LOCAL.len(), 14, "{DESIGNED_LOCAL:?}");
+    assert_eq!(uncontracted::DESIGNED_VAKINT.len(), 9);
     for code in ["open_root", "insertion_mass_symbol", "root_crown_paired"] {
         assert!(DESIGNED_LOCAL.contains(&code), "{code}");
     }
@@ -1892,6 +1916,585 @@ fn k1_l5_34342_fixtures() -> Result<()> {
             false,
         )?;
         ensure!(n == 1);
+        Ok(())
+    })
+}
+
+// ---------------------------------------------------------------------------
+// K3: IR hard parts (U7b)
+// ---------------------------------------------------------------------------
+//
+// Oracle: the VERIFIED fixtures wh-fixtures/k3-hs (L3 36) and k3-dirac
+// (L4 4966), copied to testdata/u7b with their sha256 (SHA256SUMS.txt), and
+// the site value of k3-dirac's term 1 (its raw dump's `value` line,
+// testdata/u7b/k3-dirac-term1.value.txt). The fixture tests INJECT the
+// fixture's edge and vertex factors into the colour-factored DOT
+// ([`fixture_branch`]: the first colour row's gluon propagators carry `-𝑖`
+// where the beta's branch has `+𝑖`), so "emitted == input.txt" is circular
+// for the FACTORS (U7a review I1); the factor extraction is tested by
+// `k3_check_equals_off` on the same diagrams WITHOUT injection, through the
+// check mode's PRODUCT identity (the record's factors multiply back to the
+// site's numerator `graph.numerator(remaining, contracted)`, else the strict
+// run fails with `error:product_mismatch`); the values against value.txt
+// stay independent.
+
+const IR_HARD: [Kind; 1] = [Kind::IrHard];
+const ALL_KINDS: [Kind; 3] = [Kind::Root, Kind::Child, Kind::IrHard];
+/// The UV child of L4 4966 whose R* holds k3-dirac's site.
+const K3_DIRAC_CHILD: [usize; 8] = [2, 3, 5, 7, 8, 9, 10, 11];
+
+/// The R* of one proper UV child `support` (its edge ids) of a diagram as
+/// the parent's plan computes an `rstar`-route child
+/// (`RStarPlan::rstar_child_counterterm` with the plan's route and closure,
+/// a fresh Δ cache) under `switch`, with every attempt reported inside it.
+/// The production beta reaches k3-dirac's site so: L4 4966's child
+/// {2,3,5,7,8,9,10,11} takes the R* route there (its `UV_CHILD route=rstar
+/// loops=3` line in wh-fixtures/k3-dirac's run), while the full-graph root
+/// of the unit layer marks edge 9 inside it and so takes the massive
+/// reference-mass route for it.
+fn child_run(
+    diagram: &feynkit_graph::FeynmanDiagram,
+    support: &[usize],
+    switch: Switch,
+    vakint: &Vakint,
+) -> Result<(Atom, Vec<Captured>)> {
+    let settings = settings();
+    let graph = diagram.to_gamma_loop_graph(None, true)?;
+    let model = diagram.model();
+    let plan = RStarPlan::with_automatic_edge(&graph, model, &settings)?;
+    let child = plan
+        .counterterms
+        .iter()
+        .map(|call| &call.argument.support)
+        .find(|child| super::plan::uv_child_edge_ids(&graph, child) == support)
+        .ok_or_else(|| eyre!("{}: no UV child {support:?}", graph.name))?;
+    let cache = std::sync::Arc::new(super::CountertermCache::default());
+    let (value, captured) = with_switch(switch, || {
+        with_strict(true, || {
+            with_boundary_mode(BoundaryMode::On, false, || {
+                with_capture(|| {
+                    RStarPlan::rstar_child_counterterm(
+                        &cache,
+                        &graph,
+                        child,
+                        model,
+                        vakint,
+                        &settings,
+                        plan.uv_children,
+                        plan.uv_child_closure,
+                    )
+                })
+            })
+        })
+    });
+    Ok((value?, captured))
+}
+
+/// [`checked_run`] for one UV child ([`child_run`]): check (the attempts as
+/// [`expect_outcomes`]), off (nothing reported; check returns its Δ) and on
+/// (the same outcomes; its Δ equals off's). A child prints no
+/// `UNCONTRACTED_SUMMARY` (its records join its diagram root's line). The
+/// attempts of the check run.
+fn checked_child_run(
+    what: &str,
+    diagram: &feynkit_graph::FeynmanDiagram,
+    support: &[usize],
+    vakint: &Vakint,
+    kinds: &[Kind],
+    declines: &[(&str, usize)],
+) -> Result<Vec<Captured>> {
+    let (checked, captured) = child_run(diagram, support, Switch::new(Mode::Check, kinds), vakint)?;
+    expect_outcomes(&format!("{what} check"), &captured, declines, true)?;
+    let (off, nothing) = child_run(diagram, support, Switch::OFF, vakint)?;
+    ensure!(nothing.is_empty(), "{what}: mode off reports nothing");
+    ensure!(
+        checked == off,
+        "{what}: check mode returns today's Δ\noff   {off}\ncheck {checked}"
+    );
+    let (on, attempts) = child_run(diagram, support, Switch::new(Mode::On, kinds), vakint)?;
+    expect_outcomes(&format!("{what} on"), &attempts, declines, false)?;
+    ensure!(
+        atoms_agree(&on, &off),
+        "{what}: mode on differs from off\noff {off}\non  {on}"
+    );
+    Ok(captured)
+}
+
+/// The `<key>=` token of a record label.
+fn label_field<'l>(label: &'l str, key: &str) -> Option<&'l str> {
+    label
+        .split(' ')
+        .find_map(|field| field.strip_prefix(key)?.strip_prefix('='))
+}
+
+/// Every K3 attempt of a run has the K3 shape (WH-RECORD-FORMAT v1.4 K3 row;
+/// WH-OQ-ANSWERS (c); addendum OQ-24, OQ-25): at least one loop (a zero-loop
+/// term gives no record), depth = loops + the quotient's extra loops and
+/// the value complete through `ε^(depth - loops - 1)`; its text a fixed point
+/// of vakint's writer (round trip); kind closure `externals=independent`;
+/// every external leg scaled, `compensate_mass=0`, `orders=all`, degree
+/// `ω >= 1` (no order-0 correction); one `soft` line per external, `role=root`
+/// exactly for the scope's root legs (the label's scope: a child scope's
+/// crown, else the graph's external edges); prefactor 1 with
+/// `original_cycles`; no projector and only Lorentz ports (gluonic `h_s`), or
+/// the IR Dirac closure `gamma(c, r, mink(D, ir_dirac_closure_nu))`
+/// (`p2_power=0`) closing the two bispinor ports with `nu` the one open slot.
+/// The number of K3 records.
+fn k3_shapes(what: &str, graph: &Graph, captured: &[Captured]) -> Result<usize> {
+    use vakint::p_integral::factorized::TaylorOrders;
+    let nu = symbol!("gammalooprs::ir_dirac_closure_nu");
+    let graph_externals = graph
+        .iter_edges()
+        .filter(|(pair, _, _)| matches!(pair, HedgePair::Unpaired { .. }))
+        .map(|(_, edge, _)| usize::from(edge))
+        .collect::<BTreeSet<_>>();
+    // the vertices of an edge
+    let ends = |pair: HedgePair| -> Vec<usize> {
+        match pair {
+            HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => vec![
+                usize::from(graph.node_id(source)),
+                usize::from(graph.node_id(sink)),
+            ],
+            HedgePair::Unpaired { hedge, .. } => vec![usize::from(graph.node_id(hedge))],
+        }
+    };
+    let mut n = 0;
+    for attempt in captured.iter().filter(|a| a.kind == Kind::IrHard) {
+        let at = format!("{what}: K3 id {}", attempt.id);
+        ensure!(attempt.loops >= 1, "{at}: a zero-loop term was attempted");
+        ensure!(
+            attempt.depth > attempt.loops
+                && attempt.order == attempt.depth as i64 - attempt.loops as i64 - 1,
+            "{at}: depth {} over {} loops, order {}",
+            attempt.depth,
+            attempt.loops,
+            attempt.order
+        );
+        let Some(text) = &attempt.text else { continue };
+        let record = FactorizedNumerator::from_text(text).map_err(|e| eyre!("{at}: {e}"))?;
+        ensure!(
+            record.to_text().map_err(|e| eyre!("{at}: {e}"))? == *text,
+            "{at}: the record is not a fixed point of vakint's writer"
+        );
+        ensure!(
+            record.label.starts_with("u7b kind=ir-hard "),
+            "{at}: label {}",
+            record.label
+        );
+        let FactorizedKind::Closure(spec) = &record.kind else {
+            return Err(eyre!("{at}: not a closure record"));
+        };
+        let taylor = spec
+            .taylor
+            .as_ref()
+            .ok_or_else(|| eyre!("{at}: no Taylor step"))?;
+        let externals = record
+            .external_edges
+            .iter()
+            .map(|edge| edge.ok_or_else(|| eyre!("{at}: an external without edge")))
+            .collect::<Result<Vec<_>>>()?;
+        ensure!(
+            spec.independent_externals
+                && taylor.degree >= 1
+                && !taylor.compensate_mass
+                && taylor.orders == TaylorOrders::All
+                && taylor.scaled_edges == externals
+                && spec.depth == Some(attempt.depth)
+                && spec.original_cycles.is_some()
+                && record.loop_edges.len() == attempt.loops,
+            "{at}: not the K3 closure shape\n{text}"
+        );
+        let roots = match label_field(&record.label, "scope") {
+            Some(scope) if scope.starts_with("child:") => {
+                // the child's crown: the edges outside its support with an
+                // end on one of its vertices
+                let support = scope["child:".len()..]
+                    .split(',')
+                    .map(|edge| edge.parse::<usize>())
+                    .collect::<std::result::Result<BTreeSet<_>, _>>()?;
+                let nodes = graph
+                    .iter_edges()
+                    .filter(|(_, edge, _)| support.contains(&usize::from(*edge)))
+                    .flat_map(|(pair, _, _)| ends(pair))
+                    .collect::<BTreeSet<_>>();
+                graph
+                    .iter_edges()
+                    .filter(|(pair, edge, _)| {
+                        !support.contains(&usize::from(*edge))
+                            && ends(*pair).iter().any(|node| nodes.contains(node))
+                    })
+                    .map(|(_, edge, _)| usize::from(edge))
+                    .collect::<BTreeSet<_>>()
+            }
+            Some(scope) if scope.starts_with("root:") => graph_externals.clone(),
+            other => return Err(eyre!("{at}: scope {other:?}")),
+        };
+        ensure!(
+            spec.softs.len() == externals.len()
+                && spec.softs.iter().enumerate().all(|(j, soft)| {
+                    soft.external == j + 1
+                        && soft.edge == externals[j]
+                        && soft.root == roots.contains(&soft.edge)
+                }),
+            "{at}: softs {:?} against the externals {externals:?} and the scope's root legs {roots:?}",
+            spec.softs
+        );
+        let p = &record.prefactor;
+        ensure!(
+            (p.loop_sign, p.nf_power) == (1, 0)
+                && p.overall == Atom::num(1)
+                && p.scalars == Atom::num(1)
+                && p.colour == Atom::num(1),
+            "{at}: prefactor {p:?} (convention B; the closure's 1/Tr[1] is the caller's)"
+        );
+        let open = record.open_slots().map_err(|e| eyre!("{at}: {e}"))?;
+        let mink = |slot: &Atom| slot.to_canonical_string().contains("::mink(");
+        match &record.projector {
+            None => ensure!(
+                record.ports.iter().all(mink) && open.len() == record.ports.len(),
+                "{at}: an open record with non-Lorentz ports {:?}",
+                record.ports
+            ),
+            Some(projector) => ensure!(
+                projector.p2_power == 0
+                    && projector.tensor.contains_symbol(nu)
+                    && record.ports.len() == 2
+                    && record.ports.iter().all(|port| !mink(port))
+                    && open.len() == 1
+                    && open[0].contains_symbol(nu),
+                "{at}: not the IR Dirac closure of two bispinor ports with nu open\n{text}"
+            ),
+        }
+        n += 1;
+    }
+    Ok(n)
+}
+
+/// The one K3 attempt whose record has the remainder `key` (internal edges,
+/// `ct:` rules).
+fn k3_attempt<'c>(
+    what: &str,
+    captured: &'c [Captured],
+    key: &(Vec<usize>, Vec<String>),
+) -> Result<&'c Captured> {
+    let found = captured
+        .iter()
+        .filter(|a| a.kind == Kind::IrHard)
+        .filter(|a| {
+            a.text
+                .as_ref()
+                .and_then(|text| FactorizedNumerator::from_text(text).ok())
+                .is_some_and(|record| record_key(&record) == *key)
+        })
+        .collect::<Vec<_>>();
+    ensure!(
+        found.len() == 1,
+        "{what}: {} K3 records of the remainder {key:?}",
+        found.len()
+    );
+    Ok(found[0])
+}
+
+/// The scope label, the record's own: `ir-hard` everywhere but inside the
+/// R* of a decorated quotient or an insertion surrogate.
+#[test]
+fn k3_kind_by_scope() {
+    with_switch(Switch::new(Mode::On, &ALL_KINDS), || {
+        assert_eq!(uncontracted::classify_ir_hard(), Kind::IrHard);
+        uncontracted::scoped(uncontracted::Scope::Quotient, || {
+            assert_eq!(uncontracted::classify_ir_hard(), Kind::Quotient)
+        });
+        super::expression::in_dressed_scope(|| {
+            assert_eq!(uncontracted::classify_ir_hard(), Kind::Surrogate)
+        });
+        assert_eq!(uncontracted::classify_ir_hard(), Kind::IrHard);
+    });
+}
+
+/// Check mode compares through the record's order: two values with the same
+/// poles but a different ε^0 part are equal for K1 / K2 (order -1) and differ
+/// for K3 at depth = loops + 1 (order 0); the valid order of a record.
+#[test]
+fn k3_check_compares_through_its_order() {
+    test_initialise().unwrap();
+    assert_eq!(uncontracted::valid_order(2, 2), -1, "K1 / K2: the poles");
+    assert_eq!(uncontracted::valid_order(2, 1), 0, "k3-hs");
+    assert_eq!(uncontracted::valid_order(3, 2), 0, "k3-dirac");
+    let e = Atom::var(epsilon());
+    let a = Atom::var(symbol!("u7b_test_a"));
+    let today = &a / &e + Atom::num(3) + Atom::num(5) * &e;
+    let finite = &a / &e + Atom::num(4) + Atom::num(5) * &e;
+    let higher = &a / &e + Atom::num(3) + Atom::num(7) * &e;
+    let poles = uncontracted::compare(&today, &finite, epsilon(), -1, 0.0, 0.0);
+    assert!(poles.equal && !poles.identical);
+    let order0 = uncontracted::compare(&today, &finite, epsilon(), 0, 0.0, 0.0);
+    assert!(!order0.equal, "a different eps^0 part");
+    let beyond = uncontracted::compare(&today, &higher, epsilon(), 0, 0.0, 0.0);
+    assert!(beyond.equal, "eps^1 is beyond the order");
+}
+
+/// k3-hs: the open gluonic hard part h_s of L3 36 (correction 0, term 0,
+/// inside the R* of the UV child {5,6,7,8}; γ = {5,6}, marked edge 5, ω = 1,
+/// depth 2; crown legs 4 (`role=root`, a root leg of the child), 7 and 8
+/// (`role=soft`); ports m(7), m(13), m(15), no projector), against
+/// wh-fixtures/k3-hs: the emitted record == input.txt up to canonical order
+/// (the fixture's factors injected, see above), a byte-identical round trip
+/// through vakint's writer, the value == value.txt through ε^0 (valid_through;
+/// the record's own order 0), check equal, every other K3 record of the
+/// diagram compared equal, on == off. Term 1 (Δ(γ) inserted, zero loops)
+/// gives no record.
+#[test]
+fn k3_hs_fixture() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let input = include_str!("testdata/u7b/k3-hs.input.txt");
+        let value = include_str!("testdata/u7b/k3-hs.value.txt");
+        let fixture = FactorizedNumerator::from_text(input).map_err(|e| eyre!("{e}"))?;
+        let diagram = fixture_branch(include_str!("testdata/u7a/l3-d036.dot"), &[&fixture])?;
+        let graph = diagram.to_gamma_loop_graph(None, true)?;
+        uncontracted::take_no_records();
+        let captured = checked_run("k3-hs", &diagram, &Vakint::new()?, &IR_HARD, &[], true)?;
+        let skipped = uncontracted::take_no_records();
+        compare_fixture_of(
+            "k3-hs (L3 36, γ {5,6} in the child {5,6,7,8})",
+            Kind::IrHard,
+            &captured,
+            input,
+            value,
+        )?;
+        let attempt = k3_attempt("k3-hs", &captured, &record_key(&fixture))?;
+        ensure!(
+            attempt.order == valid_through(value) && attempt.depth == 2,
+            "k3-hs: depth {} order {}",
+            attempt.depth,
+            attempt.order
+        );
+        let n = k3_shapes("k3-hs", &graph, &captured)?;
+        ensure!(
+            skipped.iter().any(|(_, why)| *why == NoRecord::ZeroLoops)
+                && !skipped.iter().any(|(_, why)| *why == NoRecord::OrderZero),
+            "k3-hs: the terms without a record {skipped:?} (term 1, Δ(γ), has zero loops)"
+        );
+        eprintln!(
+            "U7B_K3 k3-hs records={n} no_record={skipped:?} id={} identical={:?}",
+            attempt.id, attempt.identical
+        );
+        Ok(())
+    })
+}
+
+/// k3-dirac: the quark-leg hard part of L4 4966 closed by the IR Dirac
+/// closure (correction 0 inside the R* of the UV child
+/// {2,3,5,7,8,9,10,11}; γ = {7,8,9,10,11}, marked edge 9, ω = 1, slash kind),
+/// against wh-fixtures/k3-dirac: term 0 (two loops, depth 3) == input.txt
+/// (projector `gamma(bis(9), bis(4), mink(D, ir_dirac_closure_nu))`, ports
+/// the two bispinor slots, `nu` open, `prefactor_scalars 1`), round trip,
+/// value == value.txt through ε^0; term 1 (one loop, the child {7,8} as a
+/// `ct:` insertion at vertex 2, depth 2) == the site's value through ε^0;
+/// term 2 (zero loops) gives no record; check equal, on == off (the child's
+/// R* as production computes it, [`child_run`]).
+#[test]
+fn k3_dirac_fixture() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let input = include_str!("testdata/u7b/k3-dirac.input.txt");
+        let value = include_str!("testdata/u7b/k3-dirac.value.txt");
+        let term1 = include_str!("testdata/u7b/k3-dirac-term1.value.txt");
+        let fixture = FactorizedNumerator::from_text(input).map_err(|e| eyre!("{e}"))?;
+        let diagram = fixture_branch(include_str!("testdata/u7b/l4-d4966.dot"), &[&fixture])?;
+        let graph = diagram.to_gamma_loop_graph(None, true)?;
+        uncontracted::take_no_records();
+        let captured = checked_child_run(
+            "k3-dirac",
+            &diagram,
+            &K3_DIRAC_CHILD,
+            &Vakint::new()?,
+            &IR_HARD,
+            &[],
+        )?;
+        let skipped = uncontracted::take_no_records();
+        compare_fixture_of(
+            "k3-dirac (L4 4966, γ {7,8,9,10,11} Dirac closed)",
+            Kind::IrHard,
+            &captured,
+            input,
+            value,
+        )?;
+        let attempt = k3_attempt("k3-dirac", &captured, &record_key(&fixture))?;
+        ensure!(attempt.order == valid_through(value) && attempt.depth == 3);
+        // term 1: the K3 record with an insertion
+        let key = (vec![9, 10, 11], vec!["ct:edges-7-8".to_owned()]);
+        let with_child = k3_attempt("k3-dirac term 1", &captured, &key)?;
+        let text = with_child.text.as_ref().unwrap();
+        let record = FactorizedNumerator::from_text(text).map_err(|e| eyre!("{e}"))?;
+        ensure!(
+            with_child.outcome == "uncontracted"
+                && with_child.depth == 2
+                && with_child.order == valid_through(term1)
+                && record.insertions.len() == 1
+                && record.insertions[0].vertex == 2
+                && record.projector.is_some(),
+            "k3-dirac term 1: outcome {} depth {} order {}\n{text}",
+            with_child.outcome,
+            with_child.depth,
+            with_child.order
+        );
+        let expected = fixture_value(term1);
+        let order = valid_through(term1);
+        let ours = with_child.value.as_ref().ok_or_else(|| eyre!("no value"))?;
+        ensure!(
+            equal_through(ours, &expected, order)?,
+            "k3-dirac term 1: the value differs from the site's through eps^{order}\nours {ours}\nsite {expected}"
+        );
+        if let Some(contracted) = &with_child.contracted {
+            ensure!(
+                equal_through(contracted, &expected, order)?,
+                "k3-dirac term 1: today's value is not the site's (not this branch)"
+            );
+        }
+        ensure!(with_child.equal == Some(true));
+        let n = k3_shapes("k3-dirac", &graph, &captured)?;
+        ensure!(
+            skipped.iter().any(|(_, why)| *why == NoRecord::ZeroLoops)
+                && !skipped.iter().any(|(_, why)| *why == NoRecord::OrderZero),
+            "k3-dirac: the terms without a record {skipped:?} (term 2 has zero loops)"
+        );
+        eprintln!(
+            "U7B_K3 k3-dirac records={n} no_record={skipped:?} term0 id={} identical={:?} term1 id={} identical={:?}",
+            attempt.id, attempt.identical, with_child.id, with_child.identical
+        );
+        Ok(())
+    })
+}
+
+/// The K3 factor test (U7a review I1): L3 36 and L4 4966 colour factored as
+/// they are, NO fixture factor injected, check mode with root, child and
+/// ir-hard records: every K3 record passes the PRODUCT identity (its edge and
+/// vertex factors multiply back to the site's numerator; a mismatch is an
+/// error and fails the strict run) and is compared equal through its order;
+/// every record has the K3 shape; check returns today's value and on == off.
+/// The fixture's remainder (L3 36 in the diagram's run; L4 4966 in the R* of
+/// its child {2,3,5,7,8,9,10,11}, [`child_run`], after the whole diagram)
+/// is emitted with input.txt's structure; only its factors differ (the
+/// first colour row).
+#[test]
+fn k3_check_equals_off() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let none: &[(&str, usize)] = &[];
+        for (what, dot, input, child, declines) in [
+            (
+                "L3/36",
+                include_str!("testdata/u7a/l3-d036.dot"),
+                include_str!("testdata/u7b/k3-hs.input.txt"),
+                None,
+                none,
+            ),
+            (
+                "L4/4966",
+                include_str!("testdata/u7b/l4-d4966.dot"),
+                include_str!("testdata/u7b/k3-dirac.input.txt"),
+                Some(&K3_DIRAC_CHILD[..]),
+                none,
+            ),
+        ] {
+            let diagram = colour_factored(&load(dot)?)?;
+            let graph = diagram.to_gamma_loop_graph(None, true)?;
+            let mut captured = checked_run(what, &diagram, &vakint, &ALL_KINDS, declines, true)?;
+            let n = k3_shapes(what, &graph, &captured)?;
+            ensure!(n >= 1, "{what}: no K3 record");
+            eprintln!(
+                "U7B_K3 {what} colour-factored diagram: K3 records={n} attempts={}",
+                captured.len()
+            );
+            if let Some(child) = child {
+                let what = format!("{what} child {child:?}");
+                captured =
+                    checked_child_run(&what, &diagram, child, &vakint, &ALL_KINDS, declines)?;
+                let n = k3_shapes(&what, &graph, &captured)?;
+                ensure!(n >= 1, "{what}: no K3 record");
+                eprintln!(
+                    "U7B_K3 {what} colour-factored child: K3 records={n} attempts={}",
+                    captured.len()
+                );
+            }
+            let theirs = FactorizedNumerator::from_text(input).map_err(|e| eyre!("{e}"))?;
+            let attempt = k3_attempt(what, &captured, &record_key(&theirs))?;
+            let ours = FactorizedNumerator::from_text(attempt.text.as_ref().unwrap())
+                .map_err(|e| eyre!("{e}"))?;
+            let structural = record_differences(&ours, &theirs)
+                .into_iter()
+                .filter(|difference| !difference.ends_with(" factor"))
+                .collect::<Vec<_>>();
+            ensure!(
+                structural.is_empty(),
+                "{what}: the colour-factored record differs from the fixture beyond its factors: {structural:#?}"
+            );
+        }
+        Ok(())
+    })
+}
+
+/// ω = 0 corrections give no K3 record (K8, out of scope): under the
+/// production `GAMMALOOP_IR_HARD_CHILD_SELECT=omega1` they never reach the
+/// child route (they take `ir_term_today`), so the hook sees no order-0 term,
+/// no K3 record names the hard part of a root-scope ω-0 correction (the
+/// plan's), and every K3 record has degree >= 1. At least one such
+/// correction occurs among the graphs.
+#[test]
+fn k3_order_zero_corrections_have_no_record() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let mut order_zero = 0;
+        for (what, dot) in [
+            ("L3/36", include_str!("testdata/u7a/l3-d036.dot")),
+            ("L3/16", include_str!("testdata/u7a/l3-d016.dot")),
+            ("L4/4966", include_str!("testdata/u7b/l4-d4966.dot")),
+        ] {
+            let diagram = colour_factored(&load(dot)?)?;
+            let graph = diagram.to_gamma_loop_graph(None, true)?;
+            let plan = RStarPlan::with_automatic_edge(&graph, diagram.model(), &settings())?;
+            let zero = plan
+                .ir
+                .iter()
+                .filter(|correction| correction.taylor_order == 0)
+                .map(|correction| {
+                    super::plan::join_edge_ids(&super::plan::uv_child_edge_ids(
+                        &graph,
+                        &correction.hard,
+                    ))
+                })
+                .collect::<BTreeSet<_>>();
+            order_zero += zero.len();
+            uncontracted::take_no_records();
+            let (_, captured, _) = root_run(&diagram, Switch::new(Mode::Check, &IR_HARD))?;
+            let skipped = uncontracted::take_no_records();
+            ensure!(
+                !skipped.iter().any(|(_, why)| *why == NoRecord::OrderZero),
+                "{what}: an order-0 term reached the K3 hook {skipped:?}"
+            );
+            k3_shapes(what, &graph, &captured)?;
+            for attempt in captured.iter().filter(|a| a.kind == Kind::IrHard) {
+                let Some(text) = &attempt.text else { continue };
+                let record = FactorizedNumerator::from_text(text).map_err(|e| eyre!("{e}"))?;
+                if label_field(&record.label, "scope").is_some_and(|s| s.starts_with("root:")) {
+                    let hard = label_field(&record.label, "hard").unwrap_or_default();
+                    ensure!(
+                        !zero.contains(hard),
+                        "{what}: a K3 record of the order-0 hard part {hard}"
+                    );
+                }
+            }
+            eprintln!(
+                "U7B_K3 {what} root order-0 corrections={zero:?} K3 attempts={} no_record={skipped:?}",
+                captured.iter().filter(|a| a.kind == Kind::IrHard).count()
+            );
+        }
+        ensure!(
+            order_zero > 0,
+            "no root-scope order-0 IR correction among the graphs"
+        );
         Ok(())
     })
 }

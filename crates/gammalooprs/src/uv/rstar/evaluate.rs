@@ -906,6 +906,22 @@ impl RStarPlan {
     }
 }
 
+/// One remainder term of an IR hard part as [`Evaluation::ir_hard_child`]
+/// integrates it: the correction, the term and the depth attempt, the hard
+/// part, its IR Dirac closure, `ω` (and as the degree), the quotient's extra
+/// Laurent terms and the contraction basis.
+struct IrHardTerm<'a> {
+    correction_index: usize,
+    term_index: usize,
+    attempt: usize,
+    hard: &'a SuBitGraph,
+    closure: Option<&'a DiracBoundary>,
+    omega: i32,
+    degree: usize,
+    extra: usize,
+    edge_basis: bool,
+}
+
 struct Evaluation<'a> {
     plan: &'a RStarPlan,
     graph: &'a Graph,
@@ -1943,17 +1959,22 @@ impl<'a> Evaluation<'a> {
                     }
                     None => (remainder, None),
                 };
-                let remainder = remainder.with_ir_hard_truncation(&soft, omega)?;
-                let routed_bytes = remainder.routed_bytes();
-                let value = self
-                    .integrate_ir_hard_term(&remainder, &soft, degree, extra, edge_basis)
-                    .wrap_err_with(|| {
-                        format!(
-                            "while integrating the IR hard part corr={correction_index} term={term_index} of {}",
-                            self.graph.name
-                        )
-                    })?;
-                drop(remainder);
+                let (value, routed_bytes) = self.integrate_ir_hard(
+                    IrHardTerm {
+                        correction_index,
+                        term_index,
+                        attempt: attempts,
+                        hard: &correction.hard,
+                        closure: closure.as_ref(),
+                        omega,
+                        degree,
+                        extra,
+                        edge_basis,
+                    },
+                    term,
+                    remainder,
+                    &soft,
+                )?;
                 eprintln!(
                     "IR_HARD_CHILD_TERM graph={} corr={correction_index} term={term_index} attempt={attempts} hard_loops={hard_loops} rem_loops={} children={} omega={omega} edge={edge_basis} extra_depth={extra} routed_bytes={routed_bytes} h_bytes={} closures={} seconds={:.3}{} edges={}",
                     self.graph.name,
@@ -2131,6 +2152,144 @@ impl<'a> Evaluation<'a> {
                     outer_started.elapsed().as_secs_f64(),
                 ),
             )));
+        }
+    }
+
+    /// One remainder term of an IR hard part `H(γ)` ([`Self::ir_hard_child`]),
+    /// its IR Dirac closure multiplied in, untruncated: with
+    /// `GAMMALOOP_UNCONTRACTED_NUMERATOR` off (the default), today's path
+    /// ([`Self::integrate_ir_hard_today`]) and nothing else; on or check:
+    /// [`Self::integrate_ir_hard_uncontracted`]. The value and the routed
+    /// bytes of its `IR_HARD_CHILD_TERM` line.
+    fn integrate_ir_hard(
+        &mut self,
+        call: IrHardTerm<'_>,
+        term: &UvPreparationTerm,
+        remainder: RStarIntegrand,
+        soft: &[EdgeIndex],
+    ) -> Result<(Atom, usize)> {
+        let switch = super::uncontracted::switch();
+        if switch.mode == super::uncontracted::Mode::Off {
+            return self.integrate_ir_hard_today(&call, remainder, soft);
+        }
+        self.integrate_ir_hard_uncontracted(call, term, remainder, soft, switch)
+    }
+
+    /// Today's path of one remainder term of an IR hard part: the graded
+    /// truncation to grade `ω` in the crown momenta, then
+    /// [`Self::integrate_ir_hard_term`].
+    fn integrate_ir_hard_today(
+        &mut self,
+        call: &IrHardTerm<'_>,
+        remainder: RStarIntegrand,
+        soft: &[EdgeIndex],
+    ) -> Result<(Atom, usize)> {
+        let remainder = remainder.with_ir_hard_truncation(soft, call.omega)?;
+        let routed_bytes = remainder.routed_bytes();
+        let value = self
+            .integrate_ir_hard_term(&remainder, soft, call.degree, call.extra, call.edge_basis)
+            .wrap_err_with(|| {
+                format!(
+                    "while integrating the IR hard part corr={} term={} of {}",
+                    call.correction_index, call.term_index, self.graph.name
+                )
+            })?;
+        Ok((value, routed_bytes))
+    }
+
+    /// `GAMMALOOP_UNCONTRACTED_NUMERATOR` on or check with `ir-hard` enabled
+    /// (U7b, K3): the remainder term as one uncontracted record evaluated by
+    /// vakint's factorised entry ([`super::uncontracted`]), under the
+    /// integration id today's path would consume, with today's depth (the
+    /// remainder's loops plus the quotient's extra loops). On: its value, or
+    /// today's path for this term when it is declined. Check: our attempt (no
+    /// state changes), then today's path; the values must agree through
+    /// `ε^(extra - 1)`; today's value is returned. No record (today's path):
+    /// a zero-loop term (Δ(γ) inserted, no vakint call today, OQ-25) and a
+    /// correction of order `ω = 0` (K8, out of scope).
+    fn integrate_ir_hard_uncontracted(
+        &mut self,
+        call: IrHardTerm<'_>,
+        term: &UvPreparationTerm,
+        remainder: RStarIntegrand,
+        soft: &[EdgeIndex],
+        switch: super::uncontracted::Switch,
+    ) -> Result<(Atom, usize)> {
+        use super::uncontracted::{self as uncontracted, Mode, NoRecord};
+        let kind = uncontracted::classify_ir_hard();
+        if !switch.enabled(kind) {
+            return self.integrate_ir_hard_today(&call, remainder, soft);
+        }
+        let no_record = if term.remainder.loops == 0 {
+            Some(NoRecord::ZeroLoops)
+        } else if call.omega < 1 {
+            Some(NoRecord::OrderZero)
+        } else {
+            None
+        };
+        if let Some(why) = no_record {
+            uncontracted::no_record(&self.graph.name, why);
+            return self.integrate_ir_hard_today(&call, remainder, soft);
+        }
+        let id = self.integration_id + 1;
+        let started = Instant::now();
+        let hard = self.edges(call.hard);
+        let attempt = {
+            let site = self.uncontracted_ir_hard_site(term, &call, &hard);
+            uncontracted::attempt(&site, kind, id, switch.mode, || Ok(&remainder))?
+        };
+        let uncontracted_elapsed = started.elapsed();
+        if switch.mode == Mode::Check {
+            // a refusal that is not designed fails the diagram (review B1/B2)
+            if attempt.is_error() {
+                uncontracted::report(&attempt, None);
+                return Err(uncontracted::error_failure(&attempt, switch.mode));
+            }
+            let today_started = Instant::now();
+            let (today, routed_bytes) = match self.integrate_ir_hard_today(&call, remainder, soft) {
+                Ok(today) => today,
+                Err(error) => {
+                    uncontracted::report(&attempt, None);
+                    return Err(error);
+                }
+            };
+            let check = attempt.value().map(|ours| {
+                uncontracted::compare(
+                    &today,
+                    &ours,
+                    self.epsilon,
+                    attempt.order,
+                    today_started.elapsed().as_secs_f64(),
+                    uncontracted_elapsed.as_secs_f64(),
+                )
+            });
+            uncontracted::report(&attempt, check.as_ref());
+            if let Some(check) = &check
+                && !check.equal
+            {
+                return Err(uncontracted::check_failure(&attempt, check, self.epsilon));
+            }
+            return Ok((today, routed_bytes));
+        }
+        uncontracted::report(&attempt, None);
+        if attempt.is_error() && uncontracted::strict() {
+            return Err(uncontracted::error_failure(&attempt, switch.mode));
+        }
+        match attempt.value() {
+            Some(value) => {
+                self.integration_id = id;
+                self.integration_elapsed += uncontracted_elapsed;
+                IntegrationTimings::boundary(
+                    started,
+                    0.0,
+                    attempt.build_seconds,
+                    attempt.evaluate_seconds,
+                    attempt.finish_seconds,
+                )
+                .log(self.graph, id, term.remainder.loops, "uncontracted");
+                Ok((value, remainder.routed_bytes()))
+            }
+            None => self.integrate_ir_hard_today(&call, remainder, soft),
         }
     }
 
@@ -3356,6 +3515,7 @@ impl<'a> Evaluation<'a> {
                     &today,
                     &ours,
                     self.epsilon,
+                    attempt.order,
                     today_started.elapsed().as_secs_f64(),
                     uncontracted_elapsed.as_secs_f64(),
                 )
@@ -3418,6 +3578,36 @@ impl<'a> Evaluation<'a> {
             },
             Err(_) => "error".to_owned(),
         };
+        self.uncontracted_site_with(term, today)
+    }
+
+    /// The borrowed view of this evaluation for a K3 record: one remainder
+    /// term of the IR hard part of `call` (hard edge ids `hard`).
+    fn uncontracted_ir_hard_site<'s>(
+        &'s self,
+        term: &'s UvPreparationTerm,
+        call: &IrHardTerm<'s>,
+        hard: &'s str,
+    ) -> super::uncontracted::Site<'s> {
+        let mut site = self.uncontracted_site_with(term, "ir_hard".to_owned());
+        site.ir_hard = Some(super::uncontracted::IrHardSite {
+            correction: call.correction_index,
+            term: call.term_index,
+            attempt: call.attempt,
+            hard,
+            degree: call.degree,
+            depth: term.remainder.loops + call.extra,
+            closure: call.closure,
+        });
+        site
+    }
+
+    /// [`Self::uncontracted_site`] with today's route `today`.
+    fn uncontracted_site_with<'s>(
+        &'s self,
+        term: &'s UvPreparationTerm,
+        today: String,
+    ) -> super::uncontracted::Site<'s> {
         super::uncontracted::Site {
             graph: self.graph,
             model: self.model,
@@ -3437,6 +3627,7 @@ impl<'a> Evaluation<'a> {
             top_mass: self.top_mass,
             epsilon: self.epsilon,
             today,
+            ir_hard: None,
         }
     }
 

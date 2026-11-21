@@ -1057,6 +1057,7 @@ fn site_attempt(
         top_mass: Some(TopMassTerms::Keep),
         epsilon: GS.dim_epsilon,
         today: "site-test".into(),
+        ir_hard: None,
     };
     uncontracted::attempt(&site, Kind::Root, 2, Mode::On, || {
         RStarIntegrand::new_with_closure(
