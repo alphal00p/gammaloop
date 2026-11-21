@@ -18,27 +18,46 @@
 //! * E3: a vakint evaluation method other than `rustred` and `forcer` is an
 //!   error of every record (`vakint_evaluation_methods`), in check and in
 //!   on; the beta's two orders are unchanged.
+//! * `insertion_nonlocal`: a Δ about to be written as an insertion with a
+//!   log, μᵣ² / log_mu_sq, EulerGamma, exp, sqrt or a non-integer /
+//!   non-literal power is an error of its record (it fails the diagram), in
+//!   check and in on (at 292b5362a7 the record was written and evaluated);
+//!   a mass symbol stays the designed `insertion_mass_symbol`, and a
+//!   non-local zero by momentum conservation is removed first (L3 016's
+//!   production Δ with M_aux² = 2).
 //!   `additional_normalization` other than "1" stays the designed decline
 //!   `additional_normalization` (confirmed here; passes before and after).
 
 use eyre::{Result, ensure, eyre};
-use symbolica::atom::{Atom, AtomCore};
-use vakint::Vakint;
+use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
+
+use linnet::half_edge::subgraph::SuBitGraph;
+use symbolica::{
+    atom::{Atom, AtomCore, Symbol},
+    function, symbol,
+};
+use vakint::{Vakint, p_integral::factorized::FactorizedEdge};
 
 use crate::{
     feyngen::feynkit::FeynmanDiagramGammaLoopExt,
+    graph::Graph,
     initialisation::test_initialise,
+    utils::GS,
     uv::{UVgenerationSettings, approx::streamed::with_production_piece_limit},
 };
 
 use super::{
-    RStarPlan,
+    REFERENCE_MASS_SQUARED, RStarPlan,
     boundary::{BoundaryMode, with_boundary_mode},
+    plan::uv_child_edge_ids,
     recursive_tests::{colour_factored, load, settings},
-    uncontracted::{self, Captured, Kind, Mode, Switch, with_capture, with_switch},
+    uncontracted::{
+        self, Captured, InsertionHook, Kind, Mode, Switch, with_capture, with_insertion_hook,
+        with_strict, with_switch,
+    },
     uncontracted_ledger::{self as ledger, DiagramLedger},
     uncontracted_ledger_tests::{L2_22, agree, disposition, field, lines_of},
-    uncontracted_oracle_tests::metric_root,
+    uncontracted_oracle_tests::{metric_root, parse},
 };
 
 /// Root records only: the first record a diagram builds is a root one.
@@ -328,6 +347,184 @@ fn e3_an_evaluation_method_outside_rustred_and_forcer_is_an_error() -> Result<()
                 )?;
             }
         }
+        Ok(())
+    })
+}
+
+/// A hook that multiplies the Δ at every `ct:` node of every root record by
+/// `form`, counting the nodes it changed.
+fn times(form: Atom, count: Rc<RefCell<usize>>) -> InsertionHook {
+    Rc::new(
+        move |kind: Kind, _node: usize, delta: &mut Atom, _edges: &mut [FactorizedEdge]| {
+            if kind == Kind::Root && !delta.is_zero() {
+                *delta = (&*delta * &form).expand();
+                *count.borrow_mut() += 1;
+            }
+        },
+    )
+}
+
+/// The forms of the C7 statement's guard, one each: a log, μᵣ², vakint's
+/// log_mu_sq and EulerGamma, sqrt, exp, a fractional and an ε power.
+fn nonlocal_forms() -> Result<Vec<(&'static str, Atom)>> {
+    let epsilon = Atom::var(GS.dim_epsilon);
+    Ok(vec![
+        ("log(2)", function!(Symbol::LOG, Atom::num(2))),
+        (
+            "log(-p^2/mu^2)-like",
+            function!(Symbol::LOG, Atom::var(symbol!("u7ai_p2"))),
+        ),
+        ("mu_r^2", Atom::var(GS.mu_r_sq)),
+        ("log_mu_sq", parse("vakint::log_mu_sq")?),
+        ("EulerGamma", parse("vakint::EulerGamma")?),
+        ("sqrt(3)", function!(Symbol::SQRT, Atom::num(3))),
+        ("3^(1/2)", parse("3^(1/2)")?),
+        ("exp(eps)", function!(Symbol::EXP, epsilon.clone())),
+        ("2^eps", Atom::num(2).pow(epsilon)),
+    ])
+}
+
+/// `insertion_nonlocal`: each form in a root record's Δ fails the diagram
+/// as that error, in check and in on; the unchanged run is the control (no
+/// such error, values as off).
+#[test]
+fn a_nonlocal_insertion_is_an_error() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let uv = settings();
+        let off = run(L2_22, &uv, Switch::OFF)?.value?;
+        for (mode, switch) in [
+            ("check", Switch::new(Mode::Check, &ROOT)),
+            ("on", Switch::new(Mode::On, &ROOT)),
+        ] {
+            let control = run(L2_22, &uv, switch)?;
+            ensure!(
+                agree(control.value.as_ref().map_err(|e| eyre!("{e:#}"))?, &off)
+                    && !control
+                        .captured
+                        .iter()
+                        .any(|a| a.outcome.contains("insertion_nonlocal")),
+                "{mode}: the control"
+            );
+            for (name, form) in nonlocal_forms()? {
+                let count = Rc::new(RefCell::new(0));
+                let hooked =
+                    with_insertion_hook(times(form, count.clone()), || run(L2_22, &uv, switch))?;
+                ensure!(
+                    *count.borrow() > 0,
+                    "{mode} {name}: no root record has an insertion"
+                );
+                fails_with(&hooked, "insertion_nonlocal", &format!("{mode} {name}"))?;
+            }
+        }
+        Ok(())
+    })
+}
+
+/// A mass symbol stays the designed `insertion_mass_symbol` (decided before
+/// the new guard), log(M_aux²) included: never `insertion_nonlocal`.
+#[test]
+fn a_mass_log_in_an_insertion_stays_the_designed_decline() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let uv = settings();
+        let form = function!(
+            Symbol::LOG,
+            Atom::var(symbol!("rstar_mass_squared"; Scalar))
+        );
+        let count = Rc::new(RefCell::new(0));
+        let hooked = with_insertion_hook(times(form, count.clone()), || {
+            run(L2_22, &uv, Switch::new(Mode::Check, &ROOT))
+        })?;
+        ensure!(*count.borrow() > 0, "no root record has an insertion");
+        let outcomes = hooked
+            .captured
+            .iter()
+            .filter(|a| a.kind == Kind::Root)
+            .map(|a| a.outcome.clone())
+            .collect::<Vec<_>>();
+        ensure!(
+            outcomes
+                .iter()
+                .any(|o| o == "declined:insertion_mass_symbol")
+                && !outcomes.iter().any(|o| o.contains("insertion_nonlocal")),
+            "{outcomes:?}"
+        );
+        Ok(())
+    })
+}
+
+const L3_16_DOT: &str = include_str!("testdata/u7a/l3-d016.dot");
+const L3_016_DELTA: &str = include_str!("testdata/u7a/l3-016-delta.txt");
+
+/// L3 016's production Δ of its child {4,5,6,7,8} carries `log(M_aux²)` and
+/// `log(μᵣ²)` only times `Q(1) - Q(2) - Q(3)`, a zero by momentum
+/// conservation at the root remainder's `ct:` node. With M_aux² = 2 no mass
+/// symbol is left, so the mass step does not run: the new guard must apply
+/// the conservation step itself and write the record (check: compared and
+/// equal), not fail it with `insertion_nonlocal`.
+#[test]
+fn a_nonlocal_zero_by_conservation_is_removed_not_refused() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let diagram = colour_factored(&load(L3_16_DOT)?)?;
+        let uv = settings();
+        let vakint = Vakint::new()?;
+        let graph: Graph = diagram.to_gamma_loop_graph(None, true)?;
+        let model = diagram.model();
+        let plan = RStarPlan::with_automatic_edge(&graph, model, &uv)?;
+        let reference_mass = Atom::var(*REFERENCE_MASS_SQUARED).sqrt();
+        let mut children: BTreeMap<SuBitGraph, Atom> =
+            plan.evaluate_uv_children(&graph, model, &reference_mass, &vakint, &uv)?;
+        let support = children
+            .keys()
+            .find(|support| uv_child_edge_ids(&graph, support) == [4, 5, 6, 7, 8])
+            .cloned()
+            .ok_or_else(|| eyre!("L3 016 has no child {{4,5,6,7,8}}"))?;
+        let auxiliary = symbol!("rstar_mass_squared"; Scalar);
+        let delta = parse(L3_016_DELTA.trim())?
+            .replace(auxiliary)
+            .with(Atom::num(2))
+            .expand();
+        ensure!(!delta.contains_symbol(auxiliary));
+        ensure!(delta.contains_symbol(GS.mu_r_sq), "the Δ lost its log(μᵣ²)");
+        children.insert(support, delta);
+        let closed_root = metric_root(&graph);
+        let callback = |tensor: &Atom| -> Result<Atom> {
+            Ok(tensor.replace_multiple(&closed_root.external_routing) * &closed_root.factor)
+        };
+        let (value, captured) = with_switch(Switch::new(Mode::Check, &ROOT), || {
+            with_strict(true, || {
+                with_boundary_mode(BoundaryMode::On, false, || {
+                    with_capture(|| {
+                        plan.projected_counterterm_closing_root_scalar_with_children(
+                            &graph,
+                            model,
+                            &vakint,
+                            &uv,
+                            &callback,
+                            &closed_root,
+                            children,
+                        )
+                    })
+                })
+            })
+        });
+        let _ = ledger::take_lines();
+        let outcomes = captured
+            .iter()
+            .map(|a| (a.id, a.outcome.clone(), a.conserved, a.equal))
+            .collect::<Vec<_>>();
+        ensure!(value.is_ok(), "{:#}: {outcomes:?}", value.unwrap_err());
+        ensure!(
+            captured
+                .iter()
+                .any(|a| a.conserved > 0 && a.outcome == "uncontracted" && a.equal == Some(true))
+                && !captured
+                    .iter()
+                    .any(|a| a.outcome.contains("insertion_nonlocal")),
+            "{outcomes:?}"
+        );
         Ok(())
     })
 }
