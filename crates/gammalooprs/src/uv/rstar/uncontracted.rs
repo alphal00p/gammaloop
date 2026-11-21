@@ -42,10 +42,13 @@
 //!
 //! Every diagram prints one `UNCONTRACTED_DISPOSITION` line per enabled kind
 //! and one `UNCONTRACTED_SUMMARY` line (expected, attempted, uncontracted,
-//! compared, equal, declined, no-record, unchecked and error counts by code)
-//! with the switch on or check: the ledger, [`super::uncontracted_ledger`]
-//! (U7a delta, U7a.4). The switch's initialisation ([`validate`]) refuses
-//! `GAMMALOOP_UNCONTRACTED_STRICT=0`.
+//! compared, equal, declined, no-record, Δ-cache-hit, unchecked and error
+//! counts by code) with the switch on or check, and check mode fails a
+//! diagram its comparisons do not cover: the ledger,
+//! [`super::uncontracted_ledger`] (U7a delta, U7a.1 and U7a.4). The switch's
+//! initialisation ([`validate`]) refuses `GAMMALOOP_UNCONTRACTED_STRICT=0`,
+//! check mode with `PINT6_CLOSURE_DUMP`, a kind list without a kind this
+//! build emits and a bad exception list.
 //!
 //! Kinds (`root` = K1 root remainders, `child` = K2 UV children, `ir-hard` =
 //! K3 IR hard parts, and the inert `quotient`, `surrogate`, `insertion`):
@@ -350,14 +353,15 @@ fn join_kinds(kinds: &[Kind]) -> String {
         .join(",")
 }
 
-/// The switch of the environment.
+/// The switch of the environment and the check's exception list.
 struct Environment {
     switch: Switch,
+    exceptions: super::uncontracted_ledger::Exceptions,
 }
 
 /// The switch of the environment, read and checked once
-/// ([`super::uncontracted_ledger::initialise`]: strict): an error refuses
-/// the run at [`validate`] (the
+/// ([`super::uncontracted_ledger::initialise`]: strict, the PINT6 dump, the
+/// kinds, the exception list): an error refuses the run at [`validate`] (the
 /// beta's start-up) and panics at the first use otherwise, as
 /// `GAMMALOOP_INSERTION_CLOSURE` does.
 static ENVIRONMENT: LazyLock<std::result::Result<Environment, String>> = LazyLock::new(|| {
@@ -369,11 +373,23 @@ static ENVIRONMENT: LazyLock<std::result::Result<Environment, String>> = LazyLoc
         }
     };
     let switch = Switch::parse(read(VARIABLE)?.as_deref())?;
-    super::uncontracted_ledger::initialise(switch, read(STRICT_VARIABLE)?.as_deref())?;
+    let exceptions = super::uncontracted_ledger::initialise(
+        switch,
+        read(STRICT_VARIABLE)?.as_deref(),
+        || super::pint6_dump::settings().is_some(),
+        read(super::uncontracted_ledger::EXCEPTIONS_VARIABLE)?.as_deref(),
+    )?;
     if switch.mode != Mode::Off {
-        eprintln!("{} strict=1", switch.line());
+        eprintln!(
+            "{} strict=1 exceptions={}",
+            switch.line(),
+            match &exceptions.digest {
+                Some(digest) => format!("{}:{digest}", exceptions.entries.len()),
+                None => "none".to_owned(),
+            }
+        );
     }
-    Ok(Environment { switch })
+    Ok(Environment { switch, exceptions })
 });
 
 fn environment() -> Switch {
@@ -389,6 +405,15 @@ pub(crate) fn validate() -> Result<()> {
     match &*ENVIRONMENT {
         Ok(_) => Ok(()),
         Err(error) => Err(eyre!("{error}")),
+    }
+}
+
+/// The exception list of the environment (empty unless check mode reads
+/// one).
+pub(super) fn exceptions() -> super::uncontracted_ledger::Exceptions {
+    match &*ENVIRONMENT {
+        Ok(environment) => environment.exceptions.clone(),
+        Err(error) => panic!("{error}"),
     }
 }
 
