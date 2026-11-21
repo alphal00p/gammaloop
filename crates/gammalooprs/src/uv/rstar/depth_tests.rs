@@ -103,9 +103,17 @@ fn same(actual: &Atom, expected: &Atom) -> Result<bool> {
 struct Routes {
     today: Atom,
     child: Atom,
-    /// IRH-DEPTH counts of the child-route evaluation: (corrections,
-    /// retried, refused).
-    counts: (usize, usize, usize),
+    /// IRH-DEPTH counts of the child-route evaluation.
+    counts: Counts,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Counts {
+    corrections: usize,
+    retried: usize,
+    /// Retries to the bound beyond the measured need.
+    raised: usize,
+    refused: usize,
 }
 
 /// The counterterm of `dot` on today's path and on the child route (with
@@ -139,8 +147,14 @@ fn routes(dot: &str, hook: Option<RowHook>, start: usize) -> Result<Routes> {
         None => run(),
     }?;
     let after = depth::totals();
-    let counts = (after.0 - before.0, after.1 - before.1, after.2 - before.2);
-    eprintln!("IRH_DEPTH_TEST counts(corrections,retried,refused)={counts:?}");
+    let [corrections, retried, raised, refused] = [0, 1, 2, 3].map(|k| after[k] - before[k]);
+    let counts = Counts {
+        corrections,
+        retried,
+        raised,
+        refused,
+    };
+    eprintln!("IRH_DEPTH_TEST {counts:?}");
     Ok(Routes {
         today,
         child,
@@ -162,8 +176,20 @@ fn a_hard_part_vanishing_at_the_first_depth_keeps_its_quotient_pole() -> Result<
         routes.child,
         routes.today
     );
-    // The guard refuses the correction: today's path evaluates it.
-    ensure!(routes.counts.2 >= 1, "{:?}", routes.counts);
+    // The vanished groups show no insertion: the bound stands for their
+    // valuation and raises the depth to 2, where the hard part is shown and
+    // the child route itself gets the pole; the guard never fires.
+    let Counts {
+        corrections,
+        retried,
+        raised,
+        refused,
+    } = routes.counts;
+    ensure!(
+        corrections >= 1 && retried >= 1 && raised >= 1 && refused == 0,
+        "{:?}",
+        routes.counts
+    );
     Ok(())
 }
 
@@ -178,9 +204,14 @@ fn a_measured_quotient_pole_still_retries() -> Result<()> {
         routes.child,
         routes.today
     );
-    let (corrections, retried, refused) = routes.counts;
+    let Counts {
+        corrections,
+        retried,
+        raised,
+        refused,
+    } = routes.counts;
     ensure!(
-        corrections >= 1 && retried >= 1 && refused == 0,
+        corrections >= 1 && retried >= 1 && raised == 0 && refused == 0,
         "{:?}",
         routes.counts
     );
@@ -199,9 +230,14 @@ fn a_vanishing_hard_part_under_a_simple_pole_needs_nothing() -> Result<()> {
         routes.child,
         routes.today
     );
-    let (corrections, retried, refused) = routes.counts;
+    let Counts {
+        corrections,
+        retried,
+        raised,
+        refused,
+    } = routes.counts;
     ensure!(
-        corrections >= 1 && retried == 0 && refused == 0,
+        corrections >= 1 && retried == 0 && raised == 0 && refused == 0,
         "{:?}",
         routes.counts
     );
@@ -296,11 +332,25 @@ fn a_vanished_row_of_a_nonzero_group_keeps_its_quotient_pole() -> Result<()> {
             continue;
         }
         let routes = routes(L3_006, Some(vanished_row(target.clone(), true)), 0)?;
-        // The guard refuses the correction (today's path, without the hook).
-        ensure!(routes.counts.2 >= 1, "{:?}", routes.counts);
         ensure!(
-            same(&routes.child, &routes.today)?,
-            "the refused correction must take today's path"
+            same(&routes.child, &reference.child)?,
+            "child route {} differs from the reference {}",
+            routes.child,
+            reference.child
+        );
+        // The vanished row's quotient factor is measured (no raise to a
+        // bound): the planner retries at depth 3 and the child route gets the
+        // reference; the guard never fires.
+        let Counts {
+            corrections,
+            retried,
+            raised,
+            refused,
+        } = routes.counts;
+        ensure!(
+            corrections >= 1 && retried >= 1 && raised == 0 && refused == 0,
+            "{:?}",
+            routes.counts
         );
         return Ok(());
     }
