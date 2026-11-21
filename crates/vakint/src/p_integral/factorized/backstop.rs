@@ -12,9 +12,11 @@
 //!   ([`super::VAKINT_DATA_ATOMS`]: `UNKNOWN(master, k)`, `MZV(..)`) are
 //!   output too, except `UNKNOWN` when the settings do not allow unknown
 //!   master coefficients and no input carries it. A test (the tripwire) reads
-//!   every symbol the crate's code creates and fails when a vakint name is
-//!   neither in the internal table, nor a data atom, nor on the reviewed output
-//!   list (`REVIEWED_OUTPUT`, test code);
+//!   the arguments of the listed symbol constructors and parse macros in the
+//!   crate's non-test code: every vakint name a literal argument creates must
+//!   be internal, a data atom, in the display table or on the reviewed output
+//!   list (`REVIEWED_OUTPUT`, test code), and every argument it cannot resolve
+//!   to a literal must be on its reviewed site list;
 //! - (b) a symbol of ANY OTHER namespace that is not among the INPUTS (every
 //!   atom of the record, the prefactor argument, the settings' epsilon and
 //!   scale symbols), Symbolica's own (`symbolica::`) or the caller notation's
@@ -26,8 +28,9 @@
 //!   base whose exponent is not a positive rational number.
 //!
 //! What it cannot catch: a wrong value made of legitimate symbols (a wrong
-//! coefficient, a missing order); an internal symbol vakint creates without
-//! a literal or format string in its code (the tripwire reads source text);
+//! coefficient, a missing order); an internal symbol vakint creates at run
+//! time through a reviewed site (a name from data, settings, the caller or a
+//! format placeholder) or through a constructor the tripwire does not list;
 //! an input symbol that should have been substituted (it is an input); a zero
 //! that is no number (a zero base written as an unexpanded expression).
 
@@ -123,7 +126,7 @@ const NOTATION_HEADS: [&str; 12] = [
 /// internal. Test code: the check itself allows every name that is not
 /// internal.
 #[cfg(test)]
-const REVIEWED_OUTPUT: [&str; 58] = [
+const REVIEWED_OUTPUT: [&str; 55] = [
     "D6",
     "EulerGamma",
     "GPLImag",
@@ -169,7 +172,6 @@ const REVIEWED_OUTPUT: [&str; 58] = [
     "PR7D2Eps1",
     "Master",
     "GschemeConstants",
-    "GammaSeriesTail",
     "logMassiveClosure",
     "logQ2mu",
     "log_mu_sq",
@@ -180,8 +182,6 @@ const REVIEWED_OUTPUT: [&str; 58] = [
     "Interval",
     "K5LogMoment",
     "K5Moment",
-    "{}",
-    "{}{}",
 ];
 
 /// The caller notation's structural heads.
@@ -724,7 +724,63 @@ mod tests {
         );
     }
 
-    /// `text` with every item under a line-leading `#[cfg(test)]` blanked: the
+    /// The end (exclusive) of the lexical token starting at `i` when it is a
+    /// string (plain, byte, raw, raw byte), a character literal or a comment.
+    fn token_end(chars: &[char], i: usize) -> Option<usize> {
+        let at = |k: usize| chars.get(k).copied();
+        let ident = |k: usize| chars[k].is_alphanumeric() || chars[k] == '_';
+        match at(i)? {
+            '/' if at(i + 1) == Some('/') => Some(
+                (i..chars.len())
+                    .find(|&k| chars[k] == '\n')
+                    .unwrap_or(chars.len()),
+            ),
+            '/' if at(i + 1) == Some('*') => Some(
+                (i + 2..chars.len().saturating_sub(1))
+                    .find(|&k| chars[k] == '*' && chars[k + 1] == '/')
+                    .map_or(chars.len(), |k| k + 2),
+            ),
+            '"' => {
+                let mut k = i + 1;
+                while k < chars.len() && chars[k] != '"' {
+                    k += if chars[k] == '\\' { 2 } else { 1 };
+                }
+                Some(k + 1)
+            }
+            // r".." / r#".."#, and br".." (the `b` is an identifier character)
+            'r' if i == 0
+                || !ident(i - 1)
+                || (chars[i - 1] == 'b' && (i == 1 || !ident(i - 2))) =>
+            {
+                let hashes = (i + 1..chars.len())
+                    .take_while(|&k| chars[k] == '#')
+                    .count();
+                if at(i + 1 + hashes) != Some('"') {
+                    return None;
+                }
+                let close: Vec<char> = std::iter::once('"')
+                    .chain(std::iter::repeat_n('#', hashes))
+                    .collect();
+                let from = i + 2 + hashes;
+                Some(
+                    (from..chars.len())
+                        .find(|&k| chars[k..].starts_with(&close))
+                        .map_or(chars.len(), |k| k + close.len()),
+                )
+            }
+            // '\n', '\'', '\\', '\u{..}': the closing quote after the escape
+            '\'' if at(i + 1) == Some('\\') => Some(
+                (i + 3..chars.len())
+                    .find(|&k| chars[k] == '\'')
+                    .map_or(chars.len(), |k| k + 1),
+            ),
+            '\'' if at(i + 2) == Some('\'') => Some(i + 3),
+            _ => None,
+        }
+    }
+
+    /// `text` with every item under a line-leading `#[cfg(test)]` or
+    /// `#[cfg(all(test, ..))]` blanked: the
     /// attribute up to the first `;` or `,` outside brackets (a `use`, a
     /// `mod x;`, a field) or through the brace block that comes first (a
     /// module, a function, an impl, a statement). Strings, raw strings,
@@ -733,7 +789,9 @@ mod tests {
     /// hidden).
     fn without_test_items(text: &str) -> String {
         let chars: Vec<char> = text.chars().collect();
-        let attribute = regex::Regex::new(r"(?m)^[ \t]*#\[cfg\(test\)\]").unwrap();
+        let attribute =
+            regex::Regex::new(r"(?m)^[ \t]*#\[cfg\((?:test|all\(\s*test\s*,[^\]\n]*\))\)\]")
+                .unwrap();
         // char offsets of the attributes' ends
         let starts: Vec<(usize, usize)> = attribute
             .find_iter(text)
@@ -744,54 +802,7 @@ mod tests {
                 )
             })
             .collect();
-        // the end (exclusive) of the lexical token starting at i, if it is a
-        // string, a raw string, a character literal or a comment
-        let skip = |i: usize| -> Option<usize> {
-            let at = |k: usize| chars.get(k).copied();
-            match at(i)? {
-                '/' if at(i + 1) == Some('/') => Some(
-                    (i..chars.len())
-                        .find(|&k| chars[k] == '\n')
-                        .unwrap_or(chars.len()),
-                ),
-                '/' if at(i + 1) == Some('*') => Some(
-                    (i + 2..chars.len().saturating_sub(1))
-                        .find(|&k| chars[k] == '*' && chars[k + 1] == '/')
-                        .map_or(chars.len(), |k| k + 2),
-                ),
-                '"' => {
-                    let mut k = i + 1;
-                    while k < chars.len() && chars[k] != '"' {
-                        k += if chars[k] == '\\' { 2 } else { 1 };
-                    }
-                    Some(k + 1)
-                }
-                'r' if i == 0 || !(chars[i - 1].is_alphanumeric() || chars[i - 1] == '_') => {
-                    let hashes = (i + 1..chars.len())
-                        .take_while(|&k| chars[k] == '#')
-                        .count();
-                    if at(i + 1 + hashes) != Some('"') {
-                        return None;
-                    }
-                    let close: Vec<char> = std::iter::once('"')
-                        .chain(std::iter::repeat_n('#', hashes))
-                        .collect();
-                    let from = i + 2 + hashes;
-                    Some(
-                        (from..chars.len())
-                            .find(|&k| chars[k..].starts_with(&close))
-                            .map_or(chars.len(), |k| k + close.len()),
-                    )
-                }
-                '\'' if at(i + 1) == Some('\\') => Some(
-                    (i + 2..chars.len())
-                        .find(|&k| chars[k] == '\'')
-                        .map_or(chars.len(), |k| k + 1),
-                ),
-                '\'' if at(i + 2) == Some('\'') => Some(i + 3),
-                _ => None,
-            }
-        };
+        let skip = |i: usize| token_end(&chars, i);
         let mut blank = vec![false; chars.len()];
         for (start, end) in starts {
             let (mut i, mut depth) = (end, 0i64);
@@ -901,72 +912,976 @@ fn after() { let _ = symbol!("witness::kept_b"); }
         assert_eq!(kept.lines().count(), source.lines().count());
     }
 
-    /// THE TRIPWIRE: every name the crate's non-test code creates in vakint's
-    /// namespace with a literal or a format string (vk_symbol!, symbol!,
-    /// vakint_symbol!) is either internal ([`internal`], with the format
-    /// placeholders filled by a digit), a data atom or on [`REVIEWED_OUTPUT`]: a new name
-    /// fails here until it is classified. Skipped: only test code (files under
-    /// a tests/ directory, tests.rs, *_tests.rs, and every item under a
-    /// `#[cfg(test)]`, by [`without_test_items`]); a source file with "test"
-    /// elsewhere in its name is read.
-    #[test]
-    fn every_name_the_code_creates_is_classified() {
+    /// The symbol constructors the tripwire reads: macros (by the last segment
+    /// of their path, followed by `!`) ...
+    const MACRO_CONSTRUCTORS: [&str; 9] = [
+        "vk_symbol",
+        "vk_symbol_uncached",
+        "vakint_symbol",
+        "symbol",
+        "vk_parse",
+        "vakint_parse",
+        "parse",
+        "try_parse",
+        "parse_lit",
+    ];
+    /// .. and associated functions (by their last two path segments).
+    const FUNCTION_CONSTRUCTORS: [&str; 5] = [
+        "NamespacedSymbol::parse",
+        "NamespacedSymbol::try_parse",
+        "NamespacedSymbol::try_parse_lit",
+        "SymbolBuilder::new",
+        "Atom::parse",
+    ];
+    /// The constructors whose argument is ONE symbol name (`symbol!`: every
+    /// positional argument before a `;`); the others take a text that is
+    /// parsed as an expression.
+    const NAME_CONSTRUCTORS: [&str; 8] = [
+        "vk_symbol!",
+        "vk_symbol_uncached!",
+        "vakint_symbol!",
+        "symbol!",
+        "NamespacedSymbol::parse",
+        "NamespacedSymbol::try_parse",
+        "NamespacedSymbol::try_parse_lit",
+        "SymbolBuilder::new",
+    ];
+
+    /// The reviewed constructor sites whose argument the tripwire cannot
+    /// resolve to a literal: (file under src/, constructor, argument text with
+    /// whitespace collapsed, number of such sites in the file, reason). The
+    /// reasons: `settings` (a symbol or a normalisation named by
+    /// [`VakintSettings`]: the epsilon or the scale symbol, alone or formatted
+    /// into a literal text), `data` (a name or a text from vakint's own data:
+    /// tables, catalogues, registries, records, files, external tools' output,
+    /// or a literal list / literal argument in vakint's code that the
+    /// tripwire does not follow), `caller` (a name or a text the API caller
+    /// supplies), `format` (a format string whose placeholder is a whole name
+    /// or expression: a constant's name, an index, an atom's text), `macro` (a
+    /// parameter `$x` of one of the
+    /// listed constructor macros' own definitions: their call sites are read
+    /// as that constructor). A site missing here, a count that differs and an
+    /// entry no site matches all fail.
+    #[rustfmt::skip]
+    const REVIEWED_SITES: [(&str, &str, &str, usize, &str); 170] = [
+        ("display.rs", "NamespacedSymbol::parse", "&self.name", 1, "data"),
+        ("display.rs", "NamespacedSymbol::parse", "full_name", 1, "data"),
+        ("display.rs", "SymbolBuilder::new", "NamespacedSymbol::parse(&self.name)", 1, "data"),
+        ("fmft.rs", "vk_parse!", "&settings.epsilon_symbol", 1, "settings"),
+        ("fmft.rs", "vk_parse!", "format!( \"({})^{}\", muv_sq_atom.to_canonical_string(), muv_sq_dimension ) .as_str()", 1, "format"),
+        ("fmft.rs", "vk_symbol!", "&settings.epsilon_symbol", 1, "settings"),
+        ("fmft.rs", "vk_symbol!", "*name", 1, "data"),
+        ("fmft.rs", "vk_symbol!", "self.settings.epsilon_symbol.as_str()", 1, "settings"),
+        ("fmft/finalize.rs", "vk_parse!", "format!( \"((𝑖*(𝜋^((4-2*{eps})/2)))\\ *(exp(-EulerGamma))^({eps})\\ *(exp(-logmUVmu-log_mu_sq))^({eps}))^{loop_count}\", eps = settings.epsilon_symbol, ) .as_str()", 1, "settings"),
+        ("fmft/finalize.rs", "vk_symbol!", "name", 2, "data"),
+        ("fmft/finalize.rs", "vk_symbol!", "settings.epsilon_symbol.as_str()", 2, "settings"),
+        ("fmft/finalize.rs", "vk_symbol!", "settings.mu_r_sq_symbol.as_str()", 2, "settings"),
+        ("inspection.rs", "vk_parse!", "value", 1, "caller"),
+        ("inspection/constants.rs", "vk_symbol!", "name", 3, "data"),
+        ("inspection/definitions.rs", "vk_parse!", "&text", 1, "data"),
+        ("inspection/definitions.rs", "vk_symbol!", "bar", 1, "data"),
+        ("inspection/definitions.rs", "vk_symbol!", "name", 1, "data"),
+        ("inspection/registry.rs", "vk_parse!", "expression", 1, "data"),
+        ("inspection/registry.rs", "vk_parse!", "formula", 3, "data"),
+        ("inspection/registry.rs", "vk_symbol!", "&digest", 1, "format"),
+        ("lib.rs", "vk_parse!", "&expr.to_expression()", 1, "settings"),
+        ("lib.rs", "vk_parse!", "&settings.epsilon_symbol", 7, "settings"),
+        ("lib.rs", "vk_parse!", "&vakint_settings.epsilon_symbol", 1, "settings"),
+        ("lib.rs", "vk_parse!", "format!( \"( 𝑖*(𝜋^((4-2*{eps})/2))\\ )^{n_loops}\", eps = settings.epsilon_symbol, n_loops = n_loops ) .as_str()", 1, "settings"),
+        ("lib.rs", "vk_parse!", "format!( \"(\\ 𝑖*(𝜋^((4-2*{eps})/2))\\ * (exp(-EulerGamma))^({eps})\\ * (exp(-logmUVmu-log_mu_sq))^({eps})\\ )^{n_loops}\", eps = settings.epsilon_symbol, n_loops = integral.n_loops ) .as_str()", 1, "settings"),
+        ("lib.rs", "vk_parse!", "format!( \"prop(id{id}_,uedge(n{id_l_node}_,n{id_r_node}_),q{id}__,{mass},{power})\", id = i_prop, id_l_node = id_node_left, id_r_node = id_node_right, mass = mass_symbol_string, power = pow_symbol_string ) .as_str()", 1, "format"),
+        ("lib.rs", "vk_parse!", "format!( \"prop(id{id}_,uedge(n{id_l_node}l_,n{id_r_node}r_),q{id}__,{mass},{power})\", id = i_prop, id_l_node = id_node_left, id_r_node = id_node_right, mass = mass_symbol_string, power = pow_symbol_string ) .as_str()", 1, "format"),
+        ("lib.rs", "vk_parse!", "format!( \"vec{}({}{},idx_)\", if *vec == EXTERNAL_MOMENTUM_SYMBOL { \"1\" } else { \"\" }, vec, id ) .as_str()", 1, "format"),
+        ("lib.rs", "vk_parse!", "format!( \"{}{}(mu{})*{}{}(mu{})\", a_in[0], a_in[1], a_in[4], a_in[2], a_in[3], a_in[4], ) .as_str()", 1, "format"),
+        ("lib.rs", "vk_parse!", "format!(\"k({})\", i_loop).as_str()", 1, "format"),
+        ("lib.rs", "vk_parse!", "format!(\"k({},idx___)\", i_loop).as_str()", 2, "format"),
+        ("lib.rs", "vk_parse!", "format!(\"msq({})\", i_prop).as_str()", 2, "format"),
+        ("lib.rs", "vk_parse!", "format!(\"msq({})\", var_prop_id).as_str()", 1, "format"),
+        ("lib.rs", "vk_parse!", "format!(\"pow({})\", i_prop).as_str()", 2, "format"),
+        ("lib.rs", "vk_parse!", "format!(\"pow({})\", prop_id).as_str()", 1, "format"),
+        ("lib.rs", "vk_parse!", "format!(\"pow({})\", var_prop_id).as_str()", 1, "format"),
+        ("lib.rs", "vk_parse!", "format!(\"prop({},args__)\", i_prop).as_str()", 1, "format"),
+        ("lib.rs", "vk_parse!", "format!(\"{}(1,1)\", DOT_SYMBOL)", 1, "format"),
+        ("lib.rs", "vk_parse!", "format!(\"{}(idx1_,idx2_)\", METRIC_SYMBOL)", 1, "format"),
+        ("lib.rs", "vk_parse!", "format!(\"{}(idx1_,idx2_)\", METRIC_SYMBOL).as_str()", 1, "format"),
+        ("lib.rs", "vk_parse!", "format!(\"{}(idx1_,idx2_)\", metric_symbol)", 1, "format"),
+        ("lib.rs", "vk_parse!", "format!(\"{}(momID_,idx___)\", EXTERNAL_MOMENTUM_SYMBOL).as_str()", 1, "format"),
+        ("lib.rs", "vk_parse!", "format!(\"{}({})\", v, v_id).as_str()", 2, "format"),
+        ("lib.rs", "vk_parse!", "format!(\"{}({})\", vec, id).as_str()", 1, "format"),
+        ("lib.rs", "vk_parse!", "format!(\"{}({},idx_)\", vec, id).as_str()", 3, "format"),
+        ("lib.rs", "vk_parse!", "format!(\"{}{}\", v, v_id).as_str()", 2, "format"),
+        ("lib.rs", "vk_parse!", "format!(\"{}{}\", vec, id).as_str()", 1, "format"),
+        ("lib.rs", "vk_parse!", "format!(\"{}{}(idx_)\", vec, id).as_str()", 2, "format"),
+        ("lib.rs", "vk_parse!", "out.replace(\"I\", \"𝑖\").as_str()", 1, "data"),
+        ("lib.rs", "vk_parse!", "settings.mu_r_sq_symbol.as_str()", 1, "settings"),
+        ("lib.rs", "vk_parse!", "symb.as_str()", 2, "caller"),
+        ("lib.rs", "vk_symbol!", "&param_first_form.clone()", 1, "caller"),
+        ("lib.rs", "vk_symbol!", "&self.epsilon_symbol", 1, "settings"),
+        ("lib.rs", "vk_symbol!", "&settings.epsilon_symbol", 9, "settings"),
+        ("lib.rs", "vk_symbol!", "format!(\"{}{}\", v, v_id)", 1, "format"),
+        ("lib.rs", "vk_symbol!", "metric_symbol", 1, "data"),
+        ("lib.rs", "vk_symbol!", "property", 1, "data"),
+        ("lib.rs", "vk_symbol!", "self.name.clone()", 1, "data"),
+        ("lib.rs", "vk_symbol!", "settings.epsilon_symbol.as_str()", 7, "settings"),
+        ("lib.rs", "vk_symbol!", "settings.epsilon_symbol.clone()", 1, "settings"),
+        ("lib.rs", "vk_symbol!", "settings.mu_r_sq_symbol.as_str()", 4, "settings"),
+        ("lib.rs", "vk_symbol!", "settings.mu_r_sq_symbol.clone()", 1, "settings"),
+        ("lib.rs", "vk_symbol!", "vec", 1, "data"),
+        ("matad.rs", "vk_parse!", "&settings.epsilon_symbol", 1, "settings"),
+        ("matad.rs", "vk_parse!", "format!( \"( (𝑖*(𝜋^((4-2*{eps})/2)))\\ * (exp(-EulerGamma))^({eps})\\ * (exp(-logmUVmu-log_mu_sq))^({eps})\\ )^{loop_count}\", eps = settings.epsilon_symbol, ) .as_str()", 1, "settings"),
+        ("matad.rs", "vk_parse!", "format!(\"((-1)^{sign_power})\").as_str()", 1, "format"),
+        ("matad.rs", "vk_parse!", "format!(\"({})^(pow_/2)\", muv_sq_atom.to_canonical_string()).as_str()", 1, "format"),
+        ("matad.rs", "vk_parse!", "format!(\"({})^pow_\", muv_atom.to_canonical_string()).as_str()", 1, "format"),
+        ("matad.rs", "vk_parse!", "format!(\"{}*dot(p{},p{})\", -orientation1 * orientation2, i_edge1, i_edge2).as_str()", 1, "format"),
+        ("matad.rs", "vk_parse!", "muv_atom.to_canonical_string().as_str()", 1, "caller"),
+        ("matad.rs", "vk_symbol!", "&settings.epsilon_symbol", 1, "settings"),
+        ("matad.rs", "vk_symbol!", "settings.epsilon_symbol.as_str()", 2, "settings"),
+        ("matad.rs", "vk_symbol!", "settings.mu_r_sq_symbol.as_str()", 2, "settings"),
+        ("p_integral.rs", "vk_parse!", "data.lines", 1, "data"),
+        ("p_integral.rs", "vk_parse!", "family.lines", 1, "data"),
+        ("p_integral.rs", "vk_symbol!", "name", 1, "data"),
+        ("p_integral.rs", "vk_symbol!", "self.data.name", 1, "data"),
+        ("p_integral/boundary.rs", "vk_parse!", "text", 1, "caller"),
+        ("p_integral/factorized.rs", "vk_symbol!", "&settings.epsilon_symbol", 1, "settings"),
+        ("p_integral/factorized.rs", "vk_symbol!", "&settings.mu_r_sq_symbol", 1, "settings"),
+        ("p_integral/factorized.rs", "vk_symbol!", "epsilon", 1, "settings"),
+        ("p_integral/factorized/backstop.rs", "vk_symbol!", "&settings.epsilon_symbol", 1, "settings"),
+        ("p_integral/factorized/backstop.rs", "vk_symbol!", "&settings.mu_r_sq_symbol", 1, "settings"),
+        ("p_integral/factorized/closure.rs", "vk_symbol!", "&settings.epsilon_symbol", 3, "settings"),
+        ("p_integral/factorized/evaluate.rs", "vk_symbol!", "&settings.epsilon_symbol", 5, "settings"),
+        ("p_integral/factorized/graph.rs", "vk_symbol!", "&settings.epsilon_symbol", 1, "settings"),
+        ("p_integral/factorized/graph.rs", "vk_symbol!", "settings.epsilon_symbol.as_str()", 1, "settings"),
+        ("p_integral/factorized/text.rs", "vk_parse!", "text", 1, "caller"),
+        ("p_integral/factorized/vacuum.rs", "vk_symbol!", "&settings.epsilon_symbol", 4, "settings"),
+        ("p_integral/finalize.rs", "vk_parse!", "&format!( \"(𝑖*𝜋^(2-({eps}))*Gamma(1+{eps})*Gamma(1-{eps})^2/Gamma(2-2*{eps}))^{l}\\ *exp(-logQ2mu-log_mu_sq)^({eps}*{l})\", eps = settings.epsilon_symbol )", 1, "settings"),
+        ("p_integral/finalize.rs", "vk_symbol!", "&settings.epsilon_symbol", 2, "settings"),
+        ("p_integral/finalize.rs", "vk_symbol!", "&settings.mu_r_sq_symbol", 1, "settings"),
+        ("p_integral/forcer.rs", "vk_parse!", "&cleaned", 1, "data"),
+        ("p_integral/forcer.rs", "vk_symbol!", "&settings.epsilon_symbol", 1, "settings"),
+        ("p_integral/forcer/batch.rs", "vk_symbol!", "&settings.epsilon_symbol", 1, "settings"),
+        ("p_integral/forcer/fixtures.rs", "vk_parse!", "text", 1, "data"),
+        ("p_integral/forcer/fixtures.rs", "vk_symbol!", "&settings.epsilon_symbol", 2, "settings"),
+        ("p_integral/forcer/fixtures.rs", "vk_symbol!", "&settings.mu_r_sq_symbol", 1, "settings"),
+        ("p_integral/forcer/fixtures.rs", "vk_symbol!", "epsilon", 1, "settings"),
+        ("p_integral/input.rs", "vk_symbol!", "family.name", 1, "data"),
+        ("p_integral/massive.rs", "vk_parse!", "&format!( \"(𝑖*𝜋^(2-({eps})))^{loops}\\ *(Gamma(1+{eps})*Gamma(1-{eps})^2/Gamma(2-2*{eps}))^{cut_loops}\\ *exp(-logMassiveClosure)^({eps}*{loops})\", eps = settings.epsilon_symbol, )", 1, "settings"),
+        ("p_integral/massive.rs", "vk_symbol!", "&settings.epsilon_symbol", 7, "settings"),
+        ("p_integral/massive.rs", "vk_symbol!", "&settings.mu_r_sq_symbol", 1, "settings"),
+        ("p_integral/master_basis.rs", "vk_parse!", "&text", 1, "data"),
+        ("p_integral/master_basis.rs", "vk_symbol!", "&symbol(&exchange.old)?", 1, "data"),
+        ("p_integral/master_basis.rs", "vk_symbol!", "&symbol(master)?", 1, "data"),
+        ("p_integral/master_catalogue.rs", "vk_parse!", "&term.coefficient", 1, "data"),
+        ("p_integral/master_catalogue.rs", "vk_parse!", "text", 1, "data"),
+        ("p_integral/master_catalogue.rs", "vk_symbol!", "name", 1, "data"),
+        ("p_integral/master_catalogue.rs", "vk_symbol!", "symbol", 1, "data"),
+        ("p_integral/masters.rs", "vk_parse!", "&body", 1, "data"),
+        ("p_integral/masters.rs", "vk_symbol!", "name", 1, "data"),
+        ("p_integral/parts.rs", "vk_parse!", "family.lines", 1, "data"),
+        ("p_integral/parts.rs", "vk_symbol!", "name", 1, "data"),
+        ("precision.rs", "vk_parse!", "name", 2, "caller"),
+        ("precision.rs", "vk_symbol!", "&settings.epsilon_symbol", 2, "settings"),
+        ("precision.rs", "vk_symbol!", "*name", 1, "data"),
+        ("precision/legacy.rs", "vk_parse!", "&original_text", 1, "data"),
+        ("precision/materialize.rs", "vk_symbol!", "&settings.epsilon_symbol", 1, "settings"),
+        ("refpath.rs", "vk_symbol!", "&settings.epsilon_symbol", 2, "settings"),
+        ("refpath/direct.rs", "vk_symbol!", "&settings.epsilon_symbol", 2, "settings"),
+        ("rustred_evaluation/experimental/native.rs", "vakint_parse!", "label.as_str()", 2, "data"),
+        ("rustred_evaluation/experimental/native.rs", "vk_symbol!", "settings.epsilon_symbol.as_str()", 1, "settings"),
+        ("rustred_evaluation/five_loop.rs", "vk_parse!", "format!( \"(𝑖*𝜋^(2-({eps}))*exp(-EulerGamma*({eps})))^{loop_count}\", eps = settings.epsilon_symbol )", 1, "settings"),
+        ("rustred_evaluation/five_loop.rs", "vk_symbol!", "settings.epsilon_symbol.as_str()", 1, "settings"),
+        ("rustred_evaluation/five_loop.rs", "vk_symbol!", "settings.mu_r_sq_symbol.as_str()", 1, "settings"),
+        ("rustred_evaluation/five_loop/r2_fixtures.rs", "vakint_parse!", "text", 2, "data"),
+        ("rustred_evaluation/masters.rs", "vk_parse!", "&constant.symbol", 1, "data"),
+        ("rustred_evaluation/masters.rs", "vk_parse!", "exact", 1, "data"),
+        ("rustred_evaluation/masters.rs", "vk_parse!", "expression", 1, "data"),
+        ("rustred_evaluation/masters.rs", "vk_parse!", "formula", 1, "data"),
+        ("rustred_evaluation/masters.rs", "vk_parse!", "name", 1, "data"),
+        ("rustred_evaluation/masters.rs", "vk_parse!", "recorded", 1, "data"),
+        ("rustred_evaluation/masters.rs", "vk_parse!", "value", 1, "data"),
+        ("rustred_evaluation/masters.rs", "vk_symbol!", "&settings.epsilon_symbol", 3, "settings"),
+        ("rustred_evaluation/masters.rs", "vk_symbol!", "&tag", 1, "format"),
+        ("rustred_evaluation/materialize.rs", "vk_symbol!", "settings.epsilon_symbol.as_str()", 1, "settings"),
+        ("rustred_evaluation/mod.rs", "vk_symbol!", "&settings.epsilon_symbol", 1, "settings"),
+        ("rustred_evaluation/numerator.rs", "vk_symbol!", "settings.epsilon_symbol.as_str()", 1, "settings"),
+        ("rustred_evaluation/p_data.rs", "vk_symbol!", "&settings.epsilon_symbol", 1, "settings"),
+        ("rustred_evaluation/p_data.rs", "vk_symbol!", "residual.node.as_str()", 1, "data"),
+        ("rustred_evaluation/p_gate.rs", "try_parse!", "value", 1, "data"),
+        ("rustred_evaluation/p_handover.rs", "vk_symbol!", "&settings.epsilon_symbol", 1, "settings"),
+        ("rustred_evaluation/p_integral.rs", "vk_parse!", "&text", 1, "data"),
+        ("rustred_evaluation/p_integral.rs", "vk_parse!", "coefficient", 1, "data"),
+        ("rustred_evaluation/p_integral.rs", "vk_symbol!", "&settings.epsilon_symbol", 5, "settings"),
+        ("rustred_evaluation/p_integral.rs", "vk_symbol!", "name.as_str()", 1, "data"),
+        ("rustred_evaluation/p_integral.rs", "vk_symbol!", "node.trim()", 1, "data"),
+        ("rustred_evaluation/p_lowering.rs", "vk_symbol!", "&settings.epsilon_symbol", 1, "settings"),
+        ("symbolica_community_module/inspection.rs", "vakint_parse!", "&name", 1, "caller"),
+        ("symbolica_community_module/mod.rs", "vakint_symbol!", "self.settings.epsilon_symbol.clone()", 2, "settings"),
+        ("symbolica_community_module/numerical.rs", "vakint_parse!", "&name", 1, "caller"),
+        ("symbolica_community_module/numerical.rs", "vakint_symbol!", "&settings.epsilon_symbol", 1, "settings"),
+        ("symbols.rs", "symbol!", "format!(\"{}::{}\",crate::NAMESPACE,METRIC_SYMBOL)", 1, "format"),
+        ("symbols.rs", "vk_parse!", "left", 1, "data"),
+        ("symbols.rs", "vk_parse!", "right", 1, "data"),
+        ("symbols.rs", "vk_parse!", "value", 1, "data"),
+        ("symbols.rs", "vk_symbol!", "basis", 1, "data"),
+        ("symbols.rs", "vk_symbol!", "name", 3, "data"),
+        ("topologies.rs", "vk_parse!", "format!( \"prop({},edge({},{}),args__)\", edge.id, edge.left_node_id, edge.right_node_id )", 1, "format"),
+        ("topologies.rs", "vk_parse!", "format!(\"pow({})\", prop_id).as_str()", 1, "format"),
+        ("topologies.rs", "vk_parse!", "format!(\"prop({},args__)\", prop_id).as_str()", 3, "format"),
+        ("topologies.rs", "vk_parse!", "format!(\"prop({},edge(nl_,nr_),args__)\", edge.id)", 1, "format"),
+        ("topologies.rs", "vk_parse!", "format!(\"prop({},edges_,q_,mUVsq_,pow_)\", prop_id).as_str()", 1, "format"),
+        ("truncation_guard.rs", "vk_parse!", "master", 1, "data"),
+        ("truncation_guard.rs", "vk_symbol!", "master", 1, "data"),
+        ("utils.rs", "try_parse!", "$s", 7, "macro"),
+        ("utils.rs", "try_parse!", "format!(\"{}\", $s)", 2, "macro"),
+        ("utils.rs", "vk_parse!", "s", 2, "caller"),
+        ("utils.rs", "vk_symbol_uncached!", "$s", 2, "macro"),
+    ];
+
+    /// Names in vakint's namespace that literal arguments create and that are
+    /// NOT YET CLASSIFIED: whether each can legitimately appear in a marked
+    /// value (then [`REVIEWED_OUTPUT`]) or is a placeholder vakint substitutes
+    /// away (then [`INTERNAL_EXACT`] / [`INTERNAL_FAMILIES`]) was not decided
+    /// by the tripwire's author (grouped by the files that create them). The
+    /// tripwire FAILS while this list is not empty (after all its other
+    /// checks); an entry no site creates fails as stale.
+    #[rustfmt::skip]
+    const UNDECIDED: &[&str] = &[
+        // fmft_numerics.rs
+        "I_PR0", "I_PR1", "I_PR10", "I_PR11", "I_PR11d", "I_PR12", "I_PR13", "I_PR14", "I_PR15",
+        "I_PR2", "I_PR3", "I_PR4", "I_PR4d", "I_PR5", "I_PR6", "I_PR7", "I_PR8", "I_PR9",
+        "I_PR9d", "I_PR9x", "PR0", "PR0ep0", "PR0ep1", "PR1", "PR10", "PR10_exact", "PR10ep0",
+        "PR10ep1", "PR11", "PR11_exact", "PR11ep0", "PR11ep1", "PR12", "PR12ep0", "PR12ep1",
+        "PR13", "PR13_exact", "PR13ep0", "PR13ep1", "PR14", "PR14_exact", "PR14ep0", "PR14ep1",
+        "PR15", "PR15_exact", "PR15ep0", "PR15ep1", "PR1_exact", "PR1ep1", "PR1ep2", "PR2",
+        "PR2_exact", "PR2ep1", "PR2ep2", "PR3", "PR3_exact", "PR3ep1", "PR3ep2", "PR4",
+        "PR4_exact", "PR4d", "PR4d_exact", "PR4dep1", "PR4dfin", "PR4ep1", "PR4fin", "PR5",
+        "PR5_exact", "PR5ep0", "PR5ep1", "PR6", "PR6_exact", "PR6ep0", "PR6ep1", "PR7",
+        "PR7_exact", "PR7ep1", "PR8", "PR8_exact", "PR8ep0", "PR8ep1", "PR9", "PR9_exact",
+        "PR9d", "PR9d_exact", "PR9dep0", "PR9ep0", "PR9ep1", "PR9x", "T1ep4", "iD6",
+        // matad.rs, matad_numerics.rs
+        "BN", "BN1", "D3", "D4", "D5", "DM", "DN", "E3", "miBN", "miBN1", "miD3", "miD4",
+        "miD5", "miD6", "miDM", "miDN", "miE3", "miT111",
+        // matad.rs
+        "BN1bar", "BNbar", "D3bar", "D4bar", "D5bar", "D6bar", "DMbar", "DNbar", "E3bar", "M",
+        "T1", "T111bar",
+        // topologies.rs
+        "I1L", "I2L", "I3L", "I4L_BMW", "I4L_FG", "I4L_H", "I4L_X",
+        // alphaloop_numerics.rs
+        "MASTER2m22EP", "MASTER3m001111FIN", "MASTER3m011101EP", "MASTER3m011111FIN",
+        "MASTER3m111111FINPIECE",
+        // lib.rs
+        "I", "eps", "mUV", "mu1",
+        // precision.rs
+        "aggregate_error_imaginary_a", "aggregate_error_imaginary_b", "aggregate_error_real_a",
+        "aggregate_error_real_b",
+        // fmft.rs, matad.rs
+        "Gam", "iGam",
+        // lib.rs, topologies.rs
+        "integral", "n_props",
+        // fmft.rs, lib.rs, matad.rs, p_integral/finalize.rs, p_integral/massive.rs, symbols.rs
+        "Gamma",
+        // fmft/finalize.rs, lib.rs, matad.rs
+        "logmUVmu",
+        // matad_numerics.rs
+        "T111",
+    ];
+
+    /// Source files under src/ that no module declaration names (not compiled,
+    /// hence not read); a new orphan and a stale entry fail.
+    const REVIEWED_ORPHANS: [&str; 2] = [
+        "rustred_evaluation/masters_grouping_tests.rs",
+        "rustred_evaluation/masters_series_tests.rs",
+    ];
+
+    /// The tripwire's view of the crate's non-test sources: (path under src/,
+    /// text). Skipped: files declared by a `#[cfg(test)]` or
+    /// `#[cfg(all(test, ..))]` `mod x;` (x.rs, x/mod.rs and everything under
+    /// x/, or the file a `#[path = ".."]` names and the directory of its
+    /// stem), every item under such an attribute ([`without_test_items`]);
+    /// comments are blanked. Returned apart: the ORPHANS, files no `mod x;`
+    /// declaration (with or without `#[path]`) of any file names, which the
+    /// crate does not compile (they must be on [`REVIEWED_ORPHANS`]).
+    fn non_test_sources() -> (Vec<(String, Vec<char>, Vec<bool>)>, Vec<String>) {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
-        let creating = regex::Regex::new(
-            r#"(?:vk_symbol!|symbol!|vakint_symbol!)\(\s*&?(?:format!\()?\s*"([^"]*)""#,
-        )
-        .unwrap();
-        let placeholder = regex::Regex::new(r"\{[^}]*\}").unwrap();
-        let mut unclassified = Vec::new();
-        let mut files = vec![root.clone()];
-        let mut sources = Vec::new();
-        while let Some(path) = files.pop() {
-            for entry in std::fs::read_dir(&path).unwrap() {
+        let mut files = Vec::new();
+        let mut dirs = vec![root.clone()];
+        while let Some(dir) = dirs.pop() {
+            for entry in std::fs::read_dir(&dir).unwrap() {
                 let path = entry.unwrap().path();
                 if path.is_dir() {
-                    files.push(path);
+                    dirs.push(path);
                 } else if path.extension().is_some_and(|e| e == "rs") {
-                    sources.push(path);
+                    files.push(path);
                 }
             }
         }
-        for path in sources {
-            let name = path.to_string_lossy().to_string();
-            // only real test code is skipped: files under a tests/ directory,
-            // tests.rs and *_tests.rs, and inline #[cfg(test)] modules
+        files.sort();
+        // attributes, then `mod x;`: test-only when one attribute is
+        // `cfg(test)` or `cfg(all(test, ..))`; `#[path = ".."]` names the file
+        let declaration = regex::Regex::new(
+            r"(?m)^((?:[ \t]*#\[[^\]]*\]\s*)*)[ \t]*(?:pub(?:\([^)]*\))?\s+)?mod\s+(\w+)\s*;",
+        )
+        .unwrap();
+        let test_only =
+            regex::Regex::new(r"#\[cfg\((?:test|all\(\s*test\s*,[^\]]*\))\)\]").unwrap();
+        let path_attribute = regex::Regex::new(r#"#\[path\s*=\s*"([^"]*)"\s*\]"#).unwrap();
+        let (mut test_paths, mut live_files) = (Vec::new(), vec![root.join("lib.rs")]);
+        for path in &files {
+            let text = std::fs::read_to_string(path).unwrap();
             let file = path.file_name().unwrap().to_string_lossy().to_string();
-            if path.components().any(|c| c.as_os_str() == "tests")
-                || file == "tests.rs"
-                || file.ends_with("_tests.rs")
-            {
+            let dir = if ["mod.rs", "lib.rs", "main.rs"].contains(&file.as_str()) {
+                path.parent().unwrap().to_path_buf()
+            } else {
+                path.with_extension("")
+            };
+            for capture in declaration.captures_iter(&text) {
+                let declared = if let Some(named) = path_attribute.captures(&capture[1]) {
+                    vec![path.parent().unwrap().join(&named[1])]
+                } else {
+                    vec![
+                        dir.join(format!("{}.rs", &capture[2])),
+                        dir.join(&capture[2]).join("mod.rs"),
+                    ]
+                };
+                if test_only.is_match(&capture[1]) {
+                    for file in declared {
+                        test_paths.push(file.with_extension(""));
+                        if file.ends_with("mod.rs") {
+                            test_paths.push(file.parent().unwrap().to_path_buf());
+                        }
+                        test_paths.push(file);
+                    }
+                } else {
+                    live_files.extend(declared);
+                }
+            }
+        }
+        let relative = |path: &std::path::Path| {
+            path.strip_prefix(&root)
+                .unwrap()
+                .to_string_lossy()
+                .replace('\\', "/")
+        };
+        let mut orphans = Vec::new();
+        let sources = files
+            .into_iter()
+            .filter(|path| !test_paths.iter().any(|test| path.starts_with(test)))
+            .filter(|path| {
+                let live = live_files.contains(path);
+                if !live {
+                    orphans.push(relative(path));
+                }
+                live
+            })
+            .map(|path| {
+                let text = without_test_items(&std::fs::read_to_string(&path).unwrap());
+                let (chars, literal) = code_view(&text);
+                (relative(&path), chars, literal)
+            })
+            .collect();
+        (sources, orphans)
+    }
+
+    /// The characters of `text` with comments blanked (newlines kept), and
+    /// whether each character is inside a string or a character literal.
+    fn code_view(text: &str) -> (Vec<char>, Vec<bool>) {
+        let mut chars: Vec<char> = text.chars().collect();
+        let mut literal = vec![false; chars.len()];
+        let mut i = 0;
+        while i < chars.len() {
+            if let Some(end) = token_end(&chars, i) {
+                let end = end.min(chars.len());
+                if chars[i] == '/' {
+                    for c in &mut chars[i..end] {
+                        if *c != '\n' {
+                            *c = ' ';
+                        }
+                    }
+                } else {
+                    for l in &mut literal[i..end] {
+                        *l = true;
+                    }
+                }
+                i = end;
+            } else {
+                i += 1;
+            }
+        }
+        (chars, literal)
+    }
+
+    /// The top-level arguments of the bracket opened at `open`: (text,
+    /// whether a `;` came before it), and the index after the closing bracket.
+    fn arguments(chars: &[char], open: usize) -> (Vec<(String, bool)>, usize) {
+        let (mut depth, mut i, mut from) = (0i64, open, open + 1);
+        let mut out = Vec::new();
+        let mut after_semicolon = false;
+        while i < chars.len() {
+            if let Some(end) = token_end(chars, i) {
+                i = end;
                 continue;
             }
-            let text = without_test_items(&std::fs::read_to_string(&path).unwrap());
-            for capture in creating.captures_iter(&text) {
-                let created = &capture[1];
-                let local = if let Some(rest) = created.strip_prefix("vakint::") {
-                    rest
-                } else if let Some(rest) = created.strip_prefix("{}::") {
-                    rest
-                } else if created.contains("::") {
-                    continue; // another namespace: an input or a caller head
-                } else {
-                    created
-                };
-                // a format placeholder stands for a formatted part
-                let filled = placeholder.replace_all(local, "1");
-                if !(internal(&filled, false)
-                    || data_atom(&format!("vakint::{local}"))
-                    || REVIEWED_OUTPUT.contains(&local))
-                {
-                    unclassified.push(format!("{created} ({name})"));
+            match chars[i] {
+                '(' | '[' | '{' => depth += 1,
+                ')' | ']' | '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        let text: String = chars[from..i].iter().collect();
+                        if !text.trim().is_empty() {
+                            out.push((text, after_semicolon));
+                        }
+                        return (out, i + 1);
+                    }
+                }
+                ',' | ';' if depth == 1 => {
+                    out.push((chars[from..i].iter().collect(), after_semicolon));
+                    after_semicolon |= chars[i] == ';';
+                    from = i + 1;
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+        (out, chars.len())
+    }
+
+    /// The string literal (plain or raw) that is the whole of `text`, unescaped.
+    fn string_literal(text: &str) -> Option<(String, &'static str)> {
+        let text = text.trim();
+        if let Some(rest) = text.strip_prefix('r') {
+            let hashes = rest.chars().take_while(|&c| c == '#').count();
+            let close = format!("\"{}", "#".repeat(hashes));
+            let body = rest[hashes..]
+                .strip_prefix('"')?
+                .strip_suffix(close.as_str())?;
+            return (!body.contains(close.as_str())).then(|| (body.to_string(), "raw"));
+        }
+        let body = text.strip_prefix('"')?.strip_suffix('"')?;
+        let mut out = String::new();
+        let mut chars = body.chars();
+        while let Some(c) = chars.next() {
+            match c {
+                '"' => return None, // two literals
+                '\\' => match chars.next()? {
+                    'n' => out.push('\n'),
+                    't' => out.push('\t'),
+                    'r' => out.push('\r'),
+                    '0' => out.push('\0'),
+                    '\\' => out.push('\\'),
+                    '"' => out.push('"'),
+                    '\'' => out.push('\''),
+                    '\n' => {
+                        while chars.clone().next().is_some_and(char::is_whitespace) {
+                            chars.next();
+                        }
+                    }
+                    'u' => {
+                        let code: String =
+                            chars.by_ref().skip(1).take_while(|&c| c != '}').collect();
+                        out.push(char::from_u32(u32::from_str_radix(&code, 16).ok()?)?);
+                    }
+                    'x' => {
+                        let code: String = chars.by_ref().take(2).collect();
+                        out.push(char::from(u8::from_str_radix(&code, 16).ok()?));
+                    }
+                    _ => return None,
+                },
+                _ => out.push(c),
+            }
+        }
+        Some((out, "str"))
+    }
+
+    /// Stands for a format placeholder in a resolved format string.
+    const PLACEHOLDER: char = '\u{E000}';
+
+    /// How a constructor's argument resolves.
+    enum Resolved {
+        /// a literal text (placeholders as [`PLACEHOLDER`]) and its form
+        Text(String, &'static str),
+        /// `NamespacedSymbol::parse(<literal>)`: read at that inner site
+        Inner,
+        /// not resolved: the kind of argument
+        Site(&'static str),
+    }
+
+    /// The `const` / `static` string items of the crate's non-test code: name
+    /// -> its values (several when the name is defined more than once).
+    fn string_constants(
+        sources: &[(String, Vec<char>, Vec<bool>)],
+    ) -> std::collections::BTreeMap<String, std::collections::BTreeSet<String>> {
+        let item = regex::Regex::new(
+            r#"(?:const|static)\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*&\s*(?:'static\s+)?str\s*=\s*((?:r#*)?"[^;]*)\s*;"#,
+        )
+        .unwrap();
+        let mut out: std::collections::BTreeMap<String, std::collections::BTreeSet<String>> =
+            Default::default();
+        for (_, chars, _) in sources {
+            let text: String = chars.iter().collect();
+            for capture in item.captures_iter(&text) {
+                let value = string_literal(&capture[2])
+                    .map_or_else(|| format!("{PLACEHOLDER}unresolved"), |(value, _)| value);
+                out.entry(capture[1].to_string()).or_default().insert(value);
+            }
+        }
+        out
+    }
+
+    fn resolve(
+        argument: &str,
+        constants: &std::collections::BTreeMap<String, std::collections::BTreeSet<String>>,
+    ) -> Resolved {
+        let mut text = argument.trim();
+        while let Some(rest) = text.strip_prefix('&') {
+            text = rest.trim_start();
+        }
+        if let Some((value, form)) = string_literal(text) {
+            return Resolved::Text(value, form);
+        }
+        // a literal or a format behind `.as_str()` / `.to_string()`
+        for suffix in [".as_str()", ".to_string()"] {
+            if let Some(inner) = text.strip_suffix(suffix) {
+                if let resolved @ Resolved::Text(..) = resolve(inner, constants) {
+                    return resolved;
                 }
             }
         }
+        if text.starts_with("b\"") || text.starts_with("br\"") || text.starts_with("br#") {
+            return Resolved::Site("bytes");
+        }
+        if text.starts_with('$') {
+            return Resolved::Site("macro parameter");
+        }
+        for (prefix, form) in [("format!", "format"), ("NamespacedSymbol::parse", "inner")] {
+            let Some(rest) = text.strip_prefix(prefix) else {
+                continue;
+            };
+            let chars: Vec<char> = rest.trim_start().chars().collect();
+            if chars.first() != Some(&'(') {
+                return Resolved::Site("expression");
+            }
+            let (inner, end) = arguments(&chars, 0);
+            if end != chars.len() || inner.is_empty() {
+                return Resolved::Site("expression");
+            }
+            let Some((value, _)) = string_literal(&inner[0].0) else {
+                return Resolved::Site(if form == "format" {
+                    "format of a non-literal"
+                } else {
+                    "expression"
+                });
+            };
+            if form == "inner" {
+                return Resolved::Inner;
+            }
+            // {{ / }} are braces, every other {..} a placeholder
+            let (mut out, mut chars) = (String::new(), value.chars().peekable());
+            while let Some(c) = chars.next() {
+                match c {
+                    '{' if chars.peek() == Some(&'{') => {
+                        chars.next();
+                        out.push('{');
+                    }
+                    '}' if chars.peek() == Some(&'}') => {
+                        chars.next();
+                        out.push('}');
+                    }
+                    '{' => {
+                        for c in chars.by_ref() {
+                            if c == '}' {
+                                break;
+                            }
+                        }
+                        out.push(PLACEHOLDER);
+                    }
+                    c => out.push(c),
+                }
+            }
+            return Resolved::Text(out, "format");
+        }
+        let path =
+            regex::Regex::new(r"^(?:[A-Za-z_][A-Za-z0-9_]*::)*([A-Za-z_][A-Za-z0-9_]*)$").unwrap();
+        if let Some(capture) = path.captures(text) {
+            return match constants.get(&capture[1]) {
+                Some(values) if values.len() == 1 => {
+                    let value = values.first().unwrap().clone();
+                    if value.contains(PLACEHOLDER) {
+                        Resolved::Site("identifier")
+                    } else {
+                        Resolved::Text(value, "const")
+                    }
+                }
+                _ => Resolved::Site("identifier"),
+            };
+        }
+        if text.starts_with("concat!") {
+            return Resolved::Site("concat");
+        }
+        Resolved::Site("expression")
+    }
+
+    /// The names a text names: (namespace, name), the namespace empty when the
+    /// name is unqualified. A name constructor's text is one name; a parsed
+    /// text is lexed for identifiers, namespaced or not, an attribute group
+    /// `ns::{..}::name` skipped; numbers are skipped.
+    fn names_in(text: &str, one_name: bool) -> Vec<(String, String)> {
+        let chars: Vec<char> = text.trim().chars().collect();
+        let word = |c: char| c.is_alphanumeric() || c == '_' || c == PLACEHOLDER;
+        let mut out = Vec::new();
+        let mut i = 0;
+        while i < chars.len() {
+            let c = chars[i];
+            if c.is_numeric() && c != PLACEHOLDER {
+                while i < chars.len() && word(chars[i]) {
+                    i += 1;
+                }
+                continue;
+            }
+            if !word(c) {
+                i += 1;
+                continue;
+            }
+            let mut segments = Vec::new();
+            loop {
+                let start = i;
+                while i < chars.len() && word(chars[i]) {
+                    i += 1;
+                }
+                segments.push(chars[start..i].iter().collect::<String>());
+                if chars.get(i) == Some(&':') && chars.get(i + 1) == Some(&':') {
+                    let mut k = i + 2;
+                    // an attribute group ::{..}::
+                    if chars.get(k) == Some(&'{') {
+                        if let Some(close) = (k..chars.len()).find(|&j| chars[j] == '}') {
+                            if chars.get(close + 1) == Some(&':')
+                                && chars.get(close + 2) == Some(&':')
+                            {
+                                k = close + 3;
+                            }
+                        }
+                    }
+                    if chars.get(k).is_some_and(|&c| word(c)) {
+                        i = k;
+                        continue;
+                    }
+                }
+                break;
+            }
+            let local = segments.pop().unwrap();
+            out.push((segments.join("::"), local));
+        }
+        if one_name && out.len() != 1 {
+            // not one identifier: the whole text is the name
+            let text: String = chars.iter().collect();
+            return match text.rsplit_once("::") {
+                Some((namespace, local)) => vec![(namespace.to_string(), local.to_string())],
+                None => vec![(String::new(), text)],
+            };
+        }
+        out
+    }
+
+    /// THE TRIPWIRE (fail closed), over the crate's non-test code
+    /// ([`non_test_sources`]):
+    /// - constructors read: the macros `vk_symbol!`, `vk_symbol_uncached!`,
+    ///   `vakint_symbol!`, `symbol!` (every positional argument before a `;`),
+    ///   `vk_parse!`, `vakint_parse!`, `parse!`, `try_parse!`, `parse_lit!`
+    ///   (any path prefix, e.g. `symbolica::`, `$crate::`), and the functions
+    ///   `NamespacedSymbol::parse` / `try_parse` / `try_parse_lit`,
+    ///   `SymbolBuilder::new` and `Atom::parse`;
+    /// - argument forms resolved: a string literal `".."`, a raw string
+    ///   `r".."` / `r#".."#`, `format!("..", ..)` with a literal format string
+    ///   (a placeholder before `::` is vakint's namespace, a placeholder inside
+    ///   a name is filled by a digit), an identifier or path naming a
+    ///   `const` / `static` `&str` item of the crate (defined once, by a
+    ///   literal), each optionally behind `&`; `SymbolBuilder::new(
+    ///   NamespacedSymbol::parse(<literal>))` is read at its inner site;
+    /// - EVERY OTHER ARGUMENT (byte strings, `concat!`, expressions, macro
+    ///   parameters, identifiers it cannot resolve, a format placeholder that
+    ///   is a whole name or expression) fails unless its site is on
+    ///   [`REVIEWED_SITES`] with its count and a reason; a stale entry fails;
+    /// - the names: a name constructor's text is one name; a parsed text is
+    ///   lexed for identifiers ([`names_in`]); an unqualified name is in the
+    ///   constructor's default namespace (vakint's unless a literal other
+    ///   namespace is given) except Symbolica's built-ins; every name in
+    ///   vakint's namespace must be internal ([`internal`] or the display
+    ///   table's `internal`), a data atom, a form or a native of the display
+    ///   table (src/display_forms.json) or on [`REVIEWED_OUTPUT`]; an entry of
+    ///   [`REVIEWED_OUTPUT`] no site creates fails.
+    /// Not read: symbols made from strings by any other function or macro,
+    /// and the names a reviewed site creates at run time.
+    #[test]
+    fn listed_constructors_create_classified_names_and_other_arguments_are_reviewed() {
+        crate::Vakint::initialize_vakint_symbols();
+        let (sources, orphans) = non_test_sources();
+        let constants = string_constants(&sources);
+        let table: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(
+                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/display_forms.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let listed = |key: &str| -> std::collections::BTreeSet<String> {
+            table[key]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|entry| entry["name"].as_str().unwrap().to_string())
+                .collect()
+        };
+        let (display_internal, display_output) = (listed("internal"), {
+            let mut s = listed("forms");
+            s.extend(listed("native"));
+            s
+        });
+        let builtin = symbolica::state::State::BUILTIN_NAMES_AND_ALIASES;
+        let named = regex::Regex::new(r"^\s*[A-Za-z_]\w*\s*=[^=]").unwrap();
+        let mut counts: std::collections::BTreeMap<(String, &str), usize> = Default::default();
+        let mut sites: std::collections::BTreeMap<(String, String, String), (usize, &str, usize)> =
+            Default::default();
+        // name -> its first site
+        let mut unclassified: std::collections::BTreeMap<String, String> = Default::default();
+        let mut created = std::collections::BTreeSet::new();
+        for (file, chars, literal) in &sources {
+            let ident = |c: char| c.is_alphanumeric() || c == '_';
+            let mut i = 0;
+            while i < chars.len() {
+                if literal[i]
+                    || !ident(chars[i])
+                    || chars[i].is_numeric()
+                    || (i > 0 && ident(chars[i - 1]))
+                {
+                    i += 1;
+                    continue;
+                }
+                let start = i;
+                let mut segments = Vec::new();
+                loop {
+                    let from = i;
+                    while i < chars.len() && ident(chars[i]) {
+                        i += 1;
+                    }
+                    segments.push(chars[from..i].iter().collect::<String>());
+                    if chars.get(i) == Some(&':')
+                        && chars.get(i + 1) == Some(&':')
+                        && chars.get(i + 2).is_some_and(|&c| ident(c))
+                    {
+                        i += 2;
+                        continue;
+                    }
+                    break;
+                }
+                let after_path = i;
+                let mut j = i;
+                let bang = chars.get(j) == Some(&'!');
+                if bang {
+                    j += 1;
+                }
+                while chars.get(j).is_some_and(|c| c.is_whitespace()) {
+                    j += 1;
+                }
+                let last = segments.last().unwrap().as_str();
+                let pair = segments[segments.len().saturating_sub(2)..].join("::");
+                let constructor = if bang
+                    && MACRO_CONSTRUCTORS.contains(&last)
+                    && matches!(chars.get(j), Some('(' | '[' | '{'))
+                {
+                    format!("{last}!")
+                } else if !bang
+                    && FUNCTION_CONSTRUCTORS.contains(&pair.as_str())
+                    && chars.get(j) == Some(&'(')
+                {
+                    pair
+                } else {
+                    i = after_path;
+                    continue;
+                };
+                let line = chars[..start].iter().filter(|&&c| c == '\n').count() + 1;
+                let (args, _) = arguments(chars, j);
+                let positional: Vec<&str> = args
+                    .iter()
+                    .filter(|(text, after_semicolon)| !after_semicolon && !named.is_match(text))
+                    .map(|(text, _)| text.as_str())
+                    .collect();
+                let named_namespace = args.iter().find_map(|(text, _)| {
+                    text.trim()
+                        .strip_prefix("default_namespace")
+                        .and_then(|rest| rest.trim_start().strip_prefix('='))
+                        .map(str::trim)
+                });
+                let one_name = NAME_CONSTRUCTORS.contains(&constructor.as_str());
+                let (texts, namespace_argument): (Vec<&str>, Option<&str>) =
+                    if constructor == "symbol!" {
+                        (positional.clone(), None)
+                    } else if constructor == "parse_lit!" {
+                        (vec![], None)
+                    } else {
+                        (
+                            positional.first().copied().into_iter().collect(),
+                            named_namespace.or(if one_name {
+                                None
+                            } else {
+                                positional.get(1).copied()
+                            }),
+                        )
+                    };
+                // the default namespace: vakint's unless a literal or a
+                // constant names another one
+                let default_namespace = match namespace_argument.map(|a| resolve(a, &constants)) {
+                    Some(Resolved::Text(namespace, _)) if !namespace.contains(PLACEHOLDER) => {
+                        namespace
+                    }
+                    _ => "vakint".to_string(),
+                };
+                let mut resolved = Vec::new();
+                if constructor == "parse_lit!" {
+                    let (_, end) = arguments(chars, j);
+                    resolved.push((
+                        "<tokens>".to_string(),
+                        Resolved::Text(chars[j + 1..end - 1].iter().collect(), "tokens"),
+                    ));
+                } else if texts.is_empty() {
+                    resolved.push(("".to_string(), Resolved::Site("no argument")));
+                } else {
+                    for text in texts {
+                        resolved.push((text.to_string(), resolve(text, &constants)));
+                    }
+                }
+                for (argument, resolution) in resolved {
+                    let site_kind = match resolution {
+                        Resolved::Inner => {
+                            *counts.entry((constructor.clone(), "inner")).or_default() += 1;
+                            None
+                        }
+                        Resolved::Site(kind) => Some(kind),
+                        Resolved::Text(text, form) => {
+                            *counts.entry((constructor.clone(), form)).or_default() += 1;
+                            let mut whole_placeholder = false;
+                            for (namespace, local) in names_in(&text, one_name) {
+                                let placeholder =
+                                    !local.is_empty() && local.chars().all(|c| c == PLACEHOLDER);
+                                let namespace = if namespace.is_empty() {
+                                    // a parsed text names Symbolica's built-ins
+                                    // unqualified; a name constructor may make
+                                    // vakint's own symbol (a decorated name)
+                                    if !one_name && builtin.contains(&local.as_str()) {
+                                        continue;
+                                    }
+                                    default_namespace.clone()
+                                } else if namespace.contains(PLACEHOLDER) {
+                                    "vakint".to_string()
+                                } else {
+                                    namespace
+                                };
+                                if namespace != "vakint" {
+                                    continue;
+                                }
+                                // a placeholder that is a whole name or
+                                // expression: not resolved
+                                if placeholder {
+                                    whole_placeholder = true;
+                                    continue;
+                                }
+                                let filled = local.replace(PLACEHOLDER, "1");
+                                let full = format!("vakint::{filled}");
+                                created.insert(filled.clone());
+                                if !(internal(&filled, false)
+                                    || display_internal.contains(&full)
+                                    || data_atom(&full)
+                                    || display_output.contains(&full)
+                                    || REVIEWED_OUTPUT.contains(&filled.as_str()))
+                                {
+                                    unclassified.entry(filled.clone()).or_insert_with(|| {
+                                        format!("{full} ({file}:{line}, {constructor})")
+                                    });
+                                }
+                            }
+                            whole_placeholder.then_some("format placeholder")
+                        }
+                    };
+                    if let Some(kind) = site_kind {
+                        let argument = argument.split_whitespace().collect::<Vec<_>>().join(" ");
+                        let entry = sites
+                            .entry((file.clone(), constructor.clone(), argument))
+                            .or_insert((0, kind, line));
+                        entry.0 += 1;
+                        *counts
+                            .entry((constructor.clone(), "REVIEWED SITE"))
+                            .or_default() += 1;
+                    }
+                }
+                i = after_path;
+            }
+        }
+        let mut report = String::from("constructor, form: count\n");
+        for ((constructor, form), count) in &counts {
+            report.push_str(&format!("  {constructor}, {form}: {count}\n"));
+        }
+        report.push_str(&format!(
+            "distinct vakint names created by resolved arguments: {}\nreviewed sites: {} distinct\n",
+            created.len(),
+            sites.len()
+        ));
+        eprintln!("{report}");
+        let mut failures = Vec::new();
+        for ((file, constructor, argument), (count, kind, line)) in &sites {
+            match REVIEWED_SITES
+                .iter()
+                .find(|(f, c, a, _, _)| f == file && c == constructor && a == argument)
+            {
+                None => failures.push(format!(
+                    "UNREVIEWED ({kind}, line {line}): (\"{file}\", \"{constructor}\", {argument:?}, {count}, \"?\"),"
+                )),
+                Some((_, _, _, reviewed, _)) if reviewed != count => failures.push(format!(
+                    "COUNT {reviewed} -> {count}: ({file}, {constructor}, {argument:?})"
+                )),
+                Some((_, _, _, _, reason)) => {
+                    if !["settings", "data", "caller", "format", "macro"].contains(reason) {
+                        failures.push(format!("REASON {reason:?}: ({file}, {constructor}, {argument:?})"));
+                    }
+                }
+            }
+        }
+        for (file, constructor, argument, _, _) in REVIEWED_SITES {
+            if !sites.contains_key(&(
+                file.to_string(),
+                constructor.to_string(),
+                argument.to_string(),
+            )) {
+                failures.push(format!("STALE SITE: ({file}, {constructor}, {argument:?})"));
+            }
+        }
+        for orphan in &orphans {
+            if !REVIEWED_ORPHANS.contains(&orphan.as_str()) {
+                failures.push(format!("ORPHAN (not compiled, not read): {orphan:?}"));
+            }
+        }
+        for orphan in REVIEWED_ORPHANS {
+            if !orphans.iter().any(|o| o == orphan) {
+                failures.push(format!("STALE ORPHAN: {orphan}"));
+            }
+        }
+        for name in REVIEWED_OUTPUT {
+            if !created.contains(name) {
+                failures.push(format!("STALE REVIEWED_OUTPUT: {name}"));
+            }
+        }
+        for (name, _) in &unclassified {
+            if !UNDECIDED.contains(&name.as_str()) {
+                failures.push(format!("UNCLASSIFIED: {}", unclassified[name]));
+            }
+        }
+        for name in UNDECIDED {
+            if !unclassified.contains_key(*name) {
+                failures.push(format!("STALE UNDECIDED: {name}"));
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
         assert!(
-            unclassified.is_empty(),
-            "names created in vakint's namespace that are neither internal, nor a data atom, nor reviewed output:\n{}",
-            unclassified.join("\n")
+            UNDECIDED.is_empty(),
+            "{} names in vakint's namespace are created by literal arguments and are not yet classified (UNDECIDED): {}",
+            UNDECIDED.len(),
+            UNDECIDED.join(", ")
         );
     }
 }
