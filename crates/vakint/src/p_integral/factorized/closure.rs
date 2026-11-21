@@ -1550,7 +1550,15 @@ pub(super) fn evaluate_validated(
     value.check_insertion_epsilon(epsilon_symbol.get_name())?;
     let pole_order = value.insertion_pole_order(epsilon_symbol)?;
     let returned_terms = local.number_of_terms_in_epsilon_expansion;
-    local.number_of_terms_in_epsilon_expansion += pole_order as i64;
+    local.number_of_terms_in_epsilon_expansion = i64::try_from(pole_order)
+        .ok()
+        .and_then(|n| returned_terms.checked_add(n))
+        .ok_or_else(|| FactorizedError::Insertion {
+            vertex: value.insertions.first().map_or(0, |i| i.vertex),
+            detail: format!(
+                "an ε power out of range: the insertions' pole order {pole_order} does not fit the depth {returned_terms}"
+            ),
+        })?;
     let prepared = prepare(vakint, &local, value, spec, prefactor)?;
     let started = Instant::now();
     let mut counts = (0, 0, 0);

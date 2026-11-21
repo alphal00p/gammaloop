@@ -2603,12 +2603,12 @@ fn two_poled_insertions_raise_the_depth_by_their_sum() {
 }
 
 /// The closure entry is the only caller of `insertion_pole_order` (its depth
-/// raise). An insertion whose Laurent series in ε would fail there because it
-/// is not a Laurent expression (exp(1/ε), an essential singularity) is refused
-/// first, by the entry's validation: `Insertion`. A Laurent coefficient whose
-/// integer power is beyond i64 (ε^(-10^30)) passes validation, and symbolica
-/// does not expand such a power: that failure reaches the caller as the pole
-/// order's `Evaluation`, before any reduction.
+/// raise). The insertions whose Laurent series in ε would fail there are
+/// refused first, by the entry's validation, `Insertion`: exp(1/ε) (an
+/// essential singularity, not a Laurent polynomial) and ε^(-10^30) (an
+/// integer power beyond i64, which symbolica does not expand: an ε power out
+/// of range). The pole order's `Evaluation` is not reached through the entry
+/// by any input found.
 #[test]
 fn a_non_laurent_insertion_is_refused_by_the_closure_entry_before_its_pole_order() {
     let eps = "gammalooprs::ε";
@@ -2622,11 +2622,10 @@ fn a_non_laurent_insertion_is_refused_by_the_closure_entry_before_its_pole_order
     }
     let huge = closure_insertion_error(&format!("{eps}^(-10^30)"));
     match &huge {
-        FactorizedError::Evaluation { detail } => assert!(
-            detail.starts_with("insertion at vertex 1: the Laurent series in ε failed: "),
-            "{detail}"
-        ),
-        other => panic!("expected the pole order's Evaluation, got {other:?}"),
+        FactorizedError::Insertion { vertex: 1, detail } => {
+            assert!(detail.starts_with("an ε power out of range"), "{detail}")
+        }
+        other => panic!("expected the Insertion refusal at vertex 1, got {other:?}"),
     }
 }
 

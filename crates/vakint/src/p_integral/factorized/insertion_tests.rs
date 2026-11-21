@@ -813,12 +813,12 @@ fn every_insertion_rule_has_its_refusal() {
 }
 
 /// The pole order's own Laurent expansion can fail: that is an INTERNAL
-/// failure, `Evaluation` with the vertex and symbolica's reason. An essential
-/// singularity (exp(1/ε)) is refused by validation first (not a Laurent
-/// polynomial) and reaches it only through the public `insertion_pole_order`
-/// on a value that was not validated; an integer power beyond i64 is a valid
-/// Laurent coefficient that symbolica does not expand, and reaches it after
-/// validation. The same record with a pole has order 1.
+/// failure, `Evaluation` with the vertex and symbolica's reason. Both inputs
+/// that make it fail are refused by validation first: an essential
+/// singularity (exp(1/ε): not a Laurent polynomial) and an integer power
+/// beyond i64 (ε^(-10^30), which symbolica does not expand: an ε power out of
+/// range). Only the public `insertion_pole_order` on a value that was not
+/// validated reaches it. The same record with a pole has order 1.
 #[test]
 fn a_failing_laurent_series_of_an_insertion_is_an_evaluation_failure() {
     let eps_atom = atom(EPS);
@@ -845,8 +845,12 @@ fn a_failing_laurent_series_of_an_insertion_is_an_evaluation_failure() {
     }
     let mut huge = gluon_surrogate(1);
     ins(&mut huge).coefficient = atom(&format!("{EPS}^(-10^30)"));
-    huge.validate()
-        .expect("an integer power of eps is a Laurent coefficient");
+    insertion_refusal(
+        &huge.validate().unwrap_err(),
+        C0,
+        "an ε power out of range",
+        "eps^(-10^30) at validation",
+    );
     match &huge.insertion_pole_order(epsilon).unwrap_err() {
         FactorizedError::Evaluation { detail } => {
             assert!(detail.starts_with(&prefix), "{detail}")
@@ -856,6 +860,82 @@ fn a_failing_laurent_series_of_an_insertion_is_an_evaluation_failure() {
     let mut pole = gluon_surrogate(1);
     ins(&mut pole).coefficient = atom(&format!("{EPS}^-1"));
     assert_eq!(pole.insertion_pole_order(epsilon).unwrap(), 1);
+}
+
+/// The pole order is bounded: a bound on |the powers of ε and of the
+/// dimension| of coefficient x factor (degrees: sums the largest, products
+/// added, integer powers times |n|) may reach at most
+/// INSERTION_MAX_EPSILON_POWER (64), the coefficient's and the factor's bounds
+/// added; beyond, and for an exponent beyond i64, the record is refused at
+/// validation, `Insertion` "an ε power out of range". At the cap the record is
+/// accepted with its pole order (at most the bound).
+#[test]
+fn an_epsilon_power_beyond_the_cap_is_refused_at_validation() {
+    let eps_atom = atom(EPS);
+    let AtomView::Var(epsilon) = eps_atom.as_view() else {
+        unreachable!()
+    };
+    let epsilon = epsilon.get_symbol();
+    assert_eq!(super::INSERTION_MAX_EPSILON_POWER, 64);
+    let good = gluon_surrogate(1);
+    let with = |coefficient: &str, extra: &str| {
+        let mut value = good.clone();
+        ins(&mut value).coefficient = atom(coefficient);
+        let factor = ins(&mut value).factor.clone();
+        ins(&mut value).factor = factor * atom(extra);
+        value
+    };
+    // the surrogate's own factor, (D-2)/(D-1) x tensors, has the bound 2
+    // (degree 1 in D twice), so 62 is the coefficient's power at the cap
+    let dimension = good.dimension;
+    let depends = |s: Symbol| super::is_epsilon_symbol(s) || s == dimension;
+    assert_eq!(
+        super::epsilon_power_bound(ins(&mut good.clone()).factor.as_view(), &depends),
+        Some(2)
+    );
+    let prefix = "an ε power out of range";
+    for (what, value) in [
+        (
+            "eps^-63 (one above the cap)",
+            with(&format!("{EPS}^-63"), "1"),
+        ),
+        (
+            "eps^63 (one above the cap)",
+            with(&format!("{EPS}^63"), "1"),
+        ),
+        (
+            "eps^-31 x (D-4)^-32 (the bounds add, one above)",
+            with(&format!("{EPS}^-31"), &format!("({DIM}-4)^-32")),
+        ),
+        (
+            "eps^(-10^30) (beyond i64)",
+            with(&format!("{EPS}^(-10^30)"), "1"),
+        ),
+        (
+            "(1+eps)^(2^62) (a power of a sum)",
+            with(&format!("(1+{EPS})^4611686018427387904"), "1"),
+        ),
+    ] {
+        insertion_refusal(&value.validate().unwrap_err(), C0, prefix, what);
+    }
+    for (what, value, order) in [
+        ("eps^-62 (at the cap)", with(&format!("{EPS}^-62"), "1"), 62),
+        ("eps^62 (at the cap)", with(&format!("{EPS}^62"), "1"), 0),
+        (
+            "eps^-31 x (D-4)^-31 (at the cap)",
+            with(&format!("{EPS}^-31"), &format!("({DIM}-4)^-31")),
+            62,
+        ),
+    ] {
+        value
+            .validate()
+            .unwrap_or_else(|e| panic!("{what} is at the cap: {e}"));
+        assert_eq!(
+            value.insertion_pole_order(epsilon).unwrap(),
+            order,
+            "{what}"
+        );
+    }
 }
 
 /// An insertion's coefficient and factor are Laurent expressions in ε: ε and

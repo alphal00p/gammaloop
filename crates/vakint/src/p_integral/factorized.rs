@@ -1099,6 +1099,44 @@ fn momentum_degree(view: AtomView<'_>) -> u64 {
     }
 }
 
+/// The largest bound on |the powers of ε| (the dimension counted as 4 - 2ε)
+/// an insertion's coefficient x factor may reach, the bound of
+/// [`epsilon_power_bound`] (a degree count, so the pole order is at most it;
+/// the coefficient's and the factor's added): 64. Far above anything
+/// physical (an R* insertion's pole order is at most twice its child's loop
+/// count, about 20 at ten loops), and so small that no sum can overflow: the
+/// pole order of n insertions is at most 64 n, beyond i64 only for n > 2^57
+/// insertions, one per vertex of a record. Beyond it the record is refused
+/// (`an ε power out of range`), never wrapped.
+pub(crate) const INSERTION_MAX_EPSILON_POWER: u64 = 64;
+
+/// An upper bound on |the power of a symbol `depends` selects| in any term of
+/// `view` expanded (sums: the largest; products: the sum; an integer power:
+/// |n| times its base's), with a representation slot's dimension argument
+/// and, after the Laurent rule, any function counting 0; None beyond u64 or
+/// for an exponent beyond i64. The trailing power of ε of a Laurent
+/// expression is at least minus this bound.
+fn epsilon_power_bound(view: AtomView<'_>, depends: &dyn Fn(Symbol) -> bool) -> Option<u64> {
+    match view {
+        AtomView::Var(v) => Some(u64::from(depends(v.get_symbol()))),
+        AtomView::Add(a) => a
+            .iter()
+            .try_fold(0u64, |m, t| Some(m.max(epsilon_power_bound(t, depends)?))),
+        AtomView::Mul(m) => m
+            .iter()
+            .try_fold(0u64, |s, t| s.checked_add(epsilon_power_bound(t, depends)?)),
+        AtomView::Pow(p) => {
+            let (base, exponent) = p.get_base_exp();
+            let b = epsilon_power_bound(base, depends)?;
+            if b == 0 {
+                return Some(0);
+            }
+            b.checked_mul(i64::try_from(exponent).ok()?.unsigned_abs())
+        }
+        _ => Some(0),
+    }
+}
+
 /// A symbol named `ε` in any namespace (the evaluation's epsilon; which one is
 /// checked against the settings when the input is built).
 fn is_epsilon_symbol(symbol: Symbol) -> bool {
@@ -2327,6 +2365,21 @@ impl FactorizedNumerator {
                     )));
                 }
             }
+            // bounded pole order: |trailing power of ε| of coefficient x factor
+            // is at most the bound of the coefficient plus that of the factor
+            let bound =
+                epsilon_power_bound(insertion.coefficient.as_view(), &depends).and_then(|c| {
+                    epsilon_power_bound(insertion.factor.as_view(), &depends)?.checked_add(c)
+                });
+            match bound {
+                Some(b) if b <= INSERTION_MAX_EPSILON_POWER => {}
+                _ => {
+                    return Err(error(format!(
+                        "an ε power out of range: the powers of ε and of the dimension in coefficient x factor reach {}, at most {INSERTION_MAX_EPSILON_POWER} are supported",
+                        bound.map_or_else(|| "beyond 2^64".to_string(), |b| b.to_string())
+                    )));
+                }
+            }
             check_scalar(
                 insertion.coefficient.as_view(),
                 &format!("insertion at vertex {v} coefficient"),
@@ -2473,7 +2526,9 @@ impl FactorizedNumerator {
                 .to_i64()
                 .ok_or_else(|| failure("an ε power out of range".into()))?;
             if v < 0 {
-                order += v.unsigned_abs();
+                order = order.checked_add(v.unsigned_abs()).ok_or_else(|| {
+                    failure("an ε power out of range: the insertions' pole order overflows".into())
+                })?;
             }
         }
         Ok(order)

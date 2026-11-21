@@ -168,6 +168,149 @@ fn the_beta_k5_surrogate_root_equals_its_contracted_value() {
     );
 }
 
+/// The k5-surrogate record with insertions of the given coefficients: an
+/// existing insertion's coefficient replaced, any other vertex turned into a
+/// contracted child (ct:) with its own factor as the insertion's factor.
+fn with_coefficients(coefficients: &[(usize, String)]) -> FactorizedNumerator {
+    let mut value =
+        FactorizedNumerator::from_text(include_str!("fixtures/wh-k5-surrogate.record.txt"))
+            .unwrap();
+    for (vertex, text) in coefficients {
+        let coefficient = vk_parse!(text.as_str()).unwrap();
+        if let Some(i) = value.insertions.iter().position(|x| x.vertex == *vertex) {
+            value.insertions[i].coefficient = coefficient;
+            continue;
+        }
+        let hedges = value
+            .local_hedges(Location::Vertex(*vertex))
+            .into_iter()
+            .collect::<Vec<_>>();
+        let v = value.vertices.iter_mut().find(|v| v.id == *vertex).unwrap();
+        let factor = std::mem::replace(&mut v.factor, Atom::num(1));
+        v.rule = format!("ct:child{vertex}");
+        value.insertions.push(Insertion {
+            vertex: *vertex,
+            hedges,
+            cycles: (0, 0),
+            coefficient,
+            factor,
+        });
+    }
+    value.insertions.sort_by_key(|x| x.vertex);
+    value
+}
+
+/// The pole order's arithmetic cannot wrap or panic: insertions whose powers
+/// of ε add beyond the integers (two ε^-(2^63-1) and two ε^(2^63-1) on the
+/// record's ε-free vertices with ε^-1 on its first insertion; three
+/// ε^-(2^63-1); one, whose pole order does not fit the depth) are refused at
+/// validation and by the closure entry, `Insertion` "an ε power out of range"
+/// at the first such vertex (5). Without the bound the first two panicked on
+/// the sum (and would wrap without overflow checks) and the third ran without
+/// end on a negative depth. The defect-free twin (ε^-1 on the first insertion,
+/// coefficient 1 elsewhere: pole order 3) equals ε^-1 times the record with
+/// coefficient 1 evaluated one term deeper, truncated at ε^(depth - L - 1).
+#[test]
+fn the_pole_order_arithmetic_cannot_wrap() {
+    let eps = "gammalooprs::ε";
+    let big = "9223372036854775807";
+    let vakint = plain_engine();
+    for (what, coefficients) in [
+        (
+            "five",
+            vec![
+                (1, format!("{eps}^-1")),
+                (5, format!("{eps}^-{big}")),
+                (6, format!("{eps}^-{big}")),
+                (7, format!("{eps}^{big}")),
+                (9, format!("{eps}^{big}")),
+            ],
+        ),
+        (
+            "three",
+            vec![
+                (5, format!("{eps}^-{big}")),
+                (6, format!("{eps}^-{big}")),
+                (7, format!("{eps}^-{big}")),
+            ],
+        ),
+        ("one", vec![(5, format!("{eps}^-{big}"))]),
+    ] {
+        let value = with_coefficients(&coefficients);
+        for error in [
+            value.validate().unwrap_err(),
+            evaluate_factorized_closure(
+                &vakint,
+                &site_settings(),
+                std::slice::from_ref(&value),
+                &[value.prefactor.total()],
+            )
+            .unwrap_err(),
+        ] {
+            match &error {
+                FactorizedError::Insertion { vertex: 5, detail } => {
+                    assert!(
+                        detail.starts_with("an ε power out of range"),
+                        "{what}: {detail}"
+                    )
+                }
+                other => {
+                    panic!("{what}: expected the Insertion refusal at vertex 5, got {other:?}")
+                }
+            }
+        }
+    }
+    let ones = [5, 6, 7, 9].map(|v| (v, "1".to_string()));
+    let mut twin_coefficients = vec![(1, format!("{eps}^-1"))];
+    twin_coefficients.extend(ones.iter().cloned());
+    let twin = with_coefficients(&twin_coefficients);
+    twin.validate().unwrap();
+    let epsilon = vk_symbol!("gammalooprs::ε");
+    assert_eq!(twin.insertion_pole_order(epsilon).unwrap(), 3);
+    let got = evaluate_factorized_closure(
+        &vakint,
+        &site_settings(),
+        std::slice::from_ref(&twin),
+        &[twin.prefactor.total()],
+    )
+    .unwrap();
+    let mut all_ones = vec![(1, "1".to_string())];
+    all_ones.extend(ones.iter().cloned());
+    let mut deeper = with_coefficients(&all_ones);
+    let FactorizedKind::Closure(spec) = &mut deeper.kind else {
+        unreachable!()
+    };
+    let depth = spec.depth.unwrap();
+    spec.depth = Some(depth + 1);
+    assert_eq!(deeper.insertion_pole_order(epsilon).unwrap(), 2);
+    let bare = evaluate_factorized_closure(
+        &vakint,
+        &site_settings(),
+        std::slice::from_ref(&deeper),
+        &[deeper.prefactor.total()],
+    )
+    .unwrap();
+    let target = depth as i64 - twin.loops() as i64 - 1;
+    let inverse_text = format!("{eps}^-1");
+    let inverse = vk_parse!(inverse_text.as_str()).unwrap();
+    let reference = (inverse * &bare.value)
+        .series(
+            epsilon,
+            Atom::Zero.as_view(),
+            symbolica::domains::rational::Rational::from(target),
+        )
+        .unwrap()
+        .to_atom()
+        .expand();
+    assert!(!reference.is_zero());
+    assert!(
+        (&got.value - &reference).expand().is_zero(),
+        "twin {}\nreference {}",
+        got.value,
+        reference
+    );
+}
+
 /// k5-stress (L5 graph 3793): 5 records, 4 insertion vertices each; r0051 has
 /// five loops (the package is required).
 #[test]
