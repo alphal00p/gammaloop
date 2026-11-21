@@ -57,14 +57,43 @@
 //! the existing retry. At depth `B` every group and row is either shown, and
 //! measured, or of valuation at least `B`, out of reach of every pole.
 //!
+//! The planner starts at `max(quotient loops, B)` (no attempt below `B` is
+//! ever useful: it would be raised to `B` after a whole integration of `H`);
+//! on production `B` is the quotient's loops, the old first depth.
+//!
 //! The guard stays as a backstop: it refuses the child route for a
-//! correction whose accepted depth stays below `B` (only possible when `B`
-//! is unknown, or when a measured row exceeds `B`); the correction is then
-//! evaluated on today's path (the closed or projected moments with the
-//! generic forest step, which measures every quotient factor before its
-//! hard coefficient is integrated).
-
-use std::sync::atomic::{AtomicUsize, Ordering};
+//! correction whose accepted depth stays below `B`, for every correction
+//! whose `B` is unknown (a row of a nonzero group that the moment extraction
+//! dropped is counted nowhere, so without `B` nothing certifies that no pole
+//! hides; refused before `H` is integrated when the quotient's own bound is
+//! unknown), and for a measured row above `B` (`bound_exceeded`: the proof of
+//! `B` failed; refused at once, an alarm of its own, fatal under
+//! `GAMMALOOP_IR_HARD_DEPTH_STRICT=1`). The correction is then evaluated on
+//! today's path (the closed or projected moments with the generic forest
+//! step, which measures every quotient factor before its hard coefficient is
+//! integrated), so a refusal costs time, never a value.
+//!
+//! # Domain of `B`
+//!
+//! `B` reads the `ε` dependence of the quotient where it is explicit: the
+//! vertex and propagator NUMERATORS outside the hard part
+//! (`Graph::numerator`, the same source the R* integrand uses), the root
+//! closure and each row's insertion. It assumes that nothing else of the
+//! quotient depends on `ε`:
+//! * propagator powers and denominators: on this route every propagator is
+//!   `1/p²` with power one (feynkit's `propagator_power` is an `i32` and the
+//!   runtime graph rejects any power but 1, `graph/parse`; R* requires a
+//!   massless graph, `Evaluation::new`), so an `ε`-dependent power or mass
+//!   cannot reach the quotient;
+//! * opaque coefficient symbols: a symbol whose value, substituted later,
+//!   has poles in `ε` is invisible to `B` (it is read as regular). No
+//!   production input has one (no `ε` and no such symbol in any 5L/6L
+//!   numerator, census-6l.md); insertion surrogates carry their coefficient
+//!   explicitly (an `ε` polynomial, regular by construction), so `B` counts
+//!   it. A future input with such a symbol is outside the domain;
+//! * a function of `ε` (`f(ε)`, any function whose arguments carry `ε` after
+//!   `d = 4-2ε`): its order is not read from a series; detectable, so `B` is
+//!   unknown and the correction is refused ([`excess_poles`]).
 
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
@@ -76,7 +105,9 @@ use crate::{utils::GS, uv::approx::integrated::Integrated};
 /// `Σ max(0, -ord_ε f)` over the product factors `f` of `expression`, read
 /// at `d = 4-2ε`: how many poles beyond its loops a `K` of a region carrying
 /// these factors can gain. `Some(0)` without `ε` (or `d`); `None` when a
-/// factor's order is not an integer or cannot be determined.
+/// factor's order is not an integer or cannot be determined, and when a
+/// function's argument carries `ε` (its order would be guessed from a
+/// series of an opaque function: the module doc's domain).
 pub(super) fn excess_poles(expression: &Atom) -> Option<usize> {
     let epsilon = GS.dim_epsilon;
     if !expression.contains_symbol(epsilon) && !expression.contains_symbol(GS.dim) {
@@ -85,6 +116,30 @@ pub(super) fn excess_poles(expression: &Atom) -> Option<usize> {
     let regulated = Integrated::dimensionally_regularized(expression);
     if !regulated.contains_symbol(epsilon) {
         return Some(0);
+    }
+    // A representation's dimension (`mink(4-2ε, i)`) is not a function of
+    // `ε` in this sense: drop the representations before looking.
+    let representation = &spenso::network::tags::SPENSO_TAG.representation;
+    let scalars = regulated.replace_map(|view, _, out| {
+        if let AtomView::Fun(function) = view
+            && function.get_symbol().has_tag(representation)
+        {
+            **out = Atom::num(1);
+        }
+    });
+    let mut opaque = false;
+    scalars.visitor(&mut |view| {
+        if let AtomView::Fun(function) = view
+            && function
+                .iter()
+                .any(|argument| argument.contains_symbol(epsilon))
+        {
+            opaque = true;
+        }
+        !opaque
+    });
+    if opaque {
+        return None;
     }
     let factors = match regulated.as_view() {
         AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
@@ -153,13 +208,16 @@ impl Truncation {
 /// The guard (module doc), at the depth `extra` the planner would accept
 /// with `needed` measured on the shown rows and `bound` = `B` (the largest
 /// row bound included): `Some(reason)` refuses the child route.
+/// * `unbounded`: `B` is unknown. Refused whatever the truncation shows: a
+///   row of a nonzero group that the moment extraction dropped is counted
+///   nowhere (not in [`Truncation::vanished`]), so nothing certifies that no
+///   pole hides.
 /// * `bound_exceeded`: a measured row needs more than `B`; the bound does not
 ///   hold, so nothing it certifies can be trusted.
 /// * `vanished`: a vanished group or row may carry up to `B > extra` poles.
 /// * `unverified`: `B > extra` with every group and row shown; a row of a
 ///   nonzero group whose coefficient vanished at the truncation is dropped
 ///   by the moment extraction and cannot be told apart from an absent one.
-/// * `unbounded`: `B` is unknown and something vanished.
 pub(super) fn refusal(
     bound: Option<usize>,
     extra: usize,
@@ -167,8 +225,7 @@ pub(super) fn refusal(
     truncation: &Truncation,
 ) -> Option<&'static str> {
     match bound {
-        None if truncation.vanished() > 0 => Some("unbounded"),
-        None => None,
+        None => Some("unbounded"),
         Some(bound) if needed > bound => Some("bound_exceeded"),
         Some(bound) if bound <= extra => None,
         Some(_) if truncation.vanished() > 0 => Some("vanished"),
@@ -181,36 +238,128 @@ pub(super) fn bound_label(bound: Option<usize>) -> String {
     bound.map_or_else(|| "unknown".to_owned(), |bound| bound.to_string())
 }
 
+/// `GAMMALOOP_IR_HARD_DEPTH_STRICT=1` (default off): a measured row above
+/// the quotient bound (`bound_exceeded`, the proof of `B` failed) is an
+/// error instead of a refusal into today's path. Off, the refusal is safe
+/// (today's path measures every quotient factor before integrating) and
+/// loud: its own `IR_HARD_DEPTH_REFUSED reason=bound_exceeded` line and the
+/// `exceeded=` field of `IR_HARD_DEPTH_SUMMARY`.
+pub(super) fn strict() -> bool {
+    #[cfg(test)]
+    if let Some(strict) = TEST.with(|slot| slot.get()).strict {
+        return strict;
+    }
+    static STRICT: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+        matches!(
+            std::env::var("GAMMALOOP_IR_HARD_DEPTH_STRICT")
+                .as_deref()
+                .map(str::trim),
+            Ok("1")
+        )
+    });
+    *STRICT
+}
+
 /// IRH-DEPTH counts of one evaluation's child-route IR corrections
-/// (`IR_HARD_CHILD_DEPTH_SUMMARY`).
+/// (`IR_HARD_DEPTH_SUMMARY`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) struct DepthCounts {
     /// Corrections integrated on the child route (not skipped by selection).
     pub corrections: usize,
-    /// Corrections whose quotient bound exceeds the quotient's loops.
+    /// Corrections whose quotient bound exceeds the quotient's loops (or is
+    /// unknown).
     pub bounded: usize,
     /// Corrections integrated more than once (a depth retry).
     pub retried: usize,
     /// Retries whose depth the bound raised beyond the measured need.
     pub raised: usize,
-    /// Corrections refused by the guard (`IR_HARD_CHILD_DEPTH_REFUSED`).
+    /// Corrections of an evaluation on a proper support (a UV child's or a
+    /// decorated quotient's R*): nested child calls.
+    pub nested: usize,
+    /// Nested corrections whose quotient bound exceeds the quotient's loops.
+    pub nested_bounded: usize,
+    /// Corrections with a measured row above the bound (also refused).
+    pub exceeded: usize,
+    /// Corrections refused by the guard (`IR_HARD_DEPTH_REFUSED`).
     pub refused: usize,
+    /// Tests: the last refusal's reason.
+    pub reason: Option<&'static str>,
 }
 
-/// Process-wide totals (tests, and every refusal also has its own line).
-pub(super) static CORRECTIONS: AtomicUsize = AtomicUsize::new(0);
-pub(super) static RETRIED: AtomicUsize = AtomicUsize::new(0);
-pub(super) static RAISED: AtomicUsize = AtomicUsize::new(0);
-pub(super) static REFUSED: AtomicUsize = AtomicUsize::new(0);
-
-pub(super) fn count(counter: &AtomicUsize) {
-    counter.fetch_add(1, Ordering::Relaxed);
+impl DepthCounts {
+    fn add(&mut self, other: &Self) {
+        self.corrections += other.corrections;
+        self.bounded += other.bounded;
+        self.retried += other.retried;
+        self.raised += other.raised;
+        self.nested += other.nested;
+        self.nested_bounded += other.nested_bounded;
+        self.exceeded += other.exceeded;
+        self.refused += other.refused;
+        self.reason = other.reason.or(self.reason);
+    }
 }
 
-/// Tests: the process-wide `(corrections, retried, raised, refused)`.
+/// Count one event in `counts` (the evaluation's) and, in tests, in the
+/// enclosing [`collect`] scope of this thread.
+pub(super) fn note(counts: &mut DepthCounts, field: fn(&mut DepthCounts) -> &mut usize) {
+    *field(counts) += 1;
+    #[cfg(test)]
+    COLLECTED.with(|slot| {
+        if let Some(collected) = slot.borrow_mut().as_mut() {
+            *field(collected) += 1;
+        }
+    });
+}
+
+/// Record a refusal's reason (tests: in the enclosing [`collect`] scope).
+pub(super) fn refused(counts: &mut DepthCounts, reason: &'static str) {
+    note(counts, |counts| &mut counts.refused);
+    counts.reason = Some(reason);
+    #[cfg(test)]
+    COLLECTED.with(|slot| {
+        if let Some(collected) = slot.borrow_mut().as_mut() {
+            collected.reason = Some(reason);
+        }
+    });
+}
+
+/// Tests: what the planner does (`Fixed` is production).
 #[cfg(test)]
-pub(super) fn totals() -> [usize; 4] {
-    [&CORRECTIONS, &RETRIED, &RAISED, &REFUSED].map(|counter| counter.load(Ordering::Relaxed))
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) enum Planner {
+    /// The planner of this module (production).
+    #[default]
+    Fixed,
+    /// The fixed planner without the raise to the bound: it starts at the
+    /// quotient's loops and retries only to the measured need, so the guard
+    /// alone stands between a hidden pole and the value.
+    NoRaise,
+    /// The planner before IRH-DEPTH (072f9952cb): no raise, no measurement
+    /// of vanished rows, no guard (reproduces the missed pole).
+    Legacy,
+}
+
+/// Tests: the quotient bound the planner sees.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) enum BoundOverride {
+    #[default]
+    Computed,
+    /// As if `B` could not be computed.
+    Unknown,
+    /// `B` replaced by this value (below the truth: `bound_exceeded`).
+    Fixed(usize),
+}
+
+/// Tests: the planner settings of [`with_depth_test`].
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct DepthTest {
+    pub planner: Planner,
+    pub bound: BoundOverride,
+    /// [`strict`] read as this value.
+    pub strict: Option<bool>,
 }
 
 /// Tests: where a child-route attempt calls the [`RowHook`].
@@ -232,6 +381,52 @@ pub(super) type RowHook = Box<dyn Fn(&HookSite, &mut Vec<(Atom, Atom, usize)>)>;
 thread_local! {
     static ROW_HOOK: std::cell::RefCell<Option<RowHook>> = const { std::cell::RefCell::new(None) };
     static START_EXTRA: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+    static TEST: std::cell::Cell<DepthTest> = std::cell::Cell::new(DepthTest::default());
+    static COLLECTED: std::cell::RefCell<Option<DepthCounts>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Tests: run `f` and return the IRH-DEPTH counts of every child-route
+/// correction it evaluates on this thread, nested evaluations (UV children
+/// computed by R*) included. Per thread and scoped, so tests running in
+/// parallel (`cargo test`) do not see each other's counts; an enclosing
+/// scope also receives them. The child route itself is selected per thread
+/// (`with_ir_hard`), so no child-route correction of `f` runs elsewhere.
+#[cfg(test)]
+pub(super) fn collect<T>(f: impl FnOnce() -> T) -> (T, DepthCounts) {
+    // Restores the enclosing scope (also on a panic), handing it this
+    // scope's counts.
+    struct Scope(Option<DepthCounts>);
+    impl Drop for Scope {
+        fn drop(&mut self) {
+            let mut outer = self.0.take();
+            COLLECTED.with(|slot| {
+                let inner = slot.borrow_mut().take().unwrap_or_default();
+                if let Some(outer) = outer.as_mut() {
+                    outer.add(&inner);
+                }
+                *slot.borrow_mut() = outer;
+            });
+        }
+    }
+    let scope = Scope(COLLECTED.with(|slot| slot.borrow_mut().replace(DepthCounts::default())));
+    let value = f();
+    let counts = COLLECTED.with(|slot| slot.borrow().unwrap_or_default());
+    drop(scope);
+    (value, counts)
+}
+
+/// Tests: run `f` with the planner settings `test` on this thread.
+#[cfg(test)]
+pub(super) fn with_depth_test<T>(test: DepthTest, f: impl FnOnce() -> T) -> T {
+    struct Restore(DepthTest);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let previous = self.0;
+            TEST.with(|slot| slot.set(previous));
+        }
+    }
+    let _restore = Restore(TEST.with(|slot| slot.replace(test)));
+    f()
 }
 
 /// Tests: run `f` with `hook` rewriting the child route's rows on this thread.
@@ -271,20 +466,59 @@ pub(super) fn with_start_extra<T>(extra: usize, f: impl FnOnce() -> T) -> T {
     f()
 }
 
-/// The child route's first depth: the quotient's loops (tests: at least the
-/// [`with_start_extra`] value).
-pub(super) fn start_extra(quotient_loops: usize) -> usize {
+/// The quotient bound the planner uses: `bound` (tests: overridden by
+/// [`with_depth_test`]).
+pub(super) fn planner_bound(bound: Option<usize>) -> Option<usize> {
+    #[cfg(test)]
+    match TEST.with(|slot| slot.get()).bound {
+        BoundOverride::Computed => {}
+        BoundOverride::Unknown => return None,
+        BoundOverride::Fixed(fixed) => return Some(fixed),
+    }
+    bound
+}
+
+/// Whether the planner raises the depth to the bound (tests: not for
+/// [`Planner::NoRaise`] and [`Planner::Legacy`]).
+pub(super) fn raises() -> bool {
+    #[cfg(test)]
+    if TEST.with(|slot| slot.get()).planner != Planner::Fixed {
+        return false;
+    }
+    true
+}
+
+/// Whether the planner measures the quotient factors of a vanished row and
+/// applies the guard (tests: not for [`Planner::Legacy`]).
+pub(super) fn guards() -> bool {
+    #[cfg(test)]
+    if TEST.with(|slot| slot.get()).planner == Planner::Legacy {
+        return false;
+    }
+    true
+}
+
+/// The child route's first depth: the quotient's loops raised to the
+/// quotient bound when known (module doc; tests: at least the
+/// [`with_start_extra`] value, and without the raise for the planners
+/// that do not raise).
+pub(super) fn start_extra(quotient_loops: usize, bound: Option<usize>) -> usize {
+    let start = match bound {
+        Some(bound) if raises() => quotient_loops.max(bound),
+        _ => quotient_loops,
+    };
     #[cfg(test)]
     if let Some(extra) = START_EXTRA.with(|slot| slot.get()) {
-        return quotient_loops.max(extra);
+        return start.max(extra);
     }
-    quotient_loops
+    start
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::initialisation::test_initialise;
+    use spenso::structure::representation::RepName;
     use symbolica::parse;
 
     fn eps() -> Atom {
@@ -307,7 +541,61 @@ mod tests {
         let d = Atom::var(GS.dim);
         assert_eq!(excess_poles(&(&x / (&d - Atom::num(1)))), Some(0));
         assert_eq!(excess_poles(&(&x / (&d - Atom::num(4)))), Some(1));
+        // Outside the domain, detectable: a non-integer order, a function of
+        // ε (symbolica would expand an opaque f(ε) as regular).
+        assert_eq!(
+            excess_poles(&(&x * eps().pow(Atom::num(1) / Atom::num(2)))),
+            None
+        );
+        let opaque = symbolica::function!(symbolica::symbol!("irh_depth_test_f"), eps());
+        assert_eq!(excess_poles(&(&x * &opaque)), None);
+        assert_eq!(excess_poles(&(&x * opaque / eps())), None);
+        // A representation's dimension is no function of ε.
+        let mink = spenso::structure::representation::Minkowski {}.new_rep(GS.dim);
+        let g = spenso::network::library::symbolic::ETS.metric(
+            mink.to_symbolic([Atom::num(1)]),
+            mink.to_symbolic([Atom::num(2)]),
+        );
+        assert_eq!(excess_poles(&(&g * &d / eps())), Some(1));
         Ok(())
+    }
+
+    #[test]
+    fn scoped_counts_see_only_their_own_scope() {
+        let mut counts = DepthCounts::default();
+        let ((), outer) = collect(|| {
+            note(&mut counts, |counts| &mut counts.corrections);
+            let ((), inner) = collect(|| {
+                note(&mut counts, |counts| &mut counts.retried);
+                refused(&mut counts, "vanished");
+            });
+            assert_eq!(
+                (
+                    inner.corrections,
+                    inner.retried,
+                    inner.refused,
+                    inner.reason
+                ),
+                (0, 1, 1, Some("vanished"))
+            );
+        });
+        assert_eq!(
+            (
+                outer.corrections,
+                outer.retried,
+                outer.refused,
+                outer.reason
+            ),
+            (1, 1, 1, Some("vanished"))
+        );
+        // Outside every scope only the evaluation's own counts change.
+        note(&mut counts, |counts| &mut counts.raised);
+        assert_eq!(
+            (counts.corrections, counts.raised, counts.refused),
+            (1, 1, 1)
+        );
+        let ((), empty) = collect(|| ());
+        assert_eq!(empty, DepthCounts::default());
     }
 
     #[test]
@@ -350,7 +638,10 @@ mod tests {
         // After the retry to the bound.
         assert_eq!(refusal(Some(2), 2, 2, &vanished), None);
         assert_eq!(refusal(Some(2), 3, 3, &shown), Some("bound_exceeded"));
-        assert_eq!(refusal(None, 1, 1, &shown), None);
+        // An unknown bound refuses whatever the truncation shows: a row of a
+        // nonzero group dropped by the moment extraction is in no count.
+        assert_eq!(refusal(None, 1, 1, &shown), Some("unbounded"));
         assert_eq!(refusal(None, 1, 1, &zero_row), Some("unbounded"));
+        assert_eq!(refusal(None, 5, 0, &shown), Some("unbounded"));
     }
 }
