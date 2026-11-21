@@ -4767,7 +4767,12 @@ fn builtins_are_accepted_in_a_marked_record_and_leave_the_value_unchanged() {
     };
     let reference = run(&base, &base.prefactor.total());
     assert!(!reference.is_zero());
-    for constant in ["𝑖*𝜋", "𝜋^-2", "log(UFO::x)", "sqrt(UFO::x)*exp(UFO::x)"] {
+    for constant in [
+        "𝑖*𝜋",
+        "𝜋^-2",
+        "log(UFO::x)",
+        "symbolica::zeta(3)*cos(UFO::x)",
+    ] {
         let c = atom(constant);
         let mut in_factor = base.clone();
         in_factor.vertices[1].factor = &in_factor.vertices[1].factor * &c;

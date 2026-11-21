@@ -1531,6 +1531,33 @@ fn non_laurent_dependence(view: AtomView<'_>, depends: &dyn Fn(Symbol) -> bool) 
     }
 }
 
+/// The first power of `view` (at any depth, inside function arguments too)
+/// whose exponent is not WRITTEN as an integer: after Symbolica's automatic
+/// normalisation the exponent atom is not an integer number (`x^(2-3)` is
+/// read as `x^-1` and accepted; an expression equal to an integer, `π`,
+/// `sqrt(2)`, a symbol, a rational `1/2` are refused; nothing is expanded
+/// to decide); with the exponent named.
+fn first_non_integer_exponent(view: AtomView<'_>) -> Option<String> {
+    let mut found = None;
+    view.visitor(&mut |part| {
+        if found.is_some() {
+            return false;
+        }
+        if let AtomView::Pow(p) = part {
+            let (_, exponent) = p.get_base_exp();
+            if symbolica::domains::integer::Integer::try_from(exponent).is_err() {
+                found = Some(format!(
+                    "the exponent {} of {} is not an integer literal",
+                    exponent.to_owned().to_canonical_string(),
+                    part.to_owned().to_canonical_string()
+                ));
+            }
+        }
+        found.is_none()
+    });
+    found
+}
+
 /// Whether `name` is a STRUCTURAL head the evaluation reads (slots and
 /// representations, momenta, the metric, gamma, dot, index labels, colour,
 /// the reader's slash dummy): its arguments are not opaque.
@@ -2497,15 +2524,16 @@ impl FactorizedNumerator {
         Ok(())
     }
 
-    /// OPAQUE CALLER SCALARS (marked values): a function other than the
-    /// structural heads (slots, momenta, metric, gamma, dot, index labels,
-    /// colour) and a non-integer or symbolic power are opaque to the
-    /// evaluation, so their arguments (and an exponent) must be free of ε,
-    /// the dimension (outside slots), the masses and the momenta: `Graph`
-    /// (`Insertion` in an insertion), detail prefix `a non-polynomial
-    /// dependence in <field>: `. Caller-namespaced scalars and function heads
-    /// are otherwise accepted as opaque (the format has no declared symbol
-    /// table).
+    /// EXPONENTS AND OPAQUE CALLER SCALARS (marked values): every exponent
+    /// is written as an integer ([`first_non_integer_exponent`]: detail
+    /// prefix `a non-integer exponent in <field>: `); a function other than
+    /// the structural heads (slots, momenta, metric, gamma, dot, index
+    /// labels, colour) is opaque to the evaluation, so its arguments must be
+    /// free of ε, the dimension (outside slots), the masses and the momenta
+    /// (detail prefix `a non-polynomial dependence in <field>: `). `Graph`,
+    /// `Insertion` in an insertion. Caller-namespaced scalars and function
+    /// heads are otherwise accepted as opaque (the format has no declared
+    /// symbol table).
     pub(crate) fn check_opaque_dependence(&self, atom: &Atom, field: &str) -> Result<()> {
         let masses = match &self.kind {
             FactorizedKind::Closure(spec) => [&spec.mass_squared, &spec.auxiliary_mass_squared]
@@ -2522,10 +2550,15 @@ impl FactorizedNumerator {
             let name = symbol.get_name();
             name == "ε" || name.ends_with("::ε") || symbol == dimension || masses.contains(&symbol)
         };
-        match opaque_dependence(atom.as_view(), &depends) {
+        let found = first_non_integer_exponent(atom.as_view())
+            .map(|found| format!("a non-integer exponent in {field}: {found}"))
+            .or_else(|| {
+                opaque_dependence(atom.as_view(), &depends)
+                    .map(|found| format!("a non-polynomial dependence in {field}: {found}"))
+            });
+        match found {
             None => Ok(()),
-            Some(found) => {
-                let detail = format!("a non-polynomial dependence in {field}: {found}");
+            Some(detail) => {
                 let insertion = field
                     .strip_prefix("insertion ")
                     .and_then(|rest| rest.split(' ').next())

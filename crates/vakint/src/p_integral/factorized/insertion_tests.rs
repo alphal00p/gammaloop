@@ -1276,8 +1276,8 @@ fn a_non_laurent_dependence_on_epsilon_is_refused_at_validation() {
             2,
         ),
         (
-            "a fractional power of another scalar",
-            format!("witness::m2^(1/2)*{EPS}^-1"),
+            "an integer power of another scalar (a fractional one is refused: exponents are integer literals)",
+            format!("witness::m2^3*{EPS}^-1"),
             1,
         ),
     ] {

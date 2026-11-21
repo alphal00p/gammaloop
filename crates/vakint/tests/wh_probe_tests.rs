@@ -1855,17 +1855,18 @@ fn g3_opaque_functions_and_powers_are_free_of_eps_dimension_masses_momenta() {
         vertex.factor = &vertex.factor * atom(extra);
         v
     };
-    let prefix = format!("a non-polynomial dependence in vertex {vertex_id} factor: ");
-    for bad in [
-        format!("log(1+{EPS})"),
-        format!("probe::f({DIM})"),
-        format!("(1+{EPS})^(1/2)"),
-        format!("probe::x^{EPS}"),
-        format!("sin({DIM}*probe::x)"),
+    let dependence = format!("a non-polynomial dependence in vertex {vertex_id} factor: ");
+    let exponent = format!("a non-integer exponent in vertex {vertex_id} factor: ");
+    for (bad, prefix) in [
+        (format!("log(1+{EPS})"), &dependence),
+        (format!("probe::f({DIM})"), &dependence),
+        (format!("sin({DIM}*probe::x)"), &dependence),
+        (format!("(1+{EPS})^(1/2)"), &exponent),
+        (format!("probe::x^{EPS}"), &exponent),
     ] {
         match with(&bad).validate() {
             Err(FactorizedError::Graph { detail }) => {
-                assert!(detail.starts_with(&prefix), "{bad}: {detail}")
+                assert!(detail.starts_with(prefix.as_str()), "{bad}: {detail}")
             }
             other => panic!("{bad}: {other:?}"),
         }
@@ -1873,7 +1874,6 @@ fn g3_opaque_functions_and_powers_are_free_of_eps_dimension_masses_momenta() {
     for good in [
         format!("(1+{EPS})"),
         "probe::f(probe::x)".to_string(),
-        "(1+probe::x)^(1/2)".to_string(),
         "log(probe::x)".to_string(),
         "symbolica::zeta(3)".to_string(),
         format!("({DIM}-1)^-2"),
@@ -1887,7 +1887,7 @@ fn g3_opaque_functions_and_powers_are_free_of_eps_dimension_masses_momenta() {
     s.prefactor.scalars = &s.prefactor.scalars * atom(&format!("exp({EPS})"));
     match s.validate() {
         Err(FactorizedError::Graph { detail }) => assert!(
-            detail.starts_with("a non-polynomial dependence in prefactor_scalars: "),
+            detail.starts_with("a non-integer exponent in prefactor_scalars: the exponent "),
             "{detail}"
         ),
         other => panic!("exp(eps) in prefactor_scalars: {other:?}"),
@@ -1990,6 +1990,150 @@ fn only_vakint_unknown_in_its_exact_shape_is_allowed() {
         v.insertions[0].coefficient = &v.insertions[0].coefficient * atom(good);
         v.validate().unwrap_or_else(|e| panic!("{good}: {e}"));
     }
+}
+
+// ===========================================================================
+// G3: every exponent a caller writes is an integer literal
+// ===========================================================================
+
+/// P(t) = (t-3)^2 - t^2 + 6t - 9, identically zero but not a literal zero.
+fn zero_polynomial(t: &str) -> String {
+    format!("(({t}-3)^2-{t}^2+6*{t}-9)")
+}
+
+/// The gate reviewer's inputs: on the real K2 record, ε^-1 P(x)^(-sqrt(2)),
+/// ε^-1 P(x)^(-π) and ε^-1 P(x)^(P(y)-1) in the insertion coefficient
+/// (the last exponent is identically -1 but not WRITTEN as an integer):
+/// refused at validation, `Insertion`, prefix `a non-integer exponent in
+/// insertion <v> coefficient: the exponent `; nothing is expanded to decide.
+#[test]
+fn g3_the_reviewers_exponents_are_refused() {
+    let base = record("wh-k2-child-ins");
+    let vertex = base.insertions[0].vertex;
+    let p = zero_polynomial("probe::x");
+    for exponent in [
+        "-2^(1/2)".to_string(),
+        "-𝜋".to_string(),
+        format!("{}-1", zero_polynomial("probe::y")),
+        "(probe::y-3)^2-probe::y^2+6*probe::y-10".to_string(),
+    ] {
+        let mut v = base.clone();
+        v.insertions[0].coefficient = atom(&format!("{EPS}^-1*{p}^({exponent})"));
+        match v.validate() {
+            Err(FactorizedError::Insertion { vertex: at, detail }) => {
+                assert_eq!(at, vertex);
+                assert!(
+                    detail.starts_with(&format!(
+                        "a non-integer exponent in insertion {vertex} coefficient: the exponent "
+                    )),
+                    "{exponent}: {detail}"
+                );
+            }
+            other => panic!("{exponent}: {other:?}"),
+        }
+    }
+}
+
+/// In EVERY caller field (edge and vertex factor, projector, prefactor
+/// fields, insertion coefficient and factor, the entry's prefactor
+/// argument): x^(1/2) and x^y of a caller scalar are refused; x^-3, and
+/// x^(2-3) which the parser normalises to x^-1, are accepted.
+#[test]
+fn g3_exponents_are_integer_literals_in_every_field() {
+    let base = record("wh-k2-child-ins");
+    base.validate().unwrap();
+    let edge_id = base
+        .edges
+        .iter()
+        .find(|e| !e.is_external() && e.factor != Atom::num(1))
+        .unwrap()
+        .id;
+    let vertex_id = base
+        .vertices
+        .iter()
+        .find(|x| x.factor != Atom::num(1))
+        .unwrap()
+        .id;
+    let fields: Vec<(&str, Box<dyn Fn(&mut FactorizedNumerator, &Atom)>)> = vec![
+        (
+            "edge factor",
+            Box::new(move |v, x| {
+                let e = v.edges.iter_mut().find(|e| e.id == edge_id).unwrap();
+                e.factor = &e.factor * x;
+            }),
+        ),
+        (
+            "vertex factor",
+            Box::new(move |v, x| {
+                let e = v.vertices.iter_mut().find(|e| e.id == vertex_id).unwrap();
+                e.factor = &e.factor * x;
+            }),
+        ),
+        (
+            "prefactor_scalars",
+            Box::new(|v, x| v.prefactor.scalars = &v.prefactor.scalars * x),
+        ),
+        (
+            "prefactor_colour",
+            Box::new(|v, x| v.prefactor.colour = &v.prefactor.colour * x),
+        ),
+        (
+            "insertion coefficient",
+            Box::new(|v, x| v.insertions[0].coefficient = &v.insertions[0].coefficient * x),
+        ),
+        (
+            "insertion factor",
+            Box::new(|v, x| v.insertions[0].factor = &v.insertions[0].factor * x),
+        ),
+    ];
+    for (field, put) in &fields {
+        for bad in ["probe::x^(1/2)", "probe::x^probe::y"] {
+            let mut v = base.clone();
+            put(&mut v, &atom(bad));
+            let detail = v
+                .validate()
+                .expect_err(&format!("{field}: {bad} accepted"))
+                .to_string();
+            assert!(
+                detail.contains("a non-integer exponent in "),
+                "{field} {bad}: {detail}"
+            );
+        }
+        for good in ["probe::x^-3", "probe::x^(2-3)"] {
+            let mut v = base.clone();
+            put(&mut v, &atom(good));
+            v.validate()
+                .unwrap_or_else(|e| panic!("{field} {good}: {e}"));
+        }
+    }
+    // the projector (on a record with one) and the prefactor argument
+    let root = record("wh-k1-root");
+    let mut v = root.clone();
+    let projector = v.projector.as_mut().unwrap();
+    projector.tensor = &projector.tensor * atom("probe::x^(1/2)");
+    assert!(
+        v.validate()
+            .unwrap_err()
+            .to_string()
+            .contains("a non-integer exponent in projector: ")
+    );
+    match closure(
+        &root,
+        &symbolic(),
+        &(root.prefactor.total() * atom("probe::x^probe::y")),
+    ) {
+        Err(FactorizedError::Graph { detail }) => assert!(
+            detail.starts_with("a non-integer exponent in prefactor argument: "),
+            "{detail}"
+        ),
+        other => panic!("argument x^y: {other:?}"),
+    }
+    closure(
+        &root,
+        &symbolic(),
+        &(root.prefactor.total() * atom("probe::x^-3")),
+    )
+    .unwrap();
 }
 
 /// MARKED three-loop massive vacuum values through the vacuum entry in
