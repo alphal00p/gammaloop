@@ -23,11 +23,14 @@
 //! * The record builder's impossible states (`sigma`, `root_crown_paired`,
 //!   `root_normalisation_momentum`) are errors.
 //! * vakint's `open slot ` row needs `is not a Lorentz slot`.
+//! * A K2 / K3 crown mismatch is its own error `crown` (not `routing`); the
+//!   second leg of a paired crown edge has the record id
+//!   `PAIRED_LEG_OFFSET + id`, every edge id below the offset.
 
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
 use eyre::{Result, ensure, eyre};
-use linnet::half_edge::subgraph::SuBitGraph;
+use linnet::half_edge::{involution::EdgeIndex, subgraph::SuBitGraph};
 use spenso::{
     network::tags::SPENSO_TAG,
     structure::representation::{Minkowski, RepName},
@@ -50,7 +53,7 @@ use super::{
     REFERENCE_MASS_SQUARED, RStarPlan,
     boundary::{BoundaryMode, ClosedRootNormalization, with_boundary_mode},
     expression::RStarIntegrand,
-    plan::uv_child_edge_ids,
+    plan::{join_edge_ids, uv_child_edge_ids},
     recursive_tests::{colour_factored, load, settings},
     top_mass::TopMassTerms,
     uncontracted::{
@@ -931,4 +934,143 @@ fn open_slot_needs_the_lorentz_phrase() {
         assert!(!decline.designed, "{detail}: {decline:?}");
         assert_eq!(decline.code, "vakint:Closure", "{detail}");
     }
+}
+
+// ---------------------------------------------------------------------------
+// helper VH round 2 minors: the crown code (R2-M5), the second leg id (R2-M4)
+// ---------------------------------------------------------------------------
+
+/// The K2 attempt on the remainder {5,6} (with {7,8} contracted) of L3 36's
+/// open child {5,6,7,8}, colour factored, with the crown `root_edges`
+/// (`None`: the child's own) and the nested Δ `delta`.
+fn child_site_attempt(
+    root_edges: Option<Vec<EdgeIndex>>,
+    delta: Atom,
+) -> Result<uncontracted::Attempt> {
+    let diagram = colour_factored(&load(L3_36_DOT)?)?;
+    let graph = diagram.to_gamma_loop_graph(None, true)?;
+    let model = diagram.model();
+    let vakint = Vakint::new()?;
+    let uv = settings();
+    let vakint_settings = uv.vakint.true_settings();
+    let root_plan = RStarPlan::with_automatic_edge(&graph, model, &uv)?;
+    let support = root_plan
+        .counterterms
+        .iter()
+        .map(|call| call.argument.support.clone())
+        .find(|support| uv_child_edge_ids(&graph, support) == [5, 6, 7, 8])
+        .ok_or_else(|| eyre!("L3 36 has no child {{5,6,7,8}}"))?;
+    let plan = RStarPlan::for_support(&graph, model, &support, &uv)?;
+    let term = plan
+        .ordinary_uv
+        .iter()
+        .find(|term| {
+            join_edge_ids(&uv_child_edge_ids(&graph, &term.remainder.remaining)) == "5,6"
+                && term.remainder.insertions.len() == 1
+        })
+        .ok_or_else(|| eyre!("the child plan has no term {{5,6}} with {{7,8}} contracted"))?;
+    let nested = term.remainder.insertions[0].support.clone();
+    let children = BTreeMap::from([(nested, delta.clone())]);
+    let boundary = plan
+        .root_boundary
+        .clone()
+        .ok_or_else(|| eyre!("a child plan has a root boundary"))?;
+    let crown = graph
+        .iter_edges_of(&boundary)
+        .map(|(_, edge, _)| edge)
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let root_edges = root_edges.unwrap_or(crown);
+    let auxiliary = auxiliary_mass();
+    let site = Site {
+        graph: &graph,
+        model,
+        plan: &plan,
+        term,
+        children: &children,
+        root_closure: None,
+        closed_root: None,
+        closure_data: None,
+        root_projector: false,
+        root_edges: &root_edges,
+        reference_mass_squared: *REFERENCE_MASS_SQUARED,
+        auxiliary_mass_squared: &auxiliary,
+        settings: &vakint_settings,
+        vakint: &vakint,
+        uv_settings: &uv,
+        top_mass: None,
+        epsilon: GS.dim_epsilon,
+        today: "site-test".into(),
+        ir_hard: None,
+    };
+    let insertions = vec![delta];
+    uncontracted::attempt(&site, Kind::Child, 1, Mode::Check, || {
+        RStarIntegrand::new_with_closure(
+            &graph,
+            model,
+            &term.remainder,
+            &insertions,
+            plan.marked_edge,
+            Atom::var(*REFERENCE_MASS_SQUARED),
+            None,
+        )
+    })
+}
+
+/// R2-M5: a K2 crown that is not the remainder's soft edges (here: one crown
+/// edge dropped, then none) is its own error code `crown`, not the K1 code
+/// `routing`.
+#[test]
+fn crown_mismatch_is_its_own_error() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        // the nested Δ of {7,8} as wh-fixtures/k2-child-ins states it
+        let fixture =
+            FactorizedNumerator::from_text(include_str!("testdata/u7a/k2-child-ins.input.txt"))
+                .map_err(|e| eyre!("{e}"))?;
+        let insertion = fixture
+            .insertions
+            .first()
+            .ok_or_else(|| eyre!("k2-child-ins has no insertion"))?;
+        let delta = &insertion.coefficient * &insertion.factor;
+        let full = child_site_attempt(None, delta.clone())?;
+        ensure!(
+            matches!(full.outcome, Outcome::Value(_)),
+            "the child's own crown: outcome {:?}",
+            full.outcome
+        );
+        let diagram = colour_factored(&load(L3_36_DOT)?)?;
+        let graph = diagram.to_gamma_loop_graph(None, true)?;
+        let crown = graph
+            .iter_edges()
+            .map(|(_, edge, _)| edge)
+            .filter(|edge| [3usize, 4].contains(&usize::from(*edge)))
+            .collect::<Vec<_>>();
+        ensure!(crown.len() == 2, "L3 36's crown edges 3 and 4");
+        for root_edges in [vec![crown[0]], Vec::new()] {
+            let attempt = child_site_attempt(Some(root_edges.clone()), delta.clone())?;
+            ensure!(
+                error_code(&attempt) == Some("crown"),
+                "crown {root_edges:?}: outcome {:?}",
+                attempt.outcome
+            );
+        }
+        Ok(())
+    })
+}
+
+/// R2-M4: the incoming leg of a crown edge with both ends in the scope has
+/// the record id `PAIRED_LEG_OFFSET + id` (the VERIFIED k2-child states legs
+/// 4 and 100004), valid only while every edge id of the graph stays below
+/// the offset; a graph that reaches it is the `crown` error, not a silent
+/// collision.
+#[test]
+fn paired_crown_leg_ids_stay_below_the_offset() {
+    assert_eq!(uncontracted::PAIRED_LEG_OFFSET, 100_000);
+    assert_eq!(uncontracted::paired_leg_id(4, 26), Ok(100_004));
+    assert_eq!(uncontracted::paired_leg_id(4, 99_999), Ok(100_004));
+    let decline = uncontracted::paired_leg_id(4, 100_000).unwrap_err();
+    assert_eq!(decline.code, "crown");
+    assert!(!decline.designed, "{decline:?}");
 }

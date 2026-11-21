@@ -972,6 +972,7 @@ fn designed_refusals_are_a_closed_list() {
     }
     for code in [
         "routing",
+        "crown",
         "missing_child",
         "product_mismatch",
         "text",
