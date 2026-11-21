@@ -22,6 +22,7 @@
 //!   frozen REFUSALS list), "every line is massive" among them.
 //! * The record builder's impossible states (`sigma`, `root_crown_paired`,
 //!   `root_normalisation_momentum`) are errors.
+//! * vakint's `open slot ` row needs `is not a Lorentz slot`.
 
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
@@ -902,4 +903,32 @@ fn record_builder_states_are_errors() -> Result<()> {
         );
         Ok(())
     })
+}
+
+// ---------------------------------------------------------------------------
+// R2-I4: the open-spinor row needs its Lorentz phrase
+// ---------------------------------------------------------------------------
+
+/// R2-I4: vakint's `open slot ` row is the closure entry's open-spinor
+/// refusal ("... is not a Lorentz slot (open bispinor ports are not
+/// supported ...)"), not every detail with that prefix (e.g. the vacuum
+/// entry's "open slot <port>: only Lorentz slots ... stay open").
+#[test]
+fn open_slot_needs_the_lorentz_phrase() {
+    let closure = |detail: &str| FactorizedError::Closure {
+        detail: detail.into(),
+    };
+    let designed = Decline::vakint(&closure(
+        "open slot bis(4,hedge(3,1)) is not a Lorentz slot (open bispinor ports are not supported; close the line with the projector)",
+    ));
+    assert!(designed.designed, "{designed:?}");
+    assert_eq!(designed.code, "vakint:open_spinor");
+    for detail in [
+        "open slot bis(4,hedge(3,1)): only Lorentz slots mink(D, index) stay open in the vacuum scope",
+        "open slot bis(4,hedge(3,1))",
+    ] {
+        let decline = Decline::vakint(&closure(detail));
+        assert!(!decline.designed, "{detail}: {decline:?}");
+        assert_eq!(decline.code, "vakint:Closure", "{detail}");
+    }
 }
