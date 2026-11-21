@@ -275,10 +275,9 @@ pub(crate) enum HoleCut {
 }
 
 /// The hole-cut mode of the value `value` of [`HOLE_CUT_VARIABLE`] (`None`:
-/// unset): resolved ONCE, at the switch's initialisation (an `Err` refuses
-/// the run at start-up; U7c delta pre-review N3). `probe`: whether `auto`
-/// may probe the reader (the kind `surrogate` enabled); without it `auto`
-/// stands for `decline` (the mode is then never used).
+/// unset). `probe`: whether `auto` may probe the reader (the kind
+/// `surrogate` enabled); without it `auto` stands for `decline` (the mode is
+/// then never used). Production calls it only through [`resolve_hole_cut`].
 pub(crate) fn parse_hole_cut(
     value: Option<&str>,
     probe: bool,
@@ -305,17 +304,49 @@ pub(crate) fn hole_cut_name(mode: HoleCut) -> &'static str {
     }
 }
 
+/// The process's hole-cut mode: written ONCE, by [`resolve_hole_cut`] at the
+/// switch's initialisation (uncontracted.rs `ENVIRONMENT`), never again
+/// (a `OnceLock`: no setter, no second write).
+static RESOLVED_HOLE_CUT: std::sync::OnceLock<HoleCut> = std::sync::OnceLock::new();
+
+/// Resolve the hole-cut mode of the value `value` of [`HOLE_CUT_VARIABLE`]
+/// and store it for the process: called exactly once, at the switch's
+/// initialisation (a bad value refuses the run at start-up; U7c delta
+/// pre-review N3); a second resolution is an error.
+pub(crate) fn resolve_hole_cut(
+    value: Option<&str>,
+    probe: bool,
+) -> std::result::Result<HoleCut, String> {
+    let mode = parse_hole_cut(value, probe)?;
+    RESOLVED_HOLE_CUT.set(mode).map_err(|_| {
+        format!(
+            "the hole-cut mode ({HOLE_CUT_VARIABLE}) is resolved once, at the switch's initialisation: a second resolution is refused"
+        )
+    })?;
+    Ok(mode)
+}
+
+/// The mode resolved at start-up (`None`: not resolved, the switch off).
+pub(crate) fn resolved_hole_cut() -> Option<HoleCut> {
+    RESOLVED_HOLE_CUT.get().copied()
+}
+
+#[cfg(test)]
 thread_local! {
     static TEST_HOLE_CUT: std::cell::Cell<Option<HoleCut>> = const { std::cell::Cell::new(None) };
 }
 
-/// The mode in force: a test's, or the environment's, resolved at the
-/// switch's initialisation ([`parse_hole_cut`]); it is part of the resume
-/// identity and of the Δ-cache key inside a surrogate's R*.
+/// The mode in force: the one resolved at the switch's initialisation
+/// (constant for the process; tests may override it on a thread). It is
+/// part of the resume identity; it is NOT part of the Delta-cache key: the
+/// cache is in-process only (CountertermCache, uv/counterterm_cache.rs, one
+/// per engine run), so a per-process constant cannot split its fills.
 pub(crate) fn hole_cut() -> HoleCut {
-    TEST_HOLE_CUT
-        .with(std::cell::Cell::get)
-        .unwrap_or_else(super::environment_hole_cut)
+    #[cfg(test)]
+    if let Some(mode) = TEST_HOLE_CUT.with(std::cell::Cell::get) {
+        return mode;
+    }
+    super::environment_hole_cut()
 }
 
 /// Tests: run `f` with the hole-cut mode `mode` on this thread.

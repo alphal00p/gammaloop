@@ -1091,11 +1091,9 @@ fn k5_inert_cache_key_with_surrogate_enabled() {
             Some("#uncontracted=surrogate#uncontracted-inert=child")
         );
         in_dressed_scope(|| {
-            // since the delta pre-review N3 the key inside the surrogate's
-            // R* also carries the hole-cut mode (the default here)
             assert_eq!(
                 uncontracted::cache_key_suffix().as_deref(),
-                Some("#uncontracted=surrogate#k5-hole-cut=decline")
+                Some("#uncontracted=surrogate")
             );
         });
     });
@@ -2293,13 +2291,24 @@ fn k5_contracted_cut_quark_holes_are_never_emitted() -> Result<()> {
     })
 }
 
-/// U7c delta pre-review N3 (start-up and Delta-cache key): the hole-cut
-/// mode is resolved at the switch's initialisation (a bad value is an error
-/// there, not a panic mid-run), and inside a surrogate's R* it is part of the
-/// Delta-cache key: a fill of one mode never serves the other. Outside the
-/// surrogate scope, and without `surrogate` enabled, the keys are the base's.
+/// U7c delta pre-review N3, after the gate's finding on 5e97a6eb5 (the mode
+/// in the Delta-cache key split fills that r1 shared across kinds, so child
+/// lookups missed): the hole-cut mode is resolved ONCE, at the switch's
+/// initialisation, and stored immutably; it is in the resume identity (test
+/// k5_hole_cut_mode_is_in_the_resume_identity) and NOT in the in-process
+/// Delta-cache key, which is r1's again (k5_delta_cache_is_in_process_only
+/// states why that is safe). Shown here:
+/// - parsing at start-up (a typo is an error there, not a panic mid-run);
+/// - a second resolution is an error, and changing the variable after
+///   start-up changes nothing;
+/// - structurally, in the production sources of uv/rstar (test files
+///   excluded): the variable is read at exactly one place, inside the
+///   `ENVIRONMENT` initialiser, through the one resolver; nothing else reads
+///   the environment for it; the only override is `#[cfg(test)]`;
+/// - the Delta-cache keys do not depend on the mode (inside and outside a
+///   surrogate's R*, on and check, with and without `child`) and equal r1's.
 #[test]
-fn k5_hole_cut_mode_is_resolved_at_start_up_and_in_the_cache_key() -> Result<()> {
+fn k5_hole_cut_mode_is_resolved_once_at_start_up_and_not_in_the_cache_key() -> Result<()> {
     use k5::{HoleCut, parse_hole_cut, with_hole_cut};
     // start-up parsing
     for (value, mode) in [
@@ -2310,13 +2319,113 @@ fn k5_hole_cut_mode_is_resolved_at_start_up_and_in_the_cache_key() -> Result<()>
     ] {
         ensure!(parse_hole_cut(value, true) == Ok(mode), "{value:?}");
     }
-    // this build's reader accepts the single-hedge form: auto probes it only
-    // with the kind enabled
     ensure!(parse_hole_cut(Some("auto"), true) == Ok(HoleCut::Form));
     ensure!(parse_hole_cut(Some("auto"), false) == Ok(HoleCut::Decline));
     let error = parse_hole_cut(Some("froms"), true).expect_err("a typo is refused");
     ensure!(error.contains(k5::HOLE_CUT_VARIABLE), "{error}");
-    // Delta-cache key
+    // the start-up (the test environment's switch is off: nothing resolved
+    // there), one resolution, a second one refused, a later change of the
+    // variable without effect
+    uncontracted::validate()?;
+    let before = k5::hole_cut();
+    if k5::resolved_hole_cut().is_none() {
+        ensure!(k5::resolve_hole_cut(None, false) == Ok(HoleCut::Decline));
+    }
+    let second = k5::resolve_hole_cut(Some("form"), true).expect_err("a second resolution");
+    ensure!(second.contains("second resolution"), "{second}");
+    ensure!(k5::resolved_hole_cut() == Some(HoleCut::Decline));
+    // SAFETY: nextest runs every test in its own process; the variable is
+    // removed again below
+    unsafe { std::env::set_var(k5::HOLE_CUT_VARIABLE, "form") };
+    let after = k5::hole_cut();
+    unsafe { std::env::remove_var(k5::HOLE_CUT_VARIABLE) };
+    ensure!(
+        before == HoleCut::Decline && after == before,
+        "{before:?} -> {after:?}"
+    );
+    // structure of the production sources
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/uv/rstar");
+    let mut sources = Vec::new();
+    for entry in std::fs::read_dir(&dir)? {
+        let path = entry?.path();
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .to_owned();
+        if name.ends_with(".rs") && !name.ends_with("_tests.rs") {
+            sources.push((name, std::fs::read_to_string(&path)?));
+        }
+    }
+    let count = |needle: &str| {
+        sources
+            .iter()
+            .map(|(_, text)| text.matches(needle).count())
+            .sum::<usize>()
+    };
+    ensure!(
+        count("\"GAMMALOOP_UNCONTRACTED_K5_HOLE_CUT\"") == 1,
+        "the variable's name outside its constant"
+    );
+    ensure!(
+        count("read(k5::HOLE_CUT_VARIABLE)") == 1,
+        "not exactly one read of the variable"
+    );
+    ensure!(
+        count("resolve_hole_cut(") == 2,
+        "not exactly one call of the resolver"
+    );
+    ensure!(
+        count("parse_hole_cut(") == 2,
+        "parse_hole_cut called outside the resolver"
+    );
+    ensure!(
+        count("RESOLVED_HOLE_CUT.set(") == 1,
+        "a second writer of the mode"
+    );
+    for (name, text) in &sources {
+        for line in text.lines() {
+            ensure!(
+                !(line.contains("HOLE_CUT")
+                    && (line.contains("env::var") || line.contains("var_os"))),
+                "{name}: a direct environment read of the hole-cut variable: {line}"
+            );
+        }
+    }
+    let (_, main) = sources
+        .iter()
+        .find(|(name, _)| name == "uncontracted.rs")
+        .ok_or_else(|| eyre!("no uncontracted.rs"))?;
+    let start = main
+        .find("static ENVIRONMENT")
+        .ok_or_else(|| eyre!("no ENVIRONMENT"))?;
+    let end = start + main[start..].find("\n});").ok_or_else(|| eyre!("no end"))?;
+    let read = main
+        .find("read(k5::HOLE_CUT_VARIABLE)")
+        .ok_or_else(|| eyre!("no read"))?;
+    ensure!(
+        start < read && read < end,
+        "the read is not in the start-up initialiser"
+    );
+    let (_, k5_text) = sources
+        .iter()
+        .find(|(name, _)| name == "uncontracted_k5.rs")
+        .ok_or_else(|| eyre!("no uncontracted_k5.rs"))?;
+    let test_override = k5_text
+        .find("static TEST_HOLE_CUT")
+        .ok_or_else(|| eyre!("no override"))?;
+    ensure!(
+        k5_text[..test_override]
+            .trim_end()
+            .ends_with("thread_local! {")
+            && k5_text[..test_override]
+                .trim_end()
+                .trim_end_matches("thread_local! {")
+                .trim_end()
+                .ends_with("#[cfg(test)]"),
+        "the thread override is not #[cfg(test)]"
+    );
+    // the Delta-cache keys: independent of the mode, equal to r1's
     let key = |switch: Switch, mode: HoleCut, inside: bool| {
         with_switch(switch, || {
             with_hole_cut(mode, || {
@@ -2328,32 +2437,93 @@ fn k5_hole_cut_mode_is_resolved_at_start_up_and_in_the_cache_key() -> Result<()>
             })
         })
     };
-    for (switch, inside_decline, inside_form, outside) in [
+    let gate =
+        Switch::parse(Some("check:child,ir-hard,surrogate")).map_err(|error| eyre!(error))?;
+    let gate_on =
+        Switch::parse(Some("on:child,ir-hard,surrogate")).map_err(|error| eyre!(error))?;
+    for (switch, inside, outside) in [
         (
             on_surrogate(),
-            "#uncontracted=surrogate#k5-hole-cut=decline",
-            "#uncontracted=surrogate#k5-hole-cut=form",
+            Some("#uncontracted=surrogate"),
             Some("#uncontracted=surrogate#uncontracted-inert=child"),
         ),
+        (check_surrogate(), None, Some("#uncontracted-inert=child")),
+        // with `child` enabled an ordinary child and a surrogate-scope fill
+        // share the key (the cross-kind hits r1 had)
+        (gate, None, None),
         (
-            check_surrogate(),
-            "#k5-hole-cut=decline",
-            "#k5-hole-cut=form",
-            Some("#uncontracted-inert=child"),
+            gate_on,
+            Some("#uncontracted=child,ir-hard,surrogate"),
+            Some("#uncontracted=child,ir-hard,surrogate"),
         ),
     ] {
-        ensure!(key(switch, HoleCut::Decline, true).as_deref() == Some(inside_decline));
-        ensure!(key(switch, HoleCut::Form, true).as_deref() == Some(inside_form));
         for mode in [HoleCut::Decline, HoleCut::Form] {
-            ensure!(key(switch, mode, false).as_deref() == outside, "{mode:?}");
+            ensure!(
+                key(switch, mode, true).as_deref() == inside,
+                "{switch:?} {mode:?} inside"
+            );
+            ensure!(
+                key(switch, mode, false).as_deref() == outside,
+                "{switch:?} {mode:?} outside"
+            );
         }
     }
-    let default_on = Switch::parse(Some("on")).map_err(|error| eyre!(error))?;
-    for mode in [HoleCut::Decline, HoleCut::Form] {
+    Ok(())
+}
+
+/// The Delta cache never crosses a process, which is why a per-process
+/// constant (the hole-cut mode) belongs in the resume identity and not in
+/// its key. The type is `CountertermCache` (uv/counterterm_cache.rs:323-334):
+/// `#[derive(Default)]`, a `Mutex<HashMap<Key, Entry>>` in memory, no serde,
+/// no file I/O, and no static holds one. Beta (771c059d) builds ONE per
+/// engine run (src/main.rs:3874-3880, `--delta-cache on`) or per integrator
+/// (src/integrate.rs:782), shared by that process's worker threads through
+/// an `Arc`; without one, a plan builds its own per call (plan.rs). What
+/// crosses a process are the per-diagram checkpoints, bound by the resume
+/// identity. Checked structurally here.
+#[test]
+fn k5_delta_cache_is_in_process_only() -> Result<()> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/uv");
+    let cache = std::fs::read_to_string(root.join("counterterm_cache.rs"))?;
+    ensure!(
+        cache.contains("#[derive(Default)]\npub struct CountertermCache {\n    entries: Mutex<HashMap<Key, Entry>>,"),
+        "CountertermCache is not the plain in-memory map"
+    );
+    for needle in [
+        "std::fs",
+        "File::",
+        "Deserialize",
+        "OpenOptions",
+        "BufWriter",
+        "write_all",
+    ] {
         ensure!(
-            key(default_on, mode, true) == key(default_on, HoleCut::Decline, true),
-            "the default key depends on the hole-cut mode"
+            !cache.contains(needle),
+            "counterterm_cache.rs uses {needle}"
         );
+    }
+    let mut stack = vec![root];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir)? {
+            let path = entry?.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().is_some_and(|e| e == "rs")
+                && !path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.ends_with("_tests.rs") || name == "tests.rs")
+            {
+                let text = std::fs::read_to_string(&path)?;
+                for line in text.lines() {
+                    ensure!(
+                        !(line.contains("static") && line.contains("CountertermCache")),
+                        "{}: a static holds a CountertermCache: {line}",
+                        path.display()
+                    );
+                }
+            }
+        }
     }
     Ok(())
 }
