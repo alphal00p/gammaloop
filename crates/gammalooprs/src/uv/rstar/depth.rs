@@ -425,6 +425,24 @@ pub(super) enum BoundOverride {
     Unknown,
     /// `B` replaced by this value (below the truth: `bound_exceeded`).
     Fixed(usize),
+    /// `B` replaced by `bound` in nested evaluations only (a decorated
+    /// quotient's or a UV child's R*), and only inside `within` of the
+    /// top-level evaluation (the graph's root).
+    Nested { bound: usize, within: Within },
+}
+
+/// Tests: where [`BoundOverride::Nested`] applies. Both scopes are marked by
+/// the top-level evaluation only, so a nested evaluation's own attempt (or
+/// vanished row) inside the root's fallback to today's terms is outside them.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Within {
+    /// A child-route attempt of the top-level evaluation
+    /// ([`child_attempt_scope`]; not its fallback to today's terms).
+    ChildAttempt,
+    /// The valuation of a vanished row of the top-level evaluation
+    /// ([`zero_row_scope`]).
+    ZeroRow,
 }
 
 /// Tests: the planner settings of [`with_depth_test`].
@@ -435,6 +453,8 @@ pub(super) struct DepthTest {
     pub bound: BoundOverride,
     /// [`strict`] read as this value.
     pub strict: Option<bool>,
+    /// `GAMMALOOP_IR_HARD_CHILD_GUARD` read as this value ([`child_guard`]).
+    pub guard: Option<bool>,
 }
 
 /// Tests: where a child-route attempt calls the [`RowHook`].
@@ -462,6 +482,10 @@ thread_local! {
     static START_EXTRA: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
     static TEST: std::cell::Cell<DepthTest> = std::cell::Cell::new(DepthTest::default());
     static COLLECTED: std::cell::RefCell<Option<DepthCounts>> = const { std::cell::RefCell::new(None) };
+    /// Child-route attempts running on this thread ([`child_attempt_scope`]).
+    static CHILD_ATTEMPT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Vanished rows being valued on this thread ([`zero_row_scope`]).
+    static ZERO_ROW: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// Tests: run `f` and return the IRH-DEPTH counts of every child-route
@@ -508,6 +532,36 @@ pub(super) fn with_depth_test<T>(test: DepthTest, f: impl FnOnce() -> T) -> T {
     f()
 }
 
+/// Tests: a counted scope on this thread (restored on unwinding too).
+#[cfg(test)]
+fn counted_scope(
+    slot: &'static std::thread::LocalKey<std::cell::Cell<usize>>,
+) -> impl Drop {
+    struct Scope(&'static std::thread::LocalKey<std::cell::Cell<usize>>);
+    impl Drop for Scope {
+        fn drop(&mut self) {
+            self.0.with(|slot| slot.set(slot.get() - 1));
+        }
+    }
+    slot.with(|slot| slot.set(slot.get() + 1));
+    Scope(slot)
+}
+
+/// Tests: mark a child-route attempt (not its fallback) on this thread while
+/// the returned scope lives ([`Within::ChildAttempt`]).
+#[cfg(test)]
+pub(super) fn child_attempt_scope() -> impl Drop {
+    counted_scope(&CHILD_ATTEMPT)
+}
+
+/// Tests: mark the valuation of a vanished row (the quotient factors of a
+/// row whose hard coefficient vanished) on this thread while the returned
+/// scope lives ([`Within::ZeroRow`]).
+#[cfg(test)]
+pub(super) fn zero_row_scope() -> impl Drop {
+    counted_scope(&ZERO_ROW)
+}
+
 /// Tests: run `f` with `hook` rewriting the child route's rows on this thread.
 #[cfg(test)]
 pub(super) fn with_row_hook<T>(hook: RowHook, f: impl FnOnce() -> T) -> T {
@@ -546,15 +600,37 @@ pub(super) fn with_start_extra<T>(extra: usize, f: impl FnOnce() -> T) -> T {
 }
 
 /// The quotient bound the planner uses: `bound` (tests: overridden by
-/// [`with_depth_test`]).
-pub(super) fn planner_bound(bound: Option<usize>) -> Option<usize> {
+/// [`with_depth_test`]; `nested`: the evaluation is on a proper support).
+pub(super) fn planner_bound(bound: Option<usize>, nested: bool) -> Option<usize> {
     #[cfg(test)]
     match TEST.with(|slot| slot.get()).bound {
         BoundOverride::Computed => {}
         BoundOverride::Unknown => return None,
         BoundOverride::Fixed(fixed) => return Some(fixed),
+        BoundOverride::Nested { bound: fixed, within } => {
+            let scope = match within {
+                Within::ChildAttempt => &CHILD_ATTEMPT,
+                Within::ZeroRow => &ZERO_ROW,
+            };
+            if nested && scope.with(|slot| slot.get()) > 0 {
+                return Some(fixed);
+            }
+        }
     }
+    #[cfg(not(test))]
+    let _ = nested;
     bound
+}
+
+/// Whether the child route runs under the closed path's guard: `env`, the
+/// value of `GAMMALOOP_IR_HARD_CHILD_GUARD=1` (tests: overridden by
+/// [`with_depth_test`]).
+pub(super) fn child_guard(env: bool) -> bool {
+    #[cfg(test)]
+    if let Some(guard) = TEST.with(|slot| slot.get()).guard {
+        return guard;
+    }
+    env
 }
 
 /// Whether the planner raises the depth to the bound (tests: not for
