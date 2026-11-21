@@ -1847,3 +1847,214 @@ fn k5_anchor_contracted_far_kept_declines_by_design() -> Result<()> {
         Ok(())
     })
 }
+
+/// The scalar chains of a surrogate graph: per chain, its vertices
+/// (`scalar_insertion_0..L` from the coefficient vertex) and the bubble edges
+/// of each link, read from the graph's own vertex names and edges.
+fn surrogate_chains(
+    graph: &Graph,
+    provenance: &Provenance,
+) -> Vec<(Vec<usize>, Vec<BTreeSet<usize>>)> {
+    use linnet::half_edge::involution::HedgePair;
+    let mut name = BTreeMap::new();
+    let mut ends = BTreeMap::new();
+    for (pair, edge, _) in graph.iter_edges() {
+        if let HedgePair::Paired { source, sink } = pair {
+            let (s, t) = (graph.node_id(source), graph.node_id(sink));
+            name.insert(usize::from(s), graph[s].name.value.clone());
+            name.insert(usize::from(t), graph[t].name.value.clone());
+            ends.insert(usize::from(edge), (usize::from(s), usize::from(t)));
+        }
+    }
+    provenance
+        .holes
+        .iter()
+        .map(|hole| {
+            let mut vertices = vec![hole.vertex];
+            let mut links = Vec::new();
+            for i in 0..hole.loops {
+                let current = vertices[i];
+                let next = format!("scalar_insertion_{}", i + 1);
+                let mut by = BTreeMap::<usize, BTreeSet<usize>>::new();
+                for (edge, (a, b)) in &ends {
+                    let other = if *a == current {
+                        *b
+                    } else if *b == current {
+                        *a
+                    } else {
+                        continue;
+                    };
+                    if !vertices.contains(&other) && name.get(&other) == Some(&next) {
+                        by.entry(other).or_default().insert(*edge);
+                    }
+                }
+                let (v, edges) = by.into_iter().find(|(_, e)| e.len() == 2).expect("a link");
+                vertices.push(v);
+                links.push(edges);
+            }
+            (vertices, links)
+        })
+        .collect()
+}
+
+/// The class of a surrogate record against one chain (from its text): the
+/// anchor kept / contracted / absent, the far end kept / contracted / absent.
+fn hole_class(
+    record: &FactorizedNumerator,
+    chain: &(Vec<usize>, Vec<BTreeSet<usize>>),
+) -> &'static str {
+    let (vertices, links) = chain;
+    let rule = |id: usize| {
+        record
+            .vertices
+            .iter()
+            .find(|v| v.id == id)
+            .map(|v| v.rule.clone())
+    };
+    let ct_edges = record
+        .vertices
+        .iter()
+        .filter_map(|v| v.rule.strip_prefix("ct:edges-"))
+        .map(|edges| {
+            edges
+                .split('-')
+                .filter_map(|e| e.parse::<usize>().ok())
+                .collect::<BTreeSet<_>>()
+        })
+        .collect::<Vec<_>>();
+    let contracted =
+        |link: &BTreeSet<usize>| ct_edges.iter().any(|support| !support.is_disjoint(link));
+    let anchor = match rule(vertices[0]) {
+        Some(r) if r.starts_with("ins:") => "kept",
+        _ if contracted(&links[0]) => "contracted",
+        _ => "absent",
+    };
+    let last = *vertices.last().unwrap();
+    let far = match rule(last) {
+        Some(r) if r.starts_with("scalar_insertion_") => "kept",
+        _ if contracted(links.last().unwrap()) => "contracted",
+        _ => "absent",
+    };
+    match (anchor, far) {
+        ("kept", "kept") => "whole",
+        ("kept", "absent") => "kept+cut",
+        ("kept", "contracted") => "kept,far-contracted",
+        ("contracted", "contracted") => "contracted",
+        ("contracted", _) => "contracted-cut",
+        ("absent", _) => "no-hole",
+        _ => "other",
+    }
+}
+
+/// Every (child, ct) combination the R* forest produces for chains of
+/// L = 2, 3, 4 bubbles (L5 143019, 143190, 163502 and the 12 gluon graphs of
+/// 2- and 3-loop holes), in both hole-cut settings: each record named by
+/// class (whole / kept+cut / kept,far-contracted / contracted / contracted-cut
+/// / no-hole, or its designed decline), every EMITTED record read by vakint's
+/// reader (its text) and compared equal, every other one declined by design
+/// with no record text (or `zero`: a vanishing numerator, no record), none an
+/// error; kept+cut emitted only in form mode.
+#[test]
+fn k5_every_child_ct_combination_of_cut_chains_is_stated_or_declined() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let graphs = L5_MULTI_LOOP_HOLES[..3]
+            .iter()
+            .chain(L5_ANCHOR_CONTRACTED.iter())
+            .copied()
+            .collect::<Vec<_>>();
+        let evaluator = PropagatorInsertionEvaluator::new(settings());
+        let mut failures = Vec::new();
+        let mut classes = BTreeMap::<String, usize>::new();
+        for mode in [k5::HoleCut::Decline, k5::HoleCut::Form] {
+            for (name, dot) in &graphs {
+                let original = colour_factored(&load(dot)?)?;
+                let prepared = prepare(dot, &vakint)?;
+                let graph = prepared.surrogate.to_gamma_loop_graph(None, true)?;
+                let chains = surrogate_chains(&graph, &prepared.provenance);
+                let captured = with_switch(check_surrogate(), || -> Result<Vec<Captured>> {
+                    let ledger = DiagramLedger::open(original.name(), "k5-enum");
+                    let (value, captured) = k5::with_hole_cut(mode, || {
+                        with_capture(|| evaluator.pole_part_closing_root(&original, &vakint, true))
+                    });
+                    if let Some(ledger) = ledger {
+                        ledger.close(value.is_ok())?;
+                    }
+                    value?;
+                    Ok(captured)
+                })?;
+                for attempt in captured.iter().filter(|a| a.kind == Kind::Surrogate) {
+                    let class = match &attempt.text {
+                        Some(text) => {
+                            let ours = record(text)?;
+                            if attempt.equal != Some(true) {
+                                failures.push(format!(
+                                    "{mode:?} {name} id {}: emitted, not equal",
+                                    attempt.id
+                                ));
+                            }
+                            let class = chains
+                                .iter()
+                                .map(|chain| hole_class(&ours, chain))
+                                .find(|class| *class != "no-hole")
+                                .unwrap_or("no-hole");
+                            if class == "kept+cut" && mode == k5::HoleCut::Decline {
+                                failures.push(format!(
+                                    "{name} id {}: kept+cut emitted in decline mode",
+                                    attempt.id
+                                ));
+                            }
+                            format!("emitted:{class}")
+                        }
+                        None if attempt.outcome.starts_with("declined:") => attempt.outcome.clone(),
+                        // a vanishing numerator: no record, counted `zero` by the ledger
+                        None if attempt.outcome == "zero" => "zero".to_string(),
+                        None => {
+                            failures.push(format!(
+                                "{mode:?} {name} id {}: {}",
+                                attempt.id, attempt.outcome
+                            ));
+                            attempt.outcome.clone()
+                        }
+                    };
+                    *classes.entry(format!("{mode:?} {class}")).or_default() += 1;
+                }
+            }
+        }
+        for (class, n) in &classes {
+            eprintln!("K5_ENUM {class} {n}");
+        }
+        ensure!(failures.is_empty(), "{failures:#?}");
+        for class in [
+            "Form emitted:kept+cut",
+            "Form emitted:kept,far-contracted",
+            "Decline declined:surrogate_hole_cut",
+            "Decline declined:surrogate_split_chain",
+        ] {
+            ensure!(
+                classes.contains_key(class),
+                "no record of class {class}: {classes:?}"
+            );
+        }
+        // the two settings differ exactly by kept+cut emitted <-> declined
+        let in_mode = |mode: &str| {
+            classes
+                .iter()
+                .filter_map(|(key, n)| {
+                    key.strip_prefix(mode).map(|class| {
+                        (
+                            class.replace("emitted:kept+cut", "declined:surrogate_hole_cut"),
+                            *n,
+                        )
+                    })
+                })
+                .collect::<BTreeMap<_, _>>()
+        };
+        ensure!(
+            in_mode("Decline ") == in_mode("Form "),
+            "the hole-cut settings differ beyond kept+cut: {classes:?}"
+        );
+        Ok(())
+    })
+}
