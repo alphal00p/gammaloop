@@ -326,7 +326,23 @@ pub(crate) fn resolve_hole_cut(
     Ok(mode)
 }
 
-/// The mode resolved at start-up (`None`: not resolved, the switch off).
+/// The hole-cut mode at the switch's start-up (uncontracted.rs
+/// `ENVIRONMENT`): read (`read`) and resolved ONLY when the kind `surrogate`
+/// is enabled; otherwise the variable is not read at all and nothing is
+/// resolved (a K5 variable never affects a run without the kind, as with
+/// the switch off). A bad value is then an error only for a K5 run.
+pub(crate) fn start_up_hole_cut(
+    switch: super::Switch,
+    read: impl FnOnce() -> std::result::Result<Option<String>, String>,
+) -> std::result::Result<Option<HoleCut>, String> {
+    if switch.mode == Mode::Off || !switch.enabled(Kind::Surrogate) {
+        return Ok(None);
+    }
+    resolve_hole_cut(read()?.as_deref(), true).map(Some)
+}
+
+/// The mode resolved at start-up (`None`: not resolved: the switch off, or
+/// the kind `surrogate` not enabled).
 pub(crate) fn resolved_hole_cut() -> Option<HoleCut> {
     RESOLVED_HOLE_CUT.get().copied()
 }
