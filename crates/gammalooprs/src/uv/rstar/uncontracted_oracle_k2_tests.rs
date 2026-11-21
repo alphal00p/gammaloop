@@ -524,7 +524,7 @@ fn k2_child_ins_from_the_graph() -> Result<()> {
 
 /// Every K1 and K2 record of the k1-quick diagrams L4 40, 42 and 49 (the
 /// branch's factors from each bare record): check strict and accounted
-/// (L4-49's one-loop root remainder is the designed `vakint:all_massive`),
+/// (L4-49's one-loop root remainder is the designed `one_loop_tree_cut`),
 /// on == off, the 21 K1 fixtures still equal. Child records with two
 /// insertions are counted and their pole order checked to be the sum.
 #[test]
@@ -547,7 +547,7 @@ fn k2_children_of_l4_40_42_49() -> Result<()> {
             let branch = branch(&dot, &bare)?;
             let vakint = Vakint::new()?;
             let allowed: &[&str] = if diagram == "L4-49" {
-                &["vakint:all_massive"]
+                &["one_loop_tree_cut"]
             } else {
                 &[]
             };

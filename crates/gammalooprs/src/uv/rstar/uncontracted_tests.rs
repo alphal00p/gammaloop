@@ -987,8 +987,8 @@ fn designed_refusals_are_a_closed_list() {
             "{code} is a bug, not designed"
         );
     }
-    // U7b adds no designed refusal: the closed lists are U7a's
-    assert_eq!(DESIGNED_LOCAL.len(), 14, "{DESIGNED_LOCAL:?}");
+    // U7b adds no designed refusal; the U7a delta adds `one_loop_tree_cut`
+    assert_eq!(DESIGNED_LOCAL.len(), 15, "{DESIGNED_LOCAL:?}");
     assert_eq!(uncontracted::DESIGNED_VAKINT.len(), 9);
     for code in ["open_root", "insertion_mass_symbol", "root_crown_paired"] {
         assert!(DESIGNED_LOCAL.contains(&code), "{code}");
@@ -1387,9 +1387,10 @@ fn k1_root_rc0_fixture() -> Result<()> {
 /// The factor test (U7a review I1, I3): production diagrams colour factored
 /// as they are, NO fixture factor injected, so the check mode's PRODUCT
 /// identity tests the factor extraction; every root and child record is
-/// compared equal except the stated declines (the one-loop massive tadpole
-/// remainders vakint's closure entry refuses, `vakint:all_massive`); check
-/// returns today's value; mode on == off on the diagram's poles.
+/// compared equal except the stated declines (the single-propagator
+/// remainders, a one-loop massive tadpole after the Taylor step, that the
+/// emitter declines itself, `one_loop_tree_cut`); check returns today's
+/// value; mode on == off on the diagram's poles.
 fn equals_off(what: &str, dot: &str, declines: &[(&str, usize)]) -> Result<()> {
     with_production_piece_limit(|| -> Result<()> {
         test_initialise()?;
@@ -1427,7 +1428,9 @@ fn k1_check_equals_off_l4_49() -> Result<()> {
     equals_off(
         "L4/49",
         include_str!("testdata/u7a/l4-d049.dot"),
-        &[("vakint:all_massive", 1)],
+        // id 8: the one-loop root remainder whose only propagator is the
+        // closing line (U7-PLAN 14(d), narrowed: Astra U7a)
+        &[("one_loop_tree_cut", 1)],
     )
 }
 
@@ -1663,7 +1666,8 @@ fn k2_shapes_values() -> Result<()> {
                 "isotropic",
                 include_str!("testdata/u7a/l2-d25.dot"),
                 include_str!("testdata/u7a/k2-isotropic.site.txt"),
-                &[("vakint:all_massive", 1)][..],
+                // its single-propagator root remainder: the emitter's decline
+                &[("one_loop_tree_cut", 1)][..],
                 by_name,
             ),
             (
@@ -1882,7 +1886,7 @@ fn k1_quick_l4_49_fixtures() -> Result<()> {
             "1/raw/diagram-000049.dot",
             &[numbered("", 7)],
             false,
-            &[("vakint:all_massive", 1)],
+            &[("one_loop_tree_cut", 1)],
             true,
         )?;
         ensure!(n == 7);
@@ -1892,7 +1896,8 @@ fn k1_quick_l4_49_fixtures() -> Result<()> {
 
 /// k1-quick L4-100: both root evaluations (colour branches b0 / b1), seven
 /// boundary remainders each; per branch the one-loop massive tadpole
-/// remainder (id 8) is vakint's `all_massive` refusal.
+/// remainder (id 8) is the emitter's `one_loop_tree_cut` (its only
+/// propagator is the closing line).
 #[test]
 #[ignore = "needs GAMMALOOP_U7A_FIXTURES_DIR (the beta's wh-fixtures)"]
 fn k1_quick_l4_100_fixtures() -> Result<()> {
@@ -1903,7 +1908,7 @@ fn k1_quick_l4_100_fixtures() -> Result<()> {
             "b0-rr1/raw/diagram-000100.dot",
             &[numbered("b0-rr", 7), numbered("b1-rr", 7)],
             false,
-            &[("vakint:all_massive", 1)],
+            &[("one_loop_tree_cut", 1)],
             true,
         )?;
         ensure!(n == 14);
