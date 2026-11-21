@@ -22,6 +22,8 @@ mod insertion_identity;
 mod insertions;
 mod integrate;
 mod ir_dirac;
+#[cfg(test)]
+mod ir_dirac_tests;
 mod linearize;
 mod massive;
 #[cfg(test)]
