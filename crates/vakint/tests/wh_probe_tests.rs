@@ -1609,3 +1609,120 @@ fn the_result_check_catches_f1_and_f3_without_a_validation_rule() {
         "the dimension gammalooprs::dim outside a representation slot",
     );
 }
+
+/// MARKED three-loop massive vacuum values through the vacuum entry in
+/// Symbolic and Numerical mode at 3 and 6 terms: the basketball (four lines
+/// of one mass between two vertices) and the all-massive mercedes (the
+/// tetrahedron, six lines), whose Symbolic value at 6 terms carries vakint's
+/// three-loop vacuum constant D6bar1: no result-check refusal (vakint's
+/// vacuum constants are output, not internal names).
+#[test]
+fn a_marked_three_loop_massive_tadpole_through_the_vacuum_entry() {
+    use vakint::p_integral::factorized::{
+        DirectRecord, Endpoint, FactorizedEdge, FactorizedVertex, LineKind, Prefactor,
+        evaluate_factorized_vacuum,
+    };
+    init();
+    let line =
+        |id: usize, s: usize, t: usize, h: (usize, usize), momentum: [i64; 3]| FactorizedEdge {
+            id,
+            source: Endpoint::Vertex(s),
+            target: Endpoint::Vertex(t),
+            source_hedge: Some(h.0),
+            target_hedge: Some(h.1),
+            particle: "x".into(),
+            line: LineKind::Scalar,
+            power: 1,
+            mass_squared: atom("caller::m2"),
+            momentum: momentum.to_vec(),
+            factor: Atom::num(1),
+        };
+    let v = FactorizedNumerator {
+        label: "marked three-loop basketball".into(),
+        kind: FactorizedKind::Direct,
+        dimension: symbolica::symbol!("gammalooprs::dim"),
+        loop_edges: vec![Some(1), Some(2), Some(3)],
+        external_edges: Vec::new(),
+        edges: vec![
+            line(1, 1, 2, (1, 2), [1, 0, 0]),
+            line(2, 1, 2, (3, 4), [0, 1, 0]),
+            line(3, 1, 2, (5, 6), [0, 0, 1]),
+            line(4, 2, 1, (7, 8), [1, 1, 1]),
+        ],
+        vertices: vec![
+            FactorizedVertex {
+                id: 1,
+                rule: "V".into(),
+                factor: Atom::num(1),
+            },
+            FactorizedVertex {
+                id: 2,
+                rule: "V".into(),
+                factor: Atom::num(1),
+            },
+        ],
+        ports: Vec::new(),
+        projector: None,
+        prefactor: Prefactor {
+            scalars: atom("UFO::gs^2"),
+            ..Prefactor::default()
+        },
+        colour_branch: None,
+        insertions: Vec::new(),
+        record: Some(DirectRecord {
+            original_cycles: None,
+            depth: None,
+            weights: Vec::new(),
+        }),
+    };
+    // the three-loop all-massive tetrahedron (six lines)
+    let mut mercedes = v.clone();
+    mercedes.label = "marked three-loop mercedes".into();
+    mercedes.edges = vec![
+        line(1, 1, 2, (1, 2), [1, 0, 0]),
+        line(2, 2, 3, (3, 4), [0, 1, 0]),
+        line(3, 3, 1, (5, 6), [0, 0, 1]),
+        line(4, 4, 1, (7, 8), [1, 0, -1]),
+        line(5, 2, 4, (9, 10), [1, -1, 0]),
+        line(6, 4, 3, (11, 12), [0, -1, 1]),
+    ];
+    mercedes.vertices = (1..=4)
+        .map(|id| FactorizedVertex {
+            id,
+            rule: "V".into(),
+            factor: Atom::num(1),
+        })
+        .collect();
+    let vakint = engine();
+    let mut failures = Vec::new();
+    let mut d6bar1 = false;
+    for v in [&v, &mercedes] {
+        for (mode, terms) in [
+            (RustRedMasterMode::Symbolic, 3),
+            (RustRedMasterMode::Numerical, 3),
+            (RustRedMasterMode::Symbolic, 6),
+            (RustRedMasterMode::Numerical, 6),
+        ] {
+            let settings = VakintSettings {
+                number_of_terms_in_epsilon_expansion: terms,
+                ..site(mode)
+            };
+            match evaluate_factorized_vacuum(&vakint, &settings, v, &v.prefactor.total()) {
+                Ok(r) => {
+                    eprintln!(
+                        "TADPOLE3 {} {mode:?} terms={terms}: ok {}",
+                        v.label, r.value
+                    );
+                    d6bar1 |= r.value.to_canonical_string().contains("D6bar1");
+                }
+                Err(e) => {
+                    eprintln!("TADPOLE3 {} {mode:?} terms={terms}: ERROR {e}", v.label);
+                    failures.push(format!("{} {mode:?} terms={terms}: {e}", v.label));
+                }
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{failures:?}");
+    // the witness is live: a value did carry the constant
+    assert!(d6bar1, "no value carried D6bar1");
+}
