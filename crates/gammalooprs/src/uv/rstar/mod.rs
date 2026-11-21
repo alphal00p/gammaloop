@@ -172,6 +172,30 @@ pub fn validate_uncontracted() -> eyre::Result<()> {
     uncontracted::validate()
 }
 
+/// The settings half of [`validate_uncontracted`] (call at start-up, with
+/// the UV settings every R* evaluation of the run will use): with
+/// `GAMMALOOP_UNCONTRACTED_NUMERATOR` on or check, helper VH's C7 settings
+/// exceptions are refused (`uv.vakint.normalization` other than `MSbar`).
+/// Every record built under them is an error too, so a caller that skips
+/// this check fails each diagram instead of the run.
+pub fn validate_uncontracted_settings(
+    settings: &crate::uv::UVgenerationSettings,
+) -> eyre::Result<()> {
+    uncontracted::validate()?;
+    if uncontracted::switch().mode == uncontracted::Mode::Off {
+        return Ok(());
+    }
+    uncontracted::settings_refusal(&settings.vakint).map_err(|refusal| {
+        eyre::eyre!(
+            "{}={} is refused with these settings: {} ({}); the beta's production settings are normalization MSbar, evaluation methods rustred and forcer",
+            uncontracted::VARIABLE,
+            uncontracted_ledger::current_identity().unwrap_or_default(),
+            refusal.detail,
+            refusal.code
+        )
+    })
+}
+
 /// Whether a diagram ledger opens ([`DiagramLedger::open`] is `Some`): the
 /// switch on or check, or `GAMMALOOP_UNCONTRACTED_TIMING=1` (off included).
 pub fn uncontracted_ledger_active() -> eyre::Result<bool> {
