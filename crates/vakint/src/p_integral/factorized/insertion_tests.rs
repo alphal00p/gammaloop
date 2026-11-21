@@ -285,16 +285,16 @@ fn independent_reference(
     use crate::symbols::S;
     let mut product = Atom::num(1);
     for edge in &value.edges {
-        product = product * &edge.factor;
+        product *= &edge.factor;
     }
     for vertex in &value.vertices {
-        product = product * &vertex.factor;
+        product *= &vertex.factor;
     }
     for insertion in &value.insertions {
-        product = product * &insertion.coefficient * &insertion.factor;
+        product = &product * &insertion.coefficient * &insertion.factor;
     }
     let projector = value.projector.as_ref().expect("a closed value");
-    product = product * &projector.tensor;
+    product *= &projector.tensor;
     let contracted = contract_with_idenso(&product, false).unwrap();
     let loops = value.loops();
     let momentum = |id: i64| -> Atom {
@@ -354,14 +354,13 @@ fn independent_reference(
         let (Endpoint::Vertex(s), Endpoint::Vertex(t)) = (edge.source, edge.target) else {
             unreachable!()
         };
-        topology = topology
-            * S.prop.call((
-                edge.id as i64,
-                S.edge.call((s as i64, t as i64)),
-                &momentum(edge.id as i64),
-                Atom::Zero,
-                Atom::num(edge.power),
-            ));
+        topology *= S.prop.call((
+            edge.id as i64,
+            S.edge.call((s as i64, t as i64)),
+            &momentum(edge.id as i64),
+            Atom::Zero,
+            Atom::num(edge.power),
+        ));
     }
     let head = S.p.call(1);
     let epsilon = Atom::var(crate::utils::vakint_macros::vk_symbol!(

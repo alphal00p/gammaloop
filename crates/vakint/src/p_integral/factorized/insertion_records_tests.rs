@@ -23,7 +23,6 @@ use crate::{
 };
 use std::path::PathBuf;
 
-#[allow(dead_code)]
 #[path = "../../../tests/support/wh_fixtures.rs"]
 mod wh_fixtures;
 
@@ -94,7 +93,7 @@ fn package_engine() -> Vakint {
     );
     let mut vakint = Vakint::new().unwrap();
     let library = rustred_app::propagator::load_p_library(
-        rustred_app::propagator::PLibrarySource::Directory(directory.into()),
+        rustred_app::propagator::PLibrarySource::Directory(directory),
         &rustred_app::propagator::PLibraryOptions {
             verify_descent: false,
         },
