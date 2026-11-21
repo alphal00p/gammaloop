@@ -2393,11 +2393,27 @@ pub(crate) fn reduce_requests_eager(
 /// one to four loops keep the Forcer table. No catalogue ships yet (decision
 /// Q3: Retain-only first); WP6 sets the catalogue of the loaded p area.
 fn p_master_catalogue(vakint: &Vakint, loops: usize) -> Option<Arc<PMasterCatalogue>> {
-    if loops >= 5 {
+    if loops >= 5 || package_ships_catalogue(vakint) {
         vakint.p_master_catalogue()
     } else {
         None
     }
+}
+
+/// Whether the engine's loaded p library is a package that ships its own p
+/// master catalogue (`load_p_library_directory`, `VAKINT_P_LIBRARY` or a listed
+/// library with `p-master-catalogue.json`, e.g. the 1-5 package vk5l-s12349d-r3).
+/// In such a package the masters of EVERY loop count are residual terminals:
+/// its catalogue's terminal rows map the one- to four-loop ones onto the Forcer
+/// masters (values from the Forcer table, `PMasterSource::expansion`), so the
+/// one- to four-loop channels need the catalogue too; without it they stop at
+/// `PResidual` (NoCatalogue). Libraries without their own catalogue (the
+/// injected or listed 1-4 library, whose basis layer maps onto `PMaster`) keep
+/// the Forcer table alone at one to four loops.
+fn package_ships_catalogue(vakint: &Vakint) -> bool {
+    vakint
+        .loaded_p_library()
+        .is_some_and(|handle| handle.master_catalogue.is_some())
 }
 
 /// The vakint integrals of `requests` by loop count and external head
