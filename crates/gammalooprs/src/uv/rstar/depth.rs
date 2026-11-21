@@ -37,7 +37,14 @@
 //!   insertion over an N-loop scalar chain).
 //! * `E_j` holds only the covariant tensor structure (scalars, `ε` among
 //!   them, go to `h_j`, [`super::moments::hard_moments`]); a Dirac closure
-//!   adds its gamma structure. Its own order is counted per row.
+//!   adds its gamma structure (`ir_dirac::reassemble` puts its scalar
+//!   normalisation into the coefficient). Its own order is counted per row.
+//!   A row the moment extraction DROPPED has no insertion to read: it is
+//!   bounded by `B` only through this invariant (`E_j` free of `ε` outside
+//!   representation dimensions). The planner checks it on every row the
+//!   extraction returns ([`dropped_row_bound`]); one row with an insertion
+//!   excess means a dropped row's could be larger, so the dropped rows are
+//!   unbounded and the correction is refused (`unbounded`).
 //! * The root closure multiplies `z_j` (a metric or Dirac closure, regular
 //!   at `d = 4`; counted anyway), the outer Taylor step takes polynomial
 //!   orders in the root momenta, and the fixed-mass compensation
@@ -66,12 +73,19 @@
 //! whose `B` is unknown (a row of a nonzero group that the moment extraction
 //! dropped is counted nowhere, so without `B` nothing certifies that no pole
 //! hides; refused before `H` is integrated when the quotient's own bound is
-//! unknown), and for a measured row above `B` (`bound_exceeded`: the proof of
-//! `B` failed; refused at once, an alarm of its own, fatal under
-//! `GAMMALOOP_IR_HARD_DEPTH_STRICT=1`). The correction is then evaluated on
-//! today's path (the closed or projected moments with the generic forest
-//! step, which measures every quotient factor before its hard coefficient is
-//! integrated), so a refusal costs time, never a value.
+//! unknown, and before the quotient factors are built when a row's or the
+//! dropped rows' bound is unknown), and for a measured row above its own
+//! bound (`bound_exceeded`, compared row by row: the proof of `B` failed;
+//! refused at once, an alarm of its own, fatal under
+//! `GAMMALOOP_IR_HARD_DEPTH_STRICT=1`, also under the opt-in closed-path
+//! guard `GAMMALOOP_IR_HARD_CHILD_GUARD=1`). The correction is then
+//! evaluated on today's path (the closed or projected moments with the
+//! generic forest step, which measures every quotient factor before its
+//! hard coefficient is integrated), so a refusal costs time, never a value.
+//! Every refusal is visible three times: its `IR_HARD_DEPTH_REFUSED` line,
+//! the correction's `IR_HARD_CHILD … outcome=declined:depth_refused:<reason>`
+//! line (the line every log filter keeps), and the per-reason counts of
+//! `IR_HARD_DEPTH_SUMMARY`.
 //!
 //! # Domain of `B`
 //!
@@ -88,12 +102,22 @@
 //! * opaque coefficient symbols: a symbol whose value, substituted later,
 //!   has poles in `ε` is invisible to `B` (it is read as regular). No
 //!   production input has one (no `ε` and no such symbol in any 5L/6L
-//!   numerator, census-6l.md); insertion surrogates carry their coefficient
-//!   explicitly (an `ε` polynomial, regular by construction), so `B` counts
-//!   it. A future input with such a symbol is outside the domain;
+//!   diagram numerator, census-6l.md). Production numerators DO carry `ε`,
+//!   though: with `--insertions extract` the propagator-insertion
+//!   surrogates are built at run time, and their coefficient vertices carry
+//!   the normalised insertion explicitly, a polynomial in `ε` (with rational
+//!   and `ζ` coefficients and rational functions of `d` = `4-2ε` that are
+//!   regular at `d = 4`), regular by construction. So `B` reads it in full
+//!   (the series per factor) and finds no excess
+//!   (`tests::a_surrogate_coefficient_has_no_excess`); B = quotient loops
+//!   holds on production because those series are regular, not because `ε`
+//!   is absent. A future input with such a symbol is outside the domain;
 //! * a function of `ε` (`f(ε)`, any function whose arguments carry `ε` after
 //!   `d = 4-2ε`): its order is not read from a series; detectable, so `B` is
-//!   unknown and the correction is refused ([`excess_poles`]).
+//!   unknown and the correction is refused ([`excess_poles`]). A surrogate
+//!   coefficient that kept an unexpanded function of `ε` would therefore
+//!   refuse every correction of its diagram into today's path: right value,
+//!   today's cost, counted as `unbounded=` in `IR_HARD_DEPTH_SUMMARY`.
 
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
@@ -181,9 +205,43 @@ pub(super) fn quotient_pole_bound(
     Some(quotient_loops + numerator + closure)
 }
 
-/// The bound of one row: `bound` raised by the excess of its insertion.
+/// The bound of one row: `bound` raised by the excess of its insertion
+/// (tests; the planner reads the excesses once, [`dropped_row_bound`]).
+#[cfg(test)]
 pub(super) fn row_bound(bound: Option<usize>, insertion: &Atom) -> Option<usize> {
     Some(bound? + excess_poles(insertion)?)
+}
+
+/// The bound of the rows the moment extraction dropped, from the insertion
+/// excesses of the rows it returned (module doc): `bound` when every one is
+/// `Some(0)` (the invariant: `E_j` is free of `ε` outside representation
+/// dimensions), else `None` (a dropped row's excess could be larger).
+pub(super) fn dropped_row_bound(
+    bound: Option<usize>,
+    excesses: impl IntoIterator<Item = Option<usize>>,
+) -> Option<usize> {
+    let bound = bound?;
+    excesses
+        .into_iter()
+        .all(|excess| excess == Some(0))
+        .then_some(bound)
+}
+
+/// The bound of the whole correction: the dropped rows' and every shown
+/// row's (`None` when one is unknown).
+pub(super) fn correction_bound(dropped: Option<usize>, rows: &[Option<usize>]) -> Option<usize> {
+    rows.iter()
+        .try_fold(dropped?, |largest, row| Some(largest.max((*row)?)))
+}
+
+/// The first row whose measured need exceeds its own bound (`needs[i]` and
+/// `bounds[i]` per row), as `(need, bound)`.
+pub(super) fn exceeded_row(needs: &[usize], bounds: &[Option<usize>]) -> Option<(usize, usize)> {
+    needs.iter().zip(bounds).find_map(|(need, bound)| {
+        bound
+            .filter(|bound| need > bound)
+            .map(|bound| (*need, bound))
+    })
 }
 
 /// What the truncated hard part of one correction shows at depth `extra`.
@@ -282,6 +340,12 @@ pub(super) struct DepthCounts {
     pub exceeded: usize,
     /// Corrections refused by the guard (`IR_HARD_DEPTH_REFUSED`).
     pub refused: usize,
+    /// Refusals by reason (`bound_exceeded` is [`Self::exceeded`]): an
+    /// unknown bound, a vanished group or row below the bound, a depth below
+    /// the bound with everything shown.
+    pub unbounded: usize,
+    pub vanished: usize,
+    pub unverified: usize,
     /// Tests: the last refusal's reason.
     pub reason: Option<&'static str>,
 }
@@ -298,6 +362,9 @@ impl DepthCounts {
         self.nested_bounded += other.nested_bounded;
         self.exceeded += other.exceeded;
         self.refused += other.refused;
+        self.unbounded += other.unbounded;
+        self.vanished += other.vanished;
+        self.unverified += other.unverified;
         self.reason = other.reason.or(self.reason);
     }
 }
@@ -317,6 +384,12 @@ pub(super) fn note(counts: &mut DepthCounts, field: fn(&mut DepthCounts) -> &mut
 /// Record a refusal's reason (tests: in the enclosing [`collect`] scope).
 pub(super) fn refused(counts: &mut DepthCounts, reason: &'static str) {
     note(counts, |counts| &mut counts.refused);
+    match reason {
+        "unbounded" => note(counts, |counts| &mut counts.unbounded),
+        "vanished" => note(counts, |counts| &mut counts.vanished),
+        "unverified" => note(counts, |counts| &mut counts.unverified),
+        _ => {}
+    }
     counts.reason = Some(reason);
     #[cfg(test)]
     COLLECTED.with(|slot| {
@@ -366,11 +439,15 @@ pub(super) struct DepthTest {
 
 /// Tests: where a child-route attempt calls the [`RowHook`].
 #[cfg(test)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub(super) struct HookSite {
     pub hard_loops: usize,
     pub quotient_loops: usize,
     pub extra: usize,
+    /// The evaluation is on a proper support (a nested child call).
+    pub nested: bool,
+    /// The hard part's edges (as the `edges=` log field).
+    pub edges: String,
 }
 
 /// Tests: a rewrite of the rows `(h_j, E_j, L)` of every child-route attempt,
@@ -610,7 +687,57 @@ mod tests {
         assert_eq!(quotient_pole_bound(2, &x, Some(&closure)), Some(2));
         assert_eq!(row_bound(Some(2), &(&x / eps())), Some(3));
         assert_eq!(row_bound(None, &x), None);
+        // The dropped rows: bounded by B only while every returned insertion
+        // is free of ε (correctness review, finding 1).
+        assert_eq!(dropped_row_bound(Some(2), [Some(0), Some(0)]), Some(2));
+        assert_eq!(dropped_row_bound(Some(2), []), Some(2));
+        assert_eq!(dropped_row_bound(Some(2), [Some(0), Some(1)]), None);
+        assert_eq!(dropped_row_bound(Some(2), [Some(0), None]), None);
+        assert_eq!(dropped_row_bound(None, [Some(0)]), None);
+        assert_eq!(correction_bound(Some(1), &[Some(1), Some(3)]), Some(3));
+        assert_eq!(correction_bound(Some(1), &[]), Some(1));
+        assert_eq!(correction_bound(None, &[Some(1)]), None);
+        assert_eq!(correction_bound(Some(1), &[Some(1), None]), None);
+        // Row by row (correctness review, finding 2): a row at its bound B
+        // measuring B + 1 is flagged although another row's bound is higher.
+        assert_eq!(exceeded_row(&[2, 3], &[Some(1), Some(3)]), Some((2, 1)));
+        assert_eq!(exceeded_row(&[1, 3], &[Some(1), Some(3)]), None);
+        assert_eq!(exceeded_row(&[5], &[None]), None);
         Ok(())
+    }
+
+    /// A propagator-insertion surrogate's coefficient vertex, as
+    /// `insertions.rs` builds it at run time (`with_coefficient` of the
+    /// normalised insertion): an ε polynomial with rational and ζ
+    /// coefficients, rational functions of d regular at d = 4, and the
+    /// insertion's tensor structure. It is read in full (production review,
+    /// finding 2) and has no excess: B stays the quotient's loops.
+    #[test]
+    fn a_surrogate_coefficient_has_no_excess() -> eyre::Result<()> {
+        test_initialise()?;
+        let d = Atom::var(GS.dim);
+        let z3 = parse!("zeta(3)");
+        let mink = spenso::structure::representation::Minkowski {}.new_rep(GS.dim);
+        let g = spenso::network::library::symbolic::ETS.metric(
+            mink.to_symbolic([Atom::num(1)]),
+            mink.to_symbolic([Atom::num(2)]),
+        );
+        let p2 = parse!("p2");
+        let series = q(-5, 3) + q(31, 9) * eps() + (q(7, 2) - Atom::num(6) * &z3) * eps().pow(2);
+        let coefficient = (&d - Atom::num(2)) / (&d - Atom::num(1))
+            * (Atom::num(3) * &d - Atom::num(2))
+            / (&d + Atom::num(2))
+            * series
+            * (&g * &p2);
+        assert_eq!(excess_poles(&coefficient), Some(0));
+        assert_eq!(quotient_pole_bound(2, &coefficient, None), Some(2));
+        // The same coefficient with a pole left in it is counted.
+        assert_eq!(excess_poles(&(&coefficient / eps())), Some(1));
+        Ok(())
+    }
+
+    fn q(n: i64, d: i64) -> Atom {
+        Atom::num(n) / Atom::num(d)
     }
 
     #[test]
