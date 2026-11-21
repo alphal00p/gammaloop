@@ -763,7 +763,7 @@ pub(super) fn attempt(
         Err(error) => {
             let text = error.to_string();
             if is_unknown_master_text(&text) {
-                tally_unknown_masters();
+                tally_unknown_masters(&attempt.graph);
                 eprintln!(
                     "UNCONTRACTED kind={} graph={} id={id} outcome=error:unknown_masters detail=\"{}\"",
                     kind.as_str(),
@@ -1048,7 +1048,7 @@ pub(crate) fn with_strict<T>(strict: bool, f: impl FnOnce() -> T) -> T {
     f()
 }
 
-/// The outcomes reported on this thread since the last summary.
+/// The outcomes reported for one graph since its last summary.
 #[derive(Clone, Debug, Default)]
 struct Tally {
     attempted: usize,
@@ -1060,13 +1060,21 @@ struct Tally {
     error: BTreeMap<String, usize>,
 }
 
-thread_local! {
-    static TALLY: RefCell<Tally> = RefCell::new(Tally::default());
+/// The tallies by graph name: process-wide, because a diagram's UV children
+/// may be evaluated on other threads than its root (a child's records carry
+/// the diagram's graph name).
+static TALLIES: LazyLock<std::sync::Mutex<BTreeMap<String, Tally>>> =
+    LazyLock::new(|| std::sync::Mutex::new(BTreeMap::new()));
+
+fn with_tally(graph: &str, f: impl FnOnce(&mut Tally)) {
+    let mut tallies = TALLIES
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    f(tallies.entry(graph.to_owned()).or_default());
 }
 
 fn tally(attempt: &Attempt, check: Option<&Check>) {
-    TALLY.with(|slot| {
-        let mut tally = slot.borrow_mut();
+    with_tally(&attempt.graph, |tally| {
         tally.attempted += 1;
         match &attempt.outcome {
             Outcome::Value(_) => tally.uncontracted += 1,
@@ -1084,9 +1092,8 @@ fn tally(attempt: &Attempt, check: Option<&Check>) {
 }
 
 /// The unknown-master hard error, counted in the summary.
-pub(super) fn tally_unknown_masters() {
-    TALLY.with(|slot| {
-        let mut tally = slot.borrow_mut();
+pub(super) fn tally_unknown_masters(graph: &str) {
+    with_tally(graph, |tally| {
         tally.attempted += 1;
         *tally.error.entry("unknown_masters".into()).or_default() += 1;
     });
@@ -1094,17 +1101,22 @@ pub(super) fn tally_unknown_masters() {
 
 /// `UNCONTRACTED_SUMMARY graph= mode= attempted= uncontracted= zero=
 /// compared= equal= declined=<code:n,..|none> error=<code:n,..|none>
-/// outcome=<ok|error>`: one line per diagram root evaluation (its UV
-/// children's records included), printed by the root's `counterterm` when
-/// the switch is on or check and something was attempted; the tally is
-/// reset. Nested evaluations (children, quotients, IR hard parts,
-/// surrogates) add to the enclosing root's line.
+/// outcome=<ok|error>`: one line per diagram root evaluation, printed by the
+/// root's `counterterm` when the switch is on or check and the graph has
+/// attempts since its last line (its UV children's records included, on
+/// whatever thread they ran); the graph's tally is reset. Nested
+/// evaluations (children, quotients, IR hard parts, surrogates) add to the
+/// enclosing root's line.
 pub(super) fn log_summary(graph: &str, ok: bool) {
     let switch = switch();
     if switch.mode == Mode::Off || classify(false) != Kind::Root {
         return;
     }
-    let tally = TALLY.with(|slot| std::mem::take(&mut *slot.borrow_mut()));
+    let tally = TALLIES
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .remove(graph)
+        .unwrap_or_default();
     if tally.attempted == 0 {
         return;
     }
@@ -1118,7 +1130,7 @@ pub(super) fn log_summary(graph: &str, ok: bool) {
                 .join(",")
         }
     };
-    eprintln!(
+    let line = format!(
         "UNCONTRACTED_SUMMARY graph={graph} mode={} attempted={} uncontracted={} zero={} compared={} equal={} declined={} error={} outcome={}",
         switch.mode.as_str(),
         tally.attempted,
@@ -1130,6 +1142,21 @@ pub(super) fn log_summary(graph: &str, ok: bool) {
         list(&tally.error),
         if ok { "ok" } else { "error" }
     );
+    eprintln!("{line}");
+    #[cfg(test)]
+    SUMMARIES.with(|lines| lines.borrow_mut().push(line));
+}
+
+#[cfg(test)]
+thread_local! {
+    static SUMMARIES: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Tests: the `UNCONTRACTED_SUMMARY` lines printed on this thread since the
+/// last call.
+#[cfg(test)]
+pub(crate) fn take_summaries() -> Vec<String> {
+    SUMMARIES.with(|lines| std::mem::take(&mut *lines.borrow_mut()))
 }
 
 /// The log lines, the dump and the test capture of one attempt (and its

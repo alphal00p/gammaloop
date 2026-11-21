@@ -370,8 +370,33 @@ fn checked_run(
     declines: &[(&str, usize)],
     full: bool,
 ) -> Result<Vec<Captured>> {
+    uncontracted::take_summaries();
     let (checked, captured, _) = root_run_with(diagram, Switch::new(Mode::Check, kinds), vakint)?;
     expect_outcomes(&format!("{what} check"), &captured, declines, true)?;
+    // the diagram's UNCONTRACTED_SUMMARY counts every attempt of the run
+    let summaries = uncontracted::take_summaries();
+    let field = |line: &str, key: &str| -> Option<usize> {
+        line.split(' ')
+            .find_map(|field| field.strip_prefix(key)?.strip_prefix('='))?
+            .parse()
+            .ok()
+    };
+    let sum = |key: &str| {
+        summaries
+            .iter()
+            .map(|line| field(line, key).unwrap_or(0))
+            .sum::<usize>()
+    };
+    let compared = captured.iter().filter(|a| a.equal.is_some()).count();
+    ensure!(
+        !summaries.is_empty()
+            && sum("attempted") == captured.len()
+            && sum("compared") == compared
+            && sum("equal") == compared
+            && summaries.iter().all(|line| line.contains(" error=none ")),
+        "{what}: the summaries {summaries:#?} do not count the {} attempts ({compared} compared)",
+        captured.len()
+    );
     if full {
         let (off, nothing, _) = root_run_with(diagram, Switch::OFF, vakint)?;
         ensure!(nothing.is_empty(), "{what}: mode off reports nothing");
