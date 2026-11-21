@@ -1357,12 +1357,13 @@ impl<'a> Evaluation<'a> {
             let check = match (&analytic, &generic_value) {
                 (Some((Ok((value, _)), _)), Some(generic)) if outer == top_mass::IrOuter::Check => {
                     let difference = self.poles(&(generic - value))?;
-                    let equal = difference.is_zero();
-                    ensure!(
-                        equal,
-                        "GAMMALOOP_IR_OUTER=check: the analytic IR outer Taylor differs for {} corr={correction_index} term={term_index}: poles {difference}",
-                        self.graph.name
-                    );
+                    if !difference.is_zero() {
+                        // A failed comparison, which no fallback declines.
+                        return Err(super::ir_dirac::diagnostic_failure(eyre!(
+                            "GAMMALOOP_IR_OUTER=check: the analytic IR outer Taylor differs for {} corr={correction_index} term={term_index}: poles {difference}",
+                            self.graph.name
+                        )));
+                    }
                     " check=equal"
                 }
                 _ => "",
@@ -4099,12 +4100,13 @@ impl<'a> Evaluation<'a> {
         }
         if report.mismatch(callback) {
             self.summary.errors += 1;
-            return Err(eyre!(
+            // A failed comparison, which no fallback declines.
+            return Err(super::ir_dirac::diagnostic_failure(eyre!(
                 "BOUNDARY_CHECK mismatch graph={} id={id}: input={} value={} callback={callback}",
                 self.graph.name,
                 report.input,
                 report.value
-            ));
+            )));
         }
         Ok(today)
     }

@@ -524,8 +524,12 @@ pub(super) fn agree(
 }
 
 /// A failure no fallback may decline: a failed identity comparison
-/// (`IR_DIRAC_CHECK`, `UNCONTRACTED_CHECK`) or a record refusal that is not
-/// designed in a strict or check run. Its text is the failure's.
+/// (`IR_DIRAC_CHECK`, `UNCONTRACTED_CHECK`, `DIRAC_CLOSURE_CHECK`,
+/// `INSERTION_CLOSURE_CHECK`, `BOUNDARY_CHECK`, `GAMMALOOP_IR_OUTER=check`) or
+/// a record refusal that is not designed in a strict or check run. Its text
+/// is the failure's. The Δ-cache keeps it one on every reuse of a stored
+/// failure (`uv::counterterm_cache`): a decorated quotient's R* runs
+/// inside the child guard.
 #[derive(Debug)]
 pub(super) struct DiagnosticFailure(String);
 
@@ -538,12 +542,12 @@ impl std::fmt::Display for DiagnosticFailure {
 impl std::error::Error for DiagnosticFailure {}
 
 /// `report` (its whole text) as a [`DiagnosticFailure`].
-pub(super) fn diagnostic_failure(report: eyre::Report) -> eyre::Report {
+pub(crate) fn diagnostic_failure(report: eyre::Report) -> eyre::Report {
     eyre::Report::new(DiagnosticFailure(format!("{report:#}")))
 }
 
 /// Whether `report` carries a [`DiagnosticFailure`].
-pub(super) fn is_diagnostic_failure(report: &eyre::Report) -> bool {
+pub(crate) fn is_diagnostic_failure(report: &eyre::Report) -> bool {
     report.chain().any(|cause| cause.is::<DiagnosticFailure>())
 }
 
