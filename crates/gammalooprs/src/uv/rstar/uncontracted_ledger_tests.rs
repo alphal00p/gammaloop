@@ -3,8 +3,8 @@
 //!
 //! * R2-I1 (helper VH round 2): strict is the only behaviour of on and
 //!   check; `GAMMALOOP_UNCONTRACTED_STRICT=0` is refused;
-//! * U7a.1 (Astra's U7a verdict finding 1, (iii) and (iv)): check mode's
-//!   coverage rule (an
+//! * U7a.1 (Astra's U7a verdict finding 1): the switch's checkpoint
+//!   identity, the resume evidence, check mode's coverage rule (an
 //!   all-declined diagram-kind fails unless named), Δ-cache hits as their own
 //!   disposition, check mode with the PINT6 dump refused;
 //! * U7a.4 (finding 4, R2-M2, R2-M3): one disposition line per diagram and
@@ -43,7 +43,7 @@ use super::{
     boundary::{BoundaryMode, ClosedRootNormalization, with_boundary_mode},
     recursive_tests::{colour_factored, load, settings},
     uncontracted::{self, Captured, Kind, Mode, Switch, with_capture, with_switch},
-    uncontracted_ledger::{self as ledger, DiagramLedger, Exception, Exceptions},
+    uncontracted_ledger::{self as ledger, DiagramLedger, Exception, Exceptions, Resumed},
 };
 
 const L2_22: &str = include_str!("testdata/u7a/l2-d22.dot");
@@ -96,12 +96,14 @@ fn normalization(graph: &Graph) -> ClosedRootNormalization {
     }
 }
 
-/// One run: the root's value, its attempts and the ledger's lines printed
-/// inside it.
+/// One run: the root's value, its attempts, the ledger's lines printed
+/// inside it, and the dispositions of the diagram
+/// ledger it was given (`diagram`).
 struct Run {
     value: Result<Atom>,
     captured: Vec<Captured>,
     lines: Vec<String>,
+    evidence: Option<serde_json::Value>,
 }
 
 /// The graph name of a DOT's diagram.
@@ -138,7 +140,7 @@ fn run_n(
     let vakint = Vakint::new()?;
     let _ = ledger::take_lines();
     let _ = uncontracted::take_summaries();
-    let (value, captured) = with_switch(switch, || {
+    let ((value, evidence), captured) = with_switch(switch, || {
         with_boundary_mode(BoundaryMode::On, false, || {
             with_capture(|| {
                 let opened = diagram.and_then(|key| DiagramLedger::open(&graph.name, key));
@@ -157,12 +159,12 @@ fn run_n(
                     }
                 }
                 match opened {
-                    None => value,
+                    None => (value, None),
                     Some(opened) => {
                         let closed = opened.close(value.is_ok());
                         match (value, closed) {
-                            (Ok(value), Ok(())) => Ok(value),
-                            (Err(error), _) | (Ok(_), Err(error)) => Err(error),
+                            (Ok(value), Ok(evidence)) => (Ok(value), evidence),
+                            (Err(error), _) | (Ok(_), Err(error)) => (Err(error), None),
                         }
                     }
                 }
@@ -174,6 +176,7 @@ fn run_n(
         value,
         captured,
         lines: ledger::take_lines(),
+        evidence,
     })
 }
 
@@ -399,6 +402,133 @@ fn check_with_the_pint6_dump_in_the_environment_is_refused() -> Result<()> {
         "the switch was read with the PINT6 dump: {read:?}"
     );
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// U7a.1 (i) and (ii): the checkpoint identity and the resume evidence
+// ---------------------------------------------------------------------------
+
+#[test]
+fn identity_names_mode_kinds_and_strictness() {
+    let none = Exceptions::default();
+    assert_eq!(ledger::identity_of(Switch::OFF, &none), None);
+    assert_eq!(
+        ledger::identity_of(Switch::new(Mode::Check, &ROOT_CHILD), &none).as_deref(),
+        Some("check:root,child:strict")
+    );
+    assert_eq!(
+        ledger::identity_of(Switch::new(Mode::On, &[Kind::Root]), &none).as_deref(),
+        Some("on:root:strict")
+    );
+    // inert kinds do not change what is built
+    assert_eq!(
+        ledger::identity_of(Switch::new(Mode::On, &[Kind::Root, Kind::Quotient]), &none),
+        ledger::identity_of(Switch::new(Mode::On, &[Kind::Root]), &none)
+    );
+    let named = ledger::parse_exceptions(
+        "# graph\tkind\tcode\treason\nB_self_energy_L4_0049\troot\tvakint:all_massive\ta massive tadpole\n",
+    )
+    .unwrap();
+    assert_eq!(
+        named.entries,
+        vec![Exception {
+            graph: "B_self_energy_L4_0049".into(),
+            kind: Kind::Root,
+            code: "vakint:all_massive".into(),
+            reason: "a massive tadpole".into(),
+        }]
+    );
+    let check = ledger::identity_of(Switch::new(Mode::Check, &ROOT_CHILD), &named).unwrap();
+    assert!(
+        check.starts_with("check:root,child:strict:exceptions=") && check.len() > 40,
+        "{check}"
+    );
+    // the exceptions are a check-mode identity only
+    assert_eq!(
+        ledger::identity_of(Switch::new(Mode::On, &ROOT_CHILD), &named).as_deref(),
+        Some("on:root,child:strict")
+    );
+    for bad in [
+        "g\troot\tcode\n",
+        "g\tnot-a-kind\tcode\twhy\n",
+        "g\troot\t\twhy\n",
+        "g\troot\tcode\t \n",
+    ] {
+        assert!(ledger::parse_exceptions(bad).is_err(), "{bad:?}");
+    }
+}
+
+/// A reused record is reported checked only with matching dispositions;
+/// without them (an off record, another mode's, a failed one) it is
+/// `outcome=unchecked`, never ok.
+#[test]
+fn resumed_records_need_matching_evidence() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let check = Switch::new(Mode::Check, &ROOT_CHILD);
+        let on = Switch::new(Mode::On, &ROOT_CHILD);
+        let fresh = run(L2_22, check, None, Some("000022"))?;
+        let _ = fresh.value?;
+        let evidence = fresh
+            .evidence
+            .ok_or_else(|| eyre!("a closed check ledger returns its dispositions"))?;
+        ensure!(
+            evidence["schema"] == "u7a-disposition.v1"
+                && evidence["identity"] == "check:root,child:strict"
+                && evidence["outcome"] == "ok",
+            "{evidence:#}"
+        );
+        let on_evidence = run(L2_22, on, None, Some("000022"))?
+            .evidence
+            .ok_or_else(|| eyre!("no on-mode dispositions"))?;
+        let mut failed = evidence.clone();
+        failed["outcome"] = serde_json::json!("error");
+        let graph = graph_name(L2_22)?;
+        with_switch(check, || -> Result<()> {
+            let _ = ledger::take_lines();
+            ensure!(ledger::resumed(&graph, "000022", Some(&evidence)) == Resumed::Checked);
+            let lines = ledger::take_lines();
+            ensure!(
+                lines
+                    .iter()
+                    .all(|line| line.ends_with(" source=checkpoint"))
+            );
+            for kind in ROOT_CHILD {
+                let saved = disposition(&lines, kind)?;
+                let original = disposition(&fresh.lines, kind)?;
+                ensure!(
+                    count(saved, "expected") == count(original, "expected")
+                        && count(saved, "compared") == count(original, "compared")
+                        && field(saved, "outcome") == Some("ok"),
+                    "{saved}\n{original}"
+                );
+            }
+            for (saved, reason) in [
+                (None, "no_evidence"),
+                (Some(&on_evidence), "identity:on:root,child:strict"),
+                (Some(&failed), "outcome:error"),
+            ] {
+                ensure!(
+                    ledger::resumed(&graph, "000022", saved)
+                        == Resumed::Unchecked(reason.to_owned()),
+                    "{reason}"
+                );
+                let lines = ledger::take_lines();
+                ensure!(
+                    lines.len() == ROOT_CHILD.len() + 1
+                        && lines
+                            .iter()
+                            .all(|line| field(line, "outcome") == Some("unchecked")
+                                && field(line, "reason") == Some(reason)),
+                    "{reason}: {lines:#?}"
+                );
+            }
+            Ok(())
+        })?;
+        // off: nothing to say
+        ensure!(ledger::resumed(&graph, "000022", None) == Resumed::Off);
+        Ok(())
+    })
 }
 
 // ---------------------------------------------------------------------------
