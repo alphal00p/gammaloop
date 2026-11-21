@@ -1853,3 +1853,35 @@ fn a_huge_power_in_an_insertion_is_refused_before_any_computation() {
         );
     }
 }
+
+/// A marked value's numbers have at most 4096 bits (the real records' largest
+/// has 35): on the real direct L3-185, a vertex factor times 2^5000 is refused,
+/// typed and through the text form ("a number beyond 4096 bits"); times
+/// 2^4000 it is accepted. (A text's literal power of numbers, 2^1000000000,
+/// is evaluated by Symbolica's parser into such a number before any rule.)
+#[test]
+fn a_number_beyond_4096_bits_is_refused() {
+    let direct =
+        FactorizedNumerator::from_text(include_str!("fixtures/l3-185-insertions.txt")).unwrap();
+    let plain = direct
+        .vertices
+        .iter()
+        .position(|x| direct.insertions.iter().all(|i| i.vertex != x.id))
+        .unwrap();
+    let with = |n: u32| {
+        let mut v = direct.clone();
+        v.vertices[plain].factor = &v.vertices[plain].factor * Atom::num(2).pow(Atom::num(n));
+        v
+    };
+    let big = with(5000);
+    for result in [
+        big.validate(),
+        FactorizedNumerator::from_text(&big.to_text().unwrap()).map(|_| ()),
+    ] {
+        match result {
+            Err(e) => assert!(e.to_string().contains("a number beyond 4096 bits"), "{e}"),
+            Ok(()) => panic!("2^5000 accepted"),
+        }
+    }
+    with(4000).validate().unwrap();
+}

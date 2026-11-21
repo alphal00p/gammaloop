@@ -6721,7 +6721,7 @@ fn form_settings(order: Vec<EvaluationMethod>, mode: RustRedMasterMode) -> Vakin
 /// leave masters / HPLs / logs unsubstituted; and RustRed in Symbolic,
 /// Numerical and Retain. A FALSE ERROR fails.
 #[test]
-#[ignore = "needs FORM 5 as `form` on the PATH; expected: no result-check error; on 7f1bee5a4 the result check refuses RustRed Retain vacuum values (vakint::rustred_family_<hash>) and the AlphaLoop mercedes with susbstitute_masters off (vakint::z3)"]
+#[ignore = "needs FORM 5 as `form` on the PATH"]
 fn marked_vacuum_values_through_every_backend_and_option() {
     use vakint::{AlphaLoopOptions, FMFTOptions, MATADOptions};
     let off_matad = MATADOptions {
@@ -7653,49 +7653,7 @@ fn x_cells() -> Vec<XCell> {
 
 /// The cells whose VIOLATING input is accepted on 7f1bee5a4 (rule, entry,
 /// text): asserted refused by the ignored companion test.
-const X_GAPS: &[(&str, XEntry, bool)] = &[
-    (
-        "X1 weight applied_by=vakint = prefactor_scalars",
-        XEntry::Direct,
-        false,
-    ),
-    (
-        "X1 weight applied_by=vakint = prefactor_scalars",
-        XEntry::Direct,
-        true,
-    ),
-    (
-        "X1 weight applied_by=vakint = prefactor_scalars",
-        XEntry::Ports,
-        false,
-    ),
-    (
-        "X1 weight applied_by=vakint = prefactor_scalars",
-        XEntry::Ports,
-        true,
-    ),
-    (
-        "X1 weight applied_by=vakint = prefactor_scalars",
-        XEntry::Vacuum,
-        false,
-    ),
-    (
-        "X1 weight applied_by=vakint = prefactor_scalars",
-        XEntry::Vacuum,
-        true,
-    ),
-    ("X2 original_cycles => loop_sign 1", XEntry::Vacuum, false),
-    (
-        "X3 carried cycles <= original_cycles",
-        XEntry::Vacuum,
-        false,
-    ),
-    (
-        "X4 loop_sign = the closed loops (no original_cycles)",
-        XEntry::Vacuum,
-        false,
-    ),
-];
+const X_GAPS: &[(&str, XEntry, bool)] = &[];
 
 /// Cells no evaluating entry can reach: a direct value without an external
 /// momentum is refused by the entry's two-point rule first, violating or not.
@@ -7739,9 +7697,12 @@ fn the_cross_field_rules_per_kind_and_form() {
                     e.contains("a two-point value with one independent external momentum")
                 })
             };
-            if !(two_point(&bad) && two_point(&good)) {
+            // the twin cannot reach the direct / ports entries (the two-point
+            // rule); the violating input is refused, by the rule itself (it
+            // runs at validation) or by the two-point rule
+            if !(two_point(&good) && bad.is_err()) {
                 wrong.push(format!(
-                    "{} {:?} text={}: expected unreachable (the two-point rule first)",
+                    "{} {:?} text={}: expected the twin refused by the two-point rule and the violating input refused",
                     c.rule, c.entry, c.text
                 ));
             }
@@ -7771,7 +7732,6 @@ fn the_cross_field_rules_per_kind_and_form() {
 
 /// The cells of `X_GAPS`: the violating input refused.
 #[test]
-#[ignore = "expected: refused; the rule is enforced for the closure kind only (X_GAPS)"]
 fn the_cross_field_rules_hold_for_every_kind() {
     let mut accepted = Vec::new();
     for c in x_cells() {
@@ -7791,7 +7751,6 @@ fn the_cross_field_rules_hold_for_every_kind() {
 /// the closure entry (typed and text), each within 5 s: refused by the
 /// exponent rule ("exceeds 64 in modulus") within 1 s.
 #[test]
-#[ignore = "expected: refused by the exponent rule within 1 s; on 7f1bee5a4 validation computes the power first and takes about 117 s"]
 fn a_huge_power_in_an_insertion_is_refused_at_once() {
     let huge = "((1+UFO::x)^1000000000-UFO::y)^(-1)";
     let mut wrong = Vec::new();

@@ -83,6 +83,12 @@ slow-timeout = { period = "5m", terminate-after = 2 }
 filter = "test(/the_beta_k1_quick_records|the_beta_k5_stress_records|the_beta_k1_l5_records|beta_dot_graphs_as_root_remainders|every_producer_record_passes_the_namespace_rule/)"
 slow-timeout = { period = "5m", terminate-after = 24 }
 
+[[profile.default.overrides]]
+# The record-format contract tests that run every rule on every field and
+# entry, typed and through text (about a minute each).
+filter = "binary(record_format_contract_tests) and test(/^(the_cross_field_rules_per_kind_and_form|every_rule_on_every_field)$/)"
+slow-timeout = { period = "60s", terminate-after = 5 }
+
 [profile.default.junit]
 # Default JUnit output location
 path = "target/nextest/default/junit.xml"
