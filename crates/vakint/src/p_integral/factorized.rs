@@ -918,6 +918,7 @@ pub(crate) fn check_prefactor_argument(
     };
     check_caller_atom(prefactor, FIELD, exempt, AtomSource::Argument)?;
     check_scalar(prefactor.as_view(), FIELD)?;
+    value.check_opaque_dependence(prefactor, FIELD)?;
     let refuse = |detail: String| FactorizedError::NotScalar {
         location: FIELD.to_string(),
         detail,
@@ -1502,6 +1503,77 @@ fn non_laurent_dependence(view: AtomView<'_>, depends: &dyn Fn(Symbol) -> bool) 
             }
         }
         AtomView::Fun(_) if contains(view) => shown("inside a function argument"),
+        _ => None,
+    }
+}
+
+/// Whether `name` is a STRUCTURAL head the evaluation reads (slots and
+/// representations, momenta, the metric, gamma, dot, index labels, colour,
+/// the reader's slash dummy): its arguments are not opaque.
+fn is_structural_head(name: &str) -> bool {
+    is_rep_name(name)
+        || [
+            names::MOMENTUM,
+            names::METRIC,
+            names::GAMMA,
+            names::DOT,
+            names::HEDGE,
+            "gammalooprs::edge",
+            names::STRUCTURE_F,
+            names::GENERATOR_T,
+            "vakint::slash",
+        ]
+        .contains(&name)
+}
+
+/// Whether `view` contains a momentum `Q(..)` or a symbol `depends` selects
+/// (outside the dimension argument of a slot).
+fn has_dependence(view: AtomView<'_>, depends: &dyn Fn(Symbol) -> bool) -> bool {
+    if depends_outside_slots(view, depends) {
+        return true;
+    }
+    let mut momentum = false;
+    view.visitor(&mut |part| {
+        if let AtomView::Fun(f) = part
+            && f.get_symbol().get_name() == names::MOMENTUM
+        {
+            momentum = true;
+        }
+        !momentum
+    });
+    momentum
+}
+
+/// The first OPAQUE sub-expression of `view` that depends on ε, the
+/// dimension, a mass (`depends`) or a momentum: the argument of a function
+/// that is not a structural head, the exponent of a power, or the base of a
+/// non-integer or symbolic power; with the reason. None otherwise.
+fn opaque_dependence(view: AtomView<'_>, depends: &dyn Fn(Symbol) -> bool) -> Option<String> {
+    let shown = |why: &str| Some(format!("{} ({why})", view.to_owned().to_canonical_string()));
+    match view {
+        AtomView::Add(a) => a.iter().find_map(|t| opaque_dependence(t, depends)),
+        AtomView::Mul(m) => m.iter().find_map(|t| opaque_dependence(t, depends)),
+        AtomView::Pow(p) => {
+            let (base, exponent) = p.get_base_exp();
+            if has_dependence(exponent, depends) {
+                shown("in an exponent")
+            } else if symbolica::domains::integer::Integer::try_from(exponent).is_ok() {
+                opaque_dependence(base, depends)
+            } else if has_dependence(base, depends) {
+                shown("under a non-integer or symbolic power")
+            } else {
+                None
+            }
+        }
+        AtomView::Fun(f) => {
+            if is_structural_head(f.get_symbol().get_name()) {
+                f.iter().find_map(|a| opaque_dependence(a, depends))
+            } else if f.iter().any(|a| has_dependence(a, depends)) {
+                shown("inside the argument of a function")
+            } else {
+                None
+            }
+        }
         _ => None,
     }
 }
@@ -2387,9 +2459,59 @@ impl FactorizedNumerator {
             return Err(in_kind(detail));
         }
         if let FactorizedKind::Closure(spec) = &self.kind {
-            return self.validate_closure(spec);
+            self.validate_closure(spec)?;
+        } else {
+            self.validate_contract(None)?;
         }
-        self.validate_contract(None)
+        if is_marked(self) {
+            for (field, atom) in self.record_atoms() {
+                if !field.ends_with(" mass") {
+                    self.check_opaque_dependence(atom, &field)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// OPAQUE CALLER SCALARS (marked values): a function other than the
+    /// structural heads (slots, momenta, metric, gamma, dot, index labels,
+    /// colour) and a non-integer or symbolic power are opaque to the
+    /// evaluation, so their arguments (and an exponent) must be free of ε,
+    /// the dimension (outside slots), the masses and the momenta: `Graph`
+    /// (`Insertion` in an insertion), detail prefix `a non-polynomial
+    /// dependence in <field>: `. Caller-namespaced scalars and function heads
+    /// are otherwise accepted as opaque (the format has no declared symbol
+    /// table).
+    pub(crate) fn check_opaque_dependence(&self, atom: &Atom, field: &str) -> Result<()> {
+        let masses = match &self.kind {
+            FactorizedKind::Closure(spec) => [&spec.mass_squared, &spec.auxiliary_mass_squared]
+                .into_iter()
+                .filter_map(|m| match m.as_view() {
+                    AtomView::Var(v) => Some(v.get_symbol()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>(),
+            _ => Vec::new(),
+        };
+        let dimension = self.dimension;
+        let depends = |symbol: Symbol| {
+            let name = symbol.get_name();
+            name == "ε" || name.ends_with("::ε") || symbol == dimension || masses.contains(&symbol)
+        };
+        match opaque_dependence(atom.as_view(), &depends) {
+            None => Ok(()),
+            Some(found) => {
+                let detail = format!("a non-polynomial dependence in {field}: {found}");
+                let insertion = field
+                    .strip_prefix("insertion ")
+                    .and_then(|rest| rest.split(' ').next())
+                    .and_then(|v| v.parse::<usize>().ok());
+                Err(match insertion {
+                    Some(vertex) => FactorizedError::Insertion { vertex, detail },
+                    None => FactorizedError::Graph { detail },
+                })
+            }
+        }
     }
 
     /// A marked value's ids must be i64 (they are written as Q(id, ..),

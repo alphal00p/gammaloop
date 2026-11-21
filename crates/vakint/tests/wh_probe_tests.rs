@@ -1832,6 +1832,86 @@ fn every_real_record_validates() {
     wh_fixtures::assert_compared("REAL_RECORDS_VALIDATE", accepted, Some(85));
 }
 
+// ===========================================================================
+// G3: opaque caller scalars depend on nothing the evaluation transforms
+// ===========================================================================
+
+/// A function other than the structural heads, or a non-integer power, whose
+/// argument / base / exponent depends on ε, the dimension, a mass or a
+/// momentum, in a factor or a prefactor field: refused at validation
+/// (`Graph`, prefix `a non-polynomial dependence in <field>: `); the same
+/// function of a caller scalar is accepted.
+#[test]
+fn g3_opaque_functions_and_powers_are_free_of_eps_dimension_masses_momenta() {
+    let base = record("wh-k1-root");
+    let vertex_id = base
+        .vertices
+        .iter()
+        .find(|x| x.factor != Atom::num(1))
+        .unwrap()
+        .id;
+    let with = |extra: &str| {
+        let mut v = base.clone();
+        let vertex = v.vertices.iter_mut().find(|x| x.id == vertex_id).unwrap();
+        vertex.factor = &vertex.factor * atom(extra);
+        v
+    };
+    let prefix = format!("a non-polynomial dependence in vertex {vertex_id} factor: ");
+    for bad in [
+        format!("log(1+{EPS})"),
+        format!("probe::f({DIM})"),
+        format!("(1+{EPS})^(1/2)"),
+        format!("probe::x^{EPS}"),
+        format!("sin({DIM}*probe::x)"),
+    ] {
+        match with(&bad).validate() {
+            Err(FactorizedError::Graph { detail }) => {
+                assert!(detail.starts_with(&prefix), "{bad}: {detail}")
+            }
+            other => panic!("{bad}: {other:?}"),
+        }
+    }
+    for good in [
+        format!("(1+{EPS})"),
+        "probe::f(probe::x)".to_string(),
+        "(1+probe::x)^(1/2)".to_string(),
+        "log(probe::x)".to_string(),
+        "symbolica::zeta(3)".to_string(),
+        format!("({DIM}-1)^-2"),
+    ] {
+        with(&good)
+            .validate()
+            .unwrap_or_else(|e| panic!("{good}: {e}"));
+    }
+    // a prefactor field and the prefactor ARGUMENT
+    let mut s = base.clone();
+    s.prefactor.scalars = &s.prefactor.scalars * atom(&format!("exp({EPS})"));
+    match s.validate() {
+        Err(FactorizedError::Graph { detail }) => assert!(
+            detail.starts_with("a non-polynomial dependence in prefactor_scalars: "),
+            "{detail}"
+        ),
+        other => panic!("exp(eps) in prefactor_scalars: {other:?}"),
+    }
+    match closure(
+        &base,
+        &symbolic(),
+        &(base.prefactor.total() * atom(&format!("log({DIM})"))),
+    ) {
+        Err(FactorizedError::Graph { detail }) => assert!(
+            detail.starts_with("a non-polynomial dependence in prefactor argument: "),
+            "{detail}"
+        ),
+        other => panic!("log(D) in the argument: {other:?}"),
+    }
+    closure(
+        &base,
+        &symbolic(),
+        &(base.prefactor.total() * atom("log(probe::x)")),
+    )
+    .unwrap();
+}
+
 /// MARKED three-loop massive vacuum values through the vacuum entry in
 /// Symbolic and Numerical mode at 3 and 6 terms: the basketball (four lines
 /// of one mass between two vertices) and the all-massive mercedes (the
