@@ -1297,3 +1297,105 @@ fn k1_k2_depth_check_on_the_eps0_only_records() -> Result<()> {
     }
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// U7a alone finding: a paired crown edge's incoming leg on a `ct:` node
+// ---------------------------------------------------------------------------
+
+const L5_101213_DOT: &str = include_str!("testdata/u7a/l5-d045537.dot");
+
+/// U7a-ALONE-FINDING: L5 101213 (regrouped 45537) run alone, the 4-loop
+/// child {2,3,4,5,6,8,9,10,11,12,13}. Its crown edge 7 has both ends in the
+/// child (legs 7 out of vertex 1, 100007 into vertex 7); remainder record
+/// id 2 contracts {12,13} onto the `ct:` vertex 6, which carries leg 100007
+/// (half-edge 13). The Δ of {12,13} that this graph fills itself is written
+/// with `Q(7, ..)`, the GRAPH's momentum of that boundary edge, which is not
+/// a momentum of a leg on vertex 6: vakint refused the record
+/// (`error:vakint:UnsupportedTensor`, "not a boundary momentum of the
+/// insertion") and the diagram failed in check and on. In a set the Δ came
+/// from 059943's fill, written in `Q(9)` and `Q(11)`, and compared. The
+/// emitter writes the incoming leg's own momentum `Q(100007)` (equal to
+/// `Q(7)`): every record is evaluated, check is today's value, on agrees.
+#[test]
+fn paired_crown_incoming_leg_on_a_ct_node() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let diagram = colour_factored(&load(L5_101213_DOT)?)?;
+        let support = [2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13];
+        let (off, nothing) = child_run(&diagram, &support, Switch::OFF)?;
+        let off = off?;
+        ensure!(nothing.is_empty());
+        for (mode, switch) in [("check", check()), ("on", on())] {
+            let (value, captured) = child_run(&diagram, &support, switch)?;
+            let value = value.map_err(|error| eyre!("L5 101213 child {mode}: {error:#}"))?;
+            evaluated_except(&format!("L5 101213 child {mode}"), &captured, &[])?;
+            let crown = captured
+                .iter()
+                .filter(|a| a.kind == Kind::Child && a.outcome == "uncontracted")
+                .filter_map(|a| a.text.as_deref())
+                .find(|text| {
+                    text.contains("contracted=12,13 ")
+                        && text.contains("\nedge\t100007\tsource=ext\ttarget=6\t")
+                        && text.contains("\ninsertion\t6\thedges=13,17,21\t")
+                });
+            let Some(text) = crown else {
+                return Err(eyre!(
+                    "L5 101213 child {mode}: no evaluated record with {{12,13}} contracted onto vertex 6 next to leg 100007"
+                ));
+            };
+            let factor = text
+                .lines()
+                .find(|line| line.starts_with("insertion_factor\t6\t"))
+                .unwrap_or_default();
+            eprintln!("U7A_ALONE L5 101213 {mode}: {factor}");
+            ensure!(
+                !factor.contains("::Q(7,"),
+                "L5 101213 child {mode}: the insertion at vertex 6 keeps Q(7): {factor}"
+            );
+            if mode == "check" {
+                ensure!(value == off, "check returns today's Δ");
+            } else {
+                ensure!(atoms_equal(&value, &off), "L5 101213: on differs from off");
+            }
+        }
+        Ok(())
+    })
+}
+
+/// The rename itself: only an incoming leg on the node renames, an edge
+/// with both legs (or only its outgoing one) on the node keeps its id.
+#[test]
+fn crown_legs_at_node_renames_only_an_incoming_leg() {
+    test_initialise().unwrap();
+    let q = |e: usize| function!(GS.emr_mom, e, mink());
+    let crowns = [
+        uncontracted::PairedCrown {
+            edge: 7,
+            source_hedge: 12,
+            incoming: 100_007,
+            sink_hedge: 13,
+        },
+        uncontracted::PairedCrown {
+            edge: 3,
+            source_hedge: 4,
+            incoming: 100_003,
+            sink_hedge: 5,
+        },
+    ];
+    let delta = q(7) + q(3) + q(9);
+    // node 6 carries 13 (7's incoming leg) and 17; node 1 carries 12 (7's
+    // outgoing leg); node 2 carries both legs of 3
+    let ends = [(6, 13), (6, 17), (1, 12), (2, 4), (2, 5)];
+    assert_eq!(
+        uncontracted::crown_legs_at_node(&delta, 6, &ends, &crowns),
+        q(100_007) + q(3) + q(9)
+    );
+    assert_eq!(
+        uncontracted::crown_legs_at_node(&delta, 1, &ends, &crowns),
+        delta
+    );
+    assert_eq!(
+        uncontracted::crown_legs_at_node(&delta, 2, &ends, &crowns),
+        delta
+    );
+}
