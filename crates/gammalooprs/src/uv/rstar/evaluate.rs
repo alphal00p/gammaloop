@@ -392,6 +392,37 @@ impl RStarPlan {
         evaluation.counterterm()
     }
 
+    /// Tests: [`Self::projected_counterterm_closing_root_scalar`] with the
+    /// proper UV children supplied by the caller (as
+    /// [`Self::counterterm_with_children`]), e.g. a Δ as a production run's
+    /// Δ cache spelled it.
+    #[cfg(test)]
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn projected_counterterm_closing_root_scalar_with_children(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        root_normalization: &dyn Fn(&Atom) -> Result<Atom>,
+        closed_root: &ClosedRootNormalization,
+        children: BTreeMap<SuBitGraph, Atom>,
+    ) -> Result<Atom> {
+        let mut evaluation = Evaluation::new(
+            self,
+            graph,
+            model,
+            vakint,
+            uv_settings,
+            Some(root_normalization),
+            Some(children),
+            ChildMass::Reference,
+        )?
+        .closing_root()?;
+        evaluation.closed_root = Some(closed_root);
+        evaluation.counterterm()
+    }
+
     /// [`Self::projected_bare_terms_only_closing_root`] with the closed
     /// metric-root normalisation as data (see
     /// [`Self::projected_counterterm_closing_root_scalar`]).
@@ -1151,6 +1182,11 @@ impl<'a> Evaluation<'a> {
             // The counts up to the failure, before the error propagates
             // (log_timing prints them on success).
             self.log_boundary_summary("error");
+        }
+        if self.plan.root_boundary.is_none() {
+            // GAMMALOOP_UNCONTRACTED_NUMERATOR on / check: the diagram root's
+            // UNCONTRACTED_SUMMARY (a no-op with the switch off)
+            super::uncontracted::log_summary(&self.graph.name, result.is_ok());
         }
         result
     }
@@ -3294,6 +3330,11 @@ impl<'a> Evaluation<'a> {
         };
         let uncontracted_elapsed = started.elapsed();
         if switch.mode == Mode::Check {
+            // a refusal that is not designed fails the diagram (review B1/B2)
+            if attempt.is_error() {
+                uncontracted::report(&attempt, None);
+                return Err(uncontracted::error_failure(&attempt, switch.mode));
+            }
             let today_started = Instant::now();
             let today = self.integrate_ordinary_today(term)?;
             let check = attempt.value().map(|ours| {
@@ -3314,10 +3355,35 @@ impl<'a> Evaluation<'a> {
             return Ok(today);
         }
         uncontracted::report(&attempt, None);
+        if attempt.is_error() && uncontracted::strict() {
+            return Err(uncontracted::error_failure(&attempt, switch.mode));
+        }
         match attempt.value() {
             Some(value) => {
                 self.integration_id = id;
                 self.integration_elapsed += uncontracted_elapsed;
+                // today's bookkeeping for a record vakint took (review M3):
+                // the remainder count, the RR_OUTER line of its id, and the
+                // uncontracted interval of the boundary summary
+                if matches!(
+                    boundary::remainder_boundary_mode(),
+                    Ok(BoundaryMode::On | BoundaryMode::Check)
+                ) {
+                    self.summary.remainders += 1;
+                }
+                self.summary.uncontracted += 1;
+                self.summary.seconds_uncontracted += uncontracted_elapsed.as_secs_f64();
+                if let Some(delta) = attempt.delta {
+                    self.summary.add_uncontracted(delta);
+                }
+                IntegrationTimings::boundary(
+                    started,
+                    0.0,
+                    attempt.build_seconds,
+                    attempt.evaluate_seconds,
+                    attempt.finish_seconds,
+                )
+                .log(self.graph, id, term.remainder.loops, "uncontracted");
                 Ok(value)
             }
             None => self.integrate_ordinary_today(term),

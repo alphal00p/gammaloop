@@ -1,0 +1,11 @@
+schema	wh-k2-value.v0
+label	value of B_self_energy_L2_22 k2-child remainder at its call site, integrate_polynomial (after finish_tensor); contracted path, d778df9ad4 + dump hooks d510758507
+depth	1
+notation	spenso (finish_tensor output): spenso::g(mink(D,a),mink(D,b)), Q(x,mink(D,a)), spenso::dot(..); eps = gammalooprs::{}::ε; log(M_aux^2) with M_aux^2 = gammalooprs::{scalar}::rstar_mass_squared
+value	1/32*UFO::{}::gs2_minus_i*UFO::{}::gs_minus^2*gammalooprs::{scalar}::uv_isotropic_channel_1*gammalooprs::{}::ε^(-1)*𝜋^(-2)
+valid_through	eps^-1 (depth 1 = remainder loops, from the leading eps^-1: a one-loop remainder returns its pole only; exact: the closure normalisation 1/(d(d-1)(d+2)) and the (d+2) of the projector are in the vakint input (the root_projector callback acts after the Taylor step, before the call); nothing eps-dependent multiplies the series afterwards)
+readable	(1/32) pi^-2 gs2_minus_i gs_minus^2 tau_1 / eps   (checked equal to `value` with symbolica 3.0.1: tools/readable.py)
+legend	m(h) = spenso::mink(gammalooprs::dim, gammalooprs::hedge(h,1)); tau_j = gammalooprs::{scalar}::uv_isotropic_channel_j (caller scalars carried through, OQ-15); the projector's pairings in this record: T_1 = g(m(0),m(6)) g(m(1),m(7)), T_2 = g(m(0),m(1)) g(m(6),m(7)), T_3 = g(m(0),m(7)) g(m(1),m(6)); channels 2 and 3 vanish; gs2_minus_i, gs_minus = UFO couplings carried inside the vertex factors
+ports	m(0) = edge 0 (B, p(1)) at v0; m(1) = edge 1 (B, p(2)) at v2; m(6) = leg 4 (gluon edge 4 leaving the child at v1, p(3)); m(7) = leg 100004 (edge 4 entering the child at v2, p(3)); all four closed by the isotropic projector: the returned value is a scalar linear in tau_j
+companion	raw/67951-b_child_delta-000003-B_self_energy_L2_22.txt = the child counterterm the caller builds from this value (isotropic_counterterm, tau_j -> T_j after -K): Delta(2,3,5) = -1/32 gs2_minus_i gs_minus^2 pi^-2 eps^-1 g(m(0),m(6)) g(m(1),m(7))
+end

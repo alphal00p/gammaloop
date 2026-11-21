@@ -622,9 +622,22 @@ pub(super) struct BoundarySummary {
     /// Check mode: remainders compared, and those with a skipped input pair.
     pub checks: usize,
     pub checks_skipped: usize,
+    /// `GAMMALOOP_UNCONTRACTED_NUMERATOR=on`: remainders vakint's factorised
+    /// entry took (today's path did not run), their wall seconds and
+    /// vakint::timing counters (U7a review M3; printed only when nonzero).
+    pub uncontracted: usize,
+    pub seconds_uncontracted: f64,
+    pub reduce_uncontracted: f64,
+    pub lower_uncontracted: f64,
 }
 
 impl BoundarySummary {
+    /// Add the vakint::timing counters of an uncontracted record's entry.
+    pub(super) fn add_uncontracted(&mut self, delta: vakint::timing::Delta) {
+        self.reduce_uncontracted += delta.reduce_seconds;
+        self.lower_uncontracted += delta.lower_seconds;
+    }
+
     /// Add the vakint::timing counters of a boundary-path interval.
     pub(super) fn add_boundary(&mut self, delta: vakint::timing::Delta) {
         self.reduce_boundary += delta.reduce_seconds;
@@ -681,7 +694,7 @@ impl BoundarySummary {
             }
         };
         eprintln!(
-            "BOUNDARY_SUMMARY graph={graph} root={root} remainders={} boundary={} zero={} fallback={} errors={} not_admitted={} fallback_reasons={} certified={} uncertified={} checks={} checks_skipped={} seconds_boundary={:.3} seconds_today={:.3} reduce_boundary_s={:.3} lower_boundary_s={:.3} reduce_today_s={:.3} lower_today_s={:.3} eval_s={eval_seconds:.3} reduce_eval_s={:.3} lower_eval_s={:.3} outcome={outcome}",
+            "BOUNDARY_SUMMARY graph={graph} root={root} remainders={} boundary={} zero={} fallback={} errors={} not_admitted={} fallback_reasons={} certified={} uncertified={} checks={} checks_skipped={} seconds_boundary={:.3} seconds_today={:.3} reduce_boundary_s={:.3} lower_boundary_s={:.3} reduce_today_s={:.3} lower_today_s={:.3} eval_s={eval_seconds:.3} reduce_eval_s={:.3} lower_eval_s={:.3}{} outcome={outcome}",
             self.remainders,
             self.boundary,
             self.zero,
@@ -701,6 +714,17 @@ impl BoundarySummary {
             self.lower_today,
             eval.reduce_seconds,
             eval.lower_seconds,
+            if self.uncontracted > 0 {
+                format!(
+                    " uncontracted={} seconds_uncontracted={:.3} reduce_uncontracted_s={:.3} lower_uncontracted_s={:.3}",
+                    self.uncontracted,
+                    self.seconds_uncontracted,
+                    self.reduce_uncontracted,
+                    self.lower_uncontracted
+                )
+            } else {
+                String::new()
+            },
         );
         #[cfg(test)]
         LOGGED_SUMMARIES.with(|logged| {
