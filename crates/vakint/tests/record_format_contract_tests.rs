@@ -1,4 +1,4 @@
-//! The CONTRACT of the record format (`WH-RECORD-FORMAT.md` v1.4, "v1.4 §n",
+//! The CONTRACT of the record format (the record format v1.4, "v1.4 §n",
 //! and its corrections, "corr. n") through the PUBLIC entries on real
 //! records (the vendored fixtures; the producer's fixtures under
 //! `VAKINT_TEST_WH_FIXTURES` for the `#[ignore]`d ones): what comes back,
@@ -4161,7 +4161,7 @@ fn the_inputs_per_rule_of_the_atom_grammar() {
             Ok(v) => format!("ACCEPTED ({} chars)", v.to_string().len()),
             Err(e) => format!("REFUSED {}", e.chars().take(160).collect::<String>()),
         };
-        eprintln!("CONTRACT AUDIT {name}: {shown} [{seconds:.2}s]");
+        eprintln!("CONTRACT INPUT {name}: {shown} [{seconds:.2}s]");
         if matches!(&got, Err(e) if e == "PANIC") {
             wrong.push(format!("{name}: a panic"));
             continue;
@@ -4818,7 +4818,7 @@ fn hidden_singular_functions_are_refused_by_name() {
         "symbolica::zeta(2)/symbolica::zeta(2)",
     ] {
         let t = atom(twin);
-        eprintln!("CONTRACT REVIEWER twin {twin} parses to {t}");
+        eprintln!("CONTRACT TWIN {twin} parses to {t}");
         let v = with(twin);
         v.validate().unwrap_or_else(|e| panic!("{twin}: {e}"));
         let got = closure(&v, &symbolic(), &v.prefactor.total())

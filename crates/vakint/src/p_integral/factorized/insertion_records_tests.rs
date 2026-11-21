@@ -378,7 +378,7 @@ fn the_beta_k5_stress_records_equal_their_values() {
 }
 
 /// k1-quick (L4 graphs 40 / 42 / 49 / 100): 35 records, the 30 with child
-/// insertions compared here (the 5 bare roots are lane CLOSURE's test).
+/// insertions compared here (the 5 bare roots are the closure tests').
 #[test]
 #[ignore = "needs VAKINT_TEST_WH_FIXTURES"]
 fn the_beta_k1_quick_records_with_insertions_equal_their_values() {

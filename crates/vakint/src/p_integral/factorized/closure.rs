@@ -6,7 +6,7 @@
 //! uncontracted, and the R* Taylor step UNAPPLIED ([`TaylorSpec`]), or one
 //! pre-expanded Taylor sector (`taylor = None`).
 //!
-//! What the record denotes (N/notes/wh/WH-RECORD-FORMAT.md section 4.1): with
+//! What the record denotes (the record format, section 4.1): with
 //! `E = projector · PROD factors · PROD_e den_e^(-power_e)`, `den_e = q_e² −
 //! m_e²`, every scaled `p(j) → λ p(j)` (in every edge momentum and every
 //! `Q(x_j, ..)`), the reference mass `R → (1 − λ²) M_aux²` (compensate) or
@@ -82,7 +82,7 @@ fn retains_masters(settings: &VakintSettings) -> bool {
         == Some(crate::RustRedMasterMode::Retain)
 }
 
-/// Highest Taylor degree accepted (WH-RECORD-FORMAT OQ-5: QCD R* needs <= 2).
+/// Highest Taylor degree accepted (the record format: QCD R* needs <= 2).
 pub const MAX_CLOSURE_TAYLOR_DEGREE: u32 = 2;
 
 fn refuse(detail: impl Into<String>) -> FactorizedError {
@@ -239,7 +239,7 @@ fn momentum_ids(view: AtomView<'_>) -> BTreeSet<usize> {
 }
 
 impl FactorizedNumerator {
-    /// The closure rules (the record of N/notes/wh/WH-RECORD-FORMAT.md):
+    /// The closure rules (of the record format):
     /// CONTRACT-v1's graph, factor, index, locality and fermion rules
     /// (momentum conservation on all components for a conserved record with a
     /// Taylor step, on the loop components otherwise), then the closure kind's.
@@ -307,7 +307,7 @@ impl FactorizedNumerator {
             )));
         }
         self.validate_contract(Some(conserved))?;
-        // weights, exactly once (WH-RECORD-FORMAT section 3): with
+        // weights, exactly once (the record format, section 3): with
         // `original_cycles` the original graph's weights stay with the caller;
         // without, the carried graph's closed loops are applied here
         let p = &self.prefactor;
@@ -1557,7 +1557,7 @@ pub fn evaluate_factorized_closure(
     records: &[FactorizedNumerator],
     prefactors: &[Atom],
 ) -> Result<ClosureValue> {
-    // Lane unknown-masters: strict refusal once, on this call's summed value.
+    // unknown master coefficients: strict refusal once, on this call's summed value.
     if let Some(_boundary) = crate::public_result_boundary() {
         let inner = crate::unknown_master_coefficients_carried(settings);
         let result = evaluate_factorized_closure(vakint, &inner, records, prefactors)?;
@@ -1623,7 +1623,7 @@ pub(super) fn evaluate_validated(
     prefactor: &Atom,
 ) -> Result<ClosureRecordValue> {
     // the value must not depend on the caller's tensor-reduction method or
-    // notation (WH-RECORD-FORMAT v1.4 section 7): pinned to what the R*
+    // notation (the record format, section 7): pinned to what the R*
     // boundary path uses (FeynKit, dot notation)
     let mut local = settings.clone();
     local.tensor_reduction_method = crate::TensorReductionMethod::FeynKit;

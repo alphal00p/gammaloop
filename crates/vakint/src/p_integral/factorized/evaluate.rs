@@ -164,8 +164,8 @@ struct Orientation {
 /// The most open Lorentz ports a MARKED propagator-type value may keep (the
 /// unmarked values keep the base's behaviour: no limit): the transverse Gram
 /// matrix of the tensor reduction with one external momentum is regular at
-/// `d = 4` through rank 7 and singular at rank 8 (a spurious `1/(d-4)`, N/notes
-/// D6 section 3); ranks above 6 are not validated. A CONSERVATIVE guard, not
+/// `d = 4` through rank 7 and singular at rank 8 (a spurious `1/(d-4)`);
+/// ranks above 6 are not validated. A CONSERVATIVE guard, not
 /// the exact condition: the exact one is the open LOOP-tensor rank (an open
 /// slot carried by an external momentum adds no loop rank).
 pub const MAX_OPEN_PORTS: usize = 6;
@@ -273,7 +273,7 @@ pub fn contract_to_vakint_dots(value: &FactorizedNumerator) -> Result<(Atom, f64
     if let Some((a, b)) = unknown.get() {
         return Err(evaluation(format!("a dot of unknown edges {a}, {b}")));
     }
-    // Open slots (D6, helper VH; `open_slots`: the ports without a projector,
+    // Open slots (`open_slots`: the ports without a projector,
     // or what a projector leaves open): an edge momentum carrying an open
     // index, `Q(e, mink(D, i))`, becomes the edge's vakint momentum with that
     // index (`k(j, i)`, `±p(1, i)`), a metric between two open slots
@@ -788,7 +788,7 @@ fn contract_to_vakint_dots_v1(value: &FactorizedNumerator) -> Result<(Atom, f64)
     if let Some((a, b)) = unknown.get() {
         return Err(evaluation(format!("a dot of unknown edges {a}, {b}")));
     }
-    // Open ports (no projector; D6, helper VH): an edge momentum carrying a
+    // Open ports (no projector): an edge momentum carrying a
     // port index, `Q(e, mink(D, i))`, becomes the edge's vakint momentum with
     // that index (`k(j, i)`, `±p(1, i)`), a metric between two ports
     // `g(mink(D, a), mink(D, b))` vakint's `g(a, b)`; vakint's tensor prepass

@@ -149,7 +149,7 @@ pub enum FactorizedKind {
     /// An R* remainder (or one pre-expanded Taylor sector of one) closed by a
     /// massive line among massless ones, evaluated by
     /// [`evaluate_factorized_closure`]; the record form of
-    /// N/notes/wh/WH-RECORD-FORMAT.md (kinds K1-K3). The adapter and the vacuum
+    /// the record format (kinds K1-K3). The adapter and the vacuum
     /// entry refuse it.
     Closure(ClosureSpec),
 }
@@ -499,7 +499,7 @@ pub struct FactorizedNumerator {
 /// The v3 provenance of a DIRECT record (`closure none`, `taylor none`,
 /// `softs 0` in its closure section): with `original_cycles` the weights
 /// (loop sign, n_f, overall factor) are the caller's, applied once after the
-/// call (WH-RECORD-FORMAT, the weights rule R2); without, the v1 rule.
+/// call (the record format, the weights rule R2); without, the v1 rule.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DirectRecord {
     /// `(fermion, ghost)` closed cycles of the ORIGINAL graph.

@@ -664,7 +664,7 @@ pub fn record_log_enabled() -> bool {
     *ON
 }
 
-/// The per-record line the beta's runs read (their WH-RECORD-ANSWERS Q6):
+/// The per-record line the beta's runs read (the producer's timing request):
 /// `VAKINT_RECORD kind= label="" loops= depth= patterns= contract_s=
 /// lower_s= reduce_s= finalize_s= cpu_s= wall_s= rss_gib=
 /// contracted_bytes=`. `lower_s` / `reduce_s` are P12's inclusive counters,

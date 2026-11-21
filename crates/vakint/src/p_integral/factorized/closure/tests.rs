@@ -3416,7 +3416,7 @@ fn the_prefactor_argument_gets_the_record_prefactor_checks() {
     .unwrap();
 }
 
-/// THE GATE'S DELTA WITNESS (B-1) as acceptance tests on the REAL k1-root
+/// THE DELTA WITNESS as acceptance tests on the REAL k1-root
 /// record: with `vakint::closure_tensor_0` in prefactor_scalars or in the
 /// prefactor argument it is REFUSED; with the control name
 /// `user::closure_tensor_0` in the argument the value is A x (A = the
@@ -3745,7 +3745,7 @@ fn insertion_cycles_do_not_wrap() {
     assert_eq!(super::insertion_cycles(&[a, b]), Some((u32::MAX, 1)));
 }
 
-/// THE GATE'S F2: raw port indices `PORT + i` (9001, 9002, ..) cannot meet a
+/// Raw port indices `PORT + i` (9001, 9002, ..) cannot meet a
 /// caller's integer index. (a) A caller's OPEN slot cannot be an integer: a
 /// port is a half-edge slot (`IndexNotLocal` otherwise, asserted here). (b) A
 /// caller's integer DUMMY is contracted away by idenso before the mapping;
