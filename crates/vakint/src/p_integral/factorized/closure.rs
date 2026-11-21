@@ -1494,8 +1494,7 @@ pub fn evaluate_factorized_closure(
         // a marked value: the separately supplied prefactor gets the checks of
         // the record's prefactor fields, the settings' epsilon the caller-symbol
         // rule (no-ops for an unmarked value: the base behaviour)
-        super::check_prefactor_argument(value, prefactor)?;
-        super::check_epsilon_setting(value, vk_symbol!(&settings.epsilon_symbol))?;
+        super::check_marked_entry(value, prefactor, vk_symbol!(&settings.epsilon_symbol))?;
         let record = evaluate_validated(vakint, settings, value, spec, prefactor)?;
         out.value += &record.value;
         out.vakint_value += &record.vakint_value;

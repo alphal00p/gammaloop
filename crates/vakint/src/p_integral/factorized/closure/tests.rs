@@ -2875,10 +2875,24 @@ fn assert_graph_prefix(result: std::result::Result<(), FactorizedError>, prefix:
     }
 }
 
+/// The full reserved-symbol refusal: a RECORD field names the rule for the
+/// reader's default namespace, an ARGUMENT (the prefactor argument, a
+/// setting) the reserved namespace.
 fn reserved_prefix(name: &str, field: &str) -> String {
-    format!(
-        "reserved symbol {name} in {field}: the vakint:: namespace is reserved for vakint's internal symbols"
-    )
+    if field == "prefactor argument" || field.ends_with("setting") {
+        format!(
+            "reserved symbol {name} in {field}: the vakint:: namespace is reserved for vakint's internal symbols"
+        )
+    } else {
+        format!(
+            "reserved symbol {name} in {field}: symbols of a record must be namespace-qualified (a bare name is read into vakint::)"
+        )
+    }
+}
+
+/// vakint's default epsilon symbol (the default settings' epsilon).
+fn vakint_epsilon() -> symbolica::atom::Symbol {
+    crate::utils::vakint_macros::vk_symbol!(&VakintSettings::default().epsilon_symbol)
 }
 
 /// The gate's F1: `vakint::closure_lambda` AND `vakint::closure_tensor_0` in
@@ -3021,15 +3035,22 @@ fn the_prefactor_argument_is_checked_at_every_entry() {
         }
     }
     // without the defect the argument checks pass (marked records)
-    super::super::check_prefactor_argument(&direct, &direct.prefactor.total()).unwrap();
+    super::super::check_prefactor_argument(&direct, &direct.prefactor.total(), vakint_epsilon())
+        .unwrap();
     let root = l2_root(2, true);
-    super::super::check_prefactor_argument(&root, &root.prefactor.total()).unwrap();
+    super::super::check_prefactor_argument(&root, &root.prefactor.total(), vakint_epsilon())
+        .unwrap();
     // an UNMARKED value keeps the base behaviour: no argument check
     let mut v1 = direct.clone();
     v1.record = None;
     v1.insertions.clear();
     assert!(!super::super::is_marked(&v1));
-    super::super::check_prefactor_argument(&v1, &atom("vakint::closure_tensor_0")).unwrap();
+    super::super::check_prefactor_argument(
+        &v1,
+        &atom("vakint::closure_tensor_0"),
+        vakint_epsilon(),
+    )
+    .unwrap();
 }
 
 /// A-17: every item of the prefactor argument's checks, on the closure
@@ -3038,7 +3059,9 @@ fn the_prefactor_argument_is_checked_at_every_entry() {
 fn the_prefactor_argument_gets_the_record_prefactor_checks() {
     let root = l2_root(2, true);
     let clean = root.prefactor.total();
-    let check = |x: &str| super::super::check_prefactor_argument(&root, &(&clean * atom(x)));
+    let check = |x: &str| {
+        super::super::check_prefactor_argument(&root, &(&clean * atom(x)), vakint_epsilon())
+    };
     let not_scalar = |x: &str, prefix: &str| match check(x) {
         Err(FactorizedError::NotScalar { location, detail }) => {
             assert_eq!(location, "prefactor argument", "{x}");
@@ -3097,8 +3120,14 @@ fn the_prefactor_argument_gets_the_record_prefactor_checks() {
     }
     let mut with_nf = root.clone();
     with_nf.prefactor.nf_power = 1;
-    super::super::check_prefactor_argument(&with_nf, &with_nf.prefactor.total()).unwrap();
-    super::super::check_prefactor_argument(&with_nf, &(&clean * atom("beta::nf"))).unwrap();
+    super::super::check_prefactor_argument(&with_nf, &with_nf.prefactor.total(), vakint_epsilon())
+        .unwrap();
+    super::super::check_prefactor_argument(
+        &with_nf,
+        &(&clean * atom("beta::nf")),
+        vakint_epsilon(),
+    )
+    .unwrap();
 }
 
 /// THE GATE'S DELTA WITNESS (B-1) as acceptance tests on the REAL k1-root
@@ -4099,8 +4128,96 @@ fn refusal_entry_arguments() {
 }
 
 // ---------------------------------------------------------------------------
-// Delta review of 4f3f54110: A-37, A-38, A-21b, A-27(e).
+// Delta review of 4f3f54110 (A-36, A-41, A-37, A-38, A-21b, A-27(e)).
 // ---------------------------------------------------------------------------
+
+/// A-36: a BARE name in a marked record text is read into `vakint::` and
+/// refused with the advice to qualify it.
+#[test]
+fn a_bare_name_in_a_marked_record_is_refused_with_advice() {
+    let record = include_str!("../fixtures/wh-k1-root.record.txt");
+    let line = record
+        .lines()
+        .find(|l| l.starts_with("prefactor_scalars\t"))
+        .unwrap();
+    let bare = record.replace(line, &format!("{line}*gs"));
+    assert_ne!(bare, record);
+    match FactorizedNumerator::from_text(&bare) {
+        Err(FactorizedError::Graph { detail }) => assert_eq!(
+            detail,
+            "reserved symbol vakint::gs in prefactor_scalars: symbols of a record must be namespace-qualified (a bare name is read into vakint::)"
+        ),
+        other => panic!("{other:?}"),
+    }
+    // qualified: accepted
+    let qualified = record.replace(line, &format!("{line}*UFO::gs"));
+    FactorizedNumerator::from_text(&qualified).unwrap();
+}
+
+/// A-36 (ii): an UNMARKED v1 record with bare names parses, validates and
+/// evaluates as on the base (bare names are read into `vakint::` there too):
+/// its value is the qualified record's value with the symbol renamed.
+#[test]
+fn an_unmarked_v1_record_with_bare_names_is_unchanged() {
+    let qualified_text = include_str!("../fixtures/l1-gluon-bubble.txt");
+    assert!(qualified_text.contains("UFO::{}::gs_minus"));
+    let bare_text = qualified_text.replace("UFO::{}::gs_minus", "gs_minus");
+    let bare = FactorizedNumerator::from_text(&bare_text).unwrap();
+    assert!(!super::super::is_marked(&bare));
+    bare.validate().unwrap();
+    let qualified = FactorizedNumerator::from_text(qualified_text).unwrap();
+    let vakint = Vakint::new().unwrap();
+    let run = |v: &FactorizedNumerator| {
+        super::super::evaluate_factorized(&vakint, &settings(), v, &v.prefactor.total())
+            .unwrap()
+            .value
+    };
+    let got = run(&bare);
+    let expected = run(&qualified)
+        .replace(atom("UFO::gs_minus"))
+        .with(atom("vakint::gs_minus"));
+    assert!(!expected.is_zero());
+    assert!(
+        (&got - &expected).expand().is_zero(),
+        "bare {got}\nqualified renamed {expected}"
+    );
+}
+
+/// A-41: `vakint::ε` in a marked record is exempt ONLY when it is the
+/// settings' epsilon; with another epsilon it is refused (record and
+/// argument), with vakint's own it is accepted.
+#[test]
+fn vakint_epsilon_is_exempt_only_as_the_settings_epsilon() {
+    let vakint = Vakint::new().unwrap();
+    let mut v = l2_root(1, true);
+    v.vertices[0].factor = &v.vertices[0].factor * atom("1+vakint::ε");
+    v.validate().unwrap();
+    let run = |settings: &VakintSettings| {
+        evaluate_factorized_closure(
+            &vakint,
+            settings,
+            std::slice::from_ref(&v),
+            &[v.prefactor.total()],
+        )
+        .map(|_| ())
+    };
+    assert_graph_prefix(
+        run(&rstar_site_settings()),
+        "reserved symbol vakint::ε in vertex 1 factor: the settings' epsilon is gammalooprs::ε",
+        "record, other epsilon",
+    );
+    run(&settings()).unwrap();
+    // the argument
+    let root = l2_root(1, true);
+    let argument = root.prefactor.total() * atom("1+vakint::ε");
+    let other = crate::utils::vakint_macros::vk_symbol!("gammalooprs::ε");
+    assert_graph_prefix(
+        super::super::check_prefactor_argument(&root, &argument, other),
+        &reserved_prefix("vakint::ε", "prefactor argument"),
+        "argument, other epsilon",
+    );
+    super::super::check_prefactor_argument(&root, &argument, vakint_epsilon()).unwrap();
+}
 
 /// A-37: a FORMAT defect found by the lines' back end inside validate (a
 /// closing line whose loop momentum has no unit coefficient) is a `Closure`
@@ -4255,4 +4372,211 @@ fn every_internal_failure_site_reports_evaluation() {
             other => panic!("{stage}: {other:?}"),
         }
     }
+}
+
+/// A-17 remainder: `vakint_input` (public) called DIRECTLY with a marked
+/// value checks the prefactor argument too; unmarked, it does not.
+#[test]
+fn vakint_input_checks_a_marked_value_s_argument() {
+    let direct =
+        FactorizedNumerator::from_text(include_str!("../fixtures/wh-k5-direct.record.txt"))
+            .unwrap();
+    let argument = direct.prefactor.total() * atom("vakint::k(1)");
+    assert_graph_prefix(
+        super::super::vakint_input(&settings(), &direct, &argument).map(|_| ()),
+        &reserved_prefix("vakint::k", "prefactor argument"),
+        "vakint_input",
+    );
+    super::super::vakint_input(&settings(), &direct, &direct.prefactor.total()).unwrap();
+}
+
+// ---------------------------------------------------------------------------
+// A-36 (built-ins): names Symbolica's parser resolves to BUILT-IN symbols are
+// not in vakint's namespace and are accepted in a marked record. Symbolica
+// (rev 394f6e1, `State::BUILTIN_NAMES_AND_ALIASES`): arg, coeff, exp, log,
+// sin, cos, sqrt, conj, abs, if, der, 𝑒, 𝜋, ‖, opt, alt, and the aliases
+// euler_e (-> 𝑒) and pi (-> 𝜋), all resolved to `symbolica::<name>`; `𝑖` is
+// not a symbol at all (the parser reads the complex number 1i).
+// ---------------------------------------------------------------------------
+
+/// The parser's resolution, as the rule relies on it.
+#[test]
+fn bare_builtins_resolve_outside_vakint() {
+    let head = |text: &str| -> String {
+        let a = atom(text);
+        match a.as_view() {
+            AtomView::Fun(f) => f.get_symbol().get_name().to_string(),
+            AtomView::Var(v) => v.get_symbol().get_name().to_string(),
+            other => format!("not a symbol: {other:?}"),
+        }
+    };
+    // Symbolica's own table of the names its parser resolves to built-ins
+    for name in [
+        "arg", "coeff", "exp", "log", "sin", "cos", "sqrt", "conj", "abs", "if", "der", "𝑒", "𝜋",
+        "‖", "opt", "alt", "euler_e", "pi",
+    ] {
+        assert!(symbolica::state::State::is_builtin(name), "{name}");
+    }
+    assert!(!symbolica::state::State::is_builtin("gs"));
+    for name in ["log", "sin", "cos", "abs", "conj", "arg"] {
+        assert_eq!(
+            head(&format!("{name}(UFO::x)")),
+            format!("symbolica::{name}")
+        );
+    }
+    // exp(x) is normalised by the parser to 𝑒^x (the built-in constant)
+    let e = atom("exp(UFO::x)");
+    assert_eq!(e, atom("𝑒^UFO::x"));
+    for (text, name) in [
+        ("𝜋", "symbolica::𝜋"),
+        ("pi", "symbolica::𝜋"),
+        ("𝑒", "symbolica::𝑒"),
+    ] {
+        assert_eq!(head(text), name, "{text}");
+    }
+    assert!(
+        matches!(atom("𝑖").as_view(), AtomView::Num(_)),
+        "𝑖 is a number"
+    );
+    // and a bare non-built-in name is read into vakint::
+    assert_eq!(head("gs"), "vakint::gs");
+    // the walk accepts every built-in
+    for text in [
+        "𝑖*𝜋*𝑒*pi",
+        "log(UFO::x)*exp(UFO::x)*sqrt(UFO::x)*sin(UFO::x)*cos(UFO::x)*abs(UFO::x)*conj(UFO::x)*arg(UFO::x)",
+    ] {
+        assert_eq!(
+            super::super::first_forbidden_symbol(atom(text).as_view(), &[]),
+            None,
+            "{text}"
+        );
+    }
+}
+
+/// 𝑖 and 𝜋 (and a built-in function of a caller scalar) in a FACTOR, in an
+/// INSERTION coefficient and in the PREFACTOR ARGUMENT of a marked record:
+/// accepted, and the value is the record's value times the constant.
+#[test]
+fn builtins_are_accepted_in_a_marked_record_and_leave_the_value_unchanged() {
+    let vakint = Vakint::new().unwrap();
+    let base = l2_root(1, true);
+    let run = |v: &FactorizedNumerator, argument: &Atom| {
+        v.validate().unwrap_or_else(|e| panic!("{}: {e}", v.label));
+        evaluate_factorized_closure(
+            &vakint,
+            &settings(),
+            std::slice::from_ref(v),
+            std::slice::from_ref(argument),
+        )
+        .unwrap_or_else(|e| panic!("{}: {e}", v.label))
+        .vakint_value
+    };
+    let reference = run(&base, &base.prefactor.total());
+    assert!(!reference.is_zero());
+    for constant in ["𝑖*𝜋", "𝜋^-2", "log(UFO::x)", "sqrt(UFO::x)*exp(UFO::x)"] {
+        let c = atom(constant);
+        let mut in_factor = base.clone();
+        in_factor.vertices[1].factor = &in_factor.vertices[1].factor * &c;
+        let got = run(&in_factor, &in_factor.prefactor.total());
+        assert!(
+            (&got - &reference * &c).expand().is_zero(),
+            "factor {constant}"
+        );
+        let got = run(&base, &(base.prefactor.total() * &c));
+        assert!(
+            (&got - &reference * &c).expand().is_zero(),
+            "argument {constant}"
+        );
+    }
+    // an insertion coefficient (the producer's k2-child-ins already carries 𝑖)
+    let record = include_str!("../fixtures/wh-k2-child-ins.record.txt");
+    let value_text = include_str!("../fixtures/wh-k2-child-ins.value.txt");
+    assert!(record.contains('𝑖'));
+    let mut v = FactorizedNumerator::from_text(record).unwrap();
+    let c = atom("𝑖*𝜋");
+    v.insertions[0].coefficient = &v.insertions[0].coefficient * &c;
+    v.validate().unwrap();
+    let got = evaluate_factorized_closure(
+        &vakint,
+        &rstar_site_settings(),
+        std::slice::from_ref(&v),
+        &[v.prefactor.total()],
+    )
+    .unwrap();
+    assert_equal_through(
+        &got.value,
+        &(fixture_value(value_text) * &c),
+        valid_through(value_text),
+        "k2-child-ins x 𝑖𝜋 in the insertion coefficient",
+    );
+}
+
+/// The namespace rule against a set of producer record files: every v3
+/// record is marked and passes the walk; returns (records, 𝑖 and 𝜋 in the
+/// text).
+fn namespace_rule_on(files: &[std::path::PathBuf]) -> (usize, usize, usize) {
+    let (mut records, mut i, mut pi) = (0, 0, 0);
+    for path in files {
+        let text = wh_fixtures::read_fixture(path);
+        if !text.starts_with("schema\tpint6.factorized-numerator.v3") {
+            continue;
+        }
+        let value = FactorizedNumerator::parse_text(&text)
+            .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        assert!(
+            super::super::is_marked(&value),
+            "{}: not marked",
+            path.display()
+        );
+        value
+            .check_reserved_symbols()
+            .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        records += 1;
+        i += text.matches('𝑖').count();
+        pi += text.matches('𝜋').count();
+    }
+    (records, i, pi)
+}
+
+/// Every record file under `dir` (recursively): `*record*.txt`, `input.txt`.
+fn record_files(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut out = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for entry in std::fs::read_dir(&d).unwrap() {
+            let path = entry.unwrap().path();
+            let name = path.file_name().unwrap().to_string_lossy().to_string();
+            if path.is_dir() {
+                if name != "runs" {
+                    stack.push(path);
+                }
+            } else if name == "input.txt" || (name.contains("record") && name.ends_with(".txt")) {
+                out.push(path);
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+/// The vendored producer records (this crate's fixtures): all 10 v3 records
+/// pass the namespace rule (they carry 𝑖 and 𝜋 bare).
+#[test]
+fn the_vendored_records_pass_the_namespace_rule() {
+    let dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/p_integral/factorized/fixtures");
+    let (records, i, pi) = namespace_rule_on(&record_files(&dir));
+    eprintln!("NAMESPACE_RULE vendored records={records} 𝑖={i} 𝜋={pi}");
+    assert_eq!(records, 10);
+    assert!(i > 0 && pi > 0);
+}
+
+/// EVERY producer record under `$VAKINT_TEST_WH_FIXTURES` (all 75 v3 records
+/// of the wh-fixtures root, `runs/` excluded) passes the namespace rule.
+#[test]
+#[ignore = "external data: VAKINT_TEST_WH_FIXTURES"]
+fn every_producer_record_passes_the_namespace_rule() {
+    let (records, i, pi) = namespace_rule_on(&record_files(&wh_fixtures::fixture_root()));
+    eprintln!("NAMESPACE_RULE producer records={records} 𝑖={i} 𝜋={pi}");
+    wh_fixtures::assert_compared("NAMESPACE_RULE", records, Some(75));
 }

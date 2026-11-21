@@ -573,7 +573,7 @@ fn a_contracted_child_in_the_vacuum_entry_equals_the_contracted_route() {
             particle: "x".into(),
             line: LineKind::Scalar,
             power: 1,
-            mass_squared: atom("muvsq"),
+            mass_squared: atom("helper_test::muvsq"),
             momentum: m.to_vec(),
             factor,
         }

@@ -771,9 +771,9 @@ pub(crate) enum ForbiddenSymbol {
 }
 
 /// The first FORBIDDEN symbol (variable or function head, at any nesting
-/// level) of `view`: one of vakint's namespace other than
-/// [`ALLOWED_VAKINT_SYMBOL`] and the names in `exempt`, or one whose name
-/// ends in `_`. The dummy index vakint's reader writes when it opens a compact
+/// level) of `view`: one of vakint's namespace other than the names in
+/// `exempt` (callers pass [`ALLOWED_VAKINT_SYMBOL`] when vakint's epsilon is
+/// the evaluation's), or one whose name ends in `_`. The dummy index vakint's reader writes when it opens a compact
 /// slash, `mink(D, vakint::slash(scope, n))`, is accepted in exactly that slot
 /// form (a forged one can only clash with a reader dummy, which the
 /// contraction rule refuses as an index used more than twice or shared
@@ -785,10 +785,7 @@ pub(crate) fn first_forbidden_symbol(
     let classify = |name: &str| -> Option<ForbiddenSymbol> {
         if name.ends_with('_') {
             Some(ForbiddenSymbol::Wildcard(name.to_string()))
-        } else if name.starts_with("vakint::")
-            && name != ALLOWED_VAKINT_SYMBOL
-            && !exempt.contains(&name)
-        {
+        } else if name.starts_with("vakint::") && !exempt.contains(&name) {
             Some(ForbiddenSymbol::Reserved(name.to_string()))
         } else {
             None
@@ -823,16 +820,35 @@ pub(crate) fn first_forbidden_symbol(
     found
 }
 
-/// The refusal of a [`ForbiddenSymbol`] in `field` (variant `Graph`):
-/// `reserved symbol <name> in <field>: the vakint:: namespace is reserved for
-/// vakint's internal symbols`, or `a symbol ending in _ cannot be used as
-/// <field>: <name> is a pattern wildcard`.
-pub(crate) fn forbidden_symbol_error(found: ForbiddenSymbol, field: &str) -> FactorizedError {
-    let detail = match found {
-        ForbiddenSymbol::Reserved(name) => format!(
+/// Where a checked atom comes from (it decides the refusal's advice).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AtomSource {
+    /// A field of the record (written by the reader or the caller): a bare
+    /// name in a record text is read into `vakint::`.
+    Record,
+    /// An argument of the entry (the prefactor argument, a setting).
+    Argument,
+}
+
+/// The refusal of a [`ForbiddenSymbol`] in `field` (variant `Graph`): in a
+/// record field `reserved symbol <name> in <field>: symbols of a record must
+/// be namespace-qualified (a bare name is read into vakint::)`, in an
+/// argument `reserved symbol <name> in <field>: the vakint:: namespace is
+/// reserved for vakint's internal symbols`; or `a symbol ending in _ cannot
+/// be used as <field>: <name> is a pattern wildcard`.
+pub(crate) fn forbidden_symbol_error(
+    found: ForbiddenSymbol,
+    field: &str,
+    source: AtomSource,
+) -> FactorizedError {
+    let detail = match (found, source) {
+        (ForbiddenSymbol::Reserved(name), AtomSource::Record) => format!(
+            "reserved symbol {name} in {field}: symbols of a record must be namespace-qualified (a bare name is read into vakint::)"
+        ),
+        (ForbiddenSymbol::Reserved(name), AtomSource::Argument) => format!(
             "reserved symbol {name} in {field}: the vakint:: namespace is reserved for vakint's internal symbols"
         ),
-        ForbiddenSymbol::Wildcard(name) => {
+        (ForbiddenSymbol::Wildcard(name), _) => {
             format!("a symbol ending in _ cannot be used as {field}: {name} is a pattern wildcard")
         }
     };
@@ -842,11 +858,15 @@ pub(crate) fn forbidden_symbol_error(found: ForbiddenSymbol, field: &str) -> Fac
 /// THE caller-symbol refusal of a marked value's atoms (one function for the
 /// record walk [`FactorizedNumerator::check_reserved_symbols`] and the
 /// entries' [`check_prefactor_argument`]): no symbol of the reserved
-/// `vakint::` namespace (but [`ALLOWED_VAKINT_SYMBOL`] and `exempt`), no
-/// wildcard name (ending in `_`).
-pub(crate) fn check_caller_atom(atom: &Atom, field: &str, exempt: &[&str]) -> Result<()> {
+/// `vakint::` namespace (but `exempt`), no wildcard name (ending in `_`).
+pub(crate) fn check_caller_atom(
+    atom: &Atom,
+    field: &str,
+    exempt: &[&str],
+    source: AtomSource,
+) -> Result<()> {
     match first_forbidden_symbol(atom.as_view(), exempt) {
-        Some(found) => Err(forbidden_symbol_error(found, field)),
+        Some(found) => Err(forbidden_symbol_error(found, field, source)),
         None => Ok(()),
     }
 }
@@ -862,7 +882,8 @@ pub(crate) fn check_caller_atom(atom: &Atom, field: &str, exempt: &[&str]) -> Re
 ///   `vakint::closure_lambda`, the notation heads `p`, `k`, `g`, `dot`,
 ///   `prop`, `topo`, at any nesting, function heads too) and no wildcard name;
 ///   `vakint::nf` is exempt here only, being the flavour symbol
-///   [`Prefactor::total`] writes (no internal code substitutes it);
+///   [`Prefactor::total`] writes (no internal code substitutes it), and
+///   `vakint::ε` only when it is the settings' epsilon `epsilon`;
 /// - a scalar (`InexactNumber` / `NotScalar`, location `prefactor argument`):
 ///   exact numbers, no index (no open colour index either), no momentum (no
 ///   loop momentum); colour invariants as in `prefactor_colour` are allowed;
@@ -876,12 +897,18 @@ pub(crate) fn check_caller_atom(atom: &Atom, field: &str, exempt: &[&str]) -> Re
 pub(crate) fn check_prefactor_argument(
     value: &FactorizedNumerator,
     prefactor: &Atom,
+    epsilon: Symbol,
 ) -> Result<()> {
     if !is_marked(value) {
         return Ok(());
     }
     const FIELD: &str = "prefactor argument";
-    check_caller_atom(prefactor, FIELD, &[names::NF])?;
+    let exempt: &[&str] = if epsilon.get_name() == ALLOWED_VAKINT_SYMBOL {
+        &[names::NF, ALLOWED_VAKINT_SYMBOL]
+    } else {
+        &[names::NF]
+    };
+    check_caller_atom(prefactor, FIELD, exempt, AtomSource::Argument)?;
     check_scalar(prefactor.as_view(), FIELD)?;
     let refuse = |detail: String| FactorizedError::NotScalar {
         location: FIELD.to_string(),
@@ -927,12 +954,60 @@ pub(crate) fn check_prefactor_argument(
 
 /// The settings' epsilon of a marked evaluation: not a wildcard, not a
 /// reserved `vakint::` name but [`ALLOWED_VAKINT_SYMBOL`] (it is the
-/// replacement of `D -> 4 - 2 epsilon` and the expansion variable).
+/// replacement of `D -> 4 - 2 epsilon` and the expansion variable). When it
+/// is NOT vakint's epsilon, the record may not carry `vakint::ε` either
+/// (validate exempts it, not knowing the settings: there it would be a
+/// silent constant): the record is walked once more without the exemption.
 pub(crate) fn check_epsilon_setting(value: &FactorizedNumerator, epsilon: Symbol) -> Result<()> {
     if !is_marked(value) {
         return Ok(());
     }
-    check_caller_atom(&Atom::var(epsilon), "the epsilon_symbol setting", &[])
+    check_caller_atom(
+        &Atom::var(epsilon),
+        "the epsilon_symbol setting",
+        &[ALLOWED_VAKINT_SYMBOL],
+        AtomSource::Argument,
+    )?;
+    if epsilon.get_name() != ALLOWED_VAKINT_SYMBOL {
+        value
+            .check_reserved_symbols_except(&[])
+            .map_err(|error| match error {
+                FactorizedError::Graph { detail }
+                    if detail.starts_with(&format!("reserved symbol {ALLOWED_VAKINT_SYMBOL} in ")) =>
+                {
+                    let field = detail
+                        .trim_start_matches(&format!("reserved symbol {ALLOWED_VAKINT_SYMBOL} in "))
+                        .split(": ")
+                        .next()
+                        .unwrap_or_default()
+                        .to_string();
+                    FactorizedError::Graph {
+                        detail: format!(
+                            "reserved symbol {ALLOWED_VAKINT_SYMBOL} in {field}: the settings' epsilon is {}, so vakint's epsilon would be a constant here (write the settings' epsilon)",
+                            epsilon.get_name()
+                        ),
+                    }
+                }
+                other => other,
+            })?;
+    }
+    Ok(())
+}
+
+/// THE ENTRY CHECK of a marked value ([`check_prefactor_argument`] then
+/// [`check_epsilon_setting`]), called by every public function that turns a
+/// marked value and a prefactor into vakint's input: the closure entry,
+/// `vakint_input` (hence `evaluate_factorized` and the ports entry),
+/// `vakint_vacuum_input_streamed` (hence `vakint_vacuum_input` and the
+/// vacuum entries), and at the top of `evaluate_factorized` and the vacuum
+/// entry. A no-op for an unmarked value.
+pub(crate) fn check_marked_entry(
+    value: &FactorizedNumerator,
+    prefactor: &Atom,
+    epsilon: Symbol,
+) -> Result<()> {
+    check_prefactor_argument(value, prefactor, epsilon)?;
+    check_epsilon_setting(value, epsilon)
 }
 
 /// Whether `value` is a MARKED value (a record kind of the R* interface:
@@ -1598,7 +1673,14 @@ impl FactorizedNumerator {
     /// dimension and the reference mass are replacement patterns). The first
     /// offending atom is reported ([`forbidden_symbol_error`]).
     pub(crate) fn check_reserved_symbols(&self) -> Result<()> {
-        let check = |atom: &Atom, field: &str| check_caller_atom(atom, field, &[]);
+        self.check_reserved_symbols_except(&[ALLOWED_VAKINT_SYMBOL])
+    }
+
+    /// [`Self::check_reserved_symbols`] with the exempt `vakint::` names
+    /// `exempt` (none: also `vakint::ε`, for settings with another epsilon).
+    pub(crate) fn check_reserved_symbols_except(&self, exempt: &[&str]) -> Result<()> {
+        let check =
+            |atom: &Atom, field: &str| check_caller_atom(atom, field, exempt, AtomSource::Record);
         check(&Atom::var(self.dimension), "dimension")?;
         for edge in &self.edges {
             check(&edge.factor, &format!("edge {} factor", edge.id))?;

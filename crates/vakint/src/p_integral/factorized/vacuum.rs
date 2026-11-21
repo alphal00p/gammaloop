@@ -217,6 +217,12 @@ fn validate_vacuum(value: &FactorizedNumerator) -> Result<()> {
             feature: "the closure kind in the vacuum mode".into(),
         });
     }
+    // MARKED SIDE (A-35): a marked vacuum value's own atoms get the reserved
+    // namespace and wildcard walk of `validate` (the vacuum mode never calls
+    // `validate`); an unmarked value is not walked (the base behaviour)
+    if super::is_marked(value) {
+        value.check_reserved_symbols()?;
+    }
     if !value.insertions.is_empty() {
         // The insertion rules (`Insertion`); the vacuum mode does not run the
         // whole contract (hard parts keep half-edges of a larger graph).
@@ -1009,6 +1015,11 @@ pub fn vakint_vacuum_input_streamed(
     prefactor: &Atom,
     streaming: Streaming,
 ) -> Result<(Atom, f64, usize)> {
+    // a marked value called here directly: the entry check too (A-17); the
+    // record itself is walked by validate_vacuum
+    if !matches!(value.kind, FactorizedKind::Closure(_)) {
+        super::check_marked_entry(value, prefactor, vk_symbol!(&settings.epsilon_symbol))?;
+    }
     value.check_insertion_epsilon(vk_symbol!(&settings.epsilon_symbol).get_name())?;
     let (scalar, seconds, pieces) = match streaming {
         Streaming::Pieces(n) => contract_to_vakint_vacuum_streamed(settings, value, n)?,
@@ -1120,8 +1131,7 @@ pub fn evaluate_factorized_vacuum_streamed(
     // rule (no-ops for an unmarked value: the base behaviour; the closure
     // kind keeps its earlier refusal of this entry, `Reserved`)
     if !matches!(value.kind, super::FactorizedKind::Closure(_)) {
-        super::check_prefactor_argument(value, prefactor)?;
-        super::check_epsilon_setting(value, vk_symbol!(&settings.epsilon_symbol))?;
+        super::check_marked_entry(value, prefactor, vk_symbol!(&settings.epsilon_symbol))?;
     }
     // the new record kinds do not depend on the caller's tensor reduction or
     // notation (evaluate::is_new_kind); values accepted before keep them

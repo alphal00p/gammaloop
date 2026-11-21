@@ -360,6 +360,8 @@ pub fn vakint_input(
             feature: "the closure kind (R* remainder with a closing line)".into(),
         });
     }
+    // a marked value called here directly: the entry check too (A-17)
+    super::check_marked_entry(value, prefactor, vk_symbol!(&settings.epsilon_symbol))?;
     value.validate()?;
     check_open_ports(value)?;
     value.check_insertion_epsilon(vk_symbol!(&settings.epsilon_symbol).get_name())?;
@@ -440,8 +442,7 @@ pub fn evaluate_factorized(
     // rule (no-ops for an unmarked value: the base behaviour; the closure
     // kind keeps its earlier refusal of this entry, `Reserved`)
     if !matches!(value.kind, super::FactorizedKind::Closure(_)) {
-        super::check_prefactor_argument(value, prefactor)?;
-        super::check_epsilon_setting(value, vk_symbol!(&settings.epsilon_symbol))?;
+        super::check_marked_entry(value, prefactor, vk_symbol!(&settings.epsilon_symbol))?;
     }
     let pinned;
     let settings = if is_new_kind(value) {

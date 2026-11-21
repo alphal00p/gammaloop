@@ -1035,3 +1035,135 @@ fn the_vacuum_mode_refuses_what_is_outside_its_scope() {
     v.edges.sort_by_key(|e| e.id);
     assert!(contract_to_vakint_vacuum(&v).is_err());
 }
+
+/// The two-loop sunrise of `two_loop_sunrise_open_indices` (unmarked).
+fn sunrise_value() -> FactorizedNumerator {
+    let v0 = format!(
+        "{}*{}*{}*{}*{}",
+        q(1, &hedge(10)),
+        q(2, &index(2, 8)),
+        q(20, &index(2, 8)),
+        q(2, &index(2, 9)),
+        q(20, &index(2, 9))
+    );
+    let mut v = value(
+        vec![Some(1), Some(2)],
+        vec![Some(20)],
+        vec![
+            edge(
+                1,
+                1,
+                2,
+                (1, 2),
+                &[1, 0, 0],
+                LineKind::Scalar,
+                1,
+                Atom::num(1),
+            ),
+            edge(
+                2,
+                1,
+                2,
+                (3, 4),
+                &[0, 1, 0],
+                LineKind::Scalar,
+                1,
+                Atom::num(1),
+            ),
+            edge(
+                3,
+                2,
+                1,
+                (5, 6),
+                &[1, 1, 0],
+                LineKind::Scalar,
+                1,
+                atom(&q(3, &hedge(11))),
+            ),
+            leg(20, 1, 2, 1, 1),
+        ],
+        vec![vertex(1, atom(&v0))],
+        vec![atom(&hedge(10)), atom(&hedge(11))],
+    );
+    v.label = "2L sunrise".into();
+    // a namespace-qualified mass (a marked record may not carry the bare
+    // `muvsq`, read into vakint::)
+    for e in &mut v.edges {
+        if !e.is_external() {
+            e.mass_squared = atom("helper_test::muvsq");
+        }
+    }
+    v
+}
+
+/// A-35: the vacuum mode walks a MARKED value's own atoms (it never calls
+/// `validate`): a reserved head inside an edge factor and a wildcard
+/// dimension are refused; the marked value without the defect evaluates to
+/// the unmarked one's value; an UNMARKED value is not walked (base).
+#[test]
+fn the_vacuum_mode_walks_a_marked_record() {
+    let vakint = Vakint::new().unwrap();
+    let settings = no_form_settings();
+    let run =
+        |v: &FactorizedNumerator| evaluate_factorized_vacuum(&vakint, &settings, v, &Atom::num(1));
+    let unmarked = sunrise_value();
+    let mut marked = unmarked.clone();
+    marked.record = Some(super::super::DirectRecord {
+        original_cycles: None,
+        depth: None,
+        weights: Vec::new(),
+    });
+    assert!(super::super::is_marked(&marked));
+    assert!(
+        (&run(&marked).unwrap().value - &run(&unmarked).unwrap().value)
+            .expand()
+            .is_zero()
+    );
+    let graph = |result: Result<VacuumValue>| match result {
+        Err(FactorizedError::Graph { detail }) => detail,
+        other => panic!("{other:?}"),
+    };
+    for (name, head) in [
+        ("vakint::dot(vakint::k(1),vakint::k(1))", "vakint::dot"),
+        ("vakint::topo(1)", "vakint::topo"),
+    ] {
+        let mut v = marked.clone();
+        v.edges[0].factor = &v.edges[0].factor * atom(name);
+        assert_eq!(
+            graph(run(&v)),
+            format!(
+                "reserved symbol {head} in edge 1 factor: symbols of a record must be namespace-qualified (a bare name is read into vakint::)"
+            )
+        );
+        // unmarked: not walked (the base behaviour)
+        let mut u = unmarked.clone();
+        u.edges[0].factor = &u.edges[0].factor * atom(name);
+        assert!(
+            !matches!(run(&u), Err(FactorizedError::Graph { ref detail }) if detail.starts_with("reserved symbol")),
+            "an unmarked value was walked"
+        );
+    }
+    let mut v = marked.clone();
+    v.dimension = symbolica::symbol!("UFO::D_");
+    assert_eq!(
+        graph(run(&v)),
+        "a symbol ending in _ cannot be used as dimension: UFO::D_ is a pattern wildcard"
+    );
+    // the streamed variant and the pub input function walk it too
+    let mut v = marked.clone();
+    v.edges[0].factor = &v.edges[0].factor * atom("vakint::topo(1)");
+    assert!(
+        graph(evaluate_factorized_vacuum_streamed(
+            &vakint,
+            &settings,
+            &v,
+            &Atom::num(1),
+            Streaming::Pieces(2)
+        ))
+        .starts_with("reserved symbol vakint::topo")
+    );
+    assert!(matches!(
+        vakint_vacuum_input(&settings, &v, &Atom::num(1)),
+        Err(FactorizedError::Graph { .. })
+    ));
+}
