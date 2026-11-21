@@ -908,10 +908,6 @@ fn designed_refusals_are_a_closed_list() {
             "vakint:insertion_mass_symbol",
         ),
         (
-            closure("every line is massive: not a closure"),
-            "vakint:all_massive",
-        ),
-        (
             E::Gamma5 {
                 location: "edge 3".into(),
                 tensor: "gamma5".into(),
@@ -925,6 +921,12 @@ fn designed_refusals_are_a_closed_list() {
     }
     for (error, code) in [
         // the entry's internal failures (closure.rs 1212 / 1294 / 1317 / 1334)
+        // and, requirement 13 (interim), every Closure detail without a
+        // section-8 prefix: "every line is massive" among them
+        (
+            closure("every line is massive: not a closure"),
+            "vakint:Closure",
+        ),
         (closure("lowering: no key plan"), "vakint:Closure"),
         (
             closure("truncating the insertion product: x"),
@@ -989,7 +991,7 @@ fn designed_refusals_are_a_closed_list() {
     }
     // U7b adds no designed refusal; the U7a delta adds `one_loop_tree_cut`
     assert_eq!(DESIGNED_LOCAL.len(), 15, "{DESIGNED_LOCAL:?}");
-    assert_eq!(uncontracted::DESIGNED_VAKINT.len(), 9);
+    assert_eq!(uncontracted::DESIGNED_VAKINT.len(), 8);
     for code in ["open_root", "insertion_mass_symbol", "root_crown_paired"] {
         assert!(DESIGNED_LOCAL.contains(&code), "{code}");
     }
