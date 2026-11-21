@@ -1092,7 +1092,11 @@ fn an_epsilon_setting_of_another_name_gets_the_pole_order_rules_at_the_entry() {
             "log(user::ep)",
             "the dependence on ε is not a Laurent polynomial",
         ),
-        ("user::ep^-65", "user::ep^-65", "an ε power out of range"),
+        (
+            "user::ep^-40 (1+user::ep)^-30 (degree 70, every exponent within 64)",
+            "user::ep^-40*(1+user::ep)^-30",
+            "an ε power out of range",
+        ),
     ] {
         let value = with(coefficient);
         value

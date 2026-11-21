@@ -3225,6 +3225,49 @@ fn the_masses_are_identified_by_their_role() {
     base.validate().unwrap();
 }
 
+/// Integer exponents are bounded (|n| <= 64): (1+x)^65, x^-65 and D^1000000
+/// in a vertex factor or the prefactor argument are refused; x^64 is
+/// accepted. A bare ε, dimension or mass as a DIRECT argument of a
+/// structural head (hedge(ε, 1), mink(D, ε), g(.., R)) is refused.
+#[test]
+fn exponents_are_bounded_and_structural_arguments_are_checked() {
+    let base = record("wh-k1-root");
+    let id = base
+        .vertices
+        .iter()
+        .find(|x| x.factor != Atom::num(1))
+        .unwrap()
+        .id;
+    let with = |extra: &str| {
+        let mut v = base.clone();
+        let vertex = v.vertices.iter_mut().find(|x| x.id == id).unwrap();
+        vertex.factor = &vertex.factor * atom(extra);
+        v
+    };
+    for bad in ["(1+probe::x)^65", "probe::x^-65", &format!("{DIM}^1000000")] {
+        let detail = with(bad).validate().expect_err(bad).to_string();
+        assert!(detail.contains("exceeds 64 in modulus"), "{bad}: {detail}");
+    }
+    with("probe::x^64").validate().unwrap();
+    match through_entry(
+        &base,
+        &(base.prefactor.total() * atom("(1+probe::x)^1000000000")),
+        &symbolic(),
+    ) {
+        Err(e) => assert!(e.contains("exceeds 64 in modulus"), "{e}"),
+        Ok(_) => panic!("(1+x)^(10^9) in the argument accepted"),
+    }
+    let mink = "spenso::{spenso::representation,spenso::self_dual}::mink";
+    let hedge = "gammalooprs::{spenso::index}::hedge";
+    for bad in [
+        format!("{mink}({DIM},{hedge}({EPS},1))*{mink}({DIM},{hedge}({EPS},1))"),
+        format!("{mink}({DIM},{EPS})*{mink}({DIM},{EPS})"),
+        format!("{mink}({DIM},{R})*{mink}({DIM},{R})"),
+    ] {
+        assert!(with(&bad).validate().is_err(), "{bad} accepted");
+    }
+}
+
 /// MARKED three-loop massive vacuum values through the vacuum entry in
 /// Symbolic and Numerical mode at 3 and 6 terms: the basketball (four lines
 /// of one mass between two vertices) and the all-massive mercedes (the

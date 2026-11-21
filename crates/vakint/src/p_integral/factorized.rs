@@ -1710,6 +1710,10 @@ fn non_laurent_dependence(view: AtomView<'_>, depends: &dyn Fn(Symbol) -> bool) 
     }
 }
 
+/// The largest |exponent| a caller may write in a marked value (the real
+/// records reach -8..9).
+pub const MAX_CALLER_EXPONENT: i64 = 64;
+
 /// The first power of `view` (at any depth, inside function arguments too)
 /// whose exponent is not WRITTEN as an integer: after Symbolica's automatic
 /// normalisation the exponent atom is not an integer number (`x^(2-3)` is
@@ -1724,12 +1728,29 @@ fn first_non_integer_exponent(view: AtomView<'_>) -> Option<String> {
         }
         if let AtomView::Pow(p) = part {
             let (_, exponent) = p.get_base_exp();
-            if symbolica::domains::integer::Integer::try_from(exponent).is_err() {
-                found = Some(format!(
-                    "the exponent {} of {} is not an integer literal",
-                    exponent.to_owned().to_canonical_string(),
-                    part.to_owned().to_canonical_string()
-                ));
+            match i64::try_from(exponent) {
+                Ok(n) if n.abs() <= MAX_CALLER_EXPONENT => {}
+                Ok(_) => {
+                    found = Some(format!(
+                        "the exponent {} of {} exceeds {MAX_CALLER_EXPONENT} in modulus",
+                        exponent.to_owned().to_canonical_string(),
+                        part.to_owned().to_canonical_string()
+                    ))
+                }
+                Err(_) if symbolica::domains::integer::Integer::try_from(exponent).is_ok() => {
+                    found = Some(format!(
+                        "the exponent {} of {} exceeds {MAX_CALLER_EXPONENT} in modulus",
+                        exponent.to_owned().to_canonical_string(),
+                        part.to_owned().to_canonical_string()
+                    ))
+                }
+                Err(_) => {
+                    found = Some(format!(
+                        "the exponent {} of {} is not an integer literal",
+                        exponent.to_owned().to_canonical_string(),
+                        part.to_owned().to_canonical_string()
+                    ))
+                }
             }
         }
         found.is_none()
@@ -1796,7 +1817,22 @@ fn opaque_dependence(view: AtomView<'_>, depends: &dyn Fn(Symbol) -> bool) -> Op
             }
         }
         AtomView::Fun(f) => {
-            if is_structural_head(f.get_symbol().get_name()) {
+            let head = f.get_symbol();
+            let name = head.get_name();
+            if is_structural_head(name) {
+                // a structural head's DIRECT arguments: no bare ε, mass or
+                // dimension (but the dimension argument of a slot)
+                let rep = is_rep_name(name);
+                for (i, a) in f.iter().enumerate() {
+                    if let AtomView::Var(v) = a
+                        && depends(v.get_symbol())
+                        && !(rep && i == 0)
+                    {
+                        return shown(
+                            "a bare epsilon, dimension or mass as an argument of a structural head",
+                        );
+                    }
+                }
                 f.iter().find_map(|a| opaque_dependence(a, depends))
             } else if f.iter().any(|a| has_dependence(a, depends)) {
                 shown("inside the argument of a function")
