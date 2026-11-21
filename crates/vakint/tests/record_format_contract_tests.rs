@@ -212,10 +212,10 @@ fn parse_magnitude(text: &str) -> f64 {
     let mut best: Option<f64> = None;
     let mut token = String::new();
     let flush = |token: &mut String, best: &mut Option<f64>| {
-        if token.contains('.') || token.contains('e') {
-            if let Ok(x) = token.parse::<f64>() {
-                *best = Some(best.map_or(x.abs(), |b: f64| b.max(x.abs())));
-            }
+        if (token.contains('.') || token.contains('e'))
+            && let Ok(x) = token.parse::<f64>()
+        {
+            *best = Some(best.map_or(x.abs(), |b: f64| b.max(x.abs())));
         }
         token.clear();
     };
@@ -272,9 +272,9 @@ fn retain_k1_root_without_insertions_refinalises_to_symbolic() {
 /// and corr. 4 ("UNKNOWN(master, k)*ε^-2" allowed): the UNKNOWN atom vakint
 /// writes (`vakint::UNKNOWN`, truncation_guard.rs) in an insertion
 /// coefficient of a marked record is carried LINEARLY: the value equals the
-/// value of the record with coefficient c times (1 + UNKNOWN(..)) = value(c)
-/// + UNKNOWN(..) value(c) (allow-unknowns ON, as the producer's runs that
-/// need it).
+/// value of the record with coefficient c times (1 + UNKNOWN(..)) equals
+/// value(c) plus UNKNOWN(..) value(c) (allow-unknowns ON, as the producer's
+/// runs that need it).
 #[test]
 fn unknown_from_vakint_in_an_insertion_is_carried_linearly() {
     // SAFETY: nextest runs each test in its own process
