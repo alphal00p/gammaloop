@@ -120,6 +120,20 @@ impl<'a> CountertermPrewarmPlan<'a> {
 
 type Entry = Arc<OnceLock<std::result::Result<Atom, String>>>;
 
+/// What a fill noted about itself, kept with its entry
+/// ([`CountertermCache::counterterm_noted`]; the uncontracted ledger's
+/// dispositions of the records the fill evaluated).
+pub(crate) type CacheNote = Arc<dyn std::any::Any + Send + Sync>;
+
+/// How [`CountertermCache::counterterm_noted`] found its entry.
+pub(crate) enum CacheLookup {
+    /// This call computed the entry.
+    Filled,
+    /// The entry was there (or being computed by another call): the note of
+    /// its fill, if it left one.
+    Hit(Option<CacheNote>),
+}
+
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct Key {
     graph: CountertermKey,
@@ -281,6 +295,8 @@ impl Drop for CacheTimingSample<'_> {
 #[derive(Default)]
 pub struct CountertermCache {
     entries: Mutex<HashMap<Key, Entry>>,
+    /// The notes of the fills made by [`Self::counterterm_noted`].
+    notes: Mutex<HashMap<Key, CacheNote>>,
     hits: AtomicU64,
     misses: AtomicU64,
     stores: AtomicU64,
@@ -540,6 +556,30 @@ impl CountertermCache {
         self.lookup(graph, support, model, settings_key, compute)
     }
 
+    /// [`Self::counterterm_with`] whose fill leaves a note with its entry
+    /// (stored before the entry is published, so a waiting hit finds it):
+    /// the value and whether this call filled the entry or hit it, with the
+    /// note of the fill (`None` for a fill that left none, e.g. one made by
+    /// [`Self::counterterm_with`]). The uncontracted ledger's Δ-cache hits
+    /// (`GAMMALOOP_UNCONTRACTED_NUMERATOR`, U7a delta).
+    pub(crate) fn counterterm_noted(
+        &self,
+        graph: &Graph,
+        support: &SuBitGraph,
+        model: &Model,
+        settings_key: String,
+        compute: impl FnOnce() -> Result<(Atom, CacheNote)>,
+    ) -> Result<(Atom, CacheLookup)> {
+        self.lookup_noted(
+            graph,
+            support,
+            model,
+            settings_key,
+            || compute().map(|(value, note)| (value, Some(note))),
+            true,
+        )
+    }
+
     fn lookup(
         &self,
         graph: &Graph,
@@ -548,6 +588,28 @@ impl CountertermCache {
         settings_key: String,
         compute: impl FnOnce() -> Result<Atom>,
     ) -> Result<Atom> {
+        self.lookup_noted(
+            graph,
+            support,
+            model,
+            settings_key,
+            || compute().map(|value| (value, None)),
+            false,
+        )
+        .map(|(value, _)| value)
+    }
+
+    /// The lookup; `noted`: the fill's note is stored with its entry and a
+    /// hit returns it (no note is kept or read otherwise).
+    fn lookup_noted(
+        &self,
+        graph: &Graph,
+        support: &SuBitGraph,
+        model: &Model,
+        settings_key: String,
+        compute: impl FnOnce() -> Result<(Atom, Option<CacheNote>)>,
+        noted: bool,
+    ) -> Result<(Atom, CacheLookup)> {
         let _stage = StageSpan::new("gamma.delta.lookup");
         let mut timing = self.timings.start();
         let identity_stage = StageSpan::new("gamma.delta.identity");
@@ -556,6 +618,7 @@ impl CountertermCache {
             graph: identity.key.clone(),
             settings: settings_key,
         };
+        let noted_key = noted.then(|| key.clone());
         timing.lap(CacheTimingPhase::Key);
         drop(identity_stage);
         let (entry, existing) = {
@@ -583,13 +646,23 @@ impl CountertermCache {
             None
         };
         let resolve_stage = StageSpan::new("gamma.delta.cache_resolve");
+        let mut filled = false;
         let result = timing.resolve(&entry, |timing| {
+            filled = true;
             self.misses.fetch_add(1, Ordering::Relaxed);
             let result = compute();
             timing.lap(CacheTimingPhase::Initializer);
             let _stage = StageSpan::new("gamma.delta.cache_store");
             let result = result
-                .and_then(|value| identity.canonicalize_delta(&value))
+                .and_then(|(value, note)| {
+                    if let (Some(key), Some(note)) = (&noted_key, note) {
+                        self.notes
+                            .lock()
+                            .expect("counterterm cache notes poisoned")
+                            .insert(key.clone(), note);
+                    }
+                    identity.canonicalize_delta(&value)
+                })
                 .inspect(|_| {
                     self.stores.fetch_add(1, Ordering::Relaxed);
                 })
@@ -610,7 +683,18 @@ impl CountertermCache {
         let _stage = StageSpan::new("gamma.delta.restore_boundary");
         let result = identity.restore_delta(canonical);
         timing.lap(CacheTimingPhase::Restore);
-        result
+        let lookup = if filled {
+            CacheLookup::Filled
+        } else {
+            CacheLookup::Hit(noted_key.and_then(|key| {
+                self.notes
+                    .lock()
+                    .expect("counterterm cache notes poisoned")
+                    .get(&key)
+                    .cloned()
+            }))
+        };
+        result.map(|value| (value, lookup))
     }
 
     fn compute(

@@ -3,7 +3,11 @@
 //!
 //! * R2-I1 (helper VH round 2): strict is the only behaviour of on and
 //!   check; `GAMMALOOP_UNCONTRACTED_STRICT=0` is refused;
-//! * U7a.4 (Astra's U7a verdict finding 4, R2-M2, R2-M3): one disposition line per diagram and
+//! * U7a.1 (Astra's U7a verdict finding 1, (iii) and (iv)): check mode's
+//!   coverage rule (an
+//!   all-declined diagram-kind fails unless named), Δ-cache hits as their own
+//!   disposition, check mode with the PINT6 dump refused;
+//! * U7a.4 (finding 4, R2-M2, R2-M3): one disposition line per diagram and
 //!   kind (also when nothing is expected), the summary per diagram, the
 //!   child records' evaluation path;
 //!
@@ -39,7 +43,7 @@ use super::{
     boundary::{BoundaryMode, ClosedRootNormalization, with_boundary_mode},
     recursive_tests::{colour_factored, load, settings},
     uncontracted::{self, Captured, Kind, Mode, Switch, with_capture, with_switch},
-    uncontracted_ledger::{self as ledger, DiagramLedger},
+    uncontracted_ledger::{self as ledger, DiagramLedger, Exception, Exceptions},
 };
 
 const L2_22: &str = include_str!("testdata/u7a/l2-d22.dot");
@@ -98,6 +102,13 @@ struct Run {
     value: Result<Atom>,
     captured: Vec<Captured>,
     lines: Vec<String>,
+}
+
+/// The graph name of a DOT's diagram.
+fn graph_name(dot: &str) -> Result<String> {
+    Ok(colour_factored(&load(dot)?)?
+        .to_gamma_loop_graph(None, true)?
+        .name)
 }
 
 /// `evaluations` diagram roots (the beta's closed metric root) of `dot`
@@ -242,8 +253,8 @@ fn strict_is_the_only_behaviour() {
         Switch::new(Mode::On, &ROOT_CHILD),
         Switch::new(Mode::Check, &ROOT_CHILD),
     ] {
-        assert!(ledger::initialise(switch, Some("0")).is_err());
-        assert!(ledger::initialise(switch, Some("1")).is_ok());
+        assert!(ledger::initialise(switch, Some("0"), || false, None).is_err());
+        assert!(ledger::initialise(switch, Some("1"), || false, None).is_ok());
     }
 }
 
@@ -331,7 +342,67 @@ fn on_mode_error_fails_the_diagram() -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// U7a.4: one line per diagram and kind
+// U7a.1 (iv): refusals at the switch's initialisation
+// ---------------------------------------------------------------------------
+
+#[test]
+fn check_with_the_pint6_dump_and_inert_lists_are_refused() {
+    let check = Switch::new(Mode::Check, &ROOT_CHILD);
+    let error = ledger::initialise(check, None, || true, None).unwrap_err();
+    assert!(error.contains("PINT6_CLOSURE_DUMP"), "{error}");
+    // mode on keeps the PINT6 dump as a designed decline (today's records)
+    assert!(ledger::initialise(Switch::new(Mode::On, &ROOT_CHILD), None, || true, None).is_ok());
+    // a list without a kind this build emits would build no record
+    assert!(
+        ledger::initialise(
+            Switch::new(Mode::Check, &[Kind::Quotient, Kind::Surrogate]),
+            None,
+            || false,
+            None
+        )
+        .is_err()
+    );
+    // an exception list is read in check mode only
+    assert!(
+        ledger::initialise(
+            Switch::new(Mode::On, &ROOT_CHILD),
+            None,
+            || false,
+            Some("/nonexistent")
+        )
+        .is_err()
+    );
+    assert!(ledger::initialise(check, None, || false, Some("/nonexistent")).is_err());
+    assert!(ledger::initialise(Switch::OFF, None, || true, Some("/nonexistent")).is_ok());
+}
+
+/// Check mode with `PINT6_CLOSURE_DUMP` from the environment: refused where
+/// the switch initialises (at the base every record declined `pint6_dump`
+/// and the check passed with zero comparisons).
+#[test]
+fn check_with_the_pint6_dump_in_the_environment_is_refused() -> Result<()> {
+    own_process()?;
+    let dump = std::env::temp_dir().join(format!("u7a-ledger-pint6-{}", std::process::id()));
+    unsafe {
+        std::env::set_var(uncontracted::VARIABLE, "check:root,child");
+        std::env::set_var("PINT6_CLOSURE_DUMP", &dump);
+    }
+    let refused = super::validate_uncontracted();
+    let read = std::panic::catch_unwind(uncontracted::switch);
+    let _ = std::fs::remove_dir_all(&dump);
+    let error = refused
+        .err()
+        .ok_or_else(|| eyre!("check mode initialised with the PINT6 dump"))?;
+    ensure!(format!("{error}").contains("pint6_dump"), "{error}");
+    ensure!(
+        read.is_err(),
+        "the switch was read with the PINT6 dump: {read:?}"
+    );
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// U7a.4: one line per diagram and kind; U7a.1 (iii) coverage
 // ---------------------------------------------------------------------------
 
 /// One disposition line per enabled kind and one summary per diagram, also
@@ -347,7 +418,7 @@ fn one_line_per_diagram_and_kind() -> Result<()> {
         let _ = single.value?;
         for kind in ALL_KINDS {
             let line = disposition(&single.lines, kind)?;
-            let accounted = count(line, "compared");
+            let accounted = count(line, "compared") + count(line, "cache_hit");
             ensure!(
                 field(line, "outcome") == Some("ok")
                     && field(line, "declined") == Some("none")
@@ -395,6 +466,165 @@ fn one_line_per_diagram_and_kind() -> Result<()> {
                 "{line}"
             );
         }
+        Ok(())
+    })
+}
+
+/// A diagram-kind whose every record declines fails check mode (at the base
+/// it passed with zero comparisons, Astra's pint6 receipt), unless the
+/// run's exception list names each of its codes for that graph and kind.
+#[test]
+fn all_declined_kind_fails_check_unless_named() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let check = Switch::new(Mode::Check, &ROOT_CHILD);
+        let graph = graph_name(L2_22)?;
+        let declined = || {
+            ledger::with_fault(Kind::Root, "zero_loops", true, || {
+                run(L2_22, check, None, None)
+            })
+        };
+        let failed = declined()?;
+        let error = failed
+            .value
+            .err()
+            .ok_or_else(|| eyre!("an all-declined root passed check mode"))?;
+        ensure!(format!("{error:#}").contains("none compared"), "{error:#}");
+        let root = disposition(&failed.lines, Kind::Root)?;
+        ensure!(
+            field(root, "outcome") == Some("uncovered") && count(root, "compared") == 0,
+            "{root}"
+        );
+        let named = |graph: &str, code: &str| Exceptions {
+            entries: vec![Exception {
+                graph: graph.to_owned(),
+                kind: Kind::Root,
+                code: code.to_owned(),
+                reason: "the test's designed decline".to_owned(),
+            }],
+            digest: Some("test".to_owned()),
+        };
+        // another code or another graph does not name it
+        for exceptions in [
+            named(&graph, "pint6_dump"),
+            named("another_graph", "zero_loops"),
+        ] {
+            let other = ledger::with_exceptions(exceptions, declined)?;
+            ensure!(
+                other.value.is_err(),
+                "an exception for another code or graph"
+            );
+        }
+        let excepted = ledger::with_exceptions(named(&graph, "zero_loops"), declined)?;
+        let _ = excepted.value?;
+        let root = disposition(&excepted.lines, Kind::Root)?;
+        ensure!(
+            field(root, "outcome") == Some("excepted")
+                && field(root, "excepted").is_some_and(|e| e.starts_with("zero_loops:")),
+            "{root}"
+        );
+        // the child kind is compared as usual
+        let child = disposition(&excepted.lines, Kind::Child)?;
+        ensure!(
+            field(child, "outcome") == Some("ok") && count(child, "compared") > 0,
+            "{child}"
+        );
+        Ok(())
+    })
+}
+
+/// Astra's all-declined CHECK receipt at the full hook: with the PINT6 dump
+/// every record declines `pint6_dump`; check mode now fails the diagram (at
+/// the base it returned today's value with `compared=0 ... outcome=ok`;
+/// the environment's check switch refuses the combination outright, above).
+#[test]
+fn pint6_dump_check_with_every_record_declined_fails() -> Result<()> {
+    own_process()?;
+    let dump = std::env::temp_dir().join(format!("u7a-ledger-declined-{}", std::process::id()));
+    unsafe {
+        std::env::set_var("PINT6_CLOSURE_DUMP", &dump);
+    }
+    let outcome = with_production_piece_limit(|| -> Result<Run> {
+        test_initialise()?;
+        run(L2_22, Switch::new(Mode::Check, &ROOT_CHILD), None, None)
+    });
+    let _ = std::fs::remove_dir_all(&dump);
+    let declined = outcome?;
+    ensure!(
+        declined
+            .captured
+            .iter()
+            .all(|attempt| attempt.outcome == "declined:pint6_dump")
+            && !declined.captured.is_empty(),
+        "every record declines pint6_dump"
+    );
+    ensure!(
+        declined.value.is_err(),
+        "a check with zero comparisons passed"
+    );
+    for kind in ROOT_CHILD {
+        let line = disposition(&declined.lines, kind)?;
+        ensure!(
+            field(line, "outcome") == Some("uncovered")
+                && count(line, "compared") == 0
+                && field(line, "declined").is_some_and(|d| d.starts_with("pint6_dump:")),
+            "{line}"
+        );
+    }
+    Ok(())
+}
+
+/// A Δ-cache hit is its own disposition: the hit counts the fill's records
+/// with the fill's dispositions (expected does not depend on the cache
+/// order; at the base a hit skipped them silently); a hit whose fill left no
+/// note (an off fill) is unchecked and fails check mode.
+#[test]
+fn delta_cache_hits_count_the_fill() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let check = Switch::new(Mode::Check, &ROOT_CHILD);
+        let cache = Arc::new(CountertermCache::default());
+        let fill = run(L2_22, check, Some(cache.clone()), None)?;
+        let _ = fill.value?;
+        let hit = run(L2_22, check, Some(cache), None)?;
+        let _ = hit.value?;
+        let filled = disposition(&fill.lines, Kind::Child)?;
+        let served = disposition(&hit.lines, Kind::Child)?;
+        ensure!(count(filled, "compared") > 0, "{filled}");
+        ensure!(
+            count(served, "expected") == count(filled, "expected")
+                && count(served, "attempted") == 0
+                && count(served, "cache_hit") == count(filled, "expected")
+                && field(served, "cache_hit_fill")
+                    == Some(format!("compared:{}", count(filled, "expected")).as_str())
+                && field(served, "outcome") == Some("ok"),
+            "{filled}\n{served}"
+        );
+        let hits = lines_of(&hit.lines, "UNCONTRACTED_CACHE_HIT ");
+        ensure!(
+            !hits.is_empty()
+                && hits
+                    .iter()
+                    .all(|line| field(line, "fill_diagram").is_some_and(|d| d.starts_with("root#"))),
+            "{:#?}",
+            hit.lines
+        );
+        // the root kind never hits (a root value never reaches the cache)
+        ensure!(count(disposition(&hit.lines, Kind::Root)?, "cache_hit") == 0);
+        // a cache an off evaluation filled (helper VH R2-M1): loud, not silent
+        let mixed = Arc::new(CountertermCache::default());
+        let _ = run(L2_22, Switch::OFF, Some(mixed.clone()), None)?.value?;
+        let unchecked = run(L2_22, check, Some(mixed), None)?;
+        ensure!(
+            unchecked.value.is_err(),
+            "a check served by an off fill passed"
+        );
+        let served = disposition(&unchecked.lines, Kind::Child)?;
+        ensure!(
+            field(served, "cache_hit_fill").is_some_and(|f| f.contains("unchecked"))
+                && field(served, "outcome") == Some("uncovered"),
+            "{served}"
+        );
         Ok(())
     })
 }

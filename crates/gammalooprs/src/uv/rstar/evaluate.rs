@@ -1217,7 +1217,8 @@ impl<'a> Evaluation<'a> {
     }
 
     /// The end of a root evaluation with its own diagram ledger: the
-    /// ledger's lines, with the outcome of `result`
+    /// ledger's lines, with the outcome of `result`, and check mode's
+    /// coverage rule, an error of an otherwise successful evaluation
     /// ([`super::uncontracted_ledger::DiagramLedger::close`]); `result`
     /// unchanged without a ledger.
     fn close_ledger(&mut self, result: Result<Atom>) -> Result<Atom> {
