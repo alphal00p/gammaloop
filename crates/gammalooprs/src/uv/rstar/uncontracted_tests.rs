@@ -750,6 +750,47 @@ fn conservation_removes_zero_mass_logs() {
     assert!(conserve(&delta, 5, &independent).is_none());
 }
 
+/// The real case (WH-OQ-ANSWERS-ADDENDUM OQ-28): the Δ of the child
+/// {4,5,6,7,8} at the root remainder {2,3} of L3_016 as the production run's
+/// Δ cache spelled it (runs/L3 dump a_root-000718): `log(rstar_mass_squared)`
+/// and `log(μᵣ²)` times `Q(1) - Q(2) - Q(3)`, zero by momentum conservation at
+/// the ct: node (edges 2 and 3 in, leg 1 out; routes k, p - k, +p). The step
+/// removes every mass symbol and leaves the routed Δ unchanged.
+#[test]
+fn conservation_removes_the_l3_016_zero() {
+    test_initialise().unwrap();
+    let delta = parse(include_str!("testdata/u7a/l3-016-delta.txt").trim());
+    let mass = symbol!("rstar_mass_squared"; Scalar);
+    assert!(
+        delta.contains_symbol(mass),
+        "the dumped Δ carries log(M_aux^2)"
+    );
+    let node = Endpoint::Vertex(3);
+    let edges = [
+        edge(1, node, Endpoint::External, &[0, 1]),
+        edge(2, Endpoint::Vertex(0), node, &[1, 0]),
+        edge(3, Endpoint::Vertex(0), node, &[-1, 1]),
+    ];
+    let rewritten = conserve(&delta, 3, &edges).expect("the ct: node conserves");
+    assert!(
+        !rewritten.contains_symbol(mass),
+        "a mass symbol survives: {rewritten}"
+    );
+    // routed (Q(1) -> Q(0) by sigma, Q(3) -> Q(0) - Q(2)), both are the same
+    let route = |atom: &Atom| {
+        atom.replace(function!(GS.emr_mom, 1, W_.x___))
+            .with(function!(GS.emr_mom, 0, W_.x___))
+            .replace(function!(GS.emr_mom, 3, W_.x___))
+            .with(function!(GS.emr_mom, 0, W_.x___) - function!(GS.emr_mom, 2, W_.x___))
+            .expand()
+    };
+    assert!(
+        (route(&delta) - route(&rewritten)).expand().is_zero(),
+        "the step changed the routed Δ"
+    );
+    assert!(!route(&delta).contains_symbol(mass));
+}
+
 #[test]
 fn root_factor_split() {
     test_initialise().unwrap();
