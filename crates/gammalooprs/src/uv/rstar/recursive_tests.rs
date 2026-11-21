@@ -884,14 +884,12 @@ fn dirac_child_closure_matches_the_open_tensor_and_massive_r() -> Result<()> {
 }
 
 fn dirac_child_closure_matches_the_open_tensor_and_massive_r_body() -> Result<()> {
-    use std::sync::atomic::Ordering;
     test_initialise()?;
     let vakint = Vakint::new()?;
     let closure = UvChildClosure::parse("isotropic,dirac-check")?;
-    let closed_before = super::plan::DIRAC_CHILDREN.load(Ordering::Relaxed);
-    let checks_before = super::plan::DIRAC_CHECKS
-        .each_ref()
-        .map(|count| count.load(Ordering::Relaxed));
+    // This thread's counts (super::plan::DIRAC_LOCAL): robust under
+    // cargo test's parallel threads.
+    let before = super::plan::DIRAC_LOCAL.with(std::cell::Cell::get);
     let mut coverage = Coverage::default();
     for (name, dot, max_loops) in [
         ("L2/7", include_str!("testdata/l2-d7.dot"), usize::MAX),
@@ -903,11 +901,8 @@ fn dirac_child_closure_matches_the_open_tensor_and_massive_r_body() -> Result<()
     ] {
         compare_children_with(name, dot, &vakint, max_loops, false, closure, &mut coverage)?;
     }
-    let closed = super::plan::DIRAC_CHILDREN.load(Ordering::Relaxed) - closed_before;
-    let after = super::plan::DIRAC_CHECKS
-        .each_ref()
-        .map(|count| count.load(Ordering::Relaxed));
-    let [checked, identical, equal] = [0, 1, 2].map(|k| after[k] - checks_before[k]);
+    let after = super::plan::DIRAC_LOCAL.with(std::cell::Cell::get);
+    let [closed, checked, identical, equal] = [0, 1, 2, 3].map(|k| after[k] - before[k]);
     eprintln!(
         "DIRAC_COVERAGE closed={closed} checked={checked} identical={identical} equal={equal} {coverage:?}"
     );
