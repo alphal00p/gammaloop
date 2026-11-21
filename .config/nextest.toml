@@ -77,6 +77,12 @@ filter = "test(bench) or test(benchmark)"
 filter = "test(/^gl20_multichannel_local_inspect_event_snapshot$/)"
 slow-timeout = { period = "5m", terminate-after = 2 }
 
+[[profile.default.overrides]]
+# The R* producer's fixture suites (#[ignore], external data, run explicitly
+# with --run-ignored only): a five-loop record takes minutes.
+filter = "test(/the_beta_k1_quick_records|the_beta_k5_stress_records|the_beta_k1_l5_records|beta_dot_graphs_as_root_remainders/)"
+slow-timeout = { period = "5m", terminate-after = 24 }
+
 [profile.default.junit]
 # Default JUnit output location
 path = "target/nextest/default/junit.xml"

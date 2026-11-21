@@ -2521,7 +2521,7 @@ fn the_beta_k1_l5_records_equal_their_values() {
         .collect::<Vec<_>>();
     let mut vakint = Vakint::new().unwrap();
     let library = rustred_app::propagator::load_p_library(
-        rustred_app::propagator::PLibrarySource::Directory(package.into()),
+        rustred_app::propagator::PLibrarySource::Directory(package),
         &rustred_app::propagator::PLibraryOptions {
             verify_descent: false,
         },
