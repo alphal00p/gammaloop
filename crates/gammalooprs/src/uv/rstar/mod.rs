@@ -69,6 +69,8 @@ mod uncontracted_oracle_k2_tests;
 #[cfg(test)]
 mod uncontracted_oracle_tests;
 #[cfg(test)]
+mod uncontracted_pick8_tests;
+#[cfg(test)]
 mod uncontracted_prereview_tests;
 #[cfg(test)]
 mod uncontracted_refusal_tests;
