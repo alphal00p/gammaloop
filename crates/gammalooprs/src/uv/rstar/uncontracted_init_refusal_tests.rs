@@ -421,6 +421,48 @@ fn a_nonlocal_insertion_is_an_error() -> Result<()> {
     })
 }
 
+/// Review of the C7 init refusals, F1: under `GAMMALOOP_IR_QUOTIENT=rstar`
+/// a quotient the R* route declines falls back to the massive Z̃, so a Δ may
+/// carry the massive quotient's m_uv_vacuum, also as a polynomial term
+/// (`m_uv_vacuum^2`), which is no record mass, no log and an integer power:
+/// it must be the error `insertion_nonlocal` too, in check and in on (before
+/// the fix check failed on the disagreeing comparison and on took the
+/// record). The log form stays caught.
+#[test]
+fn a_massive_quotient_m_uv_vacuum_in_an_insertion_is_an_error() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let uv = settings();
+        let m_uv = Atom::var(GS.m_uv_vacuum);
+        for (mode, switch) in [
+            ("check", Switch::new(Mode::Check, &ROOT)),
+            ("on", Switch::new(Mode::On, &ROOT)),
+        ] {
+            for (name, form) in [
+                ("m_uv_vacuum^2", m_uv.clone().pow(Atom::num(2))),
+                (
+                    "1 + m_uv_vacuum^2",
+                    Atom::num(1) + m_uv.clone().pow(Atom::num(2)),
+                ),
+                (
+                    "log(m_uv_vacuum^2)",
+                    function!(Symbol::LOG, m_uv.clone().pow(Atom::num(2))),
+                ),
+            ] {
+                let count = Rc::new(RefCell::new(0));
+                let hooked =
+                    with_insertion_hook(times(form, count.clone()), || run(L2_22, &uv, switch))?;
+                ensure!(
+                    *count.borrow() > 0,
+                    "{mode} {name}: no root record has an insertion"
+                );
+                fails_with(&hooked, "insertion_nonlocal", &format!("{mode} {name}"))?;
+            }
+        }
+        Ok(())
+    })
+}
+
 /// A mass symbol stays the designed `insertion_mass_symbol` (decided before
 /// the new guard), log(M_aux²) included: never `insertion_nonlocal`.
 #[test]
