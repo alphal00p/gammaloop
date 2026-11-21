@@ -3497,3 +3497,116 @@ fn the_producers_plain_scalars_are_accepted() {
         );
     }
 }
+
+/// EVERY RULE ON EVERY FIELD AND ENTRY, typed and through the text form: the
+/// closure entry (k1-root, k2-child-ins), the ports and the direct entry
+/// (k5-direct), the vacuum entry (a marked vacuum sunrise); each rule's
+/// violating atom in each caller field and in the prefactor argument is
+/// refused (with a control per field that a harmless scalar is accepted).
+#[test]
+fn every_rule_on_every_field_and_entry() {
+    use vakint::p_integral::factorized::{evaluate_factorized, evaluate_factorized_vacuum};
+    let settings = symbolic();
+    let vakint = engine();
+    #[derive(Clone, Copy, Debug)]
+    enum Entry {
+        Closure,
+        Ports,
+        Direct,
+        Vacuum,
+    }
+    let run = |entry: Entry, v: &FactorizedNumerator, arg: &Atom| -> Result<(), String> {
+        match entry {
+            Entry::Closure => evaluate_factorized_closure(
+                &vakint,
+                &settings,
+                std::slice::from_ref(v),
+                std::slice::from_ref(arg),
+            )
+            .map(|_| ()),
+            Entry::Ports => evaluate_factorized_ports(&vakint, &settings, v, arg).map(|_| ()),
+            Entry::Direct => evaluate_factorized(&vakint, &settings, v, arg).map(|_| ()),
+            Entry::Vacuum => evaluate_factorized_vacuum(&vakint, &settings, v, arg).map(|_| ()),
+        }
+        .map_err(|e| e.to_string())
+    };
+    let rules: Vec<(&str, String)> = vec![
+        ("reserved namespace", "vakint::closure_lambda".into()),
+        ("wildcard name", "caller::x_".into()),
+        ("non-ASCII name", "caller::𝜀".into()),
+        ("opaque function of D", format!("caller::f({DIM})")),
+        ("opaque function of eps", format!("caller::f({EPS})")),
+        ("non-integer exponent", "caller::x^(1/2)".into()),
+        ("unbounded exponent", "caller::x^65".into()),
+        ("data atom outside an insertion", "vakint::MZV(5,3)".into()),
+    ];
+    let cases: Vec<(&str, FactorizedNumerator, Vec<Entry>)> = vec![
+        ("k1-root", record("wh-k1-root"), vec![Entry::Closure]),
+        (
+            "k2-child-ins",
+            record("wh-k2-child-ins"),
+            vec![Entry::Closure],
+        ),
+        (
+            "k5-direct",
+            record("wh-k5-direct"),
+            vec![Entry::Ports, Entry::Direct],
+        ),
+        (
+            "vacuum sunrise",
+            marked_vacuum_sunrise("caller::m2", "caller::g"),
+            vec![Entry::Vacuum],
+        ),
+    ];
+    let mut misses = Vec::new();
+    for (name, base, entries) in &cases {
+        for entry in entries {
+            for text_path in [false, true] {
+                let through = |v: &FactorizedNumerator, arg: &Atom| -> Result<(), String> {
+                    let v = if text_path {
+                        let text = v.to_text().map_err(|e| e.to_string())?;
+                        FactorizedNumerator::parse_text(&text).map_err(|e| e.to_string())?
+                    } else {
+                        v.clone()
+                    };
+                    run(*entry, &v, arg)
+                };
+                for (field, put) in field_setters(base) {
+                    let mut c = base.clone();
+                    put(&mut c, &atom("caller::harmless"));
+                    let informative = through(&c, &c.prefactor.total()).is_ok();
+                    for (rule, text) in &rules {
+                        if *rule == "data atom outside an insertion"
+                            && field.starts_with("insertion")
+                        {
+                            continue;
+                        }
+                        let mut v = base.clone();
+                        put(&mut v, &atom(text));
+                        if through(&v, &v.prefactor.total()).is_ok() {
+                            misses.push(format!(
+                                "{name} {entry:?} text={text_path} {rule} in {field}"
+                            ));
+                        }
+                    }
+                    eprintln!(
+                        "CONTRACT {name} {entry:?} text={text_path} {field}: control {}",
+                        if informative {
+                            "ok"
+                        } else {
+                            "refused (uninformative)"
+                        }
+                    );
+                }
+                for (rule, text) in &rules {
+                    if through(base, &(base.prefactor.total() * atom(text))).is_ok() {
+                        misses.push(format!(
+                            "{name} {entry:?} text={text_path} {rule} in the prefactor argument"
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    assert!(misses.is_empty(), "accepted:\n{}", misses.join("\n"));
+}
