@@ -158,6 +158,7 @@ pub use top_mass::{
     split_enabled as top_mass_split_enabled, top_level_switches_line,
     top_level_switches_provenance, top_mass_terms, validate_top_level_switches,
 };
+pub use uncontracted_ledger::run_coverage as uncontracted_run_coverage;
 pub use uncontracted_ledger::{DiagramLedger, Resumed, RunTally, resumed as uncontracted_resumed};
 pub use uv::MassiveUvEvaluator;
 
