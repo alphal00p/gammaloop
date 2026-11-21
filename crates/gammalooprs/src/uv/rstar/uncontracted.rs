@@ -739,6 +739,10 @@ pub(super) const DESIGNED_LOCAL: &[&str] = &[
     // (no verified fixture; Astra #10 keeps such terms out of `ir-hard`):
     // declined before its record is built, today's path takes it
     "surrogate_ir_hard",
+    // U7c (K5): a record that holds only part of a hole's chain (a hole of
+    // two or more loops above four loops; no verified fixture): declined
+    // before its record is built, today's path takes it
+    "surrogate_split_chain",
 ];
 
 /// The designed codes caused by a SETTING of the run or of the calling
