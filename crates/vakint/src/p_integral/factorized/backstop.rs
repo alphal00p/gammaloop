@@ -42,7 +42,7 @@ use crate::VakintSettings;
 use crate::utils::vakint_macros::vk_symbol;
 
 /// vakint's internal names (without the `vakint::` namespace), exact.
-const INTERNAL_EXACT: [&str; 41] = [
+const INTERNAL_EXACT: [&str; 43] = [
     // the factorised entries
     "closure_lambda",
     "slash",
@@ -91,6 +91,11 @@ const INTERNAL_EXACT: [&str; 41] = [
     // map, never placed in an expression
     "integral",
     "n_props",
+    // the alphaLoop / FMFT / MATAD mass stand-in and normalisation log,
+    // substituted back before each backend returns (lib.rs, fmft/finalize.rs,
+    // matad.rs)
+    "mUV",
+    "logmUVmu",
 ];
 
 /// Families of internal names made with format strings: a prefix and a
@@ -1302,10 +1307,6 @@ fn after() { let _ = symbol!("witness::kept_b"); }
     /// checks); an entry no site creates fails as stale.
     #[rustfmt::skip]
     const UNDECIDED: &[&str] = &[
-        // lib.rs
-        "mUV",
-        // fmft/finalize.rs, lib.rs, matad.rs
-        "logmUVmu",
     ];
 
     /// Source files under src/ that no module declaration names (not compiled,
