@@ -790,7 +790,7 @@ mod tests {
         let source = r##"use a::{b, c};
 #[cfg(test)]
 use crate::{x, y};
-fn real() { let _ = vk_symbol!("vakint::kept_a"); }
+fn real() { let _ = symbol!("witness::kept_a"); }
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
@@ -800,7 +800,7 @@ fn single() {
     let _ = "}}}";
     let _ = r#"{"#; // }
     /* { */
-    let _ = vk_symbol!("vakint::gone_a");
+    let _ = symbol!("witness::gone_a");
 }
 struct S {
     #[cfg(test)]
@@ -809,9 +809,9 @@ struct S {
 }
 #[cfg(test)]
 mod inline {
-    fn f() { vk_symbol!("vakint::gone_b"); }
+    fn f() { symbol!("witness::gone_b"); }
 }
-fn after() { let _ = vk_symbol!("vakint::kept_b"); }
+fn after() { let _ = symbol!("witness::kept_b"); }
 "##;
         let kept = without_test_items(source);
         for name in [
