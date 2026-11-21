@@ -1032,6 +1032,9 @@ struct Evaluation<'a> {
     /// check, or the timing lines; [`super::uncontracted_ledger`]): closed
     /// with the evaluation's outcome by [`Self::close_ledger`].
     ledger: Option<super::uncontracted_ledger::DiagramLedger>,
+    /// IRH-DEPTH counts of the child-route IR corrections
+    /// (`IR_HARD_CHILD_DEPTH_SUMMARY`).
+    depth: super::depth::DepthCounts,
 }
 
 impl<'a> Evaluation<'a> {
@@ -1194,6 +1197,7 @@ impl<'a> Evaluation<'a> {
             child_decline: None,
             closure_data: None,
             ledger,
+            depth: Default::default(),
         })
     }
 
@@ -2084,7 +2088,25 @@ impl<'a> Evaluation<'a> {
         // value-dependent steps run on them as well (pre-review of the U7a
         // delta, finding 4: what mode on would do with the new values)
         let k3_check = super::uncontracted::switch().mode == super::uncontracted::Mode::Check;
-        let mut extra = quotient_loops;
+        // IRH-DEPTH (super::depth): the pole bound B of every quotient
+        // factor, from the quotient's loops and the factors outside the hard
+        // part, before any truncation and whatever rows the hard part shows.
+        let quotient_numerator = self
+            .graph
+            .numerator(&self.plan.support, &correction.hard)
+            .get_single_atom()?;
+        let bound = super::depth::quotient_pole_bound(
+            quotient_loops,
+            &quotient_numerator,
+            self.root_closure.as_ref(),
+        );
+        drop(quotient_numerator);
+        self.depth.corrections += 1;
+        super::depth::count(&super::depth::CORRECTIONS);
+        if bound.is_none_or(|bound| bound > quotient_loops) {
+            self.depth.bounded += 1;
+        }
+        let mut extra = super::depth::start_extra(quotient_loops);
         let mut attempts = 0_usize;
         loop {
             attempts += 1;
@@ -2208,12 +2230,15 @@ impl<'a> Evaluation<'a> {
             }
             let mut rows = Vec::new();
             let mut h_bytes = 0;
+            // IRH-DEPTH: groups whose truncated value vanishes show no row.
+            let mut vanished_groups = 0_usize;
             // Per loop count: the closed moments and their reassembly.
             let mut closed_moments =
                 BTreeMap::<usize, (Vec<(Atom, Atom)>, Vec<(Atom, Atom)>)>::new();
             for (loops, h) in &groups {
                 h_bytes += h.as_view().get_byte_size();
                 if h.is_zero() {
+                    vanished_groups += 1;
                     continue;
                 }
                 let moments = match hard_moments(h, &soft) {
@@ -2227,6 +2252,10 @@ impl<'a> Evaluation<'a> {
                         return Ok(Err(format!("moments:{reason}")));
                     }
                 };
+                if moments.is_empty() {
+                    // Zero after expansion (hard_moments).
+                    vanished_groups += 1;
+                }
                 let moments = match &closure {
                     Some(boundary) => match super::ir_dirac::reassemble(&moments, boundary) {
                         Ok(reassembled) => {
@@ -2323,18 +2352,28 @@ impl<'a> Evaluation<'a> {
                     )?;
                 }
             }
+            #[cfg(test)]
+            super::depth::apply_row_hook(
+                &super::depth::HookSite {
+                    hard_loops,
+                    quotient_loops,
+                    extra,
+                },
+                &mut rows,
+            );
             let hard = self.open_remainder(&correction.preparation[representative])?;
             let outer_started = Instant::now();
             let outcome = self.ir_outer_integrated(&hard, &correction.forest, &rows)?;
-            let (value, outer_stats, valuation) = match outcome {
+            let (value, outer_stats, valuation, zero_rows) = match outcome {
                 Ok(outcome) => outcome,
                 Err(reason) => return Ok(Err(reason)),
             };
             let needed = usize::try_from(-valuation.min(0)).unwrap_or(0);
             if needed > extra {
                 eprintln!(
-                    "IR_HARD_CHILD_DEPTH graph={} corr={correction_index} attempt={attempts} extra_depth={extra} needed={needed}",
-                    self.graph.name
+                    "IR_HARD_CHILD_DEPTH graph={} corr={correction_index} attempt={attempts} extra_depth={extra} needed={needed} bound={}",
+                    self.graph.name,
+                    super::depth::bound_label(bound),
                 );
                 if attempts >= 3 {
                     return Ok(Err(format!("depth:{needed}")));
@@ -2342,10 +2381,41 @@ impl<'a> Evaluation<'a> {
                 extra = needed;
                 continue;
             }
+            if attempts > 1 {
+                self.depth.retried += 1;
+                super::depth::count(&super::depth::RETRIED);
+            }
+            // IRH-DEPTH guard: the depth accepted here must reach the bound
+            // of every group and row that could hide a pole (each row's
+            // bound raised by its insertion's own excess).
+            let truncation = super::depth::Truncation {
+                groups: groups.len(),
+                vanished_groups,
+                rows: rows.len(),
+                zero_rows: zero_rows.len(),
+            };
+            let row_bound = rows.iter().fold(bound, |largest, (_, insertion, _)| {
+                Some(largest?.max(super::depth::row_bound(bound, insertion)?))
+            });
+            if let Some(reason) = super::depth::refusal(row_bound, extra, needed, &truncation) {
+                eprintln!(
+                    "IR_HARD_CHILD_DEPTH_REFUSED graph={} corr={correction_index} attempt={attempts} hard_loops={hard_loops} quotient_loops={quotient_loops} bound={} extra_depth={extra} needed={needed} reason={reason} vanished_groups={vanished_groups}/{} zero_rows={}/{} edges={}",
+                    self.graph.name,
+                    super::depth::bound_label(row_bound),
+                    groups.len(),
+                    zero_rows.len(),
+                    rows.len(),
+                    self.edges(&correction.hard),
+                );
+                self.depth.refused += 1;
+                super::depth::count(&super::depth::REFUSED);
+                return Ok(Err(format!("depth_refused:{reason}")));
+            }
             return Ok(Ok((
                 value,
                 format!(
-                    " quotient_loops={quotient_loops} extra_depth={extra} attempts={attempts} terms={terms} groups={} rows={} h_bytes={h_bytes} h_s={h_seconds:.3} closures={} integrated_terms={} edge={edge_basis} forests={} outer_s={:.3}{outer_stats}",
+                    " quotient_loops={quotient_loops} bound={} extra_depth={extra} attempts={attempts} terms={terms} groups={} rows={} h_bytes={h_bytes} h_s={h_seconds:.3} closures={} integrated_terms={} edge={edge_basis} forests={} outer_s={:.3}{outer_stats}",
+                    super::depth::bound_label(row_bound),
                     groups.len(),
                     rows.len(),
                     closures_after - closures_before,
@@ -2701,12 +2771,15 @@ impl<'a> Evaluation<'a> {
     /// `Σ_k (-1)^k binom(a_j-εL, k)`; then the generic tail (summand
     /// simplification, root projection and regulation, tensor finish) with
     /// the `h_j` substituted last. `Err(reason)` declines the correction.
+    /// Besides the value: the lowest `ε` power of the quotient factors and
+    /// the rows whose `h_j` vanishes (IRH-DEPTH, [`super::depth`]).
+    #[allow(clippy::type_complexity)]
     fn ir_outer_integrated(
         &mut self,
         hard: &RStarIntegrand,
         forests: &[IrForestTerm],
         rows: &[(Atom, Atom, usize)],
-    ) -> Result<std::result::Result<(Atom, String, i64), String>> {
+    ) -> Result<std::result::Result<(Atom, String, i64, Vec<usize>), String>> {
         use symbolica::{function, id::Replacement};
         // tests: a panic after the hard part's records (`with_outer_panic`)
         #[cfg(test)]
@@ -2823,6 +2896,11 @@ impl<'a> Evaluation<'a> {
                 .collect::<Vec<_>>();
             finished.replace_multiple(&replacements)
         };
+        let zero_rows = powers
+            .iter()
+            .enumerate()
+            .filter_map(|(row, power)| power.is_none().then_some(row))
+            .collect();
         Ok(Ok((
             value,
             format!(
@@ -2833,6 +2911,7 @@ impl<'a> Evaluation<'a> {
                     .collect::<std::collections::BTreeSet<_>>()
             ),
             valuation,
+            zero_rows,
         )))
     }
 
@@ -3391,6 +3470,18 @@ impl<'a> Evaluation<'a> {
 
     fn log_timing(&self) {
         self.log_boundary_summary("ok");
+        if self.depth.corrections > 0 {
+            // IRH-DEPTH: this evaluation's child-route IR corrections.
+            eprintln!(
+                "IR_HARD_CHILD_DEPTH_SUMMARY graph={} child={} corrections={} bounded={} retried={} refused={}",
+                self.graph.name,
+                self.plan.root_boundary.is_some(),
+                self.depth.corrections,
+                self.depth.bounded,
+                self.depth.retried,
+                self.depth.refused,
+            );
+        }
         let elapsed = self.started.elapsed();
         let preparation = elapsed.saturating_sub(
             self.proper_uv_elapsed + self.quotient_elapsed + self.integration_elapsed,
