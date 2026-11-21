@@ -3137,6 +3137,50 @@ fn the_vacuum_entry_applies_the_marked_atom_rules() {
     }
 }
 
+/// Outside ASCII only the settings' epsilon and scale and Symbolica's 𝜋 and
+/// 𝑒: a caller symbol in Symbolica's namespace with a non-ASCII name
+/// (`symbolica::ε`, a lookalike of the epsilon) is refused in a factor; a
+/// non-ASCII DIMENSION name is refused; 𝜋 and 𝑒 are accepted.
+#[test]
+fn non_ascii_names_only_the_settings_and_symbolica_constants() {
+    let base = record("wh-k1-root");
+    let id = base
+        .vertices
+        .iter()
+        .find(|x| x.factor != Atom::num(1))
+        .unwrap()
+        .id;
+    init();
+    let lookalike = Atom::var(symbolica::symbol!("symbolica::ε"));
+    let mut v = base.clone();
+    let vertex = v.vertices.iter_mut().find(|x| x.id == id).unwrap();
+    vertex.factor = &vertex.factor * lookalike.pow(Atom::num(-1));
+    match through_entry(&v, &v.prefactor.total(), &symbolic()) {
+        Err(e) => assert!(
+            e.contains(&format!(
+                "a non-ASCII name symbolica::ε in vertex {id} factor"
+            )),
+            "{e}"
+        ),
+        Ok(got) => panic!("symbolica::ε accepted: {got}"),
+    }
+    for ok in ["𝜋^-2", "𝑒^2"] {
+        let mut v = base.clone();
+        let vertex = v.vertices.iter_mut().find(|x| x.id == id).unwrap();
+        vertex.factor = &vertex.factor * atom(ok);
+        through_entry(&v, &v.prefactor.total(), &symbolic())
+            .unwrap_or_else(|e| panic!("{ok}: {e}"));
+    }
+    // a non-ASCII dimension name, used consistently
+    let text =
+        fixture_text("wh-k1-root.record.txt").replace("gammalooprs::{}::dim", "gammalooprs::{}::𝒟");
+    let v = FactorizedNumerator::from_text(&text).unwrap_or_else(|e| panic!("{e}"));
+    match through_entry(&v, &v.prefactor.total(), &symbolic()) {
+        Err(e) => assert!(e.contains("a non-ASCII name gammalooprs::𝒟 in "), "{e}"),
+        Ok(got) => panic!("a non-ASCII dimension accepted: {got}"),
+    }
+}
+
 /// MARKED three-loop massive vacuum values through the vacuum entry in
 /// Symbolic and Numerical mode at 3 and 6 terms: the basketball (four lines
 /// of one mass between two vertices) and the all-massive mercedes (the

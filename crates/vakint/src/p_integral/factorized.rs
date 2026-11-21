@@ -1208,13 +1208,18 @@ pub(crate) fn check_entry_names(
     }
     let epsilon = crate::utils::vakint_macros::vk_symbol!(&settings.epsilon_symbol);
     let scale = crate::utils::vakint_macros::vk_symbol!(&settings.mu_r_sq_symbol);
+    // Symbolica's non-ASCII built-ins by name (correction 3): the constants
+    // 𝜋 and 𝑒; its built-in function heads are ASCII
     let allowed = |name: &str| {
         name.is_ascii()
             || name == epsilon.get_name()
             || name == scale.get_name()
-            || name.starts_with("symbolica::")
+            || name == "symbolica::𝜋"
+            || name == "symbolica::𝑒"
     };
+    let dimension = Atom::var(value.dimension);
     let mut atoms = value.record_atoms();
+    atoms.push(("dimension".to_string(), &dimension));
     atoms.push(("prefactor argument".to_string(), prefactor));
     for (field, atom) in atoms {
         // an insertion: an epsilon spelled ε of another name is the
