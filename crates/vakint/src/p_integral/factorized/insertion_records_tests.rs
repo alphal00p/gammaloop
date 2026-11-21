@@ -486,3 +486,132 @@ fn an_out_of_range_depth_is_refused() {
         "k1-root at depth 2 (control)",
     );
 }
+
+/// The R* site settings with RustRed master mode Retain (masters kept as
+/// symbols: the value keeps its exact ε dependence, format section 7).
+fn retain_settings() -> VakintSettings {
+    VakintSettings {
+        evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
+            RustRedEvaluationOptions {
+                master_mode: RustRedMasterMode::Retain,
+            },
+        )]),
+        ..site_settings()
+    }
+}
+
+/// The record with its contracted (ct:) insertion at `vertex` moved onto the
+/// vertex by hand: the vertex factor is coefficient x factor, no insertion.
+fn insertion_moved_onto_its_vertex(
+    value: &FactorizedNumerator,
+    vertex: usize,
+) -> FactorizedNumerator {
+    let mut moved = value.clone();
+    let i = moved
+        .insertions
+        .iter()
+        .position(|x| x.vertex == vertex)
+        .unwrap();
+    let insertion = moved.insertions.remove(i);
+    let v = moved.vertices.iter_mut().find(|x| x.id == vertex).unwrap();
+    v.factor = (&insertion.coefficient * &insertion.factor).expand();
+    v.rule = format!("V_moved{vertex}");
+    moved
+}
+
+fn closure_value(vakint: &Vakint, settings: &VakintSettings, value: &FactorizedNumerator) -> Atom {
+    evaluate_factorized_closure(
+        vakint,
+        settings,
+        std::slice::from_ref(value),
+        &[value.prefactor.total()],
+    )
+    .unwrap_or_else(|e| panic!("{}: {e}", value.label))
+    .value
+}
+
+/// Retain keeps the EXACT ε dependence (format section 7) also with a poled
+/// insertion. The K2 child of L3-036 (vendored k2-child-ins: one ct:
+/// insertion at vertex 4, coefficient ∝ ε^-1, pole order 1, depth 1):
+/// (1) linearity: its coefficient times 1/(1 + z ε), z a fresh scalar, gives
+/// the retained value times 1/(1 + z ε) exactly (a finite series would be a
+/// polynomial in z); (2) the exact product: the insertion moved onto its
+/// vertex by hand gives the same value; (3) the value does not depend on the
+/// depth. Symbolic control: the same record keeps its vendored value.
+#[test]
+fn retain_keeps_the_exact_product_of_a_poled_insertion() {
+    let vakint = plain_engine();
+    let retain = retain_settings();
+    let k2 = FactorizedNumerator::from_text(include_str!("fixtures/wh-k2-child-ins.record.txt"))
+        .unwrap();
+    assert_eq!(
+        k2.insertion_pole_order(vk_symbol!("gammalooprs::ε"))
+            .unwrap(),
+        1
+    );
+    let exact = closure_value(&vakint, &retain, &k2);
+    let rational_text = "1/(1+witness::z*gammalooprs::ε)";
+    let rational = vk_parse!(rational_text).unwrap();
+    let mut twin = k2.clone();
+    twin.insertions[0].coefficient = &twin.insertions[0].coefficient * &rational;
+    let got = closure_value(&vakint, &retain, &twin);
+    assert!(
+        (&got - &(&exact * &rational)).expand().is_zero(),
+        "linearity in Retain:\ntwin  {got}\nexact x 1/(1+z eps)  {}",
+        &exact * &rational
+    );
+    let moved = closure_value(&vakint, &retain, &insertion_moved_onto_its_vertex(&k2, 4));
+    assert!(
+        (&exact - &moved).expand().is_zero(),
+        "exact product in Retain:\ninsertion {exact}\nmoved     {moved}"
+    );
+    let mut deeper = k2.clone();
+    if let FactorizedKind::Closure(spec) = &mut deeper.kind {
+        spec.depth = Some(4);
+    }
+    assert!(
+        (&exact - &closure_value(&vakint, &retain, &deeper))
+            .expand()
+            .is_zero(),
+        "Retain must not depend on the depth"
+    );
+    compare(
+        &vakint,
+        include_str!("fixtures/wh-k2-child-ins.record.txt"),
+        include_str!("fixtures/wh-k2-child-ins.value.txt"),
+        "k2-child-ins (Symbolic control)",
+    );
+}
+
+/// The same exact identities with TWO insertions (vendored k5-surrogate: a
+/// ct: child at vertex 1 and a surrogate ins: vertex 8, pole order 2): the ct:
+/// insertion moved onto its vertex gives the same retained value, and the
+/// value does not depend on the depth.
+#[test]
+fn retain_keeps_the_exact_product_with_two_insertions() {
+    let vakint = plain_engine();
+    let retain = retain_settings();
+    let k5 = FactorizedNumerator::from_text(include_str!("fixtures/wh-k5-surrogate.record.txt"))
+        .unwrap();
+    assert_eq!(
+        k5.insertion_pole_order(vk_symbol!("gammalooprs::ε"))
+            .unwrap(),
+        2
+    );
+    let exact = closure_value(&vakint, &retain, &k5);
+    let moved = closure_value(&vakint, &retain, &insertion_moved_onto_its_vertex(&k5, 1));
+    assert!(
+        (&exact - &moved).expand().is_zero(),
+        "exact product in Retain (two insertions)"
+    );
+    let mut deeper = k5.clone();
+    if let FactorizedKind::Closure(spec) = &mut deeper.kind {
+        spec.depth = spec.depth.map(|d| d + 2);
+    }
+    assert!(
+        (&exact - &closure_value(&vakint, &retain, &deeper))
+            .expand()
+            .is_zero(),
+        "Retain must not depend on the depth (two insertions)"
+    );
+}

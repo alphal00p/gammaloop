@@ -65,6 +65,23 @@ use crate::symbols::S;
 use crate::utils::vakint_macros::vk_symbol;
 use crate::{Vakint, VakintSettings};
 
+/// Whether `settings` keep the masters as symbols (master mode Retain), the
+/// mode the massive closure backend applies (the first RustRed or Forcer
+/// method's master mode, Symbolic by default): its value keeps the exact ε
+/// dependence, which no truncation may cut (format section 7).
+fn retains_masters(settings: &VakintSettings) -> bool {
+    settings
+        .evaluation_order
+        .0
+        .iter()
+        .find_map(|method| match method {
+            crate::EvaluationMethod::RustRed(options) => Some(options.master_mode),
+            crate::EvaluationMethod::Forcer(options) => Some(options.master_mode),
+            _ => None,
+        })
+        == Some(crate::RustRedMasterMode::Retain)
+}
+
 /// Highest Taylor degree accepted (WH-RECORD-FORMAT OQ-5: QCD R* needs <= 2).
 pub const MAX_CLOSURE_TAYLOR_DEGREE: u32 = 2;
 
@@ -1614,7 +1631,9 @@ pub(super) fn evaluate_validated(
     for (symbol, tensor) in &prepared.tensors {
         vakint_value = vakint_value.replace(symbol.clone()).with(tensor.clone());
     }
-    let vakint_value = if pole_order > 0 {
+    // the product truncated back to the requested depth; in Retain the masters
+    // are symbols and the value is the exact product: no series
+    let vakint_value = if pole_order > 0 && !retains_masters(settings) {
         let target = i64::try_from(value.loops())
             .ok()
             .and_then(|loops| returned_terms.checked_sub(loops))
