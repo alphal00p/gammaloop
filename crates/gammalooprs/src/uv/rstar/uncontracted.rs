@@ -390,12 +390,15 @@ static ENVIRONMENT: LazyLock<std::result::Result<Environment, String>> = LazyLoc
     )?;
     if switch.mode != Mode::Off {
         eprintln!(
-            "{} strict=1 exceptions={}",
+            "{} strict=1 exceptions={}{}",
             switch.line(),
             match &exceptions.digest {
                 Some(digest) => format!("{}:{digest}", exceptions.entries.len()),
                 None => "none".to_owned(),
-            }
+            },
+            // a witness build only (feature `uncontracted-witness`)
+            super::uncontracted_ledger::witness()
+                .map_or_else(String::new, |witness| format!(" witness={witness}"))
         );
     }
     Ok(Environment { switch, exceptions })
@@ -778,18 +781,20 @@ pub(super) fn is_designed_code(code: &str) -> bool {
             .is_some_and(|code| DESIGNED_VAKINT.iter().any(|row| row.3 == code))
 }
 
-/// The designed codes a K3 record gets when its IR correction declines as
-/// a whole after the record ran ([`super::uncontracted_ledger::Section`]):
-/// `ir_hard_route:<reason head>` (the child route's own decline; today's
-/// closed path computes the correction) and `ir_hard_guard:budget` (the
-/// exhausted budget of `GAMMALOOP_IR_HARD_CHILD_GUARD=1`). Never an attempt's
-/// outcome; a caught panic or error inside a record is the error
-/// `ir_hard_guard:<panic|error>`.
+/// The designed code a K3 record gets when its IR correction declines as a
+/// whole after the record ran ([`super::uncontracted_ledger::Section`]):
+/// only `ir_hard_guard:budget` (the exhausted budget of
+/// `GAMMALOOP_IR_HARD_CHILD_GUARD=1`, a resource decline; today's closed
+/// path computes the correction). Never an attempt's outcome.
+///
+/// Pre-review of the U7a delta (findings 3 and 4): the route's own declines
+/// are NOT designed codes of a record. In mode on a route decline after its
+/// K3 records were taken is caused by (or at least follows) the new values
+/// and is the error `ir_hard_route:<reason head>`; a panic or an error the
+/// guard caught is the error `ir_hard_guard:<panic|error>`, inside a record
+/// or not. Neither can be named by an exception.
 pub(super) fn is_designed_section_code(code: &str) -> bool {
     code == "ir_hard_guard:budget"
-        || code
-            .strip_prefix("ir_hard_route:")
-            .is_some_and(|head| !head.is_empty() && !head.contains(':'))
 }
 
 impl Decline {
