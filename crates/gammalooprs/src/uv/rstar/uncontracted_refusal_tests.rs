@@ -11,6 +11,9 @@
 //!   strict on fail), with its controls (a genuine mass dependence: the
 //!   designed decline; independent crown legs: the record is conserved and
 //!   evaluated).
+//! * A panic caught inside the dressed scope (or the quotient scope) leaves
+//!   no scope behind: the same thread's next root and child are classified
+//!   and executed as root and child.
 
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
@@ -512,6 +515,109 @@ fn independent_crown_at_the_full_hook_conserves() -> Result<()> {
                 ensure!(atoms_equal(&value, &off), "L3 36: on differs from off");
             }
         }
+        Ok(())
+    })
+}
+
+// ---------------------------------------------------------------------------
+// U7a.3: the scopes restore on unwinding
+// ---------------------------------------------------------------------------
+
+const L2_22_DOT: &str = include_str!("testdata/u7a/l2-d22.dot");
+
+/// The run of a diagram root (the beta's full-graph closing call) under
+/// `switch`, strict, remainder boundary on: its value and every attempt.
+fn root_run(
+    diagram: &feynkit_graph::FeynmanDiagram,
+    switch: Switch,
+) -> Result<(Result<Atom>, Vec<Captured>)> {
+    let settings = settings();
+    let vakint = Vakint::new()?;
+    let graph = diagram.to_gamma_loop_graph(None, true)?;
+    let model = diagram.model();
+    let plan = RStarPlan::with_automatic_edge(&graph, model, &settings)?;
+    let closed_root = metric_root(&graph);
+    let callback = |tensor: &Atom| -> Result<Atom> {
+        Ok(tensor.replace_multiple(&closed_root.external_routing) * &closed_root.factor)
+    };
+    Ok(with_switch(switch, || {
+        with_strict(true, || {
+            with_boundary_mode(BoundaryMode::On, false, || {
+                with_capture(|| {
+                    plan.projected_counterterm_closing_root_scalar(
+                        &graph,
+                        model,
+                        &vakint,
+                        &settings,
+                        &callback,
+                        &closed_root,
+                    )
+                })
+            })
+        })
+    }))
+}
+
+/// Astra U7a finding 3: a panic inside an insertion surrogate's R* (the
+/// dressed scope), caught on the same thread (beta catches a diagram's panic
+/// and its worker goes on), must not leave the scope set: the next ordinary
+/// root and child are classified root and child (not the inert surrogate),
+/// and an ordinary diagram on that thread then emits and compares its root
+/// and child records. The quotient scope likewise.
+#[test]
+fn a_caught_unwind_leaves_no_scope_behind() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let caught = std::panic::catch_unwind(|| {
+            super::expression::in_dressed_scope(|| -> usize {
+                panic!("U7a.3 control: a panic inside the dressed scope")
+            })
+        });
+        ensure!(caught.is_err(), "the dressed scope's panic is caught");
+        ensure!(
+            uncontracted::classify(false) == Kind::Root
+                && uncontracted::classify(true) == Kind::Child
+                && uncontracted::classify_ir_hard() == Kind::IrHard,
+            "after the unwind: root {:?}, child {:?}, ir-hard {:?}",
+            uncontracted::classify(false),
+            uncontracted::classify(true),
+            uncontracted::classify_ir_hard()
+        );
+        let caught = with_switch(check(), || {
+            std::panic::catch_unwind(|| {
+                uncontracted::scoped(uncontracted::Scope::Quotient, || -> usize {
+                    panic!("U7a.3 control: a panic inside the quotient scope")
+                })
+            })
+        });
+        ensure!(caught.is_err(), "the quotient scope's panic is caught");
+        ensure!(
+            uncontracted::classify(false) == Kind::Root
+                && uncontracted::classify(true) == Kind::Child,
+            "after the quotient unwind: root {:?}, child {:?}",
+            uncontracted::classify(false),
+            uncontracted::classify(true)
+        );
+        // executed as their kinds: an ordinary diagram on the same thread
+        let diagram = colour_factored(&load(L2_22_DOT)?)?;
+        let (value, captured) = root_run(&diagram, check())?;
+        let _ = value?;
+        evaluated_except("L2 22 after the unwinds", &captured, &[])?;
+        for kind in ROOT_CHILD {
+            ensure!(
+                captured.iter().any(|a| a.kind == kind
+                    && a.outcome == "uncontracted"
+                    && a.equal == Some(true)),
+                "L2 22 after the unwinds: no {} record emitted and compared",
+                kind.as_str()
+            );
+        }
+        ensure!(
+            captured
+                .iter()
+                .all(|a| matches!(a.kind, Kind::Root | Kind::Child)),
+            "L2 22 after the unwinds: a record of another kind"
+        );
         Ok(())
     })
 }
