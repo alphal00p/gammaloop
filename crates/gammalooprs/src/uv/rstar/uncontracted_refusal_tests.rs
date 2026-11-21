@@ -20,6 +20,8 @@
 //! * A vakint `Closure` refusal without a WH-RECORD-FORMAT section-8 prefix
 //!   is an error (requirement 13, interim until the rebase onto helper VH's
 //!   frozen REFUSALS list), "every line is massive" among them.
+//! * The record builder's impossible states (`sigma`, `root_crown_paired`,
+//!   `root_normalisation_momentum`) are errors.
 
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
@@ -45,14 +47,16 @@ use crate::{
 
 use super::{
     REFERENCE_MASS_SQUARED, RStarPlan,
-    boundary::{BoundaryMode, with_boundary_mode},
+    boundary::{BoundaryMode, ClosedRootNormalization, with_boundary_mode},
+    expression::RStarIntegrand,
     plan::uv_child_edge_ids,
     recursive_tests::{colour_factored, load, settings},
+    top_mass::TopMassTerms,
     uncontracted::{
-        self, Captured, Decline, InsertionHook, Kind, Mode, Switch, with_capture,
-        with_insertion_hook, with_strict, with_switch,
+        self, Captured, DESIGNED_LOCAL, Decline, InsertionHook, Kind, Mode, Outcome, Site, Switch,
+        split_root_factor, with_capture, with_insertion_hook, with_strict, with_switch,
     },
-    uncontracted_oracle_tests::{atoms_equal, metric_root, parse},
+    uncontracted_oracle_tests::{atoms_equal, auxiliary_mass, metric_root, parse},
 };
 
 const ROOT_CHILD: [Kind; 2] = [Kind::Root, Kind::Child];
@@ -785,4 +789,117 @@ fn closure_without_a_section_8_prefix_is_an_error() {
             row.1
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// R2-I3: the record builder's impossible states are errors
+// ---------------------------------------------------------------------------
+
+/// A K1 attempt on the bare root remainder of `dot` with the closed root
+/// `closed_root` (default: the beta's metric root).
+fn root_site_attempt(
+    dot: &str,
+    closed_root: impl FnOnce(&Graph) -> ClosedRootNormalization,
+) -> Result<uncontracted::Attempt> {
+    let diagram = colour_factored(&load(dot)?)?;
+    let graph = diagram.to_gamma_loop_graph(None, true)?;
+    let model = diagram.model();
+    let vakint = Vakint::new()?;
+    let uv = settings();
+    let vakint_settings = uv.vakint.true_settings();
+    let plan = RStarPlan::with_automatic_edge(&graph, model, &uv)?;
+    let term = plan
+        .ordinary_uv
+        .iter()
+        .find(|term| term.remainder.insertions.is_empty() && term.remainder.loops > 0)
+        .ok_or_else(|| eyre!("{}: no bare root remainder", graph.name))?;
+    let closure = RStarIntegrand::root_closure(&graph, &plan.support)?;
+    let closed_root = closed_root(&graph);
+    let auxiliary = auxiliary_mass();
+    let children = BTreeMap::new();
+    let site = Site {
+        graph: &graph,
+        model,
+        plan: &plan,
+        term,
+        children: &children,
+        root_closure: Some(&closure),
+        closed_root: Some(&closed_root),
+        closure_data: None,
+        root_projector: true,
+        root_edges: &[],
+        reference_mass_squared: *REFERENCE_MASS_SQUARED,
+        auxiliary_mass_squared: &auxiliary,
+        settings: &vakint_settings,
+        vakint: &vakint,
+        uv_settings: &uv,
+        top_mass: Some(TopMassTerms::Keep),
+        epsilon: GS.dim_epsilon,
+        today: "site-test".into(),
+        ir_hard: None,
+    };
+    uncontracted::attempt(&site, Kind::Root, 1, Mode::Check, || {
+        RStarIntegrand::new_with_closure(
+            &graph,
+            model,
+            &term.remainder,
+            &[],
+            plan.marked_edge,
+            Atom::var(*REFERENCE_MASS_SQUARED),
+            Some(&closure),
+        )
+    })
+}
+
+fn error_code(attempt: &uncontracted::Attempt) -> Option<&str> {
+    match &attempt.outcome {
+        Outcome::Error(decline) => Some(decline.code.as_str()),
+        _ => None,
+    }
+}
+
+/// R2-I3: `sigma`, `root_crown_paired` and `root_normalisation_momentum`
+/// are states of the record builder that never occur on a correct site: a
+/// regression that produced them must be an error, not a designed fallback.
+/// Driven: a σ that does not fold the second root leg onto ±p(1) (L2 22's
+/// bare root remainder, the external routing dropped) and a closed-root
+/// factor that is not a scalar times a power of p².
+#[test]
+fn record_builder_states_are_errors() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        for code in ["sigma", "root_crown_paired", "root_normalisation_momentum"] {
+            ensure!(
+                !DESIGNED_LOCAL.contains(&code),
+                "{code} is a designed refusal"
+            );
+        }
+        let attempt = root_site_attempt(L2_22_DOT, |graph| {
+            let mut closed_root = metric_root(graph);
+            closed_root.external_routing.clear();
+            closed_root
+        })?;
+        ensure!(
+            error_code(&attempt) == Some("sigma"),
+            "a σ that does not fold the legs: outcome {:?}",
+            attempt.outcome
+        );
+        let q = |e: usize| function!(GS.emr_mom, e, mink());
+        let factor = function!(SPENSO_TAG.dot, q(0), q(1)) * Atom::var(symbol!("u7ad_b_c"));
+        let decline = split_root_factor(&factor, 0)
+            .err()
+            .ok_or_else(|| eyre!("the factor {factor} split"))?;
+        ensure!(
+            decline.code == "root_normalisation_momentum" && !decline.designed,
+            "a closed-root factor with a momentum: {decline:?}"
+        );
+        // the control: the beta's own metric root is evaluated
+        let attempt = root_site_attempt(L2_22_DOT, metric_root)?;
+        ensure!(
+            matches!(attempt.outcome, Outcome::Value(_)),
+            "the metric root: outcome {:?}",
+            attempt.outcome
+        );
+        Ok(())
+    })
 }
