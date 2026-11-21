@@ -935,54 +935,65 @@ fn finish_with(
             }
         }
     }
+    // The reader's locality rule for an insertion (factorized.rs
+    // check_insertions, b6bb69835 and ccba5e0c8a alike): every free slot of
+    // its factor is a slot of one of its `hedges`, or an open port of a
+    // half-edge the record does not have. Checked here for every insertion
+    // (crown legs included), so that a record the reader would refuse is a
+    // designed decline before it exists, never an IndexNotLocal error.
     let mut spectators = BTreeSet::new();
-    for (h, holders) in &owners {
-        if legs.contains(h) {
-            continue;
-        }
-        let foreign = holders
+    for insertion in insertions.iter() {
+        let contracted = vertices
             .iter()
-            .filter_map(|n| atoms[*n].0)
-            .find(|index| !insertions[*index].hedges.contains(h));
-        if let Some(index) = foreign {
-            if record_hedges.contains(h) {
+            .any(|v| v.id == insertion.vertex && v.rule.starts_with("ct:"));
+        for (h, bis) in hedge_slots(&insertion.factor) {
+            if insertion.hedges.contains(&h) {
+                continue;
+            }
+            if record_hedges.contains(&h) {
+                // a ct: that contracts a hole's anchor while the record keeps
+                // its far end: C_H's far slot is a half-edge of the record
+                // that is not the ct: node's (beta's checked rule, point 4)
                 return Err(Decline::new(
                     "surrogate_split_chain",
                     format!(
-                        "the insertion at {} carries the slot of half-edge {h}, a half-edge of the record that is not its own (a child that contracts a hole's anchor but not its far end)",
-                        insertions[index].vertex
+                        "the insertion at {} carries the slot of half-edge {h}, a half-edge of the record that is not one of its own (a child that contracts a hole's anchor but not its far end)",
+                        insertion.vertex
                     ),
                 ));
             }
-            if holders.len() > 1 {
+            let holders = owners.get(&h).map_or(0, BTreeSet::len);
+            if holders > 1 {
                 return Err(Decline::new(
                     "surrogate_split_chain",
                     format!(
                         "the slot of half-edge {h} (not in the record) is shared by the insertion at {} and another factor (the two ends of one hole in different contracted children)",
-                        insertions[index].vertex
+                        insertion.vertex
                     ),
                 ));
             }
-            let contracted = vertices
-                .iter()
-                .any(|v| v.id == insertions[index].vertex && v.rule.starts_with("ct:"));
-            if contracted && bispinor.contains(h) {
-                // a contracted cut QUARK hole: its far-end bispinor slot would
-                // be an open spinor port no projector of the record closes
-                // (beta's checked rule, point 4)
+            if contracted && bis {
+                // a contracted cut QUARK hole: an open spinor port no
+                // projector of the record closes (point 4)
                 return Err(Decline::new(
                     "surrogate_split_chain",
                     format!(
                         "the ct: child at {} carries the far-end bispinor slot of half-edge {h} of a hole it cuts (a contracted cut quark hole)",
-                        insertions[index].vertex
+                        insertion.vertex
                     ),
                 ));
             }
-            spectators.insert(*h);
-        } else if holders.len() == 1 {
-            // a free slot of an edge, vertex or own insertion slot whose
-            // partner lies outside the record (a chain end's edge without the
-            // anchor, or the anchor without the chain end's edge)
+            spectators.insert(h);
+        }
+    }
+    // a free slot of an edge or vertex factor whose partner lies outside the
+    // record (a chain end's edge without the anchor): a port
+    for (h, holders) in &owners {
+        if legs.contains(h) || holders.len() != 1 {
+            continue;
+        }
+        let holder = *holders.iter().next().unwrap();
+        if atoms[holder].0.is_none() {
             spectators.insert(*h);
         }
     }

@@ -101,6 +101,23 @@ const K5_STRESS: [(&str, &str, &str); 5] = [
 ];
 /// L5 surrogates with holes of two or more loops (coordinator, 21 Nov):
 /// (graph, prepared DOT).
+/// The gluon surrogates of the kept + cut search whose remainders with a ct:
+/// that contracts the anchor but keeps the far end failed with
+/// IndexNotLocal before the locality-derived decline (2-loop and 3-loop holes).
+const L5_ANCHOR_CONTRACTED: [(&str, &str); 12] = [
+    ("59943", include_str!("testdata/u7c/l5-d59943.dot")),
+    ("79937", include_str!("testdata/u7c/l5-d79937.dot")),
+    ("44635", include_str!("testdata/u7c/l5-d44635.dot")),
+    ("59942", include_str!("testdata/u7c/l5-d59942.dot")),
+    ("62852", include_str!("testdata/u7c/l5-d62852.dot")),
+    ("144283", include_str!("testdata/u7c/l5-d144283.dot")),
+    ("59977", include_str!("testdata/u7c/l5-d59977.dot")),
+    ("101342", include_str!("testdata/u7c/l5-d101342.dot")),
+    ("102684", include_str!("testdata/u7c/l5-d102684.dot")),
+    ("102671", include_str!("testdata/u7c/l5-d102671.dot")),
+    ("59946", include_str!("testdata/u7c/l5-d59946.dot")),
+    ("101213", include_str!("testdata/u7c/l5-d101213.dot")),
+];
 const L5_MULTI_LOOP_HOLES: [(&str, &str); 5] = [
     ("143019", include_str!("testdata/u7c/l5-d143019.dot")),
     ("143190", include_str!("testdata/u7c/l5-d143190.dot")),
@@ -1797,5 +1814,36 @@ fn k5_beta_ledger_misses_settings_wide_root_declines() -> Result<()> {
             );
             Ok(())
         })
+    })
+}
+
+/// The 12 gluon surrogates that failed with IndexNotLocal (a ct: that
+/// contracts the anchor while the record keeps the far end: C_H's far slot
+/// non-local): through the whole evaluator in check / on / off and BOTH
+/// hole-cut settings, no diagram fails, no record errors, the case declines
+/// by design (`surrogate_split_chain`) before its record, every other record
+/// compares equal, on == off through eps^-1.
+#[test]
+fn k5_anchor_contracted_far_kept_declines_by_design() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let mut failures = Vec::new();
+        for mode in [k5::HoleCut::Decline, k5::HoleCut::Form] {
+            for (name, dot) in L5_ANCHOR_CONTRACTED {
+                let original = colour_factored(&load(dot)?)?;
+                match k5::with_hole_cut(mode, || whole_graph_summary(&original, &vakint, 1)) {
+                    Ok(summary) if summary.keys().any(|k| k.starts_with("error:")) => {
+                        failures.push(format!("{mode:?} {name}: {summary:?}"))
+                    }
+                    Ok(summary) => {
+                        eprintln!("K5_ANCHOR_CONTRACTED mode={mode:?} {name} PASS {summary:?}")
+                    }
+                    Err(error) => failures.push(format!("{mode:?} {name}: {error:#}")),
+                }
+            }
+        }
+        ensure!(failures.is_empty(), "{failures:#?}");
+        Ok(())
     })
 }
