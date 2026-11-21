@@ -166,7 +166,12 @@ impl Exceptions {
 }
 
 /// The exceptions of a file's text (`graph<TAB>kind<TAB>code<TAB>reason`;
-/// blank lines and `#` comments skipped; every field required).
+/// blank lines and `#` comments skipped; every field required). The code
+/// must be a designed refusal's ([`uncontracted::is_designed_code`]): an
+/// exception excuses only declined records, so a code that is an error
+/// (e.g. `vakint:all_massive` since requirement 13's interim rule; the
+/// single-propagator shape is now the emitter's `one_loop_tree_cut`) would
+/// name nothing and is refused instead.
 pub(crate) fn parse_exceptions(text: &str) -> std::result::Result<Exceptions, String> {
     let mut entries = Vec::new();
     for (n, line) in text.lines().enumerate() {
@@ -185,6 +190,11 @@ pub(crate) fn parse_exceptions(text: &str) -> std::result::Result<Exceptions, St
             .ok_or_else(|| bad("unknown kind"))?;
         if graph.is_empty() || code.is_empty() || reason.is_empty() {
             return Err(bad("empty graph, code or reason"));
+        }
+        if !uncontracted::is_designed_code(code) {
+            return Err(bad(
+                "the code is not a designed refusal (only declined records can be excepted; an error always fails its diagram)",
+            ));
         }
         entries.push(Exception {
             graph: graph.to_owned(),

@@ -3,12 +3,14 @@
 //! findings 2 and 3, `keep the rebase test narrow`; helper VH round 2 R2-I3,
 //! R2-I4, R2-M4, R2-M5; U7-PLAN requirements 13 and 15). Rule: ONLY a named
 //! designed refusal falls back to today's path; everything else is
-//! `outcome=error`, loud in check and in strict on.
+//! `outcome=error`, loud in check and in on (strict is their only behaviour,
+//! R2-I1); in the merged delta the ledger (lane A) reports it as the kind's
+//! `error=<code>:n outcome=error`, and a designed refusal as `declined=<code>:n`.
 //!
 //! * A nonzero residual of the Δ momentum-conservation step in a component
 //!   the record must conserve is a routing error, never
 //!   `insertion_mass_symbol`: the signed mutation at the full hook (check and
-//!   strict on fail), with its controls (a genuine mass dependence: the
+//!   on fail), with its controls (a genuine mass dependence: the
 //!   designed decline; independent crown legs: the record is conserved and
 //!   evaluated).
 //! * A panic caught inside the dressed scope (or the quotient scope) leaves
@@ -62,10 +64,42 @@ use super::{
         self, Captured, DESIGNED_LOCAL, Decline, InsertionHook, Kind, Mode, Outcome, Site, Switch,
         split_root_factor, with_capture, with_insertion_hook, with_strict, with_switch,
     },
+    uncontracted_ledger as ledger,
     uncontracted_oracle_tests::{atoms_equal, auxiliary_mass, metric_root, parse},
 };
 
 const ROOT_CHILD: [Kind; 2] = [Kind::Root, Kind::Child];
+
+/// The `<key>=` value of a ledger line.
+fn field<'l>(line: &'l str, key: &str) -> Option<&'l str> {
+    line.split_whitespace()
+        .find_map(|token| token.strip_prefix(key)?.strip_prefix('='))
+}
+
+/// The one `UNCONTRACTED_DISPOSITION` line of `kind` and the one
+/// `UNCONTRACTED_SUMMARY` line among the ledger lines `lines` (lane A's
+/// per-diagram ledger: a root evaluation outside a diagram job opens its own).
+fn disposition_and_summary(lines: &[String], kind: Kind) -> Result<(String, String)> {
+    let of = |head: &str| {
+        lines
+            .iter()
+            .filter(|line| line.starts_with(head))
+            .filter(|line| {
+                head != "UNCONTRACTED_DISPOSITION " || field(line, "kind") == Some(kind.as_str())
+            })
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    let (dispositions, summaries) = (of("UNCONTRACTED_DISPOSITION "), of("UNCONTRACTED_SUMMARY "));
+    ensure!(
+        dispositions.len() == 1 && summaries.len() == 1,
+        "{} {} disposition and {} summary lines: {lines:#?}",
+        dispositions.len(),
+        kind.as_str(),
+        summaries.len()
+    );
+    Ok((dispositions[0].clone(), summaries[0].clone()))
+}
 
 fn check() -> Switch {
     Switch::new(Mode::Check, &ROOT_CHILD)
@@ -304,7 +338,7 @@ fn conservation_classifies_the_residual() {
 /// momenta agree), reverse ONLY the emitted loop coefficient of the edge
 /// that carries k out of the node (edge 3: -k -> +k), the contracted source
 /// and today's path untouched. The loop residual is then 2k: a misrouted
-/// record. Check mode and strict on must FAIL the diagram with
+/// record. Check mode and mode on must FAIL the diagram with
 /// `outcome=error:routing`; before the fix the residual made the step
 /// return "no rewrite" and the record was the designed
 /// `insertion_mass_symbol` (a silent fallback to today's value).
@@ -336,10 +370,12 @@ fn loop_residual_at_the_full_hook_is_a_routing_error() -> Result<()> {
                 },
             )
         };
-        for (mode, switch) in [("check", check()), ("strict on", on())] {
+        for (mode, switch) in [("check", check()), ("on", on())] {
             flips.borrow_mut().clear();
+            let _ = ledger::take_lines();
             let (value, captured) =
                 with_insertion_hook(hook.clone(), || l3_016_run(&case, &case.delta, switch))?;
+            let lines = ledger::take_lines();
             let flipped = flips.borrow().clone();
             eprintln!("U7AD_B L3 016 {mode}: residuals after the flip {flipped:?}");
             ensure!(
@@ -374,6 +410,19 @@ fn loop_residual_at_the_full_hook_is_a_routing_error() -> Result<()> {
                     .any(|a| a.outcome == "declined:insertion_mass_symbol"),
                 "L3 016 {mode}: the misrouted record counted as a mass refusal"
             );
+            // the merged ledger (lane A): the routing error is the root
+            // kind's `error=routing:1 outcome=error`, never a decline, and the
+            // diagram's summary is `outcome=error`
+            let (root, summary) = disposition_and_summary(&lines, Kind::Root)?;
+            eprintln!("U7AD_MERGE L3 016 {mode}: {root}\n{summary}");
+            for line in [&root, &summary] {
+                ensure!(
+                    field(line, "outcome") == Some("error")
+                        && field(line, "error") == Some("routing:1")
+                        && field(line, "declined") == Some("none"),
+                    "L3 016 {mode}: the ledger does not report the routing error: {line}"
+                );
+            }
         }
         Ok(())
     })
@@ -394,9 +443,23 @@ fn genuine_mass_dependence_at_the_full_hook_declines() -> Result<()> {
         let off = off?;
         ensure!(nothing.is_empty());
         let declined = ["declined:insertion_mass_symbol"];
+        let _ = ledger::take_lines();
         let (checked, captured) = l3_016_run(&case, &delta, check())?;
+        let lines = ledger::take_lines();
         let checked = checked?;
         ensure!(checked == off, "check returns today's value");
+        // the merged ledger (lane A): a named designed decline, the other
+        // root records compared, the diagram ok
+        let (root, summary) = disposition_and_summary(&lines, Kind::Root)?;
+        eprintln!("U7AD_MERGE L3 016 genuine mass check: {root}\n{summary}");
+        ensure!(
+            field(&root, "outcome") == Some("ok")
+                && field(&root, "declined") == Some("insertion_mass_symbol:1")
+                && field(&root, "error") == Some("none")
+                && field(&root, "compared").is_some_and(|n| n != "0")
+                && field(&summary, "outcome") == Some("ok"),
+            "L3 016 genuine mass check: {root}\n{summary}"
+        );
         evaluated_except("L3 016 genuine mass check", &captured, &declined)?;
         let refusals = captured
             .iter()
@@ -660,9 +723,30 @@ fn one_loop_tree_cut_is_the_single_propagator_shape_only() -> Result<()> {
         let mut neighbours = BTreeMap::<Kind, usize>::new();
         for (what, dot, shapes) in [("L2/25", L2_25_DOT, 1), ("L2/22", L2_22_DOT, 0)] {
             let diagram = colour_factored(&load(dot)?)?;
+            let _ = ledger::take_lines();
             let (value, captured) = root_run(&diagram, check())?;
+            let lines = ledger::take_lines();
             let _ = value?;
             evaluated_except(what, &captured, &["declined:one_loop_tree_cut"])?;
+            // the merged ledger (lane A): the shape is a NAMED decline of the
+            // root kind's disposition (no error, the neighbours compared, the
+            // diagram passes check without an exception)
+            let (root, summary) = disposition_and_summary(&lines, Kind::Root)?;
+            eprintln!("U7AD_MERGE {what} check: {root}\n{summary}");
+            let named = if shapes == 0 {
+                "none".to_owned()
+            } else {
+                format!("one_loop_tree_cut:{shapes}")
+            };
+            ensure!(
+                field(&root, "outcome") == Some("ok")
+                    && field(&root, "declined") == Some(named.as_str())
+                    && field(&root, "error") == Some("none")
+                    && field(&root, "excepted") == Some("none")
+                    && field(&root, "compared").is_some_and(|n| n != "0")
+                    && field(&summary, "outcome") == Some("ok"),
+                "{what} check: {root}\n{summary}"
+            );
             let declined = captured
                 .iter()
                 .filter(|a| a.outcome.starts_with("declined:") || a.outcome.starts_with("error:"))

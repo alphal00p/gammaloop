@@ -428,8 +428,10 @@ fn identity_names_mode_kinds_and_strictness() {
         ledger::identity_of(Switch::new(Mode::On, &[Kind::Root, Kind::Quotient]), &none),
         ledger::identity_of(Switch::new(Mode::On, &[Kind::Root]), &none)
     );
+    // L4 49 id 8, the single-propagator shape: the emitter's own decline
+    // `one_loop_tree_cut` (lane B; at the base vakint's `all_massive`)
     let named = ledger::parse_exceptions(
-        "# graph\tkind\tcode\treason\nB_self_energy_L4_0049\troot\tvakint:all_massive\ta massive tadpole\n",
+        "# graph\tkind\tcode\treason\nB_self_energy_L4_0049\troot\tone_loop_tree_cut\ta massive tadpole\n",
     )
     .unwrap();
     assert_eq!(
@@ -437,10 +439,33 @@ fn identity_names_mode_kinds_and_strictness() {
         vec![Exception {
             graph: "B_self_energy_L4_0049".into(),
             kind: Kind::Root,
-            code: "vakint:all_massive".into(),
+            code: "one_loop_tree_cut".into(),
             reason: "a massive tadpole".into(),
         }]
     );
+    for designed in [
+        "vakint:taylor_degree",
+        "pint6_dump",
+        "insertion_mass_symbol",
+    ] {
+        let text = format!("g\tchild\t{designed}\twhy\n");
+        assert!(ledger::parse_exceptions(&text).is_ok(), "{designed}");
+    }
+    // an error is never excepted: a code that is not a designed refusal
+    // (requirement 13's `vakint:all_massive`, lane B's `routing`, `crown`,
+    // `sigma`, a vakint variant) is refused, never silently inert
+    for error in [
+        "vakint:all_massive",
+        "vakint:Closure",
+        "routing",
+        "crown",
+        "sigma",
+        "unknown_masters",
+    ] {
+        let text = format!("g\troot\t{error}\twhy\n");
+        let refused = ledger::parse_exceptions(&text).unwrap_err();
+        assert!(refused.contains("not a designed refusal"), "{refused}");
+    }
     let check = ledger::identity_of(Switch::new(Mode::Check, &ROOT_CHILD), &named).unwrap();
     assert!(
         check.starts_with("check:root,child:strict:exceptions=") && check.len() > 40,
