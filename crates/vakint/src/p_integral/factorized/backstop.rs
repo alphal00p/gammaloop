@@ -1,56 +1,187 @@
 //! THE RESULT CHECK of a marked value (the last line behind validation): after
-//! the evaluation, before an entry returns, the value may contain only
-//! - the symbols of its INPUTS (every atom of the record, the prefactor
-//!   argument, the settings' epsilon and scale symbols);
-//! - the dimension only as the dimension argument of a representation slot
-//!   (`mink(D, ..)`, `bis(D, ..)`, the compact `mink(D)` of a momentum);
-//! - the caller notation's structural heads (`spenso::g`, `spenso::dot`,
-//!   `spenso::mink`, `spenso::bis`, `spenso::gamma`, `gammalooprs::Q`), and
-//!   where the entry returns vakint notation (the direct entry's value; the
-//!   vacuum entry's external vectors without a leg) vakint's `p`, `k`,
-//!   `dot`, `g`;
-//! - Symbolica's own symbols (`symbolica::…`: 𝜋, 𝑒, γ, log, zeta, gamma, ...);
-//! - vakint's output constants (`HR`, `HI`, `GPLReal`, `GPLImag`,
-//!   `PolylogReal`, `PolylogImag`, `Zeta`, `Sqrt`, `EulerGamma`, `MZV`) and in
-//!   Retain mode its master tags `PMaster`, `PG`, `PGamma`, `PResidual`, with
-//!   their arguments; `UNKNOWN(master, k)` when the settings
-//!   allow unknown master coefficients.
+//! the evaluation, before an entry returns, a value that is no value is an
+//! internal failure (`Evaluation`, detail prefix `result check: `):
+//! - (a) vakint's INTERNAL symbols: the placeholders, parameters, pattern
+//!   wildcards and input notation vakint and the factorised entries create
+//!   and substitute away ([`internal`]: exact names, families of names made
+//!   with format strings, every name ending in `_`, and the input-notation
+//!   heads `p`, `k`, `dot`, `g`, `topo`, `prop`, .. where the entry returns the
+//!   caller's notation). EVERY OTHER `vakint::` symbol is vakint's output
+//!   vocabulary and is allowed (HR, GPLReal, cl2, T1ep, D6, om1, the RustRed
+//!   tags, the Retain master tags, vakint's 𝑖, ..); `UNKNOWN(master, k)` only
+//!   when the settings allow unknown master coefficients. A test (the
+//!   tripwire) reads every symbol the crate's code creates and fails when a
+//!   vakint name is neither in the internal table nor on the reviewed output
+//!   list (`REVIEWED_OUTPUT`, test code);
+//! - (b) a symbol of ANY OTHER namespace that is not among the INPUTS (every
+//!   atom of the record, the prefactor argument, the settings' epsilon and
+//!   scale symbols), Symbolica's own (`symbolica::`) or the caller notation's
+//!   structural heads (`spenso::g`, `dot`, `mink`, `bis`, `gamma`,
+//!   `gammalooprs::Q`);
+//! - (c) the dimension other than as the dimension argument of a
+//!   representation slot;
+//! - (d) a non-finite or indeterminate number, or a power of a literal zero
+//!   base whose exponent is not a positive rational number.
 //!
-//! Anything else (vakint's internal placeholders and parameters, e.g. the
-//! Taylor parameter `vakint::closure_lambda`, the slot placeholders
-//! `vakint::closure_tensor_<n>`, a dimension outside a slot, a symbol that
-//! came from nowhere) is an internal failure, `Evaluation`, detail prefix
-//! `result check: `, never a value.
+//! What it cannot catch: a wrong value made of legitimate symbols (a wrong
+//! coefficient, a missing order); an internal symbol vakint creates without
+//! a literal or format string in its code (the tripwire reads source text);
+//! an input symbol that should have been substituted (it is an input); a zero
+//! that is no number (a zero base written as an unexpanded expression).
 
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use symbolica::coefficient::CoefficientView;
 
 use super::{FactorizedError, FactorizedKind, FactorizedNumerator, Result, names};
 use crate::VakintSettings;
-use crate::symbols::S;
 use crate::utils::vakint_macros::vk_symbol;
 
-/// vakint's own output constants (the transcendental functions and constants
-/// of its values, crate::symbols: HR, HI, GPLReal, ...), with their arguments.
-const VAKINT_CONSTANTS: [&str; 10] = [
-    "vakint::HR",
-    "vakint::HI",
-    "vakint::GPLReal",
-    "vakint::GPLImag",
-    "vakint::PolylogReal",
-    "vakint::PolylogImag",
-    "vakint::Zeta",
-    "vakint::Sqrt",
-    "vakint::EulerGamma",
-    "vakint::MZV",
+/// vakint's internal names (without the `vakint::` namespace), exact.
+const INTERNAL_EXACT: [&str; 35] = [
+    // the factorised entries
+    "closure_lambda",
+    "slash",
+    // vakint's symbol table and its input / analysis placeholders
+    "ERROR",
+    "dot_dummy_ind",
+    "dot_pow",
+    "input_coefficient",
+    "partial_numerical_input",
+    "rustred_input",
+    "normalization_input",
+    "tensor_scalar_coefficient",
+    "feynkit_external_vector",
+    "feynkit_opaque_index",
+    "momentum_match_parameter",
+    "coordinate_limit_spectator",
+    "coordinate_metadata",
+    "VakintLambdaScalingAnalysis",
+    "RustRedMaterializeSpectator",
+    "x",
+    "y",
+    "xa",
+    "ya",
+    "vec",
+    "vec1",
+    "vxs",
+    "mom",
+    "n_loops",
+    "pySecDec_integral",
+    "pysecdec_result",
+    "Integral",
+    "LoopIntegral",
+    "RelabeledLoopIntegral",
+    "SeriesCoefficient",
+    // precision.rs staging placeholders (substituted inside stage_table)
+    "numerical_coefficient",
+    "numerical_expression",
+    "evaluation_input",
 ];
 
-/// Retain mode's master tags: their arguments are master names (vakint's).
-const RETAIN_TAGS: [&str; 4] = [
-    "vakint::PMaster",
-    "vakint::PG",
-    "vakint::PGamma",
-    "vakint::PResidual",
+/// Families of internal names made with format strings: a prefix and a
+/// suffix around the formatted part (the code's pattern in the comment).
+const INTERNAL_FAMILIES: [(&str, &str); 13] = [
+    ("closure_tensor_", ""),                // closure_tensor_{n}
+    ("graph_entry_branch_", ""),            // graph_entry_branch_{i}
+    ("input_coefficient_placeholder_", ""), // input_coefficient_placeholder_{index}
+    ("coordinate_metadata_", ""),           // coordinate_metadata_{i}
+    ("momentum_match_source_", ""),         // momentum_match_source_{axis}
+    ("vakint_master_transport_", ""),       // vakint_master_transport_{axis}
+    ("rustred_family_", ""),                // rustred_family_{:x}
+    ("I5L_", ""),                           // I5L_{}
+    ("krotated", ""),                       // krotated{}
+    ("z", ""),                              // z{n} (with digits only, see internal)
+    ("k", ""),                              // k{} (with digits only, see internal)
+    ("", "_pinch_"),                        // {}_pinch_{} (contains)
+    ("msq", ""),                            // msq, msq{}_
+];
+
+/// vakint's input-notation heads: internal in a value returned in the
+/// caller's notation (the direct entry and the vacuum entry's external
+/// vectors without a leg return vakint notation: then allowed).
+const NOTATION_HEADS: [&str; 12] = [
+    "p",
+    "k",
+    "dot",
+    "g",
+    "topo",
+    "prop",
+    "edge",
+    "pow",
+    "uvprop",
+    "EuclideanDot",
+    "uedge",
+    "vkdot",
+];
+
+/// The reviewed list of the OTHER names the crate's code creates in vakint's
+/// namespace: vakint's output vocabulary (constants, functions, master and
+/// RustRed tags, epsilon names, Retain names) and generic formatting sites;
+/// allowed in a value. The tripwire requires every created name to be here or
+/// internal. Test code: the check itself allows every name that is not
+/// internal.
+#[cfg(test)]
+const REVIEWED_OUTPUT: [&str; 60] = [
+    "D6",
+    "EulerGamma",
+    "GPLImag",
+    "GPLReal",
+    "HI",
+    "HR",
+    "MZV",
+    "NumericalSource",
+    "PG",
+    "PGamma",
+    "PMaster",
+    "PMasterValue",
+    "PResidual",
+    "PolylogImag",
+    "PolylogReal",
+    "RustRedCoefficient",
+    "RustRedConstant",
+    "RustRedFiniteLiteral",
+    "RustRedMaster",
+    "S2",
+    "Sqrt",
+    "T1ep",
+    "T1ep2",
+    "Zeta",
+    "cl2",
+    "cl4",
+    "om1",
+    "s6",
+    "sqrt3",
+    "vakintFloat",
+    "UNKNOWN",
+    "𝑖",
+    "ε",
+    "ep",
+    "d",
+    "MZVvalue",
+    "mzv_indices",
+    "zeta",
+    "pi",
+    "Oep",
+    "PR10D2",
+    "PR10D2Eps1",
+    "PR15D2",
+    "PR7D2",
+    "PR7D2Eps1",
+    "Master",
+    "GschemeConstants",
+    "GammaSeriesTail",
+    "logMassiveClosure",
+    "logQ2mu",
+    "log_mu_sq",
+    "p_master_basis_eps",
+    "delta",
+    "rat",
+    "t",
+    "Interval",
+    "K5LogMoment",
+    "K5Moment",
+    "{}",
+    "{}{}",
 ];
 
 /// The caller notation's structural heads.
@@ -62,6 +193,24 @@ const CALLER_HEADS: [&str; 6] = [
     names::GAMMA,
     names::MOMENTUM,
 ];
+
+/// Whether `name` (a vakint-namespace name without its namespace) is one of
+/// vakint's INTERNAL symbols: exact, a family, a pattern wildcard (ending in
+/// `_`), or an input-notation head where the entry returns the caller's
+/// notation.
+pub(crate) fn internal(name: &str, vakint_notation: bool) -> bool {
+    let digits = |rest: &str| !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit());
+    name.ends_with('_')
+        || INTERNAL_EXACT.contains(&name)
+        || (!vakint_notation && NOTATION_HEADS.contains(&name))
+        || INTERNAL_FAMILIES
+            .iter()
+            .any(|(prefix, contains)| match (*prefix, *contains) {
+                ("z", _) | ("k", _) => name.strip_prefix(prefix).is_some_and(digits),
+                ("", inner) => name.contains(inner),
+                (prefix, _) => name.starts_with(prefix),
+            })
+}
 
 fn collect(atom: &Atom, out: &mut std::collections::BTreeSet<Symbol>) {
     atom.as_view().visitor(&mut |part| {
@@ -135,42 +284,34 @@ fn offence(
                 "the dimension {name} outside a representation slot"
             ));
         }
+        if let Some(local) = name.strip_prefix("vakint::") {
+            if internal(local, vakint_notation)
+                || (!allow_unknown
+                    && symbol == crate::truncation_guard::unknown_coefficient_symbol())
+            {
+                return Some(format!("vakint's internal symbol {name}"));
+            }
+            return None;
+        }
         if known.contains(&symbol)
             || name.starts_with("symbolica::")
             || CALLER_HEADS.contains(&name)
-            || VAKINT_CONSTANTS.contains(&name)
-            || (vakint_notation
-                && [S.p, S.k, S.dot, S.g]
-                    .iter()
-                    .any(|head| head.get_name() == name))
         {
             return None;
         }
-        if name.starts_with("vakint::") {
-            Some(format!("vakint's internal symbol {name}"))
-        } else {
-            Some(format!(
-                "the symbol {name}, which is neither an input nor a known output"
-            ))
-        }
+        Some(format!(
+            "the symbol {name}, which is neither an input nor a known output"
+        ))
     };
     match view {
         AtomView::Num(_) => None,
         AtomView::Var(v) => name_ok(v.get_symbol()),
         AtomView::Fun(f) => {
             let symbol = f.get_symbol();
-            let name = symbol.get_name();
-            if RETAIN_TAGS.contains(&name)
-                || VAKINT_CONSTANTS.contains(&name)
-                || (allow_unknown
-                    && symbol == crate::truncation_guard::unknown_coefficient_symbol())
-            {
-                return None;
-            }
             if let Some(found) = name_ok(symbol) {
                 return Some(found);
             }
-            let rep = super::is_rep_name(name);
+            let rep = super::is_rep_name(symbol.get_name());
             for (i, arg) in f.iter().enumerate() {
                 // the dimension argument of a representation slot
                 if rep && i == 0 && matches!(arg, AtomView::Var(v) if v.get_symbol() == dimension) {
@@ -197,9 +338,6 @@ fn offence(
     }
 }
 
-/// THE RESULT CHECK (module documentation) of the value `result` an entry is
-/// about to return for the MARKED value `value` (`vakint_notation`: the
-/// direct entry's vakint-notation value). A no-op for an unmarked value.
 /// A number that is no value: a non-finite or indeterminate number
 /// (symbolica's complex infinity ⧞, indeterminate ¿, from a division by zero
 /// or 0/0), or a power of a literal ZERO base whose exponent is not a positive
@@ -241,6 +379,9 @@ fn undefined_number(view: AtomView<'_>) -> Option<String> {
     found
 }
 
+/// THE RESULT CHECK (module documentation) of the value `result` an entry is
+/// about to return for the MARKED value `value` (`vakint_notation`: the
+/// entry returns vakint notation). A no-op for an unmarked value.
 pub(crate) fn check_result(
     value: &FactorizedNumerator,
     prefactor: &Atom,
@@ -430,5 +571,302 @@ mod tests {
         for result in [format!("{eps}^-2*1^(-2^(1/2))"), format!("{eps}^-2*2^(-𝜋)")] {
             check(&result).unwrap_or_else(|e| panic!("{result}: {e}"));
         }
+    }
+
+    /// The deny table: the families made with format strings and the
+    /// wildcards are internal; vakint's output vocabulary, including the
+    /// massive-vacuum constants and the RustRed tags, passes a marked result.
+    #[test]
+    fn internal_names_are_refused_and_the_output_vocabulary_passes() {
+        for name in [
+            "closure_tensor_12",
+            "graph_entry_branch_3",
+            "input_coefficient_placeholder_0",
+            "z7",
+            "k3",
+            "pow_",
+            "idx___",
+            "topo",
+            "dot_dummy_ind",
+        ] {
+            assert!(internal(name, false), "{name} is internal");
+        }
+        assert!(
+            !internal("topo", true) && !internal("dot", true),
+            "vakint notation"
+        );
+        for name in [
+            "zeta",
+            "k",
+            "cl2",
+            "T1ep",
+            "om1",
+            "RustRedMaster",
+            "vakintFloat",
+            "t105",
+        ] {
+            assert!(!internal(name, false) || name == "k", "{name} is output");
+        }
+        for ok in [
+            "UFO::gs^2*vakint::cl2*vakint::sqrt3",
+            "UFO::gs^2*(vakint::T1ep+vakint::T1ep2+vakint::D6+vakint::S2+vakint::s6+vakint::cl4)",
+            "UFO::gs^2*vakint::HR(0,0,vakint::om1)",
+            "UFO::gs^2*vakint::RustRedMaster(1)*vakint::RustRedCoefficient(2)*vakint::RustRedConstant(3)",
+            "UFO::gs^2*vakint::RustRedFiniteLiteral(1)*vakint::vakintFloat(2)*vakint::NumericalSource(3)",
+            "UFO::gs^2*vakint::𝑖",
+        ] {
+            check(ok).unwrap_or_else(|e| panic!("{ok}: {e}"));
+        }
+        refused(
+            "UFO::gs^2*vakint::graph_entry_branch_0",
+            "vakint's internal symbol vakint::graph_entry_branch_0",
+        );
+        refused(
+            "UFO::gs^2*vakint::topo(1)",
+            "vakint's internal symbol vakint::topo",
+        );
+    }
+
+    /// `text` with every item under a line-leading `#[cfg(test)]` blanked: the
+    /// attribute up to the first `;` or `,` outside brackets (a `use`, a
+    /// `mod x;`, a field) or through the brace block that comes first (a
+    /// module, a function, an impl, a statement). Strings, raw strings,
+    /// character literals and comments are skipped when counting, so a brace
+    /// in them cuts nothing more; any doubt leaves text in (scanned, never
+    /// hidden).
+    fn without_test_items(text: &str) -> String {
+        let chars: Vec<char> = text.chars().collect();
+        let attribute = regex::Regex::new(r"(?m)^[ \t]*#\[cfg\(test\)\]").unwrap();
+        // char offsets of the attributes' ends
+        let starts: Vec<(usize, usize)> = attribute
+            .find_iter(text)
+            .map(|m| {
+                (
+                    text[..m.start()].chars().count(),
+                    text[..m.end()].chars().count(),
+                )
+            })
+            .collect();
+        // the end (exclusive) of the lexical token starting at i, if it is a
+        // string, a raw string, a character literal or a comment
+        let skip = |i: usize| -> Option<usize> {
+            let at = |k: usize| chars.get(k).copied();
+            match at(i)? {
+                '/' if at(i + 1) == Some('/') => Some(
+                    (i..chars.len())
+                        .find(|&k| chars[k] == '\n')
+                        .unwrap_or(chars.len()),
+                ),
+                '/' if at(i + 1) == Some('*') => Some(
+                    (i + 2..chars.len().saturating_sub(1))
+                        .find(|&k| chars[k] == '*' && chars[k + 1] == '/')
+                        .map_or(chars.len(), |k| k + 2),
+                ),
+                '"' => {
+                    let mut k = i + 1;
+                    while k < chars.len() && chars[k] != '"' {
+                        k += if chars[k] == '\\' { 2 } else { 1 };
+                    }
+                    Some(k + 1)
+                }
+                'r' if i == 0 || !(chars[i - 1].is_alphanumeric() || chars[i - 1] == '_') => {
+                    let hashes = (i + 1..chars.len())
+                        .take_while(|&k| chars[k] == '#')
+                        .count();
+                    if at(i + 1 + hashes) != Some('"') {
+                        return None;
+                    }
+                    let close: Vec<char> = std::iter::once('"')
+                        .chain(std::iter::repeat_n('#', hashes))
+                        .collect();
+                    let from = i + 2 + hashes;
+                    Some(
+                        (from..chars.len())
+                            .find(|&k| chars[k..].starts_with(&close))
+                            .map_or(chars.len(), |k| k + close.len()),
+                    )
+                }
+                '\'' if at(i + 1) == Some('\\') => Some(
+                    (i + 2..chars.len())
+                        .find(|&k| chars[k] == '\'')
+                        .map_or(chars.len(), |k| k + 1),
+                ),
+                '\'' if at(i + 2) == Some('\'') => Some(i + 3),
+                _ => None,
+            }
+        };
+        let mut blank = vec![false; chars.len()];
+        for (start, end) in starts {
+            let (mut i, mut depth) = (end, 0i64);
+            let stop = loop {
+                if i >= chars.len() {
+                    break None;
+                }
+                if let Some(next) = skip(i) {
+                    i = next;
+                    continue;
+                }
+                match chars[i] {
+                    '(' | '[' => depth += 1,
+                    ')' | ']' => depth -= 1,
+                    ';' | ',' if depth == 0 => break Some(i + 1),
+                    '{' if depth == 0 => {
+                        let mut braces = 0i64;
+                        while i < chars.len() {
+                            if let Some(next) = skip(i) {
+                                i = next;
+                                continue;
+                            }
+                            match chars[i] {
+                                '{' => braces += 1,
+                                '}' => braces -= 1,
+                                _ => {}
+                            }
+                            i += 1;
+                            if braces == 0 {
+                                break;
+                            }
+                        }
+                        break (braces == 0).then_some(i);
+                    }
+                    _ => {}
+                }
+                if depth < 0 {
+                    break None;
+                }
+                i += 1;
+            };
+            // an unbalanced item blanks only its attribute
+            for b in &mut blank[start..stop.unwrap_or(end).min(chars.len())] {
+                *b = true;
+            }
+        }
+        chars
+            .iter()
+            .zip(blank)
+            .map(|(&c, b)| if b && c != '\n' { ' ' } else { c })
+            .collect()
+    }
+
+    /// The skip rule hides test items only: a test module, a test function
+    /// after a `mod tests;`, a test field, a `use`; code after them and a
+    /// brace inside a string, a character or a comment of a test item do not
+    /// widen the cut.
+    #[test]
+    fn only_test_items_are_skipped() {
+        let source = r##"use a::{b, c};
+#[cfg(test)]
+use crate::{x, y};
+fn real() { let _ = vk_symbol!("vakint::kept_a"); }
+#[cfg(test)]
+mod tests;
+#[cfg(test)]
+#[test]
+fn single() {
+    let _ = '{';
+    let _ = "}}}";
+    let _ = r#"{"#; // }
+    /* { */
+    let _ = vk_symbol!("vakint::gone_a");
+}
+struct S {
+    #[cfg(test)]
+    inputs: Vec<(u8, u8)>,
+    kept: u8,
+}
+#[cfg(test)]
+mod inline {
+    fn f() { vk_symbol!("vakint::gone_b"); }
+}
+fn after() { let _ = vk_symbol!("vakint::kept_b"); }
+"##;
+        let kept = without_test_items(source);
+        for name in [
+            "kept_a",
+            "kept_b",
+            "use a::{b, c};",
+            "kept: u8,",
+            "fn after()",
+        ] {
+            assert!(kept.contains(name), "{name} is kept:\n{kept}");
+        }
+        for name in [
+            "gone_a",
+            "gone_b",
+            "crate::{x, y}",
+            "mod tests;",
+            "inputs",
+            "fn single",
+            "mod inline",
+        ] {
+            assert!(!kept.contains(name), "{name} is skipped:\n{kept}");
+        }
+        assert_eq!(kept.lines().count(), source.lines().count());
+    }
+
+    /// THE TRIPWIRE: every name the crate's non-test code creates in vakint's
+    /// namespace with a literal or a format string (vk_symbol!, symbol!,
+    /// vakint_symbol!) is either internal ([`internal`], with the format
+    /// placeholders filled by a digit) or on [`REVIEWED_OUTPUT`]: a new name
+    /// fails here until it is classified. Skipped: only test code (files under
+    /// a tests/ directory, tests.rs, *_tests.rs, and every item under a
+    /// `#[cfg(test)]`, by [`without_test_items`]); a source file with "test"
+    /// elsewhere in its name is read.
+    #[test]
+    fn every_name_the_code_creates_is_classified() {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
+        let creating = regex::Regex::new(
+            r#"(?:vk_symbol!|symbol!|vakint_symbol!)\(\s*&?(?:format!\()?\s*"([^"]*)""#,
+        )
+        .unwrap();
+        let placeholder = regex::Regex::new(r"\{[^}]*\}").unwrap();
+        let mut unclassified = Vec::new();
+        let mut files = vec![root.clone()];
+        let mut sources = Vec::new();
+        while let Some(path) = files.pop() {
+            for entry in std::fs::read_dir(&path).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    files.push(path);
+                } else if path.extension().is_some_and(|e| e == "rs") {
+                    sources.push(path);
+                }
+            }
+        }
+        for path in sources {
+            let name = path.to_string_lossy().to_string();
+            // only real test code is skipped: files under a tests/ directory,
+            // tests.rs and *_tests.rs, and inline #[cfg(test)] modules
+            let file = path.file_name().unwrap().to_string_lossy().to_string();
+            if path.components().any(|c| c.as_os_str() == "tests")
+                || file == "tests.rs"
+                || file.ends_with("_tests.rs")
+            {
+                continue;
+            }
+            let text = without_test_items(&std::fs::read_to_string(&path).unwrap());
+            for capture in creating.captures_iter(&text) {
+                let created = &capture[1];
+                let local = if let Some(rest) = created.strip_prefix("vakint::") {
+                    rest
+                } else if let Some(rest) = created.strip_prefix("{}::") {
+                    rest
+                } else if created.contains("::") {
+                    continue; // another namespace: an input or a caller head
+                } else {
+                    created
+                };
+                // a format placeholder stands for a formatted part
+                let filled = placeholder.replace_all(local, "1");
+                if !(internal(&filled, false) || REVIEWED_OUTPUT.contains(&local)) {
+                    unclassified.push(format!("{created} ({name})"));
+                }
+            }
+        }
+        assert!(
+            unclassified.is_empty(),
+            "names created in vakint's namespace that are neither internal nor reviewed output:\n{}",
+            unclassified.join("\n")
+        );
     }
 }
