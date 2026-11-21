@@ -57,7 +57,12 @@
 //! (`equal == compared`, hits included). Mode on reports the same
 //! dispositions; an error outcome fails the diagram there too, and the
 //! all-declined rule applies to its taken records (a setting-wide decline
-//! never makes mode on fall back entirely with outcome ok). Over a run
+//! never makes mode on fall back entirely with outcome ok). The same rule
+//! holds per record class (the record's frame shape, K1 / K2 / K3: one kind
+//! can have several, e.g. a K5 surrogate's roots and children) when a
+//! class's declines carry a setting's code (`uncontracted::SETTING_CODES`):
+//! a setting-caused decline of every record of one class fails, in check
+//! and in on, although another class of the kind compared. Over a run
 //! ([`RunTally`]), an enabled kind with no compared (check) / taken (on)
 //! record fails, unless a run-level exception row names it.
 //!
@@ -543,12 +548,31 @@ pub(crate) struct Counts {
     /// finding 3).
     #[serde(default)]
     pub inert: usize,
+    /// The same dispositions by record class, the record's frame shape
+    /// ([`uncontracted::Attempt::shape`]: `K1`, `K2`, `K3`; a hit: its
+    /// fill's, `hit:`-prefixed): shape -> disposition -> records, for the
+    /// setting-wide rule of [`verdict`] ([`uncontracted::SETTING_CODES`]).
+    /// Only a reported attempt has a shape: a [`Section`]'s reclassification
+    /// (its codes are no setting codes) and [`record_error`] leave it as is.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub shapes: BTreeMap<String, BTreeMap<String, usize>>,
 }
 
 impl Counts {
     fn add(&mut self, class: impl Into<String>, n: usize) {
         if n > 0 {
             *self.classes.entry(class.into()).or_default() += n;
+        }
+    }
+
+    fn add_shape(&mut self, shape: &str, class: impl Into<String>, n: usize) {
+        if n > 0 {
+            *self
+                .shapes
+                .entry(shape.to_owned())
+                .or_default()
+                .entry(class.into())
+                .or_default() += n;
         }
     }
 
@@ -566,6 +590,11 @@ impl Counts {
             *self.no_record.entry(code.clone()).or_default() += n;
         }
         self.inert += other.inert;
+        for (shape, classes) in &other.shapes {
+            for (class, n) in classes {
+                self.add_shape(shape, class.clone(), *n);
+            }
+        }
     }
 
     fn class(&self, name: &str) -> usize {
@@ -781,6 +810,7 @@ pub(super) fn record(attempt: &Attempt, check: Option<&Check>, mode: Mode) {
             _ => "taken".to_owned(),
         });
         counts.equal += usize::from(check.is_some_and(|check| check.equal));
+        counts.add_shape(attempt.shape, class.clone(), 1);
         counts.add(class, 1);
     });
 }
@@ -798,6 +828,29 @@ pub(crate) fn record_value(kind: Kind, mode: Mode) {
         } else {
             counts.add("taken", 1);
         }
+    });
+}
+
+/// Tests: one expected record of `kind` and frame shape `shape` (as
+/// [`record`] counts an attempt): `None` evaluated (compared in check,
+/// taken in on, agreeing), `Some(code)` declined by the designed `code`.
+#[cfg(test)]
+pub(crate) fn record_shaped(kind: Kind, shape: &str, declined: Option<&str>, mode: Mode) {
+    with_counts(kind, |counts| {
+        counts.expected += 1;
+        counts.attempted += 1;
+        let class = match declined {
+            Some(code) => format!("declined:{code}"),
+            None => {
+                counts.uncontracted += 1;
+                if mode == Mode::Check {
+                    counts.equal += 1;
+                }
+                verb(mode).to_owned()
+            }
+        };
+        counts.add_shape(shape, class.clone(), 1);
+        counts.add(class, 1);
     });
 }
 
@@ -922,6 +975,16 @@ fn hit(note: Option<&FillNote>, graph: &Graph, support: &SuBitGraph) {
                         format!("hit:{class}")
                     };
                     counts.add(class, *n);
+                }
+                for (shape, classes) in &fill.shapes {
+                    for (class, n) in classes {
+                        let class = if class.starts_with("hit:") {
+                            class.clone()
+                        } else {
+                            format!("hit:{class}")
+                        };
+                        counts.add_shape(shape, class, *n);
+                    }
                 }
             }
         }
@@ -1416,7 +1479,70 @@ fn verdict(
             ));
         }
     }
+    for (shape, records, codes) in setting_wide_classes(counts, mode) {
+        if !matches!(verdict.outcome, "ok" | "excepted") {
+            break;
+        }
+        // a setting-caused decline of every record of one record class
+        // fails, although records of another class of the kind compared
+        // (helper VH 2's k5_beta_ledger_misses_settings_wide_root_declines);
+        // accepted only when every code of the class is named, as above
+        if codes.keys().all(|code| exceptions.names(graph, kind, code)) {
+            verdict.outcome = "excepted";
+            for (code, n) in codes {
+                *verdict.excepted.entry(code).or_default() += n;
+            }
+        } else {
+            verdict.outcome = "uncovered";
+            verdict.failure = Some(format!(
+                "all {records} {shape}-shaped records declined, none {}, with a setting's code (by code: {}): a setting-caused decline of a whole record class (records of another class may have been {}); a named exception ({EXCEPTIONS_VARIABLE}: graph, kind, code, reason) is required",
+                verb(mode),
+                list(&codes),
+                verb(mode)
+            ));
+        }
+    }
     verdict
+}
+
+fn verb(mode: Mode) -> &'static str {
+    if mode == Mode::Check {
+        "compared"
+    } else {
+        "taken"
+    }
+}
+
+/// The record classes ([`Counts::shapes`]) of `counts` whose records all
+/// declined (no record compared in check / taken in on, here or in a hit's
+/// fill) with at least one [`uncontracted::SETTING_CODES`] code: each
+/// shape, its records and its declines by code (hits' included).
+fn setting_wide_classes(
+    counts: &Counts,
+    mode: Mode,
+) -> Vec<(String, usize, BTreeMap<String, usize>)> {
+    let evidence = verb(mode);
+    counts
+        .shapes
+        .iter()
+        .filter_map(|(shape, classes)| {
+            let class = |name: &str| classes.get(name).copied().unwrap_or(0);
+            if class(evidence) + class(&format!("hit:{evidence}")) > 0 {
+                return None;
+            }
+            let mut codes = BTreeMap::<String, usize>::new();
+            for (class, n) in classes {
+                let own = class.strip_prefix("hit:").unwrap_or(class);
+                if let Some(code) = own.strip_prefix("declined:") {
+                    *codes.entry(code.to_owned()).or_default() += n;
+                }
+            }
+            codes
+                .keys()
+                .any(|code| uncontracted::is_setting_code(code))
+                .then(|| (shape.clone(), classes.values().sum(), codes))
+        })
+        .collect()
 }
 
 /// The `UNCONTRACTED_DISPOSITION` line of one diagram-kind.
@@ -1805,11 +1931,20 @@ struct KindTotals {
 ///   any kind and no excepted kind fails the run (with a partial kind list a
 ///   diagram legitimately has no record of the listed kinds: the kind-level
 ///   rule covers it);
+/// * a record class (frame shape) of an enabled kind whose records over the
+///   run (outside excepted diagram-kinds) all declined, with nothing
+///   compared / taken and at least one setting's code
+///   ([`uncontracted::SETTING_CODES`]), fails the run (the run-level twin
+///   of the diagram verdict's setting-wide rule; no run-level row accepts
+///   it);
 /// * a record without evidence (or evidence of another identity) fails it.
 pub struct RunTally {
     mode: Mode,
     kinds: Vec<Kind>,
     totals: BTreeMap<Kind, KindTotals>,
+    /// Per enabled kind and record class: records, compared / taken (hits
+    /// included) and the setting codes' declines.
+    shapes: BTreeMap<(Kind, String), (usize, usize, BTreeMap<String, usize>)>,
     diagrams: usize,
     failures: Vec<String>,
 }
@@ -1822,6 +1957,7 @@ impl RunTally {
             mode: switch.mode,
             kinds: switch.enabled_kinds(),
             totals: BTreeMap::new(),
+            shapes: BTreeMap::new(),
             diagrams: 0,
             failures: Vec::new(),
         })
@@ -1861,6 +1997,23 @@ impl RunTally {
             totals.errors += counts.with_prefix("error:").values().sum::<usize>()
                 + counts.with_prefix("hit:error:").values().sum::<usize>();
             evidence_any += evidence_of(&counts, self.mode);
+            if saved["outcome"] != "excepted" {
+                let verb = verb(self.mode);
+                for (shape, classes) in &counts.shapes {
+                    let entry = self.shapes.entry((*kind, shape.clone())).or_default();
+                    for (class, n) in classes {
+                        entry.0 += n;
+                        let own = class.strip_prefix("hit:").unwrap_or(class);
+                        if own == verb {
+                            entry.1 += n;
+                        } else if let Some(code) = own.strip_prefix("declined:")
+                            && uncontracted::is_setting_code(code)
+                        {
+                            *entry.2.entry(code.to_owned()).or_default() += n;
+                        }
+                    }
+                }
+            }
         }
         let every_kind = Kind::ALL
             .into_iter()
@@ -1927,6 +2080,16 @@ impl RunTally {
                     totals.expected,
                     totals.declined,
                     kind.as_str()
+                ));
+            }
+        }
+        for ((kind, shape), (records, evidence, setting)) in &self.shapes {
+            if *evidence == 0 && !setting.is_empty() {
+                failures.push(format!(
+                    "kind {}: all {records} {shape}-shaped records over the run declined, none {}, with a setting's code ({}): a setting-caused decline of a whole record class",
+                    kind.as_str(),
+                    self.verb(),
+                    list(setting)
                 ));
             }
         }

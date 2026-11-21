@@ -1643,3 +1643,168 @@ fn the_run_fails_a_kind_with_nothing_compared() -> Result<()> {
         Ok(())
     })
 }
+
+/// Item B (helper VH 2's `k5_beta_ledger_misses_settings_wide_root_declines`,
+/// without the K5 code): one kind with records of two classes (frame shapes,
+/// as a K5 surrogate's K1 roots and K2 children). Every K1 record declines
+/// by a setting's code (`open_root`) while the K2 records compare: the
+/// kind-wide all-declined rule passes it (compared > 0), the class rule
+/// must fail the diagram, in check and in on. Controls: a class that
+/// declines by a graph code (`one_loop_tree_cut`) or that has one record
+/// compared passes; an exception naming the code accepts it (`excepted`).
+#[test]
+fn a_setting_wide_decline_of_one_record_class_fails() -> Result<()> {
+    test_initialise()?;
+    let named = |code: &str| Exceptions {
+        entries: vec![Exception {
+            graph: "setting_wide".to_owned(),
+            kind: Kind::Root,
+            code: code.to_owned(),
+            reason: "the test's setting".to_owned(),
+        }],
+        digest: Some("test".to_owned()),
+    };
+    for mode in [Mode::Check, Mode::On] {
+        with_switch(Switch::new(mode, &ROOT_CHILD), || -> Result<()> {
+            // (K1 declines, K1 evaluated, exceptions) -> the diagram passes
+            let cases: [(&[&str], usize, Option<Exceptions>, Option<&str>); 5] = [
+                (&["open_root"; 3], 0, None, None),
+                (
+                    &["open_root", "open_root", "one_loop_tree_cut"],
+                    0,
+                    None,
+                    None,
+                ),
+                (&["one_loop_tree_cut"; 3], 0, None, Some("ok")),
+                (&["open_root"; 2], 1, None, Some("ok")),
+                (
+                    &["open_root"; 3],
+                    0,
+                    Some(named("open_root")),
+                    Some("excepted"),
+                ),
+            ];
+            for (declines, evaluated, exceptions, passes) in cases {
+                let what = format!("{} {declines:?} + {evaluated} evaluated", mode.as_str());
+                let run = || -> Result<(Result<Option<serde_json::Value>>, Vec<String>)> {
+                    let _ = ledger::take_lines();
+                    let diagram = DiagramLedger::open("setting_wide", "000007")
+                        .ok_or_else(|| eyre!("no ledger"))?;
+                    for code in declines {
+                        ledger::record_shaped(Kind::Root, "K1", Some(code), mode);
+                    }
+                    for _ in 0..evaluated {
+                        ledger::record_shaped(Kind::Root, "K1", None, mode);
+                    }
+                    for _ in 0..2 {
+                        ledger::record_shaped(Kind::Root, "K2", None, mode);
+                    }
+                    ledger::record_shaped(Kind::Child, "K2", None, mode);
+                    let closed = diagram.close(true);
+                    Ok((closed, ledger::take_lines()))
+                };
+                let (closed, lines) = match exceptions {
+                    Some(exceptions) => ledger::with_exceptions(exceptions, run)?,
+                    None => run()?,
+                };
+                let root = disposition(&lines, Kind::Root)?;
+                match passes {
+                    Some(outcome) => ensure!(
+                        closed.is_ok() && field(root, "outcome") == Some(outcome),
+                        "{what}: {root} ({closed:?})"
+                    ),
+                    None => {
+                        let error = format!(
+                            "{:#}",
+                            closed
+                                .err()
+                                .ok_or_else(|| eyre!("{what}: the diagram passed: {root}"))?
+                        );
+                        ensure!(
+                            error.contains("K1-shaped records declined")
+                                && error.contains("setting-caused")
+                                && field(root, "outcome") == Some("uncovered"),
+                            "{what}: {error} / {root}"
+                        );
+                    }
+                }
+            }
+            Ok(())
+        })?;
+    }
+    Ok(())
+}
+
+/// Item B, the run tally and the resume: saved evidence whose K1 class all
+/// declined by a setting's code (K2 compared) fails the run tally and is
+/// not reused (recomputed); one K1 record compared, or the kind excepted,
+/// passes.
+#[test]
+fn the_run_and_the_resume_fail_a_setting_wide_class() -> Result<()> {
+    test_initialise()?;
+    with_switch(Switch::new(Mode::Check, &ROOT_CHILD), || -> Result<()> {
+        let identity = ledger::current_identity();
+        let evidence = |k1: serde_json::Value, outcome: &str| {
+            let k1_records = k1.as_object().map_or(0, |classes| {
+                classes.values().filter_map(|n| n.as_u64()).sum::<u64>()
+            });
+            let mut classes = serde_json::Map::new();
+            for (class, n) in k1.as_object().into_iter().flatten() {
+                classes.insert(class.clone(), n.clone());
+            }
+            let k1_compared = k1["compared"].as_u64().unwrap_or(0);
+            classes.insert("compared".to_owned(), serde_json::json!(2 + k1_compared));
+            serde_json::json!({
+                "schema": "u7a-disposition.v2", "identity": identity, "graph": "g",
+                "diagram": "000001", "outcome": "ok", "inert": {},
+                "kinds": {
+                    "root": {"expected": 2 + k1_records, "attempted": 2 + k1_records,
+                             "uncontracted": 2 + k1_compared, "zero": 0, "equal": 2 + k1_compared,
+                             "classes": classes, "shapes": {"K1": k1, "K2": {"compared": 2}},
+                             "outcome": outcome},
+                    "child": {"expected": 1, "attempted": 1, "uncontracted": 1, "zero": 0,
+                              "equal": 1, "classes": {"compared": 1},
+                              "shapes": {"K2": {"compared": 1}}, "outcome": "ok"},
+                },
+            })
+        };
+        let setting = evidence(serde_json::json!({"declined:open_root": 3}), "ok");
+        let mut tally = ledger::RunTally::new().ok_or_else(|| eyre!("no tally"))?;
+        tally.add("g/000001", Some(&setting), true);
+        let failures = tally.failures();
+        ensure!(
+            failures.len() == 1
+                && failures[0].contains("kind root: all 3 K1-shaped records over the run declined")
+                && failures[0].contains("open_root:3"),
+            "{failures:#?}"
+        );
+        match ledger::resumed("g", "000001", Some(&setting)) {
+            Resumed::Unchecked(reason) if reason == "verdict:root:uncovered" => {}
+            other => return Err(eyre!("the setting-wide evidence was reused: {other:?}")),
+        }
+        // one K1 record compared, anywhere in the run, passes; so does an
+        // excepted kind
+        let mixed = evidence(
+            serde_json::json!({"declined:open_root": 2, "compared": 1}),
+            "ok",
+        );
+        ensure!(
+            ledger::resumed("g", "000001", Some(&mixed)) == Resumed::Checked,
+            "the mixed evidence"
+        );
+        let mut tally = ledger::RunTally::new().ok_or_else(|| eyre!("no tally"))?;
+        tally.add("g/000001", Some(&mixed), true);
+        ensure!(tally.failures().is_empty(), "{:#?}", tally.failures());
+        let mut tally = ledger::RunTally::new().ok_or_else(|| eyre!("no tally"))?;
+        tally.add(
+            "g/000001",
+            Some(&evidence(
+                serde_json::json!({"declined:open_root": 3}),
+                "excepted",
+            )),
+            true,
+        );
+        ensure!(tally.failures().is_empty(), "{:#?}", tally.failures());
+        Ok(())
+    })
+}
