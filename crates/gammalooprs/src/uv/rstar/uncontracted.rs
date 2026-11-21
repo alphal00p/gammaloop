@@ -679,7 +679,9 @@ pub(super) struct Decline {
 /// does not fold a root leg onto ±p(1)), `root_crown_paired` (a K1 crown
 /// edge with both ends in the root) and `root_normalisation_momentum` (a
 /// closed-root factor that is not a scalar times a power of p²): they never
-/// occur on a correct site (helper VH round 2, R2-I3).
+/// occur on a correct site (helper VH round 2, R2-I3). So are the C7
+/// settings exceptions ([`settings_refusal`]: `vakint_normalization`),
+/// settings a record must never be built under.
 ///
 /// `one_loop_tree_cut` (U7-PLAN 14(d), narrowed as Astra U7a asks: "keep the
 /// rebase test narrow"): ONLY a remainder whose one internal propagator is
@@ -2523,6 +2525,39 @@ pub(super) fn paired_leg_id(id: usize, last_edge: usize) -> std::result::Result<
     Ok(PAIRED_LEG_OFFSET + id)
 }
 
+/// Helper VH's C7 settings exceptions (c7-normalisation.md sections 7-8,
+/// U7-PLAN item 33): the vakint settings under which the written statement
+/// holds for every field and insertion of a record. Any other setting is
+/// refused: an ERROR of every record ([`build`], never a designed decline: a
+/// setting-wide decline would make mode on fall back entirely, pre-review
+/// of the U7a delta finding 7) and, for a caller that checks its settings at
+/// start-up, [`super::validate_uncontracted_settings`].
+///
+/// * E1 `vakint_normalization`: `uv.vakint.normalization` other than
+///   `MSbar` (`pySecDec`, `FMFTandMATAD`, `GScheme`, any other string, a
+///   `Custom` factor; settings.rs maps the names). A child Δ carries the
+///   per-loop normalisation through its expansion: another one can bring a
+///   fractional power of π, log(μᵣ²) (a μ dependence not of the form
+///   `exp(log_mu_sq)^(ε L)`), log(π) or EulerGamma into the `insertion`
+///   lines. vakint applies the MSbar factor inside every evaluation.
+///
+/// `additional_normalization` other than "1" stays the designed decline of
+/// [`build`] (a factor per loop that the record cannot state).
+pub(super) fn settings_refusal(
+    vakint: &crate::uv::settings::VakintSettings,
+) -> std::result::Result<(), Decline> {
+    if vakint.normalization != "MSbar" {
+        return Err(Decline::new(
+            "vakint_normalization",
+            format!(
+                "uv.vakint.normalization `{}` is not MSbar (C7 settings exception E1)",
+                vakint.normalization
+            ),
+        ));
+    }
+    Ok(())
+}
+
 /// The record of one K1 root or K2 child remainder (`Ok(None)`: a zero
 /// insertion).
 fn build(
@@ -2534,6 +2569,7 @@ fn build(
 ) -> std::result::Result<Option<Built>, Decline> {
     let graph = site.graph;
     let region = &site.term.remainder;
+    settings_refusal(&site.uv_settings.vakint)?;
     if site.uv_settings.vakint.additional_normalization.trim() != "1" {
         return Err(Decline::new(
             "additional_normalization",
