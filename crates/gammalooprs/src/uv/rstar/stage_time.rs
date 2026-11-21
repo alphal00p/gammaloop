@@ -67,6 +67,9 @@ const ORDER: &[&str] = &[
     "N.contract.vakint",
     "N.convert",
     "N.boundary.build",
+    "N.cache",
+    "N.closed",
+    "N.poles",
     "N.record.build",
     "N.record.finish",
     "N.backend",
@@ -114,7 +117,6 @@ struct Frame {
     child_calls: u64,
     child_spans: u64,
     laps: Vec<(&'static str, u64)>,
-    lap_open: bool,
 }
 
 #[derive(Default)]
@@ -189,7 +191,6 @@ impl Span {
                     child_calls: 0,
                     child_spans: 0,
                     laps: Vec::new(),
-                    lap_open: false,
                 });
                 Span {
                     seq: Some(seq),
@@ -402,6 +403,7 @@ struct Point {
     vakint: u64,
     child_wall: u64,
     child_vakint: u64,
+    laps: u64,
 }
 
 fn point() -> Option<Point> {
@@ -415,14 +417,16 @@ fn point() -> Option<Point> {
                 vakint,
                 child_wall: frame.child_wall,
                 child_vakint: frame.child_vakint.iter().sum(),
+                laps: frame.laps.iter().map(|(_, ns)| *ns).sum(),
             })
         })
         .ok()
         .flatten()
 }
 
-/// Add `wall` ns of `leaf`, net of the vakint stages and the child spans since
-/// `from`, to the top frame when it is still `from`'s.
+/// Add `wall` ns of `leaf`, net of the vakint stages, the child spans and the
+/// (inner) laps charged since `from`, to the top frame when it is still
+/// `from`'s.
 fn charge(from: Point, leaf: &'static str, wall: u64) {
     let (vakint, _) = vakint_total(&Snapshot::now());
     let _ = STATE.try_with(|state| {
@@ -444,9 +448,11 @@ fn charge(from: Point, leaf: &'static str, wall: u64) {
         let own_vakint = vakint
             .saturating_sub(from.vakint)
             .saturating_sub(child_vakint);
+        let inner: u64 = frame.laps.iter().map(|(_, ns)| *ns).sum();
         let net = wall
             .saturating_sub(child_wall)
-            .saturating_sub(own_vakint);
+            .saturating_sub(own_vakint)
+            .saturating_sub(inner.saturating_sub(from.laps));
         if net == 0 {
             return;
         }
@@ -467,8 +473,8 @@ pub struct Lap {
 }
 
 /// Charge the wall time until the guard drops to `leaf` of the current span,
-/// net of vakint and of child spans. A lap inside a lap of the same span is
-/// inert (the outer one keeps the time).
+/// net of vakint, of child spans and of laps nested inside it (the innermost
+/// lap keeps its time).
 pub fn lap(leaf: &'static str) -> Lap {
     let inert = Lap {
         from: None,
@@ -481,23 +487,6 @@ pub fn lap(leaf: &'static str) -> Lap {
     let Some(from) = point() else {
         return inert;
     };
-    let opened = STATE
-        .try_with(|state| {
-            let Ok(mut state) = state.try_borrow_mut() else {
-                return false;
-            };
-            match state.stack.last_mut() {
-                Some(frame) if !frame.lap_open => {
-                    frame.lap_open = true;
-                    true
-                }
-                _ => false,
-            }
-        })
-        .unwrap_or(false);
-    if !opened {
-        return inert;
-    }
     Lap {
         from: Some((from, Instant::now())),
         leaf,
@@ -512,13 +501,6 @@ impl Drop for Lap {
         };
         let wall = started.elapsed().as_nanos() as u64;
         charge(from, self.leaf, wall);
-        let _ = STATE.try_with(|state| {
-            if let Ok(mut state) = state.try_borrow_mut()
-                && let Some(frame) = state.stack.iter_mut().find(|frame| frame.seq == from.seq)
-            {
-                frame.lap_open = false;
-            }
-        });
     }
 }
 
@@ -542,19 +524,7 @@ impl Mark {
         let Some(from) = self.from else {
             return;
         };
-        let open = STATE
-            .try_with(|state| {
-                state
-                    .try_borrow()
-                    .ok()
-                    .and_then(|state| state.stack.last().map(|frame| frame.lap_open))
-            })
-            .ok()
-            .flatten()
-            .unwrap_or(true);
-        if !open {
-            charge(from, leaf, wall.as_nanos() as u64);
-        }
+        charge(from, leaf, wall.as_nanos() as u64);
         self.from = point();
     }
 }

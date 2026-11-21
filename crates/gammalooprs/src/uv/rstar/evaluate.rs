@@ -1493,6 +1493,7 @@ impl<'a> Evaluation<'a> {
         let closed = if mode == super::closed::ClosedMode::Off {
             None
         } else {
+            let _lap = super::stage_time::lap("N.closed");
             Some(
                 hard.closed_moments(order, &mut closed_stats)
                     .wrap_err("while computing closed hard moments")?,
@@ -1510,9 +1511,11 @@ impl<'a> Evaluation<'a> {
                 self.log_ir_hard_declaration(correction_index, correction, term_index, term, hard);
             }
             let cost_started = Instant::now();
+            let taylor_lap = super::stage_time::lap("N.taylor");
             let polynomial = hard
                 .taylor(order)
                 .wrap_err("while Taylor-expanding the prepared hard component")?;
+            drop(taylor_lap);
             taylor_seconds = cost_started.elapsed().as_secs_f64();
             taylor_bytes = polynomial.as_view().get_byte_size();
             let project_started = Instant::now();
@@ -1520,6 +1523,7 @@ impl<'a> Evaluation<'a> {
             drop(polynomial);
             project_seconds = project_started.elapsed().as_secs_f64();
             project_bytes = covariant.as_view().get_byte_size();
+            let _lap = super::stage_time::lap("N.project");
             Some(hard_moments(&covariant, hard.soft_edges()).wrap_err_with(|| {
                 format!(
                     "while separating hard moments: hard={}, remaining={}, soft={:?}, covariant={covariant}",
@@ -3318,6 +3322,7 @@ impl<'a> Evaluation<'a> {
     }
 
     fn poles(&self, expression: &Atom) -> Result<Atom> {
+        let _lap = super::stage_time::lap("N.poles");
         Ok(expression.series(self.epsilon, 0, -1)?.to_atom().expand())
     }
 

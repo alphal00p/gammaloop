@@ -1240,7 +1240,10 @@ impl RStarPlan {
         let key = super::ir_dirac::child_key(key, super::ir_dirac::ir_dirac_mode()?);
         // GAMMALOOP_UNCONTRACTED_NUMERATOR on / check: the fill is a frame of the
         // diagram ledger and a hit counts the fill's records (U7a delta); off:
-        // `cache.counterterm_with`
+        // `cache.counterterm_with`. GAMMALOOP_STAGE_TIME: the Delta-cache key,
+        // lookup and relabelling as N.cache (the fill's own work is its laps and
+        // spans)
+        let _cache_lap = super::stage_time::lap("N.cache");
         super::uncontracted_ledger::through_cache(cache, graph, support, model, key, || {
             let started = Instant::now();
             // GAMMALOOP_STAGE_TIME: a cache fill (a hit never runs this), and
