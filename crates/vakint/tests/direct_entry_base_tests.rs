@@ -11,6 +11,7 @@
 //!   sections are refused as text errors (the process does not abort);
 //! - a port that occurs only in the projector is refused for marked values
 //!   too.
+#![cfg(feature = "feynkit-ingress")]
 use std::path::PathBuf;
 
 use symbolica::atom::{Atom, AtomCore};

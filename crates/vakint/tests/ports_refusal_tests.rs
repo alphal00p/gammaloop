@@ -7,6 +7,7 @@
 //! (tests/fixtures/direct_differential/rank<n>-v1.txt, marked with an empty
 //! v3 direct record), the beta's v3 kind-direct records k5-direct and K6
 //! quark.
+#![cfg(feature = "feynkit-ingress")]
 use std::path::PathBuf;
 
 use symbolica::atom::Atom;
