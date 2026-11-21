@@ -1585,7 +1585,15 @@ impl FactorizedNumerator {
                         vertex.rule, insertion.hedges, at_vertex
                     )));
                 }
-            } else if !vertex.rule.starts_with("ins:") {
+            } else if vertex.rule.starts_with("ins:") {
+                if insertion.hedges.len() != 2 {
+                    return Err(error(format!(
+                        "a surrogate coefficient vertex (rule {}) has {} hedges, not the two inner boundary half-edges",
+                        vertex.rule,
+                        insertion.hedges.len()
+                    )));
+                }
+            } else {
                 return Err(error(format!(
                     "the vertex rule {} is neither `ct:<label>` (a contracted child) nor `ins:<label>` (a surrogate's coefficient vertex)",
                     vertex.rule
@@ -1595,8 +1603,20 @@ impl FactorizedNumerator {
                 ("coefficient", &insertion.coefficient),
                 ("factor", &insertion.factor),
             ] {
+                // the format's variants (section 8): colour -> ColourInFactor,
+                // a flavour symbol or mUVexp -> Graph
                 if let Some(found) = forbidden_in_insertion(atom.as_view()) {
-                    return Err(error(format!("{what} contains {found}")));
+                    let location = format!("insertion at vertex {v} {what}");
+                    return Err(if found.starts_with("the colour object") {
+                        FactorizedError::ColourInFactor {
+                            location,
+                            tensor: found,
+                        }
+                    } else {
+                        FactorizedError::Graph {
+                            detail: format!("{location} contains {found}"),
+                        }
+                    });
                 }
             }
             if let Some(name) = self
@@ -1729,9 +1749,16 @@ impl FactorizedNumerator {
                 vertex: insertion.vertex,
                 detail,
             };
+            // a failing series expansion is internal (`Evaluation`), not a
+            // refusal of the record
             let series = product
                 .series(epsilon, Atom::Zero.as_view(), SeriesDepth::relative(1))
-                .map_err(|e| failure(format!("no Laurent series in ε: {e}")))?;
+                .map_err(|e| FactorizedError::Evaluation {
+                    detail: format!(
+                        "insertion at vertex {}: the Laurent series in ε failed: {e}",
+                        insertion.vertex
+                    ),
+                })?;
             if series.is_zero() {
                 continue;
             }

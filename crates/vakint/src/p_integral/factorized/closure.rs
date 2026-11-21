@@ -74,6 +74,15 @@ fn refuse(detail: impl Into<String>) -> FactorizedError {
     }
 }
 
+/// An INTERNAL failure of the evaluation of an accepted record (lowering,
+/// reduction, the ordinary closure, the truncation): `Evaluation`, never a
+/// refusal variant, so that `Closure` means only "refused by the format".
+fn internal(stage: &str, error: impl std::fmt::Display) -> FactorizedError {
+    FactorizedError::Evaluation {
+        detail: format!("closure {stage}: {error}"),
+    }
+}
+
 fn lambda_symbol() -> Symbol {
     symbolica::symbol!("vakint::closure_lambda")
 }
@@ -1241,7 +1250,7 @@ fn prepare(
         blocks,
         boundary_patterns,
     )
-    .map_err(|e| refuse(e.to_string()))?;
+    .map_err(|e| internal("boundary", e))?;
     Ok(Prepared {
         boundary: Some(boundary),
         tensors,
@@ -1323,7 +1332,7 @@ pub fn evaluate_factorized_closure(
                 if direct {
                     let (atom, stats) = boundary
                         .evaluate_with_stats(vakint, &local, BoundaryOptions::default())
-                        .map_err(|e| refuse(e.to_string()))?;
+                        .map_err(|e| internal("lowering and reduction", e))?;
                     let lower = stats.match_seconds
                         + stats.read_seconds
                         + stats.classify_seconds
@@ -1346,7 +1355,7 @@ pub fn evaluate_factorized_closure(
                     for (closure, input) in boundary.ordinary() {
                         atom += closure
                             .evaluate(vakint, &local, input.as_view())
-                            .map_err(|e| refuse(e.to_string()))?;
+                            .map_err(|e| internal("ordinary closure", e))?;
                     }
                     (atom, 0.0, 0.0, boundary.patterns.len())
                 }
@@ -1363,7 +1372,7 @@ pub fn evaluate_factorized_closure(
                     Atom::Zero.as_view(),
                     symbolica::domains::rational::Rational::from(target),
                 )
-                .map_err(|e| refuse(format!("truncating the insertion product: {e}")))?
+                .map_err(|e| internal("truncation of the insertion product", e))?
                 .to_atom()
                 .expand()
         } else {
@@ -1405,3 +1414,31 @@ pub fn evaluate_factorized_closure(
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod internal_failure_tests {
+    use super::*;
+
+    /// An internal failure is `Evaluation` with the stage named; a designed
+    /// refusal stays `Closure`.
+    #[test]
+    fn internal_failures_are_evaluation_errors_and_refusals_stay_closure() {
+        for stage in [
+            "boundary",
+            "lowering and reduction",
+            "ordinary closure",
+            "truncation of the insertion product",
+        ] {
+            match internal(stage, "inner failure") {
+                FactorizedError::Evaluation { detail } => {
+                    assert!(
+                        detail.starts_with(&format!("closure {stage}: ")),
+                        "{detail}"
+                    )
+                }
+                other => panic!("{other:?}"),
+            }
+        }
+        assert!(matches!(refuse("x"), FactorizedError::Closure { .. }));
+    }
+}

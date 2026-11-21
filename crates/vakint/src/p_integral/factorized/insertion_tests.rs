@@ -466,18 +466,6 @@ fn every_insertion_rule_has_its_refusal() {
             }),
         ),
         (
-            "colour invariant in the coefficient",
-            with(&|v| ins(v).coefficient = atom("spenso::cas(2,spenso::coad(spenso::dA))")),
-        ),
-        (
-            "flavour symbol in the coefficient",
-            with(&|v| ins(v).coefficient = atom("vakint::nf")),
-        ),
-        (
-            "mUVexp in the factor",
-            with(&|v| ins(v).factor = &ins(v).factor * atom("gammalooprs::mUVexp")),
-        ),
-        (
             "degree four",
             with(&|v| ins(v).factor = &ins(v).factor * atom(&format!("{}^2", q(3, &dummy(3, 8))))),
         ),
@@ -494,6 +482,16 @@ fn every_insertion_rule_has_its_refusal() {
     let error = refused(&five);
     assert!(is_insertion(&error), "five slots: {error}");
     eprintln!("INSERTION_REFUSAL five open slots: {error}");
+    // colour, flavour and mUVexp inside an insertion: the format's variants
+    let colour = with(&|v| ins(v).coefficient = atom("spenso::cas(2,spenso::coad(spenso::dA))"));
+    assert!(matches!(
+        refused(&colour),
+        FactorizedError::ColourInFactor { .. }
+    ));
+    let flavour = with(&|v| ins(v).coefficient = atom("vakint::nf"));
+    assert!(matches!(refused(&flavour), FactorizedError::Graph { .. }));
+    let muvexp = with(&|v| ins(v).factor = &ins(v).factor * atom("gammalooprs::mUVexp"));
+    assert!(matches!(refused(&muvexp), FactorizedError::Graph { .. }));
     // a non-scalar coefficient, a non-boundary momentum, a non-local slot
     let error = refused(&with(&|v| {
         ins(v).coefficient = atom(&format!("{}^2", q(3, &dummy(3, 8))))
