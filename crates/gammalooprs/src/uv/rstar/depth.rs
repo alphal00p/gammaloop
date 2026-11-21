@@ -287,6 +287,8 @@ pub(super) struct DepthCounts {
 }
 
 impl DepthCounts {
+    /// Tests: fold an inner [`collect`] scope into the enclosing one.
+    #[cfg(test)]
     fn add(&mut self, other: &Self) {
         self.corrections += other.corrections;
         self.bounded += other.bounded;
