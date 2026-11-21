@@ -1146,13 +1146,23 @@ fn identically_zero(base: AtomView<'_>) -> bool {
     base.to_owned().together().is_zero() || base.to_owned().expand().is_zero()
 }
 
-/// The first power with a NEGATIVE exponent (integer or not) in `view` whose
-/// base is identically zero ([`identically_zero`]) as written, or once the
-/// dimension is set to 4 - 2ε (`epsilon`): the expression is undefined there,
-/// not a pole of any order (a base that vanishes only at ε = 0, such as D - 4,
-/// is an ordinary pole; one that vanishes only for some value of a caller's
+/// Whether `exponent` is a positive rational number (a literal): the only
+/// exponents under which a vanishing base is harmless (0^(1/2) = 0^2 = 0).
+fn positive_rational(exponent: AtomView<'_>) -> bool {
+    symbolica::domains::rational::Rational::try_from(exponent)
+        .is_ok_and(|r| !r.is_negative() && !r.is_zero())
+}
+
+/// The first power in `view` whose exponent is NOT a positive rational
+/// number (a negative rational, or no rational at all: sqrt(2), π, a symbol,
+/// an expression such as P(y) - 1) and whose base is identically zero
+/// ([`identically_zero`]) as written, or once the dimension is set to 4 - 2ε
+/// (`epsilon`): the expression is undefined there, or of an undecidable kind
+/// (0^π is 0, refused too: harmless, since no record needs it), and not a
+/// pole of any order (a base that vanishes only at ε = 0, such as D - 4, is
+/// an ordinary pole; one that vanishes only for some value of a caller's
 /// scalar, x - 3, is defined). Every base is tested, whatever symbols it
-/// contains; inner powers first (bases and exponents).
+/// contains; inner powers first, in bases, exponents and function arguments.
 fn vanishing_denominator(
     view: AtomView<'_>,
     dimension: Symbol,
@@ -1168,9 +1178,7 @@ fn vanishing_denominator(
             if let Some(found) = inner(base).or_else(|| inner(exponent)) {
                 return Some(found);
             }
-            let negative = symbolica::domains::rational::Rational::try_from(exponent)
-                .is_ok_and(|r| r.is_negative());
-            if !negative {
+            if positive_rational(exponent) {
                 return None;
             }
             let shown = view.to_owned().to_canonical_string();

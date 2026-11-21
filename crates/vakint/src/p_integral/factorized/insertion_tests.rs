@@ -1027,6 +1027,51 @@ fn a_vanishing_denominator_is_refused_whatever_it_depends_on() {
     eprintln!("LARGE BASE validation: {:?}", started.elapsed());
 }
 
+/// Exponents that are not positive rational numbers, at validation: a nonzero
+/// base under -sqrt(2) is accepted; a vanishing base P (identically zero)
+/// under a positive rational, P^(1/2) and P^2, is accepted (the coefficient is
+/// 0: the insertion contributes zero, pole order 0); P^y (a symbol), f(1/P)
+/// (a caller function's argument is walked) and P^(1/Q) (Q identically zero
+/// inside the exponent: the exponent is walked) are refused.
+#[test]
+fn exponents_and_function_arguments_are_walked_for_vanishing_bases() {
+    let eps_atom = atom(EPS);
+    let AtomView::Var(epsilon) = eps_atom.as_view() else {
+        unreachable!()
+    };
+    let epsilon = epsilon.get_symbol();
+    let good = gluon_surrogate(1);
+    let with_coefficient = |c: &str| {
+        let mut value = good.clone();
+        ins(&mut value).coefficient = atom(c);
+        value
+    };
+    let p = |t: &str| format!("(({t}-3)^2-{t}^2+6*{t}-9)");
+    let (x, q) = ("witness::x", "witness::q");
+    for (what, coefficient) in [
+        ("x^(-sqrt(2))", format!("{x}^(-2^(1/2))")),
+        ("P^(1/2)", format!("{}^(1/2)", p(x))),
+        ("P^2", format!("{}^2", p(x))),
+    ] {
+        let value = with_coefficient(&coefficient);
+        value.validate().unwrap_or_else(|e| panic!("{what}: {e}"));
+        assert_eq!(value.insertion_pole_order(epsilon).unwrap(), 0, "{what}");
+    }
+    let prefix = "a denominator vanishes identically";
+    for (what, coefficient) in [
+        ("P^y", format!("{}^witness::y", p(x))),
+        ("f(1/P)", format!("witness::f(1/{})", p(x))),
+        ("P^(1/Q)", format!("{x}^(1/{})", p(q))),
+    ] {
+        insertion_refusal(
+            &with_coefficient(&coefficient).validate().unwrap_err(),
+            C0,
+            prefix,
+            what,
+        );
+    }
+}
+
 /// Validation recognises ε by its name; an epsilon setting of another name
 /// (`user::ep`) gets the pole order's rules where the settings are known, the
 /// entries' input check (here `vakint_input`, the direct and ports path): the

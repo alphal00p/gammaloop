@@ -750,3 +750,72 @@ fn every_identically_vanishing_denominator_is_refused() {
     at_a_point.validate().expect("1/(x-3) is defined");
     assert!(!closure_value(&vakint, &site_settings(), &at_a_point).is_zero());
 }
+
+/// A vanishing base is refused under EVERY exponent that is not a positive
+/// rational number: on the K2 child of L3-036, with P(t) identically zero,
+/// ε^-1·P(x)^(-sqrt(2)), ε^-1·P(x)^(-π) and ε^-1·P(x)^(P(y)-1) (an exponent
+/// identically -1 that is not a literal) are refused by validation and the
+/// entry, and so are the exponents P(y) (0^0) and P(y) + 2 (identically 2, but
+/// not a literal: refused by the rule, harmlessly). Their twins with the base
+/// P(x) + 1 (identically 1) give the original value.
+#[test]
+fn a_vanishing_base_is_refused_under_any_exponent_but_a_positive_rational() {
+    let vakint = plain_engine();
+    let original =
+        FactorizedNumerator::from_text(include_str!("fixtures/wh-k2-child-ins.record.txt"))
+            .unwrap();
+    let reference = closure_value(&vakint, &site_settings(), &original);
+    let eps_text = "gammalooprs::ε";
+    let eps = vk_parse!(eps_text).unwrap();
+    // the record with its coefficient's 1/ε replaced by `replacement`, as written
+    let with = |replacement: &str| {
+        let mut value = original.clone();
+        let written = vk_parse!(replacement).unwrap();
+        value.insertions[0].coefficient =
+            (&value.insertions[0].coefficient * &eps).expand() * &written;
+        value
+    };
+    let p = |t: &str| format!("(({t}-3)^2-{t}^2+6*{t}-9)");
+    let (x, y) = ("witness::x", "witness::y");
+    for exponent in [
+        "-2^(1/2)".to_string(),
+        "-𝜋".to_string(),
+        format!("{}-1", p(y)),
+        p(y),
+        format!("{}+2", p(y)),
+    ] {
+        let value = with(&format!("gammalooprs::ε^-1*{}^({exponent})", p(x)));
+        for error in [
+            value.validate().unwrap_err(),
+            evaluate_factorized_closure(
+                &vakint,
+                &site_settings(),
+                std::slice::from_ref(&value),
+                &[value.prefactor.total()],
+            )
+            .unwrap_err(),
+        ] {
+            match &error {
+                FactorizedError::Insertion { vertex: 4, detail } => assert!(
+                    detail.starts_with("a denominator vanishes identically"),
+                    "exponent {exponent}: {detail}"
+                ),
+                other => {
+                    panic!("exponent {exponent}: expected the Insertion refusal, got {other:?}")
+                }
+            }
+        }
+    }
+    for exponent in [
+        "-2^(1/2)".to_string(),
+        "-𝜋".to_string(),
+        format!("{}-1", p(y)),
+    ] {
+        let twin = with(&format!("gammalooprs::ε^-1*({}+1)^({exponent})", p(x)));
+        let got = closure_value(&vakint, &site_settings(), &twin);
+        assert!(
+            (&got - &reference).expand().is_zero(),
+            "the base-1 twin under {exponent} must give the original value"
+        );
+    }
+}
