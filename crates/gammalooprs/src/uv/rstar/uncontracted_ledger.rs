@@ -592,6 +592,11 @@ pub(crate) struct Counts {
     /// none.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub shapes: BTreeMap<String, BTreeMap<String, usize>>,
+    /// K5 (U7c): insertion-surrogate evaluations of the diagram under the
+    /// enabled kind ([`k5_site`]); a diagram-kind with sites but no expected
+    /// record fails ([`verdict`]): its records missed the hook.
+    #[serde(default)]
+    pub sites: usize,
 }
 
 impl Counts {
@@ -631,6 +636,7 @@ impl Counts {
                 self.add_shape(shape, class.clone(), *n);
             }
         }
+        self.sites += other.sites;
     }
 
     fn class(&self, name: &str) -> usize {
@@ -1476,6 +1482,16 @@ fn verdict(
         verdict.outcome = "error";
         return verdict;
     }
+    if counts.sites > 0 && counts.expected == 0 {
+        // U7c: an evaluated insertion surrogate whose records never reached
+        // a hook (a missed hook or a misclassified record) compares nothing
+        verdict.outcome = "uncovered";
+        verdict.failure = Some(format!(
+            "{} insertion-surrogate evaluations reached no record of the kind (a missed hook or a misclassified record)",
+            counts.sites
+        ));
+        return verdict;
+    }
     if mode == Mode::Check {
         // every comparison counted as done agreed (a disagreeing one is a
         // diagnostic failure of the hook today; the verdict does not rely on
@@ -1792,6 +1808,10 @@ fn finish(frame: Frame, ok: bool) -> Result<Option<Value>> {
         per_kind.insert(kind.as_str().to_owned(), value);
         outcomes.push(verdict.outcome);
         total.merge(&counts);
+        add_to_totals(*kind, &counts);
+        if *kind == Kind::Surrogate {
+            print(total_line(*kind));
+        }
     }
     if let Some(kind) = leaked {
         failures.push(format!(
@@ -2492,4 +2512,174 @@ pub(super) fn outer_panic() {
     if OUTER_PANIC.with(std::cell::Cell::get) {
         panic!("injected by the test: a panic in the IR hard child route's outer step");
     }
+}
+
+// ---------------------------------------------------------------------------
+// U7c (K5): surrogate sites and the run's per-kind totals
+// ---------------------------------------------------------------------------
+
+/// One insertion-surrogate evaluation (a non-zero surrogate integrated
+/// directly at <= 4 loops, or through its own R* above) under the enabled
+/// `kind`: a SITE of the innermost diagram frame. `Err` outside every diagram
+/// ledger of this thread: a surrogate record never opens an implicit ledger
+/// (it would be counted nowhere the beta's run reads).
+pub(super) fn k5_site(kind: Kind, graph: &str) -> Result<()> {
+    if !in_diagram() {
+        return Err(eyre!(
+            "UNCONTRACTED kind={} graph={graph}: an insertion surrogate evaluated outside every diagram ledger of this thread (DiagramLedger::open): its records would be counted nowhere",
+            kind.as_str()
+        ));
+    }
+    with_counts(kind, |counts| counts.sites += 1);
+    Ok(())
+}
+
+/// Whether this thread is inside a diagram ledger (tests of the K5 hooks).
+#[cfg(test)]
+pub(crate) fn in_diagram_ledger() -> bool {
+    in_diagram()
+}
+
+/// The run's records of one kind, summed over the closed diagram ledgers.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Totals {
+    pub diagrams: usize,
+    pub sites: usize,
+    pub expected: usize,
+    pub compared: usize,
+    pub hit_compared: usize,
+    pub equal: usize,
+    pub declined: usize,
+    pub error: usize,
+}
+
+#[cfg(not(test))]
+static TOTALS: LazyLock<std::sync::Mutex<BTreeMap<Kind, Totals>>> =
+    LazyLock::new(|| std::sync::Mutex::new(BTreeMap::new()));
+
+#[cfg(test)]
+thread_local! {
+    // per test thread: the tests run in parallel in one process
+    static TOTALS: RefCell<BTreeMap<Kind, Totals>> = const { RefCell::new(BTreeMap::new()) };
+}
+
+fn with_totals<T>(f: impl FnOnce(&mut BTreeMap<Kind, Totals>) -> T) -> T {
+    #[cfg(not(test))]
+    {
+        let mut totals = TOTALS
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        f(&mut totals)
+    }
+    #[cfg(test)]
+    {
+        TOTALS.with(|totals| f(&mut totals.borrow_mut()))
+    }
+}
+
+fn add_to_totals(kind: Kind, counts: &Counts) {
+    let hits = counts.with_prefix("hit:");
+    with_totals(|totals| {
+        let total = totals.entry(kind).or_default();
+        total.diagrams += 1;
+        total.sites += counts.sites;
+        total.expected += counts.expected;
+        total.compared += counts.compared();
+        total.hit_compared += hits.get("compared").copied().unwrap_or(0);
+        total.equal += counts.equal;
+        total.declined += counts.with_prefix("declined:").values().sum::<usize>();
+        total.error += counts.with_prefix("error:").values().sum::<usize>();
+    });
+}
+
+/// The `UNCONTRACTED_KIND_TOTAL` line of `kind`: the run's totals so far
+/// (the last line of a run is its per-kind comparison counter).
+fn total_line(kind: Kind) -> String {
+    let total = with_totals(|totals| totals.get(&kind).copied().unwrap_or_default());
+    format!(
+        "UNCONTRACTED_KIND_TOTAL mode={} kind={} diagrams={} sites={} expected={} compared={} hit_compared={} equal={} declined={} error={}",
+        uncontracted::switch().mode.as_str(),
+        kind.as_str(),
+        total.diagrams,
+        total.sites,
+        total.expected,
+        total.compared,
+        total.hit_compared,
+        total.equal,
+        total.declined,
+        total.error
+    )
+}
+
+/// The run's coverage per enabled kind (for the beta's run end,
+/// `UNCONTRACTED_RUN`): one `UNCONTRACTED_COVERAGE kind=<k> compared=
+/// hit_compared= declined= ...` line per enabled kind. `Err` in check mode
+/// when an enabled kind compared nothing over the whole run (compared +
+/// hit_compared = 0: a check that compared nothing), or when a kind's equal
+/// count is not its compared count; `Ok` (the lines) otherwise and off.
+pub fn run_coverage() -> Result<Vec<String>> {
+    let switch = uncontracted::switch();
+    if switch.mode == Mode::Off {
+        return Ok(Vec::new());
+    }
+    let mut lines = Vec::new();
+    let mut failures = Vec::new();
+    for kind in switch.enabled_kinds() {
+        let total = with_totals(|totals| totals.get(&kind).copied().unwrap_or_default());
+        let outcome = if switch.mode != Mode::Check {
+            "ok"
+        } else if total.compared + total.hit_compared == 0 {
+            "zero_comparisons"
+        } else if total.equal != total.compared {
+            "unequal"
+        } else {
+            "ok"
+        };
+        if outcome != "ok" {
+            failures.push(format!("kind={}: {outcome}", kind.as_str()));
+        }
+        lines.push(format!(
+            "UNCONTRACTED_COVERAGE mode={} kind={} compared={} hit_compared={} declined={} equal={} expected={} sites={} diagrams={} error={} outcome={outcome}",
+            switch.mode.as_str(),
+            kind.as_str(),
+            total.compared,
+            total.hit_compared,
+            total.declined,
+            total.equal,
+            total.expected,
+            total.sites,
+            total.diagrams,
+            total.error
+        ));
+    }
+    for line in &lines {
+        eprintln!("{line}");
+    }
+    if failures.is_empty() {
+        Ok(lines)
+    } else {
+        Err(eyre!(
+            "UNCONTRACTED_COVERAGE mode={}: the run fails its coverage: {}",
+            switch.mode.as_str(),
+            failures.join("; ")
+        ))
+    }
+}
+
+/// Tests: forget this thread's run totals.
+#[cfg(test)]
+pub(crate) fn reset_totals() {
+    with_totals(BTreeMap::clear);
+}
+
+/// Tests: one check-mode attempt of `kind` that was compared and NOT equal
+/// (the verdict's equal == compared rule; the hook itself fails such a
+/// diagram at once).
+#[cfg(test)]
+pub(crate) fn record_compared_unequal(kind: Kind) {
+    with_counts(kind, |counts| {
+        counts.attempted += 1;
+        counts.uncontracted += 1;
+        counts.add("compared", 1);
+    });
 }
