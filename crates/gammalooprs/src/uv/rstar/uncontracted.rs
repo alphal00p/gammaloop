@@ -131,6 +131,10 @@ use super::{
     expression::RStarIntegrand, top_mass::TopMassTerms,
 };
 
+/// U7c: the K5 insertion-surrogate records (kind `surrogate`).
+#[path = "uncontracted_k5.rs"]
+pub(super) mod k5;
+
 // ---------------------------------------------------------------------------
 // The switch
 // ---------------------------------------------------------------------------
@@ -171,7 +175,8 @@ pub(crate) enum Kind {
     IrHard,
     /// Inside the R* of a decorated IR quotient (`d`; inert here).
     Quotient,
-    /// Inside the R* of an insertion surrogate (`e`; inert here).
+    /// K5 (U7c): an insertion surrogate's records, its direct integral at
+    /// <= 4 loops and the remainders of its own R* above (`e`; [`k5`]).
     Surrogate,
     /// Insertion normalisations (`f`; inert here).
     Insertion,
@@ -218,7 +223,17 @@ impl Kind {
     /// Whether this build emits records of this kind (the others are
     /// accepted and inert).
     pub(crate) fn implemented(self) -> bool {
-        matches!(self, Self::Root | Self::Child | Self::IrHard)
+        matches!(
+            self,
+            Self::Root | Self::Child | Self::IrHard | Self::Surrogate
+        )
+    }
+
+    /// Whether `on` / `check` without a kind list enables this kind: the
+    /// implemented kinds except `surrogate` (U7c), which must be listed
+    /// (U8 decides the defaults).
+    pub(crate) fn in_default(self) -> bool {
+        self.implemented() && self != Self::Surrogate
     }
 
     fn bit(self) -> u8 {
@@ -275,7 +290,7 @@ impl Switch {
         let listed = match kinds {
             None => Kind::ALL
                 .into_iter()
-                .filter(|kind| kind.implemented())
+                .filter(|kind| kind.in_default())
                 .fold(0, |bits, kind| bits | kind.bit()),
             Some(list) => {
                 let mut bits = 0;
@@ -469,7 +484,11 @@ pub(crate) fn cache_key_suffix() -> Option<String> {
     let mut suffix = switch.cache_key_suffix();
     // only when a fill can hold records at all (a cacheable kind enabled):
     // without one no lookup counts a hit, and the key stays today's
-    if switch.mode != Mode::Off && (switch.enabled(Kind::Child) || switch.enabled(Kind::IrHard)) {
+    if switch.mode != Mode::Off
+        && (switch.enabled(Kind::Child)
+            || switch.enabled(Kind::IrHard)
+            || switch.enabled(Kind::Surrogate))
+    {
         let kind = classify(true);
         if !switch.enabled(kind) {
             suffix
@@ -716,6 +735,10 @@ pub(super) const DESIGNED_LOCAL: &[&str] = &[
     "insertions_share_a_vertex",
     "no_closing_line",
     "one_loop_tree_cut",
+    // U7c (K5): a K3-shaped IR hard term inside an insertion surrogate's R*
+    // (no verified fixture; Astra #10 keeps such terms out of `ir-hard`):
+    // declined before its record is built, today's path takes it
+    "surrogate_ir_hard",
 ];
 
 /// The designed codes caused by a SETTING of the run or of the calling
@@ -2786,6 +2809,7 @@ fn build(
         }
         Kind::Child => child_frame(site, remainder)?,
         Kind::IrHard => ir_hard_frame(site, remainder)?,
+        Kind::Surrogate => k5::frame(site, remainder)?,
         other => return Err(Decline::new("kind_not_built", other.as_str())),
     };
     let externals = match &frame {
@@ -3193,6 +3217,21 @@ fn build(
             ));
         }
     }
+    // K5 (U7c): coefficient vertices -> `ins:`, bubble lines, cycles
+    let k5_cycles = if kind == Kind::Surrogate {
+        Some(k5::finish(
+            graph,
+            &table,
+            region,
+            &merge,
+            &nodes,
+            &mut edges,
+            &mut vertices,
+            &mut insertions,
+        )?)
+    } else {
+        None
+    };
     // ports, projector, prefactor
     let factor_atoms = edges
         .iter()
@@ -3247,6 +3286,7 @@ fn build(
         closed_cycles(&table, &internal, LineKind::Fermion),
         closed_cycles(&table, &internal, LineKind::Ghost),
     );
+    let original_cycles = k5_cycles.unwrap_or(original_cycles);
     let degree = match &frame {
         Frame::IrHard { degree, .. } => u32::try_from(*degree)
             .map_err(|_| Decline::new("taylor", format!("hard Taylor order {degree}")))?,
