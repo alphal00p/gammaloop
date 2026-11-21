@@ -601,27 +601,39 @@ impl FactorizedNumerator {
                 "every line is massive: not a closure (after series merging the closing line is the only line)",
             ));
         }
-        // MASSES BY POSITION: the reference mass only as the closure mass and
-        // the closing edge's mass, the auxiliary mass only as the taylor
-        // mass (the prefactor's and the insertions' own rules ran above)
+        // MASSES BY POSITION (identified by their ROLE: the symbols standing
+        // in the closure line and the taylor line): the reference mass only
+        // as the closure mass and the closing edge's mass, the auxiliary mass
+        // only as the taylor mass; in every other field (the prefactor fields
+        // and the insertions included: their own rules ran above)
         for (field, atom) in self.record_atoms() {
-            if field.ends_with(" mass") || field.starts_with("insertion ") {
+            if field.ends_with(" mass") {
                 continue;
             }
-            let prefactor = field.starts_with("prefactor_");
-            if !prefactor && contains_atom(atom.as_view(), spec.mass_squared.as_view()) {
-                return Err(refuse(format!(
+            let insertion = field
+                .strip_prefix("insertion ")
+                .and_then(|rest| rest.split(' ').next())
+                .and_then(|v| v.parse::<usize>().ok());
+            let detail = if contains_atom(atom.as_view(), spec.mass_squared.as_view()) {
+                Some(format!(
                     "the reference mass {} in {field}: it may occur only as the closure mass and as the closing edge's mass",
                     spec.mass_squared
-                )));
-            }
-            if spec.auxiliary_mass_squared != spec.mass_squared
+                ))
+            } else if spec.auxiliary_mass_squared != spec.mass_squared
                 && contains_atom(atom.as_view(), spec.auxiliary_mass_squared.as_view())
             {
-                return Err(refuse(format!(
+                Some(format!(
                     "the auxiliary mass {} in {field}: it may occur only as the taylor line's mass",
                     spec.auxiliary_mass_squared
-                )));
+                ))
+            } else {
+                None
+            };
+            if let Some(detail) = detail {
+                return Err(match insertion {
+                    Some(vertex) => FactorizedError::Insertion { vertex, detail },
+                    None => refuse(detail),
+                });
             }
         }
         Ok(())

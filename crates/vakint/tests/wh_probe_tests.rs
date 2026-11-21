@@ -3181,6 +3181,50 @@ fn non_ascii_names_only_the_settings_and_symbolica_constants() {
     }
 }
 
+/// The masses by ROLE: an auxiliary mass with another name than the
+/// producer's (`probe::maux`) inside an insertion coefficient, and the
+/// reference mass in prefactor_overall of a record without original_cycles:
+/// refused; the literal 0 stays the massless lines' mass (accepted), a mass
+/// written as a zero polynomial is refused.
+#[test]
+fn the_masses_are_identified_by_their_role() {
+    let base = record("wh-k2-child-ins");
+    let mut v = base.clone();
+    if let FactorizedKind::Closure(spec) = &mut v.kind {
+        spec.auxiliary_mass_squared = atom("probe::maux");
+    }
+    v.validate().unwrap();
+    let mut bad = v.clone();
+    bad.insertions[0].coefficient = &bad.insertions[0].coefficient * atom("probe::maux");
+    match bad.validate() {
+        Err(FactorizedError::Insertion { detail, .. }) => assert!(
+            detail.starts_with(&format!(
+                "the auxiliary mass {} in insertion ",
+                atom("probe::maux")
+            )),
+            "{detail}"
+        ),
+        other => panic!("{other:?}"),
+    }
+    // R in prefactor_overall (no original_cycles: overall is free)
+    let mut r = record("wh-k1-root");
+    if let FactorizedKind::Closure(spec) = &mut r.kind {
+        spec.original_cycles = None;
+    }
+    r.prefactor.loop_sign = -1;
+    r.validate().unwrap();
+    let mut bad = r.clone();
+    bad.prefactor.overall = &bad.prefactor.overall * atom(R);
+    closure_refusal(
+        &bad,
+        &format!("the reference mass {} in prefactor_overall: ", atom(R)),
+        "R in overall",
+    );
+    // the literal 0 on massless lines: every real record has it (accepted)
+    assert!(base.edges.iter().any(|e| e.mass_squared.is_zero()));
+    base.validate().unwrap();
+}
+
 /// MARKED three-loop massive vacuum values through the vacuum entry in
 /// Symbolic and Numerical mode at 3 and 6 terms: the basketball (four lines
 /// of one mass between two vertices) and the all-massive mercedes (the
