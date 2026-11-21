@@ -1385,7 +1385,7 @@ fn a_non_laurent_dependence_on_epsilon_is_refused_at_validation() {
 /// vertex: it could wrap) is refused (MomentumBasis); a tensor power
 /// above 2 of a slot-carrying factor (Q(3, ..)^(10^12): the rules copied its
 /// slots n times before checking them) is refused at once as the
-/// over-contraction it is; the settings' number of terms outside 1..=128 is
+/// over-contraction it is; the settings' number of terms outside 1..=32 is
 /// refused by the entries' input check (Graph, "the depth .. is out of
 /// range"), 2 accepted.
 #[test]
@@ -1425,7 +1425,7 @@ fn a_marked_value_refuses_integers_out_of_range() {
         ),
         "a huge tensor power"
     );
-    for terms in [-1i64, 0, 129] {
+    for terms in [-1i64, 0, 33] {
         let mut settings = settings(2);
         settings.number_of_terms_in_epsilon_expansion = terms;
         match super::evaluate::vakint_input(&settings, &good, &Atom::num(1)).unwrap_err() {

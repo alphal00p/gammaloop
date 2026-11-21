@@ -5028,23 +5028,29 @@ fn retain_values_are_exact_products() {
     expanded_equals_symbolic(&ratio, "the K2 coefficient eps^-1 (1+eps)^-1");
 }
 
-/// The evaluation order [Forcer(Retain), RustRed(Symbolic)] at the closure
-/// entry: per record, the value is one mode's (the Symbolic or the Retain
-/// value). Printed for the K1 root, the K1 root with an ε^-1 insertion and
-/// the K2 record.
+/// An evaluation order whose RustRed and Forcer methods MIX master modes is
+/// refused for a marked value ("the evaluation methods mix master modes: ",
+/// `Graph`) at the closure, direct and vacuum entries: the closure entry
+/// decided from the first method that masters are retained while a two-loop
+/// record ran RustRed in Symbolic (the Symbolic value plus an untruncated
+/// order). Two methods with ONE mode are accepted and give that mode's value:
+/// [Forcer(Retain), RustRed(Retain)] the Retain value, [Forcer(Symbolic),
+/// RustRed(Symbolic)] the Symbolic value (the K1 root, the K1 root with an
+/// ε^-1 insertion, the K2 record). The producer's settings (RustRed and
+/// Forcer both Symbolic; AlphaLoop / MATAD / FMFT carry no mode) and vakint's
+/// default order (RustRed and Forcer both Numerical) are not mixed.
 #[test]
-#[ignore = "expected: under the evaluation order [Forcer(Retain), RustRed(Symbolic)] the closure value of a two-loop record with an eps^-1 insertion is the Symbolic or the Retain value; on 08db06bcf it is the Symbolic value with one more order (eps^0) than the record's depth"]
-fn a_mixed_evaluation_order_gives_one_modes_value() {
-    let retain = site(RustRedMasterMode::Retain);
-    let mut mixed = retain.clone();
-    mixed.evaluation_order = EvaluationOrder(vec![
-        EvaluationMethod::Forcer(vakint::ForcerOptions {
-            master_mode: RustRedMasterMode::Retain,
-        }),
-        EvaluationMethod::RustRed(RustRedEvaluationOptions {
-            master_mode: RustRedMasterMode::Symbolic,
-        }),
-    ]);
+fn a_mixed_evaluation_order_is_refused_and_one_mode_is_that_modes_value() {
+    let order = |a: RustRedMasterMode, b: RustRedMasterMode| {
+        EvaluationOrder(vec![
+            EvaluationMethod::Forcer(vakint::ForcerOptions { master_mode: a }),
+            EvaluationMethod::RustRed(RustRedEvaluationOptions { master_mode: b }),
+        ])
+    };
+    let with_order = |base: VakintSettings, o: EvaluationOrder| VakintSettings {
+        evaluation_order: o,
+        ..base
+    };
     let k1 = record("wh-k1-root");
     let vertex1 = k1
         .vertices
@@ -5053,35 +5059,60 @@ fn a_mixed_evaluation_order_gives_one_modes_value() {
         .unwrap()
         .id;
     let k1_ins = with_insertion_at(&k1, vertex1, &format!("{EPS}^-1"));
-    let mut wrong = Vec::new();
-    for (name, v) in [
+    let records = [
         ("k1-root", k1.clone()),
         ("k1-root with one eps^-1 insertion", k1_ins),
         ("k2-child-ins", record("wh-k2-child-ins")),
+    ];
+    let prefix = "the evaluation methods mix master modes: ";
+    for (a, b) in [
+        (RustRedMasterMode::Retain, RustRedMasterMode::Symbolic),
+        (RustRedMasterMode::Symbolic, RustRedMasterMode::Retain),
+        (RustRedMasterMode::Numerical, RustRedMasterMode::Symbolic),
     ] {
-        let got = closure(&v, &mixed, &v.prefactor.total());
-        let sym = value(&v, &symbolic());
-        let ret = closure(&v, &retain, &v.prefactor.total()).unwrap().value;
-        let class = match &got {
-            Err(e) => format!("REFUSED {e}"),
-            Ok(g) if (&g.value - &sym).expand().is_zero() => "the Symbolic value".into(),
-            Ok(g) if (&g.value - &ret).expand().is_zero() => "the Retain value".into(),
-            Ok(g) => {
-                let top = top_order(&sym);
-                let orders = wh_fixtures::epsilon_coefficients(&g.value, eps())
-                    .keys()
-                    .copied()
-                    .collect::<Vec<_>>();
-                let through = (&truncate(&g.value, top) - &sym).expand().is_zero();
-                wrong.push(name);
-                format!(
-                    "NEITHER: orders {orders:?} (Symbolic top {top}); truncated at eps^{top} equal to Symbolic: {through}"
-                )
+        let mixed = with_order(site(RustRedMasterMode::Symbolic), order(a, b));
+        for (name, v) in &records {
+            match closure(v, &mixed, &v.prefactor.total()) {
+                Err(e) => assert!(e.to_string().contains(prefix), "{name} [{a:?}, {b:?}]: {e}"),
+                Ok(_) => panic!("{name} [{a:?}, {b:?}]: accepted"),
             }
+        }
+        // the direct entry and the vacuum entry too
+        let direct = record("wh-k5-direct");
+        let terms = VakintSettings {
+            number_of_terms_in_epsilon_expansion: direct.record.as_ref().unwrap().depth.unwrap()
+                as i64,
+            ..mixed.clone()
         };
-        eprintln!("CONTRACT CASE [Forcer(Retain), RustRed(Symbolic)] {name}: {class}");
+        match evaluate_factorized_ports(&engine(), &terms, &direct, &direct.prefactor.total()) {
+            Err(e) => assert!(e.to_string().contains(prefix), "direct: {e}"),
+            Ok(_) => panic!("direct [{a:?}, {b:?}]: accepted"),
+        }
+        let vacuum = marked_vacuum_sunrise("caller::m2", "1");
+        match vakint::p_integral::factorized::evaluate_factorized_vacuum(
+            &engine(),
+            &mixed,
+            &vacuum,
+            &Atom::num(1),
+        ) {
+            Err(e) => assert!(e.to_string().contains(prefix), "vacuum: {e}"),
+            Ok(_) => panic!("vacuum [{a:?}, {b:?}]: accepted"),
+        }
     }
-    assert!(wrong.is_empty(), "neither mode's value: {wrong:?}");
+    for mode in [RustRedMasterMode::Retain, RustRedMasterMode::Symbolic] {
+        let one = site(mode);
+        let two = with_order(site(mode), order(mode, mode));
+        for (name, v) in &records {
+            let reference = closure(v, &one, &v.prefactor.total()).unwrap().value;
+            let got = closure(v, &two, &v.prefactor.total())
+                .unwrap_or_else(|e| panic!("{name} [{mode:?} x2]: {e}"))
+                .value;
+            assert!(
+                (&got - &reference).expand().is_zero(),
+                "{name} [{mode:?} x2]: another value"
+            );
+        }
+    }
 }
 
 /// Zero denominators and singular forms in every field, each with the rule
@@ -5297,8 +5328,8 @@ fn zero_denominators_and_singular_forms_in_every_field() {
 
 /// Depth and integer bounds. Depth = L (2 for the K1 root) with ONE ε^-1
 /// insertion: a value equal to ε^-1 times the depth-3 value truncated at the
-/// depth-2 top order. Depth 128 accepted at validation, 129 refused; depth
-/// 127 with the insertions' raise 2 refused by the closure entry before any
+/// depth-2 top order. Depth 32 accepted at validation, 33 refused; depth
+/// 31 with the insertions' raise 2 refused by the closure entry before any
 /// reduction. Settings number_of_terms = 0 on an UNMARKED v1 record through
 /// `evaluate_factorized`: no marked rule applies (printed; the v1 path).
 /// A closure vertex id 2^63; two massless lines of power 2^62.
@@ -5330,25 +5361,25 @@ fn depth_rules_and_integer_bounds() {
         "depth = L with an eps^-1 insertion",
     );
     let mut v = k1.clone();
-    set_depth(&mut v, 128);
+    set_depth(&mut v, 32);
     v.validate().unwrap();
-    set_depth(&mut v, 129);
+    set_depth(&mut v, 33);
     let r = v.validate();
-    eprintln!("CONTRACT CASE depth 129: {}", outcome(&r));
-    assert!(refusal_detail(&r.unwrap_err()).starts_with("the depth 129 is out of range"));
+    eprintln!("CONTRACT CASE depth 33: {}", outcome(&r));
+    assert!(refusal_detail(&r.unwrap_err()).starts_with("the depth 33 is out of range"));
     let mut v = with_insertion_at(&k2, 2, &format!("{EPS}^-1"));
-    set_depth(&mut v, 127);
+    set_depth(&mut v, 31);
     v.validate().unwrap();
     let started = std::time::Instant::now();
     let r = closure(&v, &symbolic(), &v.prefactor.total());
     eprintln!(
-        "CONTRACT CASE depth 127 + raise 2: {} in {:.2}s",
+        "CONTRACT CASE depth 31 + raise 2: {} in {:.2}s",
         outcome(&r),
         started.elapsed().as_secs_f64()
     );
     assert!(
         refusal_detail(&r.unwrap_err())
-            .starts_with("the depth 127 is out of range: with the insertions' raise 2")
+            .starts_with("the depth 31 is out of range: with the insertions' raise 2")
     );
     init();
     let v1 = FactorizedNumerator::from_text(&fixture_text("l1-gluon-bubble.txt")).unwrap();
@@ -5406,17 +5437,21 @@ fn depth_rules_and_integer_bounds() {
     );
 }
 
-/// Does a 128-term evaluation FINISH on a small record (`VAKINT_TEST_DEPTH128`:
-/// `k2`, the one-loop K2 at depth 127 + its insertion's raise 1; `k1`, the
-/// two-loop K1 root at depth 128)? Time printed; the caller runs it under a
-/// cap of 10 minutes and 15 G.
+/// A MEASUREMENT of the cost of a deep evaluation (not a check: the depth cap
+/// of a marked value, 32, is a sanity bound, not a promise that an evaluation
+/// at the cap is fast). Measured: the one-loop K2 at 16 terms (depth 15 + its
+/// insertion's raise 1) takes 2.2 s and its value has 2.96 M characters; at
+/// 32 and 64 terms it did not finish in 200 s, at 128 not in 600 s.
+/// `VAKINT_TEST_DEPTH128`: `k2` (default) or `k1` (the two-loop K1 root);
+/// `VAKINT_TEST_DEPTH128_DEPTH`: the depth (default 15 for k2, 16 for k1).
+/// Run explicitly under a time and memory cap.
 #[test]
-#[ignore = "costly: a 128-term evaluation (run explicitly, under a time and memory cap)"]
-fn a_128_term_evaluation_finishes() {
+#[ignore = "a measurement: a deep evaluation (run explicitly, under a time and memory cap)"]
+fn the_cost_of_a_deep_evaluation() {
     let which = std::env::var("VAKINT_TEST_DEPTH128").unwrap_or_else(|_| "k2".into());
     let (mut v, depth) = match which.as_str() {
-        "k1" => (record("wh-k1-root"), 128),
-        _ => (record("wh-k2-child-ins"), 127),
+        "k1" => (record("wh-k1-root"), 16),
+        _ => (record("wh-k2-child-ins"), 15),
     };
     // `VAKINT_TEST_DEPTH128_DEPTH`: another depth, to see how the cost grows
     let depth = std::env::var("VAKINT_TEST_DEPTH128_DEPTH")
@@ -5431,7 +5466,7 @@ fn a_128_term_evaluation_finishes() {
         Ok(r) => {
             let orders = wh_fixtures::epsilon_coefficients(&r.value, eps());
             eprintln!(
-                "CONTRACT CASE 128 terms, {which} at depth {depth}: FINISHED in {seconds:.1}s, {} orders {:?}..{:?}, {} chars",
+                "CONTRACT CASE deep evaluation, {which} at depth {depth}: FINISHED in {seconds:.1}s, {} orders {:?}..{:?}, {} chars",
                 orders.len(),
                 orders.keys().next(),
                 orders.keys().last(),
@@ -5439,7 +5474,9 @@ fn a_128_term_evaluation_finishes() {
             );
         }
         Err(e) => {
-            eprintln!("CONTRACT CASE 128 terms, {which} at depth {depth}: {e} in {seconds:.1}s")
+            eprintln!(
+                "CONTRACT CASE deep evaluation, {which} at depth {depth}: {e} in {seconds:.1}s"
+            )
         }
     }
     got.unwrap();

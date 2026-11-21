@@ -400,16 +400,17 @@ fn the_beta_k1_l5_51_records_with_insertions_equal_their_values() {
 }
 
 /// The depth of a marked value is a number of ε terms between 1 and
-/// MARKED_MAX_TERMS (128) with the closure entry's insertion raise. The
+/// MARKED_MAX_TERMS (32: far above the producer's 12; its largest depth +
+/// raise is 5 + 4) with the closure entry's insertion raise. The
 /// witness, the L2-22 K1 root (vendored k1-root, depth 2) with only
 /// its depth set to usize::MAX, returned a zero double pole (the depth was
 /// cast to -1); now it is refused (Closure, "the depth .. is out of range"),
 /// by validation (text and typed records alike) and by the entry. Refused
-/// too: i64::MAX and i64::MAX + 1 as record depths, 0, and 129 (checked at
+/// too: i64::MAX and i64::MAX + 1 as record depths, 0, and 33 (checked at
 /// validation, never evaluated); the settings' number of terms (record depth
-/// none) -1, 0, i64::MIN (which overflowed in the truncation) and 129; with
-/// an insertion of pole order 1 (k2-child-ins), depth 128 (raised to 129).
-/// Accepted at validation: depth 128 (the cap). The ordinary control keeps
+/// none) -1, 0, i64::MIN (which overflowed in the truncation) and 33; with
+/// an insertion of pole order 1 (k2-child-ins), depth 32 (raised to 33).
+/// Accepted at validation: depth 32 (the cap). The ordinary control keeps
 /// both poles: k1-root at depth 2 equals its value.
 #[test]
 fn an_out_of_range_depth_is_refused() {
@@ -440,7 +441,7 @@ fn an_out_of_range_depth_is_refused() {
         )
     };
     let huge = usize::try_from(i64::MAX).unwrap();
-    for depth in [usize::MAX, huge, huge + 1, 0, 129] {
+    for depth in [usize::MAX, huge, huge + 1, 0, 33] {
         let value = with_depth(root, Some(depth));
         refused(
             value.validate().unwrap_err(),
@@ -462,10 +463,10 @@ fn an_out_of_range_depth_is_refused() {
             "record depth from text",
         );
     }
-    with_depth(root, Some(128))
+    with_depth(root, Some(32))
         .validate()
-        .expect("depth 128 is at the cap");
-    for terms in [-1i64, 0, i64::MIN, 129] {
+        .expect("depth 32 is at the cap");
+    for terms in [-1i64, 0, i64::MIN, 33] {
         let mut settings = site_settings();
         settings.number_of_terms_in_epsilon_expansion = terms;
         refused(
@@ -475,9 +476,9 @@ fn an_out_of_range_depth_is_refused() {
         );
     }
     refused(
-        entry(&with_depth(k2, Some(128)), &site_settings()).unwrap_err(),
-        "128",
-        "depth 128 raised by the insertion's pole order 1",
+        entry(&with_depth(k2, Some(32)), &site_settings()).unwrap_err(),
+        "32",
+        "depth 32 raised by the insertion's pole order 1",
     );
     compare(
         &vakint,
@@ -1221,9 +1222,11 @@ fn signed_extremes_are_refused_not_a_panic() {
     }
 }
 
-/// The BOUNDS at the closure, direct and ports entries, typed and through
-/// the text form (the vacuum entry: vacuum::tests): the real K2 child
-/// (closure) and the real direct L3-185 record (direct, ports) with a depth of
+/// The BOUNDS at the closure, direct and ports entries and at the public
+/// input functions `vakint_input` and `contract_to_vakint_dots`, typed and
+/// through the text form (the vacuum entry and its input functions:
+/// vacuum::tests): the real K2 child (closure) and the real direct L3-185
+/// record (the others) with a depth of
 /// usize::MAX, an edge or a vertex id of i64::MAX + 1, an edge power or a
 /// momentum coefficient of i64::MIN, 1/P(x) in a weight or a vertex factor:
 /// each refused (no panic) with the bound's text.
@@ -1333,8 +1336,14 @@ fn the_bounds_reach_every_entry_typed_and_through_text() {
         ]
     };
     let settings = site_settings();
-    let entries: Vec<(&str, &FactorizedNumerator)> =
-        vec![("closure", &k2), ("direct", &direct), ("ports", &direct)];
+    // the public input functions and builders are entries of their own
+    let entries: Vec<(&str, &FactorizedNumerator)> = vec![
+        ("closure", &k2),
+        ("direct", &direct),
+        ("ports", &direct),
+        ("vakint_input", &direct),
+        ("contract_to_vakint_dots", &direct),
+    ];
     for (entry, base) in entries {
         base.validate().unwrap();
         for (what, change, text) in cases() {
@@ -1352,6 +1361,8 @@ fn the_bounds_reach_every_entry_typed_and_through_text() {
                     "direct" => {
                         evaluate_factorized(&vakint, &settings, v, &v.prefactor.total()).map(|_| ())
                     }
+                    "vakint_input" => vakint_input(&settings, v, &v.prefactor.total()).map(|_| ()),
+                    "contract_to_vakint_dots" => contract_to_vakint_dots(v).map(|_| ()),
                     _ => evaluate_factorized_ports(&vakint, &settings, v, &v.prefactor.total())
                         .map(|_| ()),
                 }
@@ -1563,4 +1574,64 @@ fn an_unknown_schema_keeps_the_base_text() {
 /// `text` parsed (vk_parse! takes no literal here: the crate's `Result` alias).
 fn parsed(text: &str) -> Atom {
     vk_parse!(text).unwrap()
+}
+
+/// INCONSISTENT COMBINATIONS: a closure value that also carries a direct
+/// record (typed only; the text form cannot write both) is refused at
+/// validation ("a closure value carries a direct record"); its record's
+/// weights are walked anyway (record_atoms lists both weight sources).
+#[test]
+fn a_closure_value_with_a_direct_record_is_refused() {
+    let mut v = FactorizedNumerator::from_text(include_str!("fixtures/wh-k2-child-ins.record.txt"))
+        .unwrap();
+    v.record = Some(DirectRecord {
+        original_cycles: None,
+        depth: None,
+        weights: vec![("extra".into(), false, parsed("gammalooprs::ε^-1"))],
+    });
+    match v.validate() {
+        Err(FactorizedError::Closure { detail }) => {
+            assert!(
+                detail.starts_with("a closure value carries a direct record"),
+                "{detail}"
+            )
+        }
+        other => panic!("expected the Closure refusal, got {other:?}"),
+    }
+    assert!(
+        v.record_atoms()
+            .iter()
+            .any(|(field, _)| field == "weight extra")
+    );
+    assert!(
+        v.record_atoms_mut()
+            .iter()
+            .any(|(field, _)| field == "weight extra")
+    );
+}
+
+/// The producer's and vakint's evaluation orders are not mixed: the R*
+/// sites' settings (RustRed in Symbolic), vakint's default order (RustRed
+/// and Forcer both Numerical, then methods without a master mode) and the
+/// producer's mapping (rustred and forcer both Symbolic, AlphaLoop / MATAD /
+/// FMFT without a mode) pass the master-mode rule.
+#[test]
+fn the_producers_and_the_default_orders_have_one_master_mode() {
+    check_master_modes(&site_settings()).unwrap();
+    check_master_modes(&VakintSettings::default()).unwrap();
+    let producer = VakintSettings {
+        evaluation_order: crate::EvaluationOrder(vec![
+            crate::EvaluationMethod::AlphaLoop(Default::default()),
+            crate::EvaluationMethod::MATAD(Default::default()),
+            crate::EvaluationMethod::FMFT(Default::default()),
+            crate::EvaluationMethod::RustRed(RustRedEvaluationOptions {
+                master_mode: RustRedMasterMode::Symbolic,
+            }),
+            crate::EvaluationMethod::Forcer(crate::ForcerOptions {
+                master_mode: RustRedMasterMode::Symbolic,
+            }),
+        ]),
+        ..site_settings()
+    };
+    check_master_modes(&producer).unwrap();
 }

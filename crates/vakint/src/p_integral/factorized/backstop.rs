@@ -100,7 +100,7 @@ const INTERNAL_EXACT: [&str; 43] = [
 
 /// Families of internal names made with format strings: a prefix and a
 /// suffix around the formatted part (the code's pattern in the comment).
-const INTERNAL_FAMILIES: [(&str, &str); 13] = [
+const INTERNAL_FAMILIES: [(&str, &str); 12] = [
     ("closure_tensor_", ""),                // closure_tensor_{n}
     ("graph_entry_branch_", ""),            // graph_entry_branch_{i}
     ("input_coefficient_placeholder_", ""), // input_coefficient_placeholder_{index}
@@ -108,7 +108,6 @@ const INTERNAL_FAMILIES: [(&str, &str); 13] = [
     ("momentum_match_source_", ""),         // momentum_match_source_{axis}
     ("vakint_master_transport_", ""),       // vakint_master_transport_{axis}
     ("rustred_family_", ""),                // rustred_family_{:x}
-    ("I5L_", ""),                           // I5L_{}
     ("krotated", ""),                       // krotated{}
     ("z", ""),                              // z{n} (with digits only, see internal)
     ("k", ""),                              // k{} (with digits only, see internal)
@@ -141,7 +140,7 @@ const NOTATION_HEADS: [&str; 12] = [
 /// internal. Test code: the check itself allows every name that is not
 /// internal.
 #[cfg(test)]
-const REVIEWED_OUTPUT: [&str; 195] = [
+const REVIEWED_OUTPUT: [&str; 196] = [
     "D6",
     "EulerGamma",
     "GPLImag",
@@ -330,6 +329,8 @@ const REVIEWED_OUTPUT: [&str; 195] = [
     "I4L_FG",
     "I4L_H",
     "I4L_X",
+    // the five-loop topology heads I5L_{sector} (the format placeholder filled by a digit)
+    "I5L_1",
     // alphaLoop master constants (kept when masters are not substituted)
     "MASTER2m22EP",
     "MASTER3m001111FIN",

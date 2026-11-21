@@ -4,6 +4,7 @@ refusal	Closure	<> records and <> prefactors
 refusal	Closure	<>: not a closure record (kind direct: evaluate_factorized / evaluate_factorized_vacuum)
 refusal	Closure	Taylor degree <> above <>
 refusal	Closure	a closure record has at least one loop (a zero-loop term, e.g. an inserted counterterm alone, stays with the caller)
+refusal	Closure	a closure value carries a direct record (record must be None: a closure's provenance is its ClosureSpec)
 refusal	Closure	a flavour symbol in the record (n_f stays with the caller)
 refusal	Closure	a pre-expanded sector (taylor none) has no auxiliary mass: it must equal the closing mass
 refusal	Closure	closing edge <> does not exist
@@ -112,6 +113,7 @@ refusal	Graph	edges are not sorted by id
 refusal	Graph	half-edge <> occurs twice
 refusal	Graph	reserved symbol <> in <>: the settings' epsilon is <>, so vakint's epsilon would be a constant here (write the settings' epsilon)
 refusal	Graph	the depth <> of the record differs from the settings' number of terms <> (they must be equal)
+refusal	Graph	the evaluation methods mix master modes: <> (a marked value needs one mode for every RustRed and Forcer method)
 refusal	Graph	the label contains a TAB or a newline
 refusal	Graph	the record and its insertions carry <> fermion / <> ghost cycles, more than original_cycles fermion=<> ghost=<>
 refusal	Graph	vertex <>: bad rule name

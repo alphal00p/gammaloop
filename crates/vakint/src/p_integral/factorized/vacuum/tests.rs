@@ -1392,9 +1392,57 @@ fn the_bounds_reach_the_vacuum_entry_typed_and_through_text() {
             "a denominator vanishes identically",
         ),
     ];
+    // an EXTERNAL LEG of power 2^31 + 1 (the momenta get the external
+    // column): the bound covers every edge, refused before any other rule
+    {
+        let mut v = base.clone();
+        for e in &mut v.edges {
+            e.momentum.push(0);
+        }
+        let mut leg = v.edges[0].clone();
+        leg.id = 4;
+        leg.target = super::super::Endpoint::External;
+        leg.target_hedge = None;
+        leg.momentum = vec![0, 0, 1];
+        leg.power = (1 << 31) + 1;
+        v.edges.push(leg);
+        v.external_edges = vec![Some(4)];
+        match evaluate_factorized_vacuum(&vakint, &settings, &v, &Atom::num(1)) {
+            Err(e) => assert!(e.to_string().contains("power"), "external leg: {e}"),
+            Ok(_) => panic!("external leg of power 2^31 + 1: accepted"),
+        }
+    }
     for (what, change, text) in &cases {
         let mut v = base.clone();
         change(&mut v);
+        // the public vacuum input functions and builders: refused too
+        for (function, result) in [
+            (
+                "vakint_vacuum_input",
+                vakint_vacuum_input(&settings, &v, &Atom::num(1)).map(|_| ()),
+            ),
+            (
+                "vakint_vacuum_input_streamed",
+                vakint_vacuum_input_streamed(&settings, &v, &Atom::num(1), Streaming::Pieces(2))
+                    .map(|_| ()),
+            ),
+            (
+                "contract_to_vakint_vacuum",
+                contract_to_vakint_vacuum(&v).map(|_| ()),
+            ),
+            (
+                "contract_to_vakint_vacuum_streamed",
+                contract_to_vakint_vacuum_streamed(&settings, &v, 2).map(|_| ()),
+            ),
+        ] {
+            // the builders take no settings and no prefactor: the shape and
+            // bound rules of validate_vacuum (the exponent and slash cases
+            // included); the input functions the entry checks too
+            match result {
+                Err(e) => assert!(e.to_string().contains(text), "{what} ({function}): {e}"),
+                Ok(()) => panic!("{what} ({function}): accepted"),
+            }
+        }
         // typed (within seconds: the shape rules run first)
         let started = std::time::Instant::now();
         let typed = evaluate_factorized_vacuum(&vakint, &settings, &v, &Atom::num(1));

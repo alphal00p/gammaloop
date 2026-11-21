@@ -1256,6 +1256,43 @@ pub(crate) fn check_marked_entry(
     Ok(())
 }
 
+/// THE MASTER MODES of the settings' evaluation order, for a marked value:
+/// every method that has one (RustRed, Forcer) must have the SAME mode. The
+/// entries decide from the first such method whether masters are retained
+/// (no truncation of the closure product, Retain's output vocabulary), while
+/// the method that actually runs depends on the record (a two-loop closure
+/// ran RustRed in Symbolic under [Forcer(Retain), RustRed(Symbolic)] and came
+/// back untruncated): a mixed order is refused instead of guessing (`Graph`,
+/// prefix `the evaluation methods mix master modes: `). Methods without a
+/// master mode (AlphaLoop, MATAD, FMFT, pySecDec) are not compared.
+pub(crate) fn check_master_modes(settings: &crate::VakintSettings) -> Result<()> {
+    let modes = settings
+        .evaluation_order
+        .0
+        .iter()
+        .filter_map(|method| match method {
+            crate::EvaluationMethod::RustRed(options) => Some(options.master_mode),
+            crate::EvaluationMethod::Forcer(options) => Some(options.master_mode),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    if modes.windows(2).any(|w| w[0] != w[1]) {
+        return Err(FactorizedError::Graph {
+            detail: format!(
+                "the evaluation methods mix master modes: {} (a marked value needs one mode for every RustRed and Forcer method)",
+                settings
+                    .evaluation_order
+                    .0
+                    .iter()
+                    .map(|m| format!("{m:?}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        });
+    }
+    Ok(())
+}
+
 /// IDENTIFIERS of a marked value at an entry (where the settings are known):
 /// a symbol or function head whose name has a character outside ASCII is
 /// refused (`Graph`, detail prefix `a non-ASCII name `) unless it is the
@@ -1271,6 +1308,7 @@ pub(crate) fn check_entry_names(
     if !is_marked(value) {
         return Ok(());
     }
+    check_master_modes(settings)?;
     let epsilon = crate::utils::vakint_macros::vk_symbol!(&settings.epsilon_symbol);
     let scale = crate::utils::vakint_macros::vk_symbol!(&settings.mu_r_sq_symbol);
     // Symbolica's non-ASCII built-ins by name (correction 3): the constants
@@ -1779,12 +1817,14 @@ pub(crate) fn check_finite_expression(
 
 /// The most ε terms a marked value may ask for: its depth (the record's
 /// `depth`, or the settings' number of terms) is at least 1 and, with the
-/// closure entry's insertion raise added, at most 128 (a depth of 64 plus the
-/// raise cap [`INSERTION_MAX_TOTAL_POLE_ORDER`]). The R* sites ask for at
-/// most 12 (six-loop K1 / K2 at depth 6, K3 with a quotient's retries). Below
-/// 1 the entries returned an empty (zero) value; far above, an evaluation that
+/// closure entry's insertion raise added, at most 32. A SANITY BOUND far above
+/// the producer's maximum (12: six-loop K1 / K2 at depth 6, K3 with a
+/// quotient's retries; the largest real depth + raise is 5 + 4), NOT a promise
+/// that an evaluation at the cap is fast: the one-loop K2 takes 2.2 s at 16
+/// terms (a 2.96 M character value) and did not finish in 200 s at 32. Below 1
+/// the entries returned an empty (zero) value; far above, an evaluation that
 /// does not end; beyond i64 the depth wrapped.
-pub(crate) const MARKED_MAX_TERMS: i64 = 128;
+pub(crate) const MARKED_MAX_TERMS: i64 = 32;
 
 /// The depth rule of a marked value ([`MARKED_MAX_TERMS`]): `depth` (any
 /// integer type, widened without loss) as the number of terms, or the detail
@@ -3016,6 +3056,14 @@ impl FactorizedNumerator {
         if !self.has_new_features() {
             return self.validate_v1();
         }
+        // a closure value's provenance is its ClosureSpec: a direct record
+        // next to it (typed only: the text form cannot write both) is an
+        // inconsistent pair
+        if matches!(self.kind, FactorizedKind::Closure(_)) && self.record.is_some() {
+            return Err(FactorizedError::Closure {
+                detail: "a closure value carries a direct record (record must be None: a closure's provenance is its ClosureSpec)".into(),
+            });
+        }
         // the record kinds of the R* interface may not name vakint's own
         // symbols (the entries' internal placeholders live there)
         if is_marked(self) {
@@ -3111,8 +3159,8 @@ impl FactorizedNumerator {
             out.push((format!("insertion {vertex} coefficient"), coefficient));
             out.push((format!("insertion {vertex} factor"), factor));
         }
-        let weights = match (kind, record) {
-            (FactorizedKind::Closure(spec), _) => {
+        let weights = match kind {
+            FactorizedKind::Closure(spec) => {
                 let ClosureSpec {
                     edge: _,
                     mass_squared,
@@ -3127,13 +3175,17 @@ impl FactorizedNumerator {
                 } = spec;
                 out.push(("closure mass".to_string(), mass_squared));
                 out.push(("taylor auxiliary mass".to_string(), auxiliary_mass_squared));
-                weights
+                Some(weights)
             }
-            (FactorizedKind::Direct, Some(record)) => &mut record.weights,
-            (FactorizedKind::Direct, None) => return out,
+            FactorizedKind::Direct => None,
         };
-        for (name, _, atom) in weights.iter_mut() {
+        for (name, _, atom) in weights.into_iter().flatten() {
             out.push((format!("weight {name}"), atom));
+        }
+        if let Some(record) = record {
+            for (name, _, atom) in record.weights.iter_mut() {
+                out.push((format!("weight {name}"), atom));
+            }
         }
         out
     }
@@ -3479,18 +3531,22 @@ impl FactorizedNumerator {
                 out.push(("taylor auxiliary mass".to_string(), auxiliary_mass_squared));
                 weights.as_slice()
             }
-            (
-                FactorizedKind::Direct,
-                Some(DirectRecord {
-                    original_cycles: _,
-                    depth: _,
-                    weights,
-                }),
-            ) => weights.as_slice(),
-            (FactorizedKind::Direct, None) => &[],
+            (FactorizedKind::Direct, _) => &[],
         };
         for (name, _, atom) in weights {
             out.push((format!("weight {name}"), atom));
+        }
+        // the direct record's weights whatever the kind (a closure value with
+        // a record is refused by validate; no atom is skipped because of it)
+        if let Some(DirectRecord {
+            original_cycles: _,
+            depth: _,
+            weights,
+        }) = record
+        {
+            for (name, _, atom) in weights {
+                out.push((format!("weight {name}"), atom));
+            }
         }
         out
     }
