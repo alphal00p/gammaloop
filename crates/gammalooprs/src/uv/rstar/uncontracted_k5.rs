@@ -50,7 +50,7 @@ use linnet::half_edge::{
     subgraph::{SuBitGraph, SubSetOps},
 };
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, AtomView, Symbol},
     function,
 };
 use vakint::{
@@ -179,20 +179,69 @@ fn with_context<T>(provenance: Arc<Provenance>, f: impl FnOnce() -> T) -> T {
     f()
 }
 
-/// The R* of a surrogate above four loops (`graph` its name): with the kind
-/// enabled, a site of the diagram's ledger and the surrogate context for its
-/// records; otherwise just `f`.
+/// The R* of a surrogate above four loops (`graph` its name; `closed`:
+/// its root is closed, [`super::super::RStarPlan::closed_pole_part`]): with
+/// the kind enabled, a site of the diagram's ledger and the surrogate context
+/// for its records; otherwise just `f`. A setting under which every
+/// surrogate root record would decline ([`settings_refusal`]) is an error
+/// here, and so is a site that adds no expected record of the kind (its
+/// records missed the hook: [`uncontracted_ledger::expected_now`]).
 pub(crate) fn scoped<T>(
     provenance: Option<&Arc<Provenance>>,
     graph: &str,
+    closed: bool,
+    uv: &UVgenerationSettings,
     f: impl FnOnce() -> Result<T>,
 ) -> Result<T> {
     if !switch().enabled(Kind::Surrogate) {
         return f();
     }
     let provenance = provenance.ok_or_else(|| missing_context(graph))?;
+    settings_refusal(graph, Some(closed), uv)?;
     uncontracted_ledger::k5_site(Kind::Surrogate, graph)?;
-    with_context(provenance.clone(), f)
+    let before = uncontracted_ledger::expected_now(Kind::Surrogate);
+    let out = with_context(provenance.clone(), f)?;
+    let after = uncontracted_ledger::expected_now(Kind::Surrogate);
+    if after <= before {
+        return Err(eyre!(
+            "UNCONTRACTED kind=surrogate graph={graph} outcome=error:surrogate_site_without_records: the surrogate's R* reached no record of the kind (a missed hook or a misclassified record)"
+        ));
+    }
+    Ok(out)
+}
+
+/// The settings under which EVERY record of a surrogate would decline by
+/// design (pre-review of U7c, finding 3: a setting-wide decline must not
+/// hide behind the children's comparisons): an open surrogate root
+/// (`GAMMALOOP_SURROGATE_CLOSED_ROOT=0`, a non-metric projection or a root
+/// that does not close; `closed` is `None` for a direct record), top-mass
+/// terms other than keep, an `additional_normalization` other than 1. An
+/// error with the kind enabled, never a fallback.
+fn settings_refusal(graph: &str, closed: Option<bool>, uv: &UVgenerationSettings) -> Result<()> {
+    let refuse = |why: String| {
+        Err(eyre!(
+            "UNCONTRACTED kind=surrogate graph={graph} outcome=error:surrogate_settings: {why}: every record of the surrogate would decline by design; run the kind with the production settings or drop it from the list"
+        ))
+    };
+    if closed == Some(false) {
+        return refuse(
+            "the surrogate root is not closed (GAMMALOOP_SURROGATE_CLOSED_ROOT=0, a non-metric projection or a root that does not close)"
+                .into(),
+        );
+    }
+    if uv.vakint.additional_normalization.trim() != "1" {
+        return refuse(format!(
+            "additional_normalization is {}, not 1",
+            uv.vakint.additional_normalization
+        ));
+    }
+    if closed.is_some() {
+        let mode = super::super::top_mass::top_mass_terms()?;
+        if mode != TopMassTerms::Keep {
+            return refuse(format!("top-mass terms {mode:?}, not keep"));
+        }
+    }
+    Ok(())
 }
 
 fn missing_context(graph: &str) -> eyre::Report {
@@ -413,7 +462,49 @@ pub(super) fn finish(
         edges,
         vertices,
         insertions,
+        false,
     )
+}
+
+/// How `atom` depends on the symbol `eps` (WH-RECORD-FORMAT v1.4
+/// correction 4: only through sums, products and integer powers; Minkowski
+/// and bispinor slot arguments aside): `Ok(true)` polynomially, `Ok(false)`
+/// through a negative integer power, `Err` otherwise (inside a function, a
+/// non-integer power).
+fn eps_dependence(atom: AtomView<'_>, eps: Symbol) -> std::result::Result<bool, String> {
+    let contains = |view: AtomView<'_>| view.to_owned().contains_symbol(eps);
+    match atom {
+        AtomView::Num(_) | AtomView::Var(_) => Ok(true),
+        AtomView::Add(sum) => sum.iter().try_fold(true, |polynomial, term| {
+            Ok(eps_dependence(term, eps)? && polynomial)
+        }),
+        AtomView::Mul(product) => product.iter().try_fold(true, |polynomial, factor| {
+            Ok(eps_dependence(factor, eps)? && polynomial)
+        }),
+        AtomView::Pow(power) => {
+            let (base, exponent) = power.get_base_exp();
+            if !contains(base) {
+                return if contains(exponent) {
+                    Err(format!("eps in the exponent of {}", atom))
+                } else {
+                    Ok(true)
+                };
+            }
+            let Ok(n) = i64::try_from(exponent) else {
+                return Err(format!("a non-integer power {}", atom));
+            };
+            Ok(eps_dependence(base, eps)? && n >= 0)
+        }
+        AtomView::Fun(function) => {
+            let symbol = function.get_symbol();
+            let name = symbol.get_name();
+            if name.ends_with("::mink") || name.ends_with("::bis") || !contains(atom) {
+                Ok(true)
+            } else {
+                Err(format!("eps inside the function {}", atom))
+            }
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -427,8 +518,40 @@ fn finish_with(
     edges: &mut [FactorizedEdge],
     vertices: &mut [FactorizedVertex],
     insertions: &mut Vec<Insertion>,
+    direct: bool,
 ) -> std::result::Result<(u32, u32), Decline> {
     let chains = chains(graph, provenance)?;
+    // a chain the record splits (a hole of two or more loops: a UV child of
+    // the surrogate, or a contracted child, that holds only part of the
+    // chain): its coefficient's slots would be non-local in the record
+    // (pre-review of U7c, finding 2): declined by design, before the record
+    for chain in &chains {
+        let state = |vertex: usize| {
+            if let Some(node) = merge.get(&vertex) {
+                (1, *node)
+            } else if vertices.iter().any(|v| v.id == vertex) {
+                (0, 0)
+            } else {
+                (2, 0)
+            }
+        };
+        let states = chain
+            .vertices
+            .iter()
+            .map(|vertex| state(*vertex))
+            .collect::<BTreeSet<_>>();
+        if states.len() > 1 {
+            return Err(Decline::new(
+                "surrogate_split_chain",
+                format!(
+                    "the record holds only part of the {}-loop chain {:?} of the hole at {} (a UV child of the surrogate or a contracted child splits it)",
+                    chain.vertices.len() - 1,
+                    chain.vertices,
+                    chain.vertices[0]
+                ),
+            ));
+        }
+    }
     let bubbles = chains
         .iter()
         .flat_map(|chain| chain.bubbles.iter().copied())
@@ -546,6 +669,34 @@ fn finish_with(
             .find(|insertion| insertion.vertex == *node)
         {
             insertion.cycles = cycles;
+        }
+    }
+    // correction 4: every insertion's coefficient and factor depends on eps
+    // only through sums, products and integer powers; a direct record's
+    // coefficient vertex is regular (its entry raises no depth)
+    for insertion in insertions.iter() {
+        for (what, atom) in [
+            ("coefficient", &insertion.coefficient),
+            ("factor", &insertion.factor),
+        ] {
+            match eps_dependence(atom.as_view(), GS.dim_epsilon) {
+                Err(why) => {
+                    return Err(Decline::new(
+                        "surrogate_insertion_eps",
+                        format!("insertion at {} {what}: {why}", insertion.vertex),
+                    ));
+                }
+                Ok(false) if direct && free.contains(&insertion.vertex) => {
+                    return Err(Decline::new(
+                        "surrogate_insertion_eps",
+                        format!(
+                            "the direct record's coefficient at {} has an eps pole (its entry raises no depth)",
+                            insertion.vertex
+                        ),
+                    ));
+                }
+                Ok(_) => {}
+            }
         }
     }
     vertices.sort_by_key(|vertex| vertex.id);
@@ -747,6 +898,7 @@ fn build_direct(
         &mut edges,
         &mut vertices,
         &mut insertions,
+        true,
     )?;
     let factor_atoms = edges
         .iter()
@@ -949,6 +1101,7 @@ pub(crate) fn direct(
         return value;
     }
     let provenance = provenance.ok_or_else(|| missing_context(&graph.name))?;
+    settings_refusal(&graph.name, None, uv)?;
     uncontracted_ledger::k5_site(kind, &graph.name)?;
     let hook = uncontracted_ledger::hook(graph, kind, 0, true, term);
     uncontracted_ledger::expect(kind);

@@ -19,9 +19,10 @@
 //! errors, the zero-comparison failures (diagram and run), the ledger frame,
 //! the default kind list, the Δ-cache key, the off mode.
 //!
-//! k5-stress (five L5 3793 records) is read from `GAMMALOOP_U7C_FIXTURES_DIR`
-//! (the wh-fixtures directory) and `#[ignore]`d, as are the whole-graph L5
-//! runs (about a minute each).
+//! k5-stress (five L5 3793 records) is vendored too (testdata/u7c/k5-stress-*,
+//! sha256 equal to the fixture's VERIFIED record); the whole-graph L5 runs of
+//! 22807 / 3793 are `#[ignore]`d (minutes; run with --run-ignored), the
+//! multi-loop-hole graphs run by default.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -70,6 +71,43 @@ const K5_DIRECT: &str = include_str!("testdata/u7c/k5-direct.input.txt");
 const K5_DIRECT_VALUE: &str = include_str!("testdata/u7c/k5-direct.value.txt");
 const K5_SURROGATE: &str = include_str!("testdata/u7c/k5-surrogate.input.txt");
 const K5_SURROGATE_VALUE: &str = include_str!("testdata/u7c/k5-surrogate.value.txt");
+/// k5-stress r0051..r0055 (input, value), vendored from the beta's wh-fixtures.
+const K5_STRESS: [(&str, &str, &str); 5] = [
+    (
+        "r0051",
+        include_str!("testdata/u7c/k5-stress-r0051.input.txt"),
+        include_str!("testdata/u7c/k5-stress-r0051.value.txt"),
+    ),
+    (
+        "r0052",
+        include_str!("testdata/u7c/k5-stress-r0052.input.txt"),
+        include_str!("testdata/u7c/k5-stress-r0052.value.txt"),
+    ),
+    (
+        "r0053",
+        include_str!("testdata/u7c/k5-stress-r0053.input.txt"),
+        include_str!("testdata/u7c/k5-stress-r0053.value.txt"),
+    ),
+    (
+        "r0054",
+        include_str!("testdata/u7c/k5-stress-r0054.input.txt"),
+        include_str!("testdata/u7c/k5-stress-r0054.value.txt"),
+    ),
+    (
+        "r0055",
+        include_str!("testdata/u7c/k5-stress-r0055.input.txt"),
+        include_str!("testdata/u7c/k5-stress-r0055.value.txt"),
+    ),
+];
+/// L5 surrogates with holes of two or more loops (coordinator, 21 Nov):
+/// (graph, prepared DOT).
+const L5_MULTI_LOOP_HOLES: [(&str, &str); 5] = [
+    ("143019", include_str!("testdata/u7c/l5-d143019.dot")),
+    ("143190", include_str!("testdata/u7c/l5-d143190.dot")),
+    ("163502", include_str!("testdata/u7c/l5-d163502.dot")),
+    ("175270", include_str!("testdata/u7c/l5-d175270.dot")),
+    ("139207", include_str!("testdata/u7c/l5-d139207.dot")),
+];
 
 fn check_surrogate() -> Switch {
     Switch::new(Mode::Check, &[Kind::Surrogate])
@@ -582,25 +620,17 @@ fn k5_surrogate_record_and_value_equal_the_fixture() -> Result<()> {
 /// child that contracts a hole in four of the five records): every record
 /// and value equals its fixture; R2 holds (vakint's reader validates it).
 #[test]
-#[ignore = "reads GAMMALOOP_U7C_FIXTURES_DIR (wh-fixtures); about a minute"]
 fn k5_stress_records_and_values_equal_the_fixtures() -> Result<()> {
     with_production_piece_limit(|| -> Result<()> {
         test_initialise()?;
         assume_defaults()?;
-        let dir =
-            std::path::PathBuf::from(std::env::var("GAMMALOOP_U7C_FIXTURES_DIR").map_err(
-                |_| eyre!("set GAMMALOOP_U7C_FIXTURES_DIR to the wh-fixtures directory"),
-            )?)
-            .join("k5-stress");
         let vakint = Vakint::new()?;
         let prepared = prepare(L5_3793_DOT, &vakint)?;
         let mut failures = Vec::new();
         let mut passed = 0;
-        for name in ["r0051", "r0052", "r0053", "r0054", "r0055"] {
-            let input = std::fs::read_to_string(dir.join(name).join("input.txt"))?;
-            let value = std::fs::read_to_string(dir.join(name).join("value.txt"))?;
-            let result = root_case(&prepared, &input)
-                .and_then(|case| assert_root_fixture(&case, &value, &vakint));
+        for (name, input, value) in K5_STRESS {
+            let result = root_case(&prepared, input)
+                .and_then(|case| assert_root_fixture(&case, value, &vakint));
             match result {
                 Ok(()) => {
                     passed += 1;
@@ -625,11 +655,13 @@ fn k5_stress_records_and_values_equal_the_fixtures() -> Result<()> {
 #[test]
 fn k5_designed_codes_are_a_closed_list() {
     assert!(uncontracted::is_designed_code("surrogate_ir_hard"));
+    assert!(uncontracted::is_designed_code("surrogate_split_chain"));
     for code in [
         "surrogate_chain",
         "surrogate_coefficient_mass",
         "surrogate_context_missing",
         "surrogate_hole_twice",
+        "surrogate_insertion_eps",
         "ir_hard_guard:panic",
     ] {
         assert!(!uncontracted::is_designed_code(code), "{code}");
@@ -805,7 +837,15 @@ fn k5_site_without_records_fails_the_diagram() -> Result<()> {
 /// inside one the frame is there.
 #[test]
 fn k5_no_frame_is_an_error() -> Result<()> {
-    with_switch(check_surrogate(), || -> Result<()> {
+    for switch in [check_surrogate(), on_surrogate()] {
+        no_frame_is_an_error(switch)?;
+    }
+    Ok(())
+}
+
+fn no_frame_is_an_error(switch: Switch) -> Result<()> {
+    let uv = settings();
+    with_switch(switch, || -> Result<()> {
         ensure!(!uncontracted_ledger::in_diagram_ledger());
         ensure!(uncontracted_ledger::k5_site(Kind::Surrogate, "nowhere").is_err());
         let provenance = Arc::new(Provenance {
@@ -813,7 +853,7 @@ fn k5_no_frame_is_an_error() -> Result<()> {
             original_cycles: (0, 0),
             holes: Vec::new(),
         });
-        let scoped = k5::scoped(Some(&provenance), "nowhere", || Ok(()));
+        let scoped = k5::scoped(Some(&provenance), "nowhere", true, &uv, || Ok(()));
         ensure!(
             scoped
                 .err()
@@ -823,11 +863,13 @@ fn k5_no_frame_is_an_error() -> Result<()> {
         let ledger =
             DiagramLedger::open("k5-frame", "k5-test").ok_or_else(|| eyre!("no ledger"))?;
         ensure!(uncontracted_ledger::in_diagram_ledger());
-        let inside = k5::scoped(Some(&provenance), "k5-frame", || {
+        let inside = k5::scoped(Some(&provenance), "k5-frame", true, &uv, || {
             ensure!(
                 uncontracted_ledger::in_diagram_ledger(),
                 "no frame at the hook"
             );
+            // the site's one record
+            uncontracted_ledger::expect(Kind::Surrogate);
             Ok(())
         });
         drop(ledger);
@@ -843,21 +885,18 @@ fn k5_direct_without_a_ledger_fails() -> Result<()> {
         test_initialise()?;
         let vakint = Vakint::new()?;
         let (graph, diagram, provenance) = direct_case(&vakint)?;
-        let (value, captured, _) = direct_run(
-            &graph,
-            &diagram,
-            Some(&provenance),
-            &vakint,
-            check_surrogate(),
-            false,
-        );
-        ensure!(
-            value
-                .err()
-                .is_some_and(|e| format!("{e}").contains("outside every diagram ledger")),
-            "the direct hook ran outside a ledger"
-        );
-        ensure!(captured.is_empty(), "a record was built: {captured:?}");
+        for switch in [check_surrogate(), on_surrogate()] {
+            let (value, captured, _) =
+                direct_run(&graph, &diagram, Some(&provenance), &vakint, switch, false);
+            ensure!(
+                value
+                    .err()
+                    .is_some_and(|e| format!("{e}").contains("outside every diagram ledger")),
+                "{:?}: the direct hook ran outside a ledger",
+                switch.mode
+            );
+            ensure!(captured.is_empty(), "a record was built: {captured:?}");
+        }
         Ok(())
     })
 }
@@ -974,13 +1013,23 @@ fn k5_off_is_todays_path() -> Result<()> {
             evaluator.pole_part_closing_root(&original, &vakint, true)
         })?
         .ok_or_else(|| eyre!("no insertion"))?;
-        let plain = evaluator
-            .pole_part_closing_root(&original, &vakint, true)?
-            .ok_or_else(|| eyre!("no insertion"))?;
-        ensure!(off.poles == plain.poles, "off != no switch");
         let prepared = evaluator
             .prepare(&original, &vakint)?
             .ok_or_else(|| eyre!("no insertion"))?;
+        // the pre-K5 computation, called directly: the surrogate's direct
+        // propagator integral and the owner map (insertions.rs before U7c)
+        let surrogate = prepared.surrogate().to_gamma_loop_graph(None, true)?;
+        let direct = super::integrate_propagator(
+            &surrogate,
+            prepared.surrogate().model(),
+            &vakint,
+            &settings(),
+            prepared.loop_count() as i64,
+        )?;
+        ensure!(
+            off.poles == prepared.restore_atom(&direct)?,
+            "off != today's integrate_propagator + restore_atom"
+        );
         let none = with_switch(Switch::OFF, || {
             k5::provenance(
                 &original,
@@ -1016,6 +1065,16 @@ fn whole_graph_modes(
     vakint: &Vakint,
     min_records: usize,
 ) -> Result<()> {
+    whole_graph_summary(original, vakint, min_records).map(|_| ())
+}
+
+/// [`whole_graph_modes`], returning the check run's surrogate outcomes by
+/// name (`compared`, `declined:<code>`, ...).
+fn whole_graph_summary(
+    original: &feynkit_graph::FeynmanDiagram,
+    vakint: &Vakint,
+    min_records: usize,
+) -> Result<BTreeMap<String, usize>> {
     let evaluator = PropagatorInsertionEvaluator::new(settings());
     let run = |switch: Switch| -> Result<(Atom, Vec<Captured>)> {
         with_switch(switch, || {
@@ -1041,6 +1100,7 @@ fn whole_graph_modes(
         "{} surrogate records (at least {min_records} expected)",
         surrogate.len()
     );
+    let mut summary = BTreeMap::<String, usize>::new();
     for attempt in &surrogate {
         ensure!(
             attempt.equal == Some(true)
@@ -1052,7 +1112,17 @@ fn whole_graph_modes(
             attempt.outcome,
             attempt.equal
         );
+        let name = if attempt.equal == Some(true) {
+            "compared".to_owned()
+        } else {
+            attempt.outcome.clone()
+        };
+        *summary.entry(name).or_default() += 1;
     }
+    ensure!(
+        summary.get("compared").copied().unwrap_or(0) > 0,
+        "no surrogate record compared: {summary:?}"
+    );
     let (on, captured) = run(on_surrogate())?;
     ensure!(
         captured
@@ -1065,7 +1135,12 @@ fn whole_graph_modes(
         equal_through(&on, &off, -1)? || atoms_equal(&on, &off),
         "on != off through eps^-1"
     );
-    Ok(())
+    eprintln!(
+        "K5_WHOLE graph={} surrogate_records={} {summary:?}",
+        original.name(),
+        surrogate.len()
+    );
+    Ok(summary)
 }
 
 /// L5 22807 (k5-surrogate's graph: the closed surrogate root, 9 remainders,
@@ -1091,5 +1166,273 @@ fn k5_l5_3793_check_and_on_equal_off() -> Result<()> {
         let vakint = Vakint::new()?;
         let original = colour_factored(&load(L5_3793_DOT)?)?;
         whole_graph_modes(&original, &vakint, 2)
+    })
+}
+
+/// The L5 surrogates whose holes have two or more loops (143019: two,
+/// 143190: three, 163502 / 175270 / 139207: four) through the whole
+/// evaluator in off, check and on mode: every record compared and equal or
+/// declined by design (`surrogate_split_chain`: a record that holds only part
+/// of a chain), at least one compared, on == off through eps^-1.
+#[test]
+fn k5_l5_multi_loop_holes_check_and_on_equal_off() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let mut failures = Vec::new();
+        for (name, dot) in L5_MULTI_LOOP_HOLES {
+            let original = colour_factored(&load(dot)?)?;
+            let prepared = prepare(dot, &vakint)?;
+            let holes = prepared
+                .provenance
+                .holes
+                .iter()
+                .map(|hole| hole.loops)
+                .collect::<Vec<_>>();
+            match whole_graph_summary(&original, &vakint, 1) {
+                Ok(summary) => eprintln!(
+                    "K5_MULTI {name} PASS surrogate_loops={} hole_loops={holes:?} {summary:?}",
+                    prepared.surrogate.loop_count()
+                ),
+                Err(error) => {
+                    eprintln!("K5_MULTI {name} FAIL hole_loops={holes:?}: {error:#}");
+                    failures.push(format!("{name}: {error:#}"));
+                }
+            }
+        }
+        ensure!(failures.is_empty(), "{failures:#?}");
+        Ok(())
+    })
+}
+
+/// Per site: a surrogate whose R* adds no expected record of the kind (its
+/// records missed the hook) fails at once, in check and in on, even when
+/// another site of the same diagram recorded.
+#[test]
+fn k5_site_without_records_fails_per_site() -> Result<()> {
+    let uv = settings();
+    let provenance = Arc::new(Provenance {
+        original: "k5-sites".into(),
+        original_cycles: (0, 0),
+        holes: Vec::new(),
+    });
+    for switch in [check_surrogate(), on_surrogate()] {
+        with_switch(switch, || -> Result<()> {
+            let ledger =
+                DiagramLedger::open("k5-sites", "k5-test").ok_or_else(|| eyre!("no ledger"))?;
+            k5::scoped(Some(&provenance), "k5-sites", true, &uv, || {
+                uncontracted_ledger::expect(Kind::Surrogate);
+                Ok(())
+            })?;
+            let missed = k5::scoped(Some(&provenance), "k5-sites", true, &uv, || Ok(()));
+            ensure!(
+                missed
+                    .err()
+                    .is_some_and(|e| format!("{e}").contains("surrogate_site_without_records")),
+                "{:?}: a site without records passed beside one with",
+                switch.mode
+            );
+            drop(ledger);
+            Ok(())
+        })?;
+    }
+    Ok(())
+}
+
+/// Settings under which every surrogate record would decline by design are
+/// errors with the kind enabled (check and on): an open surrogate root, an
+/// additional normalisation other than 1 (both at the R* scope and at the
+/// direct hook); and the evaluator's open-root entry (`pole_part`, the
+/// surrogate root not closed) on L5 3793 fails instead of declining every
+/// root record.
+#[test]
+fn k5_settings_wide_declines_are_errors() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let provenance = Arc::new(Provenance {
+            original: "k5-settings".into(),
+            original_cycles: (0, 0),
+            holes: Vec::new(),
+        });
+        let mut odd = settings();
+        odd.vakint.additional_normalization = "2".into();
+        let (graph, diagram, direct_provenance) = direct_case(&vakint)?;
+        let original = colour_factored(&load(L5_3793_DOT)?)?;
+        let evaluator = PropagatorInsertionEvaluator::new(settings());
+        for switch in [check_surrogate(), on_surrogate()] {
+            with_switch(switch, || -> Result<()> {
+                let ledger = DiagramLedger::open("k5-settings", "k5-test")
+                    .ok_or_else(|| eyre!("no ledger"))?;
+                let open = k5::scoped(Some(&provenance), "k5-settings", false, &settings(), || {
+                    Ok(())
+                });
+                ensure!(
+                    open.err()
+                        .is_some_and(|e| format!("{e}").contains("surrogate_settings")),
+                    "open root"
+                );
+                let normalised =
+                    k5::scoped(Some(&provenance), "k5-settings", true, &odd, || Ok(()));
+                ensure!(
+                    normalised
+                        .err()
+                        .is_some_and(|e| format!("{e}").contains("additional_normalization")),
+                    "additional normalisation (R*)"
+                );
+                let direct = k5::direct(
+                    Some(&direct_provenance),
+                    &graph,
+                    diagram.model(),
+                    &vakint,
+                    &odd,
+                    2,
+                    || Ok(Atom::Zero),
+                );
+                ensure!(
+                    direct
+                        .err()
+                        .is_some_and(|e| format!("{e}").contains("additional_normalization")),
+                    "additional normalisation (direct)"
+                );
+                drop(ledger);
+                let ledger = DiagramLedger::open(original.name(), "k5-test")
+                    .ok_or_else(|| eyre!("no ledger"))?;
+                let pole_part = evaluator.pole_part(&original, &vakint);
+                ensure!(
+                    pole_part
+                        .err()
+                        .is_some_and(|e| format!("{e:#}").contains("surrogate_settings")),
+                    "{:?}: the open surrogate root of L5 3793 did not fail",
+                    switch.mode
+                );
+                drop(ledger);
+                Ok(())
+            })?;
+        }
+        Ok(())
+    })
+}
+
+/// Correction 4: an insertion whose coefficient depends on eps other than
+/// through sums, products and integer powers is an error (here log(eps) on
+/// k5-surrogate's coefficient vertex); a direct record's coefficient vertex
+/// with an eps pole is an error (its entry raises no depth).
+#[test]
+fn k5_insertion_eps_rules_are_errors() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let prepared = prepare(L5_22807_DOT, &vakint)?;
+        let mut case = root_case(&prepared, K5_SURROGATE)?;
+        let node = case
+            .graph
+            .underlying
+            .iter_nodes()
+            .map(|(node, _, _)| node)
+            .find(|node| usize::from(*node) == 8)
+            .ok_or_else(|| eyre!("no vertex 8"))?;
+        let eps = Atom::var(GS.dim_epsilon);
+        let logged = case.graph[node].num.value.clone()
+            * symbolica::function!(symbolica::symbol!("log"), eps.clone());
+        case.graph.underlying[node].num.value = logged;
+        let attempt = root_attempt(&case, &vakint, Some(case.provenance.clone()), false)?;
+        match &attempt.outcome {
+            Outcome::Error(decline) => ensure!(
+                decline.code == "surrogate_insertion_eps" && !decline.designed,
+                "{decline:?}"
+            ),
+            other => return Err(eyre!("log(eps): not an error: {other:?}")),
+        }
+        let (mut graph, diagram, provenance) = direct_case(&vakint)?;
+        let node = graph
+            .underlying
+            .iter_nodes()
+            .map(|(node, _, _)| node)
+            .find(|node| usize::from(*node) == 2)
+            .ok_or_else(|| eyre!("no vertex 2"))?;
+        let pole = graph[node].num.value.clone() / &eps;
+        graph.underlying[node].num.value = pole;
+        let (value, captured, _) = direct_run(
+            &graph,
+            &diagram,
+            Some(&provenance),
+            &vakint,
+            on_surrogate(),
+            true,
+        );
+        ensure!(
+            value.is_err()
+                && captured.len() == 1
+                && captured[0].outcome == "error:surrogate_insertion_eps",
+            "direct eps pole: {captured:?}"
+        );
+        Ok(())
+    })
+}
+
+/// The record EMITTED from this build's own prepared surrogate of L2 17
+/// (no factor taken from the fixture): its structure equals the fixture's
+/// (edges, momenta, lines, vertices' rules, ports, the insertion's hedges and
+/// cycles, the provenance), and its insertion factor (the K6 normalised
+/// insertion this build's `prepare` computes) equals the fixture's up to the
+/// colour branch's overall sign; check mode compares it with today's.
+#[test]
+fn k5_direct_emitted_from_the_prepared_surrogate() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let prepared = prepare(L2_17_DOT, &vakint)?;
+        let graph = prepared.surrogate.to_gamma_loop_graph(None, true)?;
+        let fixture = record(K5_DIRECT)?;
+        let (value, captured, closed) = direct_run(
+            &graph,
+            &prepared.surrogate,
+            Some(&prepared.provenance),
+            &vakint,
+            check_surrogate(),
+            true,
+        );
+        let _today = value?;
+        closed.ok_or_else(|| eyre!("no ledger"))??;
+        ensure!(
+            captured.len() == 1 && captured[0].equal == Some(true),
+            "{captured:?}"
+        );
+        let ours = record(
+            captured[0]
+                .text
+                .as_deref()
+                .ok_or_else(|| eyre!("no text"))?,
+        )?;
+        let structure = direct_differences(&ours, &fixture)
+            .into_iter()
+            .filter(|difference| {
+                !difference.contains(": factor")
+                    && !difference.starts_with("vertex ")
+                    && !difference.contains("coefficient x factor")
+            })
+            .collect::<Vec<_>>();
+        ensure!(structure.is_empty(), "structure: {structure:#?}");
+        let product = |r: &FactorizedNumerator| {
+            r.insertions
+                .iter()
+                .map(|i| &i.coefficient * &i.factor)
+                .fold(Atom::num(1), |a, b| a * b)
+        };
+        let (a, b) = (product(&ours), product(&fixture));
+        ensure!(
+            atoms_equal(&a, &b) || atoms_equal(&a, &(-b.clone())),
+            "the prepared coefficient differs from the fixture's beyond a sign:\n{a}\n{b}"
+        );
+        eprintln!(
+            "K5_DIRECT_EMITTED coefficient {}",
+            if atoms_equal(&a, &b) {
+                "equal"
+            } else {
+                "opposite sign (colour branch)"
+            }
+        );
+        Ok(())
     })
 }
