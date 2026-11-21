@@ -25,9 +25,10 @@
 //!   refusal (the closed lists [`DESIGNED_LOCAL`] and [`DESIGNED_VAKINT`])
 //!   falls back to today's path for that record only, with one
 //!   `UNCONTRACTED ... outcome=declined:<code>` line. Any other refusal is
-//!   `outcome=error:<code>` (a bug of the emitter or of vakint's entry): it
-//!   falls back too, unless `GAMMALOOP_UNCONTRACTED_STRICT=1`, which fails
-//!   the diagram (on in the tests and the gate runs). Unknown master
+//!   `outcome=error:<code>` (a bug of the emitter or of vakint's entry) and
+//!   fails the diagram: strict is the only behaviour of on and check (helper
+//!   VH round 2 R2-I1; `GAMMALOOP_UNCONTRACTED_STRICT=1` is accepted as a
+//!   no-op, `0` is refused when the switch initialises). Unknown master
 //!   coefficients are a hard error (the format: an ALARM fails the diagram).
 //! * Check: our attempt first (it changes no state), then today's path; the
 //!   parts through the record's order (the poles for K1 / K2, `ε^(extra-1)`
@@ -43,7 +44,8 @@
 //! and one `UNCONTRACTED_SUMMARY` line (expected, attempted, uncontracted,
 //! compared, equal, declined, no-record, unchecked and error counts by code)
 //! with the switch on or check: the ledger, [`super::uncontracted_ledger`]
-//! (U7a delta, U7a.4).
+//! (U7a delta, U7a.4). The switch's initialisation ([`validate`]) refuses
+//! `GAMMALOOP_UNCONTRACTED_STRICT=0`.
 //!
 //! Kinds (`root` = K1 root remainders, `child` = K2 UV children, `ir-hard` =
 //! K3 IR hard parts, and the inert `quotient`, `surrogate`, `insertion`):
@@ -348,28 +350,46 @@ fn join_kinds(kinds: &[Kind]) -> String {
         .join(",")
 }
 
-/// The switch of the environment, read once; a bad value panics at the first
-/// use, as `GAMMALOOP_INSERTION_CLOSURE` does.
-fn environment() -> Switch {
-    static SWITCH: LazyLock<Switch> = LazyLock::new(|| {
-        let value = match std::env::var(VARIABLE) {
-            Ok(value) => Some(value),
-            Err(std::env::VarError::NotPresent) => None,
-            Err(std::env::VarError::NotUnicode(value)) => {
-                panic!("{VARIABLE}={value:?} is not unicode")
-            }
-        };
-        let switch = Switch::parse(value.as_deref()).unwrap_or_else(|error| panic!("{error}"));
-        if switch.mode != Mode::Off {
-            eprintln!(
-                "{} strict={}",
-                switch.line(),
-                u8::from(strict_environment())
-            );
+/// The switch of the environment.
+struct Environment {
+    switch: Switch,
+}
+
+/// The switch of the environment, read and checked once
+/// ([`super::uncontracted_ledger::initialise`]: strict): an error refuses
+/// the run at [`validate`] (the
+/// beta's start-up) and panics at the first use otherwise, as
+/// `GAMMALOOP_INSERTION_CLOSURE` does.
+static ENVIRONMENT: LazyLock<std::result::Result<Environment, String>> = LazyLock::new(|| {
+    let read = |name: &str| match std::env::var(name) {
+        Ok(value) => Ok(Some(value)),
+        Err(std::env::VarError::NotPresent) => Ok(None),
+        Err(std::env::VarError::NotUnicode(value)) => {
+            Err(format!("{name}={value:?} is not unicode"))
         }
-        switch
-    });
-    *SWITCH
+    };
+    let switch = Switch::parse(read(VARIABLE)?.as_deref())?;
+    super::uncontracted_ledger::initialise(switch, read(STRICT_VARIABLE)?.as_deref())?;
+    if switch.mode != Mode::Off {
+        eprintln!("{} strict=1", switch.line());
+    }
+    Ok(Environment { switch })
+});
+
+fn environment() -> Switch {
+    match &*ENVIRONMENT {
+        Ok(environment) => environment.switch,
+        Err(error) => panic!("{error}"),
+    }
+}
+
+/// The switch's initialisation: `Err` for a value the run refuses (call at
+/// start-up for an early error; the beta does).
+pub(crate) fn validate() -> Result<()> {
+    match &*ENVIRONMENT {
+        Ok(_) => Ok(()),
+        Err(error) => Err(eyre!("{error}")),
+    }
 }
 
 thread_local! {
@@ -1209,8 +1229,8 @@ pub(super) fn check_failure(attempt: &Attempt, check: &Check, epsilon: Symbol) -
 }
 
 /// The error of an attempt whose refusal is not designed
-/// ([`Outcome::Error`]): it fails the diagram in check mode, and in mode on
-/// under `GAMMALOOP_UNCONTRACTED_STRICT=1`.
+/// ([`Outcome::Error`]): it fails the diagram, in check mode and in mode on
+/// (R2-I1).
 pub(super) fn error_failure(attempt: &Attempt, mode: Mode) -> eyre::Report {
     let (code, detail) = match &attempt.outcome {
         Outcome::Error(decline) => (decline.code.as_str(), decline.detail.as_str()),
@@ -1226,53 +1246,23 @@ pub(super) fn error_failure(attempt: &Attempt, mode: Mode) -> eyre::Report {
 }
 
 // ---------------------------------------------------------------------------
-// GAMMALOOP_UNCONTRACTED_STRICT and the per-diagram summary
+// GAMMALOOP_UNCONTRACTED_STRICT (a no-op) and the per-diagram lines
 // ---------------------------------------------------------------------------
 
-/// The environment variable of the strict switch.
+/// The environment variable of the former strict switch: strict is the only
+/// behaviour of on and check (helper VH round 2 R2-I1); `1` is accepted as a
+/// no-op and `0` is refused when the switch initialises
+/// ([`super::uncontracted_ledger::parse_strict`]).
 pub(crate) const STRICT_VARIABLE: &str = "GAMMALOOP_UNCONTRACTED_STRICT";
 
-/// `GAMMALOOP_UNCONTRACTED_STRICT` (`1`/`on`; unset, `""`, `0`, `off`: not
-/// strict): in mode on an error outcome fails the diagram instead of taking
-/// today's path (check mode always fails it). Read once; a bad value
-/// panics.
-fn strict_environment() -> bool {
-    static STRICT: LazyLock<bool> = LazyLock::new(|| match std::env::var(STRICT_VARIABLE) {
-        Err(std::env::VarError::NotPresent) => false,
-        Ok(value) => match value.trim() {
-            "" | "0" | "off" => false,
-            "1" | "on" => true,
-            other => panic!("{STRICT_VARIABLE} must be 0, 1, off or on, not `{other}`"),
-        },
-        Err(std::env::VarError::NotUnicode(value)) => {
-            panic!("{STRICT_VARIABLE}={value:?} is not unicode")
-        }
-    });
-    *STRICT
-}
-
-thread_local! {
-    static TEST_STRICT: Cell<Option<bool>> = const { Cell::new(None) };
-}
-
-/// Whether an error outcome fails the diagram in mode on.
-pub(crate) fn strict() -> bool {
-    TEST_STRICT
-        .with(Cell::get)
-        .unwrap_or_else(strict_environment)
-}
-
-/// Tests: run `f` with the strict switch `strict` on this thread.
+/// Tests: run `f` "strict" (the only behaviour; `strict = false` no longer
+/// exists, R2-I1).
 #[cfg(test)]
 pub(crate) fn with_strict<T>(strict: bool, f: impl FnOnce() -> T) -> T {
-    struct Restore(Option<bool>);
-    impl Drop for Restore {
-        fn drop(&mut self) {
-            let previous = self.0;
-            TEST_STRICT.with(|slot| slot.set(previous));
-        }
-    }
-    let _restore = Restore(TEST_STRICT.with(|slot| slot.replace(Some(strict))));
+    assert!(
+        strict,
+        "the non-strict mode is removed (R2-I1): an error outcome always fails the diagram"
+    );
     f()
 }
 

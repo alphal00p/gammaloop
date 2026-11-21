@@ -1,7 +1,7 @@
 //! The per-diagram accounting of `GAMMALOOP_UNCONTRACTED_NUMERATOR` (U7a
-//! delta: Astra's U7a verdict finding 4, helper VH's round 2 R2-M2 and
-//! R2-M3; the beta project's results/consolidation/U7-PLAN.md requirements
-//! 16 and 17).
+//! delta: Astra's U7a verdict finding 4, helper VH's round 2 R2-I1, R2-M2
+//! and R2-M3; the beta project's results/consolidation/U7-PLAN.md
+//! requirements 16 and 17).
 //!
 //! # The ledger of a diagram
 //!
@@ -26,8 +26,7 @@
 //! * `compared` (check: our value compared with today's), `taken` (on:
 //!   vakint's value, or a zero Δ, replaced today's);
 //! * `declined:<code>` (a designed refusal; today's path took it);
-//! * `error:<code>` (not designed: check mode fails the diagram, and so
-//!   does mode on under `GAMMALOOP_UNCONTRACTED_STRICT=1`);
+//! * `error:<code>` (not designed: the diagram fails);
 //! * `unchecked` (reached the hook but never compared: check mode whose
 //!   today's path failed after our attempt, or a count the ledger misses).
 //!
@@ -37,7 +36,9 @@
 //!
 //! The close prints ONE `UNCONTRACTED_DISPOSITION` line per diagram and
 //! enabled kind (also when nothing was expected, so a missing line is a
-//! missing diagram) and one `UNCONTRACTED_SUMMARY` line per diagram.
+//! missing diagram) and one `UNCONTRACTED_SUMMARY` line per diagram. On and
+//! check are strict (the only behaviour, R2-I1): an error outcome fails the
+//! diagram.
 
 use std::{
     cell::RefCell,
@@ -51,7 +52,38 @@ use symbolica::atom::Atom;
 
 use crate::{graph::Graph, model::Model, uv::counterterm_cache::CountertermCache};
 
-use super::uncontracted::{self, Attempt, Check, Kind, Mode, Outcome};
+use super::uncontracted::{self, Attempt, Check, Kind, Mode, Outcome, Switch};
+
+// ---------------------------------------------------------------------------
+// The switches of the ledger: strict (a no-op)
+// ---------------------------------------------------------------------------
+
+/// `GAMMALOOP_UNCONTRACTED_STRICT` (R2-I1): on and check always fail a
+/// diagram on an error outcome, so `1` / `on` (and unset, empty) are
+/// accepted as a no-op and `0` / `off` are refused with the reason.
+pub(crate) fn parse_strict(value: Option<&str>) -> std::result::Result<(), String> {
+    match value.map(str::trim) {
+        None | Some("" | "1" | "on") => Ok(()),
+        Some("0" | "off") => Err(format!(
+            "{}={} is refused: the non-strict mode is removed (helper VH round 2 R2-I1); with {} on or check an error outcome always fails its diagram. Unset {} (1 is accepted as a no-op)",
+            uncontracted::STRICT_VARIABLE,
+            value.unwrap_or_default().trim(),
+            uncontracted::VARIABLE,
+            uncontracted::STRICT_VARIABLE
+        )),
+        Some(other) => Err(format!(
+            "{} must be unset or 1 (a no-op; strict is the only behaviour), not `{other}`",
+            uncontracted::STRICT_VARIABLE
+        )),
+    }
+}
+
+/// What the switch's initialisation checks besides the switch itself
+/// ([`uncontracted::validate`]): `GAMMALOOP_UNCONTRACTED_STRICT` (the
+/// environment's value), refused when `0` in every mode.
+pub(crate) fn initialise(_switch: Switch, strict: Option<&str>) -> std::result::Result<(), String> {
+    parse_strict(strict)
+}
 
 // ---------------------------------------------------------------------------
 // Counts and frames
@@ -549,4 +581,53 @@ fn finish(frame: Frame, ok: bool) -> Result<()> {
         worst(outcomes),
     ));
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Tests: an injected outcome at the hook
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+thread_local! {
+    static FAULT: RefCell<Option<(Kind, String, bool)>> = const { RefCell::new(None) };
+}
+
+/// Tests: run `f` with every attempt of `kind` refused by `code` at the
+/// hook (`designed`: a designed decline, else an error outcome), as if the
+/// emitter or vakint's entry had refused it.
+#[cfg(test)]
+pub(crate) fn with_fault<T>(kind: Kind, code: &str, designed: bool, f: impl FnOnce() -> T) -> T {
+    struct Restore(Option<(Kind, String, bool)>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let previous = self.0.take();
+            FAULT.with(|slot| *slot.borrow_mut() = previous);
+        }
+    }
+    let _restore =
+        Restore(FAULT.with(|slot| slot.replace(Some((kind, code.to_owned(), designed)))));
+    f()
+}
+
+/// Tests: the attempt with the injected outcome of [`with_fault`], if any.
+#[cfg(test)]
+pub(super) fn inject(mut attempt: Attempt) -> Attempt {
+    FAULT.with(|slot| {
+        if let Some((kind, code, designed)) = slot.borrow().as_ref()
+            && *kind == attempt.kind
+        {
+            let decline = uncontracted::Decline {
+                code: code.clone(),
+                detail: "injected by the test".to_owned(),
+                designed: *designed,
+            };
+            attempt.text = None;
+            attempt.outcome = if *designed {
+                Outcome::Declined(decline)
+            } else {
+                Outcome::Error(decline)
+            };
+        }
+    });
+    attempt
 }
