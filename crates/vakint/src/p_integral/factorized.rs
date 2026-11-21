@@ -1107,11 +1107,80 @@ fn momentum_degree(view: AtomView<'_>) -> u64 {
     }
 }
 
+/// The first negative integer power in `view` whose base vanishes
+/// IDENTICALLY once the dimension is set to 4 - 2ε (`epsilon`): the expression
+/// is undefined there, not a pole of any order (a base that vanishes only at
+/// ε = 0, such as D - 4, is an ordinary pole). Inner powers first; the base is
+/// put over a common denominator (exact rational arithmetic, not a series).
+/// Bases without ε or the dimension (outside slots) are skipped: an
+/// identically zero one is already the parser's non-finite number, refused as
+/// such.
+fn undefined_after_substitution(
+    view: AtomView<'_>,
+    dimension: Symbol,
+    epsilon: Symbol,
+) -> Option<String> {
+    let depends = |s: Symbol| s == epsilon || s == dimension;
+    match view {
+        AtomView::Add(a) => a
+            .iter()
+            .find_map(|t| undefined_after_substitution(t, dimension, epsilon)),
+        AtomView::Mul(m) => m
+            .iter()
+            .find_map(|t| undefined_after_substitution(t, dimension, epsilon)),
+        AtomView::Fun(f) => f
+            .iter()
+            .find_map(|t| undefined_after_substitution(t, dimension, epsilon)),
+        AtomView::Pow(p) => {
+            let (base, exponent) = p.get_base_exp();
+            if let Some(found) = undefined_after_substitution(base, dimension, epsilon) {
+                return Some(found);
+            }
+            let negative = symbolica::domains::integer::Integer::try_from(exponent)
+                .is_ok_and(|n| n.is_negative());
+            if !negative || !depends_outside_slots(base, &depends) {
+                return None;
+            }
+            let substituted = base
+                .to_owned()
+                .replace(Atom::var(dimension))
+                .with(Atom::num(4) - Atom::num(2) * Atom::var(epsilon));
+            substituted.together().is_zero().then(|| {
+                format!(
+                    "{} (its base is identically zero after D -> 4-2ε)",
+                    view.to_owned().to_canonical_string()
+                )
+            })
+        }
+        _ => None,
+    }
+}
+
+/// The first symbol named ε (in any namespace) in `view`.
+fn epsilon_symbol_in(view: AtomView<'_>) -> Option<Symbol> {
+    let mut found = None;
+    view.visitor(&mut |part| {
+        if found.is_none()
+            && let AtomView::Var(v) = part
+            && is_epsilon_symbol(v.get_symbol())
+        {
+            found = Some(v.get_symbol());
+        }
+        found.is_none()
+    });
+    found
+}
+
 /// The pole order's rules for one insertion, `depends` selecting ε and the
 /// dimension: the dependence on them is a Laurent polynomial
 /// ([`non_laurent_dependence`]) and its bound is at most
 /// [`INSERTION_MAX_EPSILON_POWER`] (`an ε power out of range`).
-fn insertion_epsilon_rules(insertion: &Insertion, depends: &dyn Fn(Symbol) -> bool) -> Result<()> {
+fn insertion_epsilon_rules(
+    insertion: &Insertion,
+    depends: &dyn Fn(Symbol) -> bool,
+    dimension: Symbol,
+    epsilon: Option<Symbol>,
+) -> Result<()> {
     let v = insertion.vertex;
     let error = |detail: String| FactorizedError::Insertion { vertex: v, detail };
     // The pole order (`insertion_pole_order`) is that of coefficient x
@@ -1142,6 +1211,24 @@ fn insertion_epsilon_rules(insertion: &Insertion, depends: &dyn Fn(Symbol) -> bo
                 "an ε power out of range: the powers of ε and of the dimension in coefficient x factor reach {}, at most {INSERTION_MAX_EPSILON_POWER} are supported",
                 bound.map_or_else(|| "beyond 2^64".to_string(), |b| b.to_string())
             )));
+        }
+    }
+    // defined after D -> 4-2ε: ε given by the settings at the entries, by
+    // its name at validation (no ε in the insertion: nothing can vanish)
+    let epsilon = epsilon.or_else(|| {
+        epsilon_symbol_in(insertion.coefficient.as_view())
+            .or_else(|| epsilon_symbol_in(insertion.factor.as_view()))
+    });
+    if let Some(epsilon) = epsilon {
+        for (what, atom) in [
+            ("coefficient", &insertion.coefficient),
+            ("factor", &insertion.factor),
+        ] {
+            if let Some(found) = undefined_after_substitution(atom.as_view(), dimension, epsilon) {
+                return Err(error(format!(
+                    "a denominator vanishes identically after D -> 4-2ε (undefined, not a pole of any order): {found} in the {what}"
+                )));
+            }
         }
     }
     Ok(())
@@ -2508,7 +2595,7 @@ impl FactorizedNumerator {
             // its name here (the settings are not known)
             let dimension = self.dimension;
             let depends = |s: Symbol| is_epsilon_symbol(s) || s == dimension;
-            insertion_epsilon_rules(insertion, &depends)?;
+            insertion_epsilon_rules(insertion, &depends, dimension, None)?;
             check_scalar(
                 insertion.coefficient.as_view(),
                 &format!("insertion at vertex {v} coefficient"),
@@ -2580,8 +2667,9 @@ impl FactorizedNumerator {
         if !(epsilon == "ε" || epsilon.ends_with("::ε")) {
             let dimension = self.dimension;
             let depends = |s: Symbol| s.get_name() == epsilon || s == dimension;
+            let settings_epsilon = crate::utils::vakint_macros::vk_symbol!(epsilon);
             for insertion in &self.insertions {
-                insertion_epsilon_rules(insertion, &depends)?;
+                insertion_epsilon_rules(insertion, &depends, dimension, Some(settings_epsilon))?;
             }
         }
         Ok(())

@@ -615,3 +615,62 @@ fn retain_keeps_the_exact_product_with_two_insertions() {
         "Retain must not depend on the depth (two insertions)"
     );
 }
+
+/// An insertion UNDEFINED after D -> 4-2ε is refused; its two defined forms
+/// agree. The gate's witness: the K2 child of L3-036 with its coefficient's
+/// 1/ε replaced by 1/(D-4+2ε) (identically zero denominator; the entry
+/// returned 0 before), refused (Insertion at vertex 4, "a denominator
+/// vanishes identically after D -> 4-2ε") by validation and by the entry. The
+/// two defined forms of the same pole, 1/ε and -2/(D-4) (equal after the
+/// substitution), are accepted and give EQUAL values. The same with an
+/// epsilon setting named user::ep (the coefficient written with it): the
+/// undefined form is refused at the entry (validation recognises ε by name),
+/// the two defined ones agree.
+#[test]
+fn an_undefined_insertion_is_refused_and_its_defined_twins_agree() {
+    let vakint = plain_engine();
+    let text = include_str!("fixtures/wh-k2-child-ins.record.txt");
+    let mut user = site_settings();
+    user.epsilon_symbol = "user::ep".into();
+    let prefix = "a denominator vanishes identically after D -> 4-2ε";
+    for (eps, settings) in [("gammalooprs::ε", site_settings()), ("user::ep", user)] {
+        // the record with its coefficient's 1/ε (gammalooprs::ε) replaced by `pole`
+        let with = |pole: &str| {
+            let mut value = FactorizedNumerator::from_text(text).unwrap();
+            let original_eps = "gammalooprs::ε";
+            let replaced = format!("{original_eps}*{pole}");
+            let factor = vk_parse!(replaced.as_str()).unwrap();
+            value.insertions[0].coefficient = (&value.insertions[0].coefficient * &factor).expand();
+            value
+        };
+        let undefined = with(&format!("1/(gammalooprs::{{}}::dim-4+2*{eps})"));
+        if eps == "gammalooprs::ε" {
+            match undefined.validate().unwrap_err() {
+                FactorizedError::Insertion { vertex: 4, detail } => {
+                    assert!(detail.starts_with(prefix), "{detail}")
+                }
+                other => panic!("expected the Insertion refusal, got {other:?}"),
+            }
+        }
+        match evaluate_factorized_closure(
+            &vakint,
+            &settings,
+            std::slice::from_ref(&undefined),
+            &[undefined.prefactor.total()],
+        )
+        .unwrap_err()
+        {
+            FactorizedError::Insertion { vertex: 4, detail } => {
+                assert!(detail.starts_with(prefix), "{eps}: {detail}")
+            }
+            other => panic!("{eps}: expected the Insertion refusal, got {other:?}"),
+        }
+        let one_over_eps = closure_value(&vakint, &settings, &with(&format!("1/{eps}")));
+        let in_dimension = closure_value(&vakint, &settings, &with("-2/(gammalooprs::{}::dim-4)"));
+        assert!(!one_over_eps.is_zero(), "{eps}");
+        assert!(
+            (&one_over_eps - &in_dimension).expand().is_zero(),
+            "{eps}: 1/eps and -2/(D-4) must agree\n1/eps    {one_over_eps}\n-2/(D-4) {in_dimension}"
+        );
+    }
+}

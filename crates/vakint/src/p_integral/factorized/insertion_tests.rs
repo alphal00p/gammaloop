@@ -901,6 +901,78 @@ fn a_cancelling_sum_under_a_negative_power_keeps_its_exact_pole_order() {
     );
 }
 
+/// An insertion that is UNDEFINED after D -> 4-2ε (a negative power of a base
+/// that vanishes identically then) is refused (Insertion, "a denominator
+/// vanishes identically after D -> 4-2ε"), wherever the zero is: (D-4+2ε)^-1;
+/// (x-x+D-4+2ε)^-1 (the parser cancels x-x: the same); a base that is zero
+/// only after expansion, ((1+ε)^2-1-2ε-ε^2)^-1; nested,
+/// ((D-4+2ε)^-1+1)^-1; in the factor. A zero NUMERATOR is defined (the
+/// insertion contributes zero): D-4+2ε and (D-4+2ε)·ε^-1 are accepted with
+/// pole order 0; an ordinary pole (a base vanishing only at ε = 0), 1/(D-4),
+/// is accepted with pole order 1. A 0/0 cannot be written: the parser (and
+/// Atom arithmetic alike) cancels (D-4+2ε)/(D-4+2ε) to 1.
+#[test]
+fn an_insertion_undefined_after_the_substitution_is_refused() {
+    let eps_atom = atom(EPS);
+    let AtomView::Var(epsilon) = eps_atom.as_view() else {
+        unreachable!()
+    };
+    let epsilon = epsilon.get_symbol();
+    let good = gluon_surrogate(1);
+    let with_coefficient = |c: &str| {
+        let mut value = good.clone();
+        ins(&mut value).coefficient = atom(c);
+        value
+    };
+    let zero = format!("({DIM}-4+2*{EPS})");
+    let prefix = "a denominator vanishes identically after D -> 4-2ε";
+    for (what, value) in [
+        ("1/(D-4+2eps)", with_coefficient(&format!("{zero}^-1"))),
+        (
+            "(x-x+D-4+2eps)^-1",
+            with_coefficient(&format!("(witness::x-witness::x+{DIM}-4+2*{EPS})^-1")),
+        ),
+        (
+            "zero only after expansion",
+            with_coefficient(&format!("((1+{EPS})^2-1-2*{EPS}-{EPS}^2)^-1")),
+        ),
+        ("nested", with_coefficient(&format!("({zero}^-1+1)^-1"))),
+        ("in the factor", {
+            let mut value = good.clone();
+            let factor = ins(&mut value).factor.clone();
+            ins(&mut value).factor = factor * atom(&format!("{zero}^-1"));
+            value
+        }),
+    ] {
+        insertion_refusal(&value.validate().unwrap_err(), C0, prefix, what);
+    }
+    for (what, coefficient, order) in [
+        ("a zero numerator", zero.clone(), 0),
+        ("zero times a pole", format!("{zero}*{EPS}^-1"), 0),
+        ("an ordinary pole", format!("1/({DIM}-4)"), 1),
+    ] {
+        let value = with_coefficient(&coefficient);
+        value
+            .validate()
+            .unwrap_or_else(|e| panic!("{what} is defined: {e}"));
+        assert_eq!(
+            value.insertion_pole_order(epsilon).unwrap(),
+            order,
+            "{what}"
+        );
+    }
+    assert_eq!(
+        atom(&format!("{zero}/{zero}")),
+        Atom::num(1),
+        "the parser cancels 0/0"
+    );
+    assert_eq!(
+        atom(&zero) * atom(&format!("{zero}^-1")),
+        Atom::num(1),
+        "and so does Atom arithmetic"
+    );
+}
+
 /// Validation recognises ε by its name; an epsilon setting of another name
 /// (`user::ep`) gets the pole order's rules where the settings are known, the
 /// entries' input check (here `vakint_input`, the direct and ports path): the
