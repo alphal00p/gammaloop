@@ -1171,9 +1171,11 @@ fn k5_l5_3793_check_and_on_equal_off() -> Result<()> {
 
 /// The L5 surrogates whose holes have two or more loops (143019: two,
 /// 143190: three, 163502 / 175270 / 139207: four) through the whole
-/// evaluator in off, check and on mode: every record compared and equal or
-/// declined by design (`surrogate_split_chain`: a record that holds only part
-/// of a chain), at least one compared, on == off through eps^-1.
+/// evaluator in off, check and on mode: every record whose chain a UV child
+/// boundary cuts is STATED (the anchor carries the hole; the far end's slot
+/// a spectator port when the record lacks it) and compared equal, none
+/// declined `surrogate_split_chain` (measured: no record of these five needs
+/// it); on == off through eps^-1.
 #[test]
 fn k5_l5_multi_loop_holes_check_and_on_equal_off() -> Result<()> {
     with_production_piece_limit(|| -> Result<()> {
@@ -1190,6 +1192,14 @@ fn k5_l5_multi_loop_holes_check_and_on_equal_off() -> Result<()> {
                 .map(|hole| hole.loops)
                 .collect::<Vec<_>>();
             match whole_graph_summary(&original, &vakint, 1) {
+                Ok(summary) if summary.contains_key("declined:surrogate_split_chain") => {
+                    eprintln!(
+                        "K5_MULTI {name} FAIL hole_loops={holes:?}: split chains declined {summary:?}"
+                    );
+                    failures.push(format!(
+                        "{name}: a cut chain was declined, not stated: {summary:?}"
+                    ));
+                }
                 Ok(summary) => eprintln!(
                     "K5_MULTI {name} PASS surrogate_loops={} hole_loops={holes:?} {summary:?}",
                     prepared.surrogate.loop_count()
