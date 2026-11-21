@@ -1215,16 +1215,21 @@ fn an_epsilon_of_another_namespace_is_refused() {
 fn direct_record_z_in_the_argument() {
     let v = record("wh-k5-direct");
     let vakint = engine();
-    let plain = evaluate_factorized_ports(&vakint, &symbolic(), &v, &v.prefactor.total())
+    // the record's depth is the number of terms
+    let settings = VakintSettings {
+        number_of_terms_in_epsilon_expansion: v.record.as_ref().unwrap().depth.unwrap() as i64,
+        ..symbolic()
+    };
+    let plain = evaluate_factorized_ports(&vakint, &settings, &v, &v.prefactor.total())
         .unwrap()
         .value;
-    let got = evaluate_factorized_ports(&vakint, &symbolic(), &v, &(v.prefactor.total() * z()))
+    let got = evaluate_factorized_ports(&vakint, &settings, &v, &(v.prefactor.total() * z()))
         .unwrap()
         .value;
     assert_same(&got, &(&plain * z()), "k5-direct argument z");
     let mut i = v.clone();
     i.insertions[0].coefficient = &i.insertions[0].coefficient * z();
-    let got = evaluate_factorized_ports(&vakint, &symbolic(), &i, &i.prefactor.total())
+    let got = evaluate_factorized_ports(&vakint, &settings, &i, &i.prefactor.total())
         .unwrap()
         .value;
     assert_same(&got, &(&plain * z()), "k5-direct insertion z");

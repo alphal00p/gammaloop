@@ -168,7 +168,13 @@ fn refusal_k6_quark_without_its_projector_is_an_open_line() {
     let text = read("tests/fixtures/wh_ports/k6-quark.input.txt");
     let good = FactorizedNumerator::from_text(&text).unwrap();
     assert!(good.projector.is_some());
-    let settings = refpath::vakint_settings(good.loops() as i64 + 1);
+    // a v3 record's depth is the number of terms
+    let terms = good
+        .record
+        .as_ref()
+        .and_then(|r| r.depth)
+        .map_or(good.loops() as i64 + 1, |d| d as i64);
+    let settings = refpath::vakint_settings(terms);
     evaluate_factorized_ports(&vakint, &settings, &good, &Atom::num(1)).unwrap();
     let mut bad = good.clone();
     bad.projector = None;

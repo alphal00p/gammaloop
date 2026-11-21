@@ -1184,11 +1184,35 @@ pub(crate) fn check_marked_entry(
 ) -> Result<()> {
     check_prefactor_argument(value, prefactor, epsilon)?;
     check_epsilon_setting(value, epsilon)?;
+    if is_marked(value) {
+        // the entry's prefactor argument: defined and finite at ε = 0
+        check_finite_expression(
+            prefactor,
+            "prefactor argument",
+            value.dimension,
+            epsilon,
+            true,
+        )?;
+        // the record fields with the settings' ε (validation took the
+        // insertions' ε, or vakint's own without insertions)
+        value.check_marked_fields(Some(epsilon))?;
+    }
     // the settings' number of terms (an entry that does not take it from the
     // record), by the depth rule of [`MARKED_MAX_TERMS`]; marked values only
     // (the vacuum entries call this for every value)
     if let Some(terms) = terms.filter(|_| is_marked(value)) {
         marked_depth(i128::from(terms)).map_err(|detail| FactorizedError::Graph { detail })?;
+        // a v3 direct record's depth sets the number of terms (format
+        // section 7); these entries take the settings' number: they must agree
+        if let Some(depth) = value.record.as_ref().and_then(|r| r.depth)
+            && i128::try_from(depth).ok() != Some(i128::from(terms))
+        {
+            return Err(FactorizedError::Graph {
+                detail: format!(
+                    "the depth {depth} of the record differs from the settings' number of terms {terms} (they must be equal)"
+                ),
+            });
+        }
     }
     Ok(())
 }
@@ -1491,6 +1515,38 @@ fn vanishing_denominator(
     }
 }
 
+/// The first power with a negative exponent in `view` whose base, with the
+/// dimension set to 4 - 2ε, vanishes at ε = 0: a CANDIDATE pole (1/(D-4),
+/// ε^-1, 1/(ε + ε^2)); whether the expression has one is decided on the whole
+/// expression ([`check_finite_expression`]). Inner powers first.
+fn pole_denominator(view: AtomView<'_>, dimension: Symbol, epsilon: Symbol) -> Option<String> {
+    let inner = |v: AtomView<'_>| pole_denominator(v, dimension, epsilon);
+    match view {
+        AtomView::Add(a) => a.iter().find_map(inner),
+        AtomView::Mul(m) => m.iter().find_map(inner),
+        AtomView::Fun(f) => f.iter().find_map(inner),
+        AtomView::Pow(p) => {
+            let (base, exponent) = p.get_base_exp();
+            if let Some(found) = inner(base).or_else(|| inner(exponent)) {
+                return Some(found);
+            }
+            let negative = symbolica::domains::rational::Rational::try_from(exponent)
+                .is_ok_and(|r| r.is_negative());
+            if !negative {
+                return None;
+            }
+            let at_zero = base
+                .to_owned()
+                .replace(Atom::var(dimension))
+                .with(Atom::num(4) - Atom::num(2) * Atom::var(epsilon))
+                .replace(Atom::var(epsilon))
+                .with(Atom::Zero);
+            identically_zero(at_zero.as_view()).then(|| view.to_owned().to_canonical_string())
+        }
+        _ => None,
+    }
+}
+
 /// The first symbol named ε (in any namespace) in `view`.
 fn epsilon_symbol_in(view: AtomView<'_>) -> Option<Symbol> {
     let mut found = None;
@@ -1626,6 +1682,60 @@ fn epsilon_power_bound(view: AtomView<'_>, depends: &dyn Fn(Symbol) -> bool) -> 
         }
         _ => Some(0),
     }
+}
+
+/// One caller expression outside the insertions (a record field or the
+/// entry's prefactor argument) is defined and finite at ε = 0 after
+/// D -> 4-2ε: `NotScalar` at `location`, "a denominator vanishes identically
+/// .." or "a pole in ε outside an insertion ..".
+pub(crate) fn check_finite_expression(
+    atom: &Atom,
+    location: &str,
+    dimension: Symbol,
+    epsilon: Symbol,
+    poles: bool,
+) -> Result<()> {
+    let refuse = |detail: String| FactorizedError::NotScalar {
+        location: location.to_string(),
+        detail,
+    };
+    if let Some((after, found)) = vanishing_denominator(atom.as_view(), dimension, epsilon) {
+        let when = if after { " after D -> 4-2ε" } else { "" };
+        return Err(refuse(format!(
+            "a denominator vanishes identically{when} (undefined, not a pole of any order): {found}"
+        )));
+    }
+    // a pole: a candidate base vanishing at ε = 0 first (none in a real
+    // record: no series then); for a candidate the WHOLE expression decides,
+    // in lowest terms (a zero of a numerator cancels one of a denominator:
+    // ε/(D-4) is finite), by the trailing power of its Laurent series in ε
+    if !poles {
+        return Ok(());
+    }
+    if let Some(candidate) = pole_denominator(atom.as_view(), dimension, epsilon) {
+        let reduced = atom
+            .replace(Atom::var(dimension))
+            .with(Atom::num(4) - Atom::num(2) * Atom::var(epsilon))
+            .together();
+        let pole = match reduced.series(
+            epsilon,
+            Atom::Zero.as_view(),
+            symbolica::poly::series::SeriesDepth::relative(1),
+        ) {
+            Ok(series) => !series.is_zero() && series.get_trailing_exponent().is_negative(),
+            Err(e) => {
+                return Err(refuse(format!(
+                    "a pole in ε outside an insertion (no Laurent series at ε = 0: {e}): {candidate}"
+                )));
+            }
+        };
+        if pole {
+            return Err(refuse(format!(
+                "a pole in ε outside an insertion (only insertion coefficients may carry poles): {candidate}"
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// The most ε terms a marked value may ask for: its depth (the record's
@@ -2733,6 +2843,8 @@ impl FactorizedNumerator {
         }
         if is_marked(self) {
             self.check_marked_atoms()?;
+            // every caller expression outside the insertions: defined, finite
+            self.check_marked_fields(None)?;
         }
         Ok(())
     }
@@ -2819,6 +2931,48 @@ impl FactorizedNumerator {
                 })
             }
         }
+    }
+
+    /// Every caller expression of a marked value outside its insertions (edge
+    /// and vertex factors, the projector, the prefactor fields) is defined and
+    /// finite at ε = 0 once the dimension is set to 4 - 2ε: no denominator
+    /// vanishes identically, as written or after the substitution, and none
+    /// makes a pole (poles belong in insertion coefficients, whose pole order
+    /// raises the depth; R1 counts nothing else): `NotScalar` at the field. ε
+    /// is `epsilon` when given (every entry, with the settings' ε), else (at
+    /// validation, without settings) the first symbol named ε in the
+    /// insertions (the record's own ε); without insertions validation does
+    /// not know the record's ε: a field naming a symbol ε gets only the zero
+    /// test there, its pole test at the entry (with the settings' ε: a
+    /// lookalike, such as symbolica::ε, is then a plain symbol, refused by the
+    /// entry's name rule); a field written in the dimension alone gets both.
+    pub(crate) fn check_marked_fields(&self, epsilon: Option<Symbol>) -> Result<()> {
+        let mut fields = Vec::new();
+        for edge in &self.edges {
+            fields.push((format!("edge {} factor", edge.id), &edge.factor));
+        }
+        for vertex in &self.vertices {
+            fields.push((format!("vertex {} factor", vertex.id), &vertex.factor));
+        }
+        if let Some(projector) = &self.projector {
+            fields.push(("projector".to_string(), &projector.tensor));
+        }
+        fields.push(("prefactor_overall".to_string(), &self.prefactor.overall));
+        fields.push(("prefactor_scalars".to_string(), &self.prefactor.scalars));
+        fields.push(("prefactor_colour".to_string(), &self.prefactor.colour));
+        let known = epsilon.or_else(|| {
+            self.insertions.iter().find_map(|i| {
+                epsilon_symbol_in(i.coefficient.as_view())
+                    .or_else(|| epsilon_symbol_in(i.factor.as_view()))
+            })
+        });
+        let epsilon =
+            known.unwrap_or_else(|| crate::utils::vakint_macros::vk_symbol!(ALLOWED_VAKINT_SYMBOL));
+        for (location, atom) in fields {
+            let poles = known.is_some() || epsilon_symbol_in(atom.as_view()).is_none();
+            check_finite_expression(atom, &location, self.dimension, epsilon, poles)?;
+        }
+        Ok(())
     }
 
     /// A marked value's ids must be i64 (they are written as Q(id, ..),

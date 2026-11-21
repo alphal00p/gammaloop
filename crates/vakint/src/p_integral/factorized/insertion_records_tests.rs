@@ -502,10 +502,17 @@ fn retain_settings() -> VakintSettings {
 
 /// The record with its contracted (ct:) insertion at `vertex` moved onto the
 /// vertex by hand: the vertex factor is coefficient x factor, no insertion.
+/// The insertion at `vertex` moved onto its vertex by hand WITH ITS POLE
+/// TAKEN OUT (a vertex factor may carry no pole in ε): the vertex factor
+/// becomes coefficient × ε^n × factor, n the insertion's own pole order;
+/// returns the moved value and n (the value with the insertion is ε^-n times
+/// the moved one, exactly, in Retain).
 fn insertion_moved_onto_its_vertex(
     value: &FactorizedNumerator,
     vertex: usize,
-) -> FactorizedNumerator {
+) -> (FactorizedNumerator, i64) {
+    let eps_text = "gammalooprs::ε";
+    let eps = vk_symbol!(eps_text);
     let mut moved = value.clone();
     let i = moved
         .insertions
@@ -513,10 +520,14 @@ fn insertion_moved_onto_its_vertex(
         .position(|x| x.vertex == vertex)
         .unwrap();
     let insertion = moved.insertions.remove(i);
+    let mut alone = value.clone();
+    alone.insertions = vec![insertion.clone()];
+    let n = i64::try_from(alone.insertion_pole_order(eps).unwrap()).unwrap();
     let v = moved.vertices.iter_mut().find(|x| x.id == vertex).unwrap();
-    v.factor = (&insertion.coefficient * &insertion.factor).expand();
+    v.factor =
+        (&insertion.coefficient * Atom::var(eps).pow(Atom::num(n)) * &insertion.factor).expand();
     v.rule = format!("V_moved{vertex}");
-    moved
+    (moved, n)
 }
 
 fn closure_value(vakint: &Vakint, settings: &VakintSettings, value: &FactorizedNumerator) -> Atom {
@@ -536,7 +547,8 @@ fn closure_value(vakint: &Vakint, settings: &VakintSettings, value: &FactorizedN
 /// (1) linearity: its coefficient times 1/(1 + z ε), z a fresh scalar, gives
 /// the retained value times 1/(1 + z ε) exactly (a finite series would be a
 /// polynomial in z); (2) the exact product: the insertion moved onto its
-/// vertex by hand gives the same value; (3) the value does not depend on the
+/// vertex by hand with its pole ε^-1 taken out gives the value times ε, exactly
+/// (a vertex factor carries no pole); (3) the value does not depend on the
 /// depth. Symbolic control: the same record keeps its vendored value.
 #[test]
 fn retain_keeps_the_exact_product_of_a_poled_insertion() {
@@ -560,10 +572,15 @@ fn retain_keeps_the_exact_product_of_a_poled_insertion() {
         "linearity in Retain:\ntwin  {got}\nexact x 1/(1+z eps)  {}",
         &exact * &rational
     );
-    let moved = closure_value(&vakint, &retain, &insertion_moved_onto_its_vertex(&k2, 4));
+    let (moved, n) = insertion_moved_onto_its_vertex(&k2, 4);
+    assert_eq!(n, 1);
+    let moved = closure_value(&vakint, &retain, &moved);
+    let eps = Atom::var(vk_symbol!("gammalooprs::ε"));
     assert!(
-        (&exact - &moved).expand().is_zero(),
-        "exact product in Retain:\ninsertion {exact}\nmoved     {moved}"
+        (&exact - &(&moved * eps.pow(Atom::num(-n))))
+            .expand()
+            .is_zero(),
+        "exact product in Retain:\ninsertion {exact}\nmoved     {moved} (times ε^-{n})"
     );
     let mut deeper = k2.clone();
     if let FactorizedKind::Closure(spec) = &mut deeper.kind {
@@ -585,8 +602,9 @@ fn retain_keeps_the_exact_product_of_a_poled_insertion() {
 
 /// The same exact identities with TWO insertions (vendored k5-surrogate: a
 /// ct: child at vertex 1 and a surrogate ins: vertex 8, pole order 2): the ct:
-/// insertion moved onto its vertex gives the same retained value, and the
-/// value does not depend on the depth.
+/// insertion moved onto its vertex with its own pole taken out gives the
+/// retained value times ε^n, exactly, and the value does not depend on the
+/// depth.
 #[test]
 fn retain_keeps_the_exact_product_with_two_insertions() {
     let vakint = plain_engine();
@@ -599,10 +617,14 @@ fn retain_keeps_the_exact_product_with_two_insertions() {
         2
     );
     let exact = closure_value(&vakint, &retain, &k5);
-    let moved = closure_value(&vakint, &retain, &insertion_moved_onto_its_vertex(&k5, 1));
+    let (moved, n) = insertion_moved_onto_its_vertex(&k5, 1);
+    let moved = closure_value(&vakint, &retain, &moved);
+    let eps = Atom::var(vk_symbol!("gammalooprs::ε"));
     assert!(
-        (&exact - &moved).expand().is_zero(),
-        "exact product in Retain (two insertions)"
+        (&exact - &(&moved * eps.pow(Atom::num(-n))))
+            .expand()
+            .is_zero(),
+        "exact product in Retain (two insertions, the moved one of pole order {n})"
     );
     let mut deeper = k5.clone();
     if let FactorizedKind::Closure(spec) = &mut deeper.kind {
@@ -809,5 +831,206 @@ fn a_vanishing_base_or_an_exponent_not_an_integer_literal_is_refused() {
                 }
             }
         }
+    }
+}
+
+/// EVERY CALLER FIELD outside the insertions is defined and finite at ε = 0
+/// (D -> 4-2ε): on the K2 child of L3-036 (closure kind) and the real
+/// direct-kind L3-185 record, each of an edge factor, a vertex factor, the
+/// projector, prefactor_overall, prefactor_scalars and prefactor_colour
+/// multiplied by 1/P(x) or 1/P(D) (P(t) = (t-3)^2-t^2+6t-9, identically
+/// zero, written unexpanded) is refused by validation with "a denominator
+/// vanishes identically" at that field (`NotScalar`), and multiplied by
+/// 1/(D-4) with "a pole in ε outside an insertion". The finite forms pass:
+/// (D^2-16)/(D-4) (the pole cancels in lowest terms; the normaliser keeps
+/// the quotient) and the producer's prefactor bases 1/(D-1), 1/(D+2), 1/D.
+#[test]
+fn every_caller_field_is_defined_and_finite_at_epsilon_zero() {
+    let closure =
+        FactorizedNumerator::from_text(include_str!("fixtures/wh-k2-child-ins.record.txt"))
+            .unwrap();
+    let direct =
+        FactorizedNumerator::from_text(include_str!("fixtures/l3-185-insertions.txt")).unwrap();
+    let d = "gammalooprs::{}::dim";
+    let p = |t: &str| format!("(({t}-3)^2-{t}^2+6*{t}-9)");
+    let pa = |text: &str| vk_parse!(text).unwrap();
+    // the first vertex without an insertion (an insertion's vertex factor is 1)
+    let plain_vertex = |value: &FactorizedNumerator| {
+        value
+            .vertices
+            .iter()
+            .position(|v| value.insertions.iter().all(|i| i.vertex != v.id))
+            .unwrap()
+    };
+    // the field, multiplied by `factor` as written (not expanded)
+    let multiplied = |original: &FactorizedNumerator, field: &str, factor: &str| {
+        let mut value = original.clone();
+        let factor = pa(factor);
+        let times = |atom: &mut Atom| *atom = &*atom * &factor;
+        let vertex = plain_vertex(original);
+        match field {
+            "edge" => times(&mut value.edges[0].factor),
+            "vertex" => times(&mut value.vertices[vertex].factor),
+            "projector" => times(&mut value.projector.as_mut().unwrap().tensor),
+            // (records without a projector skip this field below)
+            "prefactor_overall" => times(&mut value.prefactor.overall),
+            "prefactor_scalars" => times(&mut value.prefactor.scalars),
+            "prefactor_colour" => times(&mut value.prefactor.colour),
+            other => panic!("{other}"),
+        }
+        value
+    };
+    let location_of = |value: &FactorizedNumerator, field: &str| match field {
+        "edge" => format!("edge {} factor", value.edges[0].id),
+        "vertex" => format!("vertex {} factor", value.vertices[plain_vertex(value)].id),
+        other => other.to_string(),
+    };
+    let fields = [
+        "edge",
+        "vertex",
+        "projector",
+        "prefactor_overall",
+        "prefactor_scalars",
+        "prefactor_colour",
+    ];
+    for original in [&closure, &direct] {
+        original.validate().unwrap();
+        for field in fields {
+            // no projector; the closure kind's prefactor_overall is fixed
+            // to 1 by its own rule (the original graph's weights)
+            if (field == "projector" && original.projector.is_none())
+                || (field == "prefactor_overall"
+                    && matches!(original.kind, FactorizedKind::Closure(_)))
+            {
+                continue;
+            }
+            for (factor, prefix) in [
+                (
+                    format!("1/{}", p("witness::x")),
+                    "a denominator vanishes identically",
+                ),
+                (format!("1/{}", p(d)), "a denominator vanishes identically"),
+                (format!("1/({d}-4)"), "a pole in ε outside an insertion"),
+            ] {
+                let value = multiplied(original, field, &factor);
+                match value.validate() {
+                    Err(FactorizedError::NotScalar {
+                        location: at,
+                        detail,
+                    }) => {
+                        assert_eq!(at, location_of(original, field), "{factor} in {field}");
+                        assert!(detail.starts_with(prefix), "{factor} in {field}: {detail}");
+                    }
+                    other => panic!(
+                        "{}: {factor} in {field}: expected NotScalar, got {other:?}",
+                        original.label
+                    ),
+                }
+            }
+            let finite = multiplied(original, field, &format!("({d}^2-16)/({d}-4)"));
+            finite
+                .validate()
+                .unwrap_or_else(|e| panic!("(D^2-16)/(D-4) in {field}: {e}"));
+        }
+        for twin in [format!("1/({d}-1)"), format!("1/({d}+2)"), format!("1/{d}")] {
+            multiplied(original, "prefactor_scalars", &twin)
+                .validate()
+                .unwrap_or_else(|e| panic!("{twin} in prefactor_scalars: {e}"));
+        }
+    }
+    // through the closure entry: refused before any evaluation, and a twin
+    // is evaluated
+    let vakint = plain_engine();
+    let bad = multiplied(&closure, "vertex", &format!("1/({d}-4)"));
+    assert!(matches!(
+        evaluate_factorized_closure(
+            &vakint,
+            &site_settings(),
+            std::slice::from_ref(&bad),
+            &[bad.prefactor.total()],
+        ),
+        Err(FactorizedError::NotScalar { .. })
+    ));
+    let twin = multiplied(&closure, "prefactor_scalars", &format!("1/({d}-1)"));
+    assert!(!closure_value(&vakint, &site_settings(), &twin).is_zero());
+    // a record WITHOUT insertions (the real k1-root): validation cannot know
+    // its ε; the entry checks the fields with the settings' ε
+    let root =
+        FactorizedNumerator::from_text(include_str!("fixtures/wh-k1-root.record.txt")).unwrap();
+    let poled = multiplied(&root, "vertex", "gammalooprs::ε^-1");
+    poled.validate().unwrap();
+    match evaluate_factorized_closure(
+        &vakint,
+        &site_settings(),
+        std::slice::from_ref(&poled),
+        &[poled.prefactor.total()],
+    ) {
+        Err(FactorizedError::NotScalar { location, detail }) => {
+            assert_eq!(location, location_of(&root, "vertex"));
+            assert!(
+                detail.starts_with("a pole in ε outside an insertion"),
+                "{detail}"
+            );
+        }
+        other => panic!("ε^-1 in a vertex factor of k1-root: expected NotScalar, got {other:?}"),
+    }
+}
+
+/// The real direct-kind L3-185 record carries `p2_power = -1` on its
+/// projector: it validates, and the marked entry checks (prefactor argument,
+/// ε setting, depth) accept it; the field checks act on the projector's
+/// tensor, never on its power.
+#[test]
+fn a_real_record_with_p2_power_minus_one_is_accepted() {
+    let value =
+        FactorizedNumerator::from_text(include_str!("fixtures/l3-185-insertions.txt")).unwrap();
+    assert_eq!(value.projector.as_ref().unwrap().p2_power, -1);
+    value.validate().unwrap();
+    let eps_text = "gammalooprs::ε";
+    check_marked_entry(
+        &value,
+        &value.prefactor.total(),
+        vk_symbol!(eps_text),
+        Some(3),
+    )
+    .unwrap();
+}
+
+/// A v3 direct record's `depth` sets its number of terms (format section 7);
+/// the direct, ports and vacuum entries take the settings' number: on the
+/// real L3-185 record with depth 2, settings of 3 terms are refused ("the
+/// depth 2 of the record differs from the settings' number of terms 3"), at
+/// the entry check and through the direct entry; 2 terms pass the check, and
+/// a record without a depth takes any number.
+#[test]
+fn a_record_depth_other_than_the_settings_terms_is_refused() {
+    let mut value =
+        FactorizedNumerator::from_text(include_str!("fixtures/l3-185-insertions.txt")).unwrap();
+    let eps_text = "gammalooprs::ε";
+    let eps = vk_symbol!(eps_text);
+    check_marked_entry(&value, &value.prefactor.total(), eps, Some(3)).unwrap();
+    value
+        .record
+        .get_or_insert_with(|| DirectRecord {
+            original_cycles: None,
+            depth: None,
+            weights: Vec::new(),
+        })
+        .depth = Some(2);
+    value.validate().unwrap();
+    let detail = "the depth 2 of the record differs from the settings' number of terms 3";
+    match check_marked_entry(&value, &value.prefactor.total(), eps, Some(3)) {
+        Err(FactorizedError::Graph { detail: got }) => assert!(got.starts_with(detail), "{got}"),
+        other => panic!("expected Graph, got {other:?}"),
+    }
+    check_marked_entry(&value, &value.prefactor.total(), eps, Some(2)).unwrap();
+    match evaluate_factorized(
+        &plain_engine(),
+        &site_settings(),
+        &value,
+        &value.prefactor.total(),
+    ) {
+        Err(FactorizedError::Graph { detail: got }) => assert!(got.starts_with(detail), "{got}"),
+        other => panic!("expected Graph through the direct entry, got {other:?}"),
     }
 }

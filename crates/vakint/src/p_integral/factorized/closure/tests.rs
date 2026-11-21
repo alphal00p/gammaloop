@@ -4676,12 +4676,17 @@ fn vakint_input_checks_a_marked_value_s_argument() {
         FactorizedNumerator::from_text(include_str!("../fixtures/wh-k5-direct.record.txt"))
             .unwrap();
     let argument = direct.prefactor.total() * atom("vakint::k(1)");
+    // the record's depth is the number of terms
+    let settings = VakintSettings {
+        number_of_terms_in_epsilon_expansion: direct.record.as_ref().unwrap().depth.unwrap() as i64,
+        ..settings()
+    };
     assert_graph_prefix(
-        super::super::vakint_input(&settings(), &direct, &argument).map(|_| ()),
+        super::super::vakint_input(&settings, &direct, &argument).map(|_| ()),
         &reserved_prefix("vakint::k", "prefactor argument"),
         "vakint_input",
     );
-    let _ = super::super::vakint_input(&settings(), &direct, &direct.prefactor.total()).unwrap();
+    let _ = super::super::vakint_input(&settings, &direct, &direct.prefactor.total()).unwrap();
 }
 
 // ---------------------------------------------------------------------------
