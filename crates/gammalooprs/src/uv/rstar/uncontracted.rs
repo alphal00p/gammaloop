@@ -1458,6 +1458,28 @@ pub(super) fn compare(
     }
 }
 
+/// A failure that fails the diagram by design (a CHECK mismatch, a refusal
+/// that is not designed): a typed error, so that, like the IRH-DEPTH alarm
+/// ([`super::depth::is_alarm`]), no closed-path guard
+/// (`GAMMALOOP_IR_HARD_CHILD_GUARD=1`), vanished-row valuation or
+/// counterterm cache turns it into a decline (review IRH-DEPTH, control: a
+/// K3 CHECK mismatch in a guarded child attempt was declined). Same text as
+/// before.
+#[derive(Debug)]
+pub(super) struct Failure(String);
+
+impl std::fmt::Display for Failure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for Failure {}
+
+pub(super) fn failure(message: String) -> eyre::Report {
+    eyre::Report::new(Failure(message))
+}
+
 /// The error of a failed check (`equal=false`): it fails the diagram.
 pub(super) fn check_failure(attempt: &Attempt, check: &Check, epsilon: Symbol) -> eyre::Report {
     let ours = attempt.value().unwrap_or_default();
@@ -1466,7 +1488,7 @@ pub(super) fn check_failure(attempt: &Attempt, check: &Check, epsilon: Symbol) -
             .map(|p| p.to_canonical_string())
             .unwrap_or_else(|e| format!("error:{e:#}"))
     };
-    eyre!(
+    failure(format!(
         "UNCONTRACTED_CHECK: kind={} graph={} id={}: the uncontracted value differs from the contracted one through eps^{} (depth {}, first difference {}){}\ncontracted: {}\nuncontracted: {}",
         attempt.kind.as_str(),
         attempt.graph,
@@ -1481,7 +1503,7 @@ pub(super) fn check_failure(attempt: &Attempt, check: &Check, epsilon: Symbol) -
             .unwrap_or_default(),
         show(&check.contracted),
         show(&ours)
-    )
+    ))
 }
 
 /// The error of an attempt whose refusal is not designed
@@ -1492,13 +1514,13 @@ pub(super) fn error_failure(attempt: &Attempt, mode: Mode) -> eyre::Report {
         Outcome::Error(decline) => (decline.code.as_str(), decline.detail.as_str()),
         _ => ("none", ""),
     };
-    eyre!(
+    failure(format!(
         "UNCONTRACTED kind={} graph={} id={} mode={}: outcome=error:{code}: the record is refused for a reason that is not a designed refusal (a bug of the emitter or of vakint's entry): {detail}",
         attempt.kind.as_str(),
         attempt.graph,
         attempt.id,
         mode.as_str()
-    )
+    ))
 }
 
 // ---------------------------------------------------------------------------

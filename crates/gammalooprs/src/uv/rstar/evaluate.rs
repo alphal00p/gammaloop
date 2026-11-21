@@ -1912,6 +1912,8 @@ impl<'a> Evaluation<'a> {
             // is never declined either: raised by this evaluation or by any
             // nested one (a decorated quotient's or a UV child's R*, also
             // replayed by the counterterm cache), it is returned as the error.
+            // A K3 CHECK mismatch or an undesigned K3 refusal is a diagnostic
+            // failure on this stack (and an uncontracted::Failure).
             let limit = super::closed::budget_extra_bytes()
                 .and_then(|extra| super::expression::process_rss_now().map(|rss| rss + extra));
             let guarded = super::ir_dirac::guarded_unless_diagnostic(
@@ -1932,10 +1934,10 @@ impl<'a> Evaluation<'a> {
                         self.graph.name,
                         self.graph.n_loops(&correction.hard),
                         correction.taylor_order,
-                        if super::depth::is_alarm(&error) {
-                            "error:depth_strict"
-                        } else {
+                        if super::ir_dirac::is_diagnostic_failure(&error) {
                             "error:diagnostic"
+                        } else {
+                            "error:depth_strict"
                         },
                         started.elapsed().as_secs_f64(),
                         self.edges(&correction.hard),
