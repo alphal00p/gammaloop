@@ -1,0 +1,34 @@
+schema	pint6.factorized-numerator.v1
+label	legacy v1 bubble with 5 external spectators
+kind	direct
+dimension	gammalooprs::{}::dim
+momenta	loops=1	externals=1
+loop	1	edge=2
+external	1	edge=0
+edges	4
+edge	0	source=ext	target=1	hedges=-,0	particle=B	line=vector	power=1	momentum=0,1	0
+edge_factor	0	1
+edge	1	source=0	target=ext	hedges=1,-	particle=B	line=vector	power=1	momentum=0,1	0
+edge_factor	1	1
+edge	2	source=0	target=1	hedges=2,3	particle=Q	line=vector	power=1	momentum=1,0	0
+edge_factor	2	1
+edge	3	source=0	target=1	hedges=4,5	particle=Q	line=vector	power=1	momentum=-1,-1	0
+edge_factor	3	1
+vertices	2
+vertex	0	rule=V_BQQ	1
+vertex	1	rule=V_BQQ	gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(0,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(0,1)))*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(0,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(0,2)))*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(0,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(0,3)))*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(0,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(0,4)))*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(0,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(0,5)))
+ports	5
+port	spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(0,1))
+port	spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(0,2))
+port	spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(0,3))
+port	spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(0,4))
+port	spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(0,5))
+projector	none
+prefactor	loop_sign=1	nf_power=0
+prefactor_overall	1
+prefactor_scalars	1
+prefactor_colour	1
+colour_branch	0	of=1	rows=0,0,0,0,0,0
+insertions	0
+lines	33
+end
