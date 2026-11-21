@@ -925,7 +925,7 @@ fn an_insertion_undefined_after_the_substitution_is_refused() {
         value
     };
     let zero = format!("({DIM}-4+2*{EPS})");
-    let prefix = "a denominator vanishes identically after D -> 4-2ε";
+    let prefix = "a denominator vanishes identically";
     for (what, value) in [
         ("1/(D-4+2eps)", with_coefficient(&format!("{zero}^-1"))),
         (
@@ -971,6 +971,60 @@ fn an_insertion_undefined_after_the_substitution_is_refused() {
         Atom::num(1),
         "and so does Atom arithmetic"
     );
+}
+
+/// The zero test of a denominator does not depend on what the base contains:
+/// identically zero bases are refused (P(t) = (t-3)^2 - t^2 + 6t - 9 for
+/// t = D, a caller scalar x, a number 2 - 2 spelled as x - x + 2 - 2 inside a
+/// sum; in the factor too), their twins with base 1 ((t-3)^2 - t^2 + 6t - 8)
+/// are accepted, as are 1/(D-4) (a pole), 1/x and 1/(x-3) (zero only at one
+/// value of x). A large base under a negative power, ((x+y+z+w)^40)^-1, is
+/// decided by the cheap exact pre-filter (no expansion).
+#[test]
+fn a_vanishing_denominator_is_refused_whatever_it_depends_on() {
+    let good = gluon_surrogate(1);
+    let with_coefficient = |c: &str| {
+        let mut value = good.clone();
+        ins(&mut value).coefficient = atom(c);
+        value
+    };
+    let p = |t: &str, k: i64| format!("(({t}-3)^2-{t}^2+6*{t}-{k})");
+    let prefix = "a denominator vanishes identically";
+    for (what, value) in [
+        ("1/P(D)", with_coefficient(&format!("1/{}", p(DIM, 9)))),
+        (
+            "1/P(x)",
+            with_coefficient(&format!("1/{}", p("witness::x", 9))),
+        ),
+        (
+            "1/(x - x + P(y))",
+            with_coefficient(&format!("1/(witness::x-witness::x+{})", p("witness::y", 9))),
+        ),
+        ("1/P(D) in the factor", {
+            let mut value = good.clone();
+            let factor = ins(&mut value).factor.clone();
+            ins(&mut value).factor = factor * atom(&format!("1/{}", p(DIM, 9)));
+            value
+        }),
+    ] {
+        insertion_refusal(&value.validate().unwrap_err(), C0, prefix, what);
+    }
+    for (what, coefficient) in [
+        ("base 1 in D", format!("1/{}", p(DIM, 8))),
+        ("base 1 in x", format!("1/{}", p("witness::x", 8))),
+        ("a pole", format!("1/({DIM}-4)")),
+        ("1/x", "1/witness::x".to_string()),
+        ("1/(x-3)", "1/(witness::x-3)".to_string()),
+    ] {
+        with_coefficient(&coefficient)
+            .validate()
+            .unwrap_or_else(|e| panic!("{what} is defined: {e}"));
+    }
+    let started = std::time::Instant::now();
+    with_coefficient("((witness::x+witness::y+witness::z+witness::w)^40)^-1")
+        .validate()
+        .expect("a large nonzero base");
+    eprintln!("LARGE BASE validation: {:?}", started.elapsed());
 }
 
 /// Validation recognises ε by its name; an epsilon setting of another name

@@ -1107,50 +1107,100 @@ fn momentum_degree(view: AtomView<'_>) -> u64 {
     }
 }
 
-/// The first negative integer power in `view` whose base vanishes
-/// IDENTICALLY once the dimension is set to 4 - 2ε (`epsilon`): the expression
-/// is undefined there, not a pole of any order (a base that vanishes only at
-/// ε = 0, such as D - 4, is an ordinary pole). Inner powers first; the base is
-/// put over a common denominator (exact rational arithmetic, not a series).
-/// Bases without ε or the dimension (outside slots) are skipped: an
-/// identically zero one is already the parser's non-finite number, refused as
-/// such.
-fn undefined_after_substitution(
+/// Whether `base` is IDENTICALLY ZERO as a rational function of its symbols
+/// (D, ε, a caller's scalars, function atoms alike) after expansion. First a
+/// cheap exact pre-filter: fixed distinct integers for its variables,
+/// symbolica's own normalisation (`replace` + exact rational arithmetic). Only
+/// a finite NONZERO NUMBER is conclusive (a rational function that is nonzero
+/// at one point is not identically zero, so one assignment suffices); every
+/// other outcome (zero, a non-finite number because the point is a pole of an
+/// inner power, a non-number such as a remaining function atom) falls through
+/// to the exact normal forms: `together` (a common denominator) and `expand`. A
+/// zero that holds only by an identity of special functions
+/// (sin(x)^2 + cos(x)^2 - 1) is not seen: such a base is not zero here.
+fn identically_zero(base: AtomView<'_>) -> bool {
+    let mut symbols = Vec::new();
+    base.visitor(&mut |part| {
+        if let AtomView::Var(v) = part
+            && !symbols.contains(&v.get_symbol())
+        {
+            symbols.push(v.get_symbol());
+        }
+        true
+    });
+    let mut point = base.to_owned();
+    for (i, symbol) in symbols.iter().enumerate() {
+        let value = 10007 + 101 * i64::try_from(i).unwrap_or(i64::MAX / 202);
+        point = point.replace(Atom::var(*symbol)).with(Atom::num(value));
+    }
+    if let AtomView::Num(n) = point.as_view()
+        && matches!(
+            n.get_coeff_view(),
+            CoefficientView::Natural(..) | CoefficientView::Large(..)
+        )
+        && !point.is_zero()
+    {
+        return false;
+    }
+    base.to_owned().together().is_zero() || base.to_owned().expand().is_zero()
+}
+
+/// The first power with a NEGATIVE exponent (integer or not) in `view` whose
+/// base is identically zero ([`identically_zero`]) as written, or once the
+/// dimension is set to 4 - 2ε (`epsilon`): the expression is undefined there,
+/// not a pole of any order (a base that vanishes only at ε = 0, such as D - 4,
+/// is an ordinary pole; one that vanishes only for some value of a caller's
+/// scalar, x - 3, is defined). Every base is tested, whatever symbols it
+/// contains; inner powers first (bases and exponents).
+fn vanishing_denominator(
     view: AtomView<'_>,
     dimension: Symbol,
     epsilon: Symbol,
-) -> Option<String> {
-    let depends = |s: Symbol| s == epsilon || s == dimension;
+) -> Option<(bool, String)> {
+    let inner = |v: AtomView<'_>| vanishing_denominator(v, dimension, epsilon);
     match view {
-        AtomView::Add(a) => a
-            .iter()
-            .find_map(|t| undefined_after_substitution(t, dimension, epsilon)),
-        AtomView::Mul(m) => m
-            .iter()
-            .find_map(|t| undefined_after_substitution(t, dimension, epsilon)),
-        AtomView::Fun(f) => f
-            .iter()
-            .find_map(|t| undefined_after_substitution(t, dimension, epsilon)),
+        AtomView::Add(a) => a.iter().find_map(inner),
+        AtomView::Mul(m) => m.iter().find_map(inner),
+        AtomView::Fun(f) => f.iter().find_map(inner),
         AtomView::Pow(p) => {
             let (base, exponent) = p.get_base_exp();
-            if let Some(found) = undefined_after_substitution(base, dimension, epsilon) {
+            if let Some(found) = inner(base).or_else(|| inner(exponent)) {
                 return Some(found);
             }
-            let negative = symbolica::domains::integer::Integer::try_from(exponent)
-                .is_ok_and(|n| n.is_negative());
-            if !negative || !depends_outside_slots(base, &depends) {
+            let negative = symbolica::domains::rational::Rational::try_from(exponent)
+                .is_ok_and(|r| r.is_negative());
+            if !negative {
                 return None;
             }
-            let substituted = base
-                .to_owned()
-                .replace(Atom::var(dimension))
-                .with(Atom::num(4) - Atom::num(2) * Atom::var(epsilon));
-            substituted.together().is_zero().then(|| {
-                format!(
-                    "{} (its base is identically zero after D -> 4-2ε)",
-                    view.to_owned().to_canonical_string()
-                )
-            })
+            let shown = view.to_owned().to_canonical_string();
+            if identically_zero(base) {
+                return Some((
+                    false,
+                    format!("{shown} (its base is identically zero as written)"),
+                ));
+            }
+            let mut dimension_inside = false;
+            base.visitor(&mut |part| {
+                if let AtomView::Var(v) = part
+                    && v.get_symbol() == dimension
+                {
+                    dimension_inside = true;
+                }
+                !dimension_inside
+            });
+            if dimension_inside {
+                let substituted = base
+                    .to_owned()
+                    .replace(Atom::var(dimension))
+                    .with(Atom::num(4) - Atom::num(2) * Atom::var(epsilon));
+                if identically_zero(substituted.as_view()) {
+                    return Some((
+                        true,
+                        format!("{shown} (its base is identically zero after D -> 4-2ε)"),
+                    ));
+                }
+            }
+            None
         }
         _ => None,
     }
@@ -1213,22 +1263,25 @@ fn insertion_epsilon_rules(
             )));
         }
     }
-    // defined after D -> 4-2ε: ε given by the settings at the entries, by
-    // its name at validation (no ε in the insertion: nothing can vanish)
-    let epsilon = epsilon.or_else(|| {
-        epsilon_symbol_in(insertion.coefficient.as_view())
-            .or_else(|| epsilon_symbol_in(insertion.factor.as_view()))
-    });
-    if let Some(epsilon) = epsilon {
-        for (what, atom) in [
-            ("coefficient", &insertion.coefficient),
-            ("factor", &insertion.factor),
-        ] {
-            if let Some(found) = undefined_after_substitution(atom.as_view(), dimension, epsilon) {
-                return Err(error(format!(
-                    "a denominator vanishes identically after D -> 4-2ε (undefined, not a pole of any order): {found} in the {what}"
-                )));
-            }
+    // defined: no denominator identically zero, as written or after
+    // D -> 4-2ε, whatever it depends on (ε given by the settings at the
+    // entries, by its name at validation, else vakint's own: the test does not
+    // depend on which, ε being a free variable there)
+    let epsilon = epsilon
+        .or_else(|| {
+            epsilon_symbol_in(insertion.coefficient.as_view())
+                .or_else(|| epsilon_symbol_in(insertion.factor.as_view()))
+        })
+        .unwrap_or_else(|| crate::utils::vakint_macros::vk_symbol!(ALLOWED_VAKINT_SYMBOL));
+    for (what, atom) in [
+        ("coefficient", &insertion.coefficient),
+        ("factor", &insertion.factor),
+    ] {
+        if let Some((after, found)) = vanishing_denominator(atom.as_view(), dimension, epsilon) {
+            let when = if after { " after D -> 4-2ε" } else { "" };
+            return Err(error(format!(
+                "a denominator vanishes identically{when} (undefined, not a pole of any order): {found} in the {what}"
+            )));
         }
     }
     Ok(())

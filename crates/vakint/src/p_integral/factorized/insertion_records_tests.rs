@@ -674,3 +674,79 @@ fn an_undefined_insertion_is_refused_and_its_defined_twins_agree() {
         );
     }
 }
+
+/// Every denominator of an insertion is tested for being identically zero,
+/// whatever it depends on: with P(t) = (t-3)^2 - t^2 + 6t - 9 (identically 0
+/// as a polynomial) on the K2 child of L3-036, the coefficient's 1/ε replaced
+/// by 1/P(D), by 1/P(x) (x a caller scalar, no ε or dimension in it), the
+/// same next to an explicit ε^-1, and P(x)^(-1/2): each refused (Insertion at
+/// vertex 4, "a denominator vanishes identically"), by validation and by the
+/// entry. The defined controls 1/(ε (P(t) + 1)) (P + 1 = 1) for t = D and
+/// t = x give the original record's value exactly; 1/(x - 3), zero only for
+/// one value of x, is defined and evaluates.
+#[test]
+fn every_identically_vanishing_denominator_is_refused() {
+    let vakint = plain_engine();
+    let text = include_str!("fixtures/wh-k2-child-ins.record.txt");
+    let original = FactorizedNumerator::from_text(text).unwrap();
+    let reference = closure_value(&vakint, &site_settings(), &original);
+    // the record with its coefficient's 1/ε replaced by `replacement`
+    let with = |replacement: &str| {
+        let mut value = original.clone();
+        // the coefficient's own factor c ε expanded (ε-free), the replacement
+        // multiplied in as written (expanding it would turn P(t) into 0)
+        let eps_text = "gammalooprs::ε";
+        let eps = vk_parse!(eps_text).unwrap();
+        let written = vk_parse!(replacement).unwrap();
+        value.insertions[0].coefficient =
+            (&value.insertions[0].coefficient * &eps).expand() * &written;
+        value
+    };
+    let p = |t: &str| format!("(({t}-3)^2-{t}^2+6*{t}-9)");
+    let d = "gammalooprs::{}::dim";
+    let x = "witness::x";
+    let prefix = "a denominator vanishes identically";
+    for (what, replacement) in [
+        ("1/P(D)", format!("1/{}", p(d))),
+        ("1/P(x)", format!("1/{}", p(x))),
+        (
+            "1/P(D) next to an explicit ε^-1",
+            format!("gammalooprs::ε^-1/{}", p(d)),
+        ),
+        (
+            "1/P(x) next to an explicit ε^-1",
+            format!("gammalooprs::ε^-1/{}", p(x)),
+        ),
+        ("P(x)^(-1/2)", format!("{}^(-1/2)", p(x))),
+    ] {
+        let value = with(&replacement);
+        for error in [
+            value.validate().unwrap_err(),
+            evaluate_factorized_closure(
+                &vakint,
+                &site_settings(),
+                std::slice::from_ref(&value),
+                &[value.prefactor.total()],
+            )
+            .unwrap_err(),
+        ] {
+            match &error {
+                FactorizedError::Insertion { vertex: 4, detail } => {
+                    assert!(detail.starts_with(prefix), "{what}: {detail}")
+                }
+                other => panic!("{what}: expected the Insertion refusal, got {other:?}"),
+            }
+        }
+    }
+    for t in [d, x] {
+        let control = with(&format!("1/(gammalooprs::ε*({}+1))", p(t)));
+        let got = closure_value(&vakint, &site_settings(), &control);
+        assert!(
+            (&got - &reference).expand().is_zero(),
+            "1/(ε (P({t})+1)) must give the original value"
+        );
+    }
+    let at_a_point = with(&format!("1/({x}-3)"));
+    at_a_point.validate().expect("1/(x-3) is defined");
+    assert!(!closure_value(&vakint, &site_settings(), &at_a_point).is_zero());
+}
