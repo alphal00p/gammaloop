@@ -1,0 +1,6 @@
+# Vendored from the beta project's VERIFIED fixture set wh-fixtures/k1-quick/L4-40 (format WH-RECORD-FORMAT v1.4).
+# sha256 of each file as copied (unchanged):
+b43d08c131cbe1a5c45029a6bb4f1a190d9a476ac1047daffd060d0e87e4589f  l4-d40.dot  (k1-quick/L4-40/rr1/raw/diagram-000040.dot)
+9feacccc8c5b5d4db584ba4e16acd941d9fbcbf393727971de40a1a42dc1cbc4  l4-40-rr1.input.txt  (k1-quick/L4-40/rr1/input.txt)
+13cd090e96829704f67c4e90cf152c3d4ffdc834bd92cdc0ff330ed44f29367f  l4-40-rr2.input.txt  (k1-quick/L4-40/rr2/input.txt)
+edfe99e7b944c91265ea7cae8a328ade18ebf09c089434428881412c61493352  l4-40-rr2.value.txt  (k1-quick/L4-40/rr2/value.txt)
