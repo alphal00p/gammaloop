@@ -3037,6 +3037,106 @@ fn catalogue_constants(path: &std::path::Path) {
     );
 }
 
+/// A MARKED two-loop massive vacuum sunrise (v3 direct record) for the
+/// vacuum entry; `mass` is the lines' mass, `factor` the first vertex's.
+fn marked_vacuum_sunrise(mass: &str, factor: &str) -> FactorizedNumerator {
+    use vakint::p_integral::factorized::{
+        DirectRecord, Endpoint, FactorizedEdge, FactorizedVertex, LineKind, Prefactor,
+    };
+    init();
+    let line =
+        |id: usize, s: usize, t: usize, h: (usize, usize), momentum: [i64; 2]| FactorizedEdge {
+            id,
+            source: Endpoint::Vertex(s),
+            target: Endpoint::Vertex(t),
+            source_hedge: Some(h.0),
+            target_hedge: Some(h.1),
+            particle: "x".into(),
+            line: LineKind::Scalar,
+            power: 1,
+            mass_squared: atom(mass),
+            momentum: momentum.to_vec(),
+            factor: Atom::num(1),
+        };
+    FactorizedNumerator {
+        label: "marked vacuum sunrise".into(),
+        kind: FactorizedKind::Direct,
+        dimension: symbolica::symbol!("gammalooprs::dim"),
+        loop_edges: vec![Some(1), Some(2)],
+        external_edges: Vec::new(),
+        edges: vec![
+            line(1, 1, 2, (1, 2), [1, 0]),
+            line(2, 1, 2, (3, 4), [0, 1]),
+            line(3, 2, 1, (5, 6), [1, 1]),
+        ],
+        vertices: vec![
+            FactorizedVertex {
+                id: 1,
+                rule: "V".into(),
+                factor: atom(factor),
+            },
+            FactorizedVertex {
+                id: 2,
+                rule: "V".into(),
+                factor: Atom::num(1),
+            },
+        ],
+        ports: Vec::new(),
+        projector: None,
+        prefactor: Prefactor {
+            scalars: atom("UFO::gs^2"),
+            ..Prefactor::default()
+        },
+        colour_branch: None,
+        insertions: Vec::new(),
+        record: Some(DirectRecord {
+            original_cycles: None,
+            depth: None,
+            weights: Vec::new(),
+        }),
+    }
+}
+
+/// The vacuum entry applies a MARKED value's atom rules (it never calls
+/// `validate`): a vertex factor x log(ε), a fractional or symbolic exponent,
+/// an edge mass that is not a plain symbol: refused; the plain record
+/// evaluates.
+#[test]
+fn the_vacuum_entry_applies_the_marked_atom_rules() {
+    use vakint::p_integral::factorized::evaluate_factorized_vacuum;
+    let vakint = engine();
+    let run = |v: &FactorizedNumerator| {
+        evaluate_factorized_vacuum(&vakint, &symbolic(), v, &v.prefactor.total()).map(|r| r.value)
+    };
+    run(&marked_vacuum_sunrise("probe::m2", "1")).unwrap();
+    for (mass, factor, prefix) in [
+        (
+            "probe::m2",
+            format!("log({EPS})"),
+            "a non-polynomial dependence in vertex 1 factor: ",
+        ),
+        (
+            "probe::m2",
+            "probe::x^(1/2)".to_string(),
+            "a non-integer exponent in vertex 1 factor: ",
+        ),
+        (
+            "probe::m2",
+            "probe::x^probe::y".to_string(),
+            "a non-integer exponent in vertex 1 factor: ",
+        ),
+        ("probe::m2^(1/2)", "1".to_string(), "edge 1: mass "),
+        ("log(probe::m2)", "1".to_string(), "edge 1: mass "),
+    ] {
+        match run(&marked_vacuum_sunrise(mass, &factor)) {
+            Err(FactorizedError::Graph { detail }) => {
+                assert!(detail.starts_with(prefix), "{mass} {factor}: {detail}")
+            }
+            other => panic!("{mass} {factor}: {other:?}"),
+        }
+    }
+}
+
 /// MARKED three-loop massive vacuum values through the vacuum entry in
 /// Symbolic and Numerical mode at 3 and 6 terms: the basketball (four lines
 /// of one mass between two vertices) and the all-massive mercedes (the

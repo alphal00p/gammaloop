@@ -225,6 +225,7 @@ fn validate_vacuum(value: &FactorizedNumerator) -> Result<()> {
     // `validate`); an unmarked value is not walked (the base behaviour)
     if super::is_marked(value) {
         value.check_reserved_symbols()?;
+        value.check_marked_atoms()?;
     }
     if !value.insertions.is_empty() {
         // The insertion rules (`Insertion`); the vacuum mode does not run the

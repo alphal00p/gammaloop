@@ -2689,11 +2689,31 @@ impl FactorizedNumerator {
             self.validate_contract(None)?;
         }
         if is_marked(self) {
-            for (field, atom) in self.record_atoms() {
-                if !field.ends_with(" mass") {
-                    self.check_opaque_dependence(atom, &field)?;
-                }
+            self.check_marked_atoms()?;
+        }
+        Ok(())
+    }
+
+    /// The atom rules of a MARKED value beyond the namespace walk, for
+    /// `validate` and the vacuum mode alike: every non-mass record atom
+    /// through [`Self::check_opaque_dependence`] (exponents, opaque function
+    /// arguments, data atoms, UNKNOWN linearity), and every nonzero edge mass
+    /// a plain symbol (`Graph`, prefix `edge <id>: mass `).
+    pub(crate) fn check_marked_atoms(&self) -> Result<()> {
+        for (field, atom) in self.record_atoms() {
+            if !field.ends_with(" mass") {
+                self.check_opaque_dependence(atom, &field)?;
             }
+        }
+        if let Some(edge) = self.edges.iter().find(|e| {
+            !e.mass_squared.is_zero() && !matches!(e.mass_squared.as_view(), AtomView::Var(_))
+        }) {
+            return Err(FactorizedError::Graph {
+                detail: format!(
+                    "edge {}: mass {} is neither 0 nor a plain symbol",
+                    edge.id, edge.mass_squared
+                ),
+            });
         }
         Ok(())
     }
