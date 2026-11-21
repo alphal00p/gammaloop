@@ -354,7 +354,12 @@ pub(crate) fn initialise(
     // insertions (root: the root's children; child: the child's; ir-hard:
     // the hard part's), and it multiplies the K3 values after the call. So
     // refused for any kind list, at start-up: a per-record decline would be
-    // setting-wide (pre-review of the U7a delta, finding 7).
+    // setting-wide (pre-review of the U7a delta, finding 7). The start-up
+    // refusal is not the only defence: under `rstar` a quotient the R*
+    // route declines (`IR_QUOTIENT ... declined=`) still falls back to the
+    // massive Z̃ (`massive_declined`), so a Δ with m_uv_vacuum (polynomial
+    // or in a log) is the record's ERROR `insertion_nonlocal`
+    // (`uncontracted::nonlocal_form`).
     match &routes.ir_quotient {
         Ok(super::top_mass::IrQuotient::Rstar) => {}
         Ok(route) => {
