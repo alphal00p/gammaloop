@@ -82,16 +82,42 @@ fn ir_hard_setting() -> String {
 /// paths, compared at a random rational point; the projected moments are
 /// used). Unset is `child`, whose fallback is the closed path.
 pub fn closed_mode() -> ClosedMode {
-    static MODE: LazyLock<ClosedMode> = LazyLock::new(|| {
-        match ir_hard_setting().as_str() {
+    fn of(setting: &str) -> ClosedMode {
+        match setting {
             // `child`/`child-check`: the closed path is the fallback and the
             // reference of the hard-part-as-child route.
             "closed" | "child" | "child-check" => ClosedMode::On,
             "check" => ClosedMode::Check,
             _ => ClosedMode::Off,
         }
-    });
+    }
+    #[cfg(test)]
+    if let Some(setting) = TEST_IR_HARD.with(|slot| slot.get()) {
+        return of(setting);
+    }
+    static MODE: LazyLock<ClosedMode> = LazyLock::new(|| of(ir_hard_setting().as_str()));
     *MODE
+}
+
+#[cfg(test)]
+thread_local! {
+    static TEST_IR_HARD: std::cell::Cell<Option<&'static str>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// Tests: run `f` with `GAMMALOOP_IR_HARD` read as `setting` on this thread,
+/// never through the environment ([`closed_mode`], [`child_mode`]).
+#[cfg(test)]
+pub(crate) fn with_ir_hard<T>(setting: &'static str, f: impl FnOnce() -> T) -> T {
+    struct Restore(Option<&'static str>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let previous = self.0;
+            TEST_IR_HARD.with(|slot| slot.set(previous));
+        }
+    }
+    let _restore = Restore(TEST_IR_HARD.with(|slot| slot.replace(Some(setting))));
+    f()
 }
 
 /// `GAMMALOOP_IR_HARD=child|child-check` (results/ir-hard-child; unset is
@@ -110,11 +136,18 @@ pub enum ChildMode {
 }
 
 pub fn child_mode() -> ChildMode {
-    static MODE: LazyLock<ChildMode> = LazyLock::new(|| match ir_hard_setting().as_str() {
-        "child" => ChildMode::On,
-        "child-check" => ChildMode::Check,
-        _ => ChildMode::Off,
-    });
+    fn of(setting: &str) -> ChildMode {
+        match setting {
+            "child" => ChildMode::On,
+            "child-check" => ChildMode::Check,
+            _ => ChildMode::Off,
+        }
+    }
+    #[cfg(test)]
+    if let Some(setting) = TEST_IR_HARD.with(|slot| slot.get()) {
+        return of(setting);
+    }
+    static MODE: LazyLock<ChildMode> = LazyLock::new(|| of(ir_hard_setting().as_str()));
     *MODE
 }
 
