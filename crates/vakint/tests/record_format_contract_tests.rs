@@ -5418,6 +5418,11 @@ fn a_128_term_evaluation_finishes() {
         "k1" => (record("wh-k1-root"), 128),
         _ => (record("wh-k2-child-ins"), 127),
     };
+    // `VAKINT_TEST_DEPTH128_DEPTH`: another depth, to see how the cost grows
+    let depth = std::env::var("VAKINT_TEST_DEPTH128_DEPTH")
+        .ok()
+        .and_then(|d| d.parse().ok())
+        .unwrap_or(depth);
     set_depth(&mut v, depth);
     let started = std::time::Instant::now();
     let got = closure(&v, &symbolic(), &v.prefactor.total());
