@@ -8,10 +8,12 @@
 //!   heads `p`, `k`, `dot`, `g`, `topo`, `prop`, .. where the entry returns the
 //!   caller's notation). EVERY OTHER `vakint::` symbol is vakint's output
 //!   vocabulary and is allowed (HR, GPLReal, cl2, T1ep, D6, om1, the RustRed
-//!   tags, the Retain master tags, vakint's 𝑖, ..); `UNKNOWN(master, k)` only
-//!   when the settings allow unknown master coefficients. A test (the
-//!   tripwire) reads every symbol the crate's code creates and fails when a
-//!   vakint name is neither in the internal table nor on the reviewed output
+//!   tags, the Retain master tags, vakint's 𝑖, ..). vakint's DATA ATOMS
+//!   ([`super::VAKINT_DATA_ATOMS`]: `UNKNOWN(master, k)`, `MZV(..)`) are
+//!   output too, except `UNKNOWN` when the settings do not allow unknown
+//!   master coefficients and no input carries it. A test (the tripwire) reads
+//!   every symbol the crate's code creates and fails when a vakint name is
+//!   neither in the internal table, nor a data atom, nor on the reviewed output
 //!   list (`REVIEWED_OUTPUT`, test code);
 //! - (b) a symbol of ANY OTHER namespace that is not among the INPUTS (every
 //!   atom of the record, the prefactor argument, the settings' epsilon and
@@ -121,14 +123,13 @@ const NOTATION_HEADS: [&str; 12] = [
 /// internal. Test code: the check itself allows every name that is not
 /// internal.
 #[cfg(test)]
-const REVIEWED_OUTPUT: [&str; 60] = [
+const REVIEWED_OUTPUT: [&str; 58] = [
     "D6",
     "EulerGamma",
     "GPLImag",
     "GPLReal",
     "HI",
     "HR",
-    "MZV",
     "NumericalSource",
     "PG",
     "PGamma",
@@ -152,7 +153,6 @@ const REVIEWED_OUTPUT: [&str; 60] = [
     "s6",
     "sqrt3",
     "vakintFloat",
-    "UNKNOWN",
     "𝑖",
     "ε",
     "ep",
@@ -269,6 +269,14 @@ fn inputs(
     s
 }
 
+/// Whether `name` (with its namespace) is one of vakint's data atoms
+/// ([`super::VAKINT_DATA_ATOMS`]).
+fn data_atom(name: &str) -> bool {
+    super::VAKINT_DATA_ATOMS
+        .iter()
+        .any(|(atom, _)| *atom == name)
+}
+
 /// The first offending atom of `result`, as the refusal detail.
 fn offence(
     view: AtomView<'_>,
@@ -284,11 +292,21 @@ fn offence(
                 "the dimension {name} outside a representation slot"
             ));
         }
-        if let Some(local) = name.strip_prefix("vakint::") {
-            if internal(local, vakint_notation)
-                || (!allow_unknown
-                    && symbol == crate::truncation_guard::unknown_coefficient_symbol())
+        if data_atom(&name) {
+            // an unknown master coefficient: allowed by the settings, or
+            // carried by an input
+            if symbol == crate::truncation_guard::unknown_coefficient_symbol()
+                && !allow_unknown
+                && !known.contains(&symbol)
             {
+                return Some(format!(
+                    "vakint's data atom {name}, but the settings do not allow unknown master coefficients"
+                ));
+            }
+            return None;
+        }
+        if let Some(local) = name.strip_prefix("vakint::") {
+            if internal(local, vakint_notation) {
                 return Some(format!("vakint's internal symbol {name}"));
             }
             return None;
@@ -504,7 +522,7 @@ mod tests {
         );
         refused(
             "vakint::UNKNOWN(vakint::m1,0)*UFO::gs^2",
-            "vakint's internal symbol vakint::UNKNOWN",
+            "vakint's data atom vakint::UNKNOWN, but the settings do not allow",
         );
         for ok in [
             format!("UFO::gs^2*{eps}^-2*𝜋^-4*log(gammalooprs::μᵣ²)"),
@@ -533,6 +551,21 @@ mod tests {
             false,
         )
         .unwrap();
+        // UNKNOWN carried by an input (here the prefactor argument) is an
+        // input; MZV is output; no data atom is internal
+        check_result(
+            &v,
+            &atom("vakint::UNKNOWN(vakint::ggppss_int_1,0)*UFO::gs^2"),
+            &settings(),
+            &atom("vakint::UNKNOWN(vakint::ggppss_int_1,0)*UFO::gs^2"),
+            false,
+        )
+        .unwrap();
+        check("UFO::gs^2*vakint::MZV(5,3)").unwrap();
+        for (name, _) in super::super::VAKINT_DATA_ATOMS {
+            let local = name.strip_prefix("vakint::").unwrap();
+            assert!(!internal(local, false) && !internal(local, true), "{name}");
+        }
         // an unmarked value is not checked
         let unmarked = bare(None);
         check_result(
@@ -807,7 +840,7 @@ fn after() { let _ = vk_symbol!("vakint::kept_b"); }
     /// THE TRIPWIRE: every name the crate's non-test code creates in vakint's
     /// namespace with a literal or a format string (vk_symbol!, symbol!,
     /// vakint_symbol!) is either internal ([`internal`], with the format
-    /// placeholders filled by a digit) or on [`REVIEWED_OUTPUT`]: a new name
+    /// placeholders filled by a digit), a data atom or on [`REVIEWED_OUTPUT`]: a new name
     /// fails here until it is classified. Skipped: only test code (files under
     /// a tests/ directory, tests.rs, *_tests.rs, and every item under a
     /// `#[cfg(test)]`, by [`without_test_items`]); a source file with "test"
@@ -858,14 +891,17 @@ fn after() { let _ = vk_symbol!("vakint::kept_b"); }
                 };
                 // a format placeholder stands for a formatted part
                 let filled = placeholder.replace_all(local, "1");
-                if !(internal(&filled, false) || REVIEWED_OUTPUT.contains(&local)) {
+                if !(internal(&filled, false)
+                    || data_atom(&format!("vakint::{local}"))
+                    || REVIEWED_OUTPUT.contains(&local))
+                {
                     unclassified.push(format!("{created} ({name})"));
                 }
             }
         }
         assert!(
             unclassified.is_empty(),
-            "names created in vakint's namespace that are neither internal nor reviewed output:\n{}",
+            "names created in vakint's namespace that are neither internal, nor a data atom, nor reviewed output:\n{}",
             unclassified.join("\n")
         );
     }
