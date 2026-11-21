@@ -67,6 +67,7 @@ use super::{
 const L2_17_DOT: &str = include_str!("testdata/u7c/l2-d017.dot");
 const L5_22807_DOT: &str = include_str!("testdata/u7c/l5-d22807.dot");
 const L5_3793_DOT: &str = include_str!("testdata/u7c/l5-d3793.dot");
+const L5_120364_DOT: &str = include_str!("testdata/u7c/l5-d120364.dot");
 const K5_DIRECT: &str = include_str!("testdata/u7c/k5-direct.input.txt");
 const K5_DIRECT_VALUE: &str = include_str!("testdata/u7c/k5-direct.value.txt");
 const K5_SURROGATE: &str = include_str!("testdata/u7c/k5-surrogate.input.txt");
@@ -2192,122 +2193,102 @@ fn bispinor_hedges(atom: &Atom) -> BTreeSet<usize> {
 /// child holding the anchor, the far end's half-edge h_out absent from the
 /// record) would need a bispinor port no projector of the record closes
 /// (open format: OQ-6 / PORTS F5). It is NEVER emitted, in either hole-cut
-/// setting:
-/// (a) forced: a ct: Delta carrying the bispinor slot of a half-edge the
-///     record does not have (k5-surrogate's site, slot `bis(4, hedge(99, 1))`
-///     injected) declines `surrogate_split_chain` (closed list) with the case
-///     named in its detail, before any record text, in both settings;
-/// (b) real: on L5 175270 (quark carrier, 4-loop hole) no emitted surrogate
-///     record, in either setting, has a ct: insertion with a bispinor slot of
-///     a half-edge the record lacks (its three contracted-cut records are
-///     `zero`: the anchor child's Delta vanishes), every attempt is compared
-///     equal, zero or declined by design.
+/// setting, through the whole evaluator in check mode:
+/// (a) L5 120364 (quark carrier, 3-loop hole; the 198-graph search's case
+///     with a NON-ZERO anchor child Delta): the record declines
+///     `surrogate_split_chain` (closed list) with the case named in its
+///     detail, before any record text;
+/// (b) L5 175270 (quark carrier, 4-loop hole): its contracted-cut records are
+///     `zero` (the anchor child's Delta vanishes);
+/// in both graphs and settings no emitted surrogate record has a ct:
+/// insertion with a bispinor slot of a half-edge the record lacks, and every
+/// attempt is compared equal, zero or declined by design.
 #[test]
 fn k5_contracted_cut_quark_holes_are_never_emitted() -> Result<()> {
     with_production_piece_limit(|| -> Result<()> {
         test_initialise()?;
         let vakint = Vakint::new()?;
-        // (a)
-        let prepared = prepare(L5_22807_DOT, &vakint)?;
-        let mut case = root_case(&prepared, K5_SURROGATE)?;
-        ensure!(
-            !case.deltas.is_empty(),
-            "the k5-surrogate site has no ct: child"
-        );
-        ensure!(
-            !record(K5_SURROGATE)?
-                .edges
-                .iter()
-                .flat_map(|edge| [edge.source_hedge, edge.target_hedge])
-                .any(|h| h == Some(99)),
-            "half-edge 99 is in the record"
-        );
-        let probe = symbolica::try_parse!(
-            "gammalooprs::{}::k5_spinor_probe(spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(99,1)))"
-        )
-        .map_err(|error| eyre!("{error}"))?;
-        for delta in case.deltas.values_mut() {
-            *delta = &*delta * &probe;
-        }
-        for mode in [k5::HoleCut::Decline, k5::HoleCut::Form] {
-            let attempt = k5::with_hole_cut(mode, || {
-                root_attempt(&case, &vakint, Some(case.provenance.clone()), false)
-            })?;
-            ensure!(attempt.text.is_none(), "{mode:?}: a record was built");
-            match &attempt.outcome {
-                Outcome::Declined(decline) => ensure!(
-                    decline.code == "surrogate_split_chain"
-                        && decline.designed
-                        && decline.detail.contains("a contracted cut quark hole"),
-                    "{mode:?}: {decline:?}"
-                ),
-                other => return Err(eyre!("{mode:?}: not declined: {other:?}")),
-            }
-        }
-        // (b)
-        let (name, dot) = L5_MULTI_LOOP_HOLES[3];
-        ensure!(name == "175270");
-        let original = colour_factored(&load(dot)?)?;
         let evaluator = PropagatorInsertionEvaluator::new(settings());
         let mut counts = BTreeMap::<String, usize>::new();
-        for mode in [k5::HoleCut::Decline, k5::HoleCut::Form] {
-            let captured = with_switch(check_surrogate(), || -> Result<Vec<Captured>> {
-                let ledger = DiagramLedger::open(original.name(), "k5-cut-quark");
-                let (value, captured) = k5::with_hole_cut(mode, || {
-                    with_capture(|| evaluator.pole_part_closing_root(&original, &vakint, true))
-                });
-                if let Some(ledger) = ledger {
-                    ledger.close(value.is_ok())?;
-                }
-                value?;
-                Ok(captured)
-            })?;
-            for attempt in captured.iter().filter(|a| a.kind == Kind::Surrogate) {
-                ensure!(
-                    attempt.equal == Some(true)
-                        || attempt.outcome == "zero"
-                        || (attempt.outcome.starts_with("declined:")
-                            && uncontracted::is_designed_code(
-                                &attempt.outcome["declined:".len()..]
-                            )),
-                    "{mode:?} id {}: {} equal {:?}",
-                    attempt.id,
-                    attempt.outcome,
-                    attempt.equal
-                );
-                *counts
-                    .entry(format!("{mode:?} {}", attempt.outcome))
-                    .or_default() += 1;
-                let Some(text) = &attempt.text else { continue };
-                let ours = record(text)?;
-                let present = ours
-                    .edges
-                    .iter()
-                    .flat_map(|edge| [edge.source_hedge, edge.target_hedge])
-                    .flatten()
-                    .collect::<BTreeSet<_>>();
-                for vertex in ours.vertices.iter().filter(|v| v.rule.starts_with("ct:")) {
-                    for insertion in ours.insertions.iter().filter(|i| i.vertex == vertex.id) {
-                        let slots = bispinor_hedges(&(&insertion.coefficient * &insertion.factor));
-                        let absent = slots.difference(&present).collect::<Vec<_>>();
-                        ensure!(
-                            absent.is_empty(),
-                            "{mode:?} id {}: the ct: insertion at {} carries the bispinor slots {absent:?} of half-edges the record lacks (an emitted contracted cut quark hole)",
-                            attempt.id,
-                            vertex.id
-                        );
+        for (name, dot) in [("120364", L5_120364_DOT), L5_MULTI_LOOP_HOLES[3]] {
+            let original = colour_factored(&load(dot)?)?;
+            for mode in [k5::HoleCut::Decline, k5::HoleCut::Form] {
+                let captured = with_switch(check_surrogate(), || -> Result<Vec<Captured>> {
+                    let ledger = DiagramLedger::open(original.name(), "k5-cut-quark");
+                    let (value, captured) = k5::with_hole_cut(mode, || {
+                        with_capture(|| evaluator.pole_part_closing_root(&original, &vakint, true))
+                    });
+                    if let Some(ledger) = ledger {
+                        ledger.close(value.is_ok())?;
+                    }
+                    value?;
+                    Ok(captured)
+                })?;
+                for attempt in captured.iter().filter(|a| a.kind == Kind::Surrogate) {
+                    ensure!(
+                        attempt.equal == Some(true)
+                            || attempt.outcome == "zero"
+                            || (attempt.outcome.starts_with("declined:")
+                                && uncontracted::is_designed_code(
+                                    &attempt.outcome["declined:".len()..]
+                                )),
+                        "{name} {mode:?} id {}: {} equal {:?} {:?}",
+                        attempt.id,
+                        attempt.outcome,
+                        attempt.equal,
+                        attempt.detail
+                    );
+                    let cut_quark = attempt.outcome == "declined:surrogate_split_chain"
+                        && attempt
+                            .detail
+                            .as_deref()
+                            .is_some_and(|detail| detail.contains("a contracted cut quark hole"));
+                    if cut_quark {
+                        ensure!(attempt.text.is_none(), "{name}: a record text was built");
+                    }
+                    let key = if cut_quark {
+                        "declined:cut-quark".to_owned()
+                    } else {
+                        attempt.outcome.clone()
+                    };
+                    *counts.entry(format!("{name} {mode:?} {key}")).or_default() += 1;
+                    let Some(text) = &attempt.text else { continue };
+                    let ours = record(text)?;
+                    let present = ours
+                        .edges
+                        .iter()
+                        .flat_map(|edge| [edge.source_hedge, edge.target_hedge])
+                        .flatten()
+                        .collect::<BTreeSet<_>>();
+                    for vertex in ours.vertices.iter().filter(|v| v.rule.starts_with("ct:")) {
+                        for insertion in ours.insertions.iter().filter(|i| i.vertex == vertex.id) {
+                            let slots =
+                                bispinor_hedges(&(&insertion.coefficient * &insertion.factor));
+                            let absent = slots.difference(&present).collect::<Vec<_>>();
+                            ensure!(
+                                absent.is_empty(),
+                                "{name} {mode:?} id {}: the ct: insertion at {} carries the bispinor slots {absent:?} of half-edges the record lacks (an emitted contracted cut quark hole)",
+                                attempt.id,
+                                vertex.id
+                            );
+                        }
                     }
                 }
             }
         }
         for (outcome, n) in &counts {
-            eprintln!("K5_CUT_QUARK 175270 {outcome} {n}");
+            eprintln!("K5_CUT_QUARK {outcome} {n}");
         }
-        ensure!(
-            counts.get("Decline zero") == counts.get("Form zero")
-                && counts.contains_key("Decline zero"),
-            "{counts:?}"
-        );
+        for mode in ["Decline", "Form"] {
+            ensure!(
+                counts.contains_key(&format!("120364 {mode} declined:cut-quark")),
+                "120364 {mode}: no contracted cut quark decline: {counts:?}"
+            );
+            ensure!(
+                counts.contains_key(&format!("175270 {mode} zero")),
+                "175270 {mode}: no zero: {counts:?}"
+            );
+        }
         Ok(())
     })
 }
@@ -2436,4 +2417,80 @@ fn k5_hole_cut_mode_is_in_the_resume_identity() -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// U7c delta pre-review N4: an open slot of a half-edge that is not a hole's
+/// inner half-edge is an ERROR (`surrogate_stray_slot`), never a spectator
+/// port, in mode on (no product check there): (a) a Minkowski slot pair of
+/// absent half-edges in a ct: child's Delta, (b) the same pair on a
+/// propagator outside every chain, (c) a bispinor slot of an absent
+/// non-chain half-edge in a ct: Delta (not the designed contracted cut quark
+/// decline, which is only a hole's far end). On every graph of the suite the
+/// port set equals the one the record's structure implies
+/// (`surrogate_ports` would be an error: covered by every whole-graph test).
+#[test]
+fn k5_stray_open_slots_are_errors_not_ports() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let prepared = prepare(L5_22807_DOT, &vakint)?;
+        let parse = |text: &str| symbolica::try_parse!(text).map_err(|error| eyre!("{error}"));
+        let mink = parse(
+            "spenso::{symmetric,linear,real,spenso::tensor}::g(spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(98,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(99,1)))",
+        )?;
+        let bis = parse(
+            "gammalooprs::{}::k5_spinor_probe(spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(99,1)))",
+        )?;
+        let expect_error = |attempt: uncontracted::Attempt, what: &str| -> Result<()> {
+            ensure!(attempt.text.is_none(), "{what}: a record was built");
+            match &attempt.outcome {
+                Outcome::Error(error) => ensure!(
+                    error.code == "surrogate_stray_slot" && !error.designed,
+                    "{what}: {error:?}"
+                ),
+                other => return Err(eyre!("{what}: not an error: {other:?}")),
+            }
+            Ok(())
+        };
+        for (what, probe) in [
+            ("(a) mink in a ct: Delta", &mink),
+            ("(c) bis in a ct: Delta", &bis),
+        ] {
+            let mut case = root_case(&prepared, K5_SURROGATE)?;
+            ensure!(!case.deltas.is_empty());
+            for delta in case.deltas.values_mut() {
+                *delta = &*delta * probe;
+            }
+            for mode in [k5::HoleCut::Decline, k5::HoleCut::Form] {
+                let attempt = k5::with_hole_cut(mode, || {
+                    root_attempt(&case, &vakint, Some(case.provenance.clone()), false)
+                })?;
+                expect_error(attempt, what)?;
+            }
+        }
+        // (b) a propagator outside every chain (not a bubble line, factor not 1)
+        let case = root_case(&prepared, K5_SURROGATE)?;
+        let done = std::rc::Rc::new(std::cell::Cell::new(false));
+        let hook: uncontracted::InsertionHook = {
+            let (done, mink) = (done.clone(), mink.clone());
+            std::rc::Rc::new(move |kind: Kind, _node: usize, _delta: &mut Atom, edges: &mut [vakint::p_integral::factorized::FactorizedEdge]| {
+                if kind != Kind::Surrogate || done.get() {
+                    return;
+                }
+                if let Some(edge) = edges
+                    .iter_mut()
+                    .find(|edge| !edge.is_external() && edge.factor != Atom::num(1))
+                {
+                    edge.factor = &edge.factor * &mink;
+                    done.set(true);
+                }
+            })
+        };
+        let attempt = uncontracted::with_insertion_hook(hook, || {
+            root_attempt(&case, &vakint, Some(case.provenance.clone()), false)
+        })?;
+        ensure!(done.get(), "(b): no propagator mutated");
+        expect_error(attempt, "(b) mink on a propagator")?;
+        Ok(())
+    })
 }

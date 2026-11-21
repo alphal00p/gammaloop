@@ -484,6 +484,10 @@ pub(super) struct Chain {
     pub inner_edges: [(usize, bool); 2],
     /// The closed cycles inside the excised region.
     pub cycles: (u32, u32),
+    /// Whether the coefficient C_H (chain[0]'s factor in the surrogate) has
+    /// a slot of the far end's inner half-edge `inner[1]` (a gluon or quark
+    /// carrier; a ghost's has none).
+    pub far_slot: bool,
 }
 
 fn chain_error(detail: impl Into<String>) -> Decline {
@@ -606,12 +610,16 @@ pub(super) fn chains(
                 .ok_or_else(|| chain_error(format!("half-edge {h} has no edge")))
         };
         let inner_edges = [edge_of(inner[0])?, edge_of(inner[1])?];
+        let far_slot = nodes
+            .get(&vertices[0])
+            .is_some_and(|node| hedge_slots(&graph[*node].get_num()).contains_key(&inner[1]));
         out.push(Chain {
             vertices,
             bubbles,
             inner,
             inner_edges,
             cycles: hole.cycles,
+            far_slot,
         });
     }
     Ok(out)
@@ -938,6 +946,10 @@ fn finish_with(
     // half-edge the record does not have. Checked here for every insertion
     // (crown legs included), so that a record the reader would refuse is a
     // designed decline before it exists, never an IndexNotLocal error.
+    let inner = chains
+        .iter()
+        .flat_map(|chain| chain.inner)
+        .collect::<BTreeSet<_>>();
     let mut spectators = BTreeSet::new();
     for insertion in insertions.iter() {
         let contracted = vertices
@@ -969,7 +981,7 @@ fn finish_with(
                     ),
                 ));
             }
-            if contracted && bis {
+            if contracted && bis && inner.contains(&h) {
                 // a contracted cut QUARK hole: an open spinor port no
                 // projector of the record closes (point 4)
                 return Err(Decline::new(
@@ -993,6 +1005,43 @@ fn finish_with(
         if atoms[holder].0.is_none() {
             spectators.insert(*h);
         }
+    }
+    // U7c delta pre-review N4: a spectator port is only ever a hole's inner
+    // half-edge (any other open slot is a builder error, never a port), and
+    // the ports are exactly those the record's STRUCTURE implies: per hole
+    // whose coefficient C_H has a far-end slot, the far end's inner
+    // half-edge when C_H's owner (the kept anchor, or the ct: node holding
+    // it) is in the record and the far end is not, or when the far end is in
+    // the record, not as a leg, and the owner is not
+    if let Some(h) = spectators.iter().find(|h| !inner.contains(h)) {
+        return Err(Decline::new(
+            "surrogate_stray_slot",
+            format!(
+                "the slot of half-edge {h} is open in the record and is not a hole's inner half-edge"
+            ),
+        ));
+    }
+    let expected = chains
+        .iter()
+        .filter(|chain| {
+            let owner = free.contains(&chain.vertices[0]) || merge.contains_key(&chain.vertices[0]);
+            let far = record_hedges.contains(&chain.inner[1]);
+            chain.far_slot
+                && if owner {
+                    !far
+                } else {
+                    far && !legs.contains(&chain.inner[1])
+                }
+        })
+        .map(|chain| chain.inner[1])
+        .collect::<BTreeSet<_>>();
+    if spectators != expected {
+        return Err(Decline::new(
+            "surrogate_ports",
+            format!(
+                "the record's spectator ports {spectators:?} are not those its holes imply {expected:?}"
+            ),
+        ));
     }
     vertices.sort_by_key(|vertex| vertex.id);
     insertions.sort_by_key(|insertion| insertion.vertex);
