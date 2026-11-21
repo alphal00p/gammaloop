@@ -17,6 +17,9 @@
 //! * `one_loop_tree_cut` is the emitter's own decline of the single
 //!   propagator shape only (the closing line alone, a massive tadpole after
 //!   the Taylor step); every other one-loop record stays on the new path.
+//! * A vakint `Closure` refusal without a WH-RECORD-FORMAT section-8 prefix
+//!   is an error (requirement 13, interim until the rebase onto helper VH's
+//!   frozen REFUSALS list), "every line is massive" among them.
 
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
@@ -32,7 +35,7 @@ use symbolica::{
 };
 use vakint::{
     Vakint,
-    p_integral::factorized::{Endpoint, FactorizedEdge, FactorizedNumerator},
+    p_integral::factorized::{Endpoint, FactorizedEdge, FactorizedError, FactorizedNumerator},
 };
 
 use crate::{
@@ -727,4 +730,59 @@ fn single_propagator_is_the_closing_line_alone() {
     ];
     assert!(!uncontracted::single_propagator(&bubble, 8));
     assert!(!uncontracted::single_propagator(&legs, 8));
+}
+
+// ---------------------------------------------------------------------------
+// U7-PLAN requirement 13 (interim): no section-8 prefix, no designed refusal
+// ---------------------------------------------------------------------------
+
+/// U7-PLAN requirement 13, interim rule (until the rebase onto helper VH's
+/// frozen REFUSALS list): a vakint `Closure` refusal is designed only with a
+/// WH-RECORD-FORMAT section-8 prefix (`Taylor degree `, `the projector
+/// contains Q(`, the open-spinor port `open slot ` + `is not a Lorentz
+/// slot`); any other `Closure` detail is an error, among them the entry's
+/// wrapped internal failures and "every line is massive: not a closure" (no
+/// section-8 row: the emitter declines that shape itself,
+/// `one_loop_tree_cut`, so vakint never sees it on a correct record).
+#[test]
+fn closure_without_a_section_8_prefix_is_an_error() {
+    let closure = |detail: &str| FactorizedError::Closure {
+        detail: detail.into(),
+    };
+    for (detail, code) in [
+        ("Taylor degree 3 above 2", "vakint:taylor_degree"),
+        (
+            "the projector contains Q(0, ..): with a Taylor step it acts after the step and must be momentum-free",
+            "vakint:projector_momentum",
+        ),
+        (
+            "open slot bis(4,hedge(3,1)) is not a Lorentz slot (open bispinor ports are not supported; close the line with the projector)",
+            "vakint:open_spinor",
+        ),
+    ] {
+        let decline = Decline::vakint(&closure(detail));
+        assert!(decline.designed, "{detail}: {decline:?}");
+        assert_eq!(decline.code, code);
+    }
+    for detail in [
+        "every line is massive: not a closure",
+        "lowering: no key plan",
+        "the lines do not form one closing line among massless ones",
+        "truncating the insertion product: x",
+    ] {
+        let decline = Decline::vakint(&closure(detail));
+        assert!(!decline.designed, "{detail}: {decline:?}");
+        assert_eq!(decline.code, "vakint:Closure", "{detail}");
+    }
+    let prefixes = ["Taylor degree ", "the projector contains Q(", "open slot "];
+    for row in uncontracted::DESIGNED_VAKINT
+        .iter()
+        .filter(|row| row.0 == "Closure")
+    {
+        assert!(
+            prefixes.contains(&row.1),
+            "the Closure row {:?} has no section-8 prefix",
+            row.1
+        );
+    }
 }
