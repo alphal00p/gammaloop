@@ -2594,6 +2594,7 @@ pub(super) fn evaluate_boundary(
             .unwrap_or_default();
         }
         split.ordinary = clock.elapsed().as_secs_f64();
+        super::integrate::log_unknown_masters("boundary", vakint, settings, &result);
         symbolica::utils::resources::checkpoint().map_err(|error| eyre!("{error}"))?;
         let clock = Instant::now();
         let result = result.expand();
