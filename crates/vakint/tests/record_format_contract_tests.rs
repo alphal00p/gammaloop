@@ -3389,11 +3389,18 @@ fn a_marked_three_loop_massive_tadpole_through_the_vacuum_entry() {
 
 /// Every unique v3 record under the roots of `VAKINT_TEST_RECORD_ROOTS`
 /// (colon-separated; files `*.record.txt` and `input.txt`) through
-/// validation only (`from_text`): the number accepted and the refusals by
-/// detail prefix. A refusal of a production record fails the test.
+/// validation only (`from_text`). The roots this split is stated for:
+/// `/common/build-cache/ben/consol:/common/ben/beta/results/consolidation/wh-fixtures`
+/// (6,240 files, 2,633 unique v3 records). EXACTLY 2,611 are accepted and 22
+/// refused, every one a Closure refusal "every line is massive: not a
+/// closure" (one-loop remainders whose only line left is the closing massive
+/// line: a massive tadpole, the producer's designed decline
+/// vakint:all_massive, dumped before the vakint call); any other refusal, or
+/// another count, fails.
 #[test]
 #[ignore = "external data: VAKINT_TEST_RECORD_ROOTS"]
 fn every_production_record_validates() {
+    const ALL_MASSIVE: &str = "every line is massive: not a closure";
     let roots =
         wh_fixtures::required_env("VAKINT_TEST_RECORD_ROOTS", "the producer's record roots");
     let mut files = Vec::new();
@@ -3433,7 +3440,13 @@ fn every_production_record_validates() {
             Ok(_) => accepted += 1,
             Err(e) => {
                 let detail = e.to_string();
-                let prefix = detail.split(':').take(2).collect::<Vec<_>>().join(":");
+                let expected = matches!(&e, FactorizedError::Closure { detail }
+                    if detail.starts_with(ALL_MASSIVE));
+                let prefix = if expected {
+                    ALL_MASSIVE.to_string()
+                } else {
+                    format!("UNEXPECTED {detail}")
+                };
                 refused
                     .entry(prefix)
                     .or_default()
@@ -3455,7 +3468,17 @@ fn every_production_record_validates() {
             paths[0]
         );
     }
-    assert!(refused.is_empty(), "production records refused");
+    let refused_total = refused.values().map(Vec::len).sum::<usize>();
+    assert_eq!(
+        refused.keys().collect::<Vec<_>>(),
+        vec![ALL_MASSIVE],
+        "a refusal other than the all-massive tadpole: {refused:?}"
+    );
+    assert_eq!(
+        (seen.len(), accepted, refused_total),
+        (2633, 2611, 22),
+        "(unique v3, accepted, refused)"
+    );
 }
 
 /// The producer's plain caller scalars stay opaque coefficients: UFO
@@ -3609,4 +3632,418 @@ fn every_rule_on_every_field_and_entry() {
         }
     }
     assert!(misses.is_empty(), "accepted:\n{}", misses.join("\n"));
+}
+
+/// The audit's inputs per rule (six each for G1, G2, G3, the exponents and
+/// UNKNOWN) not already a cell of `every_rule_on_every_field_and_entry`: each
+/// is REFUSED (at parse, validation or evaluation; never a panic), or, where
+/// it is a legitimate spelling, gives the SAME value as a control that differs
+/// only by a renaming, or (marked OBSERVE) is reported without an expectation.
+#[test]
+fn the_audit_inputs_per_rule() {
+    use vakint::p_integral::factorized::evaluate_factorized_vacuum;
+    // SAFETY: nextest runs each test in its own process
+    unsafe { std::env::set_var("VAKINT_ALLOW_UNKNOWN_MASTER_COEFFICIENTS", "1") };
+    let vakint = engine();
+    let settings = symbolic();
+    let k2_text = fixture_text("wh-k2-child-ins.record.txt");
+    let k1_text = fixture_text("wh-k1-root.record.txt");
+    type Input = Result<(FactorizedNumerator, Atom, bool), String>;
+    let try_atom = |t: &str| -> Result<Atom, String> {
+        init();
+        std::panic::catch_unwind(|| symbolica::try_parse!(t))
+            .map_err(|_| format!("parse panicked: {t}"))?
+            .map_err(|e| format!("parse: {e}"))
+    };
+    let parse = |t: &str| FactorizedNumerator::from_text(t).map_err(|e| e.to_string());
+    let plain = |v: FactorizedNumerator| -> Input {
+        let a = v.prefactor.total();
+        Ok((v, a, false))
+    };
+    let in_field = |text: &str, field: &str, x: &str| -> Input {
+        let mut v = parse(text)?;
+        let x = try_atom(x)?;
+        let (_, put) = field_setters(&v)
+            .into_iter()
+            .find(|(f, _)| *f == field)
+            .unwrap_or_else(|| panic!("no field {field}"));
+        put(&mut v, &x);
+        plain(v)
+    };
+    let in_argument = |text: &str, x: &str| -> Input {
+        let v = parse(text)?;
+        let a = v.prefactor.total() * try_atom(x)?;
+        Ok((v, a, false))
+    };
+    let vacuum = |mass: &str, factor: &str| -> Input {
+        let v = marked_vacuum_sunrise(mass, factor);
+        let a = v.prefactor.total();
+        Ok((v, a, true))
+    };
+    let run = |input: Input| -> Result<Atom, String> {
+        let (v, a, is_vacuum) = input?;
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            if is_vacuum {
+                evaluate_factorized_vacuum(&vakint, &settings, &v, &a).map(|r| r.value)
+            } else {
+                evaluate_factorized_closure(
+                    &vakint,
+                    &settings,
+                    std::slice::from_ref(&v),
+                    std::slice::from_ref(&a),
+                )
+                .map(|r| r.value)
+            }
+        }));
+        match outcome {
+            Ok(r) => r.map_err(|e| e.to_string()),
+            Err(_) => Err("PANIC".into()),
+        }
+    };
+    enum Expect {
+        Refused,
+        // the same value as the control input after the renaming (pattern, image)
+        Same(Input, &'static str, &'static str),
+        Observe,
+    }
+    let edge5_r = |to: &str| {
+        k2_text.replacen(
+            &format!("momentum=1,0,0\t{R}"),
+            &format!("momentum=1,0,0\t{to}"),
+            1,
+        )
+    };
+    // the text form of a closure record requires `original_cycles`: the
+    // record without it is typed (the spec field set to None)
+    let no_cycles = |x: &str| -> Input {
+        let mut v = parse(&k2_text)?;
+        if let FactorizedKind::Closure(spec) = &mut v.kind {
+            spec.original_cycles = None;
+        }
+        v.prefactor.overall = &v.prefactor.overall * try_atom(x)?;
+        plain(v)
+    };
+    let ok_master = "vakint::ggppss_int_1";
+    let rows: Vec<(&str, Input, Expect)> = vec![
+        // G1
+        (
+            "G1-1 vertex x symbolica::ε^-1",
+            in_field(&k2_text, "vertex factor", "symbolica::ε^-1"),
+            Expect::Refused,
+        ),
+        (
+            "G1-2 UFO::g<ZWSP>s in a vertex factor",
+            in_field(&k2_text, "vertex factor", "UFO::g\u{200B}s"),
+            Expect::Refused,
+        ),
+        (
+            "G1-3 ε<U+0301> in an insertion coefficient",
+            in_field(
+                &k2_text,
+                "insertion coefficient",
+                "gammalooprs::ε\u{0301}^-1",
+            ),
+            Expect::Refused,
+        ),
+        (
+            "G1-4 the dimension named gammalooprs::𝒟",
+            parse(&k2_text.replace(DIM, "gammalooprs::{}::𝒟")).and_then(plain),
+            Expect::Refused,
+        ),
+        (
+            "G1-5 the settings' μ as a function head μᵣ²(UFO::x)",
+            in_field(&k2_text, "vertex factor", "gammalooprs::μᵣ²(UFO::x)"),
+            Expect::Same(
+                in_field(&k2_text, "vertex factor", "caller::h(UFO::x)"),
+                "caller::h(UFO::x)",
+                "gammalooprs::μᵣ²(UFO::x)",
+            ),
+        ),
+        (
+            "G1-6 UNKNOWN(UFO::μ, 0) in an insertion",
+            in_field(
+                &k2_text,
+                "insertion coefficient",
+                "vakint::UNKNOWN(UFO::μ,0)",
+            ),
+            Expect::Refused,
+        ),
+        // G2
+        (
+            "G2-1 the auxiliary mass named UFO::maux, x eps^-1 in an insertion",
+            in_field(
+                &k2_text.replace(MAUX, "UFO::maux"),
+                "insertion coefficient",
+                "UFO::maux*gammalooprs::ε^-1",
+            ),
+            Expect::Refused,
+        ),
+        (
+            "G2-1c control: the auxiliary mass named UFO::maux",
+            parse(&k2_text.replace(MAUX, "UFO::maux")).and_then(plain),
+            Expect::Observe,
+        ),
+        (
+            "G2-2 R in prefactor_overall without original_cycles (typed)",
+            no_cycles(R),
+            Expect::Refused,
+        ),
+        (
+            "G2-2c control: no original_cycles (typed), overall x caller::c",
+            no_cycles("caller::c"),
+            Expect::Observe,
+        ),
+        (
+            "G2-3 R in a weight",
+            in_field(&k2_text, "weights", R),
+            Expect::Refused,
+        ),
+        (
+            "G2-4a vacuum edge mass UFO::m^(1/2)",
+            vacuum("UFO::m^(1/2)", "1"),
+            Expect::Refused,
+        ),
+        (
+            "G2-4b vacuum edge mass log(UFO::m)",
+            vacuum("log(UFO::m)", "1"),
+            Expect::Refused,
+        ),
+        (
+            "G2-5 a massless line with mass 0.0",
+            parse(&k2_text.replacen("momentum=-1,-1,0\t0", "momentum=-1,-1,0\t0.0", 1))
+                .and_then(plain),
+            Expect::Observe,
+        ),
+        (
+            "G2-6a the closing edge's mass written R^1",
+            parse(&edge5_r(&format!("{R}^1"))).and_then(plain),
+            Expect::Same(
+                parse(&k2_text).and_then(plain),
+                "caller::none",
+                "caller::none",
+            ),
+        ),
+        (
+            "G2-6b the closing edge's mass written 1*R",
+            parse(&edge5_r(&format!("1*{R}"))).and_then(plain),
+            Expect::Same(
+                parse(&k2_text).and_then(plain),
+                "caller::none",
+                "caller::none",
+            ),
+        ),
+        // G3
+        (
+            "G3-1 hedge(ε, 1) in a vertex factor",
+            in_field(
+                &k2_text,
+                "vertex factor",
+                &format!("gammalooprs::{{spenso::index}}::hedge({EPS},1)"),
+            ),
+            Expect::Refused,
+        ),
+        (
+            "G3-2 g(mink(D, a), R) in a vertex factor",
+            in_field(
+                &k2_text,
+                "vertex factor",
+                &format!(
+                    "spenso::{{symmetric,linear,real,spenso::tensor}}::g(spenso::{{spenso::representation,spenso::self_dual}}::mink({DIM},gammalooprs::{{spenso::index}}::hedge(90,1)),{R})"
+                ),
+            ),
+            Expect::Refused,
+        ),
+        (
+            "G3-3 UFO::f(UFO::g(ε)) in the prefactor argument",
+            in_argument(&k2_text, &format!("UFO::f(UFO::g({EPS}))")),
+            Expect::Refused,
+        ),
+        (
+            "G3-4 user::Q(1, ε) in a vertex factor",
+            in_field(&k2_text, "vertex factor", &format!("user::Q(1,{EPS})")),
+            Expect::Refused,
+        ),
+        (
+            "G3-5 vacuum vertex factor x log(ε)",
+            vacuum("caller::m2", &format!("log({EPS})")),
+            Expect::Refused,
+        ),
+        (
+            "G3-6 UFO::f(μᵣ²) in a vertex factor",
+            in_field(&k2_text, "vertex factor", "UFO::f(gammalooprs::μᵣ²)"),
+            Expect::Same(
+                in_field(&k2_text, "vertex factor", "UFO::f(caller::mu)"),
+                "caller::mu",
+                "gammalooprs::μᵣ²",
+            ),
+        ),
+        // exponents
+        (
+            "E-1 typed x^2.0 (a float exponent)",
+            in_field(&k2_text, "vertex factor", "caller::x^2.0"),
+            Expect::Refused,
+        ),
+        (
+            "E-2 (1+UFO::x)^1000000000 in the prefactor argument",
+            in_argument(&k2_text, "(1+UFO::x)^1000000000"),
+            Expect::Refused,
+        ),
+        (
+            "E-3 dim^1000000 in a vertex factor",
+            in_field(&k2_text, "vertex factor", &format!("{DIM}^1000000")),
+            Expect::Refused,
+        ),
+        (
+            "E-4 typed (x-x)^0 in a vertex factor",
+            parse(&k2_text).and_then(|mut v| {
+                let x = Atom::var(symbolica::symbol!("caller::x"));
+                let zero = &x - &x;
+                let p = std::panic::catch_unwind(|| zero.pow(Atom::num(0)))
+                    .map_err(|_| "pow panicked".to_string())?;
+                let (_, put) = field_setters(&v)
+                    .into_iter()
+                    .find(|(f, _)| *f == "vertex factor")
+                    .unwrap();
+                put(&mut v, &p);
+                plain(v)
+            }),
+            Expect::Observe,
+        ),
+        (
+            "E-5 ε^(-10^30) in a vertex factor",
+            in_field(
+                &k2_text,
+                "vertex factor",
+                &format!("{EPS}^(-1000000000000000000000000000000)"),
+            ),
+            Expect::Refused,
+        ),
+        (
+            "E-6 2^(1/2) in a projector",
+            in_field(&k1_text, "projector", "2^(1/2)"),
+            Expect::Refused,
+        ),
+        // UNKNOWN (allow-unknowns ON for the whole test)
+        (
+            "U-2 UNKNOWN(ε, 1) in an insertion",
+            in_field(
+                &k2_text,
+                "insertion coefficient",
+                &format!("vakint::UNKNOWN({EPS},1)"),
+            ),
+            Expect::Refused,
+        ),
+        (
+            "U-3a UNKNOWN(UFO::m, 0)^2 in an insertion",
+            in_field(
+                &k2_text,
+                "insertion coefficient",
+                "vakint::UNKNOWN(UFO::m,0)^2",
+            ),
+            Expect::Refused,
+        ),
+        (
+            "U-3b UNKNOWN(<master>, 0)^2 in an insertion",
+            in_field(
+                &k2_text,
+                "insertion coefficient",
+                &format!("vakint::UNKNOWN({ok_master},0)^2"),
+            ),
+            Expect::Refused,
+        ),
+        (
+            "U-4a 1/UNKNOWN(UFO::m, 0) in an insertion",
+            in_field(
+                &k2_text,
+                "insertion coefficient",
+                "1/vakint::UNKNOWN(UFO::m,0)",
+            ),
+            Expect::Refused,
+        ),
+        (
+            "U-4b 1/UNKNOWN(<master>, 0) in an insertion",
+            in_field(
+                &k2_text,
+                "insertion coefficient",
+                &format!("1/vakint::UNKNOWN({ok_master},0)"),
+            ),
+            Expect::Refused,
+        ),
+        (
+            "U-5a mink(D, UNKNOWN(UFO::m, 0)) as an index in a vertex factor",
+            in_field(
+                &k2_text,
+                "vertex factor",
+                &format!(
+                    "spenso::{{spenso::representation,spenso::self_dual}}::mink({DIM},vakint::UNKNOWN(UFO::m,0))"
+                ),
+            ),
+            Expect::Refused,
+        ),
+        (
+            "U-5b mink(D, UNKNOWN(<master>, 0)) as an index in an insertion factor",
+            in_field(
+                &k2_text,
+                "insertion factor",
+                &format!(
+                    "spenso::{{spenso::representation,spenso::self_dual}}::mink({DIM},vakint::UNKNOWN({ok_master},0))"
+                ),
+            ),
+            Expect::Refused,
+        ),
+        (
+            "U-6 UNKNOWN(UFO::x_, 0) in an insertion",
+            in_field(
+                &k2_text,
+                "insertion coefficient",
+                "vakint::UNKNOWN(UFO::x_,0)",
+            ),
+            Expect::Refused,
+        ),
+        (
+            "U-c control: UNKNOWN(<master>, 0) in an insertion",
+            in_field(
+                &k2_text,
+                "insertion coefficient",
+                &format!("vakint::UNKNOWN({ok_master},0)"),
+            ),
+            Expect::Observe,
+        ),
+    ];
+    let mut wrong = Vec::new();
+    for (name, input, expect) in rows {
+        let started = std::time::Instant::now();
+        let got = run(input);
+        let seconds = started.elapsed().as_secs_f64();
+        let shown = match &got {
+            Ok(v) => format!("ACCEPTED ({} chars)", v.to_string().len()),
+            Err(e) => format!("REFUSED {}", e.chars().take(160).collect::<String>()),
+        };
+        eprintln!("CONTRACT AUDIT {name}: {shown} [{seconds:.2}s]");
+        if matches!(&got, Err(e) if e == "PANIC") {
+            wrong.push(format!("{name}: a panic"));
+            continue;
+        }
+        match expect {
+            Expect::Refused if got.is_ok() => wrong.push(format!("{name}: accepted")),
+            Expect::Same(control, pattern, image) => match (&got, run(control)) {
+                (Ok(g), Ok(c)) => {
+                    let c = c.replace(atom(pattern)).with(atom(image));
+                    if !(g - &c).expand().is_zero() {
+                        wrong.push(format!("{name}: a different value from the control"));
+                    }
+                }
+                (g, c) => wrong.push(format!(
+                    "{name}: {:?} vs control {:?}",
+                    g.as_ref().err(),
+                    c.err()
+                )),
+            },
+            _ => {}
+        }
+        if seconds > 30.0 {
+            wrong.push(format!("{name}: {seconds:.1} s"));
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
