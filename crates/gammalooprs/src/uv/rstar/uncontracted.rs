@@ -377,6 +377,14 @@ static ENVIRONMENT: LazyLock<std::result::Result<Environment, String>> = LazyLoc
     let exceptions = super::uncontracted_ledger::initialise(
         switch,
         read(STRICT_VARIABLE)?.as_deref(),
+        read(super::uncontracted_ledger::TIMING_VARIABLE)?.as_deref(),
+        || super::uncontracted_ledger::Routes {
+            uv_children_rstar: matches!(
+                super::plan::UvChildrenRoute::from_environment(),
+                super::plan::UvChildrenRoute::Rstar { .. }
+            ),
+            ir_hard_child: super::closed::child_mode() != super::closed::ChildMode::Off,
+        },
         || super::pint6_dump::settings().is_some(),
         read(super::uncontracted_ledger::EXCEPTIONS_VARIABLE)?.as_deref(),
     )?;
@@ -442,9 +450,29 @@ pub(crate) fn with_switch<T>(switch: Switch, f: impl FnOnce() -> T) -> T {
     f()
 }
 
-/// The Δ-cache key suffix of the switch in force (`None` when off).
+/// The Δ-cache key suffix of the switch in force (`None` when off), and,
+/// on or check, `#uncontracted-inert=<kind>` for an R* child Δ looked up
+/// inside a scope whose records are a kind the switch does not enable (an
+/// insertion surrogate's R*, a decorated quotient's R*, an IR hard part
+/// with `ir-hard` not listed) while a cacheable kind (`child`, `ir-hard`) is
+/// enabled: such a fill builds no record, so it must never serve the same
+/// child of an enabled kind, which would then be neither compared nor
+/// counted (review of the U7a delta, refusal-integrity lens, finding 1).
+/// Off (and with no cacheable kind enabled): nothing, today's key.
 pub(crate) fn cache_key_suffix() -> Option<String> {
-    switch().cache_key_suffix()
+    let switch = switch();
+    let mut suffix = switch.cache_key_suffix();
+    // only when a fill can hold records at all (a cacheable kind enabled):
+    // without one no lookup counts a hit, and the key stays today's
+    if switch.mode != Mode::Off && (switch.enabled(Kind::Child) || switch.enabled(Kind::IrHard)) {
+        let kind = classify(true);
+        if !switch.enabled(kind) {
+            suffix
+                .get_or_insert_with(String::new)
+                .push_str(&format!("#uncontracted-inert={}", kind.as_str()));
+        }
+    }
+    suffix
 }
 
 // ---------------------------------------------------------------------------
@@ -744,9 +772,24 @@ pub(super) const DESIGNED_VAKINT: &[(&str, &str, &str, &str)] = &[
 /// never excepted.
 pub(super) fn is_designed_code(code: &str) -> bool {
     DESIGNED_LOCAL.contains(&code)
+        || is_designed_section_code(code)
         || code
             .strip_prefix("vakint:")
             .is_some_and(|code| DESIGNED_VAKINT.iter().any(|row| row.3 == code))
+}
+
+/// The designed codes a K3 record gets when its IR correction declines as
+/// a whole after the record ran ([`super::uncontracted_ledger::Section`]):
+/// `ir_hard_route:<reason head>` (the child route's own decline; today's
+/// closed path computes the correction) and `ir_hard_guard:budget` (the
+/// exhausted budget of `GAMMALOOP_IR_HARD_CHILD_GUARD=1`). Never an attempt's
+/// outcome; a caught panic or error inside a record is the error
+/// `ir_hard_guard:<panic|error>`.
+pub(super) fn is_designed_section_code(code: &str) -> bool {
+    code == "ir_hard_guard:budget"
+        || code
+            .strip_prefix("ir_hard_route:")
+            .is_some_and(|head| !head.is_empty() && !head.contains(':'))
 }
 
 impl Decline {
@@ -812,6 +855,22 @@ fn variant_detail(error: &FactorizedError) -> (String, Option<&str>) {
 pub(super) fn is_unknown_master_text(text: &str) -> bool {
     text.contains("expected master coefficient(s) that are not known yet")
         || text.contains("needs master Laurent coefficients beyond the available expansion depth")
+}
+
+/// The hard error of vakint's unknown-master refusal of a record, a
+/// diagnostic failure: no fallback may decline it (the IR hard child guard
+/// `GAMMALOOP_IR_HARD_CHILD_GUARD=1`, the Δ cache; review of the U7a delta,
+/// refusal-integrity finding 2).
+pub(super) fn unknown_masters_failure(
+    kind: Kind,
+    graph: &str,
+    id: usize,
+    text: &str,
+) -> eyre::Report {
+    super::ir_dirac::diagnostic_failure(eyre!(
+        "UNCONTRACTED kind={} graph={graph} id={id}: vakint refuses the record's unknown master coefficients: {text}",
+        kind.as_str()
+    ))
 }
 
 /// What one attempt gave.
@@ -982,11 +1041,7 @@ pub(super) fn attempt<R: std::borrow::Borrow<RStarIntegrand>>(
                     attempt.graph,
                     escape(&text)
                 );
-                return Err(eyre!(
-                    "UNCONTRACTED kind={} graph={} id={id}: vakint refuses the record's unknown master coefficients: {text}",
-                    kind.as_str(),
-                    attempt.graph
-                ));
+                return Err(unknown_masters_failure(kind, &attempt.graph, id, &text));
             }
             attempt.outcome = Outcome::refused(Decline::vakint(&error));
             return Ok(attempt);
@@ -2059,6 +2114,41 @@ pub(super) fn conserve(
     ))
 }
 
+/// `Err` (the routing error) when the record momenta do not conserve at
+/// some vertex in their first `conserved` components (loop components
+/// first), as vakint's reader checks them ([`conserve`] checks one `ct:`
+/// node).
+pub(super) fn routing_conserved(
+    edges: &[FactorizedEdge],
+    conserved: usize,
+) -> std::result::Result<(), Decline> {
+    let mut residuals = BTreeMap::<usize, Vec<i64>>::new();
+    for edge in edges {
+        for (end, sign) in [(&edge.target, 1_i64), (&edge.source, -1_i64)] {
+            if let Endpoint::Vertex(vertex) = end {
+                let residual = residuals
+                    .entry(*vertex)
+                    .or_insert_with(|| vec![0; edge.momentum.len()]);
+                for (slot, c) in residual.iter_mut().zip(&edge.momentum) {
+                    *slot += sign * c;
+                }
+            }
+        }
+    }
+    match residuals
+        .iter()
+        .find(|(_, residual)| residual.iter().take(conserved).any(|c| *c != 0))
+    {
+        Some((vertex, residual)) => Err(Decline::new(
+            "routing",
+            format!(
+                "the record momenta at vertex {vertex} do not conserve: residual {residual:?} is nonzero in the first {conserved} components (loop components first), which the record must conserve (vakint's reader: MomentumNotConserved); a misrouted record, not a mass refusal"
+            ),
+        )),
+        None => Ok(()),
+    }
+}
+
 /// Whether a record's only internal propagator is its closing line
 /// `closing`: a one-loop remainder whose loop is the closing line alone
 /// (after the Taylor step a massive tadpole, which vakint's closure entry
@@ -2625,6 +2715,11 @@ fn build(
                     conserved += 1;
                 }
                 _ => {
+                    // a designed decline only for a record whose momenta
+                    // conserve at EVERY vertex: a misrouted edge elsewhere is
+                    // the routing error vakint's reader would raise (review
+                    // of the U7a delta, refusal-integrity finding 3)
+                    routing_conserved(&edges, conserved_components)?;
                     return Err(Decline::new(
                         "insertion_mass_symbol",
                         format!(

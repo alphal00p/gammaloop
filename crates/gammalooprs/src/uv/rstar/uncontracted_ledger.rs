@@ -209,22 +209,59 @@ pub(crate) fn parse_exceptions(text: &str) -> std::result::Result<Exceptions, St
     })
 }
 
+/// `GAMMALOOP_UNCONTRACTED_TIMING`: unset, empty, `0`, `off` (no lines) or
+/// `1`, `on`.
+pub(crate) fn parse_timing(value: Option<&str>) -> std::result::Result<bool, String> {
+    match value.map(str::trim) {
+        None | Some("" | "0" | "off") => Ok(false),
+        Some("1" | "on") => Ok(true),
+        Some(other) => Err(format!("{TIMING_VARIABLE} must be 0 or 1, not `{other}`")),
+    }
+}
+
+/// The routes that produce the records of a kind (review of the U7a delta,
+/// zero-comparison lens, finding 2): `child` records exist only when UV
+/// children take the R* route (`GAMMALOOP_UV_CHILDREN` not `massive`),
+/// `ir-hard` records only on the IR hard child route (`GAMMALOOP_IR_HARD`
+/// `child` or `child-check`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Routes {
+    pub uv_children_rstar: bool,
+    pub ir_hard_child: bool,
+}
+
+impl Routes {
+    /// The production routes (both on).
+    pub(crate) const PRODUCTION: Routes = Routes {
+        uv_children_rstar: true,
+        ir_hard_child: true,
+    };
+}
+
 /// What the switch's initialisation checks besides the switch itself
-/// ([`uncontracted::validate`]): `GAMMALOOP_UNCONTRACTED_STRICT`, check
-/// mode with the PINT6 dump (refused: every record would decline
-/// `pint6_dump`, a check that compares nothing), the exception list (check
-/// mode only; read here), and the timing switch. `pint6` is whether
-/// `PINT6_CLOSURE_DUMP` is set; the values are the environment's.
+/// ([`uncontracted::validate`]): the timing switch (every mode, off
+/// included: it keys an off run's occurrences), and with the switch on or
+/// check `GAMMALOOP_UNCONTRACTED_STRICT`, an enabled kind whose route is
+/// off (refused: the kind would expect nothing, a check that compares
+/// nothing), check mode with the PINT6 dump (refused: every record would
+/// decline `pint6_dump`, a check that compares nothing) and the exception
+/// list (check mode only; read here). With the switch off nothing else is
+/// read, as before the switch existed. `pint6` is whether
+/// `PINT6_CLOSURE_DUMP` is set, `routes` the routes in force; the values
+/// are the environment's.
 pub(crate) fn initialise(
     switch: Switch,
     strict: Option<&str>,
+    timing: Option<&str>,
+    routes: impl FnOnce() -> Routes,
     pint6: impl FnOnce() -> bool,
     exceptions: Option<&str>,
 ) -> std::result::Result<Exceptions, String> {
-    parse_strict(strict)?;
+    parse_timing(timing)?;
     if switch.mode == Mode::Off {
         return Ok(Exceptions::default());
     }
+    parse_strict(strict)?;
     if switch.enabled_kinds().is_empty() {
         return Err(format!(
             "{}: `{}` enables no kind this build emits (inert: {}); the switch would build no record",
@@ -237,6 +274,34 @@ pub(crate) fn initialise(
                 .collect::<Vec<_>>()
                 .join(",")
         ));
+    }
+    let routes = routes();
+    for (kind, active, variable) in [
+        (
+            Kind::Child,
+            routes.uv_children_rstar,
+            "GAMMALOOP_UV_CHILDREN=massive",
+        ),
+        (
+            Kind::IrHard,
+            routes.ir_hard_child,
+            "GAMMALOOP_IR_HARD (not child or child-check)",
+        ),
+    ] {
+        if switch.enabled(kind) && !active {
+            return Err(format!(
+                "{}={}:{} enables `{}`, whose route is off ({variable}): the kind would expect no record and its check would compare nothing; enable the route or drop the kind from the list",
+                uncontracted::VARIABLE,
+                switch.mode.as_str(),
+                switch
+                    .enabled_kinds()
+                    .iter()
+                    .map(|kind| kind.as_str())
+                    .collect::<Vec<_>>()
+                    .join(","),
+                kind.as_str()
+            ));
+        }
     }
     if switch.mode == Mode::Check && pint6() {
         return Err(format!(
@@ -261,14 +326,12 @@ pub(crate) fn initialise(
 
 /// `GAMMALOOP_UNCONTRACTED_TIMING=1`: the per-occurrence timing lines.
 pub(crate) fn timing_enabled() -> bool {
-    static TIMING: LazyLock<bool> =
-        LazyLock::new(
-            || match std::env::var(TIMING_VARIABLE).as_deref().map(str::trim) {
-                Err(_) | Ok("" | "0" | "off") => false,
-                Ok("1" | "on") => true,
-                Ok(other) => panic!("{TIMING_VARIABLE} must be 0 or 1, not `{other}`"),
-            },
-        );
+    // validated at the switch's initialisation (a bad value refuses the run
+    // at start-up); a value that is not unicode is off
+    static TIMING: LazyLock<bool> = LazyLock::new(|| {
+        parse_timing(std::env::var(TIMING_VARIABLE).ok().as_deref())
+            .unwrap_or_else(|error| panic!("{error}"))
+    });
     TEST_TIMING
         .with(std::cell::Cell::get)
         .unwrap_or_else(|| *TIMING)
@@ -384,6 +447,13 @@ pub(crate) struct Counts {
     /// not expected and never compared, today's path takes them.
     #[serde(default)]
     pub no_record: BTreeMap<String, usize>,
+    /// Remainders of this kind that reached a hook while the kind is not
+    /// enabled (inert: today's path, never expected): listed on the
+    /// summary line as `inert=<kind>:<n>`, so a remainder classified into an
+    /// inert kind is visible (review of the U7a delta, zero-comparison lens,
+    /// finding 3).
+    #[serde(default)]
+    pub inert: usize,
 }
 
 impl Counts {
@@ -405,6 +475,7 @@ impl Counts {
         for (code, n) in &other.no_record {
             *self.no_record.entry(code.clone()).or_default() += n;
         }
+        self.inert += other.inert;
     }
 
     fn class(&self, name: &str) -> usize {
@@ -441,10 +512,19 @@ enum Scope {
         graph: String,
         diagram: String,
         ordinals: BTreeMap<u64, usize>,
+        /// The special scope (`surrogate`, `quotient`, `ir-hard`) this
+        /// thread was in when the beta opened the ledger: a scope left set
+        /// by an earlier diagram (Astra U7a finding 3), whose records would
+        /// all be classified into it. The close fails the diagram.
+        leaked: Option<Kind>,
     },
     /// A Δ-cache fill: its counts become the fill's note and join the frame
     /// below.
     Fill,
+    /// One IR correction on the child route ([`Section`]): its K3 records
+    /// join the frame below when it ends, reclassified when the correction
+    /// declines.
+    Section,
 }
 
 struct Frame {
@@ -464,7 +544,7 @@ thread_local! {
 static FRAME_IDS: AtomicUsize = AtomicUsize::new(1);
 
 /// Whether the ledger runs: the switch on or check, or the timing lines.
-fn active() -> bool {
+pub(crate) fn active() -> bool {
     uncontracted::switch().mode != Mode::Off || timing_enabled()
 }
 
@@ -531,7 +611,7 @@ fn diagram_key() -> (String, String) {
             frames.try_borrow().ok().and_then(|frames| {
                 frames.iter().rev().find_map(|frame| match &frame.scope {
                     Scope::Diagram { graph, diagram, .. } => Some((graph.clone(), diagram.clone())),
-                    Scope::Fill => None,
+                    Scope::Fill | Scope::Section => None,
                 })
             })
         })
@@ -558,7 +638,7 @@ fn next_ordinal(digest: u64) -> usize {
             .rev()
             .find_map(|frame| match &mut frame.scope {
                 Scope::Diagram { ordinals, .. } => Some(ordinals),
-                Scope::Fill => None,
+                Scope::Fill | Scope::Section => None,
             }) {
             Some(ordinals) => {
                 let ordinal = ordinals.entry(digest).or_default();
@@ -577,6 +657,14 @@ fn next_ordinal(digest: u64) -> usize {
 /// A remainder of the enabled `kind` reached the hook.
 pub(super) fn expect(kind: Kind) {
     with_counts(kind, |counts| counts.expected += 1);
+}
+
+/// A remainder of `kind` reached a hook while the kind is not enabled
+/// (switch on or check): counted as inert, today's path takes it.
+pub(super) fn inert(kind: Kind) {
+    if uncontracted::switch().mode != Mode::Off {
+        with_counts(kind, |counts| counts.inert += 1);
+    }
 }
 
 /// The disposition of one reported attempt ([`uncontracted::report`]).
@@ -604,6 +692,22 @@ pub(super) fn record(attempt: &Attempt, check: Option<&Check>, mode: Mode) {
         });
         counts.equal += usize::from(check.is_some_and(|check| check.equal));
         counts.add(class, 1);
+    });
+}
+
+/// Tests: one attempt of `kind` that vakint evaluated, compared (check) or
+/// taken (on).
+#[cfg(test)]
+pub(crate) fn record_value(kind: Kind, mode: Mode) {
+    with_counts(kind, |counts| {
+        counts.attempted += 1;
+        counts.uncontracted += 1;
+        if mode == Mode::Check {
+            counts.equal += 1;
+            counts.add("compared", 1);
+        } else {
+            counts.add("taken", 1);
+        }
     });
 }
 
@@ -781,6 +885,128 @@ pub(super) fn through_cache(
     Ok(value)
 }
 
+/// How an IR correction on the child route ended ([`Section::close`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum SectionEnd {
+    /// The correction's value is the child route's: the K3 records keep
+    /// their dispositions.
+    Kept,
+    /// The route declined the correction by its own designed reason
+    /// (`moments:`, `dirac_*`, `mass_power`, `depth:`, ...) after its K3
+    /// records ran; today's closed path computes the correction.
+    RouteDeclined(String),
+    /// `GAMMALOOP_IR_HARD_CHILD_GUARD=1`: the scoped budget was exhausted.
+    GuardBudget,
+    /// `GAMMALOOP_IR_HARD_CHILD_GUARD=1`: the guard caught a panic or an
+    /// ordinary error (`panic:..`, `error:..`).
+    GuardFailure(String),
+}
+
+/// The code head of a decline reason: up to its first `:` (`depth:3` ->
+/// `depth`), whitespace-free.
+fn reason_head(reason: &str) -> String {
+    reason
+        .split(':')
+        .next()
+        .unwrap_or_default()
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect()
+}
+
+/// One IR correction on the child route, a frame of the diagram ledger
+/// (review of the U7a delta: refusal-integrity findings 2 and 4,
+/// values-and-off finding 1). Its K3 records join the frame below when it
+/// closes; when the correction declines, they are reclassified first, so the
+/// lines never say `taken` for a value today's closed path replaced, and an
+/// interrupted record is never silently dropped:
+///
+/// * a route decline ([`SectionEnd::RouteDeclined`]): in mode on each
+///   `taken` record becomes `declined:ir_hard_route:<reason head>` (the
+///   value was discarded); check mode keeps `compared` (the comparison
+///   happened);
+/// * an exhausted guard budget ([`SectionEnd::GuardBudget`], a designed
+///   decline of the whole correction): `taken` (on) and the interrupted
+///   records become `declined:ir_hard_guard:budget`;
+/// * a panic or an error the guard caught ([`SectionEnd::GuardFailure`]):
+///   an interrupted record (expected, no disposition: the failure happened
+///   inside it) is `error:ir_hard_guard:<panic|error>` and fails the
+///   diagram; without one the failure was outside the records, and the
+///   decline is the route's (as a route decline, `ir_hard_route:<head>`).
+///
+/// Dropped without a close (an error return or an unwind), the counts join
+/// the frame below unchanged.
+pub(super) struct Section {
+    id: usize,
+    done: bool,
+}
+
+impl Section {
+    /// A section with the switch on or check (`None` off).
+    pub(super) fn open() -> Option<Self> {
+        (uncontracted::switch().mode != Mode::Off).then(|| Self {
+            id: push(Scope::Section),
+            done: false,
+        })
+    }
+
+    pub(super) fn close(mut self, end: SectionEnd) {
+        self.done = true;
+        let mut counts = pop(self.id).map(|frame| frame.counts).unwrap_or_default();
+        let mode = uncontracted::switch().mode;
+        for counts in counts.values_mut() {
+            reclassify(counts, mode, &end);
+        }
+        for (kind, counts) in &counts {
+            with_counts(*kind, |below| below.merge(counts));
+        }
+    }
+}
+
+/// The reclassification of one kind's counts of a [`Section`] by its end.
+fn reclassify(counts: &mut Counts, mode: Mode, end: &SectionEnd) {
+    let interrupted = counts.expected.saturating_sub(counts.accounted());
+    let (taken_to, interrupted_to) = match end {
+        SectionEnd::Kept => return,
+        SectionEnd::RouteDeclined(reason) => (
+            format!("declined:ir_hard_route:{}", reason_head(reason)),
+            None,
+        ),
+        SectionEnd::GuardBudget => (
+            "declined:ir_hard_guard:budget".to_owned(),
+            Some("declined:ir_hard_guard:budget".to_owned()),
+        ),
+        SectionEnd::GuardFailure(reason) if interrupted > 0 => (
+            format!("declined:ir_hard_route:{}", reason_head(reason)),
+            Some(format!("error:ir_hard_guard:{}", reason_head(reason))),
+        ),
+        SectionEnd::GuardFailure(reason) => (
+            format!("declined:ir_hard_route:{}", reason_head(reason)),
+            None,
+        ),
+    };
+    if mode == Mode::On
+        && let Some(taken) = counts.classes.remove("taken")
+    {
+        counts.add(taken_to, taken);
+    }
+    if let Some(class) = interrupted_to {
+        counts.add(class, interrupted);
+    }
+}
+
+impl Drop for Section {
+    fn drop(&mut self) {
+        if !self.done
+            && let Some(frame) = pop(self.id)
+        {
+            for (kind, counts) in &frame.counts {
+                with_counts(*kind, |below| below.merge(counts));
+            }
+        }
+    }
+}
+
 /// The evaluation path inside an R* child fill.
 struct ChildPath;
 
@@ -830,14 +1056,28 @@ pub struct DiagramLedger {
 impl DiagramLedger {
     /// A ledger for the diagram `diagram` (the beta: its integral index) of
     /// `graph`; `None` with the switch off (and no timing lines).
+    ///
+    /// The beta opens it between diagrams, outside every special scope: a
+    /// thread still in one (a scope an earlier diagram left set, Astra U7a
+    /// finding 3) is recorded and fails the diagram at the close, whatever
+    /// its records say (a classification check independent of the hooks).
     pub fn open(graph: &str, diagram: &str) -> Option<Self> {
-        active().then(|| Self {
-            id: push(Scope::Diagram {
-                graph: graph.to_owned(),
-                diagram: diagram.to_owned(),
-                ordinals: BTreeMap::new(),
-            }),
-            closed: false,
+        Self::open_with(graph, diagram, true)
+    }
+
+    fn open_with(graph: &str, diagram: &str, between_diagrams: bool) -> Option<Self> {
+        active().then(|| {
+            let leaked = Some(uncontracted::classify(false))
+                .filter(|kind| between_diagrams && *kind != Kind::Root);
+            Self {
+                id: push(Scope::Diagram {
+                    graph: graph.to_owned(),
+                    diagram: diagram.to_owned(),
+                    ordinals: BTreeMap::new(),
+                    leaked,
+                }),
+                closed: false,
+            }
         })
     }
 
@@ -848,9 +1088,10 @@ impl DiagramLedger {
         if !active() || in_diagram() {
             return None;
         }
-        Self::open(
+        Self::open_with(
             graph,
             &format!("root#{}", ROOTS.fetch_add(1, Ordering::Relaxed)),
+            false,
         )
     }
 
@@ -1086,7 +1327,13 @@ fn finish(frame: Frame, ok: bool) -> Result<Option<Value>> {
     if switch.mode == Mode::Off {
         return Ok(None);
     }
-    let Scope::Diagram { graph, diagram, .. } = frame.scope else {
+    let Scope::Diagram {
+        graph,
+        diagram,
+        leaked,
+        ..
+    } = frame.scope
+    else {
         return Ok(None);
     };
     let exceptions = exceptions();
@@ -1108,6 +1355,22 @@ fn finish(frame: Frame, ok: bool) -> Result<Option<Value>> {
         ));
         if let Some(failure) = &verdict.failure {
             failures.push(format!("kind={}: {failure}", kind.as_str()));
+        } else if verdict.outcome == "error" {
+            // an error outcome fails the diagram here too, whether or not
+            // the caller propagated the record's error (review of the U7a
+            // delta, zero-comparison lens, finding 4)
+            failures.push(format!(
+                "kind={}: error outcome ({})",
+                kind.as_str(),
+                list(&counts.with_prefix("error:"))
+            ));
+        } else if verdict.outcome == "unchecked" {
+            // mode on: a record without a disposition (R2-I1: loud)
+            failures.push(format!(
+                "kind={}: {} records without a disposition (unchecked)",
+                kind.as_str(),
+                counts.unchecked()
+            ));
         }
         let mut value = serde_json::to_value(&counts)?;
         value["outcome"] = json!(verdict.outcome);
@@ -1129,14 +1392,28 @@ fn finish(frame: Frame, ok: bool) -> Result<Option<Value>> {
         outcomes.push(verdict.outcome);
         total.merge(&counts);
     }
+    if let Some(kind) = leaked {
+        failures.push(format!(
+            "the diagram ledger was opened inside the {} scope (a scope left set on this thread), so its records are classified into it",
+            kind.as_str()
+        ));
+        outcomes.push("error");
+    }
     let outcome = worst(outcomes);
-    print(summary_line(
-        &graph,
-        &diagram,
-        switch.mode,
-        &kinds,
-        &total,
-        outcome,
+    let inert = frame
+        .counts
+        .iter()
+        .filter(|(kind, counts)| !switch.enabled(**kind) && counts.inert > 0)
+        .map(|(kind, counts)| (kind.as_str().to_owned(), counts.inert))
+        .collect::<BTreeMap<_, _>>();
+    print(format!(
+        "{} inert={}{}",
+        summary_line(&graph, &diagram, switch.mode, &kinds, &total, outcome),
+        list(&inert),
+        leaked.map_or_else(String::new, |kind| format!(
+            " leaked_scope={}",
+            kind.as_str()
+        ))
     ));
     let evidence = json!({
         "schema": EVIDENCE_SCHEMA,
@@ -1145,10 +1422,11 @@ fn finish(frame: Frame, ok: bool) -> Result<Option<Value>> {
         "diagram": diagram,
         "outcome": outcome,
         "kinds": per_kind,
+        "inert": inert,
     });
     if ok && !failures.is_empty() {
         return Err(eyre!(
-            "UNCONTRACTED_DISPOSITION graph={graph} diagram={diagram} mode={}: the check does not cover the diagram: {}",
+            "UNCONTRACTED_DISPOSITION graph={graph} diagram={diagram} mode={} outcome={outcome}: the diagram fails its ledger: {}",
             switch.mode.as_str(),
             failures.join("; ")
         ));
@@ -1174,8 +1452,12 @@ pub enum Resumed {
 /// A diagram record reused by the beta (resume or import) under the switch
 /// in force: its saved dispositions (`evidence`, the record's
 /// `uncontracted` field) are matching evidence when they have this
-/// schema, this switch identity, outcome ok and a line per enabled kind;
-/// then the saved lines are printed again with `source=checkpoint`.
+/// schema, this switch identity, this graph and diagram key, outcome ok and
+/// a line per enabled kind whose saved counts pass the verdict again (the
+/// coverage rule and the exception list in force, recomputed from the
+/// counts, not read from the saved outcome: review of the U7a delta,
+/// zero-comparison lens, finding 5); then the saved lines are printed
+/// again with `source=checkpoint`.
 /// Otherwise one `outcome=unchecked` line per enabled kind and an
 /// unchecked summary: a reused graph is never reported ok without them
 /// (U7a.1 (ii)).
@@ -1199,6 +1481,13 @@ pub fn resumed(graph: &str, diagram: &str, evidence: Option<&Value>) -> Resumed 
             "outcome:{}",
             evidence["outcome"].as_str().unwrap_or("none")
         )),
+        Some(evidence) if evidence["graph"] != graph || evidence["diagram"] != diagram => {
+            Some(format!(
+                "diagram:{}/{}",
+                evidence["graph"].as_str().unwrap_or("none"),
+                evidence["diagram"].as_str().unwrap_or("none")
+            ))
+        }
         Some(evidence)
             if kinds
                 .iter()
@@ -1206,7 +1495,19 @@ pub fn resumed(graph: &str, diagram: &str, evidence: Option<&Value>) -> Resumed 
         {
             Some("kinds".to_owned())
         }
-        Some(_) => None,
+        Some(evidence) => {
+            let exceptions = exceptions();
+            kinds.iter().find_map(|kind| {
+                let saved = &evidence["kinds"][kind.as_str()];
+                let Ok(counts) = serde_json::from_value::<Counts>(saved.clone()) else {
+                    return Some(format!("counts:{}", kind.as_str()));
+                };
+                let verdict = verdict(&counts, switch.mode, true, graph, *kind, &exceptions);
+                (!matches!(verdict.outcome, "ok" | "excepted")
+                    || saved["outcome"] != verdict.outcome)
+                    .then(|| format!("verdict:{}:{}", kind.as_str(), verdict.outcome))
+            })
+        }
     };
     let source = "source=checkpoint";
     match (reason, evidence) {
