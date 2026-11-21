@@ -30,7 +30,7 @@ use std::sync::Arc;
 use eyre::{Result, ensure, eyre};
 use idenso::tensor::SymbolicTensor;
 use linnet::half_edge::subgraph::SuBitGraph;
-use symbolica::atom::Atom;
+use symbolica::atom::{Atom, AtomCore};
 use vakint::{
     Vakint,
     p_integral::factorized::{
@@ -1443,6 +1443,140 @@ fn k5_direct_emitted_from_the_prepared_surrogate() -> Result<()> {
                 "opposite sign (colour branch)"
             }
         );
+        Ok(())
+    })
+}
+
+/// The designed `surrogate_split_chain` (closed list) fires BEFORE any
+/// record: a ct: child whose Delta carries the slot of a half-edge the
+/// record has but the ct: vertex does not own (here k5-surrogate's site with
+/// a metric of the far-end half-edge 22 of the hole at 8 injected into the
+/// ct: child's Delta) is declined by design with no record text built.
+#[test]
+fn k5_split_chain_declines_before_any_record() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        assert!(uncontracted::is_designed_code("surrogate_split_chain"));
+        let vakint = Vakint::new()?;
+        let prepared = prepare(L5_22807_DOT, &vakint)?;
+        let mut case = root_case(&prepared, K5_SURROGATE)?;
+        // edge 12 (vertex 9 -> 6, half-edges 22 / 23) is a remaining edge of
+        // the record: 22 (at the chain end 9) is a half-edge of the record;
+        // g(22, 23) in the ct: child's Delta (g(a, a) would be traced at once)
+        ensure!(record(K5_SURROGATE)?.edges.iter().any(|edge| edge.id == 12));
+        let far = symbolica::try_parse!(
+            "spenso::{symmetric,linear,real,spenso::tensor}::g(spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(22,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(23,1)))"
+        )
+        .map_err(|error| eyre!("{error}"))?;
+        for delta in case.deltas.values_mut() {
+            *delta = &*delta * &far;
+        }
+        let attempt = root_attempt(&case, &vakint, Some(case.provenance.clone()), false)?;
+        ensure!(attempt.text.is_none(), "a record was built");
+        match &attempt.outcome {
+            Outcome::Declined(decline) => ensure!(
+                decline.code == "surrogate_split_chain" && decline.designed,
+                "{decline:?}"
+            ),
+            other => return Err(eyre!("not declined: {other:?}")),
+        }
+        Ok(())
+    })
+}
+
+/// The free hedge slots `hedge(h, k)` (Minkowski / bispinor) of an atom, as
+/// canonical strings.
+fn free_hedge_slots(atom: &Atom) -> BTreeSet<String> {
+    let mut found = BTreeSet::new();
+    atom.as_view().visitor(&mut |view| {
+        if let symbolica::atom::AtomView::Fun(function) = view {
+            let symbol = function.get_symbol();
+            let name = symbol.get_name();
+            if (name.ends_with("::mink") || name.ends_with("::bis"))
+                && function.get_nargs() == 2
+                && function
+                    .iter()
+                    .nth(1)
+                    .is_some_and(|index| index.to_canonical_string().contains("::hedge("))
+            {
+                found.insert(view.to_canonical_string());
+                return false;
+            }
+        }
+        true
+    });
+    found
+}
+
+/// Spectator ports (beta's question (ii)): on the multi-loop-hole graphs the
+/// records whose ports include a slot of a half-edge that is not a crown leg
+/// (the coefficient's far-end slot, or a far edge's slot without the anchor)
+/// return a value with exactly the free index slots of today's value for the
+/// same remainder (the old path's child Delta), and the two values are equal
+/// in check mode.
+#[test]
+fn k5_spectator_ports_have_todays_index_structure() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let evaluator = PropagatorInsertionEvaluator::new(settings());
+        let mut spectators = 0;
+        for (name, dot) in L5_MULTI_LOOP_HOLES {
+            let original = colour_factored(&load(dot)?)?;
+            let before = spectators;
+            let captured = with_switch(check_surrogate(), || -> Result<Vec<Captured>> {
+                let ledger = DiagramLedger::open(original.name(), "k5-spectator");
+                let (value, captured) =
+                    with_capture(|| evaluator.pole_part_closing_root(&original, &vakint, true));
+                if let Some(ledger) = ledger {
+                    ledger.close(value.is_ok())?;
+                }
+                value?;
+                Ok(captured)
+            })?;
+            for attempt in captured.iter().filter(|a| a.kind == Kind::Surrogate) {
+                let Some(text) = &attempt.text else { continue };
+                let ours = record(text)?;
+                let legs = ours
+                    .edges
+                    .iter()
+                    .filter(|edge| edge.is_external())
+                    .flat_map(|edge| [edge.source_hedge, edge.target_hedge])
+                    .flatten()
+                    .collect::<BTreeSet<_>>();
+                let spectator = ours.ports.iter().any(|port| {
+                    let text = port.to_canonical_string();
+                    !legs.iter().any(|h| text.contains(&format!("::hedge({h},")))
+                });
+                if !spectator {
+                    continue;
+                }
+                spectators += 1;
+                let value = attempt.value.clone().ok_or_else(|| eyre!("no value"))?;
+                let today = attempt
+                    .contracted
+                    .clone()
+                    .ok_or_else(|| eyre!("not compared"))?;
+                ensure!(attempt.equal == Some(true), "id {}: not equal", attempt.id);
+                let (a, b) = (free_hedge_slots(&value), free_hedge_slots(&today));
+                ensure!(
+                    a == b,
+                    "id {}: the record's value has the free slots {a:?}, today's {b:?}",
+                    attempt.id
+                );
+                eprintln!(
+                    "K5_SPECTATOR id={} ports={} free_slots={a:?} == today's",
+                    attempt.id,
+                    ours.ports.len()
+                );
+            }
+            eprintln!("K5_SPECTATOR graph={name} records={}", spectators - before);
+        }
+        ensure!(
+            spectators > 0,
+            "no record with a spectator port on the five graphs"
+        );
+        eprintln!("K5_SPECTATOR records={spectators}");
         Ok(())
     })
 }
