@@ -2748,3 +2748,62 @@ fn k5_hole_cut_variable_is_ignored_without_the_kind() -> Result<()> {
     );
     Ok(())
 }
+
+/// The direct record's record class (`Attempt::shape`, read by beta's
+/// setting-caused-decline rule, uncontracted_ledger.rs `setting_wide_classes`
+/// and RunTally): `"direct"`, its OWN class. `K1` means "a remainder of an
+/// evaluation root" (uncontracted.rs `shape_of`), `K2` "a remainder of a
+/// proper UV child", `K3` "an IR hard term"; the <= 4-loop surrogate record is
+/// none of these (no R* plan, the format's `kind direct`), and the codes
+/// that can decline it differ (no `open_root`). Labelled `K1`, compared
+/// direct records would MASK a setting-caused decline of every surrogate
+/// K1 root in the same diagram-kind (or run tally). Shown here: (a) with
+/// `"direct"` such a decline fails the diagram; (b) the same records with the
+/// direct ones labelled `K1` would pass; (c) the direct record of L2 17 is
+/// counted in the class `direct` (compared).
+#[test]
+fn k5_direct_record_is_its_own_record_class() -> Result<()> {
+    test_initialise()?;
+    let close = |direct_shape: &str| {
+        with_switch(check_surrogate(), || -> Result<bool> {
+            let ledger =
+                DiagramLedger::open("k5-shape", "000001").ok_or_else(|| eyre!("no ledger"))?;
+            for _ in 0..3 {
+                uncontracted_ledger::record_shaped(
+                    Kind::Surrogate,
+                    "K1",
+                    Some("open_root"),
+                    Mode::Check,
+                );
+            }
+            uncontracted_ledger::record_shaped(Kind::Surrogate, direct_shape, None, Mode::Check);
+            Ok(ledger.close(true).is_err())
+        })
+    };
+    ensure!(
+        close("direct")?,
+        "(a) a setting-caused decline of every K1 root passed"
+    );
+    ensure!(
+        !close("K1")?,
+        "(b) the counterfactual did not mask (the test proves nothing)"
+    );
+    let vakint = Vakint::new()?;
+    let original = colour_factored(&load(L2_17_DOT)?)?;
+    let evaluator = PropagatorInsertionEvaluator::new(settings());
+    let evidence = with_switch(check_surrogate(), || -> Result<serde_json::Value> {
+        let ledger =
+            DiagramLedger::open(original.name(), "000017").ok_or_else(|| eyre!("no ledger"))?;
+        let value = evaluator.pole_part_closing_root(&original, &vakint, true);
+        ledger
+            .close(value.is_ok())?
+            .ok_or_else(|| eyre!("no evidence"))
+    })?;
+    let shapes = &evidence["kinds"]["surrogate"]["shapes"];
+    ensure!(
+        shapes["direct"]["compared"] == serde_json::json!(1)
+            && shapes.as_object().is_some_and(|classes| classes.len() == 1),
+        "(c) the direct record's class: {shapes}"
+    );
+    Ok(())
+}
