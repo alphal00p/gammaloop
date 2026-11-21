@@ -526,6 +526,36 @@ fn numerator_census(input: &Atom) -> AtomView<'_> {
     input.as_view()
 }
 
+/// With `allow_unknown_master_coefficients` on (vakint's
+/// `VAKINT_ALLOW_UNKNOWN_MASTER_COEFFICIENTS=1`), one stderr line
+/// `RSTAR_UNKNOWN site=<site> pairs=<master>:<k>@<first eps order>,...` for
+/// every massless p-integral result that carries `UNKNOWN(master, k)`, before
+/// the R* pole projection; silent otherwise (the final record lists the ones
+/// that reach its poles). Six-loop pilots, lane six-loop-highnf.
+pub(crate) fn log_unknown_masters(
+    site: &str,
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    value: &Atom,
+) {
+    if !settings.allow_unknown_master_coefficients
+        || !value.contains_symbol(vakint::truncation_guard::unknown_coefficient_symbol())
+    {
+        return;
+    }
+    match vakint.unknown_master_coefficients(settings, value.as_view(), None) {
+        Ok(list) if list.is_empty() => {}
+        Ok(list) => eprintln!(
+            "RSTAR_UNKNOWN site={site} pairs={}",
+            list.iter()
+                .map(|c| format!("{}:{}@{}", c.master, c.order, c.first_affected_result_order))
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
+        Err(error) => eprintln!("RSTAR_UNKNOWN site={site} error={error}"),
+    }
+}
+
 fn flush_direct(
     vakint: &Vakint,
     settings: &VakintSettings,
@@ -541,6 +571,7 @@ fn flush_direct(
         timing.closure_calls += closures.len();
         let combine_started = Instant::now();
         for value in integrated {
+            log_unknown_masters("direct", vakint, settings, &value);
             *result += value;
         }
         timing.combine += combine_started.elapsed();
@@ -564,6 +595,7 @@ fn flush_closures(
         timing.closure_calls += closures.len();
         let combine_started = Instant::now();
         for value in integrated {
+            log_unknown_masters("closure", vakint, settings, &value);
             *result += value;
         }
         timing.combine += combine_started.elapsed();
