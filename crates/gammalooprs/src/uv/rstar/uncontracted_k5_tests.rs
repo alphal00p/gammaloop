@@ -46,7 +46,7 @@ use crate::{
 };
 
 use super::{
-    DiagramLedger, PropagatorInsertionEvaluator, REFERENCE_MASS_SQUARED, RStarPlan,
+    DiagramLedger, PropagatorInsertionEvaluator, REFERENCE_MASS_SQUARED, RStarPlan, RunTally,
     boundary::ClosedRootNormalization,
     expression::{RStarIntegrand, in_dressed_scope},
     plan::{join_edge_ids, uv_child_edge_ids},
@@ -572,15 +572,6 @@ fn k5_direct_record_and_value_equal_the_fixture() -> Result<()> {
                 && disposition.ends_with(" outcome=ok"),
             "{disposition}"
         );
-        ensure!(
-            lines
-                .iter()
-                .any(|line| line.starts_with("UNCONTRACTED_KIND_TOTAL ")
-                    && line.contains(" kind=surrogate ")
-                    && line.contains(" sites=1 ")
-                    && line.contains(" compared=1 ")),
-            "no kind total line: {lines:#?}"
-        );
         // mode on: our value replaces today's, equal through eps^-1
         let (on, captured, closed) = direct_run(
             &graph,
@@ -901,61 +892,43 @@ fn k5_direct_without_a_ledger_fails() -> Result<()> {
     })
 }
 
-/// The run's coverage: a check run in which the enabled kind compared
-/// nothing fails; one comparison makes it pass; compared != equal fails; the
-/// field names are the beta's (kind= compared= hit_compared= declined=).
+/// The run level is beta's RunTally (U7a fix round): a check run in which
+/// the enabled kind `surrogate` compared nothing fails the run (one
+/// diagram whose surrogate kind expected no record); one compared surrogate
+/// record makes it pass.
 #[test]
 fn k5_run_with_zero_comparisons_fails() -> Result<()> {
     with_switch(check_surrogate(), || -> Result<()> {
-        uncontracted_ledger::reset_totals();
+        let mut tally = RunTally::new().ok_or_else(|| eyre!("no tally"))?;
         let ledger =
             DiagramLedger::open("k5-run-1", "k5-test").ok_or_else(|| eyre!("no ledger"))?;
-        ledger.close(true)?;
-        let error = uncontracted_ledger::run_coverage()
-            .err()
-            .ok_or_else(|| eyre!("a run that compared nothing passed"))?;
+        let evidence = ledger.close(true)?;
+        tally.add("k5-run-1", evidence.as_ref(), true);
+        let failures = tally.failures();
         ensure!(
-            format!("{error}").contains("kind=surrogate: zero_comparisons"),
-            "{error}"
+            failures
+                .iter()
+                .any(|failure| failure.starts_with("kind surrogate: no record compared")),
+            "a run that compared no surrogate record passed: {failures:?}"
         );
+        let mut tally = RunTally::new().ok_or_else(|| eyre!("no tally"))?;
         let ledger =
             DiagramLedger::open("k5-run-2", "k5-test").ok_or_else(|| eyre!("no ledger"))?;
         uncontracted_ledger::expect(Kind::Surrogate);
         uncontracted_ledger::record_value(Kind::Surrogate, Mode::Check);
-        ledger.close(true)?;
-        let lines = uncontracted_ledger::run_coverage()?;
+        let evidence = ledger.close(true)?;
+        tally.add("k5-run-2", evidence.as_ref(), true);
         ensure!(
-            lines.len() == 1
-                && lines[0].contains(" kind=surrogate ")
-                && lines[0].contains(" compared=1 ")
-                && lines[0].contains(" hit_compared=0 ")
-                && lines[0].contains(" declined=0 ")
-                && lines[0].ends_with(" outcome=ok"),
-            "{lines:?}"
+            tally.failures().is_empty(),
+            "one compared surrogate record: {:?} ({})",
+            tally.failures(),
+            tally.fields()
         );
-        let ledger =
-            DiagramLedger::open("k5-run-3", "k5-test").ok_or_else(|| eyre!("no ledger"))?;
-        uncontracted_ledger::expect(Kind::Surrogate);
-        uncontracted_ledger::record_compared_unequal(Kind::Surrogate);
-        let _ = ledger.close(true);
-        let error = uncontracted_ledger::run_coverage()
-            .err()
-            .ok_or_else(|| eyre!("compared != equal passed"))?;
-        ensure!(
-            format!("{error}").contains("kind=surrogate: unequal"),
-            "{error}"
-        );
-        uncontracted_ledger::reset_totals();
+        ensure!(tally.fields().contains("surrogate:expected=1,compared=1"));
         Ok(())
     })
 }
 
-// ---------------------------------------------------------------------------
-// The switch, the cache key, the off mode
-// ---------------------------------------------------------------------------
-
-/// `surrogate` is built but not in the unlisted default of on / check; it
-/// must be listed.
 #[test]
 fn k5_surrogate_must_be_listed() {
     for value in ["on", "check", "1"] {

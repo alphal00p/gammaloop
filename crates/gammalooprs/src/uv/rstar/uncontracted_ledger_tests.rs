@@ -1530,7 +1530,12 @@ fn run_level_exception_rows() {
 #[test]
 fn the_run_fails_a_kind_with_nothing_compared() -> Result<()> {
     test_initialise()?;
-    let check = Switch::new(Mode::Check, &ALL_KINDS);
+    // every kind this build emits (U7c: surrogate included), so that the
+    // tally's diagram rule applies
+    let check = Switch::new(
+        Mode::Check,
+        &[Kind::Root, Kind::Child, Kind::IrHard, Kind::Surrogate],
+    );
     let evidence = |identity: Option<String>, ir_hard: serde_json::Value| {
         serde_json::json!({
             "schema": ledger::EVIDENCE_SCHEMA, "identity": identity, "graph": "g",
@@ -1541,6 +1546,8 @@ fn the_run_fails_a_kind_with_nothing_compared() -> Result<()> {
                 "child": {"expected": 3, "attempted": 1, "uncontracted": 1, "zero": 0, "equal": 1,
                           "hit_equal": 2, "classes": {"compared": 1, "hit:compared": 2}, "outcome": "ok"},
                 "ir-hard": ir_hard,
+                "surrogate": {"expected": 1, "attempted": 1, "uncontracted": 1, "zero": 0,
+                              "equal": 1, "classes": {"compared": 1}, "outcome": "ok"},
             },
         })
     };
@@ -1591,7 +1598,7 @@ fn the_run_fails_a_kind_with_nothing_compared() -> Result<()> {
         let empty = serde_json::json!({
             "schema": ledger::EVIDENCE_SCHEMA, "identity": identity, "graph": "z",
             "diagram": "000009", "outcome": "ok", "inert": {},
-            "kinds": {"root": none, "child": none, "ir-hard": none},
+            "kinds": {"root": none, "child": none, "ir-hard": none, "surrogate": none},
         });
         let mut tally = ledger::RunTally::new().ok_or_else(|| eyre!("no tally"))?;
         tally.add(
