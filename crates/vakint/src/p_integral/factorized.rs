@@ -3472,6 +3472,8 @@ impl FactorizedNumerator {
 }
 
 #[cfg(test)]
+mod insertion_records_tests;
+#[cfg(test)]
 mod insertion_tests;
 #[cfg(test)]
 mod tests;

@@ -1220,19 +1220,32 @@ fn the_closure_kind_refuses_what_it_does_not_support() {
     v.kind = FactorizedKind::Direct;
     refused(&v, "not a closure record");
     // an insertion on a vertex that is neither a contracted (ct:) nor a
-    // surrogate (ins:) vertex is refused
+    // surrogate (ins:) vertex is refused BY THAT RULE: vertex 2's polynomial
+    // (degree 1) moved into an insertion with the vertex's own half-edges and
+    // factor 1, the rule name left as it is; with the rule `ct:` the same
+    // record is accepted
     let mut v = l2_root(1, true);
+    let hedges = v
+        .local_hedges(super::super::Location::Vertex(2))
+        .into_iter()
+        .collect::<Vec<_>>();
+    let vertex = v.vertices.iter_mut().find(|x| x.id == 2).unwrap();
+    let factor = std::mem::replace(&mut vertex.factor, Atom::num(1));
     v.insertions.push(super::super::Insertion {
-        vertex: 1,
-        hedges: Vec::new(),
+        vertex: 2,
+        hedges,
         cycles: (0, 0),
         coefficient: Atom::num(1),
-        factor: Atom::num(1),
+        factor,
     });
-    assert!(matches!(
-        v.validate(),
-        Err(FactorizedError::Insertion { .. })
-    ));
+    match v.validate() {
+        Err(FactorizedError::Insertion { vertex: 2, detail }) => {
+            assert!(detail.starts_with("the vertex rule "), "{detail}")
+        }
+        other => panic!("neither ct: nor ins:: {other:?}"),
+    }
+    v.vertices.iter_mut().find(|x| x.id == 2).unwrap().rule = "ct:child".into();
+    v.validate().unwrap();
     // the adapter and the vacuum entry keep refusing the kind
     let vakint = Vakint::new().unwrap();
     let v = l2_root(1, true);
@@ -2244,49 +2257,6 @@ fn the_beta_k1_quick_records_equal_their_values() {
     wh_fixtures::assert_compared("K1_QUICK", checked, only.is_none().then_some(35));
 }
 
-/// THE BETA'S REAL RECORDS WITH INSERTIONS (closure kind + insertion
-/// vertices), through `real_record` (exact through `valid_through`, caller
-/// notation, byte-identical round trip), with the summed pole order printed.
-fn real_insertion_record(record: &str, value_text: &str, what: &str) {
-    let value = FactorizedNumerator::from_text(record).unwrap();
-    let epsilon = crate::utils::vakint_macros::vk_symbol!("gammalooprs::ε");
-    let started = std::time::Instant::now();
-    real_record(record, value_text, what);
-    eprintln!(
-        "{what}: insertions {} pole order {} seconds {:.3}",
-        value.insertions.len(),
-        value.insertion_pole_order(epsilon).unwrap(),
-        started.elapsed().as_secs_f64()
-    );
-}
-
-#[test]
-fn the_beta_k2_child_with_an_insertion_equals_its_contracted_value() {
-    real_insertion_record(
-        include_str!("../fixtures/wh-k2-child-ins.record.txt"),
-        include_str!("../fixtures/wh-k2-child-ins.value.txt"),
-        "k2-child-ins",
-    );
-}
-
-#[test]
-fn the_beta_k5_surrogate_root_equals_its_contracted_value() {
-    real_insertion_record(
-        include_str!("../fixtures/wh-k5-surrogate.record.txt"),
-        include_str!("../fixtures/wh-k5-surrogate.value.txt"),
-        "k5-surrogate",
-    );
-}
-
-#[test]
-fn the_beta_k4_quotient_equals_its_contracted_value() {
-    real_insertion_record(
-        include_str!("../fixtures/wh-k4-quotient.record.txt"),
-        include_str!("../fixtures/wh-k4-quotient.value.txt"),
-        "k4-quotient",
-    );
-}
-
 /// A child insertion of momentum degree 2 in a record with Taylor degree
 /// w = 2 goes through the same routing, lambda scaling and truncation as a
 /// vertex factor: the record with the polynomial on a contracted (ct:)
@@ -2490,10 +2460,13 @@ fn insertion_cycles_count_towards_original_cycles_at_most() {
     fewer.validate().unwrap();
     let mut more = fewer.clone();
     more.insertions[0].cycles = (2, 0);
-    assert!(
-        more.validate().is_err(),
-        "the insertions' cycles exceed original_cycles"
-    );
+    match more.validate() {
+        Err(FactorizedError::Closure { detail }) => assert!(
+            detail.starts_with("the carried graph and its insertions have "),
+            "{detail}"
+        ),
+        other => panic!("the insertions' cycles exceed original_cycles: {other:?}"),
+    }
 }
 
 /// The beta's k1-l5 set: K1 records of every boundary root remainder of a
