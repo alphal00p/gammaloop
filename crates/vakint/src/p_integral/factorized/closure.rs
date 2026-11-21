@@ -1683,11 +1683,8 @@ mod internal_failure_tests {
     /// reverted to a refusal fails this test.
     #[test]
     fn the_internal_failure_sites_return_evaluation() {
-        let source = include_str!("closure.rs");
-        let code = source
-            .split("#[cfg(test)]")
-            .next()
-            .expect("the non-test part");
+        // the whole file: the patterns below appear in this test only escaped
+        let code = include_str!("closure.rs");
         for stage in [
             "internal(\"boundary\", e)",
             "internal(\"lowering and reduction\", e)",
@@ -1696,8 +1693,9 @@ mod internal_failure_tests {
         ] {
             assert_eq!(code.matches(stage).count(), 1, "{stage}");
         }
+        let refusal = ["map_err(|e| ", "refuse("].concat();
         assert!(
-            !code.contains("map_err(|e| refuse("),
+            !code.contains(&refusal),
             "an evaluation failure mapped to a refusal"
         );
     }
