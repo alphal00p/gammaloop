@@ -872,7 +872,6 @@ fn p3_vakint_epsilon_under_another_settings_epsilon_is_refused() {
 /// namespace rule (no vakint symbol in the value, corr. 1): either refused
 /// or a value free of vakint's internal symbols (the Taylor parameter).
 #[test]
-#[ignore = "finding F-1: log(R) in a factor leaks vakint::closure_lambda into the value"]
 fn p4_the_reference_mass_inside_a_function() {
     let base = record("wh-k1-root");
     let mut v = base.clone();
@@ -949,7 +948,6 @@ fn p4_an_auxiliary_mass_zero_after_the_substitution() {
 /// A D-dependent auxiliary mass M_aux² (D-2)/2 (not zero): expected refused
 /// or the substituted value; recorded.
 #[test]
-#[ignore = "finding F-3: a D-dependent auxiliary mass is accepted and dim stays in the value"]
 fn p4_a_dimension_dependent_auxiliary_mass() {
     let mut v = record("wh-k1-root");
     if let FactorizedKind::Closure(spec) = &mut v.kind {
@@ -1289,7 +1287,6 @@ fn p2_k6_z_in_the_argument() {
 /// (`1/R`, `sqrt(R)`: FactorRules admits tensor-free scalars): refused, or a
 /// value free of vakint's internal symbols.
 #[test]
-#[ignore = "finding F-1: R under a negative or non-integer power in a factor leaks vakint::closure_lambda"]
 fn p4_the_reference_mass_under_a_power() {
     let base = record("wh-k1-root");
     let mut leaks = Vec::new();
@@ -1409,4 +1406,206 @@ fn p1_numerical_mode_with_an_insertion() {
             assert!(magnitude < 1e-12, "eps^{order}: {term}");
         }
     }
+}
+
+// ===========================================================================
+// INVENTORY for the result backstop: the symbols a real result contains that
+// are NOT among its inputs (record atoms, prefactor argument, settings).
+// ===========================================================================
+
+fn symbols_of(a: &Atom, out: &mut std::collections::BTreeSet<String>) {
+    a.as_view().visitor(&mut |part| {
+        match part {
+            AtomView::Var(x) => {
+                out.insert(x.get_symbol().get_name().to_string());
+            }
+            AtomView::Fun(f) => {
+                out.insert(f.get_symbol().get_name().to_string());
+            }
+            _ => {}
+        }
+        true
+    });
+}
+
+fn input_symbols(v: &FactorizedNumerator, argument: &Atom) -> std::collections::BTreeSet<String> {
+    let mut s = std::collections::BTreeSet::new();
+    for e in &v.edges {
+        symbols_of(&e.factor, &mut s);
+        symbols_of(&e.mass_squared, &mut s);
+    }
+    for x in &v.vertices {
+        symbols_of(&x.factor, &mut s);
+    }
+    for p in &v.ports {
+        symbols_of(p, &mut s);
+    }
+    if let Some(p) = &v.projector {
+        symbols_of(&p.tensor, &mut s);
+    }
+    symbols_of(&v.prefactor.overall, &mut s);
+    symbols_of(&v.prefactor.scalars, &mut s);
+    symbols_of(&v.prefactor.colour, &mut s);
+    for i in &v.insertions {
+        symbols_of(&i.coefficient, &mut s);
+        symbols_of(&i.factor, &mut s);
+    }
+    if let FactorizedKind::Closure(spec) = &v.kind {
+        symbols_of(&spec.mass_squared, &mut s);
+        symbols_of(&spec.auxiliary_mass_squared, &mut s);
+    }
+    symbols_of(argument, &mut s);
+    s.insert("gammalooprs::ε".into());
+    s.insert("gammalooprs::μᵣ²".into());
+    s
+}
+
+fn inventory(
+    records: &[FactorizedNumerator],
+    closure_kind: bool,
+) -> std::collections::BTreeMap<String, std::collections::BTreeSet<String>> {
+    let vakint = engine();
+    let mut out = std::collections::BTreeMap::<String, std::collections::BTreeSet<String>>::new();
+    for (mode_name, mode) in [
+        ("symbolic", RustRedMasterMode::Symbolic),
+        ("numerical", RustRedMasterMode::Numerical),
+        ("retain", RustRedMasterMode::Retain),
+    ] {
+        let settings = site(mode);
+        for v in records {
+            let argument = v.prefactor.total();
+            let result = if closure_kind {
+                evaluate_factorized_closure(
+                    &vakint,
+                    &settings,
+                    std::slice::from_ref(v),
+                    std::slice::from_ref(&argument),
+                )
+                .map(|r| r.value)
+            } else {
+                evaluate_factorized_ports(&vakint, &settings, v, &argument).map(|r| r.value)
+            };
+            let result = match result {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("INVENTORY {mode_name} {}: ERROR {e}", v.label);
+                    continue;
+                }
+            };
+            let inputs = input_symbols(v, &argument);
+            let mut found = std::collections::BTreeSet::new();
+            symbols_of(&result, &mut found);
+            for name in found.difference(&inputs) {
+                out.entry(format!("{mode_name} {name}"))
+                    .or_default()
+                    .insert(v.label.split_whitespace().next().unwrap_or("").to_string());
+            }
+            if inputs.contains("gammalooprs::dim") && found.contains("gammalooprs::dim") {
+                out.entry(format!("{mode_name} DIMENSION gammalooprs::dim"))
+                    .or_default()
+                    .insert(v.label.clone());
+            }
+        }
+    }
+    for (k, v) in &out {
+        eprintln!(
+            "INVENTORY {k} <- {} records, e.g. {:?}",
+            v.len(),
+            v.iter().next()
+        );
+    }
+    out
+}
+
+#[test]
+fn inventory_vendored_records() {
+    let closures = CLOSURE_KINDS.iter().map(|n| record(n)).collect::<Vec<_>>();
+    inventory(&closures, true);
+    inventory(&[record("wh-k5-direct")], false);
+}
+
+#[test]
+#[ignore = "external data: VAKINT_TEST_WH_FIXTURES"]
+fn inventory_producer_records() {
+    let root = wh_fixtures::fixture_root();
+    let mut closures = Vec::new();
+    let mut directs = Vec::new();
+    let only = std::env::var("PROBE_INVENTORY_SETS")
+        .unwrap_or_else(|_| "k1-quick,k5-stress,k6-norm".into());
+    for set in only.split(',') {
+        let dir = root.join(set);
+        let mut inputs = Vec::new();
+        for d in wh_fixtures::record_dirs(&dir) {
+            inputs.push(d.join("input.txt"));
+        }
+        if set == "k6-norm" {
+            for e in std::fs::read_dir(&dir).unwrap() {
+                let p = e.unwrap().path();
+                if p.is_file() && p.extension().is_some_and(|x| x == "txt") {
+                    inputs.push(p);
+                }
+            }
+        }
+        for p in inputs {
+            let text = wh_fixtures::read_fixture(&p);
+            if !text.starts_with("schema\tpint6.factorized-numerator.v3") {
+                continue;
+            }
+            let v = FactorizedNumerator::from_text(&text).unwrap();
+            if matches!(v.kind, FactorizedKind::Closure(_)) {
+                closures.push(v);
+            } else {
+                directs.push(v);
+            }
+        }
+    }
+    eprintln!(
+        "INVENTORY producer: {} closure, {} direct",
+        closures.len(),
+        directs.len()
+    );
+    inventory(&closures, true);
+    inventory(&directs, false);
+}
+
+/// THE RESULT CHECK ALONE catches F-1 and F-3 through the public closure
+/// entry (with no validation rule for the masses' positions): an internal
+/// `Evaluation` error naming the symbol, prefix `result check: `.
+#[test]
+fn the_result_check_catches_f1_and_f3_without_a_validation_rule() {
+    let expect = |v: &FactorizedNumerator, what: &str, needle: &str| match closure(
+        v,
+        &symbolic(),
+        &v.prefactor.total(),
+    ) {
+        Err(FactorizedError::Evaluation { detail }) => {
+            assert!(
+                detail.starts_with("result check: ") && detail.contains(needle),
+                "{what}: {detail}"
+            )
+        }
+        // a later validation rule may refuse first: then not Evaluation
+        Err(e) => eprintln!("{what}: refused before the result check: {}", detail(&e)),
+        Ok(got) => panic!("{what}: accepted: {}", got.value),
+    };
+    let base = record("wh-k1-root");
+    for form in [format!("log({R})"), format!("{R}^-1"), format!("{R}^(1/2)")] {
+        let mut v = base.clone();
+        let vertex = v
+            .vertices
+            .iter_mut()
+            .find(|x| x.factor != Atom::num(1))
+            .unwrap();
+        vertex.factor = &vertex.factor * atom(&form);
+        expect(&v, &form, "vakint::closure_lambda");
+    }
+    let mut v = base.clone();
+    if let FactorizedKind::Closure(spec) = &mut v.kind {
+        spec.auxiliary_mass_squared = atom(&format!("{MAUX}*({DIM}-2)/2"));
+    }
+    expect(
+        &v,
+        "M_aux (D-2)/2",
+        "the dimension gammalooprs::dim outside a representation slot",
+    );
 }

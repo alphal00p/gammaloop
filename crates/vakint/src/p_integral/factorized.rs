@@ -51,6 +51,7 @@
 //! engine for these values is kept for reference on the branch
 //! `parked/vakint-numerator-engine` and is deprecated.
 
+mod backstop;
 mod closure;
 mod colour;
 mod evaluate;

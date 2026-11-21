@@ -1215,8 +1215,12 @@ pub fn evaluate_factorized_vacuum_streamed(
         VacuumBackend::Scaleless => Atom::Zero,
     };
     let evaluate_seconds = started.elapsed().as_secs_f64();
+    let caller = to_caller_notation(value, &vakint_value);
+    // (the vacuum caller notation keeps p(j) of an external vector without a
+    // leg, and its scalar products, in vakint notation: allowed here)
+    super::backstop::check_result(value, prefactor, settings, &caller, true)?;
     Ok(VacuumValue {
-        value: to_caller_notation(value, &vakint_value),
+        value: caller,
         vakint_value,
         input,
         backend,

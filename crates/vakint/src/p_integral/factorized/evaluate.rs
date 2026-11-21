@@ -509,6 +509,7 @@ pub fn evaluate_factorized(
     let result = vakint
         .evaluate(settings, input.as_view())
         .map_err(|e| evaluation(e.to_string()))?;
+    super::backstop::check_result(value, prefactor, settings, &result, true)?;
     Ok(FactorizedValue {
         value: result,
         input,
@@ -581,6 +582,7 @@ pub fn evaluate_factorized_ports(
     let evaluated = evaluate_factorized(vakint, settings, value, prefactor)?;
     let open = value.open_slots()?;
     let caller = to_caller_notation_p(value, &evaluated.value)?;
+    super::backstop::check_result(value, prefactor, settings, &caller, false)?;
     let timing = counted.elapsed();
     if crate::timing::record_log_enabled() {
         eprintln!(
