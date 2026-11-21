@@ -2163,6 +2163,668 @@ fn m2_a_v3_schema_with_trailing_whitespace_names_v3() {
     FactorizedNumerator::from_text(&clean).unwrap();
 }
 
+// ===========================================================================
+// ROUND 2: the allow-list rules attacked, every rule on every field
+// ===========================================================================
+
+/// The outcome of a marked record through its public entry (the closure
+/// entry for a closure record, the ports entry for a direct one): Ok, or the
+/// refusal text.
+fn through_entry(
+    v: &FactorizedNumerator,
+    argument: &Atom,
+    settings: &VakintSettings,
+) -> Result<Atom, String> {
+    if let Err(e) = v.validate() {
+        return Err(format!("validate: {e}"));
+    }
+    if matches!(v.kind, FactorizedKind::Closure(_)) {
+        evaluate_factorized_closure(
+            &engine(),
+            settings,
+            std::slice::from_ref(v),
+            std::slice::from_ref(argument),
+        )
+        .map(|r| r.value)
+        .map_err(|e| format!("entry: {e}"))
+    } else {
+        evaluate_factorized_ports(&engine(), settings, v, argument)
+            .map(|r| r.value)
+            .map_err(|e| format!("entry: {e}"))
+    }
+}
+
+/// One table row: rule x field -> refused?
+type Setter = Box<dyn Fn(&mut FactorizedNumerator, &Atom)>;
+
+fn field_setters(v: &FactorizedNumerator) -> Vec<(&'static str, Setter)> {
+    let mut out: Vec<(&'static str, Setter)> = Vec::new();
+    if let Some(e) = v
+        .edges
+        .iter()
+        .find(|e| !e.is_external() && e.factor != Atom::num(1))
+    {
+        let id = e.id;
+        out.push((
+            "edge factor",
+            Box::new(move |v, x| {
+                let e = v.edges.iter_mut().find(|e| e.id == id).unwrap();
+                e.factor = &e.factor * x;
+            }),
+        ));
+    }
+    if let Some(x) = v.vertices.iter().find(|x| x.factor != Atom::num(1)) {
+        let id = x.id;
+        out.push((
+            "vertex factor",
+            Box::new(move |v, x| {
+                let e = v.vertices.iter_mut().find(|e| e.id == id).unwrap();
+                e.factor = &e.factor * x;
+            }),
+        ));
+    }
+    if v.projector.is_some() {
+        out.push((
+            "projector",
+            Box::new(|v, x| {
+                let p = v.projector.as_mut().unwrap();
+                p.tensor = &p.tensor * x;
+            }),
+        ));
+    }
+    out.push((
+        "prefactor_overall",
+        Box::new(|v, x| v.prefactor.overall = &v.prefactor.overall * x),
+    ));
+    out.push((
+        "prefactor_scalars",
+        Box::new(|v, x| v.prefactor.scalars = &v.prefactor.scalars * x),
+    ));
+    out.push((
+        "prefactor_colour",
+        Box::new(|v, x| v.prefactor.colour = &v.prefactor.colour * x),
+    ));
+    out.push((
+        "weights",
+        Box::new(|v, x| {
+            let w = ("probe".to_string(), false, x.clone());
+            match &mut v.kind {
+                FactorizedKind::Closure(spec) => spec.weights.push(w),
+                _ => v.record.as_mut().unwrap().weights.push(w),
+            }
+        }),
+    ));
+    if !v.insertions.is_empty() {
+        out.push((
+            "insertion coefficient",
+            Box::new(|v, x| v.insertions[0].coefficient = &v.insertions[0].coefficient * x),
+        ));
+        out.push((
+            "insertion factor",
+            Box::new(|v, x| v.insertions[0].factor = &v.insertions[0].factor * x),
+        ));
+    }
+    out
+}
+
+/// EVERY RULE ON EVERY FIELD: each rule's violating atom in each caller
+/// field of a closure record with a projector (k1-root), one with an
+/// insertion (k2-child-ins) and a v3 direct record (k5-direct), and in the
+/// prefactor argument: refused (any variant), never a value. The table is
+/// printed; a "no" is a finding.
+#[test]
+fn round2_every_rule_on_every_field() {
+    let settings = symbolic();
+    let rules: Vec<(&str, String)> = vec![
+        ("reserved namespace", "vakint::closure_lambda".into()),
+        ("wildcard name", "probe::x_".into()),
+        ("non-ASCII name", "probe::𝜀".into()),
+        ("reference mass", R.into()),
+        ("auxiliary mass", MAUX.into()),
+        ("opaque function of D", format!("probe::f({DIM})")),
+        ("opaque function of eps", format!("probe::f({EPS})")),
+        ("non-integer exponent", "probe::x^(1/2)".into()),
+        ("symbolic exponent", "probe::x^probe::y".into()),
+        (
+            "UNKNOWN bad shape",
+            "vakint::UNKNOWN(vakint::m53,1/2)".into(),
+        ),
+        ("UNKNOWN with eps", format!("vakint::UNKNOWN({EPS},0)")),
+    ];
+    let mut misses = Vec::new();
+    let mut table = Vec::new();
+    for name in ["wh-k1-root", "wh-k2-child-ins", "wh-k5-direct"] {
+        let base = record(name);
+        let closure_kind = matches!(base.kind, FactorizedKind::Closure(_));
+        // CONTROL: a harmless caller scalar in each field must be accepted,
+        // else the column says nothing about the rules
+        let mut controls = Vec::new();
+        for (field, put) in field_setters(&base) {
+            let mut v = base.clone();
+            put(&mut v, &atom("probe::harmless"));
+            let ok = through_entry(&v, &v.prefactor.total(), &settings).is_ok();
+            controls.push(format!(
+                "{field}: {}",
+                if ok {
+                    "control ok"
+                } else {
+                    "CONTROL REFUSED (column uninformative)"
+                }
+            ));
+        }
+        eprintln!("ROUND2 {name} | CONTROL | {}", controls.join(" | "));
+        for (rule, text) in &rules {
+            if !closure_kind && (*rule == "reference mass" || *rule == "auxiliary mass") {
+                continue; // a direct record has no reference / auxiliary mass
+            }
+            let x = atom(text);
+            let mut row = vec![format!("{name} | {rule}")];
+            for (field, put) in field_setters(&base) {
+                let mut v = base.clone();
+                put(&mut v, &x);
+                let refused = through_entry(&v, &v.prefactor.total(), &settings).is_err();
+                row.push(format!("{field}: {}", if refused { "yes" } else { "NO" }));
+                if !refused {
+                    misses.push(format!("{name} {rule} in {field}"));
+                }
+            }
+            let refused = through_entry(&base, &(base.prefactor.total() * &x), &settings).is_err();
+            row.push(format!("argument: {}", if refused { "yes" } else { "NO" }));
+            if !refused {
+                misses.push(format!("{name} {rule} in the prefactor argument"));
+            }
+            table.push(row.join(" | "));
+        }
+    }
+    for row in &table {
+        eprintln!("ROUND2 {row}");
+    }
+    assert!(misses.is_empty(), "accepted:\n{}", misses.join("\n"));
+}
+
+/// BYPASSES of the function / exponent rules: sqrt and exp of ε (powers
+/// after the parser), caller heads named like Symbolica's or like the
+/// structural heads in another namespace with ε or D inside: refused.
+#[test]
+fn round2_function_and_exponent_bypasses() {
+    let base = record("wh-k1-root");
+    let id = base
+        .vertices
+        .iter()
+        .find(|x| x.factor != Atom::num(1))
+        .unwrap()
+        .id;
+    let mut accepted = Vec::new();
+    for bad in [
+        format!("sqrt(1+{EPS})"),
+        format!("exp({EPS})"),
+        format!("probe::sqrt(1+{EPS})"),
+        format!("probe::root({DIM},2)"),
+        format!("probe::mink({DIM},{EPS})"),
+        format!("probe::Q(1,{EPS})"),
+        format!("probe::dot({EPS},probe::x)"),
+        format!("probe::g({DIM},{DIM})"),
+        format!("probe::gamma({EPS})"),
+    ] {
+        let mut v = base.clone();
+        let vertex = v.vertices.iter_mut().find(|x| x.id == id).unwrap();
+        vertex.factor = &vertex.factor * atom(&bad);
+        if through_entry(&v, &v.prefactor.total(), &symbolic()).is_ok() {
+            accepted.push(bad);
+        }
+    }
+    assert!(accepted.is_empty(), "accepted: {accepted:?}");
+}
+
+/// A caller symbol NAMED like the masses in another namespace is a
+/// different symbol: accepted as an opaque scalar and carried linearly
+/// (no substitution reaches it).
+#[test]
+fn round2_mass_names_in_another_namespace_are_plain_scalars() {
+    let base = record("wh-k1-root");
+    let plain = value(&base, &symbolic());
+    for name in [
+        "probe::rstar_reference_mass_squared",
+        "probe::rstar_mass_squared",
+    ] {
+        let mut v = base.clone();
+        v.prefactor.scalars = &v.prefactor.scalars * atom(name);
+        assert_same(&value(&v, &symbolic()), &(&plain * atom(name)), name);
+    }
+}
+
+/// Non-ASCII spellings: ε with a combining mark, ε followed by a zero-width
+/// space, an ASCII name carrying a zero-width joiner or a combining mark,
+/// in an insertion coefficient (typed) and through the text form: refused.
+#[test]
+fn round2_combining_marks_and_zero_width_characters() {
+    let base = record("wh-k2-child-ins");
+    let mut accepted = Vec::new();
+    for name in [
+        "gammalooprs::ε\u{0301}",
+        "gammalooprs::ε\u{200b}",
+        "UFO::gs\u{200d}",
+        "UFO::gs\u{0308}",
+        "gammalooprs::\u{0065}\u{0301}",
+    ] {
+        init();
+        let symbol = symbolica::symbol!(name);
+        let mut v = base.clone();
+        v.insertions[0].coefficient =
+            &v.insertions[0].coefficient * (Atom::num(1) + Atom::var(symbol));
+        if through_entry(&v, &v.prefactor.total(), &symbolic()).is_ok() {
+            accepted.push(format!("typed {name:?}"));
+        }
+        // the text form
+        let text = fixture_text("wh-k2-child-ins.record.txt");
+        let line = text.lines().find(|l| l.starts_with("insertion\t")).unwrap();
+        let variant = text.replace(line, &format!("{line}*(1+{name})"));
+        if let Ok(r) = FactorizedNumerator::from_text(&variant)
+            && through_entry(&r, &r.prefactor.total(), &symbolic()).is_ok()
+        {
+            accepted.push(format!("text {name:?}"));
+        }
+    }
+    assert!(accepted.is_empty(), "accepted: {accepted:?}");
+}
+
+/// The settings' epsilon SET to a lookalike (`gammalooprs::𝜀`) and the record
+/// written in it consistently: an epsilon of another name, the same value up
+/// to the renaming; the record in the real `gammalooprs::ε` under that
+/// setting is refused.
+#[test]
+fn round2_a_lookalike_settings_epsilon() {
+    let base = record("wh-k2-child-ins");
+    let plain = value(&base, &symbolic());
+    init();
+    let look = Atom::var(symbolica::symbol!("gammalooprs::𝜀"));
+    let settings = VakintSettings {
+        epsilon_symbol: "gammalooprs::𝜀".into(),
+        ..symbolic()
+    };
+    let mut v = base.clone();
+    v.insertions[0].coefficient = v.insertions[0]
+        .coefficient
+        .replace(Atom::var(eps()))
+        .with(look.clone());
+    let got = through_entry(&v, &v.prefactor.total(), &settings).unwrap_or_else(|e| panic!("{e}"));
+    assert_same(
+        &got.replace(look).with(Atom::var(eps())),
+        &plain,
+        "lookalike settings epsilon",
+    );
+    assert!(through_entry(&base, &base.prefactor.total(), &settings).is_err());
+}
+
+/// The TYPED path with atoms the text form does not write: a float exponent
+/// (refused); an integer exponent 10^30 on an ε- or D-dependent base in a
+/// prefactor field (must be refused or evaluated within seconds: a value
+/// computed by expanding (3-2ε)^(10^30) would not finish).
+#[test]
+fn round2_typed_exponents() {
+    let base = record("wh-k1-root");
+    let mut v = base.clone();
+    let vertex = v
+        .vertices
+        .iter_mut()
+        .find(|x| x.factor != Atom::num(1))
+        .unwrap();
+    vertex.factor = &vertex.factor * atom("probe::x^0.5");
+    assert!(
+        through_entry(&v, &v.prefactor.total(), &symbolic()).is_err(),
+        "float exponent accepted"
+    );
+    // 10^30 on (-1+D): run in a thread with a time limit
+    let mut v = base.clone();
+    v.prefactor.scalars =
+        &v.prefactor.scalars * atom(&format!("(-1+{DIM})^1000000000000000000000000000000"));
+    let (send, receive) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let r = through_entry(&v, &v.prefactor.total(), &symbolic()).map(|_| ());
+        let _ = send.send(r);
+    });
+    match receive.recv_timeout(std::time::Duration::from_secs(60)) {
+        Ok(Err(e)) => eprintln!("ROUND2 (D-1)^(10^30): refused: {e}"),
+        Ok(Ok(())) => panic!("(D-1)^(10^30) in prefactor_scalars: accepted and evaluated"),
+        Err(_) => panic!(
+            "(D-1)^(10^30) in prefactor_scalars: no answer within 60 s (accepted, the evaluation does not finish)"
+        ),
+    }
+}
+
+/// Forbidden content INSIDE the arguments of STRUCTURAL heads (a slot
+/// index, a momentum, dot, gamma): refused (by the exponent / function
+/// rules or by the index rules), never a value.
+#[test]
+fn round2_inside_structural_heads() {
+    let base = record("wh-k1-root");
+    let id = base
+        .vertices
+        .iter()
+        .find(|x| x.factor != Atom::num(1))
+        .unwrap()
+        .id;
+    let mink = "spenso::{spenso::representation,spenso::self_dual}::mink";
+    let q = "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q";
+    let mut accepted = Vec::new();
+    for bad in [
+        format!("{mink}({DIM},probe::i^(1/2))*{mink}({DIM},probe::i^(1/2))"),
+        format!("{mink}({DIM},log({EPS}))*{mink}({DIM},log({EPS}))"),
+        format!("spenso::dot({q}(2,{mink}({DIM})),{q}(2,{mink}({DIM})))^(1/2)"),
+        format!("spenso::dot({q}(2,{mink}({DIM})),log({EPS}))"),
+        format!("{q}(2,{mink}({DIM},probe::j))*{q}(2,{mink}({DIM},probe::j))*{EPS}^(1/2)"),
+    ] {
+        let mut v = base.clone();
+        let vertex = v.vertices.iter_mut().find(|x| x.id == id).unwrap();
+        vertex.factor = &vertex.factor * atom(&bad);
+        if through_entry(&v, &v.prefactor.total(), &symbolic()).is_ok() {
+            accepted.push(bad);
+        }
+    }
+    assert!(accepted.is_empty(), "accepted: {accepted:?}");
+}
+
+/// vakint::UNKNOWN misused: squared, in a denominator, inside a slot, with
+/// ε or a mass in its arguments. Expected by C8 ("linear"): refused except a
+/// linear occurrence; the probe records which are accepted.
+#[test]
+fn round2_unknown_misused() {
+    // SAFETY: nextest runs each test in its own process
+    unsafe { std::env::set_var("VAKINT_ALLOW_UNKNOWN_MASTER_COEFFICIENTS", "1") };
+    let base = record("wh-k2-child-ins");
+    let u = "vakint::UNKNOWN(vakint::m53,0)";
+    let mut accepted = Vec::new();
+    for bad in [
+        format!("{u}^2"),
+        format!("{u}^-1"),
+        format!("vakint::UNKNOWN({EPS},0)"),
+        format!("vakint::UNKNOWN({R},0)"),
+        format!("vakint::UNKNOWN(vakint::m53,0)*vakint::UNKNOWN(vakint::m54,1)"),
+    ] {
+        let mut v = base.clone();
+        v.insertions[0].coefficient = &v.insertions[0].coefficient * (Atom::num(1) + atom(&bad));
+        if through_entry(&v, &v.prefactor.total(), &symbolic()).is_ok() {
+            accepted.push(bad);
+        }
+    }
+    // inside a slot of a vertex factor
+    let mut v = base.clone();
+    let vertex = v
+        .vertices
+        .iter_mut()
+        .find(|x| x.factor != Atom::num(1))
+        .unwrap();
+    vertex.factor = &vertex.factor
+        * atom(&format!(
+            "spenso::{{spenso::representation,spenso::self_dual}}::mink({DIM},{u})"
+        ));
+    if through_entry(&v, &v.prefactor.total(), &symbolic()).is_ok() {
+        accepted.push("inside a slot".into());
+    }
+    eprintln!("ROUND2 UNKNOWN accepted: {accepted:?}");
+    assert!(accepted.is_empty(), "accepted: {accepted:?}");
+}
+
+// ===========================================================================
+// The three probes owed from round 1
+// ===========================================================================
+
+/// v1.4 §7 "open spinor chains only between the two declared bispinor
+/// ports (OQ-6)": the k3-dirac value has no bispinor slot other than its
+/// declared bispinor ports (here: none, the projector closes the quark
+/// line).
+#[test]
+fn p1_open_spinor_chains_only_between_declared_ports_k3_dirac() {
+    let v = record("wh-k3-dirac");
+    let got = value(&v, &symbolic());
+    let declared = v
+        .ports
+        .iter()
+        .filter(|p| p.to_string().contains("bis("))
+        .map(|p| p.to_canonical_string())
+        .collect::<std::collections::BTreeSet<_>>();
+    let mut found = std::collections::BTreeSet::new();
+    got.as_view().visitor(&mut |part| {
+        if let AtomView::Fun(f) = part
+            && f.get_symbol().get_name() == "spenso::bis"
+        {
+            found.insert(part.to_owned().to_canonical_string());
+            return false;
+        }
+        true
+    });
+    let stray = found.difference(&declared).collect::<Vec<_>>();
+    eprintln!(
+        "P1 OPEN SPINOR k3-dirac: declared bispinor ports {declared:?}, bispinor slots in the value {found:?}"
+    );
+    assert!(
+        stray.is_empty(),
+        "bispinor slots outside the declared ports: {stray:?}"
+    );
+}
+
+/// Numerical mode on the VACUUM entry for a MARKED value (a two-loop
+/// massive sunrise, v3 direct record): the same orders as Symbolic, the
+/// Symbolic coefficients numerically.
+#[test]
+fn p1_numerical_mode_on_the_vacuum_entry() {
+    use vakint::p_integral::factorized::{
+        DirectRecord, Endpoint, FactorizedEdge, FactorizedVertex, LineKind, Prefactor,
+        evaluate_factorized_vacuum,
+    };
+    init();
+    let line =
+        |id: usize, s: usize, t: usize, h: (usize, usize), momentum: [i64; 2]| FactorizedEdge {
+            id,
+            source: Endpoint::Vertex(s),
+            target: Endpoint::Vertex(t),
+            source_hedge: Some(h.0),
+            target_hedge: Some(h.1),
+            particle: "x".into(),
+            line: LineKind::Scalar,
+            power: 1,
+            mass_squared: atom("probe::m2"),
+            momentum: momentum.to_vec(),
+            factor: Atom::num(1),
+        };
+    let v = FactorizedNumerator {
+        label: "probe vacuum sunrise".into(),
+        kind: FactorizedKind::Direct,
+        dimension: symbolica::symbol!("gammalooprs::dim"),
+        loop_edges: vec![Some(1), Some(2)],
+        external_edges: Vec::new(),
+        edges: vec![
+            line(1, 1, 2, (1, 2), [1, 0]),
+            line(2, 1, 2, (3, 4), [0, 1]),
+            line(3, 2, 1, (5, 6), [1, 1]),
+        ],
+        vertices: vec![
+            FactorizedVertex {
+                id: 1,
+                rule: "V".into(),
+                factor: Atom::num(1),
+            },
+            FactorizedVertex {
+                id: 2,
+                rule: "V".into(),
+                factor: Atom::num(1),
+            },
+        ],
+        ports: Vec::new(),
+        projector: None,
+        prefactor: Prefactor {
+            scalars: atom("UFO::gs^2"),
+            ..Prefactor::default()
+        },
+        colour_branch: None,
+        insertions: Vec::new(),
+        record: Some(DirectRecord {
+            original_cycles: None,
+            depth: None,
+            weights: Vec::new(),
+        }),
+    };
+    let vakint = engine();
+    let run = |mode| {
+        evaluate_factorized_vacuum(&vakint, &site(mode), &v, &v.prefactor.total())
+            .unwrap_or_else(|e| panic!("{mode:?}: {e}"))
+            .value
+    };
+    let exact = run(RustRedMasterMode::Symbolic);
+    let numerical = run(RustRedMasterMode::Numerical);
+    eprintln!("P1 VACUUM symbolic {exact}\nP1 VACUUM numerical {numerical}");
+    let e = wh_fixtures::epsilon_coefficients(&exact, eps());
+    let n = wh_fixtures::epsilon_coefficients(&numerical, eps());
+    assert_eq!(
+        e.keys().collect::<Vec<_>>(),
+        n.keys().collect::<Vec<_>>(),
+        "orders"
+    );
+    let pi = atom("𝜋");
+    let pi_value = atom("3.14159265358979323846264338327950288419716939937510582097494459");
+    let mut skipped = Vec::new();
+    for (order, c) in &e {
+        // vakint's transcendental constants (HI, HR, ...) stay symbolic in
+        // the Symbolic value: such a coefficient is not compared here
+        let text = c.to_string();
+        if text.contains("HI(") || text.contains("HR(") {
+            skipped.push(*order);
+            continue;
+        }
+        let difference = (c.replace(pi.clone()).with(pi_value.clone()).to_float(60)
+            - n[order]
+                .replace(pi.clone())
+                .with(pi_value.clone())
+                .to_float(60))
+        .expand();
+        let terms = match difference.as_view() {
+            AtomView::Add(sum) => sum.iter().map(|t| t.to_owned()).collect::<Vec<_>>(),
+            _ if difference.is_zero() => Vec::new(),
+            _ => vec![difference.clone()],
+        };
+        for term in terms {
+            assert!(
+                parse_magnitude(&term.to_string()) < 1e-12,
+                "eps^{order}: {term}"
+            );
+        }
+    }
+    eprintln!(
+        "P1 VACUUM numerical = symbolic at every order but {skipped:?} (vakint constants HI / HR there)"
+    );
+    assert!(skipped.len() < e.len(), "no coefficient compared");
+}
+
+/// UNKNOWN masters produced by the BACKEND through the closure entry: the
+/// five-loop K1 record L5-60 rr1 evaluated three Laurent terms deeper than
+/// its depth needs master coefficients the catalogue does not know: with
+/// allow-unknowns OFF the entry refuses (`Evaluation`, the unknown-master
+/// text); ON, the value carries `vakint::UNKNOWN(..)` linearly and the
+/// result check lets it through.
+#[test]
+#[ignore = "external data: VAKINT_TEST_WH_FIXTURES + VAKINT_TEST_P_LIBRARY_1_4"]
+fn p1_unknown_masters_from_the_backend_through_the_closure_entry() {
+    wh_fixtures::required_env("VAKINT_TEST_P_LIBRARY_1_4", "five loops");
+    let dir = wh_fixtures::fixture_dir("k1-l5").join("L5-60").join("rr1");
+    let mut v =
+        FactorizedNumerator::from_text(&wh_fixtures::read_fixture(&dir.join("input.txt"))).unwrap();
+    let FactorizedKind::Closure(spec) = &mut v.kind else {
+        unreachable!()
+    };
+    let depth = spec.depth.unwrap();
+    let extra: usize = std::env::var("PROBE_EXTRA_DEPTH")
+        .ok()
+        .and_then(|x| x.parse().ok())
+        .unwrap_or(6);
+    spec.depth = Some(depth + extra);
+    // SAFETY: nextest runs each test in its own process
+    unsafe { std::env::remove_var("VAKINT_ALLOW_UNKNOWN_MASTER_COEFFICIENTS") };
+    let off = closure(&v, &symbolic(), &v.prefactor.total());
+    eprintln!(
+        "P1 BACKEND UNKNOWN off: {:?}",
+        off.as_ref()
+            .map(|r| r.value.to_string().len())
+            .map_err(|e| e.to_string())
+    );
+    let mut settings = symbolic();
+    settings.allow_unknown_master_coefficients = true;
+    let on = closure(&v, &settings, &v.prefactor.total());
+    match (&off, &on) {
+        (Err(FactorizedError::Evaluation { detail }), Ok(on)) => {
+            assert!(detail.contains("expected master coefficient"), "{detail}");
+            assert!(
+                on.value.to_string().contains("UNKNOWN"),
+                "no UNKNOWN in {}",
+                on.value
+            );
+        }
+        (Ok(_), Ok(on)) => {
+            // depth + 3 still within the known coefficients: say so
+            assert!(!on.value.to_string().contains("UNKNOWN"));
+            panic!(
+                "depth + {extra} needs no unknown master coefficient on L5-60 rr1: choose a deeper depth"
+            );
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+/// The UNKNOWN exception may not carry vakint's own names: the real k1-root
+/// (L2-22) with prefactor_scalars x vakint::UNKNOWN(vakint::closure_tensor_0, 0)
+/// (the closure entry's slot placeholder inside the atom), and the same with
+/// the Taylor parameter, a core symbol or a wildcard name as the master:
+/// refused at validation with allow-unknowns on and off; a catalogue-like
+/// master name is accepted.
+#[test]
+fn unknown_with_an_internal_name_as_master_is_refused() {
+    let base = record("wh-k1-root");
+    for allow in [true, false] {
+        // SAFETY: nextest runs each test in its own process
+        unsafe {
+            if allow {
+                std::env::set_var("VAKINT_ALLOW_UNKNOWN_MASTER_COEFFICIENTS", "1")
+            } else {
+                std::env::remove_var("VAKINT_ALLOW_UNKNOWN_MASTER_COEFFICIENTS")
+            }
+        }
+        for master in [
+            "vakint::closure_tensor_0",
+            "vakint::closure_lambda",
+            "vakint::d",
+            "vakint::ep",
+            "vakint::slash",
+            "UFO::x_",
+            "UFO::x",
+        ] {
+            let mut v = base.clone();
+            v.prefactor.scalars =
+                &v.prefactor.scalars * atom(&format!("vakint::UNKNOWN({master},0)"));
+            match through_entry(&v, &v.prefactor.total(), &symbolic()) {
+                Err(e) => assert!(
+                    e.contains("reserved symbol vakint::UNKNOWN"),
+                    "{master}: {e}"
+                ),
+                Ok(got) => panic!("UNKNOWN({master}, 0) accepted (allow={allow}): {got}"),
+            }
+        }
+    }
+    // a catalogue-like master name (allow-unknowns on): accepted, linear
+    unsafe { std::env::set_var("VAKINT_ALLOW_UNKNOWN_MASTER_COEFFICIENTS", "1") };
+    let mut v = base.clone();
+    let u = atom("vakint::UNKNOWN(vakint::ggppss_int_53,-2)");
+    v.prefactor.scalars = &v.prefactor.scalars * &u;
+    let got = through_entry(&v, &v.prefactor.total(), &symbolic()).unwrap();
+    assert_same(
+        &got,
+        &(value(&base, &symbolic()) * &u),
+        "UNKNOWN as a linear scalar",
+    );
+    // an order beyond the bound
+    let mut v = base.clone();
+    v.prefactor.scalars = &v.prefactor.scalars * atom("vakint::UNKNOWN(vakint::ggppss_int_53,65)");
+    assert!(v.validate().is_err(), "an UNKNOWN order 65 accepted");
+}
+
 /// MARKED three-loop massive vacuum values through the vacuum entry in
 /// Symbolic and Numerical mode at 3 and 6 terms: the basketball (four lines
 /// of one mass between two vertices) and the all-massive mercedes (the

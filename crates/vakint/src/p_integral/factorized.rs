@@ -770,10 +770,113 @@ pub fn expand_compact_slash(expression: &Atom, scope: i64) -> Atom {
 /// scalar carried linearly.
 pub const ALLOWED_VAKINT_SYMBOL: &str = "vakint::ε";
 
-/// Whether `f` is vakint's `UNKNOWN(master, k)` atom in exactly the shape
+/// vakint's OWN names (crate::symbols, the notation heads, the tags and
+/// placeholders of the series): never a master's name.
+const VAKINT_OWN_NAMES: [&str; 76] = [
+    "a_",
+    "any___",
+    "b_",
+    "c_",
+    "cl2",
+    "cl4",
+    "d",
+    "D6",
+    "dot_dummy_ind",
+    "dot_pow",
+    "edge",
+    "ep",
+    "ERROR",
+    "EulerGamma",
+    "fun_",
+    "g",
+    "GPLImag",
+    "GPLReal",
+    "HI",
+    "HR",
+    "id1_",
+    "id2_",
+    "idx___",
+    "input_coefficient",
+    "k",
+    "mUVsq_",
+    "MZV",
+    "n_",
+    "nl_",
+    "n_loops",
+    "nr_",
+    "NumericalSource",
+    "om1",
+    "partial_numerical_input",
+    "PG",
+    "PGamma",
+    "PMaster",
+    "PolylogImag",
+    "PolylogReal",
+    "pow",
+    "pow_",
+    "prop",
+    "props_",
+    "q_",
+    "RustRedCoefficient",
+    "RustRedConstant",
+    "RustRedFiniteLiteral",
+    "rustred_input",
+    "RustRedMaster",
+    "RustRedMaterializeSpectator",
+    "S2",
+    "s6",
+    "Sqrt",
+    "sqrt3",
+    "T1ep",
+    "T1ep2",
+    "topo",
+    "uvprop",
+    "vakintFloat",
+    "VakintLambdaScalingAnalysis",
+    "vec",
+    "vec1",
+    "vxs",
+    "x",
+    "xa",
+    "y",
+    "ya",
+    "Zeta",
+    "p",
+    "dot",
+    "nf",
+    "slash",
+    "UNKNOWN",
+    "Oep",
+    "PResidual",
+    "mursq",
+];
+
+/// The largest |order| of an accepted `UNKNOWN(master, k)`.
+pub const UNKNOWN_MAX_ORDER: i64 = 64;
+
+/// Whether `name` can be a master's name in vakint's `UNKNOWN(master, k)`:
+/// in `vakint::`, an ASCII identifier (no wildcard `_` at the end), and
+/// none of vakint's own names (its symbols, notation heads, tags, the
+/// series' placeholders `closure_*`, `graph_entry_branch_*`). The master
+/// vocabulary itself is open (the loaded catalogues name the masters).
+fn is_master_name(name: &str) -> bool {
+    let Some(rest) = name.strip_prefix("vakint::") else {
+        return false;
+    };
+    let mut chars = rest.chars();
+    chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+        && !rest.ends_with('_')
+        && !rest.starts_with("closure_")
+        && !rest.starts_with("graph_entry_branch")
+        && !VAKINT_OWN_NAMES.contains(&rest)
+}
+
+/// Whether `view` is vakint's `UNKNOWN(master, k)` atom in exactly the shape
 /// its results write it: the head of
-/// [`crate::truncation_guard::unknown_coefficient_symbol`], a master symbol
-/// (a variable) and an integer order.
+/// [`crate::truncation_guard::unknown_coefficient_symbol`], a master name
+/// ([`is_master_name`]) and an integer order of at most
+/// [`UNKNOWN_MAX_ORDER`] in modulus.
 pub(crate) fn is_unknown_coefficient(view: AtomView<'_>) -> bool {
     let AtomView::Fun(f) = view else {
         return false;
@@ -781,8 +884,35 @@ pub(crate) fn is_unknown_coefficient(view: AtomView<'_>) -> bool {
     let args = f.iter().collect::<Vec<_>>();
     f.get_symbol() == crate::truncation_guard::unknown_coefficient_symbol()
         && args.len() == 2
-        && matches!(args[0], AtomView::Var(_))
-        && i64::try_from(args[1]).is_ok()
+        && matches!(args[0], AtomView::Var(v) if is_master_name(v.get_symbol().get_name()))
+        && i64::try_from(args[1]).is_ok_and(|k| k.abs() <= UNKNOWN_MAX_ORDER)
+}
+
+/// An upper bound of the degree of `view` in vakint's UNKNOWN atoms (a sum
+/// takes the maximum, a product the sum, a nonnegative integer power
+/// multiplies); `None` for an UNKNOWN atom under a negative power.
+fn unknown_degree(view: AtomView<'_>) -> Option<u64> {
+    match view {
+        AtomView::Fun(_) if is_unknown_coefficient(view) => Some(1),
+        AtomView::Add(a) => a
+            .iter()
+            .map(unknown_degree)
+            .try_fold(0, |m, d| Some(m.max(d?))),
+        AtomView::Mul(m) => m
+            .iter()
+            .map(unknown_degree)
+            .try_fold(0u64, |s, d| s.checked_add(d?)),
+        AtomView::Pow(p) => {
+            let (base, exponent) = p.get_base_exp();
+            let d = unknown_degree(base)?;
+            match i64::try_from(exponent) {
+                _ if d == 0 => Some(0),
+                Ok(n) if n >= 0 => d.checked_mul(n as u64),
+                _ => None,
+            }
+        }
+        _ => Some(0),
+    }
 }
 
 /// What [`first_forbidden_symbol`] found.
@@ -2552,6 +2682,13 @@ impl FactorizedNumerator {
         };
         let found = first_non_integer_exponent(atom.as_view())
             .map(|found| format!("a non-integer exponent in {field}: {found}"))
+            .or_else(|| match unknown_degree(atom.as_view()) {
+                Some(d) if d <= 1 => None,
+                _ => Some(format!(
+                    "a non-linear UNKNOWN in {field}: vakint's UNKNOWN(master, k) atoms are carried linearly (a product, a power or a denominator of them is refused): {}",
+                    atom.to_canonical_string()
+                )),
+            })
             .or_else(|| {
                 opaque_dependence(atom.as_view(), &depends)
                     .map(|found| format!("a non-polynomial dependence in {field}: {found}"))
