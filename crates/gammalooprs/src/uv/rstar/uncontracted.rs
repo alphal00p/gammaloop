@@ -1101,15 +1101,15 @@ pub(super) fn tally_unknown_masters(graph: &str) {
 
 /// `UNCONTRACTED_SUMMARY graph= mode= attempted= uncontracted= zero=
 /// compared= equal= declined=<code:n,..|none> error=<code:n,..|none>
-/// outcome=<ok|error>`: one line per diagram root evaluation, printed by the
-/// root's `counterterm` when the switch is on or check and the graph has
-/// attempts since its last line (its UV children's records included, on
-/// whatever thread they ran); the graph's tally is reset. Nested
-/// evaluations (children, quotients, IR hard parts, surrogates) add to the
-/// enclosing root's line.
+/// outcome=<ok|error>`: printed by every root-scope `counterterm` (a diagram
+/// root, an insertion surrogate root inside its dressed scope) when the
+/// switch is on or check and the graph has attempts since its last line (its
+/// UV children's records included, on whatever thread they ran); the graph's
+/// tally is reset, so every attempt is counted on exactly one line of its
+/// graph (child plans never print: their records join the root's line).
 pub(super) fn log_summary(graph: &str, ok: bool) {
     let switch = switch();
-    if switch.mode == Mode::Off || classify(false) != Kind::Root {
+    if switch.mode == Mode::Off {
         return;
     }
     let tally = TALLIES
