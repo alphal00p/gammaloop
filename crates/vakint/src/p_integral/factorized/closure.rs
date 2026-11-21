@@ -1581,6 +1581,7 @@ pub fn evaluate_factorized_closure(
         // rule (no-ops for an unmarked value: the base behaviour)
         super::check_marked_entry(value, prefactor, vk_symbol!(&settings.epsilon_symbol), None)?;
         super::check_entry_names(value, prefactor, settings)?;
+        super::check_data_atoms_catalogue(value, vakint)?;
         let record = evaluate_validated(vakint, settings, value, spec, prefactor)?;
         super::backstop::check_result(value, prefactor, settings, &record.value, false)?;
         out.value += &record.value;

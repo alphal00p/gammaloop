@@ -481,6 +481,7 @@ pub fn evaluate_factorized(
             Some(settings.number_of_terms_in_epsilon_expansion),
         )?;
         super::check_entry_names(value, prefactor, settings)?;
+        super::check_data_atoms_catalogue(value, vakint)?;
     }
     let pinned;
     let settings = if is_new_kind(value) {

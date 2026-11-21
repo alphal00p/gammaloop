@@ -1982,8 +1982,8 @@ fn only_vakint_unknown_in_its_exact_shape_is_allowed() {
         }
     }
     for good in [
-        "vakint::UNKNOWN(vakint::m53,0)",
-        "vakint::UNKNOWN(vakint::m53,-2)",
+        "vakint::UNKNOWN(vakint::ggppss_int_53,0)",
+        "vakint::UNKNOWN(vakint::ggppss_int_53,-2)",
         "user::UNKNOWN(user::m53,0)",
     ] {
         let mut v = base.clone();
@@ -2532,14 +2532,16 @@ fn round2_unknown_misused() {
     // SAFETY: nextest runs each test in its own process
     unsafe { std::env::set_var("VAKINT_ALLOW_UNKNOWN_MASTER_COEFFICIENTS", "1") };
     let base = record("wh-k2-child-ins");
-    let u = "vakint::UNKNOWN(vakint::m53,0)";
+    let u = "vakint::UNKNOWN(vakint::ggppss_int_53,0)";
     let mut accepted = Vec::new();
     for bad in [
         format!("{u}^2"),
         format!("{u}^-1"),
         format!("vakint::UNKNOWN({EPS},0)"),
         format!("vakint::UNKNOWN({R},0)"),
-        format!("vakint::UNKNOWN(vakint::m53,0)*vakint::UNKNOWN(vakint::m54,1)"),
+        format!(
+            "vakint::UNKNOWN(vakint::ggppss_int_53,0)*vakint::UNKNOWN(vakint::ggppss_int_54,1)"
+        ),
     ] {
         let mut v = base.clone();
         v.insertions[0].coefficient = &v.insertions[0].coefficient * (Atom::num(1) + atom(&bad));
@@ -2808,21 +2810,231 @@ fn unknown_with_an_internal_name_as_master_is_refused() {
             }
         }
     }
-    // a catalogue-like master name (allow-unknowns on): accepted, linear
+    // a catalogue master name OUTSIDE an insertion: refused (data atoms
+    // stand only in insertion coefficients and factors)
     unsafe { std::env::set_var("VAKINT_ALLOW_UNKNOWN_MASTER_COEFFICIENTS", "1") };
     let mut v = base.clone();
     let u = atom("vakint::UNKNOWN(vakint::ggppss_int_53,-2)");
     v.prefactor.scalars = &v.prefactor.scalars * &u;
-    let got = through_entry(&v, &v.prefactor.total(), &symbolic()).unwrap();
-    assert_same(
-        &got,
-        &(value(&base, &symbolic()) * &u),
-        "UNKNOWN as a linear scalar",
-    );
+    assert!(through_entry(&v, &v.prefactor.total(), &symbolic()).is_err());
     // an order beyond the bound
     let mut v = base.clone();
     v.prefactor.scalars = &v.prefactor.scalars * atom("vakint::UNKNOWN(vakint::ggppss_int_53,65)");
     assert!(v.validate().is_err(), "an UNKNOWN order 65 accepted");
+}
+
+// ===========================================================================
+// The vakint data atoms (UNKNOWN, MZV): shape, position, linearity, data
+// ===========================================================================
+
+/// One insertion coefficient of the real k2-child-ins times `extra`.
+fn k2_coefficient_times(extra: &str) -> FactorizedNumerator {
+    let mut v = record("wh-k2-child-ins");
+    v.insertions[0].coefficient = &v.insertions[0].coefficient * atom(extra);
+    v
+}
+
+/// The two data atoms in their exact shape in an insertion coefficient:
+/// accepted and carried linearly (the value of c·A is A times the value of c);
+/// UNKNOWN · ε^k raises the pole order by k.
+#[test]
+fn data_atoms_in_an_insertion_are_carried_linearly() {
+    // SAFETY: nextest runs each test in its own process
+    unsafe { std::env::set_var("VAKINT_ALLOW_UNKNOWN_MASTER_COEFFICIENTS", "1") };
+    let base = record("wh-k2-child-ins");
+    let plain = value(&base, &symbolic());
+    for data in [
+        "vakint::MZV(5,3)",
+        "vakint::MZV(3,5,3)",
+        "vakint::UNKNOWN(vakint::ggppss_int_53,0)",
+    ] {
+        let v = k2_coefficient_times(data);
+        assert_same(&value(&v, &symbolic()), &(&plain * atom(data)), data);
+    }
+    let order = base.insertion_pole_order(eps()).unwrap();
+    for k in [1i64, 2, 3] {
+        let v = k2_coefficient_times(&format!(
+            "vakint::UNKNOWN(vakint::ggppss_int_53,{k})*{EPS}^(-{k})"
+        ));
+        assert_eq!(
+            v.insertion_pole_order(eps()).unwrap(),
+            order + k as u64,
+            "UNKNOWN eps^-{k}"
+        );
+    }
+}
+
+/// The shapes: arguments are literals of the stated type; nothing else
+/// inside (the placeholder hole must not reopen through MZV).
+#[test]
+fn data_atoms_have_their_exact_shape() {
+    for bad in [
+        "vakint::MZV(vakint::closure_tensor_0)",
+        "vakint::MZV(probe::x)",
+        "vakint::MZV(5/2,3)",
+        "vakint::MZV(0,3)",
+        "vakint::MZV(65)",
+        "vakint::MZV()",
+        "vakint::UNKNOWN(vakint::m53,0)",
+        "vakint::UNKNOWN(vakint::ggppss_int_x,0)",
+        "vakint::UNKNOWN(vakint::closure_tensor_0,0)",
+        "vakint::UNKNOWN(vakint::ggppss_int_53,probe::k)",
+    ] {
+        let detail = k2_coefficient_times(bad)
+            .validate()
+            .expect_err(bad)
+            .to_string();
+        assert!(
+            detail.contains("reserved symbol vakint::"),
+            "{bad}: {detail}"
+        );
+    }
+    for good in [
+        "vakint::MZV(5,3)",
+        "vakint::UNKNOWN(vakint::ggppss_int_53,0)",
+        "vakint::UNKNOWN(vakint::x_t277_1_1,2)",
+    ] {
+        k2_coefficient_times(good)
+            .validate()
+            .unwrap_or_else(|e| panic!("{good}: {e}"));
+    }
+}
+
+/// The positions: only in an insertion's coefficient and factor, as a
+/// factor of a coefficient: refused in a vertex factor, the prefactor fields,
+/// the prefactor argument, a mass, inside a function argument, as an
+/// exponent; accepted as a factor of the insertion coefficient.
+#[test]
+fn data_atoms_only_in_insertions_and_not_inside_functions_or_exponents() {
+    let base = record("wh-k2-child-ins");
+    for data in [
+        "vakint::MZV(5,3)",
+        "vakint::UNKNOWN(vakint::ggppss_int_53,0)",
+    ] {
+        let x = atom(data);
+        let mut f = base.clone();
+        let vertex = f
+            .vertices
+            .iter_mut()
+            .find(|v| v.factor != Atom::num(1))
+            .unwrap();
+        vertex.factor = &vertex.factor * &x;
+        assert!(f.validate().is_err(), "{data} in a vertex factor");
+        let mut s = base.clone();
+        s.prefactor.scalars = &s.prefactor.scalars * &x;
+        assert!(s.validate().is_err(), "{data} in prefactor_scalars");
+        assert!(
+            through_entry(&base, &(base.prefactor.total() * &x), &symbolic()).is_err(),
+            "{data} in the prefactor argument"
+        );
+        let mut m = base.clone();
+        if let FactorizedKind::Closure(spec) = &mut m.kind {
+            spec.auxiliary_mass_squared = x.clone();
+        }
+        assert!(m.validate().is_err(), "{data} as the auxiliary mass");
+        for misplaced in [
+            format!("probe::f({data})"),
+            format!("probe::x^{data}"),
+            format!("log({data})"),
+        ] {
+            let detail = k2_coefficient_times(&misplaced)
+                .validate()
+                .expect_err(&misplaced)
+                .to_string();
+            assert!(
+                detail.contains("a misplaced vakint data atom")
+                    || detail.contains("a non-integer exponent"),
+                "{misplaced}: {detail}"
+            );
+        }
+        k2_coefficient_times(data)
+            .validate()
+            .unwrap_or_else(|e| panic!("{data}: {e}"));
+    }
+}
+
+/// The data atoms are derived from the code and the data: every vakint
+/// symbol in the master coefficients of a catalogue (its `exact` values) is
+/// one of VAKINT_DATA_ATOMS (MZV, UNKNOWN with its master), every other
+/// constant is Symbolica's (zeta, pi). The built-in catalogue (default suite).
+#[test]
+fn the_builtin_catalogue_carries_only_listed_data_atoms() {
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/p_master/p-master-catalogue-5l.json");
+    catalogue_constants(&path);
+}
+
+/// The same for the SHIPPED catalogue of the data package
+/// (`$VAKINT_TEST_P_LIBRARY_1_5/p-master-catalogue.json`, e.g.
+/// ggppss-5L-v4-rc4a, which carries UNKNOWN entries).
+#[test]
+#[ignore = "external data: VAKINT_TEST_P_LIBRARY_1_5"]
+fn the_shipped_catalogue_carries_only_listed_data_atoms() {
+    let dir = wh_fixtures::required_env(
+        "VAKINT_TEST_P_LIBRARY_1_5",
+        "the shipped p master catalogue",
+    );
+    catalogue_constants(&dir.join("p-master-catalogue.json"));
+}
+
+/// Every function head and bare name in a catalogue's master coefficients:
+/// only `zeta`, `MZV`, `UNKNOWN` (with a master name and an integer), `pi`.
+fn catalogue_constants(path: &std::path::Path) {
+    let text = wh_fixtures::read_fixture(path);
+    let json: serde_json::Value = serde_json::from_str(&text).unwrap();
+    let mut seen = std::collections::BTreeMap::<String, usize>::new();
+    let mut coefficients = 0;
+    for master in json["masters"].as_array().unwrap() {
+        let Some(map) = master["coefficients"].as_object() else {
+            continue;
+        };
+        for entry in map.values() {
+            let Some(exact) = entry["exact"].as_str() else {
+                continue;
+            };
+            coefficients += 1;
+            let mut chars = exact.char_indices().peekable();
+            while let Some((i, c)) = chars.next() {
+                if c.is_ascii_alphabetic() || c == '_' {
+                    let mut end = i + c.len_utf8();
+                    while let Some((j, d)) = chars.peek() {
+                        if d.is_ascii_alphanumeric() || *d == '_' {
+                            end = j + d.len_utf8();
+                            chars.next();
+                        } else {
+                            break;
+                        }
+                    }
+                    let name = &exact[i..end];
+                    let head = exact[end..].starts_with('(');
+                    let kind = match (name, head) {
+                        ("zeta", true) => "zeta (symbolica::zeta after parse_constant)".to_string(),
+                        ("MZV", true) => "MZV (vakint data atom)".to_string(),
+                        ("UNKNOWN", true) => "UNKNOWN (vakint data atom)".to_string(),
+                        ("pi", false) => "pi (symbolica::𝜋 after parse_constant)".to_string(),
+                        (n, false) if n.starts_with("ggppss_int_") || n.starts_with("x_t") => {
+                            "an UNKNOWN master name".to_string()
+                        }
+                        (n, h) => format!("UNLISTED {n} head={h}"),
+                    };
+                    *seen.entry(kind).or_default() += 1;
+                }
+            }
+        }
+    }
+    eprintln!(
+        "CATALOGUE {}: {coefficients} exact coefficients, constants {seen:?}",
+        path.display()
+    );
+    assert!(coefficients > 0);
+    let unlisted = seen
+        .keys()
+        .filter(|k| k.starts_with("UNLISTED"))
+        .collect::<Vec<_>>();
+    assert!(
+        unlisted.is_empty(),
+        "constants not in the list: {unlisted:?}"
+    );
 }
 
 /// MARKED three-loop massive vacuum values through the vacuum entry in

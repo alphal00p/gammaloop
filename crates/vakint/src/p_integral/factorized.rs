@@ -770,106 +770,83 @@ pub fn expand_compact_slash(expression: &Atom, scope: i64) -> Atom {
 /// scalar carried linearly.
 pub const ALLOWED_VAKINT_SYMBOL: &str = "vakint::ε";
 
-/// vakint's OWN names (crate::symbols, the notation heads, the tags and
-/// placeholders of the series): never a master's name.
-const VAKINT_OWN_NAMES: [&str; 76] = [
-    "a_",
-    "any___",
-    "b_",
-    "c_",
-    "cl2",
-    "cl4",
-    "d",
-    "D6",
-    "dot_dummy_ind",
-    "dot_pow",
-    "edge",
-    "ep",
-    "ERROR",
-    "EulerGamma",
-    "fun_",
-    "g",
-    "GPLImag",
-    "GPLReal",
-    "HI",
-    "HR",
-    "id1_",
-    "id2_",
-    "idx___",
-    "input_coefficient",
-    "k",
-    "mUVsq_",
-    "MZV",
-    "n_",
-    "nl_",
-    "n_loops",
-    "nr_",
-    "NumericalSource",
-    "om1",
-    "partial_numerical_input",
-    "PG",
-    "PGamma",
-    "PMaster",
-    "PolylogImag",
-    "PolylogReal",
-    "pow",
-    "pow_",
-    "prop",
-    "props_",
-    "q_",
-    "RustRedCoefficient",
-    "RustRedConstant",
-    "RustRedFiniteLiteral",
-    "rustred_input",
-    "RustRedMaster",
-    "RustRedMaterializeSpectator",
-    "S2",
-    "s6",
-    "Sqrt",
-    "sqrt3",
-    "T1ep",
-    "T1ep2",
-    "topo",
-    "uvprop",
-    "vakintFloat",
-    "VakintLambdaScalingAnalysis",
-    "vec",
-    "vec1",
-    "vxs",
-    "x",
-    "xa",
-    "y",
-    "ya",
-    "Zeta",
-    "p",
-    "dot",
-    "nf",
-    "slash",
-    "UNKNOWN",
-    "Oep",
-    "PResidual",
-    "mursq",
-];
-
 /// The largest |order| of an accepted `UNKNOWN(master, k)`.
 pub const UNKNOWN_MAX_ORDER: i64 = 64;
 
-/// Whether `name` can be a master's name in vakint's `UNKNOWN(master, k)`:
-/// in `vakint::`, an ASCII identifier (no wildcard `_` at the end), and
-/// none of vakint's own names (its symbols, notation heads, tags, the
-/// series' placeholders `closure_*`, `graph_entry_branch_*`). The master
-/// vocabulary itself is open (the loaded catalogues name the masters).
+/// THE VAKINT DATA ATOMS a marked record may carry (the one exception to the
+/// reserved `vakint::` namespace): the constants vakint's own p-integral
+/// values and master catalogues write, each with its fixed argument shape,
+/// accepted only in an insertion's coefficient and factor, never inside a
+/// function argument or an exponent ([`is_vakint_data_atom`]):
+/// - `vakint::UNKNOWN(vakint::<master>, k)`: an expected but unknown master
+///   coefficient (written by `truncation_guard::unknown_coefficient`, from a
+///   version-2 catalogue's `UNKNOWN(symbol, k)` entries); `<master>` a
+///   catalogue master name ([`is_master_name`]; at an entry, the loaded
+///   catalogue's), `k` an integer of modulus at most [`UNKNOWN_MAX_ORDER`];
+///   carried linearly;
+/// - `vakint::MZV(n_1, .., n_r)`: a multiple zeta value (a catalogue
+///   coefficient's constant, kept by `master_catalogue::parse_constant`,
+///   evaluated by `mzv`), 1 to 16 positive integers of at most 64.
+/// ζ(n) and π are Symbolica's own symbols (`symbolica::zeta`, `𝜋`), not
+/// vakint's.
+pub const VAKINT_DATA_ATOMS: [(&str, &str); 2] = [
+    (
+        "vakint::UNKNOWN",
+        "(vakint::<catalogue master>, <integer k, |k| <= 64>)",
+    ),
+    ("vakint::MZV", "(<1 to 16 positive integers <= 64>)"),
+];
+
+/// Whether `name` is a master name of vakint's catalogues by their naming
+/// pattern (`vakint::ggppss_int_<n>`, `vakint::x_t<n>(_<n>)*`, the names of
+/// the built-in and the shipped catalogues); at an entry with a catalogue
+/// loaded the name must also be one of its masters.
 fn is_master_name(name: &str) -> bool {
     let Some(rest) = name.strip_prefix("vakint::") else {
         return false;
     };
-    let mut chars = rest.chars();
-    chars.next().is_some_and(|c| c.is_ascii_alphabetic())
-        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
-        && !rest.ends_with('_')
-        && !rest.starts_with("closure_")
-        && !rest.starts_with("graph_entry_branch")
-        && !VAKINT_OWN_NAMES.contains(&rest)
+    let digits = |t: &str| !t.is_empty() && t.bytes().all(|b| b.is_ascii_digit());
+    if let Some(n) = rest.strip_prefix("ggppss_int_") {
+        return digits(n);
+    }
+    if let Some(groups) = rest.strip_prefix("x_t") {
+        return groups.split('_').all(digits);
+    }
+    false
+}
+
+/// Whether `view` is vakint's `MZV(n_1, .., n_r)` in its data shape.
+fn is_mzv(view: AtomView<'_>) -> bool {
+    let AtomView::Fun(f) = view else {
+        return false;
+    };
+    f.get_symbol().get_name() == "vakint::MZV"
+        && (1..=16).contains(&f.get_nargs())
+        && f.iter()
+            .all(|a| i64::try_from(a).is_ok_and(|n| (1..=64).contains(&n)))
+}
+
+/// Whether `view` is one of [`VAKINT_DATA_ATOMS`] in its exact shape.
+pub(crate) fn is_vakint_data_atom(view: AtomView<'_>) -> bool {
+    is_unknown_coefficient(view) || is_mzv(view)
+}
+
+/// The first data atom of `view` inside a function argument or an exponent
+/// (where no data atom may stand), shown.
+fn misplaced_data_atom(view: AtomView<'_>, inside: bool) -> Option<String> {
+    if is_vakint_data_atom(view) {
+        return inside.then(|| view.to_owned().to_canonical_string());
+    }
+    match view {
+        AtomView::Fun(f) => f.iter().find_map(|a| misplaced_data_atom(a, true)),
+        AtomView::Pow(p) => {
+            let (base, exponent) = p.get_base_exp();
+            misplaced_data_atom(base, inside).or_else(|| misplaced_data_atom(exponent, true))
+        }
+        AtomView::Add(a) => a.iter().find_map(|t| misplaced_data_atom(t, inside)),
+        AtomView::Mul(m) => m.iter().find_map(|t| misplaced_data_atom(t, inside)),
+        _ => None,
+    }
 }
 
 /// Whether `view` is vakint's `UNKNOWN(master, k)` atom in exactly the shape
@@ -938,6 +915,16 @@ pub(crate) fn first_forbidden_symbol(
     view: AtomView<'_>,
     exempt: &[&str],
 ) -> Option<ForbiddenSymbol> {
+    first_forbidden_symbol_with(view, exempt, false)
+}
+
+/// [`first_forbidden_symbol`]; `data_atoms`: [`VAKINT_DATA_ATOMS`] are
+/// accepted (an insertion's coefficient and factor).
+pub(crate) fn first_forbidden_symbol_with(
+    view: AtomView<'_>,
+    exempt: &[&str],
+    data_atoms: bool,
+) -> Option<ForbiddenSymbol> {
     let classify = |name: &str| -> Option<ForbiddenSymbol> {
         if name.ends_with('_') {
             Some(ForbiddenSymbol::Wildcard(name.to_string()))
@@ -957,8 +944,8 @@ pub(crate) fn first_forbidden_symbol(
             AtomView::Fun(f) => {
                 let symbol = f.get_symbol();
                 let name = symbol.get_name();
-                // vakint's UNKNOWN(master, k), carried as a scalar
-                if is_unknown_coefficient(part) {
+                // vakint's data atoms, where the field admits them
+                if data_atoms && is_vakint_data_atom(part) {
                     return false;
                 }
                 if name == names::MINK && f.get_nargs() == 2 {
@@ -967,7 +954,7 @@ pub(crate) fn first_forbidden_symbol(
                         && index.get_symbol().get_name() == "vakint::slash"
                         && index.iter().all(|a| matches!(a, AtomView::Num(_)))
                     {
-                        found = first_forbidden_symbol(args[0], exempt);
+                        found = first_forbidden_symbol_with(args[0], exempt, data_atoms);
                         return false;
                     }
                 }
@@ -1028,6 +1015,20 @@ pub(crate) fn check_caller_atom(
     source: AtomSource,
 ) -> Result<()> {
     match first_forbidden_symbol(atom.as_view(), exempt) {
+        Some(found) => Err(forbidden_symbol_error(found, field, source)),
+        None => Ok(()),
+    }
+}
+
+/// [`check_caller_atom`] for an insertion's coefficient or factor, where
+/// [`VAKINT_DATA_ATOMS`] are accepted.
+pub(crate) fn check_caller_atom_with_data_atoms(
+    atom: &Atom,
+    field: &str,
+    exempt: &[&str],
+    source: AtomSource,
+) -> Result<()> {
+    match first_forbidden_symbol_with(atom.as_view(), exempt, true) {
         Some(found) => Err(forbidden_symbol_error(found, field, source)),
         None => Ok(()),
     }
@@ -1245,6 +1246,49 @@ pub(crate) fn check_entry_names(
             return Err(match insertion {
                 Some(vertex) => FactorizedError::Insertion { vertex, detail },
                 None => FactorizedError::Graph { detail },
+            });
+        }
+    }
+    Ok(())
+}
+
+/// The UNKNOWN atoms of a marked value's insertions name masters of the
+/// engine's LOADED p master catalogue, when one is loaded (validation
+/// checks the catalogues' naming pattern only): `Insertion`, detail prefix
+/// `the UNKNOWN master `. A no-op for an unmarked value.
+pub(crate) fn check_data_atoms_catalogue(
+    value: &FactorizedNumerator,
+    vakint: &crate::Vakint,
+) -> Result<()> {
+    if !is_marked(value) {
+        return Ok(());
+    }
+    let Some(catalogue) = vakint.p_master_catalogue() else {
+        return Ok(());
+    };
+    for insertion in &value.insertions {
+        let mut missing = None;
+        for atom in [&insertion.coefficient, &insertion.factor] {
+            atom.as_view().visitor(&mut |part| {
+                if is_unknown_coefficient(part)
+                    && let AtomView::Fun(f) = part
+                    && let Some(AtomView::Var(master)) = f.iter().next()
+                    && catalogue
+                        .id_of_symbol(master.get_symbol().get_stripped_name())
+                        .is_none()
+                {
+                    missing.get_or_insert_with(|| master.get_symbol().get_name().to_string());
+                }
+                missing.is_none()
+            });
+        }
+        if let Some(master) = missing {
+            return Err(FactorizedError::Insertion {
+                vertex: insertion.vertex,
+                detail: format!(
+                    "the UNKNOWN master {master} is not a master of the loaded catalogue {}",
+                    catalogue.data_version()
+                ),
             });
         }
     }
@@ -2680,8 +2724,14 @@ impl FactorizedNumerator {
             let name = symbol.get_name();
             name == "ε" || name.ends_with("::ε") || symbol == dimension || masses.contains(&symbol)
         };
-        let found = first_non_integer_exponent(atom.as_view())
-            .map(|found| format!("a non-integer exponent in {field}: {found}"))
+        let found = misplaced_data_atom(atom.as_view(), false)
+            .map(|found| {
+                format!("a misplaced vakint data atom in {field}: {found} (only as a factor of a coefficient, not inside a function or an exponent)")
+            })
+            .or_else(|| {
+                first_non_integer_exponent(atom.as_view())
+                    .map(|found| format!("a non-integer exponent in {field}: {found}"))
+            })
             .or_else(|| match unknown_degree(atom.as_view()) {
                 Some(d) if d <= 1 => None,
                 _ => Some(format!(
@@ -2830,14 +2880,17 @@ impl FactorizedNumerator {
         check(&self.prefactor.scalars, "prefactor_scalars")?;
         check(&self.prefactor.colour, "prefactor_colour")?;
         for insertion in &self.insertions {
-            check(
-                &insertion.coefficient,
-                &format!("insertion {} coefficient", insertion.vertex),
-            )?;
-            check(
-                &insertion.factor,
-                &format!("insertion {} factor", insertion.vertex),
-            )?;
+            for (atom, part) in [
+                (&insertion.coefficient, "coefficient"),
+                (&insertion.factor, "factor"),
+            ] {
+                check_caller_atom_with_data_atoms(
+                    atom,
+                    &format!("insertion {} {part}", insertion.vertex),
+                    exempt,
+                    AtomSource::Record,
+                )?;
+            }
         }
         let weights = match (&self.kind, &self.record) {
             (FactorizedKind::Closure(spec), _) => {

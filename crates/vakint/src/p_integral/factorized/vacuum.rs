@@ -1161,6 +1161,7 @@ pub fn evaluate_factorized_vacuum_streamed(
             Some(settings.number_of_terms_in_epsilon_expansion),
         )?;
         super::check_entry_names(value, prefactor, settings)?;
+        super::check_data_atoms_catalogue(value, vakint)?;
     }
     // the new record kinds do not depend on the caller's tensor reduction or
     // notation (evaluate::is_new_kind); values accepted before keep them
