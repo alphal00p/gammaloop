@@ -588,15 +588,17 @@ pub(super) struct Decline {
 
 /// The emitter's designed refusals (U7a review B1), a CLOSED list: a record
 /// the format or this build does not state. Every other local code
-/// (`routing`, `missing_child`, `product_mismatch`, `text`, `taylor`,
-/// `closure_data_missing`, `normalisation_mismatch`, `finish_tensor`,
-/// `vakint:Empty`, and K3's `ir_hard_site_missing`, `ir_dirac_closure`, ...)
-/// is a bug of the emitter or of the site: `outcome=error:<code>`. So are
-/// the record builder's states `sigma` (σ does not fold a root leg onto
-/// ±p(1)), `root_crown_paired` (a K1 crown edge with both ends in the root)
-/// and `root_normalisation_momentum` (a closed-root factor that is not a
-/// scalar times a power of p²): they never occur on a correct site (helper
-/// VH round 2, R2-I3).
+/// (`routing`, `crown` (a K2 / K3 crown that is not the remainder's soft
+/// edges, or a graph whose edge ids reach [`PAIRED_LEG_OFFSET`]; helper VH
+/// round 2, R2-M4 / R2-M5), `missing_child`, `product_mismatch`, `text`,
+/// `taylor`, `closure_data_missing`, `normalisation_mismatch`,
+/// `finish_tensor`, `vakint:Empty`, and K3's `ir_hard_site_missing`,
+/// `ir_dirac_closure`, ...) is a bug of the emitter or of the site:
+/// `outcome=error:<code>`. So are the record builder's states `sigma` (σ
+/// does not fold a root leg onto ±p(1)), `root_crown_paired` (a K1 crown
+/// edge with both ends in the root) and `root_normalisation_momentum` (a
+/// closed-root factor that is not a scalar times a power of p²): they never
+/// occur on a correct site (helper VH round 2, R2-I3).
 ///
 /// `one_loop_tree_cut` (U7-PLAN 14(d), narrowed as Astra U7a asks: "keep the
 /// rebase test narrow"): ONLY a remainder whose one internal propagator is
@@ -2225,12 +2227,12 @@ fn ir_hard_frame<'s>(
         .collect::<BTreeSet<_>>();
     if soft != boundary {
         return Err(Decline::new(
-            "routing",
+            "crown",
             format!("the soft edges {soft:?} are not the hard part's crown {boundary:?}"),
         ));
     }
     if soft.is_empty() {
-        return Err(Decline::new("routing", "a hard part without crown legs"));
+        return Err(Decline::new("crown", "a hard part without crown legs"));
     }
     let projector = match ir_hard.closure {
         None => None,
@@ -2284,7 +2286,7 @@ fn child_frame<'s>(
         .collect::<BTreeSet<_>>();
     if soft != externals.iter().copied().collect::<BTreeSet<_>>() {
         return Err(Decline::new(
-            "routing",
+            "crown",
             format!(
                 "the crown {externals:?} is not the remainder's soft edges {:?}",
                 soft
@@ -2292,7 +2294,7 @@ fn child_frame<'s>(
         ));
     }
     if externals.is_empty() {
-        return Err(Decline::new("routing", "a child without crown edges"));
+        return Err(Decline::new("crown", "a child without crown edges"));
     }
     let projector = match (site.root_closure, site.root_projector, site.closure_data) {
         (None, false, _) => None,
@@ -2327,6 +2329,29 @@ fn child_frame<'s>(
         externals,
         projector,
     })
+}
+
+/// The record id offset of the INCOMING leg of a crown edge with both ends
+/// in the scope (K2 / K3, `HedgePair::Paired`): the outgoing leg keeps the
+/// edge's id `id`, the incoming one is `PAIRED_LEG_OFFSET + id` (the
+/// VERIFIED wh-fixtures/k2-child states legs 4 and 100004). Unique only
+/// while every edge id of the graph stays below the offset
+/// ([`paired_leg_id`]; helper VH round 2, R2-M4).
+pub(super) const PAIRED_LEG_OFFSET: usize = 100_000;
+
+/// The record id of the incoming leg of the paired crown edge `id` in a
+/// graph whose largest edge id is `last_edge`; the `crown` error when an
+/// edge id reaches [`PAIRED_LEG_OFFSET`] (the ids could collide).
+pub(super) fn paired_leg_id(id: usize, last_edge: usize) -> std::result::Result<usize, Decline> {
+    if last_edge >= PAIRED_LEG_OFFSET {
+        return Err(Decline::new(
+            "crown",
+            format!(
+                "the graph's edge {last_edge} reaches the paired-leg offset {PAIRED_LEG_OFFSET}: the incoming leg of crown edge {id} could collide with an edge id"
+            ),
+        ));
+    }
+    Ok(PAIRED_LEG_OFFSET + id)
 }
 
 /// The record of one K1 root or K2 child remainder (`Ok(None)`: a zero
@@ -2467,6 +2492,7 @@ fn build(
         Ok(out)
     };
     let table = edge_table(graph, site.model);
+    let last_edge = table.keys().next_back().copied().unwrap_or(0);
     // contracted supports -> ct: nodes (mkfixture-k1 rule)
     let mut contracted: SuBitGraph = graph.empty_subgraph();
     for slot in &region.insertions {
@@ -2535,7 +2561,10 @@ fn build(
                 Flow::Source => vec![(id, source, false)],
             },
             HedgePair::Paired { source, sink } if independent => {
-                vec![(id, source, false), (100_000 + id, sink, true)]
+                vec![
+                    (id, source, false),
+                    (paired_leg_id(id, last_edge)?, sink, true),
+                ]
             }
             _ => {
                 return Err(Decline::new(
