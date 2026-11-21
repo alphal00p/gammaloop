@@ -1583,36 +1583,30 @@ fn k2_child_ins_fixture() -> Result<()> {
     })
 }
 
-/// `got == expected` through ε^order up to a relabelling of the isotropic
-/// channel markers `uv_isotropic_channel_{1,2,3}` in `expected` (a site value
-/// of another run orders a closed child's crown pairings by its own crown
-/// order).
-fn equal_through_channels(got: &Atom, expected: &Atom, order: i64) -> Result<bool> {
-    let markers = [1, 2, 3]
-        .map(|j| Atom::var(symbol!(&format!("gammalooprs::uv_isotropic_channel_{j}"); Scalar)));
-    let staging = [1, 2, 3].map(|j| Atom::var(symbol!(&format!("u7a_test_channel_{j}"))));
-    for permutation in [
-        [0, 1, 2],
-        [0, 2, 1],
-        [1, 0, 2],
-        [1, 2, 0],
-        [2, 0, 1],
-        [2, 1, 0],
-    ] {
-        let mut relabelled = expected.clone();
-        for (marker, stage) in markers.iter().zip(&staging) {
-            relabelled = relabelled.replace(marker.clone()).with(stage.clone());
-        }
-        for (stage, target) in staging.iter().zip(permutation) {
-            relabelled = relabelled
-                .replace(stage.clone())
-                .with(markers[target].clone());
-        }
-        if equal_through(got, &relabelled, order)? {
-            return Ok(true);
-        }
+/// A site value with its isotropic channel markers renamed to this branch's
+/// numbers: the site's `uv_isotropic_channel_j` becomes
+/// `uv_isotropic_channel_{channels[j - 1]}` (a permutation; `[1, 2, 3]`
+/// keeps every marker by name).
+fn site_in_branch_channels(site: &Atom, channels: [usize; 3]) -> Atom {
+    assert!(
+        {
+            let mut sorted = channels;
+            sorted.sort_unstable();
+            sorted == [1, 2, 3]
+        },
+        "not a permutation of the channels: {channels:?}"
+    );
+    let marker =
+        |j: usize| Atom::var(symbol!(&format!("gammalooprs::uv_isotropic_channel_{j}"); Scalar));
+    let staged = |j: usize| Atom::var(symbol!(&format!("u7a_test_site_channel_{j}")));
+    let mut renamed = site.clone();
+    for j in 1..=3 {
+        renamed = renamed.replace(marker(j)).with(staged(j));
     }
-    Ok(false)
+    for (j, target) in (1..=3).zip(channels) {
+        renamed = renamed.replace(staged(j)).with(marker(target));
+    }
+    renamed
 }
 
 /// The K2 shapes without a v3 fixture, against the raw site values
@@ -1621,22 +1615,37 @@ fn equal_through_channels(got: &Atom, expected: &Atom, order: i64) -> Result<boo
 /// (L2 25 {2,4}), a Dirac self-energy with its open ν (L2 26 {5,6}), a Dirac
 /// vertex (L2 28 {4,5,6}) and a closed two-loop child through the child
 /// boundary (L3 352 {2,3,4,5,6}). Each record is emitted, evaluated by
-/// vakint and equal to the site value (the channel markers up to their
-/// order); every other record is compared equal except the stated declines;
-/// mode on agrees with off.
+/// vakint and equal to the site value with the isotropic channel markers
+/// `uv_isotropic_channel_j` compared BY NAME (helper VH round 2, R2-I2: the
+/// former leniency, any of the six relabellings, is gone, so a marker-order
+/// bug fails here). One fixed, stated map takes the site's markers to this
+/// branch's (`site_channels[j - 1]` = this branch's number of the site's
+/// channel j): the identity except where it is proven needed. That is the
+/// L3 352 site value only: a channel is the position of its metric pairing in
+/// the slot order of the child's numerator
+/// ([`super::expression::RStarIntegrand::isotropic_boundary`]), and the
+/// site dump comes from another process (wh-fixtures b_uv_child) whose slot
+/// order differs: its `uv_isotropic_channel_1` is this branch's
+/// `uv_isotropic_channel_3` (today's contracted value of the same call in
+/// this test carries channel 3; asserted: by name against the raw site value
+/// it differs). Ours against today stays by name without any map
+/// ([`checked_run`]). Every other record is compared equal except the stated
+/// declines; mode on agrees with off.
 #[test]
 fn k2_shapes_values() -> Result<()> {
     with_production_piece_limit(|| -> Result<()> {
         test_initialise()?;
         let vakint = Vakint::new()?;
         let none: &[(&str, usize)] = &[];
-        for (what, closure, dot, site, declines) in [
+        let by_name = [1, 2, 3];
+        for (what, closure, dot, site, declines, site_channels) in [
             (
                 "open (L2 22 {4,5})",
                 "none",
                 include_str!("testdata/u7a/l2-d22.dot"),
                 include_str!("testdata/u7a/k2-open.site.txt"),
                 none,
+                by_name,
             ),
             (
                 "isotropic (L2 25 {2,4})",
@@ -1644,6 +1653,7 @@ fn k2_shapes_values() -> Result<()> {
                 include_str!("testdata/u7a/l2-d25.dot"),
                 include_str!("testdata/u7a/k2-isotropic.site.txt"),
                 &[("vakint:all_massive", 1)][..],
+                by_name,
             ),
             (
                 "dirac self-energy (L2 26 {5,6})",
@@ -1651,6 +1661,7 @@ fn k2_shapes_values() -> Result<()> {
                 include_str!("testdata/u7a/l2-d26.dot"),
                 include_str!("testdata/u7a/k2-dirac-self-energy.site.txt"),
                 none,
+                by_name,
             ),
             (
                 "dirac vertex (L2 28 {4,5,6})",
@@ -1658,6 +1669,7 @@ fn k2_shapes_values() -> Result<()> {
                 include_str!("testdata/u7a/l2-d28.dot"),
                 include_str!("testdata/u7a/k2-dirac-vertex.site.txt"),
                 none,
+                by_name,
             ),
             (
                 "closed child boundary (L3 352 {2,3,4,5,6})",
@@ -1665,6 +1677,8 @@ fn k2_shapes_values() -> Result<()> {
                 include_str!("testdata/u7a/l3-d352.dot"),
                 include_str!("testdata/u7a/k2-closed-child-boundary.site.txt"),
                 none,
+                // the site's channel 1 = this branch's channel 3 (see above)
+                [3, 2, 1],
             ),
         ] {
             let (vertices, edges) = site_factors(site);
@@ -1679,7 +1693,8 @@ fn k2_shapes_values() -> Result<()> {
                 .split(',')
                 .map(|edge| edge.parse::<usize>())
                 .collect::<std::result::Result<Vec<_>, _>>()?;
-            let expected = parse(field("value")?);
+            let raw = parse(field("value")?);
+            let expected = site_in_branch_channels(&raw, site_channels);
             let mut found = 0;
             for attempt in captured.iter().filter(|a| a.kind == Kind::Child) {
                 let Some(text) = &attempt.text else { continue };
@@ -1696,14 +1711,21 @@ fn k2_shapes_values() -> Result<()> {
                     attempt.outcome
                 );
                 let value = attempt.value.as_ref().ok_or_else(|| eyre!("no value"))?;
+                if site_channels != by_name {
+                    // the map is needed: by name, the raw site value differs
+                    ensure!(
+                        !equal_through(attempt.contracted.as_ref().unwrap_or(value), &raw, -1)?,
+                        "{what}: the site value now agrees by name; drop its channel map {site_channels:?}"
+                    );
+                }
                 if let Some(contracted) = &attempt.contracted {
                     ensure!(
-                        equal_through_channels(contracted, &expected, -1)?,
+                        equal_through(contracted, &expected, -1)?,
                         "{what}: today's value differs from the site value (not this branch)\ntoday {contracted}\nsite  {expected}"
                     );
                 }
                 ensure!(
-                    equal_through_channels(value, &expected, -1)?,
+                    equal_through(value, &expected, -1)?,
                     "{what}: the value differs from the site value through eps^-1\nours {value}\nsite {expected}\n{text}"
                 );
                 eprintln!(
