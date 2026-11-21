@@ -298,13 +298,25 @@ fn unknown_from_vakint_in_an_insertion_is_carried_linearly() {
     }
 }
 
-/// The same with the caller's own UNKNOWN symbol (`gammalooprs::UNKNOWN`,
-/// outside vakint's namespace): carried linearly.
+/// The same with a caller's own scalar in the role of an unknown
+/// (`gammalooprs::UNKNOWN_m53_0`, a plain symbol outside vakint's
+/// namespace): carried linearly; written as a FUNCTION
+/// (`gammalooprs::UNKNOWN(..)`) it is refused by the head allow-list.
 #[test]
 fn unknown_caller_symbol_in_an_insertion_is_carried_linearly() {
     let base = record("wh-k2-child-ins");
     let plain = value(&base, &symbolic());
-    let unknown = atom("gammalooprs::UNKNOWN(gammalooprs::m53,0)");
+    let mut f = base.clone();
+    f.insertions[0].coefficient =
+        &f.insertions[0].coefficient * atom("gammalooprs::UNKNOWN(gammalooprs::m53,0)");
+    match closure(&f, &symbolic(), &f.prefactor.total()) {
+        Err(FactorizedError::Insertion { detail, .. }) => assert!(
+            detail.starts_with("a function head that is not allowed in insertion "),
+            "{detail}"
+        ),
+        other => panic!("gammalooprs::UNKNOWN(..): {other:?}"),
+    }
+    let unknown = atom("gammalooprs::UNKNOWN_m53_0");
     let mut v = base.clone();
     v.insertions[0].coefficient = &v.insertions[0].coefficient * (Atom::num(1) + &unknown);
     let got = closure(&v, &symbolic(), &v.prefactor.total()).unwrap();
@@ -1842,11 +1854,11 @@ fn every_real_record_validates() {
 // opaque caller scalars depend on nothing the evaluation transforms
 // ===========================================================================
 
-/// A function other than the structural heads, or a non-integer power, whose
-/// argument / base / exponent depends on ε, the dimension, a mass or a
-/// momentum, in a factor or a prefactor field: refused at validation
-/// (`Graph`, prefix `a non-polynomial dependence in <field>: `); the same
-/// function of a caller scalar is accepted.
+/// A function other than the structural heads (whatever its argument: of ε,
+/// the dimension, a caller scalar) is refused at validation (`Graph`, prefix
+/// `a function head that is not allowed in <field>: <head>`), a non-integer
+/// power by the exponent rule; zeta(3), a polynomial in ε and an integer power
+/// of the dimension are accepted; the same in the prefactor ARGUMENT.
 #[test]
 fn opaque_functions_and_powers_are_free_of_eps_dimension_masses_momenta() {
     let base = record("wh-k1-root");
@@ -1862,14 +1874,17 @@ fn opaque_functions_and_powers_are_free_of_eps_dimension_masses_momenta() {
         vertex.factor = &vertex.factor * atom(extra);
         v
     };
-    let dependence = format!("a non-polynomial dependence in vertex {vertex_id} factor: ");
+    let head =
+        |h: &str| format!("a function head that is not allowed in vertex {vertex_id} factor: {h}");
     let exponent = format!("a non-integer exponent in vertex {vertex_id} factor: ");
     for (bad, prefix) in [
-        (format!("log(1+{EPS})"), &dependence),
-        (format!("caller::f({DIM})"), &dependence),
-        (format!("sin({DIM}*caller::x)"), &dependence),
-        (format!("(1+{EPS})^(1/2)"), &exponent),
-        (format!("caller::x^{EPS}"), &exponent),
+        (format!("log(1+{EPS})"), head("symbolica::log")),
+        (format!("caller::f({DIM})"), head("caller::f")),
+        (format!("sin({DIM}*caller::x)"), head("symbolica::sin")),
+        ("caller::f(caller::x)".to_string(), head("caller::f")),
+        ("log(caller::x)".to_string(), head("symbolica::log")),
+        (format!("(1+{EPS})^(1/2)"), exponent.clone()),
+        (format!("caller::x^{EPS}"), exponent.clone()),
     ] {
         match with(&bad).validate() {
             Err(FactorizedError::Graph { detail }) => {
@@ -1880,8 +1895,7 @@ fn opaque_functions_and_powers_are_free_of_eps_dimension_masses_momenta() {
     }
     for good in [
         format!("(1+{EPS})"),
-        "caller::f(caller::x)".to_string(),
-        "log(caller::x)".to_string(),
+        "caller::x".to_string(),
         "symbolica::zeta(3)".to_string(),
         format!("({DIM}-1)^-2"),
     ] {
@@ -1899,21 +1913,24 @@ fn opaque_functions_and_powers_are_free_of_eps_dimension_masses_momenta() {
         ),
         other => panic!("exp(eps) in prefactor_scalars: {other:?}"),
     }
-    match closure(
-        &base,
-        &symbolic(),
-        &(base.prefactor.total() * atom(&format!("log({DIM})"))),
-    ) {
-        Err(FactorizedError::Graph { detail }) => assert!(
-            detail.starts_with("a non-polynomial dependence in prefactor argument: "),
-            "{detail}"
-        ),
-        other => panic!("log(D) in the argument: {other:?}"),
+    for (bad, h) in [
+        (format!("log({DIM})"), "symbolica::log"),
+        ("log(caller::x)".to_string(), "symbolica::log"),
+    ] {
+        match closure(&base, &symbolic(), &(base.prefactor.total() * atom(&bad))) {
+            Err(FactorizedError::Graph { detail }) => assert!(
+                detail.starts_with(&format!(
+                    "a function head that is not allowed in prefactor argument: {h}"
+                )),
+                "{detail}"
+            ),
+            other => panic!("{bad} in the argument: {other:?}"),
+        }
     }
     closure(
         &base,
         &symbolic(),
-        &(base.prefactor.total() * atom("log(caller::x)")),
+        &(base.prefactor.total() * atom("caller::x")),
     )
     .unwrap();
 }
@@ -1964,8 +1981,8 @@ fn unknown_at_a_cut_order_is_dropped_with_the_order() {
 
 /// Only the exact shape UNKNOWN(<master symbol>, <integer>) of vakint's own
 /// head is the exception: lookalike heads, another arity, a non-integer
-/// order stay reserved symbols; the caller's own `user::UNKNOWN` is a caller
-/// scalar.
+/// order stay reserved symbols; the caller's own `user::UNKNOWN(..)` is a
+/// caller FUNCTION, refused by the head allow-list.
 #[test]
 fn only_vakint_unknown_in_its_exact_shape_is_allowed() {
     let base = record("wh-k2-child-ins");
@@ -1988,10 +2005,21 @@ fn only_vakint_unknown_in_its_exact_shape_is_allowed() {
             other => panic!("{bad}: {other:?}"),
         }
     }
+    let mut v = base.clone();
+    v.insertions[0].coefficient = &v.insertions[0].coefficient * atom("user::UNKNOWN(user::m53,0)");
+    match v.validate() {
+        Err(FactorizedError::Insertion { detail, .. }) => assert!(
+            detail.starts_with(&format!(
+                "a function head that is not allowed in insertion {} coefficient: user::UNKNOWN",
+                base.insertions[0].vertex
+            )),
+            "{detail}"
+        ),
+        other => panic!("user::UNKNOWN(..): {other:?}"),
+    }
     for good in [
         "vakint::UNKNOWN(vakint::ggppss_int_53,0)",
         "vakint::UNKNOWN(vakint::ggppss_int_53,-2)",
-        "user::UNKNOWN(user::m53,0)",
     ] {
         let mut v = base.clone();
         v.insertions[0].coefficient = &v.insertions[0].coefficient * atom(good);
@@ -2287,6 +2315,13 @@ fn every_rule_on_every_field() {
         ("auxiliary mass", MAUX.into()),
         ("opaque function of D", format!("caller::f({DIM})")),
         ("opaque function of eps", format!("caller::f({EPS})")),
+        ("a caller function head", "caller::f(caller::x)".into()),
+        ("a built-in function head", "log(caller::x)".into()),
+        ("zeta of 1", "symbolica::zeta(1)".into()),
+        (
+            "an index label outside a slot",
+            "gammalooprs::hedge(1,1)".into(),
+        ),
         ("non-integer exponent", "caller::x^(1/2)".into()),
         ("symbolic exponent", "caller::x^caller::y".into()),
         (
@@ -3117,7 +3152,7 @@ fn the_vacuum_entry_applies_the_marked_atom_rules() {
         (
             "caller::m2",
             format!("log({EPS})"),
-            "a non-polynomial dependence in vertex 1 factor: ",
+            "a function head that is not allowed in vertex 1 factor: symbolica::log",
         ),
         (
             "caller::m2",
@@ -3397,12 +3432,12 @@ fn a_marked_three_loop_massive_tadpole_through_the_vacuum_entry() {
 /// (colon-separated; files `*.record.txt` and `input.txt`) through
 /// validation only (`from_text`). The roots this split is stated for:
 /// `/common/build-cache/ben/consol:/common/ben/beta/results/consolidation/wh-fixtures`
-/// (6,240 files, 2,633 unique v3 records). EXACTLY 2,611 are accepted and 22
-/// refused, every one a Closure refusal "every line is massive: not a
-/// closure" (one-loop remainders whose only line left is the closing massive
-/// line: a massive tadpole, the producer's designed decline
-/// vakint:all_massive, dumped before the vakint call); any other refusal, or
-/// another count, fails.
+/// (live: 2,633 unique v3 records on 2026-11-21, 3,042 later the same day).
+/// EXACTLY 22 are refused, every one a Closure refusal "every line is
+/// massive: not a closure" (one-loop remainders whose only line left is the
+/// closing massive line: a massive tadpole, the producer's designed decline
+/// vakint:all_massive, dumped before the vakint call), and every other record
+/// is accepted; any other refusal or another number of refusals fails.
 #[test]
 #[ignore = "external data: VAKINT_TEST_RECORD_ROOTS"]
 fn every_production_record_validates() {
@@ -3434,6 +3469,9 @@ fn every_production_record_validates() {
         0usize,
         std::collections::BTreeMap::<String, Vec<String>>::new(),
     );
+    // `VAKINT_TEST_RECORD_IDS_OUT`: one line per unique record (the path it
+    // was first seen at, accepted / refused), for the producer to diff
+    let mut ids = Vec::<String>::new();
     for p in &files {
         let Ok(text) = std::fs::read_to_string(p) else {
             continue;
@@ -3442,10 +3480,19 @@ fn every_production_record_validates() {
         {
             continue;
         }
+        let label = text
+            .lines()
+            .find_map(|l| l.strip_prefix("label\t"))
+            .unwrap_or("")
+            .to_string();
         match FactorizedNumerator::from_text(&text) {
-            Ok(_) => accepted += 1,
+            Ok(_) => {
+                accepted += 1;
+                ids.push(format!("{}\taccepted\t{label}", p.display()));
+            }
             Err(e) => {
                 let detail = e.to_string();
+                ids.push(format!("{}\trefused\t{label}\t{detail}", p.display()));
                 let expected = matches!(&e, FactorizedError::Closure { detail }
                     if detail.starts_with(ALL_MASSIVE));
                 let prefix = if expected {
@@ -3459,6 +3506,9 @@ fn every_production_record_validates() {
                     .push(p.display().to_string());
             }
         }
+    }
+    if let Some(out) = std::env::var_os("VAKINT_TEST_RECORD_IDS_OUT") {
+        std::fs::write(&out, ids.join("\n") + "\n").unwrap();
     }
     eprintln!(
         "PRODUCTION files={} unique_v3={} accepted={accepted} refused={} seconds={:.1}",
@@ -3480,10 +3530,18 @@ fn every_production_record_validates() {
         vec![ALL_MASSIVE],
         "a refusal other than the all-massive tadpole: {refused:?}"
     );
+    // the roots are live (the producer keeps writing records): the 22
+    // all-massive tadpoles are pinned, every other record must validate
+    assert_eq!(refused_total, 22, "the all-massive tadpoles refused");
     assert_eq!(
-        (seen.len(), accepted, refused_total),
-        (2633, 2611, 22),
-        "(unique v3, accepted, refused)"
+        accepted + refused_total,
+        seen.len(),
+        "every other record accepted"
+    );
+    assert!(
+        seen.len() >= 2633,
+        "fewer records than on 2026-11-21: {}",
+        seen.len()
     );
 }
 
@@ -3565,6 +3623,13 @@ fn every_rule_on_every_field_and_entry() {
         ("non-ASCII name", "caller::𝜀".into()),
         ("opaque function of D", format!("caller::f({DIM})")),
         ("opaque function of eps", format!("caller::f({EPS})")),
+        ("a caller function head", "caller::f(caller::x)".into()),
+        ("a built-in function head", "log(caller::x)".into()),
+        ("zeta of 1", "symbolica::zeta(1)".into()),
+        (
+            "an index label outside a slot",
+            "gammalooprs::hedge(1,1)".into(),
+        ),
         ("non-integer exponent", "caller::x^(1/2)".into()),
         ("unbounded exponent", "caller::x^65".into()),
         ("data atom outside an insertion", "vakint::MZV(5,3)".into()),
@@ -3757,13 +3822,9 @@ fn the_audit_inputs_per_rule() {
             Expect::Refused,
         ),
         (
-            "G1-5 the settings' μ as a function head μᵣ²(UFO::x)",
+            "G1-5 the settings' μ as a function head μᵣ²(UFO::x) (a function head that is not allowed)",
             in_field(&k2_text, "vertex factor", "gammalooprs::μᵣ²(UFO::x)"),
-            Expect::Same(
-                in_field(&k2_text, "vertex factor", "caller::h(UFO::x)"),
-                "caller::h(UFO::x)",
-                "gammalooprs::μᵣ²(UFO::x)",
-            ),
+            Expect::Refused,
         ),
         (
             "G1-6 UNKNOWN(UFO::μ, 0) in an insertion",
@@ -3875,13 +3936,9 @@ fn the_audit_inputs_per_rule() {
             Expect::Refused,
         ),
         (
-            "G3-6 UFO::f(μᵣ²) in a vertex factor",
+            "G3-6 UFO::f(μᵣ²) in a vertex factor (a function head that is not allowed)",
             in_field(&k2_text, "vertex factor", "UFO::f(gammalooprs::μᵣ²)"),
-            Expect::Same(
-                in_field(&k2_text, "vertex factor", "UFO::f(caller::mu)"),
-                "caller::mu",
-                "gammalooprs::μᵣ²",
-            ),
+            Expect::Refused,
         ),
         // exponents
         (
@@ -4171,5 +4228,509 @@ fn unknown_masters_from_the_backend_with_the_1_5_package() {
                 }
             }
         }
+    }
+}
+
+/// Every caller atom of a record with its field CATEGORY (the id dropped).
+fn caller_atoms_by_category(v: &FactorizedNumerator) -> Vec<(&'static str, Atom)> {
+    let mut out = Vec::new();
+    for e in &v.edges {
+        out.push(("edge factor", e.factor.clone()));
+        out.push(("edge mass", e.mass_squared.clone()));
+    }
+    for x in &v.vertices {
+        out.push(("vertex factor", x.factor.clone()));
+    }
+    for p in &v.ports {
+        out.push(("ports", p.clone()));
+    }
+    if let Some(p) = &v.projector {
+        out.push(("projector", p.tensor.clone()));
+    }
+    out.push(("prefactor_overall", v.prefactor.overall.clone()));
+    out.push(("prefactor_scalars", v.prefactor.scalars.clone()));
+    out.push(("prefactor_colour", v.prefactor.colour.clone()));
+    for i in &v.insertions {
+        out.push(("insertion coefficient", i.coefficient.clone()));
+        out.push(("insertion factor", i.factor.clone()));
+    }
+    let weights = match (&v.kind, &v.record) {
+        (FactorizedKind::Closure(spec), _) => {
+            out.push(("closure mass", spec.mass_squared.clone()));
+            out.push(("taylor mass", spec.auxiliary_mass_squared.clone()));
+            spec.weights.clone()
+        }
+        (_, Some(record)) => record.weights.clone(),
+        _ => Vec::new(),
+    };
+    for (_, _, a) in weights {
+        out.push(("weight", a));
+    }
+    out
+}
+
+/// The real records' texts for the head and shape scans: every unique v3
+/// record under `VAKINT_TEST_RECORD_ROOTS` (`input.txt`, `*.record.txt`),
+/// every v3 `.txt` of the vendored fixtures, and (optional,
+/// `VAKINT_TEST_PRODUCER_TESTDATA`) every v3 `*input.txt` of the producer's
+/// testdata; with the numerator atoms of that testdata's DOT inputs.
+fn real_record_sources() -> (Vec<(String, String)>, Vec<(String, Atom)>) {
+    let roots =
+        wh_fixtures::required_env("VAKINT_TEST_RECORD_ROOTS", "the producer's record roots");
+    let testdata = std::env::var_os("VAKINT_TEST_PRODUCER_TESTDATA").map(PathBuf::from);
+    let mut stack: Vec<(PathBuf, bool)> = roots
+        .to_string_lossy()
+        .split(':')
+        .map(|r| (PathBuf::from(r), false))
+        .chain([(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/p_integral/factorized/fixtures"),
+            true,
+        )])
+        .chain(testdata.iter().map(|d| (d.clone(), true)))
+        .collect();
+    let mut texts = Vec::new();
+    let mut dots = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    init();
+    while let Some((d, any_txt)) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&d) else {
+            continue;
+        };
+        for e in entries {
+            let p = e.unwrap().path();
+            let name = p.file_name().unwrap().to_string_lossy().to_string();
+            if p.is_dir() {
+                stack.push((p, any_txt));
+                continue;
+            }
+            if name.ends_with(".dot") && any_txt {
+                let text = std::fs::read_to_string(&p).unwrap();
+                for part in text.split("numerator=\"").skip(1) {
+                    let expr = part.split('"').next().unwrap();
+                    if let Ok(a) = symbolica::try_parse!(expr) {
+                        dots.push((p.display().to_string(), a));
+                    }
+                }
+                continue;
+            }
+            let wanted = name == "input.txt"
+                || name.ends_with(".record.txt")
+                || (any_txt && name.ends_with(".txt"));
+            if !wanted {
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(&p) else {
+                continue;
+            };
+            if text.starts_with("schema\tpint6.factorized-numerator.v3")
+                && seen.insert(text.clone())
+            {
+                texts.push((p.display().to_string(), text));
+            }
+        }
+    }
+    (texts, dots)
+}
+
+/// The SHAPE class of a structural head's argument (for the shape table).
+fn argument_class(a: AtomView<'_>, dimension: Symbol) -> String {
+    match a {
+        AtomView::Num(_) => match i64::try_from(a) {
+            Ok(n) if n >= 0 => "int".into(),
+            Ok(_) => "negint".into(),
+            Err(_) => format!("num:{}", a.to_owned().to_canonical_string()),
+        },
+        AtomView::Var(v) if v.get_symbol() == dimension => "D".into(),
+        AtomView::Var(v) => format!("sym:{}", v.get_symbol().get_name()),
+        AtomView::Fun(f) => format!("{}(..)", f.get_symbol().get_name()),
+        AtomView::Add(_) => "sum".into(),
+        AtomView::Mul(_) => "product".into(),
+        AtomView::Pow(_) => "power".into(),
+    }
+}
+
+/// THE HEAD TABLE: every function head (at any depth) in every caller field
+/// of the real records ([`real_record_sources`]), counted per head and field
+/// category; every distinct argument list of a head outside spenso:: and
+/// gammalooprs::; and THE SHAPE TABLE: per head the argument classes by
+/// position ([`argument_class`]) with counts, in the records and in the
+/// producer's DOT numerators (printed, `CONTRACT HEADS`, `CONTRACT SHAPE`).
+#[test]
+#[ignore = "external data: VAKINT_TEST_RECORD_ROOTS (VAKINT_TEST_PRODUCER_TESTDATA optional)"]
+fn the_function_heads_of_the_real_records() {
+    let (texts, dots) = real_record_sources();
+    let mut table = std::collections::BTreeMap::<(String, &str), usize>::new();
+    let mut arguments =
+        std::collections::BTreeMap::<String, std::collections::BTreeSet<String>>::new();
+    let mut shapes = std::collections::BTreeMap::<(&str, String), usize>::new();
+    let mut parsed = 0usize;
+    let mut scan =
+        |source: &'static str,
+         field: &'static str,
+         a: &Atom,
+         dimension: Symbol,
+         table: &mut std::collections::BTreeMap<(String, &str), usize>| {
+            a.as_view().visitor(&mut |part| {
+                if let AtomView::Fun(f) = part {
+                    let head = f.get_symbol();
+                    let name = head.get_name().to_string();
+                    *table.entry((name.clone(), field)).or_default() += 1;
+                    if !name.starts_with("spenso::") && !name.starts_with("gammalooprs::") {
+                        let args = f
+                            .iter()
+                            .map(|x| x.to_owned().to_canonical_string())
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        arguments.entry(name.clone()).or_default().insert(args);
+                    }
+                    let signature = format!(
+                        "{name}({})",
+                        f.iter()
+                            .map(|x| argument_class(x, dimension))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                    *shapes.entry((source, signature)).or_default() += 1;
+                }
+                true
+            });
+        };
+    for (_, text) in &texts {
+        let Ok(v) = FactorizedNumerator::from_text(text) else {
+            continue;
+        };
+        parsed += 1;
+        for (field, a) in caller_atoms_by_category(&v) {
+            scan("record", field, &a, v.dimension, &mut table);
+        }
+    }
+    let dot_dimension = symbolica::symbol!("gammalooprs::dim");
+    let mut dot_table = std::collections::BTreeMap::new();
+    for (_, a) in &dots {
+        scan("dot", "dot numerator", a, dot_dimension, &mut dot_table);
+    }
+    eprintln!(
+        "CONTRACT HEADS records parsed: {parsed} of {} unique v3 texts; DOT numerators {}",
+        texts.len(),
+        dots.len()
+    );
+    for ((head, field), n) in table.iter().chain(dot_table.iter()) {
+        eprintln!("CONTRACT HEADS {head}\t{field}\t{n}");
+    }
+    for (head, args) in &arguments {
+        eprintln!(
+            "CONTRACT HEADS ARGS {head}: {} distinct: {:?}",
+            args.len(),
+            args.iter().take(12).collect::<Vec<_>>()
+        );
+    }
+    for ((source, signature), n) in &shapes {
+        eprintln!("CONTRACT SHAPE {source}\t{signature}\t{n}");
+    }
+}
+
+/// The head allow-list's one test per head: every function head of
+/// Symbolica 394f6e1 (its built-ins `arg coeff exp log sin cos sqrt conj abs
+/// if der sep opt alt` and the transcendental heads), the literal singular
+/// forms (log(0), gamma(0), gamma(-1), zeta(1), polygamma(0,0), ...),
+/// caller-namespaced heads, and `gammalooprs::uvind` (an index label of R*'s
+/// finish_tensor no record holds), each in a vertex factor of the real K2
+/// record: REFUSED at validation; where the parsed atom still carries the
+/// head, with the prefix `a function head that is not allowed in vertex <v>
+/// factor: <head>`; where Symbolica normalised the head away (`sqrt(x)` is
+/// `x^(1/2)`, a literal singular form a non-finite number), by the rule that
+/// sees what is left (printed, `CONTRACT HEAD`).
+#[test]
+fn every_function_head_outside_the_allow_list_is_refused_by_name() {
+    let base = record("wh-k2-child-ins");
+    let vertex = base
+        .vertices
+        .iter()
+        .find(|x| x.factor != Atom::num(1))
+        .unwrap()
+        .id;
+    let builtins = [
+        "arg",
+        "coeff",
+        "exp",
+        "log",
+        "sin",
+        "cos",
+        "sqrt",
+        "conj",
+        "abs",
+        "if",
+        "der",
+        "opt",
+        "alt",
+        "acos",
+        "acosh",
+        "acot",
+        "acoth",
+        "acsc",
+        "acsch",
+        "asec",
+        "asech",
+        "asin",
+        "asinh",
+        "atan",
+        "atanh",
+        "bessel_i",
+        "bessel_j",
+        "bessel_k",
+        "bessel_y",
+        "cosh",
+        "cot",
+        "coth",
+        "csc",
+        "csch",
+        "erf",
+        "euler_gamma",
+        "gamma",
+        "gpl_at_one",
+        "gpl_letters",
+        "hpl_at_sixth_root",
+        "hpl_indices",
+        "imaginary_part",
+        "polygamma",
+        "polylog",
+        "real_part",
+        "root",
+        "root_var",
+        "sec",
+        "sech",
+        "sinh",
+        "tan",
+        "tanh",
+    ];
+    let mut inputs: Vec<(String, String, Result<Atom, String>)> = Vec::new();
+    for name in builtins {
+        let head = format!("symbolica::{name}");
+        // the first arity Symbolica parses
+        let parsed = ["caller::x", "2,caller::x", "1,2,caller::x"]
+            .iter()
+            .map(|args| format!("{head}({args})"))
+            .find_map(|text| {
+                init();
+                std::panic::catch_unwind(|| symbolica::try_parse!(&text))
+                    .ok()
+                    .and_then(|r| r.ok())
+                    .map(|a| (text, a))
+            });
+        match parsed {
+            Some((text, a)) => inputs.push((head, text, Ok(a))),
+            None => inputs.push((head.clone(), head, Err("does not parse".into()))),
+        }
+    }
+    let sep = symbolica::function!(
+        symbolica::atom::Symbol::SEP,
+        Atom::var(symbolica::symbol!("caller::x"))
+    );
+    inputs.push(("sep".into(), "sep(caller::x)".into(), Ok(sep)));
+    for (head, text) in [
+        ("symbolica::log", "log(0)"),
+        ("symbolica::gamma", "symbolica::gamma(0)"),
+        ("symbolica::gamma", "symbolica::gamma(-1)"),
+        ("symbolica::zeta", "symbolica::zeta(1)"),
+        ("symbolica::zeta", "symbolica::zeta(0)"),
+        ("symbolica::zeta", "symbolica::zeta(-1)"),
+        ("symbolica::polygamma", "symbolica::polygamma(0,0)"),
+        ("symbolica::polylog", "symbolica::polylog(1,1)"),
+        ("symbolica::cot", "symbolica::cot(0)"),
+        ("symbolica::csc", "symbolica::csc(0)"),
+        ("symbolica::coth", "symbolica::coth(0)"),
+        ("symbolica::atanh", "symbolica::atanh(1)"),
+        ("symbolica::bessel_y", "symbolica::bessel_y(0,0)"),
+        ("symbolica::bessel_k", "symbolica::bessel_k(0,0)"),
+        ("caller::f", "caller::f(caller::x)"),
+        ("caller::f", "caller::f(2)"),
+        ("UFO::gs", "UFO::gs(1)"),
+        ("user::Q", "user::Q(1,caller::x)"),
+        (
+            "beta_projection::transverse",
+            "beta_projection::transverse(1)",
+        ),
+        ("gammalooprs::uvind", "gammalooprs::uvind(1,2)"),
+        (
+            "gammalooprs::uvind",
+            &format!(
+                "spenso::{{symmetric,linear,real,spenso::tensor}}::g(spenso::{{spenso::representation,spenso::self_dual}}::mink({DIM},gammalooprs::uvind(1,2)),spenso::{{spenso::representation,spenso::self_dual}}::mink({DIM},gammalooprs::uvind(1,3)))"
+            ),
+        ),
+    ] {
+        init();
+        let parsed = std::panic::catch_unwind(|| symbolica::try_parse!(text))
+            .map_err(|_| "parse panicked".to_string())
+            .and_then(|r| r.map_err(|e| e.to_string()));
+        inputs.push((head.to_string(), text.to_string(), parsed));
+    }
+    let mut wrong = Vec::new();
+    for (head, text, parsed) in inputs {
+        let a = match parsed {
+            Ok(a) => a,
+            Err(e) => {
+                eprintln!("CONTRACT HEAD {text}: not parsed by Symbolica ({e})");
+                continue;
+            }
+        };
+        let mut has_head = false;
+        a.as_view().visitor(&mut |part| {
+            if let AtomView::Fun(f) = part
+                && f.get_symbol().get_name() == head
+            {
+                has_head = true;
+            }
+            !has_head
+        });
+        let mut v = base.clone();
+        let x = v.vertices.iter_mut().find(|x| x.id == vertex).unwrap();
+        x.factor = &x.factor * &a;
+        let got = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| v.validate()));
+        let shown = match &got {
+            Ok(Ok(())) => "ACCEPTED".to_string(),
+            Ok(Err(e)) => format!(
+                "REFUSED {}",
+                e.to_string().chars().take(140).collect::<String>()
+            ),
+            Err(_) => "PANIC".to_string(),
+        };
+        eprintln!("CONTRACT HEAD {text} (parsed {a}; head kept {has_head}): {shown}");
+        let finite_number = matches!(a.as_view(), AtomView::Num(_))
+            && symbolica::domains::rational::Rational::try_from(a.as_view()).is_ok();
+        match got {
+            // Symbolica evaluated a literal to a finite rational (zeta(0) =
+            // -1/2, zeta(-1) = -1/12): no head is left, a number
+            Ok(Ok(())) if finite_number => {}
+            Ok(Err(FactorizedError::Graph { detail })) if has_head => {
+                let prefix = format!(
+                    "a function head that is not allowed in vertex {vertex} factor: {head}"
+                );
+                if !detail.starts_with(&prefix) {
+                    wrong.push(format!("{text}: {detail}"));
+                }
+            }
+            Ok(Err(_)) => {}
+            _ => wrong.push(format!("{text}: {shown}")),
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+/// zeta, in the insertion coefficient of the real K2 record, at validation
+/// and at the closure entry: `zeta(3)` accepted, the value the record's times
+/// zeta(3); `zeta(1+2)` (Symbolica adds the literal: `zeta(3)`) the same;
+/// Symbolica EVALUATES `zeta(2)` = 𝜋²/6, `zeta(0)` = -1/2 and `zeta(-1)` =
+/// -1/12 at parse time: numbers, accepted with the value times that number;
+/// `zeta(1)` (a non-finite number), `zeta(x)` and `zeta(2, 3)` (the head
+/// rule) refused.
+#[test]
+fn zeta_only_at_an_integer_literal_of_at_least_two() {
+    let base = record("wh-k2-child-ins");
+    let plain = value(&base, &symbolic());
+    let with = |c: &str| {
+        let mut v = base.clone();
+        v.insertions[0].coefficient = &v.insertions[0].coefficient * atom(c);
+        v
+    };
+    for (text, expected) in [
+        ("symbolica::zeta(3)", "symbolica::zeta(3)"),
+        ("symbolica::zeta(1+2)", "symbolica::zeta(3)"),
+        ("symbolica::zeta(2)", "𝜋^2/6"),
+        ("symbolica::zeta(0)", "-1/2"),
+        ("symbolica::zeta(-1)", "-1/12"),
+    ] {
+        eprintln!("CONTRACT ZETA {text} parses to {}", atom(text));
+        let v = with(text);
+        v.validate().unwrap_or_else(|e| panic!("{text}: {e}"));
+        let got = closure(&v, &symbolic(), &v.prefactor.total())
+            .unwrap()
+            .value;
+        assert_same(&got, &(&plain * atom(expected)), text);
+    }
+    eprintln!(
+        "CONTRACT ZETA symbolica::zeta(2) parses to {}",
+        atom("symbolica::zeta(2)")
+    );
+    eprintln!(
+        "CONTRACT ZETA zeta(2) validates: {:?}",
+        with("symbolica::zeta(2)")
+            .validate()
+            .map_err(|e| e.to_string())
+    );
+    for text in [
+        "symbolica::zeta(1)",
+        "symbolica::zeta(caller::x)",
+        "symbolica::zeta(2,3)",
+    ] {
+        let v = with(text);
+        let at_validation = v.validate().map_err(|e| e.to_string());
+        let at_entry = closure(&v, &symbolic(), &v.prefactor.total())
+            .map(|_| ())
+            .map_err(|e| e.to_string());
+        eprintln!(
+            "CONTRACT ZETA {text} (parsed {}): validation {at_validation:?}",
+            atom(text)
+        );
+        assert!(at_validation.is_err(), "{text} accepted at validation");
+        assert!(at_entry.is_err(), "{text} accepted at the entry");
+    }
+}
+
+/// The gate reviewer's three inputs on the real K2 record (L3-036, the
+/// insertion coefficient times log(P(x)), gamma(P(x)), zeta(1+P(x)) with P(x)
+/// = (x-3)^2 - x^2 + 6x - 9, identically zero but not written so): REFUSED
+/// at validation and at the closure entry, `Insertion`, prefix `a function
+/// head that is not allowed in insertion <v> coefficient: <head>`. Their
+/// literal twins as Symbolica normalises them (1+log(1), gamma(1),
+/// zeta(2)/zeta(2): the number 1) are accepted, the value the record's.
+#[test]
+fn the_reviewers_hidden_singular_functions_are_refused_by_name() {
+    let base = record("wh-k2-child-ins");
+    let vertex = base.insertions[0].vertex;
+    let plain = value(&base, &symbolic());
+    let p = zero_polynomial("witness::x");
+    let with = |c: &str| {
+        let mut v = base.clone();
+        v.insertions[0].coefficient = &v.insertions[0].coefficient * atom(c);
+        v
+    };
+    for (head, c) in [
+        ("symbolica::log", format!("symbolica::log({p})")),
+        ("symbolica::gamma", format!("symbolica::gamma({p})")),
+        ("symbolica::zeta", format!("symbolica::zeta(1+{p})")),
+    ] {
+        let prefix = format!(
+            "a function head that is not allowed in insertion {vertex} coefficient: {head}"
+        );
+        let v = with(&c);
+        for (where_, got) in [
+            ("validation", v.validate()),
+            (
+                "entry",
+                closure(&v, &symbolic(), &v.prefactor.total()).map(|_| ()),
+            ),
+        ] {
+            match got {
+                Err(FactorizedError::Insertion { vertex: at, detail }) => {
+                    assert_eq!(at, vertex, "{c}");
+                    assert!(detail.starts_with(&prefix), "{where_} {c}: {detail}");
+                }
+                other => panic!("{where_} {c}: {other:?}"),
+            }
+        }
+    }
+    for twin in [
+        "1+symbolica::log(1)",
+        "symbolica::gamma(1)",
+        "symbolica::zeta(2)/symbolica::zeta(2)",
+    ] {
+        let t = atom(twin);
+        eprintln!("CONTRACT REVIEWER twin {twin} parses to {t}");
+        let v = with(twin);
+        v.validate().unwrap_or_else(|e| panic!("{twin}: {e}"));
+        let got = closure(&v, &symbolic(), &v.prefactor.total())
+            .unwrap()
+            .value;
+        assert_same(&got, &(&plain * &t), twin);
     }
 }

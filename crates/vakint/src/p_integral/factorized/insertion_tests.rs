@@ -1127,18 +1127,21 @@ fn an_epsilon_setting_of_another_name_gets_the_pole_order_rules_at_the_entry() {
         ins(&mut value).coefficient = atom(coefficient);
         value
     };
-    for (what, coefficient, prefix) in [
-        (
-            "log(user::ep)",
-            "log(user::ep)",
-            "the dependence on ε is not a Laurent polynomial",
+    // log(user::ep): a function head that is not allowed, refused by name at
+    // validation already (whatever the settings' epsilon)
+    insertion_refusal(
+        &with("log(user::ep)").validate().unwrap_err(),
+        C0,
+        &format!(
+            "a function head that is not allowed in insertion {C0} coefficient: symbolica::log"
         ),
-        (
-            "user::ep^-40 (1+user::ep)^-30 (degree 70, every exponent within 64)",
-            "user::ep^-40*(1+user::ep)^-30",
-            "an ε power out of range",
-        ),
-    ] {
+        "log(user::ep)",
+    );
+    for (what, coefficient, prefix) in [(
+        "user::ep^-40 (1+user::ep)^-30 (degree 70, every exponent within 64)",
+        "user::ep^-40*(1+user::ep)^-30",
+        "an ε power out of range",
+    )] {
         let value = with(coefficient);
         value
             .validate()
@@ -1316,8 +1319,8 @@ fn a_non_laurent_dependence_on_epsilon_is_refused_at_validation() {
             0,
         ),
         (
-            "a caller's scalar function of no eps",
-            format!("gammalooprs::UNKNOWN(gammalooprs::master7,3)*{EPS}^-2"),
+            "a caller's plain scalar of no eps (a caller FUNCTION is refused by the head allow-list, below)",
+            format!("gammalooprs::master7*{EPS}^-2"),
             2,
         ),
         (
@@ -1336,6 +1339,18 @@ fn a_non_laurent_dependence_on_epsilon_is_refused_at_validation() {
             "{what}"
         );
     }
+    insertion_refusal(
+        &with_coefficient(&format!(
+            "gammalooprs::UNKNOWN(gammalooprs::master7,3)*{EPS}^-2"
+        ))
+        .validate()
+        .unwrap_err(),
+        C0,
+        &format!(
+            "a function head that is not allowed in insertion {C0} coefficient: gammalooprs::UNKNOWN"
+        ),
+        "a caller's function of no eps",
+    );
     for (what, extra, order) in [
         ("the dimension only in slots", "1".to_string(), 0),
         ("a polynomial in the dimension", format!("{DIM}-2"), 0),
@@ -2072,8 +2087,21 @@ fn a_reserved_vakint_symbol_inside_an_insertion_is_refused() {
         ),
         "function head",
     );
+    // the caller-namespaced twin: as a FUNCTION head refused by the head
+    // allow-list, as a plain scalar accepted
     let mut twin = good.clone();
     ins(&mut twin).factor = &ins(&mut twin).factor * atom("witness::helper_head(2)");
+    match refused(&twin) {
+        FactorizedError::Insertion { detail, .. } => assert!(
+            detail.starts_with(&format!(
+                "a function head that is not allowed in insertion {C0} factor: witness::helper_head"
+            )),
+            "{detail}"
+        ),
+        other => panic!("witness::helper_head(2): {other:?}"),
+    }
+    let mut twin = good.clone();
+    ins(&mut twin).factor = &ins(&mut twin).factor * atom("witness::helper_head");
     twin.validate()
         .unwrap_or_else(|e| panic!("witness::helper_head: {e}"));
 }

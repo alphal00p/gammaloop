@@ -1870,88 +1870,256 @@ fn first_non_integer_exponent(view: AtomView<'_>) -> Option<String> {
     found
 }
 
-/// Whether `name` is a STRUCTURAL head the evaluation reads (slots and
-/// representations, momenta, the metric, gamma, dot, index labels, colour,
-/// the reader's slash dummy): its arguments are not opaque.
-fn is_structural_head(name: &str) -> bool {
-    is_rep_name(name)
-        || [
-            names::MOMENTUM,
-            names::METRIC,
+/// The shape of one argument of a STRUCTURAL head (the table
+/// [`STRUCTURAL_HEADS`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ArgShape {
+    /// A non-negative integer literal of at most [`MAX_INDEX_ID`] (an id).
+    Id,
+    /// An integer literal of at most [`MAX_INDEX_ID`] in modulus (the compact
+    /// slash's scope, `-1` for the projector).
+    SignedId,
+    /// A positive integer literal (an invariant's order).
+    Positive,
+    /// The record's dimension symbol (`mink`'s dimension).
+    Dimension,
+    /// The literal `4` (`bis`'s dimension).
+    Four,
+    /// A colour dimension: a positive integer literal, `spenso::dA` or
+    /// `spenso::Nc`.
+    ColourDimension,
+    /// An index: an index label (`hedge`, `edge`, `vertex`, `dummy`, the
+    /// compact slash), a plain caller symbol (a free index label such as
+    /// `ir_dirac_closure_nu`) that is not ε, the dimension or a mass, or an
+    /// integer literal id (the base grammar's integer indices).
+    Index,
+    /// A Lorentz or spinor slot `mink(D, index)` / `bis(4, index)`.
+    Slot,
+    /// `mink(D, index)` or the index-free `mink(D)` (a momentum's slot).
+    MinkSlot,
+    /// A momentum `Q(id, mink slot)`.
+    Momentum,
+    /// A Lorentz slot `mink(D, index)` or a momentum (the compact slash
+    /// `gamma(a, b, Q(..))` before it is opened).
+    SlotOrMomentum,
+    /// An index-free colour representation `coad(dim)` / `cof(dim)`.
+    ColourRep,
+}
+
+/// What a structural head is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HeadRole {
+    Slot,
+    IndexLabel,
+    Momentum,
+    Metric,
+    Gamma,
+    Dot,
+    ColourAtom,
+    CompactSlash,
+}
+
+/// THE STRUCTURAL HEADS of a marked value: the only function heads besides
+/// vakint's data atoms and `zeta(n)` ([`first_disallowed_head`]), each with
+/// its role and its argument shapes by position (one list per allowed
+/// arity). Index labels and the compact slash stand only as the index of a
+/// slot ([`first_out_of_shape`]).
+const STRUCTURAL_HEADS: &[(&str, HeadRole, &[&[ArgShape]])] = {
+    use ArgShape::*;
+    &[
+        (
+            names::MINK,
+            HeadRole::Slot,
+            &[&[Dimension, Index], &[Dimension]],
+        ),
+        (names::BIS, HeadRole::Slot, &[&[Four, Index]]),
+        (names::HEDGE, HeadRole::IndexLabel, &[&[Id, Id]]),
+        ("gammalooprs::edge", HeadRole::IndexLabel, &[&[Id, Id]]),
+        ("gammalooprs::vertex", HeadRole::IndexLabel, &[&[Id, Id]]),
+        ("gammalooprs::dummy", HeadRole::IndexLabel, &[&[Id]]),
+        ("vakint::slash", HeadRole::CompactSlash, &[&[SignedId, Id]]),
+        (names::MOMENTUM, HeadRole::Momentum, &[&[Id, MinkSlot]]),
+        (names::METRIC, HeadRole::Metric, &[&[Slot, Slot]]),
+        (
             names::GAMMA,
-            names::DOT,
-            names::HEDGE,
-            "gammalooprs::edge",
-            names::STRUCTURE_F,
-            names::GENERATOR_T,
-            "vakint::slash",
-        ]
-        .contains(&name)
+            HeadRole::Gamma,
+            &[&[Slot, Slot, SlotOrMomentum]],
+        ),
+        (names::DOT, HeadRole::Dot, &[&[Momentum, Momentum]]),
+        (
+            "spenso::cas",
+            HeadRole::ColourAtom,
+            &[&[Positive, ColourRep]],
+        ),
+        (names::COAD, HeadRole::ColourAtom, &[&[ColourDimension]]),
+        (names::COF, HeadRole::ColourAtom, &[&[ColourDimension]]),
+    ]
+};
+
+/// The largest id an index label or a momentum may carry.
+const MAX_INDEX_ID: i64 = u32::MAX as i64;
+
+fn structural_head(name: &str) -> Option<(HeadRole, &'static [&'static [ArgShape]])> {
+    STRUCTURAL_HEADS
+        .iter()
+        .find(|(n, _, _)| *n == name)
+        .map(|(_, role, shapes)| (*role, *shapes))
 }
 
-/// Whether `view` contains a momentum `Q(..)` or a symbol `depends` selects
-/// (outside the dimension argument of a slot).
-fn has_dependence(view: AtomView<'_>, depends: &dyn Fn(Symbol) -> bool) -> bool {
-    if depends_outside_slots(view, depends) {
-        return true;
-    }
-    let mut momentum = false;
+/// The one special function a marked value may write: Symbolica's `zeta`
+/// with ONE integer literal argument `n >= 2` (a number-like constant; the
+/// producer writes `zeta(3)`).
+fn is_zeta_constant(view: AtomView<'_>) -> bool {
+    let AtomView::Fun(f) = view else {
+        return false;
+    };
+    f.get_symbol().get_name() == "symbolica::zeta"
+        && f.get_nargs() == 1
+        && f.iter().all(|a| i64::try_from(a).is_ok_and(|n| n >= 2))
+}
+
+/// THE HEAD ALLOW-LIST of a marked value's caller atoms: every function head
+/// (at any depth) is a structural head ([`STRUCTURAL_HEADS`]), one of
+/// [`VAKINT_DATA_ATOMS`] in its exact shape (where it may stand is
+/// [`misplaced_data_atom`]'s rule), or [`is_zeta_constant`]. Every other head
+/// (Symbolica's built-ins `log`, `exp`, `gamma`, `sin`, …, `zeta` of another
+/// argument, and every caller-namespaced function) is refused BY NAME,
+/// whatever its argument: the first one found, named, with its atom.
+fn first_disallowed_head(view: AtomView<'_>) -> Option<String> {
+    let mut found = None;
     view.visitor(&mut |part| {
-        if let AtomView::Fun(f) = part
-            && f.get_symbol().get_name() == names::MOMENTUM
-        {
-            momentum = true;
+        if found.is_some() {
+            return false;
         }
-        !momentum
-    });
-    momentum
-}
-
-/// The first OPAQUE sub-expression of `view` that depends on ε, the
-/// dimension, a mass (`depends`) or a momentum: the argument of a function
-/// that is not a structural head, the exponent of a power, or the base of a
-/// non-integer or symbolic power; with the reason. None otherwise.
-fn opaque_dependence(view: AtomView<'_>, depends: &dyn Fn(Symbol) -> bool) -> Option<String> {
-    let shown = |why: &str| Some(format!("{} ({why})", view.to_owned().to_canonical_string()));
-    match view {
-        AtomView::Add(a) => a.iter().find_map(|t| opaque_dependence(t, depends)),
-        AtomView::Mul(m) => m.iter().find_map(|t| opaque_dependence(t, depends)),
-        AtomView::Pow(p) => {
-            let (base, exponent) = p.get_base_exp();
-            if has_dependence(exponent, depends) {
-                shown("in an exponent")
-            } else if symbolica::domains::integer::Integer::try_from(exponent).is_ok() {
-                opaque_dependence(base, depends)
-            } else if has_dependence(base, depends) {
-                shown("under a non-integer or symbolic power")
-            } else {
-                None
+        if let AtomView::Fun(f) = part {
+            if is_vakint_data_atom(part) || is_zeta_constant(part) {
+                return false;
             }
-        }
-        AtomView::Fun(f) => {
             let head = f.get_symbol();
             let name = head.get_name();
-            if is_structural_head(name) {
-                // a structural head's DIRECT arguments: no bare ε, mass or
-                // dimension (but the dimension argument of a slot)
-                let rep = is_rep_name(name);
-                for (i, a) in f.iter().enumerate() {
-                    if let AtomView::Var(v) = a
-                        && depends(v.get_symbol())
-                        && !(rep && i == 0)
-                    {
-                        return shown(
-                            "a bare epsilon, dimension or mass as an argument of a structural head",
-                        );
-                    }
-                }
-                f.iter().find_map(|a| opaque_dependence(a, depends))
-            } else if f.iter().any(|a| has_dependence(a, depends)) {
-                shown("inside the argument of a function")
-            } else {
-                None
+            if structural_head(name).is_none() {
+                found = Some(format!(
+                    "{name} (in {}; allowed: the structural heads, vakint's data atoms, zeta(n) with an integer literal n >= 2)",
+                    part.to_owned().to_canonical_string()
+                ));
             }
         }
+        found.is_none()
+    });
+    found
+}
+
+/// Whether the structural head `view` has one of its argument lists of
+/// [`STRUCTURAL_HEADS`]; the first argument out of shape otherwise.
+fn head_out_of_shape(
+    view: AtomView<'_>,
+    dimension: Symbol,
+    depends: &dyn Fn(Symbol) -> bool,
+) -> Option<String> {
+    let AtomView::Fun(f) = view else {
+        return None;
+    };
+    let head = f.get_symbol();
+    let (_, shapes) = structural_head(head.get_name())?;
+    let args = f.iter().collect::<Vec<_>>();
+    let Some(shape) = shapes.iter().find(|s| s.len() == args.len()) else {
+        return Some(format!(
+            "{} ({} arguments; expected {})",
+            view.to_owned().to_canonical_string(),
+            args.len(),
+            shapes
+                .iter()
+                .map(|s| s.len().to_string())
+                .collect::<Vec<_>>()
+                .join(" or ")
+        ));
+    };
+    for (i, (a, s)) in args.iter().zip(shape.iter()).enumerate() {
+        if let Some(why) = argument_out_of_shape(*a, *s, dimension, depends) {
+            return Some(format!(
+                "{} (argument {}: {why})",
+                view.to_owned().to_canonical_string(),
+                i + 1
+            ));
+        }
+    }
+    None
+}
+
+/// Whether `a` has the shape `shape` (a head inside it checked against its
+/// own shapes); why not otherwise.
+fn argument_out_of_shape(
+    a: AtomView<'_>,
+    shape: ArgShape,
+    dimension: Symbol,
+    depends: &dyn Fn(Symbol) -> bool,
+) -> Option<String> {
+    use ArgShape::*;
+    let shown = || a.to_owned().to_canonical_string();
+    let head_role = |a: AtomView<'_>| match a {
+        AtomView::Fun(f) => structural_head(f.get_symbol().get_name())
+            .map(|(r, _)| (r, f.get_symbol().get_name() == names::MINK, f.get_nargs())),
+        _ => None,
+    };
+    let fits = match shape {
+        Id => i64::try_from(a).is_ok_and(|n| (0..=MAX_INDEX_ID).contains(&n)),
+        SignedId => i64::try_from(a).is_ok_and(|n| n.abs() <= MAX_INDEX_ID),
+        Positive => i64::try_from(a).is_ok_and(|n| n >= 1),
+        Dimension => matches!(a, AtomView::Var(v) if v.get_symbol() == dimension),
+        Four => i64::try_from(a) == Ok(4),
+        ColourDimension => {
+            i64::try_from(a).is_ok_and(|n| n >= 1)
+                || matches!(a, AtomView::Var(v) if matches!(v.get_symbol().get_name(), "spenso::dA" | "spenso::Nc"))
+        }
+        Index => match a {
+            AtomView::Var(v) => !depends(v.get_symbol()) && v.get_symbol() != dimension,
+            AtomView::Num(_) => i64::try_from(a).is_ok_and(|n| (0..=MAX_INDEX_ID).contains(&n)),
+            _ => matches!(
+                head_role(a),
+                Some((HeadRole::IndexLabel | HeadRole::CompactSlash, _, _))
+            ),
+        },
+        Slot => matches!(head_role(a), Some((HeadRole::Slot, _, 2))),
+        MinkSlot => matches!(head_role(a), Some((HeadRole::Slot, true, _))),
+        Momentum => matches!(head_role(a), Some((HeadRole::Momentum, _, _))),
+        SlotOrMomentum => matches!(
+            head_role(a),
+            Some((HeadRole::Slot, true, 2) | (HeadRole::Momentum, _, _))
+        ),
+        ColourRep => matches!(head_role(a), Some((HeadRole::ColourAtom, _, 1))),
+    };
+    if !fits {
+        return Some(format!("{} is not {shape:?}", shown()));
+    }
+    head_out_of_shape(a, dimension, depends)
+}
+
+/// The first STRUCTURAL head of `view` out of its shape
+/// ([`STRUCTURAL_HEADS`]: an argument that is not of the stated shape, e.g.
+/// `hedge(ε, 1)`, `mink(D, ε)`, `vertex(x, 1)`, `dummy(1/2)`, `Q(1, x)`), or
+/// an index label or the compact slash outside a slot (a free factor): with
+/// the reason. Heads that are not structural are [`first_disallowed_head`]'s.
+fn first_out_of_shape(
+    view: AtomView<'_>,
+    dimension: Symbol,
+    depends: &dyn Fn(Symbol) -> bool,
+) -> Option<String> {
+    match view {
+        AtomView::Add(a) => a
+            .iter()
+            .find_map(|t| first_out_of_shape(t, dimension, depends)),
+        AtomView::Mul(m) => m
+            .iter()
+            .find_map(|t| first_out_of_shape(t, dimension, depends)),
+        AtomView::Pow(p) => first_out_of_shape(p.get_base_exp().0, dimension, depends),
+        AtomView::Fun(f) => match structural_head(f.get_symbol().get_name()) {
+            Some((HeadRole::IndexLabel | HeadRole::CompactSlash, _)) => Some(format!(
+                "{} (an index label outside a slot)",
+                view.to_owned().to_canonical_string()
+            )),
+            Some(_) => head_out_of_shape(view, dimension, depends),
+            None => None,
+        },
         _ => None,
     }
 }
@@ -2873,17 +3041,26 @@ impl FactorizedNumerator {
         Ok(())
     }
 
-    /// EXPONENTS AND OPAQUE CALLER SCALARS (marked values): every exponent
-    /// is written as an integer ([`first_non_integer_exponent`]: detail
-    /// prefix `a non-integer exponent in <field>: `); a function other than
-    /// the structural heads (slots, momenta, metric, gamma, dot, index
-    /// labels, colour) is opaque to the evaluation, so its arguments must be
-    /// free of ε, the dimension (outside slots), the masses and the momenta
-    /// (detail prefix `a non-polynomial dependence in <field>: `). `Graph`,
-    /// `Insertion` in an insertion. Caller-namespaced scalars and function
-    /// heads are otherwise accepted as opaque (the format has no declared
-    /// symbol table).
+    /// EXACT NUMBERS, EXPONENTS AND FUNCTION HEADS (marked values): every
+    /// number is exact and finite ([`check_exact_numbers`], `InexactNumber`
+    /// at `<field>`: Symbolica writes a literal singular form, `zeta(1)`,
+    /// `log(0)`, `gamma(0)`, as a non-finite number); every exponent is
+    /// written as an integer ([`first_non_integer_exponent`]: detail prefix
+    /// `a non-integer exponent in <field>: `); every function head is a
+    /// structural head, a vakint data atom or `zeta(n)` with an integer
+    /// literal `n >= 2` ([`first_disallowed_head`]: detail prefix `a function
+    /// head that is not allowed in <field>: <head>`); every structural head
+    /// has its arguments of the shapes of [`STRUCTURAL_HEADS`], an index label
+    /// only inside a slot ([`first_out_of_shape`]: detail prefix `a structural
+    /// head out of its shape in <field>: `). `Graph`, `Insertion` in an
+    /// insertion. Caller-namespaced
+    /// SCALARS (plain symbols) stay accepted as opaque (the format has no
+    /// declared symbol table); caller-namespaced FUNCTIONS are refused.
     pub(crate) fn check_opaque_dependence(&self, atom: &Atom, field: &str) -> Result<()> {
+        // exact numbers in EVERY field this walk visits (the weights too: a
+        // literal singular form such as zeta(1) or log(0) is a non-finite
+        // number after Symbolica's normalisation)
+        check_exact_numbers(atom.as_view(), field)?;
         let masses = match &self.kind {
             FactorizedKind::Closure(spec) => [&spec.mass_squared, &spec.auxiliary_mass_squared]
                 .into_iter()
@@ -2915,8 +3092,13 @@ impl FactorizedNumerator {
                 )),
             })
             .or_else(|| {
-                opaque_dependence(atom.as_view(), &depends)
-                    .map(|found| format!("a non-polynomial dependence in {field}: {found}"))
+                first_disallowed_head(atom.as_view())
+                    .map(|found| format!("a function head that is not allowed in {field}: {found}"))
+            })
+            .or_else(|| {
+                first_out_of_shape(atom.as_view(), dimension, &depends).map(|found| {
+                    format!("a structural head out of its shape in {field}: {found}")
+                })
             });
         match found {
             None => Ok(()),

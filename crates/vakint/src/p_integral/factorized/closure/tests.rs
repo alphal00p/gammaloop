@@ -2718,15 +2718,18 @@ fn closure_with_insertion(
 
 /// Validation recognises ε by its name; with an epsilon setting of another
 /// name (`user::ep`) the closure entry applies the pole order's rules with it:
-/// log(user::ep) refused, `Insertion` with the Laurent prefix; the twin with a
-/// pole (user::ep^-1) evaluates.
+/// log(user::ep) refused (`Insertion`: `log` is a function head that is not
+/// allowed, whatever its argument); the twin with a pole (user::ep^-1)
+/// evaluates.
 #[test]
 fn the_closure_entry_applies_the_laurent_rule_to_an_epsilon_setting_of_another_name() {
     let mut user = rstar_site_settings();
     user.epsilon_symbol = "user::ep".into();
     match closure_with_insertion("log(user::ep)", &user).unwrap_err() {
         FactorizedError::Insertion { vertex: 1, detail } => assert!(
-            detail.starts_with("the dependence on ε is not a Laurent polynomial"),
+            detail.starts_with(
+                "a function head that is not allowed in insertion 1 coefficient: symbolica::log"
+            ),
             "{detail}"
         ),
         other => panic!("expected the Insertion refusal at vertex 1, got {other:?}"),
@@ -4752,9 +4755,11 @@ fn bare_builtins_resolve_outside_vakint() {
     }
 }
 
-/// 𝑖 and 𝜋 (and a built-in function of a caller scalar) in a FACTOR, in an
-/// INSERTION coefficient and in the PREFACTOR ARGUMENT of a marked record:
-/// accepted, and the value is the record's value times the constant.
+/// 𝑖, 𝜋 and zeta(3) in a FACTOR, in an INSERTION coefficient and in the
+/// PREFACTOR ARGUMENT of a marked record: accepted, and the value is the
+/// record's value times the constant; a built-in FUNCTION of a caller scalar
+/// (log, cos) is a function head that is not allowed: refused in the factor
+/// and in the argument.
 #[test]
 fn builtins_are_accepted_in_a_marked_record_and_leave_the_value_unchanged() {
     let vakint = Vakint::new().unwrap();
@@ -4772,12 +4777,39 @@ fn builtins_are_accepted_in_a_marked_record_and_leave_the_value_unchanged() {
     };
     let reference = run(&base, &base.prefactor.total());
     assert!(!reference.is_zero());
-    for constant in [
-        "𝑖*𝜋",
-        "𝜋^-2",
-        "log(UFO::x)",
-        "symbolica::zeta(3)*cos(UFO::x)",
+    for (function, head) in [
+        ("log(UFO::x)", "symbolica::log"),
+        ("symbolica::zeta(3)*cos(UFO::x)", "symbolica::cos"),
     ] {
+        let c = atom(function);
+        let mut in_factor = base.clone();
+        in_factor.vertices[1].factor = &in_factor.vertices[1].factor * &c;
+        let id = in_factor.vertices[1].id;
+        match in_factor.validate() {
+            Err(FactorizedError::Graph { detail }) => assert!(
+                detail.starts_with(&format!(
+                    "a function head that is not allowed in vertex {id} factor: {head}"
+                )),
+                "{detail}"
+            ),
+            other => panic!("factor {function}: {other:?}"),
+        }
+        match evaluate_factorized_closure(
+            &vakint,
+            &settings(),
+            std::slice::from_ref(&base),
+            &[base.prefactor.total() * &c],
+        ) {
+            Err(FactorizedError::Graph { detail }) => assert!(
+                detail.starts_with(&format!(
+                    "a function head that is not allowed in prefactor argument: {head}"
+                )),
+                "{detail}"
+            ),
+            other => panic!("argument {function}: {other:?}"),
+        }
+    }
+    for constant in ["𝑖*𝜋", "𝜋^-2", "symbolica::zeta(3)"] {
         let c = atom(constant);
         let mut in_factor = base.clone();
         in_factor.vertices[1].factor = &in_factor.vertices[1].factor * &c;
