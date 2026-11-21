@@ -39,9 +39,11 @@
 //!   returned. Check-mode times are NOT a timing comparison (our attempt runs
 //!   first and warms vakint's caches): use paired off / on runs.
 //!
-//! Every diagram root evaluation prints one `UNCONTRACTED_SUMMARY` line
-//! (attempted, uncontracted, compared, equal, declined and error counts by
-//! code) with the switch on or check.
+//! Every diagram prints one `UNCONTRACTED_DISPOSITION` line per enabled kind
+//! and one `UNCONTRACTED_SUMMARY` line (expected, attempted, uncontracted,
+//! compared, equal, declined, no-record, unchecked and error counts by code)
+//! with the switch on or check: the ledger, [`super::uncontracted_ledger`]
+//! (U7a delta, U7a.4).
 //!
 //! Kinds (`root` = K1 root remainders, `child` = K2 UV children, `ir-hard` =
 //! K3 IR hard parts, and the inert `quotient`, `surrogate`, `insertion`):
@@ -883,7 +885,7 @@ pub(super) fn attempt<R: std::borrow::Borrow<RStarIntegrand>>(
         Err(error) => {
             let text = error.to_string();
             if is_unknown_master_text(&text) {
-                tally_unknown_masters(&attempt.graph);
+                tally_unknown_masters(kind);
                 eprintln!(
                     "UNCONTRACTED kind={} graph={} id={id} outcome=error:unknown_masters detail=\"{}\"",
                     kind.as_str(),
@@ -1274,115 +1276,17 @@ pub(crate) fn with_strict<T>(strict: bool, f: impl FnOnce() -> T) -> T {
     f()
 }
 
-/// The outcomes reported for one graph since its last summary.
-#[derive(Clone, Debug, Default)]
-struct Tally {
-    attempted: usize,
-    uncontracted: usize,
-    zero: usize,
-    compared: usize,
-    equal: usize,
-    declined: BTreeMap<String, usize>,
-    error: BTreeMap<String, usize>,
-}
-
-/// The tallies by graph name: process-wide, because a diagram's UV children
-/// may be evaluated on other threads than its root (a child's records carry
-/// the diagram's graph name).
-static TALLIES: LazyLock<std::sync::Mutex<BTreeMap<String, Tally>>> =
-    LazyLock::new(|| std::sync::Mutex::new(BTreeMap::new()));
-
-fn with_tally(graph: &str, f: impl FnOnce(&mut Tally)) {
-    let mut tallies = TALLIES
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    f(tallies.entry(graph.to_owned()).or_default());
-}
-
-fn tally(attempt: &Attempt, check: Option<&Check>) {
-    with_tally(&attempt.graph, |tally| {
-        tally.attempted += 1;
-        match &attempt.outcome {
-            Outcome::Value(_) => tally.uncontracted += 1,
-            Outcome::Zero => tally.zero += 1,
-            Outcome::Declined(decline) => {
-                *tally.declined.entry(decline.code.clone()).or_default() += 1
-            }
-            Outcome::Error(decline) => *tally.error.entry(decline.code.clone()).or_default() += 1,
-        }
-        if let Some(check) = check {
-            tally.compared += 1;
-            tally.equal += usize::from(check.equal);
-        }
-    });
-}
-
-/// The unknown-master hard error, counted in the summary.
-pub(super) fn tally_unknown_masters(graph: &str) {
-    with_tally(graph, |tally| {
-        tally.attempted += 1;
-        *tally.error.entry("unknown_masters".into()).or_default() += 1;
-    });
-}
-
-/// `UNCONTRACTED_SUMMARY graph= mode= attempted= uncontracted= zero=
-/// compared= equal= declined=<code:n,..|none> error=<code:n,..|none>
-/// outcome=<ok|error>`: printed by every root-scope `counterterm` (a diagram
-/// root, an insertion surrogate root inside its dressed scope) when the
-/// switch is on or check and the graph has attempts since its last line (its
-/// UV children's records included, on whatever thread they ran); the graph's
-/// tally is reset, so every attempt is counted on exactly one line of its
-/// graph (child plans never print: their records join the root's line).
-pub(super) fn log_summary(graph: &str, ok: bool) {
-    let switch = switch();
-    if switch.mode == Mode::Off {
-        return;
-    }
-    let tally = TALLIES
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .remove(graph)
-        .unwrap_or_default();
-    if tally.attempted == 0 {
-        return;
-    }
-    let list = |map: &BTreeMap<String, usize>| {
-        if map.is_empty() {
-            "none".to_owned()
-        } else {
-            map.iter()
-                .map(|(code, n)| format!("{code}:{n}"))
-                .collect::<Vec<_>>()
-                .join(",")
-        }
-    };
-    let line = format!(
-        "UNCONTRACTED_SUMMARY graph={graph} mode={} attempted={} uncontracted={} zero={} compared={} equal={} declined={} error={} outcome={}",
-        switch.mode.as_str(),
-        tally.attempted,
-        tally.uncontracted,
-        tally.zero,
-        tally.compared,
-        tally.equal,
-        list(&tally.declined),
-        list(&tally.error),
-        if ok { "ok" } else { "error" }
-    );
-    eprintln!("{line}");
-    #[cfg(test)]
-    SUMMARIES.with(|lines| lines.borrow_mut().push(line));
-}
-
-#[cfg(test)]
-thread_local! {
-    static SUMMARIES: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+/// vakint's unknown-master refusal of an attempt of `kind`, counted in its
+/// diagram's lines.
+pub(super) fn tally_unknown_masters(kind: Kind) {
+    super::uncontracted_ledger::record_unknown_masters(kind);
 }
 
 /// Tests: the `UNCONTRACTED_SUMMARY` lines printed on this thread since the
-/// last call.
+/// last call (one per diagram ledger, [`super::uncontracted_ledger`]).
 #[cfg(test)]
 pub(crate) fn take_summaries() -> Vec<String> {
-    SUMMARIES.with(|lines| std::mem::take(&mut *lines.borrow_mut()))
+    super::uncontracted_ledger::take_summaries()
 }
 
 /// The log lines, the dump and the test capture of one attempt (and its
@@ -1409,7 +1313,7 @@ pub(super) fn report(attempt: &Attempt, check: Option<&Check>) {
             )
         }
     }
-    tally(attempt, check);
+    super::uncontracted_ledger::record(attempt, check, switch().mode);
     if let Some(check) = check {
         eprintln!(
             "UNCONTRACTED_CHECK kind={} graph={} id={} identical={} equal={} full={} contracted_s={:.3} uncontracted_s={:.3} depth={} valid_through=eps^{} first_difference={}",
@@ -2677,9 +2581,12 @@ fn build(
         Some(_) => "child",
         None => "root",
     };
+    // the evaluation path: a child record names the forest of its parents
+    // (helper VH round 2 R2-M3)
+    let path = super::uncontracted_ledger::current_path();
     let label = match site.ir_hard {
         Some(ir_hard) if kind == Kind::IrHard => format!(
-            "u7b kind=ir-hard graph={} scope={scope}:{} corr={} term={} attempt={} hard={} remaining={} contracted={contracted_label} marked_edge={} omega={} depth={} closure={} id={id}",
+            "u7b kind=ir-hard graph={} scope={scope}:{} corr={} term={} attempt={} hard={} remaining={} contracted={contracted_label} marked_edge={} omega={} depth={} closure={} path={path} id={id}",
             graph.name,
             super::plan::join_edge_ids(&super::plan::uv_child_edge_ids(graph, &site.plan.support)),
             ir_hard.correction,
@@ -2693,7 +2600,7 @@ fn build(
             closure_name(site, kind)
         ),
         _ => format!(
-            "u7a kind={} graph={} scope={}:{} term={} remaining={} contracted={contracted_label} marked_edge={} closure={} id={id}",
+            "u7a kind={} graph={} scope={}:{} term={} remaining={} contracted={contracted_label} marked_edge={} closure={} path={path} id={id}",
             kind.as_str(),
             graph.name,
             kind.as_str(),
