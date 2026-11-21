@@ -265,6 +265,9 @@ pub struct PreparedInsertion {
     identity: OnceLock<Result<InsertionSkeletonIdentity, String>>,
     context: Arc<()>,
     extraction_elapsed: Duration,
+    /// U7c: what the surrogate's records need from the original diagram
+    /// (`None` unless the uncontracted kind `surrogate` is enabled).
+    k5: Option<Arc<super::uncontracted::k5::Provenance>>,
 }
 
 impl PreparedInsertion {
@@ -534,6 +537,12 @@ impl PropagatorInsertionEvaluator {
                 counted.elapsed().fields()
             );
         }
+        let k5 = super::uncontracted::k5::provenance(
+            diagram,
+            holes
+                .iter()
+                .map(|hole| (hole.vertex.0, hole.loops, &hole.original.support)),
+        )?;
         Ok(Some(PreparedInsertion {
             surrogate,
             holes,
@@ -541,6 +550,7 @@ impl PropagatorInsertionEvaluator {
             identity: OnceLock::new(),
             context: self.context.clone(),
             extraction_elapsed: extraction_started.elapsed(),
+            k5,
         }))
     }
 
@@ -577,12 +587,23 @@ impl PropagatorInsertionEvaluator {
             Ok(Atom::Zero)
         } else if loops <= 4 {
             let graph = surrogate.to_gamma_loop_graph(None, true)?;
-            integrate_propagator(
+            // U7c: the K5 direct record (kind surrogate; off: just the call)
+            super::uncontracted::k5::direct(
+                prepared.k5.as_ref(),
                 &graph,
                 surrogate.model(),
                 vakint,
                 &self.settings,
-                loops as i64,
+                loops,
+                || {
+                    integrate_propagator(
+                        &graph,
+                        surrogate.model(),
+                        vakint,
+                        &self.settings,
+                        loops as i64,
+                    )
+                },
             )
         } else {
             let graph = surrogate.to_gamma_loop_graph(None, true)?;
@@ -600,12 +621,15 @@ impl PropagatorInsertionEvaluator {
                     graph.name
                 );
             }
-            super::expression::in_dressed_scope(|| {
-                if closed {
-                    plan.closed_pole_part(&graph, surrogate.model(), vakint, &self.settings)
-                } else {
-                    plan.pole_part(&graph, surrogate.model(), vakint, &self.settings)
-                }
+            // U7c: the surrogate's records (kind surrogate; off: just the call)
+            super::uncontracted::k5::scoped(prepared.k5.as_ref(), &graph.name, || {
+                super::expression::in_dressed_scope(|| {
+                    if closed {
+                        plan.closed_pole_part(&graph, surrogate.model(), vakint, &self.settings)
+                    } else {
+                        plan.pole_part(&graph, surrogate.model(), vakint, &self.settings)
+                    }
+                })
             })
         }
         .wrap_err("while evaluating the scalar-bubble surrogate's bare poles")?;
@@ -654,6 +678,13 @@ impl PropagatorInsertionEvaluator {
         let (representative, _) = members
             .first()
             .ok_or_else(|| eyre!("an insertion group needs at least one member"))?;
+        // U7c: a grouped skeleton carries the weights inside its integrand
+        // (U7-PLAN requirement 12): it never builds K5 records
+        ensure!(
+            !super::uncontracted::switch().enabled(super::uncontracted::Kind::Surrogate),
+            "{}: the grouped insertion skeleton is not supported with the kind surrogate (its weights are inside the integrand: no record); run without skeleton grouping",
+            super::uncontracted::VARIABLE
+        );
         self.check_preparation(representative)?;
         let loops = representative.loop_count();
         ensure!(
