@@ -1,0 +1,1095 @@
+//! U7c tests: the K5 insertion-surrogate records (kind `surrogate`,
+//! [`super::uncontracted::k5`]).
+//!
+//! The ORACLE is the beta's verified fixtures (wh-fixtures k5-direct,
+//! k5-surrogate, k5-stress): the record the emitter builds for the fixture's
+//! site is compared field by field with the fixture's `input.txt` (atoms by
+//! expanded difference, the label ignored), read back with vakint's frozen
+//! reader (which validates it, R2 included), evaluated by vakint's entry and
+//! finished as the hook finishes it; that value must equal the fixture's
+//! CONTRACTED value (`value.txt`) through its `valid_through`. The surrogate
+//! graphs come from this build's own `prepare` of the beta's prepared DOT;
+//! the factors of the record's edges and vertices (the beta's colour branch)
+//! are taken from the fixture, as the U7a oracle tests do ([`with_branch`]):
+//! the factor lines then test the emitter's pass-through, the momenta, legs,
+//! insertions, lines, cycles and ports its construction.
+//!
+//! Then one test per binding condition of the design (notes/wi/U7C_SITE.md;
+//! beta's answers U7C_BETA_ANSWERS.md): the closed designed list, the loud
+//! errors, the zero-comparison failures (diagram and run), the ledger frame,
+//! the default kind list, the Δ-cache key, the off mode.
+//!
+//! k5-stress (five L5 3793 records) is read from `GAMMALOOP_U7C_FIXTURES_DIR`
+//! (the wh-fixtures directory) and `#[ignore]`d, as are the whole-graph L5
+//! runs (about a minute each).
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
+
+use eyre::{Result, ensure, eyre};
+use idenso::tensor::SymbolicTensor;
+use linnet::half_edge::subgraph::SuBitGraph;
+use symbolica::atom::Atom;
+use vakint::{
+    Vakint,
+    p_integral::factorized::{
+        ClosureSpec, FactorizedKind, FactorizedNumerator, TaylorOrders, TaylorSpec,
+        evaluate_factorized_ports,
+    },
+};
+
+use crate::{
+    feyngen::feynkit::FeynmanDiagramGammaLoopExt, graph::Graph, initialisation::test_initialise,
+    numerator::symbolica_ext::NumeratorAtomExt, utils::GS,
+    uv::approx::streamed::with_production_piece_limit,
+};
+
+use super::{
+    DiagramLedger, PropagatorInsertionEvaluator, REFERENCE_MASS_SQUARED, RStarPlan,
+    boundary::ClosedRootNormalization,
+    expression::{RStarIntegrand, in_dressed_scope},
+    plan::{join_edge_ids, uv_child_edge_ids},
+    recursive_tests::{colour_factored, load, settings},
+    top_mass::TopMassTerms,
+    uncontracted::{
+        self, Captured, IrHardSite, Kind, Mode, Outcome, Site, Switch,
+        k5::{self, Provenance},
+        with_capture, with_switch,
+    },
+    uncontracted_ledger,
+    uncontracted_oracle_tests::{
+        assume_defaults, atoms_equal, auxiliary_mass, equal_through, fixture_value, oracle_value,
+        record, record_differences, valid_through,
+    },
+};
+
+const L2_17_DOT: &str = include_str!("testdata/u7c/l2-d017.dot");
+const L5_22807_DOT: &str = include_str!("testdata/u7c/l5-d22807.dot");
+const L5_3793_DOT: &str = include_str!("testdata/u7c/l5-d3793.dot");
+const K5_DIRECT: &str = include_str!("testdata/u7c/k5-direct.input.txt");
+const K5_DIRECT_VALUE: &str = include_str!("testdata/u7c/k5-direct.value.txt");
+const K5_SURROGATE: &str = include_str!("testdata/u7c/k5-surrogate.input.txt");
+const K5_SURROGATE_VALUE: &str = include_str!("testdata/u7c/k5-surrogate.value.txt");
+
+fn check_surrogate() -> Switch {
+    Switch::new(Mode::Check, &[Kind::Surrogate])
+}
+
+fn on_surrogate() -> Switch {
+    Switch::new(Mode::On, &[Kind::Surrogate])
+}
+
+// ---------------------------------------------------------------------------
+// Fixture plumbing
+// ---------------------------------------------------------------------------
+
+/// A surrogate of `dot` prepared by this build (switch `switch`, so that its
+/// provenance is computed), and that provenance.
+struct Prepared {
+    surrogate: feynkit_graph::FeynmanDiagram,
+    provenance: Arc<Provenance>,
+}
+
+fn prepare(dot: &str, vakint: &Vakint) -> Result<Prepared> {
+    let original = colour_factored(&load(dot)?)?;
+    let evaluator = PropagatorInsertionEvaluator::new(settings());
+    with_switch(check_surrogate(), || -> Result<Prepared> {
+        let prepared = evaluator
+            .prepare(&original, vakint)?
+            .ok_or_else(|| eyre!("no insertion selected"))?;
+        let provenance = k5::provenance(
+            &original,
+            prepared
+                .holes()
+                .iter()
+                .map(|hole| (hole.vertex.0, hole.loops, &hole.original.support)),
+        )?
+        .ok_or_else(|| eyre!("no provenance with the kind enabled"))?;
+        Ok(Prepared {
+            surrogate: prepared.surrogate().clone(),
+            provenance,
+        })
+    })
+}
+
+/// The surrogate with the factors the fixture's record states for its own
+/// edges and vertices (the beta's colour branch; an `ins:` vertex takes its
+/// insertion's coefficient x factor).
+fn with_branch(
+    surrogate: &feynkit_graph::FeynmanDiagram,
+    fixture: &FactorizedNumerator,
+) -> Result<feynkit_graph::FeynmanDiagram> {
+    let mut vertices = BTreeMap::new();
+    for vertex in &fixture.vertices {
+        if vertex.rule.starts_with("ct:") {
+            continue;
+        }
+        let factor = if vertex.rule.starts_with("ins:") {
+            let insertion = fixture
+                .insertions
+                .iter()
+                .find(|insertion| insertion.vertex == vertex.id)
+                .ok_or_else(|| eyre!("no insertion at the ins: vertex {}", vertex.id))?;
+            &insertion.coefficient * &insertion.factor
+        } else {
+            vertex.factor.clone()
+        };
+        vertices.insert(vertex.id, factor.map_mink_dim(Atom::num(4)));
+    }
+    let edges = fixture
+        .edges
+        .iter()
+        .filter(|edge| !edge.is_external())
+        .map(|edge| (edge.id, edge.factor.map_mink_dim(Atom::num(4))))
+        .collect::<BTreeMap<_, _>>();
+    let vertex_fragments = surrogate
+        .vertices()
+        .filter_map(|(id, _)| vertices.get(&id.0).map(|f| (id, f.clone())))
+        .map(|(id, f)| Ok((id, SymbolicTensor::infer(f)?)))
+        .collect::<Result<Vec<_>>>()?;
+    let edge_fragments = surrogate
+        .edges()
+        .filter_map(|(id, _, _)| edges.get(&id.0).map(|f| (id, f.clone())))
+        .map(|(id, f)| Ok((id, SymbolicTensor::infer(f)?)))
+        .collect::<Result<Vec<_>>>()?;
+    ensure!(
+        vertex_fragments.len() == vertices.len() && edge_fragments.len() == edges.len(),
+        "the fixture's vertices / edges are not all in the prepared surrogate"
+    );
+    surrogate
+        .clone()
+        .with_numerator_fragments(vertex_fragments, edge_fragments)
+        .map_err(|error| eyre!("{error}"))
+}
+
+/// `name=<value>` of a fixture label.
+fn label_field(label: &str, name: &str) -> Option<String> {
+    label
+        .split_whitespace()
+        .find_map(|token| token.strip_prefix(name))
+        .map(str::to_owned)
+}
+
+/// The child supports of a fixture label (`children=[a,b]loops=..;[c]..`).
+fn label_children(label: &str) -> BTreeSet<String> {
+    let Some(children) = label_field(label, "children=") else {
+        return BTreeSet::new();
+    };
+    children
+        .split('[')
+        .skip(1)
+        .filter_map(|piece| piece.split(']').next())
+        .map(str::to_owned)
+        .collect()
+}
+
+/// One closed-root remainder of a surrogate above four loops, as the
+/// fixture states it: the graph with the fixture's branch, the plan, the
+/// term and the fixture's child counterterms by support.
+struct RootCase {
+    graph: Graph,
+    model_diagram: feynkit_graph::FeynmanDiagram,
+    plan: RStarPlan,
+    term: usize,
+    deltas: BTreeMap<SuBitGraph, Atom>,
+    fixture: FactorizedNumerator,
+    provenance: Arc<Provenance>,
+}
+
+fn root_case(prepared: &Prepared, input: &str) -> Result<RootCase> {
+    let fixture = record(input)?;
+    let diagram = with_branch(&prepared.surrogate, &fixture)?;
+    let graph = diagram.to_gamma_loop_graph(None, true)?;
+    let plan = RStarPlan::with_automatic_edge(&graph, diagram.model(), &settings())?;
+    let FactorizedKind::Closure(spec) = &fixture.kind else {
+        return Err(eyre!("the fixture is not a closure record"));
+    };
+    ensure!(
+        usize::from(plan.marked_edge) == spec.edge,
+        "the plan's marked edge {} is not the fixture's closing edge {}",
+        usize::from(plan.marked_edge),
+        spec.edge
+    );
+    let remaining =
+        label_field(&fixture.label, "remaining=").ok_or_else(|| eyre!("no remaining="))?;
+    let children = label_children(&fixture.label);
+    let term = plan
+        .ordinary_uv
+        .iter()
+        .position(|term| {
+            join_edge_ids(&uv_child_edge_ids(&graph, &term.remainder.remaining)) == remaining
+                && term
+                    .remainder
+                    .insertions
+                    .iter()
+                    .map(|slot| join_edge_ids(&uv_child_edge_ids(&graph, &slot.support)))
+                    .collect::<BTreeSet<_>>()
+                    == children
+        })
+        .ok_or_else(|| eyre!("no plan term for remaining={remaining} children={children:?}"))?;
+    let mut deltas = BTreeMap::new();
+    for slot in &plan.ordinary_uv[term].remainder.insertions {
+        let rule = format!(
+            "ct:edges-{}",
+            uv_child_edge_ids(&graph, &slot.support)
+                .iter()
+                .map(usize::to_string)
+                .collect::<Vec<_>>()
+                .join("-")
+        );
+        let vertex = fixture
+            .vertices
+            .iter()
+            .find(|vertex| vertex.rule == rule)
+            .ok_or_else(|| eyre!("no {rule} vertex in the fixture"))?
+            .id;
+        let insertion = fixture
+            .insertions
+            .iter()
+            .find(|insertion| insertion.vertex == vertex)
+            .ok_or_else(|| eyre!("no insertion at {vertex}"))?;
+        deltas.insert(
+            slot.support.clone(),
+            &insertion.coefficient * &insertion.factor,
+        );
+    }
+    Ok(RootCase {
+        graph,
+        model_diagram: diagram,
+        plan,
+        term,
+        deltas,
+        fixture,
+        provenance: prepared.provenance.clone(),
+    })
+}
+
+/// The emitter's attempt on the case's remainder as the closed surrogate root
+/// holds it (factor 1, σ the physical routing, the root metric closure), in
+/// the surrogate context `context` (`None`: outside it); `ir_hard` makes it
+/// a K3-shaped term.
+fn root_attempt(
+    case: &RootCase,
+    vakint: &Vakint,
+    context: Option<Arc<Provenance>>,
+    ir_hard: bool,
+) -> Result<uncontracted::Attempt> {
+    let uv = settings();
+    let vakint_settings = uv.vakint.true_settings();
+    let model = case.model_diagram.model();
+    let term = &case.plan.ordinary_uv[case.term];
+    let closure = RStarIntegrand::root_closure(&case.graph, &case.plan.support)?;
+    let (external, external_routing) = RStarIntegrand::physical_external_routing(
+        &case.graph,
+        &case.graph.external_filter::<SuBitGraph>(),
+    )?;
+    let closed_root = ClosedRootNormalization {
+        external,
+        external_routing,
+        factor: Atom::num(1),
+    };
+    let auxiliary = auxiliary_mass();
+    let insertions = term
+        .counterterms
+        .iter()
+        .map(|child| {
+            case.deltas
+                .get(&child.argument.support)
+                .cloned()
+                .ok_or_else(|| eyre!("no Delta for a counterterm support"))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let site = Site {
+        graph: &case.graph,
+        model,
+        plan: &case.plan,
+        term,
+        children: &case.deltas,
+        root_closure: Some(&closure),
+        closed_root: Some(&closed_root),
+        closure_data: None,
+        root_projector: true,
+        root_edges: &[],
+        reference_mass_squared: *REFERENCE_MASS_SQUARED,
+        auxiliary_mass_squared: &auxiliary,
+        settings: &vakint_settings,
+        vakint,
+        uv_settings: &uv,
+        top_mass: Some(TopMassTerms::Keep),
+        epsilon: GS.dim_epsilon,
+        today: "k5-site-test".into(),
+        ir_hard: ir_hard.then_some(IrHardSite {
+            correction: 0,
+            term: 0,
+            attempt: 0,
+            hard: "test",
+            degree: 1,
+            depth: term.remainder.loops + 1,
+            closure: None,
+        }),
+    };
+    let run = || {
+        uncontracted::attempt(&site, Kind::Surrogate, 7, Mode::On, || {
+            RStarIntegrand::new_with_closure(
+                &case.graph,
+                model,
+                &term.remainder,
+                &insertions,
+                case.plan.marked_edge,
+                Atom::var(*REFERENCE_MASS_SQUARED),
+                Some(&closure),
+            )
+        })
+    };
+    match context {
+        Some(provenance) => k5::with_test_context(provenance, run),
+        None => run(),
+    }
+}
+
+/// Every check of a closed-root fixture: the record equals the fixture, its
+/// value equals the fixture's contracted value, and so does the oracle value
+/// of the record text (vakint's reader, the closure entry, finish_tensor).
+fn assert_root_fixture(case: &RootCase, value_text: &str, vakint: &Vakint) -> Result<()> {
+    let attempt = root_attempt(case, vakint, Some(case.provenance.clone()), false)?;
+    let text = attempt
+        .text
+        .clone()
+        .ok_or_else(|| eyre!("no record built: {:?}", attempt.outcome))?;
+    let ours = record(&text)?;
+    let differences = record_differences(&ours, &case.fixture);
+    ensure!(
+        differences.is_empty(),
+        "record != fixture: {differences:#?}"
+    );
+    let value = attempt
+        .value()
+        .ok_or_else(|| eyre!("declined: {:?}", attempt.outcome))?;
+    let expected = fixture_value(value_text)?;
+    let order = valid_through(value_text)?;
+    ensure!(
+        equal_through(&value, &expected, order)?,
+        "value != the fixture's contracted value through eps^{order}"
+    );
+    let oracle = oracle_value(vakint, &text, 7)?;
+    ensure!(
+        equal_through(&oracle, &expected, order)?,
+        "oracle value != the fixture's contracted value"
+    );
+    Ok(())
+}
+
+/// The direct record of the L2 17 surrogate with the fixture's branch.
+fn direct_case(vakint: &Vakint) -> Result<(Graph, feynkit_graph::FeynmanDiagram, Arc<Provenance>)> {
+    let prepared = prepare(L2_17_DOT, vakint)?;
+    let fixture = record(K5_DIRECT)?;
+    let diagram = with_branch(&prepared.surrogate, &fixture)?;
+    let graph = diagram.to_gamma_loop_graph(None, true)?;
+    Ok((graph, diagram, prepared.provenance))
+}
+
+/// `k5::direct` on `graph` inside a diagram ledger (when `ledger`), with
+/// every attempt captured; the ledger's close result too.
+fn direct_run(
+    graph: &Graph,
+    diagram: &feynkit_graph::FeynmanDiagram,
+    provenance: Option<&Arc<Provenance>>,
+    vakint: &Vakint,
+    switch: Switch,
+    ledger: bool,
+) -> (Result<Atom>, Vec<Captured>, Option<Result<()>>) {
+    let uv = settings();
+    with_switch(switch, || {
+        let opened = if ledger {
+            DiagramLedger::open(&graph.name, "k5-test")
+        } else {
+            None
+        };
+        let (value, captured) = with_capture(|| {
+            k5::direct(provenance, graph, diagram.model(), vakint, &uv, 2, || {
+                super::integrate_propagator(graph, diagram.model(), vakint, &uv, 2)
+            })
+        });
+        let closed = opened.map(|ledger| ledger.close(value.is_ok()).map(|_| ()));
+        (value, captured, closed)
+    })
+}
+
+/// A direct record's own fields (the kind, the provenance) and, through the
+/// U7a comparator with the kinds blanked, all the others.
+fn direct_differences(ours: &FactorizedNumerator, theirs: &FactorizedNumerator) -> Vec<String> {
+    let mut out = Vec::new();
+    if ours.kind != FactorizedKind::Direct || theirs.kind != FactorizedKind::Direct {
+        out.push("kind is not direct on both sides".into());
+    }
+    let provenance = |r: &FactorizedNumerator| {
+        r.record
+            .as_ref()
+            .map(|record| (record.original_cycles, record.depth))
+    };
+    if provenance(ours) != provenance(theirs) {
+        out.push(format!(
+            "direct provenance {:?} vs {:?}",
+            provenance(ours),
+            provenance(theirs)
+        ));
+    }
+    let blank = ClosureSpec {
+        edge: 0,
+        mass_squared: Atom::Zero,
+        auxiliary_mass_squared: Atom::Zero,
+        power: 1,
+        independent_externals: false,
+        taylor: Some(TaylorSpec {
+            degree: 0,
+            scaled_edges: Vec::new(),
+            compensate_mass: false,
+            orders: TaylorOrders::All,
+        }),
+        softs: Vec::new(),
+        original_cycles: None,
+        depth: None,
+        weights: Vec::new(),
+    };
+    let (mut a, mut b) = (ours.clone(), theirs.clone());
+    a.kind = FactorizedKind::Closure(blank.clone());
+    b.kind = FactorizedKind::Closure(blank);
+    out.extend(record_differences(&a, &b));
+    out
+}
+
+// ---------------------------------------------------------------------------
+// The oracle: k5-direct, k5-surrogate, k5-stress
+// ---------------------------------------------------------------------------
+
+/// k5-direct (L2 17, <= 4 loops): the direct record of the surrogate equals
+/// the fixture, and its value (vakint's ports entry, finish_tensor) equals
+/// the fixture's contracted value through eps^-1; the hook in check mode
+/// compares it with today's integrate_propagator (equal) and counts it in
+/// the diagram's frame (site 1, expected 1, compared 1).
+#[test]
+fn k5_direct_record_and_value_equal_the_fixture() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        assume_defaults()?;
+        let vakint = Vakint::new()?;
+        let (graph, diagram, provenance) = direct_case(&vakint)?;
+        let fixture = record(K5_DIRECT)?;
+        let expected = fixture_value(K5_DIRECT_VALUE)?;
+        let order = valid_through(K5_DIRECT_VALUE)?;
+        ensure!(order == -1, "k5-direct is valid through eps^-1");
+        uncontracted_ledger::take_lines();
+        let (value, captured, closed) = direct_run(
+            &graph,
+            &diagram,
+            Some(&provenance),
+            &vakint,
+            check_surrogate(),
+            true,
+        );
+        let today = value?;
+        closed.ok_or_else(|| eyre!("no ledger"))??;
+        ensure!(captured.len() == 1, "one record: {captured:?}");
+        let attempt = &captured[0];
+        ensure!(attempt.kind == Kind::Surrogate, "kind surrogate");
+        ensure!(attempt.equal == Some(true), "check: equal ({attempt:?})");
+        let text = attempt.text.clone().ok_or_else(|| eyre!("no text"))?;
+        let ours = record(&text)?;
+        let differences = direct_differences(&ours, &fixture);
+        ensure!(
+            differences.is_empty(),
+            "record != fixture: {differences:#?}"
+        );
+        let value = attempt.value.clone().ok_or_else(|| eyre!("no value"))?;
+        ensure!(
+            equal_through(&value, &expected, order)?,
+            "ours != the fixture's contracted value through eps^-1:\n{value}\n{expected}"
+        );
+        ensure!(
+            equal_through(&today, &expected, order)?,
+            "today's value on the fixture branch != the fixture's (the test's branch)"
+        );
+        // the oracle: the text alone through vakint's reader and ports entry
+        let mut vakint_settings = settings().vakint.true_settings();
+        vakint_settings.number_of_terms_in_epsilon_expansion = 2;
+        let oracle =
+            evaluate_factorized_ports(&vakint, &vakint_settings, &ours, &ours.prefactor.total())
+                .map_err(|error| eyre!("{error}"))?;
+        let oracle = RStarIntegrand::finish_tensor(oracle.value, 0)?;
+        ensure!(
+            equal_through(&oracle, &expected, order)?,
+            "oracle value != the fixture's"
+        );
+        let lines = uncontracted_ledger::take_lines();
+        let disposition = lines
+            .iter()
+            .find(|line| {
+                line.starts_with("UNCONTRACTED_DISPOSITION ") && line.contains(" kind=surrogate ")
+            })
+            .ok_or_else(|| eyre!("no surrogate disposition line: {lines:#?}"))?;
+        ensure!(
+            disposition.contains(" expected=1 ")
+                && disposition.contains(" compared=1 ")
+                && disposition.contains(" equal=1 ")
+                && disposition.ends_with(" outcome=ok"),
+            "{disposition}"
+        );
+        ensure!(
+            lines
+                .iter()
+                .any(|line| line.starts_with("UNCONTRACTED_KIND_TOTAL ")
+                    && line.contains(" kind=surrogate ")
+                    && line.contains(" sites=1 ")
+                    && line.contains(" compared=1 ")),
+            "no kind total line: {lines:#?}"
+        );
+        // mode on: our value replaces today's, equal through eps^-1
+        let (on, captured, closed) = direct_run(
+            &graph,
+            &diagram,
+            Some(&provenance),
+            &vakint,
+            on_surrogate(),
+            true,
+        );
+        closed.ok_or_else(|| eyre!("no ledger"))??;
+        ensure!(captured.len() == 1 && captured[0].outcome == "uncontracted");
+        ensure!(equal_through(&on?, &expected, order)?, "on != fixture");
+        Ok(())
+    })
+}
+
+/// k5-surrogate (L5 22807, closed surrogate root, seq 62: ct: [2,3,4,5,7,8]
+/// and the `ins:` coefficient vertex 8): record and value equal the fixture.
+#[test]
+fn k5_surrogate_record_and_value_equal_the_fixture() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        assume_defaults()?;
+        let vakint = Vakint::new()?;
+        let prepared = prepare(L5_22807_DOT, &vakint)?;
+        ensure!(
+            prepared.provenance.original_cycles == (1, 0),
+            "original cycles {:?}",
+            prepared.provenance.original_cycles
+        );
+        let case = root_case(&prepared, K5_SURROGATE)?;
+        assert_root_fixture(&case, K5_SURROGATE_VALUE, &vakint)
+    })
+}
+
+/// k5-stress (L5 3793, skel1 x ins4: up to four `ins:` vertices, one ct:
+/// child that contracts a hole in four of the five records): every record
+/// and value equals its fixture; R2 holds (vakint's reader validates it).
+#[test]
+#[ignore = "reads GAMMALOOP_U7C_FIXTURES_DIR (wh-fixtures); about a minute"]
+fn k5_stress_records_and_values_equal_the_fixtures() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        assume_defaults()?;
+        let dir =
+            std::path::PathBuf::from(std::env::var("GAMMALOOP_U7C_FIXTURES_DIR").map_err(
+                |_| eyre!("set GAMMALOOP_U7C_FIXTURES_DIR to the wh-fixtures directory"),
+            )?)
+            .join("k5-stress");
+        let vakint = Vakint::new()?;
+        let prepared = prepare(L5_3793_DOT, &vakint)?;
+        let mut failures = Vec::new();
+        let mut passed = 0;
+        for name in ["r0051", "r0052", "r0053", "r0054", "r0055"] {
+            let input = std::fs::read_to_string(dir.join(name).join("input.txt"))?;
+            let value = std::fs::read_to_string(dir.join(name).join("value.txt"))?;
+            let result = root_case(&prepared, &input)
+                .and_then(|case| assert_root_fixture(&case, &value, &vakint));
+            match result {
+                Ok(()) => {
+                    passed += 1;
+                    eprintln!("K5_STRESS {name} PASS");
+                }
+                Err(error) => {
+                    eprintln!("K5_STRESS {name} FAIL: {error:#}");
+                    failures.push(format!("{name}: {error:#}"));
+                }
+            }
+        }
+        ensure!(failures.is_empty(), "{passed}/5 passed: {failures:#?}");
+        Ok(())
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Designed declines and loud errors
+// ---------------------------------------------------------------------------
+
+/// The closed list: `surrogate_ir_hard` is designed; the K5 errors are not.
+#[test]
+fn k5_designed_codes_are_a_closed_list() {
+    assert!(uncontracted::is_designed_code("surrogate_ir_hard"));
+    for code in [
+        "surrogate_chain",
+        "surrogate_coefficient_mass",
+        "surrogate_context_missing",
+        "surrogate_hole_twice",
+        "ir_hard_guard:panic",
+    ] {
+        assert!(!uncontracted::is_designed_code(code), "{code}");
+    }
+}
+
+/// A K3-shaped IR hard term inside a surrogate declines by design BEFORE its
+/// record is built (no text), and is counted per kind: in check mode a
+/// diagram whose surrogate records all decline fails (no exception named).
+#[test]
+fn k5_ir_hard_term_declines_before_any_record_and_is_counted() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let prepared = prepare(L5_22807_DOT, &vakint)?;
+        let case = root_case(&prepared, K5_SURROGATE)?;
+        let attempt = with_switch(check_surrogate(), || {
+            root_attempt(&case, &vakint, Some(case.provenance.clone()), true)
+        })?;
+        ensure!(attempt.text.is_none(), "a record was built");
+        match &attempt.outcome {
+            Outcome::Declined(decline) => ensure!(
+                decline.code == "surrogate_ir_hard" && decline.designed,
+                "{decline:?}"
+            ),
+            other => return Err(eyre!("not declined: {other:?}")),
+        }
+        // counted per kind; all declined -> the diagram fails in check mode
+        with_switch(check_surrogate(), || -> Result<()> {
+            let ledger =
+                DiagramLedger::open("k5-ir-hard", "k5-test").ok_or_else(|| eyre!("no ledger"))?;
+            uncontracted_ledger::expect(Kind::Surrogate);
+            uncontracted::report(&attempt, None);
+            let closed = ledger.close(true);
+            let error = closed
+                .err()
+                .ok_or_else(|| eyre!("an all-declined check passed"))?;
+            ensure!(format!("{error}").contains("declined"), "{error}");
+            Ok(())
+        })
+    })
+}
+
+/// A mass symbol inside an `ins:` coefficient is an ERROR (never the
+/// designed `insertion_mass_symbol`, which stays a ct: child's decline).
+#[test]
+fn k5_mass_in_a_coefficient_is_an_error() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let prepared = prepare(L5_22807_DOT, &vakint)?;
+        let mut case = root_case(&prepared, K5_SURROGATE)?;
+        let node = case
+            .graph
+            .underlying
+            .iter_nodes()
+            .map(|(node, _, _)| node)
+            .find(|node| usize::from(*node) == 8)
+            .ok_or_else(|| eyre!("no vertex 8"))?;
+        let massive = case.graph[node].num.value.clone() * Atom::var(*REFERENCE_MASS_SQUARED);
+        case.graph.underlying[node].num.value = massive;
+        let attempt = root_attempt(&case, &vakint, Some(case.provenance.clone()), false)?;
+        match &attempt.outcome {
+            Outcome::Error(decline) => ensure!(
+                decline.code == "surrogate_coefficient_mass" && !decline.designed,
+                "{decline:?}"
+            ),
+            other => return Err(eyre!("not an error: {other:?}")),
+        }
+        Ok(())
+    })
+}
+
+/// A chain that is not the scalar bubble chain (a bubble edge with a factor
+/// other than 1) and a surrogate record outside the surrogate context are
+/// errors, not declines.
+#[test]
+fn k5_broken_chain_and_missing_context_are_errors() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let prepared = prepare(L5_22807_DOT, &vakint)?;
+        let mut case = root_case(&prepared, K5_SURROGATE)?;
+        let missing = root_attempt(&case, &vakint, None, false)?;
+        match &missing.outcome {
+            Outcome::Error(decline) => {
+                ensure!(decline.code == "surrogate_context_missing", "{decline:?}")
+            }
+            other => return Err(eyre!("not an error: {other:?}")),
+        }
+        let bubble = case
+            .graph
+            .iter_edges()
+            .map(|(_, edge, _)| edge)
+            .find(|edge| usize::from(*edge) == 14)
+            .ok_or_else(|| eyre!("no edge 14"))?;
+        case.graph.underlying[bubble].num.value = Atom::num(2);
+        let broken = root_attempt(&case, &vakint, Some(case.provenance.clone()), false)?;
+        match &broken.outcome {
+            Outcome::Error(decline) => {
+                ensure!(decline.code == "surrogate_chain", "{decline:?}")
+            }
+            other => return Err(eyre!("not an error: {other:?}")),
+        }
+        Ok(())
+    })
+}
+
+/// An undesigned failure is loud at the direct hook: in mode on and in check
+/// mode the call fails (no fallback to today's value), and the diagram's
+/// line says error.
+#[test]
+fn k5_undesigned_failure_is_loud_at_the_hook() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let (mut graph, diagram, provenance) = direct_case(&vakint)?;
+        let bubble = graph
+            .iter_edges()
+            .map(|(_, edge, _)| edge)
+            .find(|edge| usize::from(*edge) == 5)
+            .ok_or_else(|| eyre!("no edge 5"))?;
+        graph.underlying[bubble].num.value = Atom::num(2);
+        for switch in [on_surrogate(), check_surrogate()] {
+            let (value, captured, closed) =
+                direct_run(&graph, &diagram, Some(&provenance), &vakint, switch, true);
+            let error = value
+                .err()
+                .ok_or_else(|| eyre!("{:?}: an undesigned failure passed", switch.mode))?;
+            ensure!(
+                format!("{error:#}").contains("outcome=error:surrogate_chain"),
+                "{error:#}"
+            );
+            ensure!(
+                captured.len() == 1 && captured[0].outcome == "error:surrogate_chain",
+                "{captured:?}"
+            );
+            let _ = closed;
+        }
+        Ok(())
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Zero comparisons, the frame, the run's coverage
+// ---------------------------------------------------------------------------
+
+/// A surrogate site whose records never reached a hook (here: none at all)
+/// fails its diagram in check mode and in mode on.
+#[test]
+fn k5_site_without_records_fails_the_diagram() -> Result<()> {
+    for switch in [check_surrogate(), on_surrogate()] {
+        with_switch(switch, || -> Result<()> {
+            let ledger =
+                DiagramLedger::open("k5-site", "k5-test").ok_or_else(|| eyre!("no ledger"))?;
+            uncontracted_ledger::k5_site(Kind::Surrogate, "k5-site")?;
+            let error = ledger
+                .close(true)
+                .err()
+                .ok_or_else(|| eyre!("{:?}: a site without records passed", switch.mode))?;
+            ensure!(
+                format!("{error}").contains("insertion-surrogate evaluations reached no record"),
+                "{error}"
+            );
+            Ok(())
+        })?;
+    }
+    Ok(())
+}
+
+/// A surrogate evaluated outside every diagram ledger is an error (never an
+/// implicit ledger): at the site, at the direct hook and at the R* scope;
+/// inside one the frame is there.
+#[test]
+fn k5_no_frame_is_an_error() -> Result<()> {
+    with_switch(check_surrogate(), || -> Result<()> {
+        ensure!(!uncontracted_ledger::in_diagram_ledger());
+        ensure!(uncontracted_ledger::k5_site(Kind::Surrogate, "nowhere").is_err());
+        let provenance = Arc::new(Provenance {
+            original: "nowhere".into(),
+            original_cycles: (0, 0),
+            holes: Vec::new(),
+        });
+        let scoped = k5::scoped(Some(&provenance), "nowhere", || Ok(()));
+        ensure!(
+            scoped
+                .err()
+                .is_some_and(|e| format!("{e}").contains("outside every diagram ledger")),
+            "scoped"
+        );
+        let ledger =
+            DiagramLedger::open("k5-frame", "k5-test").ok_or_else(|| eyre!("no ledger"))?;
+        ensure!(uncontracted_ledger::in_diagram_ledger());
+        let inside = k5::scoped(Some(&provenance), "k5-frame", || {
+            ensure!(
+                uncontracted_ledger::in_diagram_ledger(),
+                "no frame at the hook"
+            );
+            Ok(())
+        });
+        drop(ledger);
+        inside
+    })
+}
+
+/// The direct hook outside every diagram ledger fails (with the kind
+/// enabled), before any record.
+#[test]
+fn k5_direct_without_a_ledger_fails() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let (graph, diagram, provenance) = direct_case(&vakint)?;
+        let (value, captured, _) = direct_run(
+            &graph,
+            &diagram,
+            Some(&provenance),
+            &vakint,
+            check_surrogate(),
+            false,
+        );
+        ensure!(
+            value
+                .err()
+                .is_some_and(|e| format!("{e}").contains("outside every diagram ledger")),
+            "the direct hook ran outside a ledger"
+        );
+        ensure!(captured.is_empty(), "a record was built: {captured:?}");
+        Ok(())
+    })
+}
+
+/// The run's coverage: a check run in which the enabled kind compared
+/// nothing fails; one comparison makes it pass; compared != equal fails; the
+/// field names are the beta's (kind= compared= hit_compared= declined=).
+#[test]
+fn k5_run_with_zero_comparisons_fails() -> Result<()> {
+    with_switch(check_surrogate(), || -> Result<()> {
+        uncontracted_ledger::reset_totals();
+        let ledger =
+            DiagramLedger::open("k5-run-1", "k5-test").ok_or_else(|| eyre!("no ledger"))?;
+        ledger.close(true)?;
+        let error = uncontracted_ledger::run_coverage()
+            .err()
+            .ok_or_else(|| eyre!("a run that compared nothing passed"))?;
+        ensure!(
+            format!("{error}").contains("kind=surrogate: zero_comparisons"),
+            "{error}"
+        );
+        let ledger =
+            DiagramLedger::open("k5-run-2", "k5-test").ok_or_else(|| eyre!("no ledger"))?;
+        uncontracted_ledger::expect(Kind::Surrogate);
+        uncontracted_ledger::record_value(Kind::Surrogate, Mode::Check);
+        ledger.close(true)?;
+        let lines = uncontracted_ledger::run_coverage()?;
+        ensure!(
+            lines.len() == 1
+                && lines[0].contains(" kind=surrogate ")
+                && lines[0].contains(" compared=1 ")
+                && lines[0].contains(" hit_compared=0 ")
+                && lines[0].contains(" declined=0 ")
+                && lines[0].ends_with(" outcome=ok"),
+            "{lines:?}"
+        );
+        let ledger =
+            DiagramLedger::open("k5-run-3", "k5-test").ok_or_else(|| eyre!("no ledger"))?;
+        uncontracted_ledger::expect(Kind::Surrogate);
+        uncontracted_ledger::record_compared_unequal(Kind::Surrogate);
+        let _ = ledger.close(true);
+        let error = uncontracted_ledger::run_coverage()
+            .err()
+            .ok_or_else(|| eyre!("compared != equal passed"))?;
+        ensure!(
+            format!("{error}").contains("kind=surrogate: unequal"),
+            "{error}"
+        );
+        uncontracted_ledger::reset_totals();
+        Ok(())
+    })
+}
+
+// ---------------------------------------------------------------------------
+// The switch, the cache key, the off mode
+// ---------------------------------------------------------------------------
+
+/// `surrogate` is built but not in the unlisted default of on / check; it
+/// must be listed.
+#[test]
+fn k5_surrogate_must_be_listed() {
+    for value in ["on", "check", "1"] {
+        let switch = Switch::parse(Some(value)).unwrap();
+        assert!(!switch.enabled(Kind::Surrogate), "{value}");
+        assert!(
+            switch.enabled(Kind::Root) && switch.enabled(Kind::Child),
+            "{value}"
+        );
+    }
+    for value in ["on:surrogate", "check:root,child,surrogate", "check:e"] {
+        let switch = Switch::parse(Some(value)).unwrap();
+        assert!(switch.enabled(Kind::Surrogate), "{value}");
+        assert!(switch.inert_kinds().is_empty(), "{value}");
+    }
+    assert!(Kind::Surrogate.implemented() && !Kind::Surrogate.in_default());
+}
+
+/// With `surrogate` enabled, a child looked up OUTSIDE the surrogate's R*
+/// (its kind not enabled) gets the inert key, one inside does not: an inert
+/// fill never serves a surrogate lookup.
+#[test]
+fn k5_inert_cache_key_with_surrogate_enabled() {
+    with_switch(on_surrogate(), || {
+        assert_eq!(
+            uncontracted::cache_key_suffix().as_deref(),
+            Some("#uncontracted=surrogate#uncontracted-inert=child")
+        );
+        in_dressed_scope(|| {
+            assert_eq!(
+                uncontracted::cache_key_suffix().as_deref(),
+                Some("#uncontracted=surrogate")
+            );
+        });
+    });
+    with_switch(check_surrogate(), || {
+        assert_eq!(
+            uncontracted::cache_key_suffix().as_deref(),
+            Some("#uncontracted-inert=child")
+        );
+    });
+}
+
+/// Off: the direct hook is today's call, value for value, and no provenance
+/// is computed; the whole evaluator off equals the evaluator without the
+/// switch (L2 17).
+#[test]
+fn k5_off_is_todays_path() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let original = colour_factored(&load(L2_17_DOT)?)?;
+        let evaluator = PropagatorInsertionEvaluator::new(settings());
+        let off = with_switch(Switch::OFF, || {
+            evaluator.pole_part_closing_root(&original, &vakint, true)
+        })?
+        .ok_or_else(|| eyre!("no insertion"))?;
+        let plain = evaluator
+            .pole_part_closing_root(&original, &vakint, true)?
+            .ok_or_else(|| eyre!("no insertion"))?;
+        ensure!(off.poles == plain.poles, "off != no switch");
+        let prepared = evaluator
+            .prepare(&original, &vakint)?
+            .ok_or_else(|| eyre!("no insertion"))?;
+        let none = with_switch(Switch::OFF, || {
+            k5::provenance(
+                &original,
+                prepared
+                    .holes()
+                    .iter()
+                    .map(|hole| (hole.vertex.0, hole.loops, &hole.original.support)),
+            )
+        })?;
+        ensure!(none.is_none(), "a provenance computed with the switch off");
+        Ok(())
+    })
+}
+
+/// The whole evaluator on L2 17 (the direct record) in check and on mode,
+/// inside a diagram ledger: compared and equal, on == off through eps^-1.
+#[test]
+fn k5_l2_17_check_and_on_equal_off() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let original = colour_factored(&load(L2_17_DOT)?)?;
+        whole_graph_modes(&original, &vakint, 1)
+    })
+}
+
+/// The whole evaluator (`pole_part_closing_root`) in off, check and on mode
+/// inside a diagram ledger: every surrogate record compared and equal in
+/// check (at least `min_records`), the diagrams' ledgers close ok, on == off
+/// through eps^-1 of the bare poles.
+fn whole_graph_modes(
+    original: &feynkit_graph::FeynmanDiagram,
+    vakint: &Vakint,
+    min_records: usize,
+) -> Result<()> {
+    let evaluator = PropagatorInsertionEvaluator::new(settings());
+    let run = |switch: Switch| -> Result<(Atom, Vec<Captured>)> {
+        with_switch(switch, || {
+            let ledger = DiagramLedger::open(original.name(), "k5-whole");
+            let (value, captured) =
+                with_capture(|| evaluator.pole_part_closing_root(original, vakint, true));
+            if let Some(ledger) = ledger {
+                ledger.close(value.is_ok())?;
+            }
+            let value = value?.ok_or_else(|| eyre!("no insertion"))?;
+            Ok((value.poles, captured))
+        })
+    };
+    let (off, _) = run(Switch::OFF)?;
+    let (check, captured) = run(check_surrogate())?;
+    ensure!(off == check, "check mode must return today's value");
+    let surrogate = captured
+        .iter()
+        .filter(|attempt| attempt.kind == Kind::Surrogate)
+        .collect::<Vec<_>>();
+    ensure!(
+        surrogate.len() >= min_records,
+        "{} surrogate records (at least {min_records} expected)",
+        surrogate.len()
+    );
+    for attempt in &surrogate {
+        ensure!(
+            attempt.equal == Some(true)
+                || attempt.outcome.starts_with("declined:")
+                || attempt.outcome == "zero",
+            "{} id {}: {} equal {:?}",
+            attempt.graph,
+            attempt.id,
+            attempt.outcome,
+            attempt.equal
+        );
+    }
+    let (on, captured) = run(on_surrogate())?;
+    ensure!(
+        captured
+            .iter()
+            .filter(|attempt| attempt.kind == Kind::Surrogate)
+            .all(|attempt| !attempt.outcome.starts_with("error:")),
+        "an error in mode on"
+    );
+    ensure!(
+        equal_through(&on, &off, -1)? || atoms_equal(&on, &off),
+        "on != off through eps^-1"
+    );
+    Ok(())
+}
+
+/// L5 22807 (k5-surrogate's graph: the closed surrogate root, 9 remainders,
+/// UV children inside the surrogate) through the whole evaluator.
+#[test]
+#[ignore = "about a minute (L5)"]
+fn k5_l5_22807_check_and_on_equal_off() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let original = colour_factored(&load(L5_22807_DOT)?)?;
+        whole_graph_modes(&original, &vakint, 2)
+    })
+}
+
+/// L5 3793 (k5-stress's graph: four one-loop insertions) through the whole
+/// evaluator.
+#[test]
+#[ignore = "about a minute (L5)"]
+fn k5_l5_3793_check_and_on_equal_off() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let original = colour_factored(&load(L5_3793_DOT)?)?;
+        whole_graph_modes(&original, &vakint, 2)
+    })
+}

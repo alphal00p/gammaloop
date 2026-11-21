@@ -1,0 +1,50 @@
+schema	pint6.factorized-numerator.v3
+label	k5-direct graph=B_self_energy_L2_17_scalar_insertion original=B_self_energy_L2_17 context=e_surrogate[B_self_energy_L2_17_scalar_insertion] route=integrate_propagator(direct,<=4 loops) loops=2 external_edge=0 ins_vertex=2 chain_end=3 source=wh-fixture.v0
+kind	direct	externals=conserved
+dimension	gammalooprs::{}::dim
+momenta	loops=2	externals=1
+loop	1	edge=4
+loop	2	edge=6
+external	1	edge=0
+edges	7
+edge	0	source=ext	target=0	hedges=-,0	particle=B	line=vector	power=1	momentum=0,0,1	0
+edge_factor	0	1
+edge	1	source=1	target=ext	hedges=1,-	particle=B	line=vector	power=1	momentum=0,0,1	0
+edge_factor	1	1
+edge	2	source=1	target=0	hedges=2,3	particle=c	line=ghost	power=1	momentum=1,0,-1	0
+edge_factor	2	𝑖
+edge	3	source=0	target=2	hedges=4,5	particle=c	line=ghost	power=1	momentum=1,0,0	0
+edge_factor	3	𝑖
+edge	4	source=3	target=1	hedges=6,7	particle=c	line=ghost	power=1	momentum=1,0,0	0
+edge_factor	4	𝑖
+edge	5	source=2	target=3	hedges=8,9	particle=c	line=scalar	power=1	momentum=1,-1,0	0
+edge_factor	5	1
+edge	6	source=2	target=3	hedges=10,11	particle=c	line=scalar	power=1	momentum=0,1,0	0
+edge_factor	6	1
+vertices	4
+vertex	0	rule=V_ccB	(-1*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(0,1)))+-1*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(0,1))))*-1*UFO::{}::gs_minus
+vertex	1	rule=V_ccB	(-1*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(1,1)))+-1*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(1,1))))*-1*UFO::{}::gs_minus
+vertex	2	rule=ins:scalar_insertion_0	1
+vertex	3	rule=scalar_insertion_1	1
+ports	2
+port	spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(0,1))
+port	spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(1,1))
+projector	none
+open	2
+open_slot	spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(0,1))
+open_slot	spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(1,1))
+prefactor	loop_sign=1	nf_power=0
+prefactor_overall	1
+prefactor_scalars	1
+prefactor_colour	1
+colour_branch	none
+closure	none
+taylor	none
+softs	0
+original_cycles	fermion=0	ghost=1
+depth	2
+insertions	1
+insertion	2	hedges=5,6	cycles=0,0	1
+insertion_factor	2	-1/2*UFO::{}::gs_minus^2*spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))
+lines	49
+end
