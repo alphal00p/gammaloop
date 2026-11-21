@@ -591,7 +591,12 @@ pub(super) struct Decline {
 /// (`routing`, `missing_child`, `product_mismatch`, `text`, `taylor`,
 /// `closure_data_missing`, `normalisation_mismatch`, `finish_tensor`,
 /// `vakint:Empty`, and K3's `ir_hard_site_missing`, `ir_dirac_closure`, ...)
-/// is a bug of the emitter or of the site: `outcome=error:<code>`.
+/// is a bug of the emitter or of the site: `outcome=error:<code>`. So are
+/// the record builder's states `sigma` (σ does not fold a root leg onto
+/// ±p(1)), `root_crown_paired` (a K1 crown edge with both ends in the root)
+/// and `root_normalisation_momentum` (a closed-root factor that is not a
+/// scalar times a power of p²): they never occur on a correct site (helper
+/// VH round 2, R2-I3).
 ///
 /// `one_loop_tree_cut` (U7-PLAN 14(d), narrowed as Astra U7a asks: "keep the
 /// rebase test narrow"): ONLY a remainder whose one internal propagator is
@@ -603,12 +608,13 @@ pub(super) struct Decline {
 ///
 /// K3 (U7b) adds NO code: a K3 record can hit only rows already here,
 /// `insertion_mass_symbol` (a UV child's Δ with a mass symbol at a `ct:`
-/// node where independent crown legs meet, as K2) and
-/// `insertions_share_a_vertex`, `pint6_dump`; its zero-loop terms and its
-/// order-0 corrections are not attempted at all ([`NoRecord`]); the root-only
-/// codes (`open_root`, `root_normalisation_*`, `sigma`, `root_crown_paired`)
-/// and `top_mass_mode` cannot occur (its crown is independent, its mass is
-/// fixed whatever the top-mass mode).
+/// node where independent crown legs meet, as K2),
+/// `insertions_share_a_vertex`, `pint6_dump` and `one_loop_tree_cut` (a
+/// one-loop term whose only line is the closing one); its zero-loop terms
+/// and its order-0 corrections are not attempted at all ([`NoRecord`]); the
+/// root-only codes (`open_root`, `root_normalisation_opaque`) and
+/// `top_mass_mode` cannot occur (its crown is independent, its mass is fixed
+/// whatever the top-mass mode).
 pub(super) const DESIGNED_LOCAL: &[&str] = &[
     "pint6_dump",
     "zero_loops",
@@ -616,14 +622,11 @@ pub(super) const DESIGNED_LOCAL: &[&str] = &[
     "child_not_built",
     "open_root",
     "root_normalisation_opaque",
-    "root_normalisation_momentum",
     "additional_normalization",
     "top_mass_mode",
     "insertion_mass_symbol",
     "insertions_share_a_vertex",
-    "sigma",
     "no_closing_line",
-    "root_crown_paired",
     "one_loop_tree_cut",
 ];
 
