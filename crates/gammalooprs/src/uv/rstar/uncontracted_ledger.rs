@@ -1823,9 +1823,13 @@ impl RunTally {
                 + counts.with_prefix("hit:error:").values().sum::<usize>();
             evidence_any += evidence_of(&counts, self.mode);
         }
+        // the diagram rule holds for every list with all the DEFAULT kinds
+        // (those a plain `check` / `on` enables), whatever else is listed: a
+        // kind built only when listed (U7c: `surrogate`) must not switch it
+        // off for the default lists (U7c delta pre-review N1)
         let every_kind = Kind::ALL
             .into_iter()
-            .filter(|kind| kind.implemented())
+            .filter(|kind| kind.in_default())
             .all(|kind| self.kinds.contains(&kind));
         if every_kind && nonzero && evidence_any == 0 && !excepted {
             self.failures.push(format!(
