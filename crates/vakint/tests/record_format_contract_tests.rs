@@ -6536,3 +6536,453 @@ fn the_refusal_table_matches_the_source() {
             .join("\n"),
     );
 }
+
+// ===========================================================================
+// THE RESULT CHECK ON COMBINATIONS NO INVENTORY RAN: every backend and option
+// on marked vacuum values, Forcer-only and RustRed-only orders on the closure
+// kinds, renamed settings symbols, open-port values in vakint notation, four
+// loops, Retain on the vacuum entry. Each evaluation: PASS (no result-check
+// error; the vakint:: symbols of the result printed), FALSE ERROR (a
+// `result check:` refusal) or REFUSED / ERROR before the check (printed).
+// ===========================================================================
+
+/// The `vakint::` names of `a`.
+fn vakint_names(a: &Atom) -> std::collections::BTreeSet<String> {
+    let mut out = std::collections::BTreeSet::new();
+    a.as_view().visitor(&mut |part| {
+        let s = match part {
+            AtomView::Var(v) => Some(v.get_symbol()),
+            AtomView::Fun(f) => Some(f.get_symbol()),
+            _ => None,
+        };
+        if let Some(s) = s
+            && s.get_name().starts_with("vakint::")
+        {
+            out.insert(s.get_name().to_string());
+        }
+        true
+    });
+    out
+}
+
+/// A marked vacuum value of `loops` loops with the lines `(id, source,
+/// target, momentum)`, every line of mass `caller::m2`.
+fn marked_vacuum(
+    label: &str,
+    loops: usize,
+    lines: &[(usize, usize, usize, Vec<i64>)],
+) -> FactorizedNumerator {
+    use vakint::p_integral::factorized::{
+        DirectRecord, Endpoint, FactorizedEdge, FactorizedVertex, LineKind, Prefactor,
+    };
+    init();
+    let mut vertices = std::collections::BTreeSet::new();
+    let edges = lines
+        .iter()
+        .map(|(id, s, t, m)| {
+            vertices.insert(*s);
+            vertices.insert(*t);
+            FactorizedEdge {
+                id: *id,
+                source: Endpoint::Vertex(*s),
+                target: Endpoint::Vertex(*t),
+                source_hedge: Some(2 * id),
+                target_hedge: Some(2 * id + 1),
+                particle: "x".into(),
+                line: LineKind::Scalar,
+                power: 1,
+                mass_squared: atom("caller::m2"),
+                momentum: m.clone(),
+                factor: Atom::num(1),
+            }
+        })
+        .collect();
+    FactorizedNumerator {
+        label: label.into(),
+        kind: FactorizedKind::Direct,
+        dimension: symbolica::symbol!("gammalooprs::dim"),
+        loop_edges: (1..=loops).map(Some).collect(),
+        external_edges: Vec::new(),
+        edges,
+        vertices: vertices
+            .into_iter()
+            .map(|id| FactorizedVertex {
+                id,
+                rule: "V".into(),
+                factor: Atom::num(1),
+            })
+            .collect(),
+        ports: Vec::new(),
+        projector: None,
+        prefactor: Prefactor {
+            scalars: atom("UFO::gs^2"),
+            ..Prefactor::default()
+        },
+        colour_branch: None,
+        insertions: Vec::new(),
+        record: Some(DirectRecord {
+            original_cycles: None,
+            depth: None,
+            weights: Vec::new(),
+        }),
+    }
+}
+
+fn marked_vacuum_values() -> Vec<FactorizedNumerator> {
+    vec![
+        marked_vacuum(
+            "one-loop bubble",
+            1,
+            &[(1, 1, 2, vec![1]), (2, 2, 1, vec![1])],
+        ),
+        marked_vacuum(
+            "two-loop sunrise",
+            2,
+            &[
+                (1, 1, 2, vec![1, 0]),
+                (2, 1, 2, vec![0, 1]),
+                (3, 2, 1, vec![1, 1]),
+            ],
+        ),
+        marked_vacuum(
+            "three-loop basketball",
+            3,
+            &[
+                (1, 1, 2, vec![1, 0, 0]),
+                (2, 1, 2, vec![0, 1, 0]),
+                (3, 1, 2, vec![0, 0, 1]),
+                (4, 2, 1, vec![1, 1, 1]),
+            ],
+        ),
+        marked_vacuum(
+            "three-loop mercedes",
+            3,
+            &[
+                (1, 1, 2, vec![1, 0, 0]),
+                (2, 2, 3, vec![0, 1, 0]),
+                (3, 3, 1, vec![0, 0, 1]),
+                (4, 4, 1, vec![1, 0, -1]),
+                (5, 2, 4, vec![1, -1, 0]),
+                (6, 4, 3, vec![0, -1, 1]),
+            ],
+        ),
+    ]
+}
+
+/// One evaluation through `entry` within `seconds`: the outcome classified.
+fn uncovered_run(
+    name: &str,
+    seconds: u64,
+    run: impl FnOnce() -> Result<(Atom, Option<Atom>), FactorizedError> + Send + 'static,
+) -> Result<(), String> {
+    let started = std::time::Instant::now();
+    let got = within(seconds, run);
+    let elapsed = started.elapsed().as_secs_f64();
+    let shown = match &got {
+        None => format!("TIMED OUT after {seconds} s (not a result-check outcome)"),
+        Some(Err(_)) => "PANIC".into(),
+        Some(Ok(Ok((v, extra)))) => {
+            let mut names = vakint_names(v);
+            if let Some(x) = extra {
+                names.extend(vakint_names(x));
+            }
+            format!("PASS; vakint:: symbols {names:?}")
+        }
+        Some(Ok(Err(e))) => {
+            let d = e.to_string();
+            if d.contains("result check:") {
+                format!("FALSE ERROR {d}")
+            } else {
+                format!(
+                    "REFUSED / ERROR before the check: {}",
+                    d.chars().take(220).collect::<String>()
+                )
+            }
+        }
+    };
+    eprintln!("CONTRACT UNCOVERED {name}: {shown} [{elapsed:.1}s]");
+    if shown.starts_with("FALSE ERROR") || shown == "PANIC" {
+        Err(format!("{name}: {shown}"))
+    } else {
+        Ok(())
+    }
+}
+
+fn form_settings(order: Vec<EvaluationMethod>, mode: RustRedMasterMode) -> VakintSettings {
+    VakintSettings {
+        evaluation_order: EvaluationOrder(order),
+        form_exe_path: "form".into(),
+        ..site(mode)
+    }
+}
+
+/// (1) and (7): marked vacuum values at one to three loops through MATAD,
+/// AlphaLoop and FMFT, with the default options and with the options that
+/// leave masters / HPLs / logs unsubstituted; and RustRed in Symbolic,
+/// Numerical and Retain. A FALSE ERROR fails.
+#[test]
+#[ignore = "needs FORM 5 as `form` on the PATH; expected: no result-check error; on 7f1bee5a4 the result check refuses RustRed Retain vacuum values (vakint::rustred_family_<hash>) and the AlphaLoop mercedes with susbstitute_masters off (vakint::z3)"]
+fn marked_vacuum_values_through_every_backend_and_option() {
+    use vakint::{AlphaLoopOptions, FMFTOptions, MATADOptions};
+    let off_matad = MATADOptions {
+        expand_masters: false,
+        susbstitute_masters: false,
+        substitute_hpls: false,
+        direct_numerical_substition: false,
+    };
+    let half_matad = MATADOptions {
+        susbstitute_masters: false,
+        substitute_hpls: false,
+        direct_numerical_substition: false,
+        ..MATADOptions::default()
+    };
+    let orders: Vec<(&str, Vec<EvaluationMethod>, RustRedMasterMode)> = vec![
+        (
+            "MATAD default",
+            vec![EvaluationMethod::MATAD(MATADOptions::default())],
+            RustRedMasterMode::Symbolic,
+        ),
+        (
+            "MATAD expanded, unsubstituted",
+            vec![EvaluationMethod::MATAD(half_matad)],
+            RustRedMasterMode::Symbolic,
+        ),
+        (
+            "MATAD nothing expanded or substituted",
+            vec![EvaluationMethod::MATAD(off_matad)],
+            RustRedMasterMode::Symbolic,
+        ),
+        (
+            "AlphaLoop default",
+            vec![EvaluationMethod::AlphaLoop(AlphaLoopOptions::default())],
+            RustRedMasterMode::Symbolic,
+        ),
+        (
+            "AlphaLoop unsubstituted",
+            vec![EvaluationMethod::AlphaLoop(AlphaLoopOptions {
+                susbstitute_masters: false,
+            })],
+            RustRedMasterMode::Symbolic,
+        ),
+        (
+            "FMFT default",
+            vec![EvaluationMethod::FMFT(FMFTOptions::default())],
+            RustRedMasterMode::Symbolic,
+        ),
+        (
+            "FMFT unexpanded",
+            vec![EvaluationMethod::FMFT(FMFTOptions {
+                expand_masters: false,
+                susbstitute_masters: false,
+            })],
+            RustRedMasterMode::Symbolic,
+        ),
+        (
+            "RustRed Symbolic",
+            vec![EvaluationMethod::RustRed(RustRedEvaluationOptions {
+                master_mode: RustRedMasterMode::Symbolic,
+            })],
+            RustRedMasterMode::Symbolic,
+        ),
+        (
+            "RustRed Numerical",
+            vec![EvaluationMethod::RustRed(RustRedEvaluationOptions {
+                master_mode: RustRedMasterMode::Numerical,
+            })],
+            RustRedMasterMode::Numerical,
+        ),
+        (
+            "RustRed Retain",
+            vec![EvaluationMethod::RustRed(RustRedEvaluationOptions {
+                master_mode: RustRedMasterMode::Retain,
+            })],
+            RustRedMasterMode::Retain,
+        ),
+    ];
+    let mut false_errors = Vec::new();
+    for v in marked_vacuum_values() {
+        for (oname, order, mode) in &orders {
+            let s = form_settings(order.clone(), *mode);
+            let v = v.clone();
+            let name = format!("vacuum {} / {oname}", v.label);
+            if let Err(e) = uncovered_run(&name, 120, move || {
+                let vakint = engine();
+                vakint::p_integral::factorized::evaluate_factorized_vacuum(
+                    &vakint,
+                    &s,
+                    &v,
+                    &v.prefactor.total(),
+                )
+                .map(|r| (r.value, None))
+            }) {
+                false_errors.push(e);
+            }
+        }
+    }
+    assert!(false_errors.is_empty(), "{false_errors:#?}");
+}
+
+/// (2), (3), (5): the closure kinds under a Forcer-only and a RustRed-only
+/// order, Symbolic, Numerical and Retain (the value and the vakint-notation
+/// value both checked by the entry; their vakint:: names printed). A FALSE
+/// ERROR fails.
+#[test]
+#[ignore = "needs FORM 5 as `form` on the PATH (Forcer)"]
+fn closure_kinds_under_forcer_only_and_rustred_only_orders() {
+    let mut false_errors = Vec::new();
+    for kind in CLOSURE_KINDS {
+        for mode in [
+            RustRedMasterMode::Symbolic,
+            RustRedMasterMode::Numerical,
+            RustRedMasterMode::Retain,
+        ] {
+            for (oname, order) in [
+                (
+                    "Forcer only",
+                    vec![EvaluationMethod::Forcer(vakint::ForcerOptions {
+                        master_mode: mode,
+                    })],
+                ),
+                (
+                    "RustRed only",
+                    vec![EvaluationMethod::RustRed(RustRedEvaluationOptions {
+                        master_mode: mode,
+                    })],
+                ),
+            ] {
+                let s = form_settings(order, mode);
+                let v = record(kind);
+                let name = format!("closure {kind} / {oname} / {mode:?}");
+                if let Err(e) = uncovered_run(&name, 120, move || {
+                    let vakint = engine();
+                    evaluate_factorized_closure(
+                        &vakint,
+                        &s,
+                        std::slice::from_ref(&v),
+                        &[v.prefactor.total()],
+                    )
+                    .map(|r| (r.value, Some(r.vakint_value)))
+                }) {
+                    false_errors.push(e);
+                }
+            }
+        }
+    }
+    assert!(false_errors.is_empty(), "{false_errors:#?}");
+}
+
+/// (4): renamed epsilon and scale symbols in the settings, Numerical mode, on
+/// the K1 root (no insertion: its ε is the settings') and on marked vacuum
+/// values. A FALSE ERROR fails.
+#[test]
+fn renamed_epsilon_and_scale_symbols_in_numerical_mode() {
+    let mut false_errors = Vec::new();
+    for (eps_name, mu_name) in [("user::ep", "user::mu2"), ("eps", "mursq")] {
+        let s = VakintSettings {
+            epsilon_symbol: eps_name.into(),
+            mu_r_sq_symbol: mu_name.into(),
+            ..site(RustRedMasterMode::Numerical)
+        };
+        let k1 = record("wh-k1-root");
+        let s1 = s.clone();
+        if let Err(e) = uncovered_run(
+            &format!("closure wh-k1-root / ε {eps_name}, μ {mu_name} / Numerical"),
+            120,
+            move || {
+                let vakint = engine();
+                evaluate_factorized_closure(
+                    &vakint,
+                    &s1,
+                    std::slice::from_ref(&k1),
+                    &[k1.prefactor.total()],
+                )
+                .map(|r| (r.value, Some(r.vakint_value)))
+            },
+        ) {
+            false_errors.push(e);
+        }
+        for v in marked_vacuum_values().into_iter().take(3) {
+            let s2 = s.clone();
+            if let Err(e) = uncovered_run(
+                &format!("vacuum {} / ε {eps_name}, μ {mu_name} / Numerical", v.label),
+                120,
+                move || {
+                    let vakint = engine();
+                    vakint::p_integral::factorized::evaluate_factorized_vacuum(
+                        &vakint,
+                        &s2,
+                        &v,
+                        &v.prefactor.total(),
+                    )
+                    .map(|r| (r.value, None))
+                },
+            ) {
+                false_errors.push(e);
+            }
+        }
+    }
+    assert!(false_errors.is_empty(), "{false_errors:#?}");
+}
+
+/// (6): a marked four-loop vacuum value (the all-massive four-loop banana:
+/// five lines between two vertices) through RustRed and FMFT, each within 300
+/// s. A FALSE ERROR fails; a time-out is reported.
+#[test]
+#[ignore = "costly: four-loop vacuum evaluations (run explicitly)"]
+fn a_marked_four_loop_vacuum_value() {
+    use vakint::FMFTOptions;
+    let v = marked_vacuum(
+        "four-loop banana",
+        4,
+        &[
+            (1, 1, 2, vec![1, 0, 0, 0]),
+            (2, 1, 2, vec![0, 1, 0, 0]),
+            (3, 1, 2, vec![0, 0, 1, 0]),
+            (4, 1, 2, vec![0, 0, 0, 1]),
+            (5, 2, 1, vec![1, 1, 1, 1]),
+        ],
+    );
+    let mut false_errors = Vec::new();
+    for (oname, order, mode) in [
+        (
+            "RustRed Symbolic",
+            vec![EvaluationMethod::RustRed(RustRedEvaluationOptions {
+                master_mode: RustRedMasterMode::Symbolic,
+            })],
+            RustRedMasterMode::Symbolic,
+        ),
+        (
+            "FMFT default",
+            vec![EvaluationMethod::FMFT(FMFTOptions::default())],
+            RustRedMasterMode::Symbolic,
+        ),
+        (
+            "FMFT unexpanded",
+            vec![EvaluationMethod::FMFT(FMFTOptions {
+                expand_masters: false,
+                susbstitute_masters: false,
+            })],
+            RustRedMasterMode::Symbolic,
+        ),
+    ] {
+        let s = form_settings(order, mode);
+        let v = v.clone();
+        if let Err(e) = uncovered_run(
+            &format!("vacuum four-loop banana / {oname}"),
+            300,
+            move || {
+                let vakint = engine();
+                vakint::p_integral::factorized::evaluate_factorized_vacuum(
+                    &vakint,
+                    &s,
+                    &v,
+                    &v.prefactor.total(),
+                )
+                .map(|r| (r.value, None))
+            },
+        ) {
+            false_errors.push(e);
+        }
+    }
+    assert!(false_errors.is_empty(), "{false_errors:#?}");
+}
