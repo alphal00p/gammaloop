@@ -1056,7 +1056,7 @@ fn a_declined_correction_reclassifies_its_records() -> Result<()> {
     test_initialise()?;
     let ir_hard = [Kind::Root, Kind::Child, Kind::IrHard];
     // (mode, end, completed records, interrupted, expected line fields, close ok)
-    let cases: [(Mode, SectionEnd, usize, usize, &[(&str, &str)], bool); 6] = [
+    let cases: [(Mode, SectionEnd, usize, usize, &[(&str, &str)], bool); 7] = [
         (
             Mode::On,
             SectionEnd::Kept,
@@ -1101,6 +1101,20 @@ fn a_declined_correction_reclassifies_its_records() -> Result<()> {
             ],
             true,
         ),
+        // check mode: the record's today's path failed on the budget inside
+        // the guard (counted unchecked by the hook): declined with the budget
+        (
+            Mode::Check,
+            SectionEnd::GuardBudget,
+            0,
+            0,
+            &[
+                ("declined", "ir_hard_guard:budget:1"),
+                ("unchecked", "0"),
+                ("outcome", "uncovered"),
+            ],
+            false,
+        ),
         (
             Mode::On,
             SectionEnd::GuardFailure("panic:index_out_of_bounds".into()),
@@ -1122,6 +1136,11 @@ fn a_declined_correction_reclassifies_its_records() -> Result<()> {
             for _ in 0..completed {
                 ledger::record_value(Kind::IrHard, mode);
             }
+            if completed + interrupted == 0 {
+                // the hook's report of an attempt whose today's path failed
+                ledger::expect(Kind::IrHard);
+                ledger::record_unchecked(Kind::IrHard);
+            }
             section.close(end.clone());
             let closed = diagram.close(true);
             let lines = ledger::take_lines();
@@ -1134,7 +1153,7 @@ fn a_declined_correction_reclassifies_its_records() -> Result<()> {
                 );
             }
             ensure!(
-                count(line, "expected") == completed + interrupted,
+                count(line, "expected") == (completed + interrupted).max(1),
                 "{} {end:?}: {line}",
                 mode.as_str()
             );
@@ -1158,6 +1177,13 @@ fn a_declined_correction_reclassifies_its_records() -> Result<()> {
     for code in ["ir_hard_guard:panic", "ir_hard_route:", "ir_hard_route:a:b"] {
         assert!(!uncontracted::is_designed_code(code), "{code}");
     }
+    // vakint's text of an exhausted scoped budget (the guard's budget)
+    assert!(uncontracted::is_budget_text(
+        "evaluation: vacuum: process RSS 243523584 bytes plus requested allocation 0 bytes exceeds RAM budget 243513052 bytes"
+    ));
+    assert!(!uncontracted::is_budget_text(
+        "every line is massive: not a closure"
+    ));
     Ok(())
 }
 

@@ -873,6 +873,13 @@ pub(super) fn unknown_masters_failure(
     ))
 }
 
+/// Whether vakint's error text is an exhausted scoped resource budget (the
+/// RSS budget of symbolica's `ResourceBudget`, as the closed path's guard
+/// detects it by text: `resource budget exhausted`, `exceeds RAM budget`).
+pub(super) fn is_budget_text(text: &str) -> bool {
+    text.contains("resource budget exhausted") || text.contains("exceeds RAM budget")
+}
+
 /// What one attempt gave.
 #[derive(Clone, Debug)]
 pub(super) enum Outcome {
@@ -1033,6 +1040,19 @@ pub(super) fn attempt<R: std::borrow::Borrow<RStarIntegrand>>(
         Ok(value) => value,
         Err(error) => {
             let text = error.to_string();
+            if is_budget_text(&text) {
+                // an exhausted scoped resource budget inside vakint (only
+                // under GAMMALOOP_IR_HARD_CHILD_GUARD=1's budget): not a
+                // refusal of the record; a plain error carrying the budget
+                // phrase, which the guard declines as `budget` (the record
+                // then is `declined:ir_hard_guard:budget`) and which fails
+                // the diagram anywhere else
+                return Err(eyre!(
+                    "resource budget exhausted in the uncontracted record kind={} graph={} id={id}: {text}",
+                    kind.as_str(),
+                    attempt.graph
+                ));
+            }
             if is_unknown_master_text(&text) {
                 tally_unknown_masters(kind);
                 eprintln!(

@@ -711,6 +711,17 @@ pub(crate) fn record_value(kind: Kind, mode: Mode) {
     });
 }
 
+/// Tests: one check-mode attempt of `kind` whose today's path failed
+/// (`unchecked`, as the hook reports it).
+#[cfg(test)]
+pub(crate) fn record_unchecked(kind: Kind) {
+    with_counts(kind, |counts| {
+        counts.attempted += 1;
+        counts.uncontracted += 1;
+        counts.add("unchecked", 1);
+    });
+}
+
 /// vakint's unknown-master refusal of an attempt of `kind` (a hard error).
 pub(super) fn record_unknown_masters(kind: Kind) {
     with_counts(kind, |counts| {
@@ -934,6 +945,10 @@ fn reason_head(reason: &str) -> String {
 ///   diagram; without one the failure was outside the records, and the
 ///   decline is the route's (as a route decline, `ir_hard_route:<head>`).
 ///
+/// An interrupted record is one that reached the hook with no disposition,
+/// or one counted `unchecked` (check mode: its today's path failed inside
+/// the guarded correction).
+///
 /// Dropped without a close (an error return or an unwind), the counts join
 /// the frame below unchanged.
 pub(super) struct Section {
@@ -964,7 +979,14 @@ impl Section {
 }
 
 /// The reclassification of one kind's counts of a [`Section`] by its end.
+/// The interrupted records of a guard's end are those without a disposition
+/// and those `unchecked` (check mode: today's path of the record failed
+/// inside the guarded correction, e.g. on the exhausted budget).
 fn reclassify(counts: &mut Counts, mode: Mode, end: &SectionEnd) {
+    if matches!(end, SectionEnd::GuardBudget | SectionEnd::GuardFailure(_)) {
+        // an `unchecked` record is one without a disposition from here on
+        counts.classes.remove("unchecked");
+    }
     let interrupted = counts.expected.saturating_sub(counts.accounted());
     let (taken_to, interrupted_to) = match end {
         SectionEnd::Kept => return,
