@@ -33,6 +33,12 @@ use crate::{
     RustRedMasterMode,
 };
 
+/// THE shared fixture helper (load or fail, compare through valid_through
+/// with a signed bound and a nonzero reference, count): one file for the unit
+/// and the integration tests.
+#[path = "../../../../tests/support/wh_fixtures.rs"]
+mod wh_fixtures;
+
 const MINK: &str = "spenso::{spenso::representation,spenso::self_dual}::mink";
 const METRIC: &str = "spenso::{symmetric,linear,real,spenso::tensor}::g";
 const MOMENTUM: &str = "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q";
@@ -1004,13 +1010,7 @@ fn the_v3_text_form_round_trips_every_fixture() {
 fn dot_root_remainders(
     picks: &[(&str, usize)],
 ) -> Vec<(FactorizedNumerator, Vec<(String, String)>)> {
-    let root = std::env::var("VAKINT_TEST_FACTORIZED_DOT_ROOT")
-        .unwrap_or_else(|_| "/common/ben/beta/results/prepared".into());
-    let root = std::path::PathBuf::from(root);
-    if !root.join("L1").join("model.json").is_file() {
-        eprintln!("SKIP: no DOT data under {}", root.display());
-        return Vec::new();
-    }
+    let root = dot_root();
     let mut out = Vec::new();
     for (level, n) in picks {
         let directory = root.join(level);
@@ -1025,6 +1025,12 @@ fn dot_root_remainders(
             })
             .collect::<Vec<_>>();
         files.sort_by_key(|p| (std::fs::metadata(p).unwrap().len(), p.clone()));
+        assert!(
+            files.len() >= *n,
+            "{}: {} DOT graphs, {n} requested",
+            directory.display(),
+            files.len()
+        );
         out.extend(dot_files_as_roots(
             level,
             &model,
@@ -1034,22 +1040,34 @@ fn dot_root_remainders(
     out
 }
 
+/// The R* producer's prepared DOT graphs (`<root>/L<n>/diagram-*.dot` and
+/// `model.json`): `VAKINT_TEST_FACTORIZED_DOT_ROOT`, REQUIRED (the tests that
+/// read it are `#[ignore]`; run, a missing root is a failure).
+#[cfg(feature = "feynkit-ingress")]
+fn dot_root() -> std::path::PathBuf {
+    let root = wh_fixtures::required_env(
+        "VAKINT_TEST_FACTORIZED_DOT_ROOT",
+        "the DOT suites read the producer's prepared DOT graphs",
+    );
+    assert!(
+        root.join("L1").join("model.json").is_file(),
+        "no DOT data under {}",
+        root.display()
+    );
+    root
+}
+
 /// Named DOT graphs as root remainders ([`dot_root_remainders`]).
 #[cfg(feature = "feynkit-ingress")]
 fn dot_named_root_remainders(
     names: &[(&str, &str)],
 ) -> Vec<(FactorizedNumerator, Vec<(String, String)>)> {
-    let root = std::env::var("VAKINT_TEST_FACTORIZED_DOT_ROOT")
-        .unwrap_or_else(|_| "/common/ben/beta/results/prepared".into());
-    let root = std::path::PathBuf::from(root);
+    let root = dot_root();
     let mut out = Vec::new();
     for (level, name) in names {
         let directory = root.join(level);
         let path = directory.join(name);
-        if !path.is_file() {
-            eprintln!("SKIP: {}", path.display());
-            continue;
-        }
+        assert!(path.is_file(), "missing DOT graph {}", path.display());
         let model = crate::refpath::load_model(&directory).unwrap();
         out.extend(dot_files_as_roots(level, &model, [path]));
     }
@@ -1151,10 +1169,15 @@ fn dot_files_as_roots(
     out
 }
 
+/// External data (`VAKINT_TEST_FACTORIZED_DOT_ROOT`): `#[ignore]`; run, the
+/// six graphs (L2 x3, L3 x2, L4 x1) must all be read and compared.
 #[cfg(feature = "feynkit-ingress")]
 #[test]
+#[ignore = "external data: VAKINT_TEST_FACTORIZED_DOT_ROOT"]
 fn beta_dot_graphs_as_root_remainders_equal_the_contracted_reference() {
-    for (value, routing) in dot_root_remainders(&[("L2", 3), ("L3", 2), ("L4", 1)]) {
+    let cases = dot_root_remainders(&[("L2", 3), ("L3", 2), ("L4", 1)]);
+    let mut compared = 0;
+    for (value, routing) in cases {
         let routing = routing
             .iter()
             .map(|(a, b)| (a.as_str(), b.as_str()))
@@ -1162,7 +1185,9 @@ fn beta_dot_graphs_as_root_remainders_equal_the_contracted_reference() {
         check(&value, &routing);
         let text = value.to_text().unwrap();
         assert_eq!(FactorizedNumerator::from_text(&text).unwrap(), value);
+        compared += 1;
     }
+    wh_fixtures::assert_compared("DOT_ROOTS", compared, Some(6));
 }
 
 /// Single-core timing, entry (uncontracted record) vs the contracted reference
@@ -1224,6 +1249,11 @@ fn closure_kind_timing() {
         cases = dot_named_root_remainders(&named);
     }
     let with_reference = std::env::var("VAKINT_CLOSURE_TIMING_NO_REFERENCE").is_err();
+    if !with_reference {
+        eprintln!(
+            "CLOSURE_TIMING: VAKINT_CLOSURE_TIMING_NO_REFERENCE set: NO VALUE IS COMPARED (timing only)"
+        );
+    }
     let peak_kb = || {
         std::fs::read_to_string("/proc/self/status")
             .ok()
@@ -1315,11 +1345,7 @@ fn rstar_site_settings() -> VakintSettings {
 }
 
 fn fixture_value(text: &str) -> Atom {
-    let line = text
-        .lines()
-        .find_map(|l| l.strip_prefix("value\t"))
-        .expect("a value line");
-    atom(line)
+    atom(wh_fixtures::value_line(text))
 }
 
 /// THE BETA'S REAL K3 RECORD: the gluonic IR hard part h_s of
@@ -1356,43 +1382,17 @@ fn the_beta_k3_hs_record_equals_its_contracted_value() {
 }
 
 /// The order in ε through which a fixture's value is valid (`valid_through
-/// eps^n`).
+/// eps^n`, signed).
 fn valid_through(text: &str) -> i64 {
-    let line = text
-        .lines()
-        .find_map(|l| l.strip_prefix("valid_through\t"))
-        .expect("a valid_through line");
-    let order = line
-        .trim_start_matches("eps^")
-        .split_whitespace()
-        .next()
-        .unwrap();
-    order.parse().unwrap()
+    wh_fixtures::valid_through(text)
 }
 
-/// Exact equality coefficient by coefficient of the Laurent series in ε
-/// (`gammalooprs::ε`) through order `order`, AND NO FURTHER (the fixtures'
-/// identity rule: higher orders are not valid in their value).
+/// [`wh_fixtures::assert_equal_through`] in `gammalooprs::ε`: exact through
+/// `order` (SIGNED) and NO FURTHER, the reference nonzero through `order`.
 fn assert_equal_through(got: &Atom, expected: &Atom, order: i64, what: &str) {
     let epsilon = symbolica::symbol!("gammalooprs::ε");
-    let difference = (got - expected).expand();
-    let mut checked = 0;
-    if !difference.is_zero() {
-        let series = difference
-            .series(epsilon, 0, order as u32 as usize)
-            .unwrap();
-        for (power, coefficient) in series.terms() {
-            let n = power.numerator().to_i64().unwrap();
-            if n <= order {
-                assert!(
-                    coefficient.expand().is_zero(),
-                    "{what}: coefficient of eps^{n} differs: {coefficient}\nentry {got}\nbeta  {expected}"
-                );
-                checked += 1;
-            }
-        }
-    }
-    eprintln!("{what}: equal through eps^{order} ({checked} nonzero-difference orders inspected)");
+    let compared = wh_fixtures::assert_equal_through(got, expected, epsilon, order, what);
+    eprintln!("{what}: equal through eps^{order} ({compared} orders compared)");
 }
 
 /// THE BETA'S REAL K3 DIRAC RECORD: the IR hard part of B_self_energy_L4_4966
@@ -1757,10 +1757,7 @@ fn p2_power_zero_and_minus_one_projectors_agree() {
 #[test]
 #[ignore]
 fn closure_contraction_probe() {
-    let Ok(path) = std::env::var("VAKINT_CLOSURE_PROBE_RECORD") else {
-        eprintln!("SKIP: VAKINT_CLOSURE_PROBE_RECORD unset");
-        return;
-    };
+    let path = wh_fixtures::required_env("VAKINT_CLOSURE_PROBE_RECORD", "the probe's record");
     let reps = std::env::var("VAKINT_CLOSURE_TIMING_REPS")
         .ok()
         .and_then(|v| v.parse().ok())
@@ -1824,28 +1821,14 @@ fn closure_contraction_probe() {
 /// 100 that reaches their boundary path, as v3 records with the value and the
 /// RR_CONTRACT seconds of that call; 30 of the 35 with child insertions):
 /// each record through the entry, its value equal to value.txt through
-/// valid_through, and its contraction seconds printed beside theirs. Data: `VAKINT_TEST_WH_K1_QUICK` (default the beta's directory);
-/// SKIP without it.
+/// valid_through, and its contraction seconds printed beside theirs. Data:
+/// `$VAKINT_TEST_WH_FIXTURES/k1-quick` (`#[ignore]`; run, missing data is a
+/// failure and all 35 records must be compared, unless
+/// `VAKINT_TEST_WH_K1_ONLY` selects some by suffix).
 #[test]
+#[ignore = "external data: VAKINT_TEST_WH_FIXTURES"]
 fn the_beta_k1_quick_records_equal_their_values() {
-    let root = std::env::var("VAKINT_TEST_WH_K1_QUICK")
-        .unwrap_or_else(|_| "/common/ben/beta/results/consolidation/wh-fixtures/k1-quick".into());
-    let root = std::path::PathBuf::from(root);
-    if !root.is_dir() {
-        eprintln!("SKIP: no k1-quick data under {}", root.display());
-        return;
-    }
-    let mut records = Vec::new();
-    for graph in std::fs::read_dir(&root).unwrap().map(|e| e.unwrap().path()) {
-        if let Ok(entries) = std::fs::read_dir(&graph) {
-            for record in entries.map(|e| e.unwrap().path()) {
-                if record.join("input.txt").is_file() && record.join("value.txt").is_file() {
-                    records.push(record);
-                }
-            }
-        }
-    }
-    records.sort();
+    let records = wh_fixtures::record_dirs(&wh_fixtures::fixture_dir("k1-quick"));
     let only = std::env::var("VAKINT_TEST_WH_K1_ONLY").ok();
     let vakint = Vakint::new().unwrap();
     let (mut mine, mut theirs, mut checked) = (0.0, 0.0, 0);
@@ -1912,6 +1895,7 @@ fn the_beta_k1_quick_records_equal_their_values() {
     eprintln!(
         "K1_QUICK SUM records={checked} entry_contract_s={mine:.4} their_rr_contract_s={theirs:.4}"
     );
+    wh_fixtures::assert_compared("K1_QUICK", checked, only.is_none().then_some(35));
 }
 
 /// THE BETA'S REAL RECORDS WITH INSERTIONS (closure kind + insertion
@@ -2014,17 +1998,13 @@ fn a_degree_two_insertion_is_routed_and_truncated_like_a_factor() {
 /// records with four insertion vertices each; r0051 has five loops and needs
 /// the 1-4 loop package of `VAKINT_TEST_P_LIBRARY_1_4`): each record equal to
 /// its value through valid_through, with the entry's seconds per stage.
-/// Data: `VAKINT_TEST_WH_K5_STRESS` (default the beta's directory); SKIP
-/// without it.
+/// Data: `$VAKINT_TEST_WH_FIXTURES/k5-stress` (`#[ignore]`; run, missing data
+/// is a failure, all 5 records are compared, r0051 requires
+/// `VAKINT_TEST_P_LIBRARY_1_4`).
 #[test]
+#[ignore = "external data: VAKINT_TEST_WH_FIXTURES (+ VAKINT_TEST_P_LIBRARY_1_4)"]
 fn the_beta_k5_stress_records_equal_their_values() {
-    let root = std::env::var("VAKINT_TEST_WH_K5_STRESS")
-        .unwrap_or_else(|_| "/common/ben/beta/results/consolidation/wh-fixtures/k5-stress".into());
-    let root = std::path::PathBuf::from(root);
-    if !root.is_dir() {
-        eprintln!("SKIP: no k5-stress data under {}", root.display());
-        return;
-    }
+    let records = wh_fixtures::record_dirs(&wh_fixtures::fixture_dir("k5-stress"));
     let mut vakint = Vakint::new().unwrap();
     let package = std::env::var_os("VAKINT_TEST_P_LIBRARY_1_4");
     if let Some(directory) = &package {
@@ -2037,25 +2017,18 @@ fn the_beta_k5_stress_records_equal_their_values() {
         .unwrap();
         vakint.inject_p_library(library).unwrap();
     }
-    let mut records = std::fs::read_dir(&root)
-        .unwrap()
-        .map(|e| e.unwrap().path())
-        .filter(|p| p.join("input.txt").is_file())
-        .collect::<Vec<_>>();
-    records.sort();
     let epsilon = crate::utils::vakint_macros::vk_symbol!("gammalooprs::ε");
+    let mut compared = 0;
     for record in &records {
         let input = std::fs::read_to_string(record.join("input.txt")).unwrap();
         let value_text = std::fs::read_to_string(record.join("value.txt")).unwrap();
         let value = FactorizedNumerator::from_text(&input)
             .unwrap_or_else(|e| panic!("{}: {e}", record.display()));
-        if value.loops() > 4 && package.is_none() {
-            eprintln!(
-                "K5_STRESS {} SKIP: five loops need VAKINT_TEST_P_LIBRARY_1_4",
-                record.display()
-            );
-            continue;
-        }
+        assert!(
+            value.loops() <= 4 || package.is_some(),
+            "{}: five loops need VAKINT_TEST_P_LIBRARY_1_4",
+            record.display()
+        );
         let started = std::time::Instant::now();
         let got = evaluate_factorized_closure(
             &vakint,
@@ -2085,7 +2058,9 @@ fn the_beta_k5_stress_records_equal_their_values() {
             r.evaluate_seconds,
             r.patterns
         );
+        compared += 1;
     }
+    wh_fixtures::assert_compared("K5_STRESS", compared, Some(5));
 }
 
 /// Two contracted children with a pole each (ε^-1 and 3 ε^-1) on the L2 root
@@ -2183,20 +2158,47 @@ fn insertion_cycles_count_towards_original_cycles_at_most() {
 /// The beta's k1-l5 set: K1 records of every boundary root remainder of a
 /// FIVE-LOOP diagram (most with child insertions), each against value.txt
 /// through valid_through, its seconds printed beside the RR_CONTRACT of
-/// meta.json. Heavy (five-loop reductions): runs only when
-/// `VAKINT_TEST_WH_K1_L5` names a graph directory (e.g. .../k1-l5/L5-60), with
-/// the 1-4 loop package of `VAKINT_TEST_P_LIBRARY_1_4`;
-/// `VAKINT_TEST_WH_K1_L5_INSERTIONS_ONLY` skips the records without insertions.
+/// meta.json. Heavy (five-loop reductions). Data:
+/// `$VAKINT_TEST_WH_FIXTURES/k1-l5/<graph>` and the 1-4 loop package of
+/// `VAKINT_TEST_P_LIBRARY_1_4` (`#[ignore]`; run, missing data is a failure);
+/// `VAKINT_TEST_WH_K1_L5_GRAPHS` (comma list, default all three) selects
+/// graphs, `VAKINT_TEST_WH_K1_L5_INSERTIONS_ONLY` the records with insertions;
+/// the count compared is asserted for the selection (L5-60 15 / 14, L5-51
+/// 6 / 5, L5-34342 1 / 0).
 #[test]
+#[ignore = "external data: VAKINT_TEST_WH_FIXTURES + VAKINT_TEST_P_LIBRARY_1_4"]
 fn the_beta_k1_l5_records_equal_their_values() {
-    let Some(root) = std::env::var_os("VAKINT_TEST_WH_K1_L5") else {
-        eprintln!("SKIP: VAKINT_TEST_WH_K1_L5 not set");
-        return;
-    };
-    let Some(package) = std::env::var_os("VAKINT_TEST_P_LIBRARY_1_4") else {
-        eprintln!("SKIP: five-loop records need VAKINT_TEST_P_LIBRARY_1_4");
-        return;
-    };
+    // the graphs (all three by default) and their record counts: all
+    // records, or (VAKINT_TEST_WH_K1_L5_INSERTIONS_ONLY) those with insertions
+    const GRAPHS: [(&str, usize, usize); 3] =
+        [("L5-60", 15, 14), ("L5-51", 6, 5), ("L5-34342", 1, 0)];
+    let insertions_only = std::env::var_os("VAKINT_TEST_WH_K1_L5_INSERTIONS_ONLY").is_some();
+    let selected = std::env::var("VAKINT_TEST_WH_K1_L5_GRAPHS").ok();
+    let graphs = GRAPHS
+        .iter()
+        .filter(|(g, _, _)| {
+            selected
+                .as_ref()
+                .is_none_or(|s| s.split(',').any(|x| x == *g))
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        !graphs.is_empty(),
+        "VAKINT_TEST_WH_K1_L5_GRAPHS selects no graph"
+    );
+    let expected = graphs
+        .iter()
+        .map(|(_, all, with)| if insertions_only { *with } else { *all })
+        .sum::<usize>();
+    let package = wh_fixtures::required_env(
+        "VAKINT_TEST_P_LIBRARY_1_4",
+        "five-loop records need the 1-4 P library",
+    );
+    let root = wh_fixtures::fixture_dir("k1-l5");
+    let records = graphs
+        .iter()
+        .flat_map(|(g, _, _)| wh_fixtures::record_dirs(&root.join(g)))
+        .collect::<Vec<_>>();
     let mut vakint = Vakint::new().unwrap();
     let library = rustred_app::propagator::load_p_library(
         rustred_app::propagator::PLibrarySource::Directory(package.into()),
@@ -2206,21 +2208,13 @@ fn the_beta_k1_l5_records_equal_their_values() {
     )
     .unwrap();
     vakint.inject_p_library(library).unwrap();
-    let mut records = std::fs::read_dir(std::path::PathBuf::from(root))
-        .unwrap()
-        .map(|e| e.unwrap().path())
-        .filter(|p| p.join("input.txt").is_file() && p.join("value.txt").is_file())
-        .collect::<Vec<_>>();
-    records.sort();
-    let (mut mine, mut theirs) = (0.0, 0.0);
+    let (mut mine, mut theirs, mut compared) = (0.0, 0.0, 0);
     for record in &records {
         let input = std::fs::read_to_string(record.join("input.txt")).unwrap();
         let value_text = std::fs::read_to_string(record.join("value.txt")).unwrap();
         let value = FactorizedNumerator::from_text(&input)
             .unwrap_or_else(|e| panic!("{}: {e}", record.display()));
-        if value.insertions.is_empty()
-            && std::env::var_os("VAKINT_TEST_WH_K1_L5_INSERTIONS_ONLY").is_some()
-        {
+        if value.insertions.is_empty() && insertions_only {
             eprintln!(
                 "K1_L5 {} SKIP: no insertion (VAKINT_TEST_WH_K1_L5_INSERTIONS_ONLY)",
                 record.display()
@@ -2262,9 +2256,57 @@ fn the_beta_k1_l5_records_equal_their_values() {
         );
         mine += r.contract_seconds;
         theirs += their_seconds;
+        compared += 1;
     }
     eprintln!(
-        "K1_L5 SUM records={} entry_contract_s={mine:.3} their_rr_contract_s={theirs:.3}",
-        records.len()
+        "K1_L5 SUM records={compared} entry_contract_s={mine:.3} their_rr_contract_s={theirs:.3}"
     );
+    wh_fixtures::assert_compared("K1_L5", compared, Some(expected));
+}
+
+/// The comparator FAILS FAST on a wrong oracle: k1-root's value perturbed at
+/// its lowest valid order (eps^-2, valid through eps^-1) is reported as
+/// different within seconds (an unsigned cast of the negative bound used to
+/// request ~4e9 orders instead).
+#[test]
+fn a_wrong_oracle_fails_fast() {
+    let text = include_str!("../fixtures/wh-k1-root.value.txt");
+    let expected = fixture_value(text);
+    let wrong = &expected + atom("UFO::gs_minus^2*gammalooprs::ε^(-2)");
+    let order = valid_through(text);
+    assert!(order < 0, "the fixture is valid through a negative order");
+    let started = std::time::Instant::now();
+    let outcome =
+        std::panic::catch_unwind(|| assert_equal_through(&expected, &wrong, order, "wrong oracle"));
+    let seconds = started.elapsed().as_secs_f64();
+    assert!(outcome.is_err(), "the wrong oracle was not reported");
+    assert!(
+        seconds < 10.0,
+        "the wrong oracle took {seconds} s to report"
+    );
+    eprintln!("WRONG_ORACLE reported in {seconds:.3} s");
+}
+
+/// The comparator refuses a ZERO reference (a fixture whose value parsed to
+/// zero, or truncated above `valid_through`, cannot pass against a zero
+/// entry), and compares a nonzero one order by order.
+#[test]
+fn the_comparator_needs_a_nonzero_reference() {
+    let text = include_str!("../fixtures/wh-k1-root.value.txt");
+    let order = valid_through(text);
+    let zero = std::panic::catch_unwind(|| {
+        assert_equal_through(&Atom::Zero, &Atom::Zero, order, "zero reference")
+    });
+    assert!(zero.is_err(), "a zero reference passed");
+    // a reference that is nonzero only ABOVE valid_through is zero for the test
+    let above = atom(&format!("UFO::x*gammalooprs::ε^({})", order + 1));
+    let truncated = std::panic::catch_unwind(|| {
+        assert_equal_through(&above, &above, order, "reference above valid_through")
+    });
+    assert!(
+        truncated.is_err(),
+        "a reference zero through valid_through passed"
+    );
+    let expected = fixture_value(text);
+    assert_equal_through(&expected, &expected, order, "the fixture against itself");
 }
