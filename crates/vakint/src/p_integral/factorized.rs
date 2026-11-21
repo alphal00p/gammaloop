@@ -762,8 +762,28 @@ pub fn expand_compact_slash(expression: &Atom, scope: i64) -> Atom {
 
 /// The one symbol of vakint's namespace a record of the R* interface may
 /// carry: vakint's default epsilon (`VakintSettings::epsilon_symbol`), used by
-/// internal code only as the evaluation's epsilon.
+/// internal code only as the evaluation's epsilon. The one ATOM of vakint's
+/// namespace it may carry besides: an expected but unknown master
+/// coefficient exactly as vakint's results write it,
+/// `UNKNOWN(master, k)` ([`crate::truncation_guard::unknown_coefficient_symbol`]
+/// with a master symbol and an integer: [`is_unknown_coefficient`]), a plain
+/// scalar carried linearly.
 pub const ALLOWED_VAKINT_SYMBOL: &str = "vakint::ε";
+
+/// Whether `f` is vakint's `UNKNOWN(master, k)` atom in exactly the shape
+/// its results write it: the head of
+/// [`crate::truncation_guard::unknown_coefficient_symbol`], a master symbol
+/// (a variable) and an integer order.
+pub(crate) fn is_unknown_coefficient(view: AtomView<'_>) -> bool {
+    let AtomView::Fun(f) = view else {
+        return false;
+    };
+    let args = f.iter().collect::<Vec<_>>();
+    f.get_symbol() == crate::truncation_guard::unknown_coefficient_symbol()
+        && args.len() == 2
+        && matches!(args[0], AtomView::Var(_))
+        && i64::try_from(args[1]).is_ok()
+}
 
 /// What [`first_forbidden_symbol`] found.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -807,6 +827,10 @@ pub(crate) fn first_forbidden_symbol(
             AtomView::Fun(f) => {
                 let symbol = f.get_symbol();
                 let name = symbol.get_name();
+                // vakint's UNKNOWN(master, k), carried as a scalar
+                if is_unknown_coefficient(part) {
+                    return false;
+                }
                 if name == names::MINK && f.get_nargs() == 2 {
                     let args = f.iter().collect::<Vec<_>>();
                     if let AtomView::Fun(index) = args[1]

@@ -277,7 +277,6 @@ fn p1_retain_k1_root_without_insertions_refinalises_to_symbolic() {
 /// + UNKNOWN(..) value(c) (allow-unknowns ON, as the producer's runs that
 /// need it).
 #[test]
-#[ignore = "finding F-4: vakint's own UNKNOWN atom in an insertion is refused as a reserved symbol"]
 fn p1_unknown_from_vakint_in_an_insertion_is_carried_linearly() {
     // SAFETY: nextest runs each test in its own process
     unsafe { std::env::set_var("VAKINT_ALLOW_UNKNOWN_MASTER_COEFFICIENTS", "1") };
@@ -1910,6 +1909,87 @@ fn g3_opaque_functions_and_powers_are_free_of_eps_dimension_masses_momenta() {
         &(base.prefactor.total() * atom("log(probe::x)")),
     )
     .unwrap();
+}
+
+// ===========================================================================
+// The one vakint atom a marked record may carry: UNKNOWN(master, k)
+// ===========================================================================
+
+/// With allow-unknowns OFF (the default), a caller-supplied vakint UNKNOWN
+/// atom reaches the result and vakint's unknown-master policy refuses the
+/// result (`Evaluation`, the unknown-master text), as for an unknown master
+/// of the integral itself: never a value.
+#[test]
+fn unknown_from_vakint_with_allow_unknowns_off_is_refused_by_the_policy() {
+    // SAFETY: nextest runs each test in its own process
+    unsafe { std::env::remove_var("VAKINT_ALLOW_UNKNOWN_MASTER_COEFFICIENTS") };
+    let mut v = record("wh-k2-child-ins");
+    v.insertions[0].coefficient = &v.insertions[0].coefficient
+        * (Atom::num(1) + atom("vakint::UNKNOWN(vakint::ggppss_int_53,0)"));
+    v.validate().unwrap();
+    match closure(&v, &symbolic(), &v.prefactor.total()) {
+        Err(FactorizedError::Evaluation { detail }) => assert!(
+            detail.contains("expected master coefficient") && detail.contains("UNKNOWN"),
+            "{detail}"
+        ),
+        other => panic!("{other:?}"),
+    }
+}
+
+/// A caller UNKNOWN multiplying an order the record's depth CUTS is dropped
+/// with that order (the returned product is truncated at ε^(depth-L-1)), as
+/// any term there.
+#[test]
+fn unknown_at_a_cut_order_is_dropped_with_the_order() {
+    // SAFETY: nextest runs each test in its own process
+    unsafe { std::env::set_var("VAKINT_ALLOW_UNKNOWN_MASTER_COEFFICIENTS", "1") };
+    let base = record("wh-k2-child-ins");
+    let plain = value(&base, &symbolic());
+    let mut v = base.clone();
+    v.insertions[0].coefficient = &v.insertions[0].coefficient
+        * (Atom::num(1) + atom(&format!("vakint::UNKNOWN(vakint::ggppss_int_53,0)*{EPS}^3")));
+    assert_same(
+        &value(&v, &symbolic()),
+        &plain,
+        "UNKNOWN x eps^3 beyond the depth",
+    );
+}
+
+/// Only the exact shape UNKNOWN(<master symbol>, <integer>) of vakint's own
+/// head is the exception: lookalike heads, another arity, a non-integer
+/// order stay reserved symbols; the caller's own `user::UNKNOWN` is a caller
+/// scalar.
+#[test]
+fn only_vakint_unknown_in_its_exact_shape_is_allowed() {
+    let base = record("wh-k2-child-ins");
+    for bad in [
+        "vakint::UNKNOWN2(vakint::m53,0)",
+        "vakint::unknown(vakint::m53,0)",
+        "vakint::UNKNOWN(vakint::m53,1/2)",
+        "vakint::UNKNOWN(vakint::m53,0,1)",
+        "vakint::UNKNOWN(vakint::m53+1,0)",
+    ] {
+        let mut v = base.clone();
+        v.insertions[0].coefficient = &v.insertions[0].coefficient * atom(bad);
+        match v.validate() {
+            Err(FactorizedError::Graph { detail }) => {
+                assert!(
+                    detail.starts_with("reserved symbol vakint::"),
+                    "{bad}: {detail}"
+                )
+            }
+            other => panic!("{bad}: {other:?}"),
+        }
+    }
+    for good in [
+        "vakint::UNKNOWN(vakint::m53,0)",
+        "vakint::UNKNOWN(vakint::m53,-2)",
+        "user::UNKNOWN(user::m53,0)",
+    ] {
+        let mut v = base.clone();
+        v.insertions[0].coefficient = &v.insertions[0].coefficient * atom(good);
+        v.validate().unwrap_or_else(|e| panic!("{good}: {e}"));
+    }
 }
 
 /// MARKED three-loop massive vacuum values through the vacuum entry in
