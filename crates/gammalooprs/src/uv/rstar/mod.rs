@@ -58,6 +58,8 @@ mod tests;
 mod top_mass;
 mod uncontracted;
 #[cfg(test)]
+mod uncontracted_oracle_tests;
+#[cfg(test)]
 mod uncontracted_tests;
 mod uv;
 
