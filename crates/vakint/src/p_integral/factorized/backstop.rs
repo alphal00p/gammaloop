@@ -42,7 +42,7 @@ use crate::VakintSettings;
 use crate::utils::vakint_macros::vk_symbol;
 
 /// vakint's internal names (without the `vakint::` namespace), exact.
-const INTERNAL_EXACT: [&str; 35] = [
+const INTERNAL_EXACT: [&str; 41] = [
     // the factorised entries
     "closure_lambda",
     "slash",
@@ -81,6 +81,16 @@ const INTERNAL_EXACT: [&str; 35] = [
     "numerical_coefficient",
     "numerical_expression",
     "evaluation_input",
+    // precision.rs: the error-aggregation formula's inputs (evaluated with
+    // an input map in the same function)
+    "aggregate_error_real_a",
+    "aggregate_error_real_b",
+    "aggregate_error_imaginary_a",
+    "aggregate_error_imaginary_b",
+    // topologies.rs / lib.rs: keys of the canonical-expression substitution
+    // map, never placed in an expression
+    "integral",
+    "n_props",
 ];
 
 /// Families of internal names made with format strings: a prefix and a
@@ -1294,11 +1304,6 @@ fn after() { let _ = symbol!("witness::kept_b"); }
     const UNDECIDED: &[&str] = &[
         // lib.rs
         "mUV",
-        // precision.rs
-        "aggregate_error_imaginary_a", "aggregate_error_imaginary_b", "aggregate_error_real_a",
-        "aggregate_error_real_b",
-        // lib.rs, topologies.rs
-        "integral", "n_props",
         // fmft/finalize.rs, lib.rs, matad.rs
         "logmUVmu",
     ];
