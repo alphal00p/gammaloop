@@ -1094,6 +1094,55 @@ fn a_quotient_route_other_than_rstar_is_refused() {
     }
 }
 
+/// Helper VH's C7, settings exception E1: every normalisation but exactly
+/// `MSbar` is refused as an error (never designed), and by the start-up
+/// check [`super::validate_uncontracted_settings`] in on and check, not off.
+/// `additional_normalization` is not a settings refusal: it stays the
+/// designed decline of the record (`uncontracted_init_refusal_tests`).
+#[test]
+fn the_normalisation_must_be_msbar() {
+    let mut uv = settings();
+    assert!(uncontracted::settings_refusal(&uv.vakint).is_ok());
+    for mode in [Mode::Check, Mode::On, Mode::Off] {
+        let switch = if mode == Mode::Off {
+            Switch::OFF
+        } else {
+            Switch::new(mode, &ROOT_CHILD)
+        };
+        assert!(with_switch(switch, || super::validate_uncontracted_settings(&uv)).is_ok());
+    }
+    for name in [
+        "GScheme",
+        "FMFTandMATAD",
+        "pySecDec",
+        "MSbar ",
+        "msbar",
+        "MS",
+    ] {
+        uv.vakint.normalization = name.into();
+        let refusal = uncontracted::settings_refusal(&uv.vakint).unwrap_err();
+        assert!(
+            refusal.code == "vakint_normalization" && !refusal.designed,
+            "{name}: {refusal:?}"
+        );
+        for mode in [Mode::Check, Mode::On] {
+            let error = with_switch(Switch::new(mode, &ROOT_CHILD), || {
+                super::validate_uncontracted_settings(&uv)
+            })
+            .unwrap_err();
+            let text = format!("{error}");
+            assert!(
+                text.contains("vakint_normalization") && text.contains("E1"),
+                "{name}: {text}"
+            );
+        }
+        assert!(with_switch(Switch::OFF, || super::validate_uncontracted_settings(&uv)).is_ok());
+    }
+    let mut uv = settings();
+    uv.vakint.additional_normalization = "-1".into();
+    assert!(uncontracted::settings_refusal(&uv.vakint).is_ok());
+}
+
 /// values-and-off 2: the timing switch is validated at the initialisation in
 /// every mode (at 6c492c9ddc a bad value started and then panicked in every
 /// diagram); STRICT is read only with the switch on or check.
