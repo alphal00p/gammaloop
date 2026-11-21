@@ -6030,3 +6030,468 @@ fn the_most_negative_integer_is_refused_without_a_panic() {
     assert!(matches!(a, Ok(Err(_))), "x^(i64::MIN): {a:?}");
     assert!(matches!(b, Ok(Err(_))), "UNKNOWN(master, i64::MIN): {b:?}");
 }
+
+// ===========================================================================
+// THE REFUSAL TABLE: every refusal the factorised code constructs, by variant
+// and detail template, in ONE data file (tests/fixtures/factorized_refusals.tsv)
+// ===========================================================================
+
+/// The variants of `FactorizedError` that carry a free-text `detail`.
+const DETAIL_VARIANTS: [&str; 13] = [
+    "Ports",
+    "MomentumBasis",
+    "Graph",
+    "NotScalar",
+    "FermionOrientation",
+    "Insertion",
+    "Closure",
+    "TextSyntax",
+    "Constructor",
+    "OverallFactor",
+    "Colour",
+    "Oracle",
+    "Evaluation",
+];
+
+/// A Rust string literal starting at `s[0] == '"'` (or a raw `r"`/`r#"`):
+/// its text with `\"`, `\\` and line continuations resolved, and its length
+/// in the source.
+fn rust_string_literal(s: &[char]) -> Option<(String, usize)> {
+    let mut i = 0;
+    let mut hashes = 0;
+    let raw = s.first() == Some(&'r');
+    if raw {
+        i += 1;
+        while s.get(i) == Some(&'#') {
+            hashes += 1;
+            i += 1;
+        }
+    }
+    if s.get(i) != Some(&'"') {
+        return None;
+    }
+    i += 1;
+    let mut out = String::new();
+    while i < s.len() {
+        let c = s[i];
+        if raw {
+            if c == '"' && (0..hashes).all(|k| s.get(i + 1 + k) == Some(&'#')) {
+                return Some((out, i + 1 + hashes));
+            }
+            out.push(c);
+            i += 1;
+            continue;
+        }
+        match c {
+            '"' => return Some((out, i + 1)),
+            '\\' => {
+                match s.get(i + 1) {
+                    Some('\n') => {
+                        i += 2;
+                        while s.get(i).is_some_and(|c| c.is_whitespace()) {
+                            i += 1;
+                        }
+                        continue;
+                    }
+                    Some('"') => out.push('"'),
+                    Some('\\') => out.push('\\'),
+                    Some('n') => out.push('\n'),
+                    Some(other) => {
+                        out.push('\\');
+                        out.push(*other);
+                    }
+                    None => return None,
+                }
+                i += 2;
+            }
+            _ => {
+                out.push(c);
+                i += 1;
+            }
+        }
+    }
+    None
+}
+
+/// A format string's TEMPLATE: every placeholder `{..}` written `<>`,
+/// `{{` / `}}` as `{` / `}`.
+fn detail_template(literal: &str) -> String {
+    let c = literal.chars().collect::<Vec<_>>();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < c.len() {
+        match (c[i], c.get(i + 1)) {
+            ('{', Some('{')) | ('}', Some('}')) => {
+                out.push(c[i]);
+                i += 2;
+            }
+            ('{', _) => {
+                while i < c.len() && c[i] != '}' {
+                    i += 1;
+                }
+                out.push_str("<>");
+                i += 1;
+            }
+            _ => {
+                out.push(c[i]);
+                i += 1;
+            }
+        }
+    }
+    out
+}
+
+/// The non-test text of a source file: inline `#[cfg(test)] mod .. { .. }`
+/// blocks and `#[cfg(test)] mod ..;` declarations removed.
+fn without_test_modules(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(at) = rest.find("#[cfg(test)]") {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + "#[cfg(test)]".len()..];
+        let trimmed = after.trim_start();
+        // attributes between cfg(test) and the item
+        let mut item = trimmed;
+        while item.starts_with("#[") {
+            let close = item.find(']').map(|e| e + 1).unwrap_or(item.len());
+            item = item[close..].trim_start();
+        }
+        if let Some(m) = item.strip_prefix("mod ") {
+            let semi = m.find(';');
+            let brace = m.find('{');
+            match (semi, brace) {
+                (Some(s), b) if b.is_none_or(|b| s < b) => {
+                    rest = &m[s + 1..];
+                    continue;
+                }
+                (_, Some(b)) => {
+                    let body = &m[b..];
+                    let mut depth = 0i64;
+                    let mut end = body.len();
+                    for (k, ch) in body.char_indices() {
+                        match ch {
+                            '{' => depth += 1,
+                            '}' => {
+                                depth -= 1;
+                                if depth == 0 {
+                                    end = k + 1;
+                                    break;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    rest = &body[end..];
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        out.push_str("#[cfg(test)]");
+        rest = after;
+    }
+    out.push_str(rest);
+    out
+}
+
+/// The refusals the factorised code constructs (`crates/vakint/src/p_integral/
+/// factorized.rs` and `factorized/*.rs` except test files, test modules
+/// removed): (variant, detail template) of every construction
+/// `FactorizedError::<V> { .. detail: <literal or format!> .. }` and of every
+/// call of a local constructor `let <f> = |detail: String| FactorizedError::<V>
+/// ..` / `fn <f>(detail: ..) -> FactorizedError` whose argument is a literal
+/// or a `format!`; and, per file and variant, the number of sites whose
+/// detail is not a literal (a variable, a call): those the scan cannot read.
+fn scan_factorized_refusals() -> (
+    std::collections::BTreeSet<(String, String)>,
+    std::collections::BTreeMap<(String, String), usize>,
+) {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/p_integral");
+    let mut files = vec![root.join("factorized.rs")];
+    let mut more = std::fs::read_dir(root.join("factorized"))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| {
+            p.extension().is_some_and(|x| x == "rs")
+                && !p.file_name().unwrap().to_string_lossy().contains("test")
+        })
+        .collect::<Vec<_>>();
+    more.sort();
+    files.extend(more);
+    let mut rows = std::collections::BTreeSet::new();
+    let mut unresolved = std::collections::BTreeMap::<(String, String), usize>::new();
+    let ident = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    for file in files {
+        let name = file
+            .strip_prefix(&root)
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+        let text = without_test_modules(&std::fs::read_to_string(&file).unwrap());
+        let chars = text.chars().collect::<Vec<_>>();
+        let s: String = chars.iter().collect();
+        // the argument at char index `at` (after an opening paren or `detail:`):
+        // a template, or None (not a literal)
+        let read_arg = |mut at: usize| -> Option<String> {
+            while chars.get(at).is_some_and(|c| c.is_whitespace()) {
+                at += 1;
+            }
+            let tail: String = chars[at..(at + 8).min(chars.len())].iter().collect();
+            if tail.starts_with("format!(") {
+                at += 8;
+                while chars.get(at).is_some_and(|c| c.is_whitespace()) {
+                    at += 1;
+                }
+            }
+            rust_string_literal(&chars[at..]).map(|(lit, _)| detail_template(&lit))
+        };
+        // local constructors: name -> (char position, variant)
+        // a closure's scope ends where its enclosing block closes
+        let scope_end = |from: usize| -> usize {
+            let mut depth = 0i64;
+            for (k, c) in chars.iter().enumerate().skip(from) {
+                match c {
+                    '{' => depth += 1,
+                    '}' => {
+                        depth -= 1;
+                        if depth < 0 {
+                            return k;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            chars.len()
+        };
+        let mut helpers: Vec<(usize, usize, String, String)> = Vec::new();
+        for (pos, _) in s.char_indices().filter(|(_, c)| *c == '|') {
+            let rest = &s[pos..];
+            let head = rest
+                .strip_prefix("|detail: String|")
+                .or_else(|| rest.strip_prefix("|detail|"));
+            let variant = match head.map(|h| h.trim_start()) {
+                Some(r) if r.starts_with("FactorizedError::") => Some(
+                    r[17..]
+                        .chars()
+                        .take_while(|c| ident(*c))
+                        .collect::<String>(),
+                ),
+                // a block closure: every variant its body builds, joined by |
+                Some(r) if r.starts_with('{') => {
+                    let start = s.len() - r.len();
+                    let cstart = s[..start].chars().count();
+                    let body: String = chars[cstart + 1..scope_end(cstart + 1)].iter().collect();
+                    let mut vs = body
+                        .match_indices("FactorizedError::")
+                        .map(|(k, _)| {
+                            body[k + 17..]
+                                .chars()
+                                .take_while(|c| ident(*c))
+                                .collect::<String>()
+                        })
+                        .collect::<Vec<_>>();
+                    vs.sort();
+                    vs.dedup();
+                    (!vs.is_empty()).then(|| vs.join("|"))
+                }
+                _ => None,
+            };
+            if let Some(variant) = variant {
+                let before = &s[..pos];
+                let name: String = before
+                    .trim_end()
+                    .trim_end_matches('=')
+                    .trim_end()
+                    .chars()
+                    .rev()
+                    .take_while(|c| ident(*c))
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .collect();
+                let p = s[..pos].chars().count();
+                helpers.push((p, scope_end(p), name, variant));
+            }
+        }
+        for (pos, _) in s.match_indices("fn ") {
+            let rest = &s[pos + 3..];
+            let fname: String = rest.chars().take_while(|c| ident(*c)).collect();
+            let sig = &rest[fname.len()..rest.find('{').unwrap_or(rest.len()).min(rest.len())];
+            if sig.starts_with("(detail") && sig.contains("-> FactorizedError") {
+                let body = &rest[fname.len() + sig.len()..];
+                if let Some(v) = body.find("FactorizedError::") {
+                    let variant: String =
+                        body[v + 17..].chars().take_while(|c| ident(*c)).collect();
+                    helpers.push((0, chars.len(), fname, variant));
+                }
+            }
+        }
+        // direct constructions
+        for (pos, _) in s.match_indices("FactorizedError::") {
+            let r = &s[pos + 17..];
+            let variant: String = r.chars().take_while(|c| ident(*c)).collect();
+            if !DETAIL_VARIANTS.contains(&variant.as_str()) {
+                continue;
+            }
+            let after = r[variant.len()..].trim_start();
+            if !after.starts_with('{') {
+                continue;
+            }
+            // a helper's own body is not a site
+            let before = s[..pos].trim_end();
+            if before.ends_with("|detail: String|") || before.ends_with("|detail|") {
+                continue;
+            }
+            let window = &s[pos.saturating_sub(300)..pos];
+            let window = window
+                .get(window.len().saturating_sub(300)..)
+                .unwrap_or(window);
+            if (window.contains("|detail: String| {") || window.contains("|detail| {"))
+                && r[variant.len()..]
+                    .trim_start()
+                    .trim_start_matches('{')
+                    .trim_start()
+                    .starts_with("detail }")
+            {
+                continue;
+            }
+            let group_end = after.find('}').unwrap_or(after.len());
+            let group = &after[..group_end];
+            let Some(d) = group.find("detail") else {
+                continue;
+            };
+            let after_detail = group[d + 6..].trim_start();
+            if after_detail.starts_with(':') {
+                let char_at = s
+                    [..pos + 17 + variant.len() + (r[variant.len()..].len() - after.len()) + d + 6]
+                    .chars()
+                    .count();
+                let colon = chars[char_at..].iter().position(|c| *c == ':').unwrap();
+                match read_arg(char_at + colon + 1) {
+                    Some(t) => {
+                        rows.insert((variant.clone(), t));
+                    }
+                    None => {
+                        *unresolved
+                            .entry((name.clone(), variant.clone()))
+                            .or_default() += 1
+                    }
+                }
+            } else {
+                *unresolved
+                    .entry((name.clone(), variant.clone()))
+                    .or_default() += 1;
+            }
+        }
+        // calls of the local constructors (the nearest definition before)
+        let mut names = helpers
+            .iter()
+            .map(|(_, _, n, _)| n.clone())
+            .collect::<Vec<_>>();
+        names.sort();
+        names.dedup();
+        for hname in names {
+            let needle = format!("{hname}(");
+            let mut from = 0;
+            while let Some(found) = s[from..].find(&needle) {
+                let at = from + found;
+                from = at + needle.len();
+                let prev = s[..at].chars().last();
+                if prev.is_some_and(ident) || s[..at].ends_with("fn ") || s[..at].ends_with('.') {
+                    continue;
+                }
+                let cpos = s[..at].chars().count();
+                let Some((_, _, _, variant)) = helpers
+                    .iter()
+                    .filter(|(p, e, n, _)| *n == hname && *p <= cpos && cpos < *e)
+                    .max_by_key(|(p, _, _, _)| *p)
+                else {
+                    continue;
+                };
+                match read_arg(cpos + needle.chars().count()) {
+                    Some(t) => {
+                        rows.insert((variant.clone(), t));
+                    }
+                    None => {
+                        *unresolved
+                            .entry((name.clone(), variant.clone()))
+                            .or_default() += 1
+                    }
+                }
+            }
+        }
+    }
+    (rows, unresolved)
+}
+
+/// THE REFUSAL TABLE (tests/fixtures/factorized_refusals.tsv): one row
+/// `refusal<TAB><variant><TAB><detail template>` per refusal the factorised
+/// code constructs with a literal detail (placeholders written `<>`), and one
+/// row `unresolved<TAB><file><TAB><variant><TAB><count>` per file and variant
+/// for the sites whose detail the scan cannot read (a variable, a call).
+/// BOTH DIRECTIONS: every row must be a construction of the source (a stale or
+/// reworded row fails), and every construction must be a row (a new or
+/// reworded refusal fails); the unresolved counts must match. With
+/// `VAKINT_TEST_WRITE_REFUSALS=<path>` the table is written there instead (the
+/// regeneration). What it covers: the constructions in factorized.rs and
+/// factorized/*.rs of the variants with a free-text detail, directly or
+/// through a local constructor, with a literal or `format!` detail; not
+/// covered (counted only): details computed elsewhere and passed as a value.
+#[test]
+fn the_refusal_table_matches_the_source() {
+    let (rows, unresolved) = scan_factorized_refusals();
+    let mut table = String::from(
+        "# The refusals of the factorised code: generated by the_refusal_table_matches_the_source\n# (VAKINT_TEST_WRITE_REFUSALS=<path>); replace the file to regenerate.\n",
+    );
+    for (v, t) in &rows {
+        table.push_str(&format!("refusal\t{v}\t{}\n", t.replace('\n', "\\n")));
+    }
+    for ((f, v), n) in &unresolved {
+        table.push_str(&format!("unresolved\t{f}\t{v}\t{n}\n"));
+    }
+    if let Some(out) = std::env::var_os("VAKINT_TEST_WRITE_REFUSALS") {
+        std::fs::write(&out, &table).unwrap();
+        eprintln!(
+            "CONTRACT REFUSALS written: {} rows, {} unresolved groups",
+            rows.len(),
+            unresolved.len()
+        );
+        return;
+    }
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/factorized_refusals.tsv");
+    let stored = wh_fixtures::read_fixture(&path);
+    let wanted = table
+        .lines()
+        .filter(|l| !l.starts_with('#'))
+        .collect::<std::collections::BTreeSet<_>>();
+    let have = stored
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
+        .collect::<std::collections::BTreeSet<_>>();
+    let stale = have.difference(&wanted).collect::<Vec<_>>();
+    let missing = wanted.difference(&have).collect::<Vec<_>>();
+    eprintln!(
+        "CONTRACT REFUSALS {} rows from the source ({} unresolved sites in {} groups); table {} rows; stale {}, missing {}",
+        rows.len(),
+        unresolved.values().sum::<usize>(),
+        unresolved.len(),
+        have.len(),
+        stale.len(),
+        missing.len()
+    );
+    assert!(
+        stale.is_empty() && missing.is_empty(),
+        "the refusal table differs from the source\nrows not in the source (stale or reworded):\n{}\nconstructions not in the table:\n{}",
+        stale
+            .iter()
+            .map(|l| format!("  {l}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        missing
+            .iter()
+            .map(|l| format!("  {l}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
+}
