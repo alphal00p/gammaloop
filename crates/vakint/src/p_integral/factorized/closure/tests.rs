@@ -1703,6 +1703,20 @@ fn valid_through(text: &str) -> i64 {
     wh_fixtures::valid_through(text)
 }
 
+/// A fixture's value file against `got` in `gammalooprs::ε`: a DECLARED zero
+/// ([`wh_fixtures::is_declared_zero`]) must be zero through valid_through,
+/// every other value equal through valid_through ([`assert_equal_through`]).
+fn assert_fixture(got: &Atom, value_text: &str, what: &str) {
+    let order = valid_through(value_text);
+    if wh_fixtures::is_declared_zero(value_text) {
+        let epsilon = symbolica::symbol!("gammalooprs::ε");
+        wh_fixtures::assert_declared_zero(got, epsilon, order, what);
+        eprintln!("{what}: declared zero, zero through eps^{order}");
+    } else {
+        assert_equal_through(got, &fixture_value(value_text), order, what);
+    }
+}
+
 /// [`wh_fixtures::assert_equal_through`] in `gammalooprs::ε`: exact through
 /// `order` (SIGNED) and NO FURTHER, the reference nonzero through `order`.
 fn assert_equal_through(got: &Atom, expected: &Atom, order: i64, what: &str) {
@@ -2176,12 +2190,7 @@ fn the_beta_k1_quick_records_equal_their_values() {
         )
         .unwrap_or_else(|e| panic!("{}: {e}", record.display()));
         let what = record.display().to_string();
-        assert_equal_through(
-            &got.value,
-            &fixture_value(&value_text),
-            valid_through(&value_text),
-            &what,
-        );
+        assert_fixture(&got.value, &value_text, &what);
         let r = &got.records[0];
         eprintln!(
             "K1_QUICK {what} insertions={} entry_contract_s={:.4} their_rr_contract_s={their_seconds:.4} ratio={:.2} split_s={:.4} evaluate_s={:.4} peak_rss_kb={} patterns={} blocks={} key_plans={} lowered={} lower_s={:.4} reduce_s={:.4}",
@@ -2355,12 +2364,7 @@ fn the_beta_k5_stress_records_equal_their_values() {
         .unwrap_or_else(|e| panic!("{}: {e}", record.display()));
         let total = started.elapsed().as_secs_f64();
         let what = record.display().to_string();
-        assert_equal_through(
-            &got.value,
-            &fixture_value(&value_text),
-            valid_through(&value_text),
-            &what,
-        );
+        assert_fixture(&got.value, &value_text, &what);
         let r = &got.records[0];
         eprintln!(
             "K5_STRESS {what} loops={} insertions={} pole_order={} total_s={total:.3} contract_s={:.3} split_s={:.3} lower_s={:.3} reduce_s={:.3} evaluate_s={:.3} patterns={}",
@@ -2554,12 +2558,7 @@ fn the_beta_k1_l5_records_equal_their_values() {
         .unwrap_or_else(|e| panic!("{}: {e}", record.display()));
         let total = started.elapsed().as_secs_f64();
         let what = record.display().to_string();
-        assert_equal_through(
-            &got.value,
-            &fixture_value(&value_text),
-            valid_through(&value_text),
-            &what,
-        );
+        assert_fixture(&got.value, &value_text, &what);
         let r = &got.records[0];
         eprintln!(
             "K1_L5 {what} loops={} insertions={} total_s={total:.3} contract_s={:.3} their_rr_contract_s={their_seconds:.3} lower_s={:.3} reduce_s={:.3} patterns={}",

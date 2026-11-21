@@ -190,6 +190,29 @@ pub fn assert_equal_through(
     compared
 }
 
+/// Whether a value file DECLARES its value to be exactly zero (the `value`
+/// line is the atom `0`, as the producer writes a site whose boundary
+/// patterns all integrate to zero): such a fixture is compared with
+/// [`assert_declared_zero`], every other one with [`assert_equal_through`]
+/// (whose nonzero-reference rule then catches a value that parsed to zero).
+pub fn is_declared_zero(text: &str) -> bool {
+    value_line(text).trim() == "0"
+}
+
+/// `got` is zero through `order` (SIGNED): every coefficient of an order at
+/// or below `order` vanishes exactly. Returns the number of orders checked.
+pub fn assert_declared_zero(got: &Atom, epsilon: Symbol, order: i64, what: &str) -> usize {
+    let got_c = epsilon_coefficients(got, epsilon);
+    let mut checked = 0;
+    for (n, c) in &got_c {
+        if *n <= order {
+            panic!("{what}: declared zero, but the coefficient of eps^{n} is {c}");
+        }
+        checked += 1;
+    }
+    checked
+}
+
 /// The number of records compared equals the expected count (a filter that
 /// selects a subset passes `None`: then at least one).
 pub fn assert_compared(what: &str, compared: usize, expected: Option<usize>) {
