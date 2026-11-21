@@ -16,10 +16,11 @@
 //! goes through the same `RStarIntegrand::finish_tensor` as today's value,
 //! under the same integration id.
 //!
-//! * Off (unset, `""`, `0`, `off`; the default): no record is built and
-//!   nothing is printed; the hook calls today's body unchanged (the closed
-//!   children's `closure_data` is still recorded, a clone of their
-//!   normalisation, and the switch is read).
+//! * Off (unset, `""`, `0`, `off`; the default): no record is built,
+//!   nothing is allocated and nothing is printed; the hook calls today's body
+//!   unchanged. Only the switch is read (a thread-local and a `LazyLock`), at
+//!   the hook, the quotient scope, the Δ-cache key, the closed children's
+//!   [`closure_data`] and the root's summary.
 //! * On: the record's value replaces today's for that remainder. A DESIGNED
 //!   refusal (the closed lists [`DESIGNED_LOCAL`] and [`DESIGNED_VAKINT`])
 //!   falls back to today's path for that record only, with one
@@ -279,8 +280,9 @@ impl Switch {
     }
 
     /// `#uncontracted=<enabled cacheable kinds>` in mode on with at least one
-    /// enabled kind whose values can reach the Δ cache (`child`, `quotient`,
-    /// `surrogate`, `insertion`; a root value never does); `None` otherwise,
+    /// enabled kind whose values can reach the Δ cache (every kind but
+    /// `root`: a diagram root's value never does, while an IR hard part's
+    /// does, through the Δ of the child it belongs to); `None` otherwise,
     /// check mode included (every value is then today's), so the Δ-cache key
     /// is today's (U7a review M2).
     pub(crate) fn cache_key_suffix(self) -> Option<String> {
@@ -290,7 +292,7 @@ impl Switch {
         let kinds = self
             .enabled_kinds()
             .into_iter()
-            .filter(|kind| *kind != Kind::Root && *kind != Kind::IrHard)
+            .filter(|kind| *kind != Kind::Root)
             .collect::<Vec<_>>();
         (!kinds.is_empty()).then(|| format!("#uncontracted={}", join_kinds(&kinds)))
     }
@@ -451,6 +453,21 @@ pub(super) struct ClosureData {
     /// The open slot (diagnostics; vakint derives `open` from the record).
     #[allow(dead_code)]
     pub open: Option<Atom>,
+}
+
+/// A closed child's closure as data for its records (read only at the hook,
+/// on the evaluation's own thread); `None` with the switch off, so nothing is
+/// cloned on today's path.
+pub(super) fn closure_data(
+    kind: ChildClosure,
+    normalization: &Atom,
+    open: Option<&Atom>,
+) -> Option<ClosureData> {
+    (switch().mode != Mode::Off).then(|| ClosureData {
+        kind,
+        normalization: normalization.clone(),
+        open: open.cloned(),
+    })
 }
 
 /// A borrowed view of one evaluation at the hook ([`super::evaluate`] builds
@@ -1645,7 +1662,7 @@ fn scalar_part(term: AtomView<'_>) -> Atom {
     for factor in factors {
         let text = factor.to_canonical_string();
         if !INDEXED.iter().any(|key| text.contains(key)) {
-            scalar = scalar * factor.to_owned();
+            scalar *= factor.to_owned();
         }
     }
     scalar

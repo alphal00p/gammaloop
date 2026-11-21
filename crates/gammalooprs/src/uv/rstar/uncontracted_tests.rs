@@ -809,6 +809,31 @@ fn cache_suffix_only_when_enabled() {
     );
 }
 
+/// Off mode builds nothing for the closed children either: their closure
+/// data (a clone of the normalisation) exists only with the switch on or
+/// check.
+#[test]
+fn closure_data_only_when_enabled() {
+    let normalization = parse("1/4");
+    let nu = parse("gammalooprs::uv_dirac_closure_nu");
+    let data = |switch: Switch| {
+        with_switch(switch, || {
+            uncontracted::closure_data(
+                uncontracted::ChildClosure::DiracSelfEnergy,
+                &normalization,
+                Some(&nu),
+            )
+        })
+    };
+    assert!(data(Switch::OFF).is_none(), "off clones nothing");
+    for mode in [Mode::On, Mode::Check] {
+        let data = data(Switch::new(mode, &ROOT_CHILD)).expect("on / check record it");
+        assert_eq!(data.kind, uncontracted::ChildClosure::DiracSelfEnergy);
+        assert_eq!(data.normalization, normalization);
+        assert_eq!(data.open.as_ref(), Some(&nu));
+    }
+}
+
 /// The designed refusals are a closed list (U7a review B1): the emitter's
 /// codes, and vakint's section-8 rows by variant AND detail prefix; every
 /// other refusal (the entry's wrapped internal failures, the reader's
@@ -1148,6 +1173,9 @@ fn root_factor_split() {
     assert!(split_root_factor(&(&t * momentum), 0).is_err());
 }
 
+/// One mutation of a record (`comparator_catches_mutations`).
+type Mutation = Box<dyn Fn(&mut FactorizedNumerator)>;
+
 #[test]
 fn comparator_catches_mutations() {
     test_initialise().unwrap();
@@ -1164,7 +1192,7 @@ fn comparator_catches_mutations() {
         let mut relabelled = record.clone();
         relabelled.label = "other".into();
         assert!(record_differences(&relabelled, &record).is_empty());
-        let mutations: Vec<(&str, Box<dyn Fn(&mut FactorizedNumerator)>)> = vec![
+        let mutations: Vec<(&str, Mutation)> = vec![
             (
                 "a wrong vector",
                 Box::new(|r: &mut FactorizedNumerator| {
