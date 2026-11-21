@@ -554,7 +554,9 @@ pub(crate) struct Counts {
     /// fill's, `hit:`-prefixed): shape -> disposition -> records, for the
     /// setting-wide rule of [`verdict`] ([`uncontracted::SETTING_CODES`]).
     /// Only a reported attempt has a shape: a [`Section`]'s reclassification
-    /// (its codes are no setting codes) and [`record_error`] leave it as is.
+    /// moves the shaped records as it moves the kind's (its interrupted
+    /// records have no shape; [`reclassify`]), and [`record_error`] adds
+    /// none.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub shapes: BTreeMap<String, BTreeMap<String, usize>>,
 }
@@ -1191,28 +1193,41 @@ impl Section {
 /// those without a disposition and those `unchecked` (check mode: today's
 /// path of the record failed inside the guarded correction, e.g. on the
 /// exhausted budget).
+///
+/// Every move is made in the record classes ([`Counts::shapes`]) too, so
+/// the class rule never reads a `taken` / `compared` the section undid
+/// (review of the follow-ups, ledger lens, finding 2). A shaped `unchecked`
+/// record takes the section's class in its record class; an interrupted
+/// record has no shape (no reported attempt) and joins the kind's classes
+/// only: it is no evidence, so it cannot make a record class pass.
 fn reclassify(counts: &mut Counts, mode: Mode, end: &SectionEnd) -> Option<String> {
-    if matches!(end, SectionEnd::GuardBudget | SectionEnd::GuardFailure(_)) {
+    let guard = match end {
+        SectionEnd::GuardBudget => Some("declined:ir_hard_guard:budget".to_owned()),
+        SectionEnd::GuardFailure(reason) => {
+            Some(format!("error:ir_hard_guard:{}", reason_head(reason)))
+        }
+        SectionEnd::Kept | SectionEnd::RouteDeclined(_) => None,
+    };
+    if let Some(class) = &guard {
         // an `unchecked` record is one without a disposition from here on
         counts.classes.remove("unchecked");
+        move_shaped(counts, "unchecked", class);
     }
     let interrupted = counts.expected.saturating_sub(counts.accounted());
     match end {
         SectionEnd::Kept => None,
         SectionEnd::RouteDeclined(reason) => {
-            let taken = (mode == Mode::On)
-                .then(|| counts.classes.remove("taken"))
-                .flatten()?;
+            if mode != Mode::On {
+                return None;
+            }
             let class = format!("error:ir_hard_route:{}", reason_head(reason));
-            counts.add(class.clone(), taken);
-            Some(format!("{taken} taken records became {class}"))
+            let taken = move_records(counts, "taken", &class);
+            (taken > 0).then(|| format!("{taken} taken records became {class}"))
         }
         SectionEnd::GuardBudget => {
             let class = "declined:ir_hard_guard:budget";
-            if mode == Mode::On
-                && let Some(taken) = counts.classes.remove("taken")
-            {
-                counts.add(class, taken);
+            if mode == Mode::On {
+                move_records(counts, "taken", class);
             }
             counts.add(class, interrupted);
             None
@@ -1221,14 +1236,33 @@ fn reclassify(counts: &mut Counts, mode: Mode, end: &SectionEnd) -> Option<Strin
             let class = format!("error:ir_hard_guard:{}", reason_head(reason));
             let mut records = interrupted;
             for done in ["taken", "compared"] {
-                records += counts.classes.remove(done).unwrap_or(0);
+                records += move_records(counts, done, &class);
             }
             if counts.compared() == 0 {
                 // the comparisons went with their records
                 counts.equal = 0;
             }
-            counts.add(class.clone(), records);
+            // the taken and compared records are moved; the interrupted join
+            counts.add(class.clone(), interrupted);
             (records > 0).then(|| format!("{records} records became {class}"))
+        }
+    }
+}
+
+/// Move the `from` records of `counts` to `to`, in the kind's classes and
+/// in every record class; the records moved (the kind's).
+fn move_records(counts: &mut Counts, from: &str, to: &str) -> usize {
+    let records = counts.classes.remove(from).unwrap_or(0);
+    counts.add(to, records);
+    move_shaped(counts, from, to);
+    records
+}
+
+/// Move the `from` records to `to` in every record class of `counts`.
+fn move_shaped(counts: &mut Counts, from: &str, to: &str) {
+    for classes in counts.shapes.values_mut() {
+        if let Some(records) = classes.remove(from).filter(|records| *records > 0) {
+            *classes.entry(to.to_owned()).or_default() += records;
         }
     }
 }
