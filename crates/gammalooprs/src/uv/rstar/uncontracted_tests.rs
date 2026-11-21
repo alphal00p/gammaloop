@@ -994,8 +994,9 @@ fn designed_refusals_are_a_closed_list() {
     }
     // U7b adds no designed refusal; the U7a delta adds `one_loop_tree_cut`
     // R2-I3 removes `sigma`, `root_crown_paired`, `root_normalisation_momentum`;
-    // U7c (K5) adds `surrogate_ir_hard` and `surrogate_split_chain`
-    assert_eq!(DESIGNED_LOCAL.len(), 14, "{DESIGNED_LOCAL:?}");
+    // U7c (K5) adds `surrogate_ir_hard`, `surrogate_split_chain` and
+    // `surrogate_hole_cut`
+    assert_eq!(DESIGNED_LOCAL.len(), 15, "{DESIGNED_LOCAL:?}");
     assert_eq!(uncontracted::DESIGNED_VAKINT.len(), 8);
     for code in ["open_root", "insertion_mass_symbol", "one_loop_tree_cut"] {
         assert!(DESIGNED_LOCAL.contains(&code), "{code}");

@@ -743,6 +743,9 @@ pub(super) const DESIGNED_LOCAL: &[&str] = &[
     // two or more loops above four loops; no verified fixture): declined
     // before its record is built, today's path takes it
     "surrogate_split_chain",
+    // U7c (K5): a record that holds a hole's anchor but not its far end, on a
+    // reader without the single-hedge ins: form (GAMMALOOP_UNCONTRACTED_K5_HOLE_CUT)
+    "surrogate_hole_cut",
 ];
 
 /// The designed codes caused by a SETTING of the run or of the calling
