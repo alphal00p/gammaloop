@@ -3640,30 +3640,75 @@ fn edge_ids_beyond_i64_are_refused() {
         .unwrap();
 }
 
-/// A-21: a power whose Taylor coefficients overflow i64 is refused by
-/// validate (not later at the evaluation), with the same power accepted
-/// without a Taylor step and a normal power accepted with one.
+/// A-21 / A-71: a marked value's edge power is at most 2^31 in absolute
+/// value (powers are summed when lines are merged in series): a power of
+/// i64::MAX / 2 and -(2^31 + 1) are refused by validate ("edge 1: power ..
+/// out of range"), 2^31 and 3 are accepted with a Taylor step of degree 2. With
+/// that bound and a degree of at most 2 the Taylor coefficients cannot
+/// overflow (the bound function's own limit at degree 2 is about 3.04e9 >
+/// 2^31); the bound function stays checked on its own.
 #[test]
 fn powers_that_overflow_the_taylor_coefficients_are_refused() {
     let huge = i64::MAX / 2;
-    let mut v = l2_root(2, true);
-    v.edges[0].power = huge;
-    match v.validate() {
-        Err(FactorizedError::Closure { detail }) => assert!(
-            detail.starts_with(&format!(
-                "edge 1: power {huge} is too large for a Taylor step of degree 2"
-            )),
-            "{detail}"
-        ),
-        other => panic!("{other:?}"),
+    for power in [huge, -(1i64 << 31) - 1] {
+        let mut v = l2_root(2, true);
+        v.edges[0].power = power;
+        match v.validate() {
+            Err(FactorizedError::Closure { detail }) => assert!(
+                detail.starts_with(&format!(
+                    "edge 1: power {power} out of range (at most 2^31 in absolute value)"
+                )),
+                "{detail}"
+            ),
+            other => panic!("{power}: {other:?}"),
+        }
     }
-    let mut v = l2_root(2, true);
-    v.edges[0].power = 3;
-    v.validate().unwrap();
+    for power in [1i64 << 31, 3] {
+        let mut v = l2_root(2, true);
+        v.edges[0].power = power;
+        v.validate().unwrap_or_else(|e| panic!("{power}: {e}"));
+    }
     // the bound function itself
     assert!(super::taylor_coefficient_bound(3_037_000_499, 2).is_some());
     assert!(super::taylor_coefficient_bound(i64::MAX, 1).is_none());
     assert!(super::taylor_coefficient_bound(huge, 2).is_none());
+}
+
+/// A-70: a closure-kind value's VERTEX ids are i64 too (they are written as
+/// edge(source, target)): a vertex renumbered to usize::MAX or i64::MAX + 1 is
+/// refused by validate ("id <n>: the edge and vertex ids"), i64::MAX is
+/// accepted (no fresh ids are counted on vertices).
+#[test]
+fn closure_vertex_ids_beyond_i64_are_refused() {
+    let base = l2_root(0, true);
+    base.validate().unwrap();
+    let renumbered = |id: usize| {
+        let mut v = base.clone();
+        // the last vertex (ids stay sorted)
+        let last = v.vertices.len() - 1;
+        let old = v.vertices[last].id;
+        v.vertices[last].id = id;
+        for e in &mut v.edges {
+            for end in [&mut e.source, &mut e.target] {
+                if *end == Endpoint::Vertex(old) {
+                    *end = Endpoint::Vertex(id);
+                }
+            }
+        }
+        v
+    };
+    for id in [usize::MAX, i64::MAX as usize + 1] {
+        match renumbered(id).validate() {
+            Err(FactorizedError::Closure { detail }) => assert!(
+                detail.starts_with(&format!("id {id}: the edge and vertex ids")),
+                "{id}: {detail}"
+            ),
+            other => panic!("{id}: {other:?}"),
+        }
+    }
+    renumbered(i64::MAX as usize)
+        .validate()
+        .unwrap_or_else(|e| panic!("i64::MAX: {e}"));
 }
 
 /// A-21: a degree read off an exponent saturates (a degree is only compared

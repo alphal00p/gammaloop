@@ -2999,8 +2999,16 @@ impl FactorizedNumerator {
         // ids are written as Q(id, ..) and edge(source, target): i64 (the
         // closure kind has its own bound, with its own text, in
         // validate_closure)
-        if !closure && let Some(detail) = self.marked_id_overflow() {
+        if let Some(detail) = self.marked_id_overflow(!closure) {
             return Err(in_kind(detail));
+        }
+        // edge powers are summed when lines are merged in series: bounded so
+        // that no sum of fewer than 2^32 lines can wrap
+        if let Some(edge) = self.edges.iter().find(|e| e.power.unsigned_abs() > 1 << 31) {
+            return Err(in_kind(format!(
+                "edge {}: power {} out of range (at most 2^31 in absolute value)",
+                edge.id, edge.power
+            )));
         }
         if let FactorizedKind::Closure(spec) = &self.kind {
             self.validate_closure(spec)?;
@@ -3160,12 +3168,17 @@ impl FactorizedNumerator {
     /// A marked value's ids must be i64 (they are written as Q(id, ..),
     /// edge(source, target), with fresh loop-vector ids max + 1 + i above the
     /// largest): the detail of the refusal when one is not.
-    fn marked_id_overflow(&self) -> Option<String> {
-        let fresh = self
-            .loop_edges
-            .iter()
-            .rposition(|e| e.is_none())
-            .map_or(0, |i| i + 1);
+    fn marked_id_overflow(&self, edges: bool) -> Option<String> {
+        // the closure kind bounds its edge ids itself (validate_closure, with
+        // the fresh loop-vector ids): here only its vertex ids
+        let fresh = if edges {
+            self.loop_edges
+                .iter()
+                .rposition(|e| e.is_none())
+                .map_or(0, |i| i + 1)
+        } else {
+            0
+        };
         let top = self
             .edges
             .iter()
@@ -3174,12 +3187,12 @@ impl FactorizedNumerator {
                     Endpoint::Vertex(v) => Some(*v),
                     Endpoint::External => None,
                 };
-                [Some(e.id), vertex(&e.source), vertex(&e.target)]
+                [edges.then_some(e.id), vertex(&e.source), vertex(&e.target)]
                     .into_iter()
                     .flatten()
             })
             .chain(self.vertices.iter().map(|v| v.id))
-            .chain(self.constant_vectors())
+            .chain(self.constant_vectors().into_iter().filter(|_| edges))
             .max()
             .unwrap_or(0);
         let limit = usize::try_from(i64::MAX).unwrap_or(usize::MAX);
