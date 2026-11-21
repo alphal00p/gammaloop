@@ -15,6 +15,9 @@
 //! * E1: `uv.vakint.normalization` other than `MSbar` is an error of every
 //!   record (`vakint_normalization`), in check and in on (at 292b5362a7 the
 //!   records were built and evaluated under it); MSbar is unchanged.
+//! * E3: a vakint evaluation method other than `rustred` and `forcer` is an
+//!   error of every record (`vakint_evaluation_methods`), in check and in
+//!   on; the beta's two orders are unchanged.
 //!   `additional_normalization` other than "1" stays the designed decline
 //!   `additional_normalization` (confirmed here; passes before and after).
 
@@ -286,6 +289,44 @@ fn additional_normalization_stays_declined() -> Result<()> {
                         .is_some_and(|d| d.starts_with("additional_normalization:")),
                 "{mode}: {root}"
             );
+        }
+        Ok(())
+    })
+}
+
+/// E3: an evaluation method outside {rustred, forcer} is an error of every
+/// record (here after the two, so vakint itself would never reach it: the
+/// setting alone is refused), in check and in on; the beta's order (RustRed
+/// first) is the control (Forcer first: the settings test of
+/// `uncontracted_ledger_tests`).
+#[test]
+fn e3_an_evaluation_method_outside_rustred_and_forcer_is_an_error() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let off = run(L2_22, &settings(), Switch::OFF)?.value?;
+        for (mode, switch) in [
+            ("check", Switch::new(Mode::Check, &ROOT)),
+            ("on", Switch::new(Mode::On, &ROOT)),
+        ] {
+            for order in [["rustred", "forcer"]] {
+                let mut uv = settings();
+                uv.vakint.evaluation_methods = order.iter().map(|m| m.to_string()).collect();
+                let control = run(L2_22, &uv, switch)?;
+                ensure!(
+                    agree(control.value.as_ref().map_err(|e| eyre!("{e:#}"))?, &off),
+                    "{mode} {order:?}: differs from off"
+                );
+            }
+            for extra in ["matad", "fmft", "alphaloop"] {
+                let mut uv = settings();
+                uv.vakint.evaluation_methods =
+                    vec!["rustred".into(), "forcer".into(), extra.into()];
+                fails_with(
+                    &run(L2_22, &uv, switch)?,
+                    "vakint_evaluation_methods",
+                    &format!("{mode} {extra}"),
+                )?;
+            }
         }
         Ok(())
     })

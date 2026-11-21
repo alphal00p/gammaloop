@@ -1143,6 +1143,60 @@ fn the_normalisation_must_be_msbar() {
     assert!(uncontracted::settings_refusal(&uv.vakint).is_ok());
 }
 
+/// Helper VH's C7, settings exception E3: the evaluation methods must lie
+/// in {rustred, forcer} (either order, either alone); any other entry is an
+/// error (never designed) and refused by the start-up check in on and
+/// check, not off.
+#[test]
+fn the_evaluation_methods_must_be_rustred_or_forcer() {
+    let methods = |list: &[&str]| list.iter().map(|m| m.to_string()).collect::<Vec<_>>();
+    let mut uv = settings();
+    for accepted in [
+        &["rustred", "forcer"][..],
+        &["forcer", "rustred"],
+        &["rustred"],
+        &["forcer"],
+    ] {
+        uv.vakint.evaluation_methods = methods(accepted);
+        assert!(
+            uncontracted::settings_refusal(&uv.vakint).is_ok(),
+            "{accepted:?}"
+        );
+        assert!(
+            with_switch(Switch::new(Mode::Check, &ROOT_CHILD), || {
+                super::validate_uncontracted_settings(&uv)
+            })
+            .is_ok()
+        );
+    }
+    for refused in [
+        &["matad"][..],
+        &["rustred", "forcer", "fmft"],
+        &["alphaloop", "matad", "fmft"],
+        &["rustred", "pysecdec"],
+        &["rustred", "RustRed"],
+    ] {
+        uv.vakint.evaluation_methods = methods(refused);
+        let refusal = uncontracted::settings_refusal(&uv.vakint).unwrap_err();
+        assert!(
+            refusal.code == "vakint_evaluation_methods" && !refusal.designed,
+            "{refused:?}: {refusal:?}"
+        );
+        for mode in [Mode::Check, Mode::On] {
+            let error = with_switch(Switch::new(mode, &ROOT_CHILD), || {
+                super::validate_uncontracted_settings(&uv)
+            })
+            .unwrap_err();
+            let text = format!("{error}");
+            assert!(
+                text.contains("vakint_evaluation_methods") && text.contains("E3"),
+                "{refused:?}: {text}"
+            );
+        }
+        assert!(with_switch(Switch::OFF, || super::validate_uncontracted_settings(&uv)).is_ok());
+    }
+}
+
 /// values-and-off 2: the timing switch is validated at the initialisation in
 /// every mode (at 6c492c9ddc a bad value started and then panicked in every
 /// diagram); STRICT is read only with the switch on or check.
