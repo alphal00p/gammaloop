@@ -536,13 +536,18 @@ struct Reader<'a> {
     offset: usize,
 }
 
+/// The largest preallocation a declared section count can ask for.
+const PREALLOCATION_CAP: usize = 256;
+
 impl<'a> Reader<'a> {
-    /// A preallocation for a section of `n` declared entries, at most the
-    /// number of lines left (a declared count is the caller's: it must not
-    /// size an allocation; a count larger than the text is refused by the
-    /// section's own count check).
+    /// A preallocation for a section of `n` declared entries, at most
+    /// [`PREALLOCATION_CAP`] (a declared count is the caller's: it must not
+    /// size an allocation; a longer section grows its vector, and a count
+    /// larger than the text is refused by the section's own count check). A
+    /// fixed cap, not the number of lines left: counting those on each call
+    /// made reading a many-record text quadratic.
     fn bounded(&self, n: usize) -> usize {
-        n.min(self.lines.clone().count())
+        n.min(PREALLOCATION_CAP)
     }
 
     fn syntax(&self, line: usize, detail: impl Into<String>) -> FactorizedError {

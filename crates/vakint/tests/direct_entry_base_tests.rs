@@ -17,7 +17,7 @@ use symbolica::atom::{Atom, AtomCore};
 use vakint::Vakint;
 use vakint::p_integral::factorized::{
     DirectRecord, FACTORIZED_SCHEMA_V3, Insertion, MAX_OPEN_PORTS, evaluate_factorized,
-    evaluate_factorized_ports, vakint_input,
+    evaluate_factorized_ports, parse_factorized_records, vakint_input,
 };
 use vakint::p_integral::{FACTORIZED_SCHEMA, FactorizedError, FactorizedNumerator};
 use vakint::refpath;
@@ -361,4 +361,30 @@ fn a_marked_value_keeps_the_open_slot_ceiling() {
     refused(vakint_input(&settings, &seven, &Atom::num(1)).map(|_| ()));
     let unmarked = FactorizedNumerator::from_text(&rank(7)).unwrap();
     assert!(vakint_input(&settings, &unmarked, &Atom::num(1)).is_ok());
+}
+
+/// Reading a many-record text is linear in its length (A-42): 2,000 records
+/// take at most a fixed multiple of 20 times the time of 100 (a quadratic
+/// reader takes about 400 times).
+#[test]
+fn a_many_record_text_reads_in_linear_time() {
+    let one = rank(1);
+    let read = |n: usize| {
+        let text = one.repeat(n);
+        let started = std::time::Instant::now();
+        let values = parse_factorized_records(&text).unwrap();
+        assert_eq!(values.len(), n);
+        started.elapsed().as_secs_f64()
+    };
+    read(10);
+    let small = read(100);
+    let large = read(2000);
+    eprintln!(
+        "READ_RECORDS 100: {small:.3} s, 2000: {large:.3} s, ratio {:.1}",
+        large / small
+    );
+    assert!(
+        large < 60.0 * small.max(0.05),
+        "2000 records {large:.3} s vs 100 records {small:.3} s: not linear"
+    );
 }
