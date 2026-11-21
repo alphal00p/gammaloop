@@ -1548,7 +1548,7 @@ pub(super) fn evaluate_validated(
     // is evaluated n terms deeper and the product truncated back
     let epsilon_symbol = vk_symbol!(&settings.epsilon_symbol);
     value.check_insertion_epsilon(epsilon_symbol.get_name())?;
-    let pole_order = value.insertion_pole_order(epsilon_symbol)?;
+    let pole_order = value.insertion_depth_raise(epsilon_symbol)?;
     let returned_terms = local.number_of_terms_in_epsilon_expansion;
     local.number_of_terms_in_epsilon_expansion = i64::try_from(pole_order)
         .ok()

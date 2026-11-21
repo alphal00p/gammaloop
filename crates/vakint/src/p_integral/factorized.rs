@@ -1123,8 +1123,8 @@ fn insertion_epsilon_rules(insertion: &Insertion, depends: &dyn Fn(Symbol) -> bo
             )));
         }
     }
-    // bounded pole order: |trailing power of ε| of coefficient x factor
-    // is at most the bound of the coefficient plus that of the factor
+    // bounded exponents: the degree count of coefficient x factor (not the
+    // pole order, which insertion_pole_order computes exactly)
     let bound = epsilon_power_bound(insertion.coefficient.as_view(), depends)
         .and_then(|c| epsilon_power_bound(insertion.factor.as_view(), depends)?.checked_add(c));
     match bound {
@@ -1139,23 +1139,41 @@ fn insertion_epsilon_rules(insertion: &Insertion, depends: &dyn Fn(Symbol) -> bo
     Ok(())
 }
 
-/// The largest bound on |the powers of ε| (the dimension counted as 4 - 2ε)
-/// an insertion's coefficient x factor may reach, the bound of
-/// [`epsilon_power_bound`] (a degree count, so the pole order is at most it;
-/// the coefficient's and the factor's added): 64. Far above anything
-/// physical (an R* insertion's pole order is at most twice its child's loop
-/// count, about 20 at ten loops), and so small that no sum can overflow: the
-/// pole order of n insertions is at most 64 n, beyond i64 only for n > 2^57
-/// insertions, one per vertex of a record. Beyond it the record is refused
-/// (`an ε power out of range`), never wrapped.
+/// The cap on the DEGREE COUNT of an insertion's coefficient x factor in ε
+/// (the dimension outside representation slots counted as 4 - 2ε; see
+/// [`epsilon_power_bound`], the coefficient's and the factor's counts added):
+/// 64. The count is NOT the pole order: it bounds the size of the exponents
+/// the series code is handed (no exponent beyond i64, no overflow in the
+/// count). It can refuse an insertion without a high pole ((1+ε)^-100: count
+/// 100, pole order 0) and admit one whose pole order exceeds it when a
+/// negative power acts on a sum whose terms cancel at ε = 0
+/// (((1-ε)^-1 - 1 - ε)^-40: count 40, pole order 80). The exact pole order is
+/// computed by [`FactorizedNumerator::insertion_pole_order`] and used, and
+/// the depth raise it causes is capped by [`INSERTION_MAX_TOTAL_POLE_ORDER`];
+/// for such an unsimplified cancelling power symbolica's series is slow
+/// (about 1 s at ^-10, 50 s at ^-20, not finished in minutes at ^-40).
 pub(crate) const INSERTION_MAX_EPSILON_POWER: u64 = 64;
+
+/// The cap on the SUM of the exact pole orders of a record's insertions, the
+/// closure entry's depth raise (the only entry that raises a depth by it: the
+/// direct, ports and vacuum entries hand the insertions to vakint inside the
+/// integrand): 64. Real records stay far below: the 83 insertions of the R*
+/// producer's fixture sets have totals of at most 3 per record (the five-loop
+/// k1-l5 records), with at most 4 insertions per record (k5-stress). An R*
+/// record's children are disjoint subgraphs and an l-loop child's
+/// counterterm has poles up to ε^-l, so the total is at most L - 1, 5 at six
+/// loops; even the producer's largest six-loop pole part, ε^-6, on each of 4
+/// insertions gives 24. Above it the record is refused (`an ε power out of
+/// range`) instead of being evaluated some 64 or more terms deeper.
+pub(crate) const INSERTION_MAX_TOTAL_POLE_ORDER: u64 = 64;
 
 /// An upper bound on |the power of a symbol `depends` selects| in any term of
 /// `view` expanded (sums: the largest; products: the sum; an integer power:
 /// |n| times its base's), with a representation slot's dimension argument
 /// and, after the Laurent rule, any function counting 0; None beyond u64 or
-/// for an exponent beyond i64. The trailing power of ε of a Laurent
-/// expression is at least minus this bound.
+/// for an exponent beyond i64. Not a bound on the pole order (see
+/// [`INSERTION_MAX_EPSILON_POWER`]): a negative power of a sum whose terms
+/// cancel at ε = 0 has a higher one.
 fn epsilon_power_bound(view: AtomView<'_>, depends: &dyn Fn(Symbol) -> bool) -> Option<u64> {
     match view {
         AtomView::Var(v) => Some(u64::from(depends(v.get_symbol()))),
@@ -2550,6 +2568,24 @@ impl FactorizedNumerator {
                     failure("an ε power out of range: the insertions' pole order overflows".into())
                 })?;
             }
+        }
+        Ok(order)
+    }
+
+    /// The closure entry's depth raise: the insertions' exact pole order
+    /// ([`Self::insertion_pole_order`]), refused above
+    /// [`INSERTION_MAX_TOTAL_POLE_ORDER`] (`Insertion` at the first
+    /// insertion's vertex, `an ε power out of range: the insertions' pole
+    /// orders add up to <n>, above 64`).
+    pub(crate) fn insertion_depth_raise(&self, epsilon: Symbol) -> Result<u64> {
+        let order = self.insertion_pole_order(epsilon)?;
+        if order > INSERTION_MAX_TOTAL_POLE_ORDER {
+            return Err(FactorizedError::Insertion {
+                vertex: self.insertions.first().map_or(0, |i| i.vertex),
+                detail: format!(
+                    "an ε power out of range: the insertions' pole orders add up to {order}, above {INSERTION_MAX_TOTAL_POLE_ORDER}"
+                ),
+            });
         }
         Ok(order)
     }

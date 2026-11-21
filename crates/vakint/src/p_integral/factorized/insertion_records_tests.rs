@@ -209,7 +209,11 @@ fn with_coefficients(coefficients: &[(usize, String)]) -> FactorizedNumerator {
 /// the sum (and would wrap without overflow checks) and the third ran without
 /// end on a negative depth. The defect-free twin (ε^-1 on the first insertion,
 /// coefficient 1 elsewhere: pole order 3) equals ε^-1 times the record with
-/// coefficient 1 evaluated one term deeper, truncated at ε^(depth - L - 1).
+/// coefficient 1 evaluated one term deeper, truncated at ε^(depth - L - 1): a
+/// CONSISTENCY check of the depth raise (both sides through the entry); the
+/// independent checks are the closure tests'
+/// `dimension_dependent_insertion_factors_equal_the_independent_reference`
+/// and `a_cancelling_coefficient_raises_the_depth_by_its_exact_pole_order`.
 #[test]
 fn the_pole_order_arithmetic_cannot_wrap() {
     let eps = "gammalooprs::ε";
@@ -309,6 +313,56 @@ fn the_pole_order_arithmetic_cannot_wrap() {
         got.value,
         reference
     );
+}
+
+/// The TOTAL depth raise is capped at 64 over all insertions of a record:
+/// five insertions on the k5 surrogate record (its own factors add 2): ε^-13
+/// on vertices 5, 6, 7, 9 and ε^-10 on 1 add up to exactly 64, accepted by
+/// the depth raise (checked there, `insertion_depth_raise`, not evaluated 64
+/// terms deeper); ε^-11 on 1 (65) and ε^-13 on all five (67) are refused, by
+/// the depth raise and by the closure entry before any reduction (`Insertion`
+/// at the first insertion's vertex, the total above 64). Each insertion alone
+/// is within the per-insertion count.
+#[test]
+fn the_total_depth_raise_is_capped() {
+    let eps = "gammalooprs::ε";
+    let epsilon = vk_symbol!("gammalooprs::ε");
+    let five = |first: i64, others: i64| {
+        let mut coefficients = vec![(1, format!("{eps}^-{first}"))];
+        coefficients.extend([5, 6, 7, 9].map(|v| (v, format!("{eps}^-{others}"))));
+        with_coefficients(&coefficients)
+    };
+    let at_cap = five(10, 13);
+    at_cap.validate().unwrap();
+    assert_eq!(at_cap.insertion_depth_raise(epsilon).unwrap(), 64);
+    let vakint = plain_engine();
+    for (what, value, total) in [("65", five(11, 13), 65), ("67", five(13, 13), 67)] {
+        value
+            .validate()
+            .unwrap_or_else(|e| panic!("{what}: each insertion is within the count: {e}"));
+        let prefix = format!(
+            "an ε power out of range: the insertions' pole orders add up to {total}, above 64"
+        );
+        for error in [
+            value.insertion_depth_raise(epsilon).unwrap_err(),
+            evaluate_factorized_closure(
+                &vakint,
+                &site_settings(),
+                std::slice::from_ref(&value),
+                &[value.prefactor.total()],
+            )
+            .unwrap_err(),
+        ] {
+            match &error {
+                FactorizedError::Insertion { vertex: 1, detail } => {
+                    assert!(detail.starts_with(&prefix), "{what}: {detail}")
+                }
+                other => {
+                    panic!("{what}: expected the Insertion refusal at vertex 1, got {other:?}")
+                }
+            }
+        }
+    }
 }
 
 /// k5-stress (L5 graph 3793): 5 records, 4 insertion vertices each; r0051 has

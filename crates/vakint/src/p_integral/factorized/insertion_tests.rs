@@ -862,6 +862,45 @@ fn a_failing_laurent_series_of_an_insertion_is_an_evaluation_failure() {
     assert_eq!(pole.insertion_pole_order(epsilon).unwrap(), 1);
 }
 
+/// The degree count is not the pole order: a negative power of a sum whose
+/// terms cancel at ε = 0, ((1-ε)^-1 - 1 - ε)^-n (its base is ε²/(1-ε)),
+/// counts n but has pole order 2n. With n = 5 (count 5, pole order 10) it is
+/// accepted with its exact order; times ε^-55 (count 60, within the
+/// per-insertion rule with the factor's 2) its exact pole order is 65, which
+/// the depth raise refuses (`an ε power out of range`, the total above 64).
+/// Checked at the depth raise itself (`insertion_depth_raise`, what the
+/// closure entry calls before any reduction). Kept small: symbolica's series
+/// of such an unsimplified power takes ~1 s at n = 10 and ~50 s at n = 20.
+#[test]
+fn a_cancelling_sum_under_a_negative_power_keeps_its_exact_pole_order() {
+    let eps_atom = atom(EPS);
+    let AtomView::Var(epsilon) = eps_atom.as_view() else {
+        unreachable!()
+    };
+    let epsilon = epsilon.get_symbol();
+    let good = gluon_surrogate(1);
+    let with = |coefficient: String| {
+        let mut value = good.clone();
+        ins(&mut value).coefficient = atom(&coefficient);
+        value
+    };
+    let cancelling = format!("((1-{EPS})^-1-1-{EPS})^-5");
+    let twin = with(cancelling.clone());
+    twin.validate().expect("count 5: accepted");
+    assert_eq!(twin.insertion_depth_raise(epsilon).unwrap(), 10);
+    let witness = with(format!("{EPS}^-55*{cancelling}"));
+    witness
+        .validate()
+        .expect("count 60: accepted by the per-insertion rule");
+    assert_eq!(witness.insertion_pole_order(epsilon).unwrap(), 65);
+    insertion_refusal(
+        &witness.insertion_depth_raise(epsilon).unwrap_err(),
+        C0,
+        "an ε power out of range: the insertions' pole orders add up to 65, above 64",
+        "the total pole order",
+    );
+}
+
 /// Validation recognises ε by its name; an epsilon setting of another name
 /// (`user::ep`) gets the pole order's rules where the settings are known, the
 /// entries' input check (here `vakint_input`, the direct and ports path): the

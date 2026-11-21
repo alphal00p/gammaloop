@@ -2465,6 +2465,56 @@ fn dimension_dependent_insertion_factors_equal_the_independent_reference() {
     );
 }
 
+/// A negative power of a sum whose terms cancel at ε = 0 keeps its EXACT pole
+/// order through the closure entry: ε^-55·((1-ε)^-1 - 1 - ε)^-5 (degree
+/// count 60, pole order 65) is refused by the entry before any reduction
+/// (`Insertion`, the total above 64); the twin ((1-ε)^-1 - 1 - ε)^-1 (count
+/// 1, pole order 2: the depth is raised by 2) equals the coefficient times the INDEPENDENT
+/// reference of the record without it, two terms deeper, truncated at
+/// ε^(depth - L - 1).
+#[test]
+fn a_cancelling_coefficient_raises_the_depth_by_its_exact_pole_order() {
+    let eps = settings().epsilon_symbol.clone();
+    let witness =
+        closure_with_insertion(&format!("{eps}^-55*((1-{eps})^-1-1-{eps})^-5"), &settings())
+            .unwrap_err();
+    match &witness {
+        FactorizedError::Insertion { vertex: 1, detail } => assert!(
+            detail.starts_with(
+                "an ε power out of range: the insertions' pole orders add up to 65, above 64"
+            ),
+            "{detail}"
+        ),
+        other => panic!("expected the Insertion refusal at vertex 1, got {other:?}"),
+    }
+    let mut base = l2_root(1, true);
+    base.vertices.iter_mut().find(|v| v.id == 1).unwrap().factor = atom(&q(1, &hedge(120)));
+    let coefficient = atom(&format!("((1-{eps})^-1-1-{eps})^-1"));
+    let got = closure_with_insertion(&coefficient.to_canonical_string(), &settings()).unwrap();
+    let epsilon = crate::utils::vakint_macros::vk_symbol!(&eps);
+    let mut deeper = settings();
+    deeper.number_of_terms_in_epsilon_expansion += 2;
+    let bare = independent_reference_with(&base, &L2_CUT, &base.prefactor.total(), deeper);
+    let target = settings().number_of_terms_in_epsilon_expansion - base.loops() as i64 - 1;
+    let expected = (&coefficient * &bare)
+        .series(
+            epsilon,
+            Atom::Zero.as_view(),
+            symbolica::domains::rational::Rational::from(target),
+        )
+        .unwrap()
+        .to_atom()
+        .expand();
+    assert!(!expected.is_zero());
+    assert!(
+        (&got.records[0].vakint_value - &expected)
+            .expand()
+            .is_zero(),
+        "entry {}\nindependent, two terms deeper {expected}",
+        got.records[0].vakint_value
+    );
+}
+
 /// The beta's k5-stress set (L5 graph 3793, closed surrogate root, five
 /// records with four insertion vertices each; r0051 has five loops and needs
 /// the 1-4 loop package of `VAKINT_TEST_P_LIBRARY_1_4`): each record equal to
