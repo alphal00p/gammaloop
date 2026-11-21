@@ -980,6 +980,10 @@ fn designed_refusals_are_a_closed_list() {
         "normalisation_mismatch",
         "finish_tensor",
         "vakint:Empty",
+        // the record builder's states (helper VH round 2, R2-I3)
+        "sigma",
+        "root_crown_paired",
+        "root_normalisation_momentum",
         // K3 (U7b): no new designed code; these two are bugs
         "ir_hard_site_missing",
         "ir_dirac_closure",
@@ -990,9 +994,10 @@ fn designed_refusals_are_a_closed_list() {
         );
     }
     // U7b adds no designed refusal; the U7a delta adds `one_loop_tree_cut`
-    assert_eq!(DESIGNED_LOCAL.len(), 15, "{DESIGNED_LOCAL:?}");
+    // R2-I3 removes `sigma`, `root_crown_paired`, `root_normalisation_momentum`
+    assert_eq!(DESIGNED_LOCAL.len(), 12, "{DESIGNED_LOCAL:?}");
     assert_eq!(uncontracted::DESIGNED_VAKINT.len(), 8);
-    for code in ["open_root", "insertion_mass_symbol", "root_crown_paired"] {
+    for code in ["open_root", "insertion_mass_symbol", "one_loop_tree_cut"] {
         assert!(DESIGNED_LOCAL.contains(&code), "{code}");
     }
 }
