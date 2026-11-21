@@ -118,7 +118,35 @@ impl<'a> CountertermPrewarmPlan<'a> {
     }
 }
 
-type Entry = Arc<OnceLock<std::result::Result<Atom, String>>>;
+type Entry = Arc<OnceLock<std::result::Result<Atom, Failure>>>;
+
+/// A stored failure: its text, and whether it is a failed comparison
+/// ([`crate::uv::rstar::diagnostic_failure`]), which no fallback may decline
+/// (a decorated quotient's R* runs inside the child guard of an IR hard
+/// part): every reuse returns it as one again, its text unchanged.
+#[derive(Debug)]
+struct Failure {
+    message: String,
+    diagnostic: bool,
+}
+
+impl Failure {
+    fn new(error: &eyre::Report) -> Self {
+        Self {
+            message: format!("{error:#}"),
+            diagnostic: crate::uv::rstar::is_diagnostic_failure(error),
+        }
+    }
+
+    fn report(&self) -> eyre::Report {
+        let report = eyre!(self.message.clone());
+        if self.diagnostic {
+            crate::uv::rstar::diagnostic_failure(report)
+        } else {
+            report
+        }
+    }
+}
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct Key {
@@ -393,7 +421,7 @@ impl CountertermCache {
             .filter_map(|entry| entry.get())
             .map(|value| match value {
                 Ok(atom) => atom.as_view().get_byte_size(),
-                Err(error) => error.len(),
+                Err(error) => error.message.len(),
             })
             .sum();
         (entries.len(), bytes)
@@ -439,7 +467,7 @@ impl CountertermCache {
                 .get(&key)
                 .cloned();
             if let Some(result) = entry.as_ref().and_then(|entry| entry.get()) {
-                result.as_ref().map_err(|message| eyre!(message.clone()))?;
+                result.as_ref().map_err(Failure::report)?;
                 continue;
             }
             let loops = request.loops();
@@ -593,12 +621,12 @@ impl CountertermCache {
                 .inspect(|_| {
                     self.stores.fetch_add(1, Ordering::Relaxed);
                 })
-                .map_err(|error| format!("{error:#}"));
+                .map_err(|error| Failure::new(&error));
             timing.lap(CacheTimingPhase::Store);
             result
         });
         drop(resolve_stage);
-        let canonical = result.as_ref().map_err(|message| eyre!(message.clone()))?;
+        let canonical = result.as_ref().map_err(Failure::report)?;
         debug_tags!(#uv, #integrated, #cache;
             stage = "uv_counterterm_cache_lookup",
             hit = existing,
