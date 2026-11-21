@@ -1178,10 +1178,24 @@ fn k5_l5_3793_check_and_on_equal_off() -> Result<()> {
 /// it); on == off through eps^-1.
 #[test]
 fn k5_l5_multi_loop_holes_check_and_on_equal_off() -> Result<()> {
+    multi_loop_holes(k5::HoleCut::Form)
+}
+
+/// The same five graphs with the DEFAULT hole-cut mode (`decline`: the
+/// single-hedge `ins:` stays out of the G-D gate): every kept and cut hole is
+/// declined by design (`surrogate_hole_cut`, today's path), counted per kind,
+/// every other record compared and equal, on == off through eps^-1.
+#[test]
+fn k5_l5_multi_loop_holes_with_the_hole_cut_declined() -> Result<()> {
+    multi_loop_holes(k5::HoleCut::Decline)
+}
+
+fn multi_loop_holes(mode: k5::HoleCut) -> Result<()> {
     with_production_piece_limit(|| -> Result<()> {
         test_initialise()?;
         let vakint = Vakint::new()?;
         let mut failures = Vec::new();
+        let mut hole_cut_declines = 0;
         for (name, dot) in L5_MULTI_LOOP_HOLES {
             let original = colour_factored(&load(dot)?)?;
             let prepared = prepare(dot, &vakint)?;
@@ -1191,7 +1205,7 @@ fn k5_l5_multi_loop_holes_check_and_on_equal_off() -> Result<()> {
                 .iter()
                 .map(|hole| hole.loops)
                 .collect::<Vec<_>>();
-            match whole_graph_summary(&original, &vakint, 1) {
+            match k5::with_hole_cut(mode, || whole_graph_summary(&original, &vakint, 1)) {
                 Ok(summary) if summary.contains_key("declined:surrogate_split_chain") => {
                     eprintln!(
                         "K5_MULTI {name} FAIL hole_loops={holes:?}: split chains declined {summary:?}"
@@ -1200,10 +1214,24 @@ fn k5_l5_multi_loop_holes_check_and_on_equal_off() -> Result<()> {
                         "{name}: a cut chain was declined, not stated: {summary:?}"
                     ));
                 }
-                Ok(summary) => eprintln!(
-                    "K5_MULTI {name} PASS surrogate_loops={} hole_loops={holes:?} {summary:?}",
-                    prepared.surrogate.loop_count()
-                ),
+                Ok(summary)
+                    if mode == k5::HoleCut::Form
+                        && summary.contains_key("declined:surrogate_hole_cut") =>
+                {
+                    failures.push(format!(
+                        "{name}: hole_cut declined in form mode: {summary:?}"
+                    ));
+                }
+                Ok(summary) => {
+                    hole_cut_declines += summary
+                        .get("declined:surrogate_hole_cut")
+                        .copied()
+                        .unwrap_or(0);
+                    eprintln!(
+                        "K5_MULTI mode={mode:?} {name} PASS surrogate_loops={} hole_loops={holes:?} {summary:?}",
+                        prepared.surrogate.loop_count()
+                    )
+                }
                 Err(error) => {
                     eprintln!("K5_MULTI {name} FAIL hole_loops={holes:?}: {error:#}");
                     failures.push(format!("{name}: {error:#}"));
@@ -1211,6 +1239,12 @@ fn k5_l5_multi_loop_holes_check_and_on_equal_off() -> Result<()> {
             }
         }
         ensure!(failures.is_empty(), "{failures:#?}");
+        if mode == k5::HoleCut::Decline {
+            ensure!(
+                hole_cut_declines > 0,
+                "decline mode declined no kept and cut hole on the five graphs"
+            );
+        }
         Ok(())
     })
 }
@@ -1526,8 +1560,10 @@ fn k5_spectator_ports_have_todays_index_structure() -> Result<()> {
             let before = spectators;
             let captured = with_switch(check_surrogate(), || -> Result<Vec<Captured>> {
                 let ledger = DiagramLedger::open(original.name(), "k5-spectator");
-                let (value, captured) =
-                    with_capture(|| evaluator.pole_part_closing_root(&original, &vakint, true));
+                // the single-hedge form (its spectator ports) is the explicit form mode
+                let (value, captured) = k5::with_hole_cut(k5::HoleCut::Form, || {
+                    with_capture(|| evaluator.pole_part_closing_root(&original, &vakint, true))
+                });
                 if let Some(ledger) = ledger {
                     ledger.close(value.is_ok())?;
                 }
@@ -1577,6 +1613,126 @@ fn k5_spectator_ports_have_todays_index_structure() -> Result<()> {
             "no record with a spectator port on the five graphs"
         );
         eprintln!("K5_SPECTATOR records={spectators}");
+        Ok(())
+    })
+}
+
+/// The hole-cut switch: `decline` is the default (unset environment), and
+/// the reader probe of this build's vakint (b6bb69835) accepts the
+/// single-hedge form (the gated reader ccba5e0c8a does not: `auto` would
+/// decline there); `surrogate_hole_cut` is in the closed list.
+#[test]
+fn k5_hole_cut_switch_defaults_to_decline() {
+    assert!(std::env::var_os(k5::HOLE_CUT_VARIABLE).is_none());
+    assert_eq!(k5::hole_cut(), k5::HoleCut::Decline);
+    assert!(k5::reader_accepts_single_hedge());
+    assert!(uncontracted::is_designed_code("surrogate_hole_cut"));
+    assert_eq!(
+        k5::with_hole_cut(k5::HoleCut::Form, k5::hole_cut),
+        k5::HoleCut::Form
+    );
+}
+
+/// Beta's point 6: the coefficient C_H carries the momentum of the excised
+/// diagram's first external edge, which may be the chain's far edge e_out:
+/// k5-surrogate's coefficient vertex 8 rewritten in Q(12) (= +Q(10): edge 10
+/// enters the chain at 8, edge 12 leaves it at 9) is emitted in Q(10), the
+/// anchor's own edge, and the record and value still equal the fixture.
+#[test]
+fn k5_coefficient_momentum_is_written_in_the_anchor_edge() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let prepared = prepare(L5_22807_DOT, &vakint)?;
+        let mut case = root_case(&prepared, K5_SURROGATE)?;
+        let node = case
+            .graph
+            .underlying
+            .iter_nodes()
+            .map(|(node, _, _)| node)
+            .find(|node| usize::from(*node) == 8)
+            .ok_or_else(|| eyre!("no vertex 8"))?;
+        let q = |e: usize| symbolica::function!(GS.emr_mom, e, crate::utils::W_.x___);
+        let far = case.graph[node]
+            .num
+            .value
+            .replace(q(10).to_pattern())
+            .with(q(12).to_pattern());
+        ensure!(
+            far.to_canonical_string().contains("::Q(12,")
+                && !far.to_canonical_string().contains("::Q(10,"),
+            "the rewrite to Q(12) did not take"
+        );
+        case.graph.underlying[node].num.value = far;
+        let attempt = root_attempt(&case, &vakint, Some(case.provenance.clone()), false)?;
+        let text = attempt
+            .text
+            .clone()
+            .ok_or_else(|| eyre!("no record: {:?}", attempt.outcome))?;
+        let ours = record(&text)?;
+        let factor = ours
+            .insertions
+            .iter()
+            .find(|insertion| insertion.vertex == 8)
+            .ok_or_else(|| eyre!("no ins: at 8"))?
+            .factor
+            .to_canonical_string();
+        ensure!(
+            factor.contains("::Q(10,") && !factor.contains("::Q(12,"),
+            "the coefficient is not written in Q(10)"
+        );
+        let differences = record_differences(&ours, &case.fixture);
+        ensure!(differences.is_empty(), "{differences:#?}");
+        let value = attempt.value().ok_or_else(|| eyre!("no value"))?;
+        ensure!(equal_through(
+            &value,
+            &fixture_value(K5_SURROGATE_VALUE)?,
+            valid_through(K5_SURROGATE_VALUE)?
+        )?);
+        Ok(())
+    })
+}
+
+/// Beta's point 7: a cut child that is a run of whole bubbles through the
+/// anchor (L5 143019's child {9,10}: superficial degree 0) carries the
+/// Taylor degree of its local dod, here deg C_H = 2 (the ghost coefficient's
+/// Q(e_in)^2), as today's outer Taylor step does.
+#[test]
+fn k5_cut_child_taylor_degree_is_the_local_dod() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let (_, dot) = L5_MULTI_LOOP_HOLES[0];
+        let original = colour_factored(&load(dot)?)?;
+        let evaluator = PropagatorInsertionEvaluator::new(settings());
+        let captured = with_switch(check_surrogate(), || -> Result<Vec<Captured>> {
+            let ledger = DiagramLedger::open(original.name(), "k5-taylor");
+            let (value, captured) = k5::with_hole_cut(k5::HoleCut::Form, || {
+                with_capture(|| evaluator.pole_part_closing_root(&original, &vakint, true))
+            });
+            if let Some(ledger) = ledger {
+                ledger.close(value.is_ok())?;
+            }
+            value?;
+            Ok(captured)
+        })?;
+        let child = captured
+            .iter()
+            .filter_map(|attempt| attempt.text.as_deref())
+            .filter(|text| text.contains(" scope=surrogate:9,10 "))
+            .map(record)
+            .collect::<Result<Vec<_>>>()?;
+        ensure!(!child.is_empty(), "no record of the child {{9,10}}");
+        for value in &child {
+            let FactorizedKind::Closure(spec) = &value.kind else {
+                return Err(eyre!("not a closure record"));
+            };
+            let degree = spec.taylor.as_ref().map(|taylor| taylor.degree);
+            ensure!(
+                degree == Some(2),
+                "child {{9,10}}: Taylor degree {degree:?}"
+            );
+        }
         Ok(())
     })
 }
