@@ -25,9 +25,10 @@
 //!   refusal (the closed lists [`DESIGNED_LOCAL`] and [`DESIGNED_VAKINT`])
 //!   falls back to today's path for that record only, with one
 //!   `UNCONTRACTED ... outcome=declined:<code>` line. Any other refusal is
-//!   `outcome=error:<code>` (a bug of the emitter or of vakint's entry): it
-//!   falls back too, unless `GAMMALOOP_UNCONTRACTED_STRICT=1`, which fails
-//!   the diagram (on in the tests and the gate runs). Unknown master
+//!   `outcome=error:<code>` (a bug of the emitter or of vakint's entry) and
+//!   fails the diagram: strict is the only behaviour of on and check (helper
+//!   VH round 2 R2-I1; `GAMMALOOP_UNCONTRACTED_STRICT=1` is accepted as a
+//!   no-op, `0` is refused when the switch initialises). Unknown master
 //!   coefficients are a hard error (the format: an ALARM fails the diagram).
 //! * Check: our attempt first (it changes no state), then today's path; the
 //!   parts through the record's order (the poles for K1 / K2, `ε^(extra-1)`
@@ -39,9 +40,16 @@
 //!   returned. Check-mode times are NOT a timing comparison (our attempt runs
 //!   first and warms vakint's caches): use paired off / on runs.
 //!
-//! Every diagram root evaluation prints one `UNCONTRACTED_SUMMARY` line
-//! (attempted, uncontracted, compared, equal, declined and error counts by
-//! code) with the switch on or check.
+//! Every diagram prints one `UNCONTRACTED_DISPOSITION` line per enabled kind
+//! and one `UNCONTRACTED_SUMMARY` line (expected, attempted, uncontracted,
+//! compared, equal, declined, no-record, Δ-cache-hit, unchecked and error
+//! counts by code) with the switch on or check, and check mode fails a
+//! diagram its comparisons do not cover: the ledger,
+//! [`super::uncontracted_ledger`] (U7a delta, U7a.1 and U7a.4), which also
+//! keys every record occurrence for paired off / on timings. The switch's
+//! initialisation ([`validate`]) refuses `GAMMALOOP_UNCONTRACTED_STRICT=0`,
+//! check mode with `PINT6_CLOSURE_DUMP`, a kind list without a kind this
+//! build emits and a bad exception list.
 //!
 //! Kinds (`root` = K1 root remainders, `child` = K2 UV children, `ir-hard` =
 //! K3 IR hard parts, and the inert `quotient`, `surrogate`, `insertion`):
@@ -346,28 +354,68 @@ fn join_kinds(kinds: &[Kind]) -> String {
         .join(",")
 }
 
-/// The switch of the environment, read once; a bad value panics at the first
-/// use, as `GAMMALOOP_INSERTION_CLOSURE` does.
-fn environment() -> Switch {
-    static SWITCH: LazyLock<Switch> = LazyLock::new(|| {
-        let value = match std::env::var(VARIABLE) {
-            Ok(value) => Some(value),
-            Err(std::env::VarError::NotPresent) => None,
-            Err(std::env::VarError::NotUnicode(value)) => {
-                panic!("{VARIABLE}={value:?} is not unicode")
-            }
-        };
-        let switch = Switch::parse(value.as_deref()).unwrap_or_else(|error| panic!("{error}"));
-        if switch.mode != Mode::Off {
-            eprintln!(
-                "{} strict={}",
-                switch.line(),
-                u8::from(strict_environment())
-            );
+/// The switch of the environment and the check's exception list.
+struct Environment {
+    switch: Switch,
+    exceptions: super::uncontracted_ledger::Exceptions,
+}
+
+/// The switch of the environment, read and checked once
+/// ([`super::uncontracted_ledger::initialise`]: strict, the PINT6 dump, the
+/// kinds, the exception list): an error refuses the run at [`validate`] (the
+/// beta's start-up) and panics at the first use otherwise, as
+/// `GAMMALOOP_INSERTION_CLOSURE` does.
+static ENVIRONMENT: LazyLock<std::result::Result<Environment, String>> = LazyLock::new(|| {
+    let read = |name: &str| match std::env::var(name) {
+        Ok(value) => Ok(Some(value)),
+        Err(std::env::VarError::NotPresent) => Ok(None),
+        Err(std::env::VarError::NotUnicode(value)) => {
+            Err(format!("{name}={value:?} is not unicode"))
         }
-        switch
-    });
-    *SWITCH
+    };
+    let switch = Switch::parse(read(VARIABLE)?.as_deref())?;
+    let exceptions = super::uncontracted_ledger::initialise(
+        switch,
+        read(STRICT_VARIABLE)?.as_deref(),
+        || super::pint6_dump::settings().is_some(),
+        read(super::uncontracted_ledger::EXCEPTIONS_VARIABLE)?.as_deref(),
+    )?;
+    if switch.mode != Mode::Off {
+        eprintln!(
+            "{} strict=1 exceptions={}",
+            switch.line(),
+            match &exceptions.digest {
+                Some(digest) => format!("{}:{digest}", exceptions.entries.len()),
+                None => "none".to_owned(),
+            }
+        );
+    }
+    Ok(Environment { switch, exceptions })
+});
+
+fn environment() -> Switch {
+    match &*ENVIRONMENT {
+        Ok(environment) => environment.switch,
+        Err(error) => panic!("{error}"),
+    }
+}
+
+/// The switch's initialisation: `Err` for a value the run refuses (call at
+/// start-up for an early error; the beta does).
+pub(crate) fn validate() -> Result<()> {
+    match &*ENVIRONMENT {
+        Ok(_) => Ok(()),
+        Err(error) => Err(eyre!("{error}")),
+    }
+}
+
+/// The exception list of the environment (empty unless check mode reads
+/// one).
+pub(super) fn exceptions() -> super::uncontracted_ledger::Exceptions {
+    match &*ENVIRONMENT {
+        Ok(environment) => environment.exceptions.clone(),
+        Err(error) => panic!("{error}"),
+    }
 }
 
 thread_local! {
@@ -415,9 +463,10 @@ thread_local! {
 }
 
 /// Run `f` inside `scope` (restored on unwinding too). With the switch off it
-/// just calls `f`.
+/// just calls `f`, unless `GAMMALOOP_UNCONTRACTED_TIMING=1` keys the off
+/// run's occurrences, which then need the kinds an on run gives them.
 pub(super) fn scoped<T>(scope: Scope, f: impl FnOnce() -> T) -> T {
-    if switch().mode == Mode::Off {
+    if switch().mode == Mode::Off && !super::uncontracted_ledger::timing_enabled() {
         return f();
     }
     let slot = ScopedSlot::enter(&SCOPE, scope);
@@ -790,7 +839,7 @@ impl Attempt {
         matches!(self.outcome, Outcome::Error(_))
     }
 
-    fn outcome_name(&self) -> String {
+    pub(super) fn outcome_name(&self) -> String {
         match &self.outcome {
             Outcome::Value(_) => "uncontracted".into(),
             Outcome::Zero => "zero".into(),
@@ -883,7 +932,7 @@ pub(super) fn attempt<R: std::borrow::Borrow<RStarIntegrand>>(
         Err(error) => {
             let text = error.to_string();
             if is_unknown_master_text(&text) {
-                tally_unknown_masters(&attempt.graph);
+                tally_unknown_masters(kind);
                 eprintln!(
                     "UNCONTRACTED kind={} graph={} id={id} outcome=error:unknown_masters detail=\"{}\"",
                     kind.as_str(),
@@ -1207,8 +1256,8 @@ pub(super) fn check_failure(attempt: &Attempt, check: &Check, epsilon: Symbol) -
 }
 
 /// The error of an attempt whose refusal is not designed
-/// ([`Outcome::Error`]): it fails the diagram in check mode, and in mode on
-/// under `GAMMALOOP_UNCONTRACTED_STRICT=1`.
+/// ([`Outcome::Error`]): it fails the diagram, in check mode and in mode on
+/// (R2-I1).
 pub(super) fn error_failure(attempt: &Attempt, mode: Mode) -> eyre::Report {
     let (code, detail) = match &attempt.outcome {
         Outcome::Error(decline) => (decline.code.as_str(), decline.detail.as_str()),
@@ -1224,170 +1273,44 @@ pub(super) fn error_failure(attempt: &Attempt, mode: Mode) -> eyre::Report {
 }
 
 // ---------------------------------------------------------------------------
-// GAMMALOOP_UNCONTRACTED_STRICT and the per-diagram summary
+// GAMMALOOP_UNCONTRACTED_STRICT (a no-op) and the per-diagram lines
 // ---------------------------------------------------------------------------
 
-/// The environment variable of the strict switch.
+/// The environment variable of the former strict switch: strict is the only
+/// behaviour of on and check (helper VH round 2 R2-I1); `1` is accepted as a
+/// no-op and `0` is refused when the switch initialises
+/// ([`super::uncontracted_ledger::parse_strict`]).
 pub(crate) const STRICT_VARIABLE: &str = "GAMMALOOP_UNCONTRACTED_STRICT";
 
-/// `GAMMALOOP_UNCONTRACTED_STRICT` (`1`/`on`; unset, `""`, `0`, `off`: not
-/// strict): in mode on an error outcome fails the diagram instead of taking
-/// today's path (check mode always fails it). Read once; a bad value
-/// panics.
-fn strict_environment() -> bool {
-    static STRICT: LazyLock<bool> = LazyLock::new(|| match std::env::var(STRICT_VARIABLE) {
-        Err(std::env::VarError::NotPresent) => false,
-        Ok(value) => match value.trim() {
-            "" | "0" | "off" => false,
-            "1" | "on" => true,
-            other => panic!("{STRICT_VARIABLE} must be 0, 1, off or on, not `{other}`"),
-        },
-        Err(std::env::VarError::NotUnicode(value)) => {
-            panic!("{STRICT_VARIABLE}={value:?} is not unicode")
-        }
-    });
-    *STRICT
-}
-
-thread_local! {
-    static TEST_STRICT: Cell<Option<bool>> = const { Cell::new(None) };
-}
-
-/// Whether an error outcome fails the diagram in mode on.
-pub(crate) fn strict() -> bool {
-    TEST_STRICT
-        .with(Cell::get)
-        .unwrap_or_else(strict_environment)
-}
-
-/// Tests: run `f` with the strict switch `strict` on this thread.
+/// Tests: run `f` "strict" (the only behaviour; `strict = false` no longer
+/// exists, R2-I1).
 #[cfg(test)]
 pub(crate) fn with_strict<T>(strict: bool, f: impl FnOnce() -> T) -> T {
-    struct Restore(Option<bool>);
-    impl Drop for Restore {
-        fn drop(&mut self) {
-            let previous = self.0;
-            TEST_STRICT.with(|slot| slot.set(previous));
-        }
-    }
-    let _restore = Restore(TEST_STRICT.with(|slot| slot.replace(Some(strict))));
+    assert!(
+        strict,
+        "the non-strict mode is removed (R2-I1): an error outcome always fails the diagram"
+    );
     f()
 }
 
-/// The outcomes reported for one graph since its last summary.
-#[derive(Clone, Debug, Default)]
-struct Tally {
-    attempted: usize,
-    uncontracted: usize,
-    zero: usize,
-    compared: usize,
-    equal: usize,
-    declined: BTreeMap<String, usize>,
-    error: BTreeMap<String, usize>,
-}
-
-/// The tallies by graph name: process-wide, because a diagram's UV children
-/// may be evaluated on other threads than its root (a child's records carry
-/// the diagram's graph name).
-static TALLIES: LazyLock<std::sync::Mutex<BTreeMap<String, Tally>>> =
-    LazyLock::new(|| std::sync::Mutex::new(BTreeMap::new()));
-
-fn with_tally(graph: &str, f: impl FnOnce(&mut Tally)) {
-    let mut tallies = TALLIES
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    f(tallies.entry(graph.to_owned()).or_default());
-}
-
-fn tally(attempt: &Attempt, check: Option<&Check>) {
-    with_tally(&attempt.graph, |tally| {
-        tally.attempted += 1;
-        match &attempt.outcome {
-            Outcome::Value(_) => tally.uncontracted += 1,
-            Outcome::Zero => tally.zero += 1,
-            Outcome::Declined(decline) => {
-                *tally.declined.entry(decline.code.clone()).or_default() += 1
-            }
-            Outcome::Error(decline) => *tally.error.entry(decline.code.clone()).or_default() += 1,
-        }
-        if let Some(check) = check {
-            tally.compared += 1;
-            tally.equal += usize::from(check.equal);
-        }
-    });
-}
-
-/// The unknown-master hard error, counted in the summary.
-pub(super) fn tally_unknown_masters(graph: &str) {
-    with_tally(graph, |tally| {
-        tally.attempted += 1;
-        *tally.error.entry("unknown_masters".into()).or_default() += 1;
-    });
-}
-
-/// `UNCONTRACTED_SUMMARY graph= mode= attempted= uncontracted= zero=
-/// compared= equal= declined=<code:n,..|none> error=<code:n,..|none>
-/// outcome=<ok|error>`: printed by every root-scope `counterterm` (a diagram
-/// root, an insertion surrogate root inside its dressed scope) when the
-/// switch is on or check and the graph has attempts since its last line (its
-/// UV children's records included, on whatever thread they ran); the graph's
-/// tally is reset, so every attempt is counted on exactly one line of its
-/// graph (child plans never print: their records join the root's line).
-pub(super) fn log_summary(graph: &str, ok: bool) {
-    let switch = switch();
-    if switch.mode == Mode::Off {
-        return;
-    }
-    let tally = TALLIES
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .remove(graph)
-        .unwrap_or_default();
-    if tally.attempted == 0 {
-        return;
-    }
-    let list = |map: &BTreeMap<String, usize>| {
-        if map.is_empty() {
-            "none".to_owned()
-        } else {
-            map.iter()
-                .map(|(code, n)| format!("{code}:{n}"))
-                .collect::<Vec<_>>()
-                .join(",")
-        }
-    };
-    let line = format!(
-        "UNCONTRACTED_SUMMARY graph={graph} mode={} attempted={} uncontracted={} zero={} compared={} equal={} declined={} error={} outcome={}",
-        switch.mode.as_str(),
-        tally.attempted,
-        tally.uncontracted,
-        tally.zero,
-        tally.compared,
-        tally.equal,
-        list(&tally.declined),
-        list(&tally.error),
-        if ok { "ok" } else { "error" }
-    );
-    eprintln!("{line}");
-    #[cfg(test)]
-    SUMMARIES.with(|lines| lines.borrow_mut().push(line));
-}
-
-#[cfg(test)]
-thread_local! {
-    static SUMMARIES: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+/// vakint's unknown-master refusal of an attempt of `kind`, counted in its
+/// diagram's lines.
+pub(super) fn tally_unknown_masters(kind: Kind) {
+    super::uncontracted_ledger::record_unknown_masters(kind);
 }
 
 /// Tests: the `UNCONTRACTED_SUMMARY` lines printed on this thread since the
-/// last call.
+/// last call (one per diagram ledger, [`super::uncontracted_ledger`]).
 #[cfg(test)]
 pub(crate) fn take_summaries() -> Vec<String> {
-    SUMMARIES.with(|lines| std::mem::take(&mut *lines.borrow_mut()))
+    super::uncontracted_ledger::take_summaries()
 }
 
 /// The log lines, the dump and the test capture of one attempt (and its
 /// check in check mode).
 pub(super) fn report(attempt: &Attempt, check: Option<&Check>) {
+    // the occurrence key (U7a delta, the timing note) and the record digest
+    let key = super::uncontracted_ledger::occurrence_fields(attempt.text.as_deref());
     let head = format!(
         "UNCONTRACTED kind={} graph={} id={} outcome={} closure={} loops={}",
         attempt.kind.as_str(),
@@ -1398,21 +1321,21 @@ pub(super) fn report(attempt: &Attempt, check: Option<&Check>) {
         attempt.loops
     );
     match &attempt.outcome {
-        Outcome::Value(_) => eprintln!("{head}{}", attempt.fields),
-        Outcome::Zero => eprintln!("{head}"),
+        Outcome::Value(_) => eprintln!("{head}{}{key}", attempt.fields),
+        Outcome::Zero => eprintln!("{head}{key}"),
         Outcome::Declined(decline) | Outcome::Error(decline) => {
             eprintln!(
-                "{head} build_s={:.3} evaluate_s={:.3} detail=\"{}\"",
+                "{head} build_s={:.3} evaluate_s={:.3} detail=\"{}\"{key}",
                 attempt.build_seconds,
                 attempt.evaluate_seconds,
                 escape(&decline.detail)
             )
         }
     }
-    tally(attempt, check);
+    super::uncontracted_ledger::record(attempt, check, switch().mode);
     if let Some(check) = check {
         eprintln!(
-            "UNCONTRACTED_CHECK kind={} graph={} id={} identical={} equal={} full={} contracted_s={:.3} uncontracted_s={:.3} depth={} valid_through=eps^{} first_difference={}",
+            "UNCONTRACTED_CHECK kind={} graph={} id={} identical={} equal={} full={} contracted_s={:.3} uncontracted_s={:.3} depth={} valid_through=eps^{} first_difference={}{key}",
             attempt.kind.as_str(),
             attempt.graph,
             attempt.id,
@@ -2677,9 +2600,12 @@ fn build(
         Some(_) => "child",
         None => "root",
     };
+    // the evaluation path: a child record names the forest of its parents
+    // (helper VH round 2 R2-M3)
+    let path = super::uncontracted_ledger::current_path();
     let label = match site.ir_hard {
         Some(ir_hard) if kind == Kind::IrHard => format!(
-            "u7b kind=ir-hard graph={} scope={scope}:{} corr={} term={} attempt={} hard={} remaining={} contracted={contracted_label} marked_edge={} omega={} depth={} closure={} id={id}",
+            "u7b kind=ir-hard graph={} scope={scope}:{} corr={} term={} attempt={} hard={} remaining={} contracted={contracted_label} marked_edge={} omega={} depth={} closure={} path={path} id={id}",
             graph.name,
             super::plan::join_edge_ids(&super::plan::uv_child_edge_ids(graph, &site.plan.support)),
             ir_hard.correction,
@@ -2693,7 +2619,7 @@ fn build(
             closure_name(site, kind)
         ),
         _ => format!(
-            "u7a kind={} graph={} scope={}:{} term={} remaining={} contracted={contracted_label} marked_edge={} closure={} id={id}",
+            "u7a kind={} graph={} scope={}:{} term={} remaining={} contracted={contracted_label} marked_edge={} closure={} path={path} id={id}",
             kind.as_str(),
             graph.name,
             kind.as_str(),
