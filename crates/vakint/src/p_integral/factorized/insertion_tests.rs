@@ -930,7 +930,7 @@ fn an_epsilon_setting_of_another_name_gets_the_pole_order_rules_at_the_entry() {
         let error = super::evaluate::vakint_input(&user, &value, &Atom::num(1)).unwrap_err();
         insertion_refusal(&error, C0, prefix, what);
     }
-    super::evaluate::vakint_input(&user, &with("user::ep^-1"), &Atom::num(1))
+    let _accepted = super::evaluate::vakint_input(&user, &with("user::ep^-1"), &Atom::num(1))
         .expect("user::ep^-1 is a Laurent coefficient");
 }
 
