@@ -890,7 +890,10 @@ fn port_refusals_are_precise() {
     });
     integer.validate().unwrap();
     match refused(&integer) {
-        FactorizedError::Ports { detail } => assert!(detail.contains("integer index"), "{detail}"),
+        FactorizedError::Ports { detail } => assert!(
+            detail.starts_with("open port ") && detail.contains("has an integer index"),
+            "{detail}"
+        ),
         other => panic!("{other}"),
     }
     // an open spinor slot (a projector slot of the spinor representation)
@@ -907,11 +910,25 @@ fn port_refusals_are_precise() {
             * symbolica::function!(sym(METRIC), bis(9500), bis(9501)),
         p2_power: 0,
     });
-    let error = match spinor.validate() {
-        Err(error) => error,
-        Ok(()) => refused(&spinor),
-    };
-    eprintln!("open spinor slot refused: {error}");
+    // a spinor metric in the projector (the projector's metric joins
+    // Lorentz slots only): refused by the projector rule; the twin without
+    // it validates
+    let mut twin = spinor.clone();
+    twin.projector = Some(Projector {
+        tensor: symbolica::function!(sym(METRIC), &spinor.ports[0], &spinor.ports[1]),
+        p2_power: 0,
+    });
+    twin.validate().unwrap();
+    match spinor.validate() {
+        Err(FactorizedError::UnsupportedTensor { location, tensor }) => {
+            assert_eq!(location, "projector");
+            assert!(
+                tensor.starts_with("spenso::{symmetric,linear,real,spenso::tensor}::g(spenso::{spenso::representation,spenso::self_dual}::bis("),
+                "{tensor}"
+            );
+        }
+        other => panic!("a spinor metric in the projector: {other:?}"),
+    }
     // every leg soft: no external momentum to return the tensor in
     let mut all_soft = base.clone();
     for edge in &mut all_soft.edges {
@@ -924,7 +941,10 @@ fn port_refusals_are_precise() {
     }
     all_soft.validate().unwrap();
     match refused(&all_soft) {
-        FactorizedError::Evaluation { detail } => assert!(detail.contains("soft"), "{detail}"),
+        FactorizedError::Evaluation { detail } => assert!(
+            detail.starts_with("every external leg is soft (zero momentum)"),
+            "{detail}"
+        ),
         other => panic!("{other}"),
     }
     // a projector slot that is not a port but occurs in the factors
@@ -938,10 +958,14 @@ fn port_refusals_are_precise() {
         ),
         p2_power: 0,
     });
-    assert!(matches!(
-        stray.validate(),
-        Err(FactorizedError::Ports { .. })
-    ));
+    match stray.validate() {
+        Err(FactorizedError::Ports { detail }) => assert!(
+            detail.starts_with("the projector's free index ")
+                && detail.contains("occurs in the factors but is not a port"),
+            "{detail}"
+        ),
+        other => panic!("{other:?}"),
+    }
 }
 
 /// A projector closing SOME ports: the others stay open, and a fresh slot of
