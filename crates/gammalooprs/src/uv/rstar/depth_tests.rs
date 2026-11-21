@@ -1167,3 +1167,7 @@ fn a_vanished_row_of_a_nonzero_group_keeps_its_quotient_pole() -> Result<()> {
         "no row of the top group needs the full bound and reaches the pole part: {rows:?}"
     ))
 }
+
+/// IRH-DEPTH round 5: the regularity witnesses ([`super::regularity`]).
+#[path = "regularity_tests.rs"]
+mod round5;

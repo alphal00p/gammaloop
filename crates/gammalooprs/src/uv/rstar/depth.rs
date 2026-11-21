@@ -118,6 +118,11 @@
 //!   coefficient that kept an unexpanded function of `ε` would therefore
 //!   refuse every correction of its diagram into today's path: right value,
 //!   today's cost, counted as `unbounded=` in `IR_HARD_DEPTH_SUMMARY`.
+//!
+//! Round 5 ([`super::regularity`]): `B` is read on the NORMALISED factors
+//! of a closed list (closed traces contracted, `d = 4-2ε`), the graph
+//! prefactor and projector included; a factor that is not provably regular
+//! refuses the whole correction before the hard part is integrated.
 
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
@@ -346,6 +351,13 @@ pub(super) struct DepthCounts {
     pub unbounded: usize,
     pub vanished: usize,
     pub unverified: usize,
+    /// Refusals by the regularity certificate (IRH-DEPTH round 5,
+    /// [`super::regularity`]): a factor of the closed list is not provably
+    /// regular, refused before the hard part is integrated.
+    pub unresolved_tensor: usize,
+    pub opaque_function: usize,
+    pub symbol_in_denominator: usize,
+    pub outside_list: usize,
     /// Tests: the last refusal's reason.
     pub reason: Option<&'static str>,
 }
@@ -365,6 +377,10 @@ impl DepthCounts {
         self.unbounded += other.unbounded;
         self.vanished += other.vanished;
         self.unverified += other.unverified;
+        self.unresolved_tensor += other.unresolved_tensor;
+        self.opaque_function += other.opaque_function;
+        self.symbol_in_denominator += other.symbol_in_denominator;
+        self.outside_list += other.outside_list;
         self.reason = other.reason.or(self.reason);
     }
 }
@@ -388,6 +404,10 @@ pub(super) fn refused(counts: &mut DepthCounts, reason: &'static str) {
         "unbounded" => note(counts, |counts| &mut counts.unbounded),
         "vanished" => note(counts, |counts| &mut counts.vanished),
         "unverified" => note(counts, |counts| &mut counts.unverified),
+        "unresolved_tensor" => note(counts, |counts| &mut counts.unresolved_tensor),
+        "opaque_function" => note(counts, |counts| &mut counts.opaque_function),
+        "symbol_in_denominator" => note(counts, |counts| &mut counts.symbol_in_denominator),
+        "outside_list" => note(counts, |counts| &mut counts.outside_list),
         _ => {}
     }
     counts.reason = Some(reason);
