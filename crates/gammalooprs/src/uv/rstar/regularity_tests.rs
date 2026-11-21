@@ -600,3 +600,42 @@ fn the_fixed_normalisations_are_regular() -> Result<()> {
     );
     Ok(())
 }
+
+/// Integration with round 4: a regularity refusal is an ordinary fallback
+/// under every guard setting with STRICT on: never the fatal depth alarm,
+/// never lost by the guarded parent (counted, today's value); a certified
+/// raised bound (the hidden tensor) raises no exceeded alarm under STRICT.
+#[test]
+fn a_refusal_is_a_fallback_under_the_guard_and_strict() -> Result<()> {
+    let y = "irh_r5_test::y";
+    let factor = format!("1/(1+{y})");
+    let symbol = modify(&hard_v0(), "v1", "numerator", times(&factor));
+    let symbol = modify(&symbol, "graph", "numerator", times(&factor));
+    for (label, dot) in [("symbol", symbol), ("tensor-hidden", tensor_hidden())] {
+        let case = Case::new(&dot, None)?;
+        let (today, _) = projected(&case, "closed", FIXED)?;
+        for guard in [false, true] {
+            let cell = format!("{label} guard={guard} strict");
+            let test = DepthTest {
+                guard: Some(guard),
+                strict: Some(true),
+                ..FIXED
+            };
+            let (child, counts) = projected(&case, "child", test)?;
+            eprintln!("IRH_R6_STRICT {cell} counts={counts:?}");
+            ensure_same(&cell, &child, &today)?;
+            if label == "symbol" {
+                ensure!(
+                    counts.exceeded == 0
+                        && counts.refused >= 1
+                        && counts.symbol_in_denominator >= 1
+                        && counts.reason == Some("symbol_in_denominator"),
+                    "{cell}: {counts:?}"
+                );
+            } else {
+                ensure_raised(&cell, &counts)?;
+            }
+        }
+    }
+    Ok(())
+}
