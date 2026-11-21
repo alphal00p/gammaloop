@@ -737,6 +737,18 @@ pub(super) const DESIGNED_VAKINT: &[(&str, &str, &str, &str)] = &[
     ("LeviCivita", "", "", "levi_civita"),
 ];
 
+/// Whether `code` is the code of a designed refusal as an outcome names it
+/// (`declined:<code>`): a [`DESIGNED_LOCAL`] code or `vakint:<code>` of a
+/// [`DESIGNED_VAKINT`] row. Only these can be named by an exception of a
+/// check run ([`super::uncontracted_ledger::parse_exceptions`]): an error is
+/// never excepted.
+pub(super) fn is_designed_code(code: &str) -> bool {
+    DESIGNED_LOCAL.contains(&code)
+        || code
+            .strip_prefix("vakint:")
+            .is_some_and(|code| DESIGNED_VAKINT.iter().any(|row| row.3 == code))
+}
+
 impl Decline {
     fn new(code: impl Into<String>, detail: impl Into<String>) -> Self {
         let code = code.into();
@@ -811,9 +823,8 @@ pub(super) enum Outcome {
     Zero,
     /// A designed refusal: today's path takes the record.
     Declined(Decline),
-    /// Any other refusal (a bug on either side): check mode fails the
-    /// diagram; mode on takes today's path, or fails under
-    /// `GAMMALOOP_UNCONTRACTED_STRICT=1`.
+    /// Any other refusal (a bug on either side): fails the diagram in check
+    /// mode and in mode on (strict is the only behaviour, R2-I1).
     Error(Decline),
 }
 
