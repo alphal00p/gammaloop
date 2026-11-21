@@ -2225,12 +2225,13 @@ impl<'a> Evaluation<'a> {
     /// vakint's factorised entry ([`super::uncontracted`]), under the
     /// integration id today's path would consume, with today's depth (the
     /// remainder's loops plus the quotient's extra loops). On: its value, or
-    /// today's path for this term when it is declined. Check: our attempt (no
-    /// state changes), then today's path; the values must agree through
-    /// `ε^(extra - 1)`; today's value is returned. No record (today's path;
-    /// listed as `no_record=` in the diagram's lines, not expected): a
-    /// zero-loop term (Δ(γ) inserted, no vakint call today, OQ-25) and a
-    /// correction of order `ω = 0` (K8, out of scope).
+    /// today's path for this term when it is declined; an error outcome fails
+    /// the diagram (R2-I1). Check: our attempt (no state changes), then
+    /// today's path; the values must agree through `ε^(extra - 1)`; today's
+    /// value is returned. No record (today's path; listed as `no_record=` in
+    /// the diagram's lines, not expected): a zero-loop term (Δ(γ)
+    /// inserted, no vakint call today, OQ-25) and a correction of order
+    /// `ω = 0` (K8, out of scope).
     fn integrate_ir_hard_uncontracted(
         &mut self,
         call: IrHardTerm<'_>,
@@ -2269,6 +2270,9 @@ impl<'a> Evaluation<'a> {
             let site = self.uncontracted_ir_hard_site(term, &call, &hard);
             uncontracted::attempt(&site, kind, id, switch.mode, || Ok(&remainder))?
         };
+        // tests: an injected outcome (the ledger's `with_fault`)
+        #[cfg(test)]
+        let attempt = super::uncontracted_ledger::inject(attempt);
         let uncontracted_elapsed = started.elapsed();
         if switch.mode == Mode::Check {
             // a refusal that is not designed fails the diagram (review B1/B2)
@@ -2303,7 +2307,8 @@ impl<'a> Evaluation<'a> {
             return Ok((today, routed_bytes));
         }
         uncontracted::report(&attempt, None);
-        if attempt.is_error() && uncontracted::strict() {
+        if attempt.is_error() {
+            // strict is the only behaviour of mode on (R2-I1)
             return Err(uncontracted::error_failure(&attempt, switch.mode));
         }
         match attempt.value() {
@@ -3507,10 +3512,10 @@ impl<'a> Evaluation<'a> {
     /// one uncontracted record evaluated by vakint's factorised entry
     /// ([`super::uncontracted`]), under the integration id today's path would
     /// consume. On: its value, or today's path for this record when it is
-    /// declined. Check: our attempt (no state changes), then today's path;
-    /// the pole parts must agree; today's value is returned. Every remainder
-    /// of an enabled kind is expected in the diagram's ledger
-    /// ([`super::uncontracted_ledger`]).
+    /// declined; an error outcome fails the diagram (R2-I1). Check: our
+    /// attempt (no state changes), then today's path; the pole parts must
+    /// agree; today's value is returned. Every remainder of an enabled kind
+    /// is expected in the diagram's ledger ([`super::uncontracted_ledger`]).
     fn integrate_ordinary_uncontracted(
         &mut self,
         term: &UvPreparationTerm,
@@ -3531,6 +3536,9 @@ impl<'a> Evaluation<'a> {
                 self.remainder_with(term, self.root_closure.as_ref())
             })?
         };
+        // tests: an injected outcome (the ledger's `with_fault`)
+        #[cfg(test)]
+        let attempt = super::uncontracted_ledger::inject(attempt);
         let uncontracted_elapsed = started.elapsed();
         if switch.mode == Mode::Check {
             // a refusal that is not designed fails the diagram (review B1/B2)
@@ -3567,7 +3575,8 @@ impl<'a> Evaluation<'a> {
             return Ok(today);
         }
         uncontracted::report(&attempt, None);
-        if attempt.is_error() && uncontracted::strict() {
+        if attempt.is_error() {
+            // strict is the only behaviour of mode on (R2-I1)
             return Err(uncontracted::error_failure(&attempt, switch.mode));
         }
         match attempt.value() {
