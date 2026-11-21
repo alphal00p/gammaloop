@@ -179,6 +179,16 @@ pub fn validate_uncontracted() -> eyre::Result<()> {
 /// `uv.vakint.evaluation_methods` other than `rustred` and `forcer`).
 /// Every record built under them is an error too, so a caller that skips
 /// this check fails each diagram instead of the run.
+///
+/// The CALLER must call it: nothing in gammalooprs does (the evaluator sees
+/// its settings only per evaluation). The binding defence is the per-record
+/// error (`uncontracted::settings_refusal` at the top of every record
+/// build, on the evaluation's own `uv_settings`); this check only moves the
+/// failure to start-up. The beta calls it right after building its
+/// `IntegrationEngine` (whose settings are MSbar and rustred / forcer by
+/// construction; review of the C7 init refusals, F2); a K5 direct record
+/// that does not go through the record build must call `settings_refusal`
+/// itself (F3).
 pub fn validate_uncontracted_settings(
     settings: &crate::uv::UVgenerationSettings,
 ) -> eyre::Result<()> {
