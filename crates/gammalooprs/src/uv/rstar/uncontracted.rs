@@ -681,8 +681,9 @@ pub(super) struct Decline {
 /// closed-root factor that is not a scalar times a power of p²): they never
 /// occur on a correct site (helper VH round 2, R2-I3). So are the C7
 /// settings exceptions ([`settings_refusal`]: `vakint_normalization`,
-/// `vakint_evaluation_methods`),
-/// settings a record must never be built under.
+/// `vakint_evaluation_methods`; settings a record must never be built
+/// under) and a Δ with a non-local or non-literal form at a `ct:` node
+/// (`insertion_nonlocal`, [`nonlocal_form`]).
 ///
 /// `one_loop_tree_cut` (U7-PLAN 14(d), narrowed as Astra U7a asks: "keep the
 /// rebase test narrow"): ONLY a remainder whose one internal propagator is
@@ -2348,6 +2349,57 @@ fn mentions_mass(atom: &Atom, masses: &BTreeSet<String>) -> bool {
     found
 }
 
+/// The first form of a Δ that must never reach a record's `insertion` line
+/// (`None`: none): log(..), exp(..), sqrt(..), μᵣ² or `log_mu_sq`,
+/// EulerGamma, or a power whose exponent is not an integer literal
+/// (x^(1/2), x^ε, e^x). Helper VH's C7 requires integer-literal exponents
+/// in every field of a marked record; a log, μᵣ² or EulerGamma in a Δ means
+/// it is not local (an incomplete R̄, a massive quotient's log(m_uv_vacuum),
+/// a normalisation other than MSbar), as K5's coefficients assert
+/// (insertions.rs).
+fn nonlocal_form(delta: &Atom) -> Option<String> {
+    let mut found = None;
+    delta.as_view().visitor(&mut |part| {
+        if found.is_some() {
+            return false;
+        }
+        let form = match part {
+            AtomView::Fun(function)
+                if [Symbol::LOG, Symbol::EXP, Symbol::SQRT].contains(&function.get_symbol()) =>
+            {
+                Some("a log, exp or sqrt")
+            }
+            AtomView::Var(variable) => {
+                let symbol = variable.get_symbol();
+                let name = symbol.get_name();
+                if symbol == GS.mu_r_sq || name.ends_with("log_mu_sq") {
+                    Some("the renormalisation scale")
+                } else if name.ends_with("EulerGamma") {
+                    Some("EulerGamma")
+                } else {
+                    None
+                }
+            }
+            AtomView::Pow(power) => {
+                let (_, exponent) = power.get_base_exp();
+                i64::try_from(exponent)
+                    .is_err()
+                    .then_some("a power whose exponent is not an integer literal")
+            }
+            _ => None,
+        };
+        if let Some(form) = form {
+            let text = part.to_owned().to_string();
+            found = Some(format!(
+                "{form}: {}",
+                text.chars().take(200).collect::<String>()
+            ));
+        }
+        found.is_none()
+    });
+    found
+}
+
 /// How a record states its externals and its closure (U7a-DESIGN 4.1).
 enum Frame<'s> {
     /// K1: one external `p(1) = Q(x0)`; σ folds every root leg onto ±p(1);
@@ -2933,6 +2985,38 @@ fn build(
                     ));
                 }
             }
+        }
+        // helper VH's C7 (an integer-literal exponent in every field) and
+        // locality: a Δ about to be written with a log, μᵣ², EulerGamma or
+        // a non-literal power is the ERROR `insertion_nonlocal` (it fails the
+        // diagram; never a designed decline), unless it is a zero by momentum
+        // conservation at the node, which the conservation step removes as
+        // for a mass symbol. A mass symbol (log(M²) included) is the designed
+        // `insertion_mass_symbol` above, decided first.
+        if let Some(form) = nonlocal_form(&delta) {
+            let rewritten = match conserve(&delta, *node, &edges, conserved_components)? {
+                Conservation::Rewritten(rewritten) if nonlocal_form(&rewritten).is_none() => {
+                    Some(rewritten)
+                }
+                _ => None,
+            };
+            let Some(rewritten) = rewritten else {
+                return Err(Decline::new(
+                    "insertion_nonlocal",
+                    format!(
+                        "the counterterm of {} contains {form}",
+                        super::plan::join_edge_ids(&super::plan::uv_child_edge_ids(
+                            graph,
+                            &slot.support
+                        ))
+                    ),
+                ));
+            };
+            if rewritten.is_zero() {
+                return Ok(None);
+            }
+            delta = rewritten;
+            conserved += 1;
         }
         let support_edges = super::plan::uv_child_edge_ids(graph, &slot.support);
         let support_set = support_edges.iter().copied().collect::<BTreeSet<_>>();
