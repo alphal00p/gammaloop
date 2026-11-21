@@ -456,6 +456,10 @@ impl PropagatorInsertionEvaluator {
             return Ok(None);
         }
         let loops = diagram.loop_count();
+        let _span = super::stage_time::Span::open("K5.prepare", &diagram.name(), || {
+            format!("insertions={}", selected.len())
+        });
+        _span.set("loops", loops);
         let extraction_started = Instant::now();
         let counted = vakint::timing::Snapshot::now();
         let mut surrogate = diagram.clone();
@@ -568,6 +572,10 @@ impl PropagatorInsertionEvaluator {
         self.check_preparation(prepared)?;
         let surrogate = &prepared.surrogate;
         let loops = prepared.loop_count();
+        let _span = super::stage_time::Span::open("K5.surrogate", &surrogate.name(), || {
+            format!("loops={loops} close_root={close_root}")
+        });
+        _span.set("loops", loops);
         let surrogate_started = Instant::now();
         let mut closed = false;
         // Through four loops the physical propagator backend gives KG directly.

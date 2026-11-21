@@ -192,6 +192,9 @@ pub(super) struct IntegrationTimings {
     conversion: f64,
     backend: f64,
     finish: f64,
+    /// `GAMMALOOP_STAGE_TIME`: the phases as leaves of the current span
+    /// (logging only; inert when off).
+    stage: super::stage_time::Mark,
 }
 
 impl IntegrationTimings {
@@ -208,14 +211,19 @@ impl IntegrationTimings {
             conversion: 0.0,
             backend: 0.0,
             finish: 0.0,
+            stage: super::stage_time::Mark::now(),
         }
     }
 
-    fn lap(&mut self) -> f64 {
+    /// [`Self::lap`] of the phase `phase` (the same value), also charged to
+    /// the phase's `GAMMALOOP_STAGE_TIME` leaf.
+    fn lap_of(&mut self, phase: &'static str) -> f64 {
         let now = Instant::now();
-        let elapsed = now.duration_since(self.last).as_secs_f64();
+        let elapsed = now.duration_since(self.last);
         self.last = now;
-        elapsed
+        self.stage
+            .phase(super::stage_time::outer_phase_leaf(phase), elapsed);
+        elapsed.as_secs_f64()
     }
 
     /// The timings of one outer integration on the remainder-boundary path
@@ -240,6 +248,7 @@ impl IntegrationTimings {
             conversion,
             backend,
             finish,
+            stage: super::stage_time::Mark::now(),
         }
     }
 
@@ -1960,6 +1969,7 @@ impl RStarIntegrand {
         root_edges: &[EdgeIndex],
         taylor_order: i32,
     ) -> Result<Self> {
+        let _lap = super::stage_time::lap("N.taylor");
         if mode == ChildTruncate::Off || !support_root {
             return Ok(self);
         }
@@ -2539,9 +2549,9 @@ impl RStarIntegrand {
         let mut timing = IntegrationTimings::new();
         if self.region.loops == 0 {
             drop(routing_stage);
-            timing.routing = timing.lap();
+            timing.routing = timing.lap_of("routing");
             let result = Self::finish_tensor(numerator, unique_id)?;
-            timing.finish = timing.lap();
+            timing.finish = timing.lap_of("finish");
             timing.log(&self.graph, unique_id, 0, "physical");
             return Ok(result);
         }
@@ -2564,7 +2574,7 @@ impl RStarIntegrand {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        timing.routing = timing.lap();
+        timing.routing = timing.lap_of("routing");
         drop(routing_stage);
         let materialization_stage =
             StageSpan::new("gamma.physical_integral.tensor_materialization");
@@ -2573,14 +2583,14 @@ impl RStarIntegrand {
         // as the vacuum bridge. Scalar products and their inverses stay compact.
         let explicit = Integrated::materialize_tensor(&numerator)?;
         let source = reducer.admit(cooking.try_cook(explicit.as_view())?)?;
-        timing.materialization = timing.lap();
+        timing.materialization = timing.lap_of("materialization");
         drop(materialization_stage);
         let projection_stage = StageSpan::new("gamma.physical_integral.tensor_reduction");
         let reduced = reducer
             .reduce(&source)
             .wrap_err("could not reduce a physical propagator tensor")?
             .into_expression()?;
-        timing.tensor_projection = timing.lap();
+        timing.tensor_projection = timing.lap_of("tensor_projection");
         drop(projection_stage);
         let algebra_stage = StageSpan::new("gamma.physical_integral.algebra");
         numerator = Self::finish_tensor(cooking.uncook(reduced.expression().as_view()), unique_id)?;
@@ -2590,7 +2600,7 @@ impl RStarIntegrand {
         let scalar_products =
             SymbolicTensor::infer_indexed(cooking.try_cook(numerator.as_view())?)?.to_dots()?;
         numerator = cooking.uncook(scalar_products.expression().as_view());
-        timing.algebra = timing.lap();
+        timing.algebra = timing.lap_of("algebra");
         drop(algebra_stage);
         let conversion_stage = StageSpan::new("gamma.physical_integral.vakint_conversion");
 
@@ -2665,16 +2675,16 @@ impl RStarIntegrand {
         );
         let mut settings = vakint_settings.clone();
         settings.use_dot_product_notation = true;
-        timing.conversion = timing.lap();
+        timing.conversion = timing.lap_of("conversion");
         drop(conversion_stage);
         let backend_stage = StageSpan::new("gamma.physical_integral.backend");
         let integrated = vakint
             .evaluate_integral(&settings, input.as_view())
             .wrap_err("while integrating a physical UV spinney remainder")?;
-        timing.backend = timing.lap();
+        timing.backend = timing.lap_of("backend");
         drop(backend_stage);
         let result = Self::finish_tensor(integrated, unique_id)?;
-        timing.finish = timing.lap();
+        timing.finish = timing.lap_of("finish");
         timing.log(&self.graph, unique_id, self.region.loops, "physical");
         Ok(result)
     }
@@ -2718,6 +2728,7 @@ impl RStarIntegrand {
     /// unevaluated, including the dimension-dependent projector coefficients.
     pub fn project_hard(&self, expression: &Atom) -> Result<Atom> {
         self.ensure_untruncated("the hard projection")?;
+        let _lap = super::stage_time::lap("N.project");
         let ids = self.combination_ids();
         let started = Instant::now();
         let input_bytes = expression.as_view().get_byte_size();
@@ -3231,7 +3242,7 @@ impl RStarIntegrand {
             drop(polynomial);
             expanded
         };
-        timing.algebra = timing.lap();
+        timing.algebra = timing.lap_of("algebra");
         self.integrate_polynomial(
             expanded,
             root_graph,
@@ -3327,7 +3338,7 @@ impl RStarIntegrand {
                 *coefficient = fixed(coefficient);
             }
         }
-        timing.taylor = timing.lap();
+        timing.taylor = timing.lap_of("taylor");
         let mut sum = Atom::Zero;
         for (origin, piece, taylor_seconds) in pieces {
             let kept = origin.kept(mode);
@@ -3487,7 +3498,7 @@ impl RStarIntegrand {
         } else {
             expanded
         };
-        timing.algebra = timing.lap();
+        timing.algebra = timing.lap_of("algebra");
         Ok(Ok(self.integrate_polynomial(
             expanded,
             root_graph,
@@ -3530,7 +3541,7 @@ impl RStarIntegrand {
             streamed::guard_checkpoint("the outer-Taylor expansion")?;
             let polynomial = taylor.evaluate(&fixed)?;
             drop(fixed);
-            timing.taylor = timing.lap();
+            timing.taylor = timing.lap_of("taylor");
             return Ok(polynomial);
         }
         // GAMMALOOP_RSTAR_TOP_MASS_TERMS=drop|drop-odd at the top-level root:
@@ -3559,7 +3570,7 @@ impl RStarIntegrand {
                     .filter(|(order, _)| mode.keeps_order(*order))
                     .map(|(_, coefficient)| coefficient),
             );
-            timing.taylor = timing.lap();
+            timing.taylor = timing.lap_of("taylor");
             return Ok(polynomial);
         }
         streamed::guard_checkpoint("the outer-Taylor mass compensation")?;
@@ -3588,7 +3599,7 @@ impl RStarIntegrand {
         }
         let polynomial = taylor.evaluate(&compensated)?;
         drop(compensated);
-        timing.taylor = timing.lap();
+        timing.taylor = timing.lap_of("taylor");
         Ok(polynomial)
     }
 
@@ -3644,7 +3655,7 @@ impl RStarIntegrand {
             unresolved.is_empty(),
             "an R* quotient left unintegrated boundary loop carriers: {unresolved:?}"
         );
-        timing.routing = timing.lap();
+        timing.routing = timing.lap_of("routing");
         // Each intermediate is dropped as soon as its successor exists: on the
         // largest diagrams each of them is hundreds of megabytes.
         let scaled = streamed::map_term_local(
@@ -3691,7 +3702,7 @@ impl RStarIntegrand {
         } else {
             expanded
         };
-        timing.tensor_projection = timing.lap();
+        timing.tensor_projection = timing.lap_of("tensor_projection");
         let integrated = if self.region.loops == 0 {
             expanded
         } else {
@@ -3714,14 +3725,14 @@ impl RStarIntegrand {
                     .wrap_err("while converting with kept edge momenta")
                 },
             )?;
-            timing.conversion = timing.lap();
+            timing.conversion = timing.lap_of("conversion");
             let integrated = integrate_single_mass(vakint, vakint_settings, &input)
                 .inspect_err(|_| edge_debug_dump("single_mass_error", &Atom::num(1)))?;
-            timing.backend = timing.lap();
+            timing.backend = timing.lap_of("backend");
             integrated
         };
         let result = Self::finish_tensor(integrated, unique_id)?;
-        timing.finish = timing.lap();
+        timing.finish = timing.lap_of("finish");
         timing.log(root_graph, unique_id, self.region.loops, "single_mass");
         Ok(result)
     }

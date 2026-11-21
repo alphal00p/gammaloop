@@ -1667,6 +1667,12 @@ pub(super) fn hook(
 }
 
 impl Hook {
+    /// The occurrence key (`<fnv>#<ordinal>`) of this hook; logging only
+    /// (`GAMMALOOP_STAGE_TIME`'s remainder-term spans).
+    pub(super) fn occurrence(&self) -> &str {
+        &self.current.occurrence
+    }
+
     /// The occurrence ends by `route` (`today`, `uncontracted`, `zero`,
     /// `check`, `declined:<code>`, `error:<code>`, `failed`): its timing
     /// line, when on.

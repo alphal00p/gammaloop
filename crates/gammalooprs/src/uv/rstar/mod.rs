@@ -54,6 +54,7 @@ mod propagator;
 mod recursive_tests;
 #[cfg(test)]
 mod scalar;
+pub mod stage_time;
 mod taylor;
 #[cfg(test)]
 mod tests;

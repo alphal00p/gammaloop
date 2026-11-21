@@ -1020,6 +1020,10 @@ struct Evaluation<'a> {
     /// check, or the timing lines; [`super::uncontracted_ledger`]): closed
     /// with the evaluation's outcome by [`Self::close_ledger`].
     ledger: Option<super::uncontracted_ledger::DiagramLedger>,
+    /// `GAMMALOOP_STAGE_TIME`: this evaluation's `rstar` span (logging only;
+    /// declared last, so it closes after the ledger).
+    #[allow(dead_code)]
+    stage_span: super::stage_time::Span,
 }
 
 impl<'a> Evaluation<'a> {
@@ -1064,6 +1068,17 @@ impl<'a> Evaluation<'a> {
         child_mass: ChildMass,
         compute_children: bool,
     ) -> Result<Self> {
+        let stage_span = super::stage_time::Span::open("rstar", &graph.name, || {
+            format!(
+                "loops={} degree={} child={}",
+                graph.n_loops(&plan.support),
+                plan.taylor_order,
+                plan.root_boundary.is_some()
+            )
+        });
+        stage_span.set("loops", graph.n_loops(&plan.support));
+        stage_span.set("degree", plan.taylor_order);
+        stage_span.set("child", plan.root_boundary.is_some());
         let started = Instant::now();
         let counted = vakint::timing::Snapshot::now();
         // GAMMALOOP_UNCONTRACTED_NUMERATOR (on / check, or the timing lines):
@@ -1182,6 +1197,7 @@ impl<'a> Evaluation<'a> {
             child_decline: None,
             closure_data: None,
             ledger,
+            stage_span,
         })
     }
 
@@ -1338,6 +1354,12 @@ impl<'a> Evaluation<'a> {
         term_index: usize,
         term: &UvPreparationTerm,
     ) -> Result<Atom> {
+        let _span = super::stage_time::Span::open("K3.today", &self.graph.name, || {
+            format!("corr={correction_index} term={term_index}")
+        });
+        _span.set("loops", self.graph.n_loops(&correction.hard));
+        _span.set("degree", correction.taylor_order);
+        _span.set("corr", correction_index);
         let mut prepared = Atom::Zero;
         // The hard part feeds quotient counterterms (a `K` each): it
         // keeps its open root slots, closed after the quotient below.
@@ -1810,6 +1832,12 @@ impl<'a> Evaluation<'a> {
         correction: &IrCorrection,
         mode: super::closed::ChildMode,
     ) -> Result<Option<Atom>> {
+        let _span = super::stage_time::Span::open("K3.irhard", &self.graph.name, || {
+            format!("corr={correction_index} edges={}", self.edges(&correction.hard))
+        });
+        _span.set("loops", self.graph.n_loops(&correction.hard));
+        _span.set("degree", correction.taylor_order);
+        _span.set("corr", correction_index);
         let started = Instant::now();
         let counted = vakint::timing::Snapshot::now();
         // GAMMALOOP_IR_HARD_CHILD_GUARD=1 (opt-in): the closed path's scoped
@@ -3441,6 +3469,14 @@ impl<'a> Evaluation<'a> {
         if let Some(value) = self.quotient_counterterms.get(&key) {
             return Ok(value.clone());
         }
+        let _span = super::stage_time::Span::open("K4.quotient", &self.graph.name, || {
+            format!(
+                "loops={} edges={}",
+                call.argument.loops,
+                self.edges(&call.argument.remaining)
+            )
+        });
+        _span.set("loops", call.argument.loops);
         let started = Instant::now();
         let counted = vakint::timing::Snapshot::now();
         // GAMMALOOP_IR_QUOTIENT: R* on the decorated graph (default `rstar`,
@@ -3676,18 +3712,36 @@ impl<'a> Evaluation<'a> {
     /// line, the off arm of a paired timing); on or check:
     /// [`Self::integrate_ordinary_uncontracted`].
     fn integrate_ordinary(&mut self, term: &UvPreparationTerm) -> Result<Atom> {
+        // GAMMALOOP_STAGE_TIME: one span per remainder term (K1 root, K2
+        // child root), keyed by the ledger's occurrence when it has one
+        let span = super::stage_time::Span::open(
+            if self.plan.root_boundary.is_some() {
+                "K2.term"
+            } else {
+                "K1.term"
+            },
+            &self.graph.name,
+            || format!("{} id={}", super::uncontracted_ledger::term_label(self.graph, &term.remainder), self.integration_id + 1),
+        );
+        span.set("loops", term.remainder.loops);
+        span.set("degree", self.plan.taylor_order);
         let switch = super::uncontracted::switch();
         if switch.mode == super::uncontracted::Mode::Off {
+            span.set("arm", "off");
             if !super::uncontracted_ledger::timing_enabled() {
                 return self.integrate_ordinary_today(term);
             }
             let kind = super::uncontracted::classify(self.plan.root_boundary.is_some());
             let hook = self.ordinary_hook(term, kind, false);
+            if let Some(hook) = &hook {
+                span.set_occurrence(hook.occurrence());
+            }
             let value = self.integrate_ordinary_today(term);
             finish_hook(hook, if value.is_ok() { "today" } else { "failed" });
             return value;
         }
-        self.integrate_ordinary_uncontracted(term, switch)
+        span.set("arm", switch.mode.as_str());
+        self.integrate_ordinary_uncontracted(term, switch, &span)
     }
 
     /// The occurrence of an ordinary hook ([`super::uncontracted_ledger::hook`]):
@@ -3715,11 +3769,18 @@ impl<'a> Evaluation<'a> {
         &mut self,
         term: &UvPreparationTerm,
         switch: super::uncontracted::Switch,
+        span: &super::stage_time::Span,
     ) -> Result<Atom> {
         use super::uncontracted::{self as uncontracted, Mode};
         let kind = uncontracted::classify(self.plan.root_boundary.is_some());
         let enabled = switch.enabled(kind);
         let hook = self.ordinary_hook(term, kind, enabled);
+        if let Some(hook) = &hook {
+            span.set_occurrence(hook.occurrence());
+        }
+        if !enabled {
+            span.set("arm", "inert");
+        }
         if !enabled {
             super::uncontracted_ledger::inert(kind);
             let value = self.integrate_ordinary_today(term);
@@ -3960,11 +4021,23 @@ impl<'a> Evaluation<'a> {
             .closed_root
             .expect("admission requires the closed-root normalisation");
         let id = self.integration_id + 1;
+        let _span = super::stage_time::Span::open(
+            if self.plan.root_boundary.is_some() {
+                "K2.boundary"
+            } else {
+                "K1.boundary"
+            },
+            &self.graph.name,
+            || format!("id={id}"),
+        );
+        _span.set("loops", remainder.region.loops);
+        _span.set("degree", self.plan.taylor_order);
         let started = Instant::now();
         let counted = vakint::timing::Snapshot::now();
         let mut settings = self.settings.clone();
         settings.number_of_terms_in_epsilon_expansion = i64::try_from(remainder.region.loops)?;
         let degree = usize::try_from(self.plan.taylor_order)?;
+        let build_lap = super::stage_time::lap("N.boundary.build");
         let built = boundary::build_boundary(
             remainder,
             &BoundaryRequest {
@@ -3989,6 +4062,7 @@ impl<'a> Evaluation<'a> {
                 self.graph.name
             )
         })?;
+        drop(build_lap);
         let built = match built {
             Built::Declined(decline, stats) => {
                 let large = boundary::large_reason(

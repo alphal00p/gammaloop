@@ -835,6 +835,8 @@ impl RStarPlan {
         marked_edge: Option<EdgeIndex>,
         settings: &UVgenerationSettings,
     ) -> Result<Self> {
+        // GAMMALOOP_STAGE_TIME: forest / spinney enumeration of the plan
+        let _lap = super::stage_time::lap("N.forest");
         ensure!(
             marked_edge.is_none_or(|marked| graph
                 .iter_edges_of(&support)
@@ -1102,6 +1104,15 @@ impl RStarPlan {
         let mut children = BTreeMap::new();
         for (call, request) in self.counterterms.iter().zip(requests) {
             let support = &call.argument.support;
+            // GAMMALOOP_STAGE_TIME: one span per proper UV child (UV_CHILD)
+            let span = super::stage_time::Span::open("K2.child", &graph.name, || {
+                format!(
+                    "loops={} degree={} edges={}",
+                    call.argument.loops,
+                    call.taylor_order,
+                    join_edge_ids(&uv_child_edge_ids(graph, support))
+                )
+            });
             let started = Instant::now();
             let counted = vakint::timing::Snapshot::now();
             let route = if !self.uv_children.uses_rstar(call.argument.loops) {
@@ -1116,6 +1127,10 @@ impl RStarPlan {
             } else {
                 "rstar"
             };
+            span.set("loops", call.argument.loops);
+            span.set("degree", call.taylor_order);
+            span.set("parent_loops", graph.n_loops(&self.support));
+            span.set("route", route);
             let polynomial = if route == "rstar" {
                 Self::rstar_child_counterterm(
                     &cache,
@@ -1159,6 +1174,7 @@ impl RStarPlan {
                     uv_child_context(graph, &self.support)
                 );
             }
+            drop(span);
             children.insert(support.clone(), polynomial);
         }
         Ok(children)
@@ -1227,10 +1243,16 @@ impl RStarPlan {
         // `cache.counterterm_with`
         super::uncontracted_ledger::through_cache(cache, graph, support, model, key, || {
             let started = Instant::now();
+            // GAMMALOOP_STAGE_TIME: a cache fill (a hit never runs this), and
+            // the child's forest as its own leaf
+            super::stage_time::set_top("cache", "fill");
+            let forest_lap = super::stage_time::lap("N.forest");
             let plan = Self::for_support(graph, model, support, settings)?
                 .with_uv_children(route)
                 .with_uv_child_closure(closure)
                 .with_counterterm_cache(Arc::clone(cache));
+            drop(forest_lap);
+            let closure_lap = super::stage_time::lap("N.project");
             debug_assert!(
                 truncation_degree.is_none_or(|degree| degree == plan.taylor_order),
                 "the truncation degree of the child key differs from the plan's Taylor order"
@@ -1257,6 +1279,7 @@ impl RStarPlan {
                 }
                 _ => None,
             };
+            drop(closure_lap);
             let delta = super::expression::in_uv_child_scope(plan.taylor_order, || match isotropic
                 .as_ref()
             {

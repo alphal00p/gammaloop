@@ -970,6 +970,20 @@ pub(super) fn attempt<R: std::borrow::Borrow<RStarIntegrand>>(
     mode: Mode,
     remainder: impl FnOnce() -> Result<R>,
 ) -> Result<Attempt> {
+    // GAMMALOOP_STAGE_TIME: the record's span (K1 / K2 / K3 by kind)
+    let span = super::stage_time::Span::open(
+        match kind {
+            Kind::Root => "K1.record",
+            Kind::Child => "K2.record",
+            Kind::IrHard => "K3.record",
+            _ => "K4.record",
+        },
+        &site.graph.name,
+        || format!("kind={} id={id}", kind.as_str()),
+    );
+    span.set("loops", site.term.remainder.loops);
+    span.set("kind", kind.as_str());
+    let build_lap = super::stage_time::lap("N.record.build");
     let started = Instant::now();
     let region = &site.term.remainder;
     let depth = site.depth();
@@ -1018,6 +1032,7 @@ pub(super) fn attempt<R: std::borrow::Borrow<RStarIntegrand>>(
         }
     };
     let build_seconds = started.elapsed().as_secs_f64();
+    drop(build_lap);
     attempt.build_seconds = build_seconds;
     attempt.text = Some(built.text.clone());
     attempt.conserved = built.conserved;
@@ -1071,6 +1086,9 @@ pub(super) fn attempt<R: std::borrow::Borrow<RStarIntegrand>>(
         attempt.outcome = Outcome::refused(Decline::new("vakint:Empty", "no record value"));
         return Ok(attempt);
     };
+    span.set("patterns", record.patterns);
+    span.set("lowered_entries", record.lowered_entries);
+    let finish_lap = super::stage_time::lap("N.record.finish");
     let finish_started = Instant::now();
     let finished = match RStarIntegrand::finish_tensor(record.value.clone(), id) {
         Ok(finished) => finished,
@@ -1080,6 +1098,7 @@ pub(super) fn attempt<R: std::borrow::Borrow<RStarIntegrand>>(
         }
     };
     let finish_seconds = finish_started.elapsed().as_secs_f64();
+    drop(finish_lap);
     attempt.finish_seconds = finish_seconds;
     let wall_seconds = started.elapsed().as_secs_f64();
     attempt.fields = timing_fields(
