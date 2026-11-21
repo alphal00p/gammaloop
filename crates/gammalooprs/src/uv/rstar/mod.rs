@@ -15,6 +15,9 @@ mod cache_tests;
 mod closed;
 #[cfg(test)]
 mod closed_skip_tests;
+mod depth;
+#[cfg(test)]
+mod depth_tests;
 mod edge_experiment;
 mod evaluate;
 mod expression;
