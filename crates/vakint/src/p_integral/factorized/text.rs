@@ -728,7 +728,7 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
     let momenta = reader.expect("momenta")?;
     let loops: usize = number(momenta.number, field(&momenta, "loops")?, "loops")?;
     let externals: usize = number(momenta.number, field(&momenta, "externals")?, "externals")?;
-    let mut loop_edges = Vec::with_capacity(loops);
+    let mut loop_edges = Vec::with_capacity(reader.bounded(loops));
     for i in 1..=loops {
         let line = reader.expect("loop")?;
         let index: usize = number(
@@ -741,7 +741,7 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
         }
         loop_edges.push(edge_ref(line.number, field(&line, "edge")?)?);
     }
-    let mut external_edges = Vec::with_capacity(externals);
+    let mut external_edges = Vec::with_capacity(reader.bounded(externals));
     for j in 1..=externals {
         let line = reader.expect("external")?;
         let index: usize = number(
@@ -755,7 +755,7 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
         external_edges.push(edge_ref(line.number, field(&line, "edge")?)?);
     }
     let (edges_line, n_edges) = count_section(reader, "edges")?;
-    let mut edges = Vec::with_capacity(n_edges);
+    let mut edges = Vec::with_capacity(reader.bounded(n_edges));
     while reader.peek_key() == Some("edge") {
         let line = reader.expect("edge")?;
         let id: usize = number(
@@ -804,7 +804,7 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
         });
     }
     let (vertices_line, n_vertices) = count_section(reader, "vertices")?;
-    let mut vertices = Vec::with_capacity(n_vertices);
+    let mut vertices = Vec::with_capacity(reader.bounded(n_vertices));
     while reader.peek_key() == Some("vertex") {
         let line = reader.expect("vertex")?;
         vertices.push(FactorizedVertex {
@@ -826,7 +826,7 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
         });
     }
     let (ports_line, n_ports) = count_section(reader, "ports")?;
-    let mut ports = Vec::with_capacity(n_ports);
+    let mut ports = Vec::with_capacity(reader.bounded(n_ports));
     while reader.peek_key() == Some("port") {
         let line = reader.expect("port")?;
         ports.push(last_atom(&line, 0)?);
@@ -1058,7 +1058,7 @@ fn read_one_v1(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
     let momenta = reader.expect("momenta")?;
     let loops: usize = number(momenta.number, field(&momenta, "loops")?, "loops")?;
     let externals: usize = number(momenta.number, field(&momenta, "externals")?, "externals")?;
-    let mut loop_edges = Vec::with_capacity(loops);
+    let mut loop_edges = Vec::with_capacity(reader.bounded(loops));
     for i in 1..=loops {
         let line = reader.expect("loop")?;
         let index: usize = number(
@@ -1071,7 +1071,7 @@ fn read_one_v1(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
         }
         loop_edges.push(edge_ref(line.number, field(&line, "edge")?)?);
     }
-    let mut external_edges = Vec::with_capacity(externals);
+    let mut external_edges = Vec::with_capacity(reader.bounded(externals));
     for j in 1..=externals {
         let line = reader.expect("external")?;
         let index: usize = number(
@@ -1085,7 +1085,7 @@ fn read_one_v1(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
         external_edges.push(edge_ref(line.number, field(&line, "edge")?)?);
     }
     let (edges_line, n_edges) = count_section(reader, "edges")?;
-    let mut edges = Vec::with_capacity(n_edges);
+    let mut edges = Vec::with_capacity(reader.bounded(n_edges));
     while reader.peek_key() == Some("edge") {
         let line = reader.expect("edge")?;
         let id: usize = number(
@@ -1134,7 +1134,7 @@ fn read_one_v1(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
         });
     }
     let (vertices_line, n_vertices) = count_section(reader, "vertices")?;
-    let mut vertices = Vec::with_capacity(n_vertices);
+    let mut vertices = Vec::with_capacity(reader.bounded(n_vertices));
     while reader.peek_key() == Some("vertex") {
         let line = reader.expect("vertex")?;
         vertices.push(FactorizedVertex {
@@ -1156,7 +1156,7 @@ fn read_one_v1(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
         });
     }
     let (ports_line, n_ports) = count_section(reader, "ports")?;
-    let mut ports = Vec::with_capacity(n_ports);
+    let mut ports = Vec::with_capacity(reader.bounded(n_ports));
     while reader.peek_key() == Some("port") {
         let line = reader.expect("port")?;
         ports.push(last_atom(&line, 0)?);

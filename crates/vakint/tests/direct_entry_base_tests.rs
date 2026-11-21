@@ -290,3 +290,41 @@ fn a_port_only_in_the_projector_is_refused() {
         }
     }
 }
+
+/// PRE-EXISTING (the base aborted here too): a declared count of the base's
+/// own sections (loops, externals, edges, vertices, ports) is no allocation
+/// size either; each huge count of a v1 text is a section refusal.
+#[test]
+fn huge_counts_of_the_base_sections_are_refused_not_allocated() {
+    let text = rank(1);
+    assert!(FactorizedNumerator::parse_text(&text).is_ok());
+    let edits: [(&str, &str, Box<dyn Fn(&str) -> String>); 5] = [
+        (
+            "loops",
+            "momenta\tloops=1\texternals=1",
+            Box::new(|n| format!("momenta\tloops={n}\texternals=1")),
+        ),
+        (
+            "externals",
+            "momenta\tloops=1\texternals=1",
+            Box::new(|n| format!("momenta\tloops=1\texternals={n}")),
+        ),
+        ("edges", "edges\t4", Box::new(|n| format!("edges\t{n}"))),
+        (
+            "vertices",
+            "vertices\t2",
+            Box::new(|n| format!("vertices\t{n}")),
+        ),
+        ("ports", "ports\t1", Box::new(|n| format!("ports\t{n}"))),
+    ];
+    for (name, line, edit) in &edits {
+        assert_eq!(text.matches(&format!("\n{line}\n")).count(), 1, "{name}");
+        for count in ["18446744073709551615", "100000000000"] {
+            let huge = text.replace(&format!("\n{line}\n"), &format!("\n{}\n", edit(count)));
+            match FactorizedNumerator::parse_text(&huge) {
+                Err(error) if is_text_error(&error) => {}
+                other => panic!("v1 {name} {count}: {other:?}"),
+            }
+        }
+    }
+}
