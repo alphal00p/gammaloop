@@ -680,7 +680,8 @@ pub(super) struct Decline {
 /// edge with both ends in the root) and `root_normalisation_momentum` (a
 /// closed-root factor that is not a scalar times a power of p²): they never
 /// occur on a correct site (helper VH round 2, R2-I3). So are the C7
-/// settings exceptions ([`settings_refusal`]: `vakint_normalization`),
+/// settings exceptions ([`settings_refusal`]: `vakint_normalization`,
+/// `vakint_evaluation_methods`),
 /// settings a record must never be built under.
 ///
 /// `one_loop_tree_cut` (U7-PLAN 14(d), narrowed as Astra U7a asks: "keep the
@@ -2421,6 +2422,12 @@ pub(super) fn paired_leg_id(id: usize, last_edge: usize) -> std::result::Result<
 ///   fractional power of π, log(μᵣ²) (a μ dependence not of the form
 ///   `exp(log_mu_sq)^(ε L)`), log(π) or EulerGamma into the `insertion`
 ///   lines. vakint applies the MSbar factor inside every evaluation.
+/// * E3 `vakint_evaluation_methods`: a `uv.vakint.evaluation_methods` entry
+///   other than `rustred` and `forcer` (the beta's, in either order):
+///   FMFT's constants (vakint `hpl::normalize_constants`) write `3^(1/2)` and
+///   `log(2)`, MATAD's `direct_numerical_substition` writes floats,
+///   `alphaloop` and `pysecdec` are not the production path; any of them can
+///   reach a child Δ, hence an `insertion` line.
 ///
 /// `additional_normalization` other than "1" stays the designed decline of
 /// [`build`] (a factor per loop that the record cannot state).
@@ -2433,6 +2440,19 @@ pub(super) fn settings_refusal(
             format!(
                 "uv.vakint.normalization `{}` is not MSbar (C7 settings exception E1)",
                 vakint.normalization
+            ),
+        ));
+    }
+    if let Some(method) = vakint
+        .evaluation_methods
+        .iter()
+        .find(|method| !matches!(method.as_str(), "rustred" | "forcer"))
+    {
+        return Err(Decline::new(
+            "vakint_evaluation_methods",
+            format!(
+                "uv.vakint.evaluation_methods {:?} contains `{method}`, not rustred or forcer (C7 settings exception E3)",
+                vakint.evaluation_methods
             ),
         ));
     }
