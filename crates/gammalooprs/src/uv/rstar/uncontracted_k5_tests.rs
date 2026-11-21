@@ -1784,3 +1784,45 @@ fn k5_v15_cases_oracle() -> Result<()> {
         Ok(())
     })
 }
+
+/// A FAILING TEST FOR BETA (ignored here; U7C-SITE hands it over): with the
+/// surrogate root NOT closed (the evaluator's open-root entry `pole_part`, as
+/// under GAMMALOOP_SURROGATE_CLOSED_ROOT=0) and the K5 site's settings check
+/// bypassed, every surrogate ROOT record of L5 3793 declines `open_root`
+/// while the surrogate's children compare: the ledger's generic rules (the
+/// all-declined rule counts the kind as a whole) let the diagram pass.
+/// Expected: the diagram fails. On 86de2ec899 + U7c it passes (the test
+/// fails); the K5 site check `surrogate_settings` is what catches it today.
+#[test]
+#[ignore = "a failing test for beta: a setting-wide decline of the surrogate roots passes the ledger's rules"]
+fn k5_beta_ledger_misses_settings_wide_root_declines() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let original = colour_factored(&load(L5_3793_DOT)?)?;
+        let evaluator = PropagatorInsertionEvaluator::new(settings());
+        with_switch(check_surrogate(), || -> Result<()> {
+            let ledger = DiagramLedger::open(original.name(), "k5-open-root")
+                .ok_or_else(|| eyre!("no ledger"))?;
+            let (value, captured) = k5::without_settings_check(|| {
+                with_capture(|| evaluator.pole_part(&original, &vakint))
+            });
+            let roots = captured
+                .iter()
+                .filter(|attempt| attempt.outcome == "declined:open_root")
+                .count();
+            let compared = captured
+                .iter()
+                .filter(|attempt| attempt.equal == Some(true))
+                .count();
+            eprintln!("K5_OPEN_ROOT roots_declined={roots} compared={compared}");
+            ensure!(roots > 0, "no root declined open_root");
+            let closed = ledger.close(value.is_ok());
+            ensure!(
+                closed.is_err(),
+                "the diagram passed with every surrogate root declined by a setting ({roots} open_root, {compared} children compared)"
+            );
+            Ok(())
+        })
+    })
+}
