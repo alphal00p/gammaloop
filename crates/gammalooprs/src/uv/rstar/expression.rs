@@ -339,10 +339,19 @@ thread_local! {
 /// `GAMMALOOP_EDGE_CONTRACTION=auto` keeps edge momenta in its ordinary
 /// remainders too (measured: fewer terms there, more in insertion-free graphs).
 pub(crate) fn in_dressed_scope<T>(f: impl FnOnce() -> T) -> T {
-    let previous = DRESSED_SCOPE.with(|scope| scope.replace(true));
-    let result = f();
-    DRESSED_SCOPE.with(|scope| scope.set(previous));
-    result
+    // Restored on unwinding too (Astra U7a finding 3): beta catches a
+    // panicking diagram and the worker thread goes on, so a scope left set
+    // would make the next diagram's root and child records the inert
+    // `surrogate` kind of `uncontracted` (and change its edge contraction).
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let previous = self.0;
+            DRESSED_SCOPE.with(|scope| scope.set(previous));
+        }
+    }
+    let _restore = Restore(DRESSED_SCOPE.with(|scope| scope.replace(true)));
+    f()
 }
 
 /// Whether this thread is inside the R* of a dressed skeleton (an insertion
