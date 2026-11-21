@@ -48,9 +48,19 @@
 //!
 //! Hence `p_j <= B = quotient loops + excess(quotient numerator) +
 //! excess(closure) + excess(E_j)`, with `excess` of [`excess_poles`]. When
-//! `B <= extra`, no row can hide a pole. The guard refuses the child route
-//! for a correction whose accepted depth stays below `B`; the correction is
-//! then evaluated on today's path (the closed or projected moments with the
+//! `B <= extra`, no row can hide a pole.
+//!
+//! The planner measures the quotient factors of every row it is given,
+//! also of a row whose coefficient vanishes at the current depth, and takes
+//! `B` for the valuation of what it cannot measure (a vanished group, a row
+//! the moment extraction dropped): below `B` it raises `extra` to `B` through
+//! the existing retry. At depth `B` every group and row is either shown, and
+//! measured, or of valuation at least `B`, out of reach of every pole.
+//!
+//! The guard stays as a backstop: it refuses the child route for a
+//! correction whose accepted depth stays below `B` (only possible when `B`
+//! is unknown, or when a measured row exceeds `B`); the correction is then
+//! evaluated on today's path (the closed or projected moments with the
 //! generic forest step, which measures every quotient factor before its
 //! hard coefficient is integrated).
 
@@ -181,6 +191,8 @@ pub(super) struct DepthCounts {
     pub bounded: usize,
     /// Corrections integrated more than once (a depth retry).
     pub retried: usize,
+    /// Retries whose depth the bound raised beyond the measured need.
+    pub raised: usize,
     /// Corrections refused by the guard (`IR_HARD_CHILD_DEPTH_REFUSED`).
     pub refused: usize,
 }
@@ -188,20 +200,17 @@ pub(super) struct DepthCounts {
 /// Process-wide totals (tests, and every refusal also has its own line).
 pub(super) static CORRECTIONS: AtomicUsize = AtomicUsize::new(0);
 pub(super) static RETRIED: AtomicUsize = AtomicUsize::new(0);
+pub(super) static RAISED: AtomicUsize = AtomicUsize::new(0);
 pub(super) static REFUSED: AtomicUsize = AtomicUsize::new(0);
 
 pub(super) fn count(counter: &AtomicUsize) {
     counter.fetch_add(1, Ordering::Relaxed);
 }
 
-/// Tests: the process-wide `(corrections, retried, refused)`.
+/// Tests: the process-wide `(corrections, retried, raised, refused)`.
 #[cfg(test)]
-pub(super) fn totals() -> (usize, usize, usize) {
-    (
-        CORRECTIONS.load(Ordering::Relaxed),
-        RETRIED.load(Ordering::Relaxed),
-        REFUSED.load(Ordering::Relaxed),
-    )
+pub(super) fn totals() -> [usize; 4] {
+    [&CORRECTIONS, &RETRIED, &RAISED, &REFUSED].map(|counter| counter.load(Ordering::Relaxed))
 }
 
 /// Tests: where a child-route attempt calls the [`RowHook`].

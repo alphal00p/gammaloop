@@ -2368,35 +2368,55 @@ impl<'a> Evaluation<'a> {
                 Ok(outcome) => outcome,
                 Err(reason) => return Ok(Err(reason)),
             };
+            // The poles the measured rows need, vanished rows included.
             let needed = usize::try_from(-valuation.min(0)).unwrap_or(0);
-            if needed > extra {
+            // The bound of every group and row (each row's raised by its
+            // insertion's own excess).
+            let row_bound = rows.iter().fold(bound, |largest, (_, insertion, _)| {
+                Some(largest?.max(super::depth::row_bound(bound, insertion)?))
+            });
+            // IRH-DEPTH: a vanished group shows no insertion to measure, nor
+            // does a row of a nonzero group whose coefficient vanished (the
+            // moment extraction drops it); the bound stands for their
+            // quotient valuation. Below it the depth is raised to it: there
+            // such a group or row is either shown (and measured) or cannot
+            // reach a pole (its valuation is at least the bound).
+            let target = match row_bound {
+                Some(row_bound) if row_bound > extra => needed.max(row_bound),
+                _ => needed,
+            };
+            if target > extra {
                 eprintln!(
-                    "IR_HARD_CHILD_DEPTH graph={} corr={correction_index} attempt={attempts} extra_depth={extra} needed={needed} bound={}",
+                    "IR_HARD_CHILD_DEPTH graph={} corr={correction_index} attempt={attempts} extra_depth={extra} needed={target} measured={needed} bound={} vanished_groups={vanished_groups}/{} zero_rows={}/{}",
                     self.graph.name,
-                    super::depth::bound_label(bound),
+                    super::depth::bound_label(row_bound),
+                    groups.len(),
+                    zero_rows.len(),
+                    rows.len(),
                 );
                 if attempts >= 3 {
-                    return Ok(Err(format!("depth:{needed}")));
+                    return Ok(Err(format!("depth:{target}")));
                 }
-                extra = needed;
+                if target > needed {
+                    self.depth.raised += 1;
+                    super::depth::count(&super::depth::RAISED);
+                }
+                extra = target;
                 continue;
             }
             if attempts > 1 {
                 self.depth.retried += 1;
                 super::depth::count(&super::depth::RETRIED);
             }
-            // IRH-DEPTH guard: the depth accepted here must reach the bound
-            // of every group and row that could hide a pole (each row's
-            // bound raised by its insertion's own excess).
+            // IRH-DEPTH guard (a backstop since the depth reaches the bound):
+            // the depth accepted here must reach the bound of every group and
+            // row that could hide a pole.
             let truncation = super::depth::Truncation {
                 groups: groups.len(),
                 vanished_groups,
                 rows: rows.len(),
                 zero_rows: zero_rows.len(),
             };
-            let row_bound = rows.iter().fold(bound, |largest, (_, insertion, _)| {
-                Some(largest?.max(super::depth::row_bound(bound, insertion)?))
-            });
             if let Some(reason) = super::depth::refusal(row_bound, extra, needed, &truncation) {
                 eprintln!(
                     "IR_HARD_CHILD_DEPTH_REFUSED graph={} corr={correction_index} attempt={attempts} hard_loops={hard_loops} quotient_loops={quotient_loops} bound={} extra_depth={extra} needed={needed} reason={reason} vanished_groups={vanished_groups}/{} zero_rows={}/{} edges={}",
@@ -2809,6 +2829,13 @@ impl<'a> Evaluation<'a> {
         for forest in forests {
             for (i, (_, insertion, loops)) in rows.iter().enumerate() {
                 let Some(power) = powers[i] else {
+                    // IRH-DEPTH: a row whose h_j vanishes at this depth adds
+                    // nothing, but its quotient factors are measured all the
+                    // same: their pole may need a deeper h_j (the retry).
+                    if let Some(pole) = self.ir_quotient_valuation(hard, forest, insertion, degree)
+                    {
+                        valuation = valuation.min(pole);
+                    }
                     continue;
                 };
                 let mut z = self.ir_forest(forest, insertion)?;
@@ -2913,6 +2940,52 @@ impl<'a> Evaluation<'a> {
             valuation,
             zero_rows,
         )))
+    }
+
+    /// IRH-DEPTH ([`super::depth`]): the lowest `ε` power of the quotient
+    /// factors `[λ^b] Z̃_F(E) · closure` of one vanished row of
+    /// [`Self::ir_outer_integrated`], measured as for a shown row but without
+    /// the compensation (a polynomial in `ε`, which only raises orders).
+    /// `None` when they vanish or cannot be measured: the quotient bound then
+    /// stands for the row (and the guard refuses an unknown bound).
+    fn ir_quotient_valuation(
+        &mut self,
+        hard: &RStarIntegrand,
+        forest: &IrForestTerm,
+        insertion: &Atom,
+        degree: usize,
+    ) -> Option<i64> {
+        let mut z = self.ir_forest(forest, insertion).ok()?;
+        if z.is_zero() {
+            return None;
+        }
+        if let Some(closure) = &self.root_closure {
+            z *= closure;
+        }
+        let orders = hard
+            .ir_outer_orders(&z, &self.root_edges, degree, self.reference_mass_squared)
+            .ok()?
+            .ok()?;
+        let mut valuation = None::<i64>;
+        for value in orders.iter().filter(|value| !value.is_zero()) {
+            let series = Integrated::dimensionally_regularized(value)
+                .series(
+                    GS.dim_epsilon,
+                    0,
+                    symbolica::poly::series::SeriesDepth::relative(1),
+                )
+                .ok()?;
+            if series.is_zero() {
+                continue;
+            }
+            let exponent = series.get_trailing_exponent();
+            let pole = exponent
+                .is_integer()
+                .then(|| exponent.numerator().to_i64())
+                .flatten()?;
+            valuation = Some(valuation.map_or(pole, |lowest| lowest.min(pole)));
+        }
+        valuation
     }
 
     /// `GAMMALOOP_IR_OUTER=analytic` for one IR correction term of the
@@ -3473,12 +3546,13 @@ impl<'a> Evaluation<'a> {
         if self.depth.corrections > 0 {
             // IRH-DEPTH: this evaluation's child-route IR corrections.
             eprintln!(
-                "IR_HARD_CHILD_DEPTH_SUMMARY graph={} child={} corrections={} bounded={} retried={} refused={}",
+                "IR_HARD_CHILD_DEPTH_SUMMARY graph={} child={} corrections={} bounded={} retried={} raised={} refused={}",
                 self.graph.name,
                 self.plan.root_boundary.is_some(),
                 self.depth.corrections,
                 self.depth.bounded,
                 self.depth.retried,
+                self.depth.raised,
                 self.depth.refused,
             );
         }
