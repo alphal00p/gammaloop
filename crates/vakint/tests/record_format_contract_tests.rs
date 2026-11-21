@@ -8454,3 +8454,170 @@ fn the_number_bound_is_4096_bits() {
     let failures = number_bound_table();
     assert!(failures.is_empty(), "{failures:#?}");
 }
+
+/// THE PAIRED CROWN LEG (a soft line with both ends on the boundary: two
+/// legs, the second with id 100000 + e) on the producer's sample record
+/// (`VAKINT_TEST_RECORD_FILE`, pick8-sample-L5_006961-id5: legs 13 and
+/// 100013, both p(3)), at the Taylor degree forced to 2, each within 600 s:
+/// (a) the two legs with DIFFERENT momenta (100013 carries p(1)): validation
+/// and the value against the record with equal momenta; (b) the partner 13
+/// absent (100013 the leg of p(3)); (c) 100013 also in scaled_edges (the value
+/// against the record without); (d) the 100013 line removed (its Q still in
+/// the insertion factor); (e) the leg renumbered 100099 (no edge 99). Each
+/// outcome printed.
+#[test]
+#[ignore = "external data: VAKINT_TEST_RECORD_FILE (the producer's paired-leg sample)"]
+fn the_paired_crown_leg_cells() {
+    use vakint::p_integral::factorized::Endpoint;
+    init();
+    let path = wh_fixtures::required_env("VAKINT_TEST_RECORD_FILE", "the paired-leg sample");
+    let base = FactorizedNumerator::from_text(&wh_fixtures::read_fixture(&path)).unwrap();
+    let degree2 = |mut v: FactorizedNumerator| {
+        if let FactorizedKind::Closure(spec) = &mut v.kind {
+            spec.taylor.as_mut().unwrap().degree = 2;
+        }
+        v
+    };
+    let value_of = |label: &str, v: FactorizedNumerator| -> Result<Atom, String> {
+        let r = v.validate().map_err(|e| format!("validation: {e}"));
+        if let Err(e) = r {
+            eprintln!(
+                "CONTRACT PAIRED {label}: REFUSED {}",
+                e.chars().take(220).collect::<String>()
+            );
+            return Err(e);
+        }
+        let started = std::time::Instant::now();
+        let got = within(600, move || {
+            closure(&v, &symbolic(), &v.prefactor.total())
+                .map(|r| r.value)
+                .map_err(|e| e.to_string())
+        });
+        let shown = match &got {
+            None => "TIMED OUT 600 s".to_string(),
+            Some(Err(_)) => "PANIC".into(),
+            Some(Ok(Ok(a))) => format!("ACCEPTED, evaluated ({} chars)", a.to_string().len()),
+            Some(Ok(Err(e))) => format!(
+                "validated, the entry refuses: {}",
+                e.chars().take(200).collect::<String>()
+            ),
+        };
+        eprintln!(
+            "CONTRACT PAIRED {label}: {shown} [{:.1}s]",
+            started.elapsed().as_secs_f64()
+        );
+        match got {
+            Some(Ok(r)) => r,
+            _ => Err(shown),
+        }
+    };
+    let equal = value_of(
+        "degree 2, equal momenta (p(3) on both legs)",
+        degree2(base.clone()),
+    );
+    // (a) different momenta: 100013 carries p(1)
+    let mut a = degree2(base.clone());
+    let loops = a.loops();
+    let leg = a.edges.iter_mut().find(|e| e.id == 100013).unwrap();
+    for c in leg.momentum[loops..].iter_mut() {
+        *c = 0;
+    }
+    leg.momentum[loops] = 1;
+    let differ = value_of(
+        "degree 2, the leg 100013 carries p(1), its partner 13 p(3)",
+        a,
+    );
+    if let (Ok(x), Ok(y)) = (&equal, &differ) {
+        eprintln!(
+            "CONTRACT PAIRED different momenta vs equal momenta: the values are {}",
+            if (x - y).expand().is_zero() {
+                "EQUAL"
+            } else {
+                "DIFFERENT (the value changes silently)"
+            }
+        );
+    }
+    // (b) the partner 13 absent: 100013 the leg of p(3)
+    let mut b = degree2(base.clone());
+    b.edges.retain(|e| e.id != 13);
+    for x in b.external_edges.iter_mut() {
+        if *x == Some(13) {
+            *x = Some(100013);
+        }
+    }
+    if let FactorizedKind::Closure(spec) = &mut b.kind {
+        for s in spec.taylor.as_mut().unwrap().scaled_edges.iter_mut() {
+            if *s == 13 {
+                *s = 100013;
+            }
+        }
+        for soft in spec.softs.iter_mut() {
+            if soft.edge == 13 {
+                soft.edge = 100013;
+            }
+        }
+    }
+    b.ports
+        .retain(|p| !p.to_canonical_string().contains("hedge(24,1)"));
+    let _ = value_of(
+        "degree 2, the partner 13 absent (100013 the leg of p(3))",
+        b,
+    );
+    // (c) 100013 also in scaled_edges
+    let mut c = degree2(base.clone());
+    if let FactorizedKind::Closure(spec) = &mut c.kind {
+        let t = spec.taylor.as_mut().unwrap();
+        t.scaled_edges.push(100013);
+        t.scaled_edges.sort();
+    }
+    let scaled = value_of("degree 2, 100013 also in scaled_edges", c);
+    if let (Ok(x), Ok(y)) = (&equal, &scaled) {
+        eprintln!(
+            "CONTRACT PAIRED with 100013 in scaled_edges vs without: the values are {}",
+            if (x - y).expand().is_zero() {
+                "EQUAL"
+            } else {
+                "DIFFERENT"
+            }
+        );
+    }
+    // (d) the 100013 line removed, its Q still in the insertion factor
+    let mut d = base.clone();
+    d.edges.retain(|e| e.id != 100013);
+    d.insertions[0].hedges.retain(|h| *h != 25);
+    d.ports
+        .retain(|p| !p.to_canonical_string().contains("hedge(25,1)"));
+    let _ = value_of(
+        "degree 0, the 100013 line removed, Q(100013) still in the insertion factor",
+        d,
+    );
+    // (e) the leg renumbered 100099 (no edge 99)
+    let mut e = degree2(base.clone());
+    for x in e.edges.iter_mut() {
+        if x.id == 100013 {
+            x.id = 100099;
+        }
+    }
+    e.edges.sort_by_key(|x| x.id);
+    let q = |id: i64| {
+        atom(&format!(
+            "gammalooprs::{{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}}::Q({id},caller::slot_)"
+        ))
+    };
+    let _ = q;
+    for i in e.insertions.iter_mut() {
+        i.factor = i.factor.replace(atom("gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(100013,x__)")).with(atom("gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(100099,x__)"));
+    }
+    let _ = Endpoint::External;
+    let renumbered = value_of("degree 2, the leg renumbered 100099 (no edge 99)", e);
+    if let (Ok(x), Ok(y)) = (&equal, &renumbered) {
+        eprintln!(
+            "CONTRACT PAIRED renumbered 100099 vs 100013: the values are {}",
+            if (x - y).expand().is_zero() {
+                "EQUAL"
+            } else {
+                "DIFFERENT"
+            }
+        );
+    }
+}
