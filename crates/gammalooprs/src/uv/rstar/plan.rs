@@ -322,6 +322,61 @@ pub(crate) fn with_dirac_closure_change<T>(change: bool, f: impl FnOnce() -> T) 
     f()
 }
 
+#[cfg(test)]
+thread_local! {
+    static CHILD_TAYLOR_ORDER: std::cell::RefCell<Option<(Vec<usize>, i32)>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Tests: run `f` with the Taylor order of the proper UV child whose edge
+/// ids are `edges` forced to `order` on this thread (pick 8 at a positive
+/// degree: no physical child with a paired crown edge has one). The child's
+/// own plan carries it, so today's contracted path and the record path both
+/// expand to it and check mode compares them there. Use a fresh Δ cache:
+/// the child key does not name the order.
+#[cfg(test)]
+pub(crate) fn with_child_taylor_order<T>(edges: &[usize], order: i32, f: impl FnOnce() -> T) -> T {
+    struct Restore(Option<(Vec<usize>, i32)>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            CHILD_TAYLOR_ORDER.with(|slot| *slot.borrow_mut() = self.0.take());
+        }
+    }
+    let _restore =
+        Restore(CHILD_TAYLOR_ORDER.with(|slot| slot.replace(Some((edges.to_vec(), order)))));
+    f()
+}
+
+#[cfg(test)]
+fn forced_child_taylor_order(graph: &Graph, support: &SuBitGraph) -> Option<i32> {
+    CHILD_TAYLOR_ORDER.with(|slot| {
+        slot.borrow()
+            .as_ref()
+            .filter(|(edges, _)| uv_child_edge_ids(graph, support) == *edges)
+            .map(|(_, order)| *order)
+    })
+}
+
+#[cfg(test)]
+fn child_taylor_override(mut plan: RStarPlan, graph: &Graph, support: &SuBitGraph) -> RStarPlan {
+    if let Some(order) = forced_child_taylor_order(graph, support) {
+        plan.taylor_order = order;
+    }
+    plan
+}
+
+/// The Taylor order a child's key names (`GAMMALOOP_UV_CHILD_TRUNCATE`): its
+/// `local_dod` (tests: or the forced order of [`with_child_taylor_order`]).
+#[cfg(not(test))]
+fn child_key_taylor_order(graph: &Graph, support: &SuBitGraph) -> i32 {
+    graph.local_dod(support)
+}
+
+#[cfg(test)]
+fn child_key_taylor_order(graph: &Graph, support: &SuBitGraph) -> i32 {
+    forced_child_taylor_order(graph, support).unwrap_or_else(|| graph.local_dod(support))
+}
+
 /// `GAMMALOOP_UV_CHILDREN_LOG` (default on; `0`, `off` or `false` turn it
 /// off): one stderr line per proper UV child request of an R*-route plan
 /// (route, loops, seconds, the child's edge ids). The progress notebook and
@@ -1215,7 +1270,7 @@ impl RStarPlan {
         // the key as `#uv-child-truncate={mode}@{d}`.
         let mut truncation_degree = None;
         let truncation = super::expression::uv_child_truncation_key(|| {
-            *truncation_degree.insert(graph.local_dod(support))
+            *truncation_degree.insert(child_key_taylor_order(graph, support))
         });
         let key =
             Self::rstar_child_key(serde_json::to_string(settings)?, route, closure, truncation);
@@ -1231,6 +1286,8 @@ impl RStarPlan {
                 .with_uv_children(route)
                 .with_uv_child_closure(closure)
                 .with_counterterm_cache(Arc::clone(cache));
+            #[cfg(test)]
+            let plan = child_taylor_override(plan, graph, support);
             debug_assert!(
                 truncation_degree.is_none_or(|degree| degree == plan.taylor_order),
                 "the truncation degree of the child key differs from the plan's Taylor order"
