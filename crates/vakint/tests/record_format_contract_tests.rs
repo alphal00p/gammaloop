@@ -7054,3 +7054,851 @@ fn a_record_of_the_next_emitter_through_the_gated_grammar() {
         }
     }
 }
+
+// ===========================================================================
+// CROSS-FIELD RULES x KINDS x FORMS: each rule relating two fields of a
+// record, on every kind it applies to (the closure entry; a v3 direct record
+// through the direct and the ports entries; a marked vacuum value), typed and
+// through the text form: a violating input refused, its valid twin accepted
+// ===========================================================================
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum XEntry {
+    Closure,
+    Direct,
+    Ports,
+    Vacuum,
+}
+
+type XInput = (FactorizedNumerator, VakintSettings, Atom);
+
+struct XCell {
+    rule: &'static str,
+    entry: XEntry,
+    text: bool,
+    bad: Box<dyn Fn() -> XInput>,
+    good: Box<dyn Fn() -> XInput>,
+}
+
+/// One input through its entry (typed, or first written and read back).
+fn x_run(entry: XEntry, text: bool, (v, s, arg): XInput) -> Result<(), String> {
+    let v = if text {
+        let t = v
+            .to_text()
+            .map_err(|e| format!("TEXT CANNOT WRITE IT: {e}"))?;
+        FactorizedNumerator::from_text(&t).map_err(|e| e.to_string())?
+    } else {
+        v
+    };
+    let vakint = engine();
+    match entry {
+        XEntry::Closure => {
+            evaluate_factorized_closure(&vakint, &s, std::slice::from_ref(&v), &[arg]).map(|_| ())
+        }
+        XEntry::Direct => {
+            vakint::p_integral::factorized::evaluate_factorized(&vakint, &s, &v, &arg).map(|_| ())
+        }
+        XEntry::Ports => evaluate_factorized_ports(&vakint, &s, &v, &arg).map(|_| ()),
+        XEntry::Vacuum => {
+            vakint::p_integral::factorized::evaluate_factorized_vacuum(&vakint, &s, &v, &arg)
+                .map(|_| ())
+        }
+    }
+    .map_err(|e| e.to_string())
+}
+
+fn x_closure_base() -> XInput {
+    let v = record("wh-k1-root");
+    let a = v.prefactor.total();
+    (v, symbolic(), a)
+}
+
+fn x_direct_base() -> XInput {
+    let (v, s) = direct_record_and_settings();
+    let a = v.prefactor.total();
+    (v, s, a)
+}
+
+/// A marked one-loop vacuum bubble of two GHOST lines (one closed ghost
+/// loop), loop sign -1, no original_cycles.
+fn x_vacuum_ghost() -> XInput {
+    use vakint::p_integral::factorized::LineKind;
+    let mut v = marked_vacuum(
+        "one-loop ghost bubble",
+        1,
+        &[(1, 1, 2, vec![1]), (2, 2, 1, vec![1])],
+    );
+    for e in &mut v.edges {
+        e.line = LineKind::Ghost;
+    }
+    v.prefactor.loop_sign = -1;
+    let a = v.prefactor.total();
+    (v, symbolic(), a)
+}
+
+fn x_vacuum_base() -> XInput {
+    let v = marked_vacuum_sunrise("caller::m2", "1");
+    let a = v.prefactor.total();
+    (v, symbolic(), a)
+}
+
+fn with_weight(mut i: XInput, by_vakint: bool, w: &str) -> XInput {
+    let entry = ("w".to_string(), by_vakint, atom(w));
+    match &mut i.0.kind {
+        FactorizedKind::Closure(spec) => spec.weights.push(entry),
+        _ => i.0.record.as_mut().unwrap().weights.push(entry),
+    }
+    i
+}
+
+fn set_original_cycles(mut i: XInput, c: Option<(u32, u32)>) -> XInput {
+    match &mut i.0.kind {
+        FactorizedKind::Closure(spec) => spec.original_cycles = c,
+        _ => i.0.record.as_mut().unwrap().original_cycles = c,
+    }
+    i
+}
+
+fn x_mixed_modes(mut i: XInput) -> XInput {
+    i.1.evaluation_order = EvaluationOrder(vec![
+        EvaluationMethod::RustRed(RustRedEvaluationOptions {
+            master_mode: RustRedMasterMode::Retain,
+        }),
+        EvaluationMethod::RustRed(RustRedEvaluationOptions {
+            master_mode: RustRedMasterMode::Symbolic,
+        }),
+    ]);
+    i
+}
+
+fn x_cells() -> Vec<XCell> {
+    let mut cells: Vec<XCell> = Vec::new();
+    let both = |cells: &mut Vec<XCell>,
+                rule: &'static str,
+                entry: XEntry,
+                bad: fn() -> XInput,
+                good: fn() -> XInput| {
+        for text in [false, true] {
+            cells.push(XCell {
+                rule,
+                entry,
+                text,
+                bad: Box::new(bad),
+                good: Box::new(good),
+            });
+        }
+    };
+    // X1: a weight applied_by=vakint equals prefactor_scalars
+    let scalars = |i: &XInput| i.0.prefactor.scalars.to_canonical_string();
+    let _ = scalars;
+    both(
+        &mut cells,
+        "X1 weight applied_by=vakint = prefactor_scalars",
+        XEntry::Closure,
+        || with_weight(x_closure_base(), true, "caller::not_the_scalars"),
+        || {
+            let b = x_closure_base();
+            let s = b.0.prefactor.scalars.to_canonical_string();
+            with_weight(b, true, &s)
+        },
+    );
+    for e in [XEntry::Direct, XEntry::Ports] {
+        both(
+            &mut cells,
+            "X1 weight applied_by=vakint = prefactor_scalars",
+            e,
+            || with_weight(x_direct_base(), true, "caller::not_the_scalars"),
+            || {
+                let b = x_direct_base();
+                let s = b.0.prefactor.scalars.to_canonical_string();
+                with_weight(b, true, &s)
+            },
+        );
+    }
+    both(
+        &mut cells,
+        "X1 weight applied_by=vakint = prefactor_scalars",
+        XEntry::Vacuum,
+        || with_weight(x_vacuum_base(), true, "caller::not_the_scalars"),
+        || {
+            let b = x_vacuum_base();
+            let s = b.0.prefactor.scalars.to_canonical_string();
+            with_weight(b, true, &s)
+        },
+    );
+    // X2: original_cycles => loop_sign 1, nf_power 0, overall 1
+    both(
+        &mut cells,
+        "X2 original_cycles => loop_sign 1",
+        XEntry::Closure,
+        || {
+            let mut b = x_closure_base();
+            b.0.prefactor.loop_sign = -1;
+            b
+        },
+        x_closure_base,
+    );
+    for e in [XEntry::Direct, XEntry::Ports] {
+        both(
+            &mut cells,
+            "X2 original_cycles => loop_sign 1",
+            e,
+            || {
+                let mut b = x_direct_base();
+                b.0.prefactor.loop_sign = -1;
+                b
+            },
+            x_direct_base,
+        );
+    }
+    both(
+        &mut cells,
+        "X2 original_cycles => loop_sign 1",
+        XEntry::Vacuum,
+        || set_original_cycles(x_vacuum_ghost(), Some((0, 1))),
+        || {
+            let mut b = set_original_cycles(x_vacuum_ghost(), Some((0, 1)));
+            b.0.prefactor.loop_sign = 1;
+            b
+        },
+    );
+    // X3: carried (+ inserted) cycles <= original_cycles
+    both(
+        &mut cells,
+        "X3 carried cycles <= original_cycles",
+        XEntry::Closure,
+        || set_original_cycles(x_closure_base(), Some((0, 0))),
+        x_closure_base,
+    );
+    for e in [XEntry::Direct, XEntry::Ports] {
+        both(
+            &mut cells,
+            "X3 carried cycles <= original_cycles",
+            e,
+            || set_original_cycles(x_direct_base(), Some((0, 0))),
+            x_direct_base,
+        );
+    }
+    both(
+        &mut cells,
+        "X3 carried cycles <= original_cycles",
+        XEntry::Vacuum,
+        || {
+            let mut b = set_original_cycles(x_vacuum_ghost(), Some((0, 0)));
+            b.0.prefactor.loop_sign = 1;
+            b
+        },
+        || {
+            let mut b = set_original_cycles(x_vacuum_ghost(), Some((0, 1)));
+            b.0.prefactor.loop_sign = 1;
+            b
+        },
+    );
+    // X4: without original_cycles, loop_sign = the carried graph's closed loops
+    both(
+        &mut cells,
+        "X4 loop_sign = the closed loops (no original_cycles)",
+        XEntry::Closure,
+        || set_original_cycles(x_closure_base(), None),
+        || {
+            let mut b = set_original_cycles(x_closure_base(), None);
+            b.0.prefactor.loop_sign = -1;
+            b
+        },
+    );
+    for e in [XEntry::Direct, XEntry::Ports] {
+        both(
+            &mut cells,
+            "X4 loop_sign = the closed loops (no original_cycles)",
+            e,
+            || set_original_cycles(x_direct_base(), None),
+            || {
+                let mut b = set_original_cycles(x_direct_base(), None);
+                b.0.prefactor.loop_sign = -1;
+                b
+            },
+        );
+    }
+    both(
+        &mut cells,
+        "X4 loop_sign = the closed loops (no original_cycles)",
+        XEntry::Vacuum,
+        || {
+            let mut b = x_vacuum_ghost();
+            b.0.prefactor.loop_sign = 1;
+            b
+        },
+        x_vacuum_ghost,
+    );
+    // X5: a v3 direct record's depth = the settings' number of terms
+    for e in [XEntry::Direct, XEntry::Ports] {
+        both(
+            &mut cells,
+            "X5 record depth = the settings' terms",
+            e,
+            || {
+                let mut b = x_direct_base();
+                b.1.number_of_terms_in_epsilon_expansion += 1;
+                b
+            },
+            x_direct_base,
+        );
+    }
+    both(
+        &mut cells,
+        "X5 record depth = the settings' terms",
+        XEntry::Vacuum,
+        || {
+            let mut b = x_vacuum_base();
+            set_depth(&mut b.0, 3);
+            b.1.number_of_terms_in_epsilon_expansion = 4;
+            b
+        },
+        || {
+            let mut b = x_vacuum_base();
+            set_depth(&mut b.0, 3);
+            b.1.number_of_terms_in_epsilon_expansion = 3;
+            b
+        },
+    );
+    // X6: depth + the insertions' raise <= 32 (closure)
+    both(
+        &mut cells,
+        "X6 depth + raise <= 32",
+        XEntry::Closure,
+        || {
+            let v = record("wh-k2-child-ins");
+            let mut v2 = v.clone();
+            set_depth(&mut v2, 32);
+            let a = v2.prefactor.total();
+            (v2, symbolic(), a)
+        },
+        || {
+            let v = record("wh-k2-child-ins");
+            let a = v.prefactor.total();
+            (v, symbolic(), a)
+        },
+    );
+    // X7: p2_power != 0 needs an external momentum (a record without one)
+    for e in [XEntry::Direct, XEntry::Ports] {
+        both(
+            &mut cells,
+            "X7 p2_power needs an external momentum",
+            e,
+            || {
+                let mut b = x_vacuum_base();
+                b.0.projector = Some(vakint::p_integral::factorized::Projector {
+                    tensor: Atom::num(1),
+                    p2_power: -1,
+                });
+                b
+            },
+            x_vacuum_base,
+        );
+    }
+    // X8: the closing edge's power = the closure line's; one mass scale (vacuum)
+    both(
+        &mut cells,
+        "X8 closing edge power = the closure line's",
+        XEntry::Closure,
+        || {
+            let mut b = x_closure_base();
+            let FactorizedKind::Closure(spec) = &b.0.kind else {
+                unreachable!()
+            };
+            let id = spec.edge;
+            b.0.edges.iter_mut().find(|e| e.id == id).unwrap().power = 2;
+            b
+        },
+        x_closure_base,
+    );
+    both(
+        &mut cells,
+        "X8 one mass scale",
+        XEntry::Vacuum,
+        || {
+            let mut b = x_vacuum_base();
+            b.0.edges[0].mass_squared = atom("caller::m3");
+            b
+        },
+        x_vacuum_base,
+    );
+    // X9: scaled_edges cover every p(j)
+    both(
+        &mut cells,
+        "X9 scaled_edges cover every p(j)",
+        XEntry::Closure,
+        || {
+            let mut b = x_closure_base();
+            if let FactorizedKind::Closure(spec) = &mut b.0.kind {
+                spec.taylor.as_mut().unwrap().scaled_edges.clear();
+            }
+            b
+        },
+        x_closure_base,
+    );
+    // X10: a closure value carries no direct record (typed only)
+    cells.push(XCell {
+        rule: "X10 a closure value carries no direct record",
+        entry: XEntry::Closure,
+        text: false,
+        bad: Box::new(|| {
+            let mut b = x_closure_base();
+            b.0.record = Some(vakint::p_integral::factorized::DirectRecord {
+                original_cycles: None,
+                depth: None,
+                weights: Vec::new(),
+            });
+            b
+        }),
+        good: Box::new(x_closure_base),
+    });
+    // X12: an UNKNOWN master is in the loaded catalogue
+    let unknown = |master: &str| {
+        let master = master.to_string();
+        move |mut b: XInput| {
+            b.0.insertions[0].coefficient = &b.0.insertions[0].coefficient
+                * atom(&format!("vakint::UNKNOWN(vakint::{master},0)"));
+            b.1.allow_unknown_master_coefficients = true;
+            b
+        }
+    };
+    let _ = unknown;
+    both(
+        &mut cells,
+        "X12 UNKNOWN master in the loaded catalogue",
+        XEntry::Closure,
+        || {
+            let v = record("wh-k2-child-ins");
+            let a = v.prefactor.total();
+            let mut b = (v, symbolic(), a);
+            b.0.insertions[0].coefficient = &b.0.insertions[0].coefficient
+                * atom("vakint::UNKNOWN(vakint::ggppss_int_99999,0)");
+            b.1.allow_unknown_master_coefficients = true;
+            b
+        },
+        || {
+            let v = record("wh-k2-child-ins");
+            let a = v.prefactor.total();
+            let mut b = (v, symbolic(), a);
+            b.0.insertions[0].coefficient =
+                &b.0.insertions[0].coefficient * atom("vakint::UNKNOWN(vakint::ggppss_int_7,0)");
+            b.1.allow_unknown_master_coefficients = true;
+            b
+        },
+    );
+    for e in [XEntry::Direct, XEntry::Ports] {
+        both(
+            &mut cells,
+            "X12 UNKNOWN master in the loaded catalogue",
+            e,
+            || {
+                let mut b = x_direct_base();
+                b.0.insertions[0].coefficient = &b.0.insertions[0].coefficient
+                    * atom("vakint::UNKNOWN(vakint::ggppss_int_99999,0)");
+                b.1.allow_unknown_master_coefficients = true;
+                b
+            },
+            || {
+                let mut b = x_direct_base();
+                b.0.insertions[0].coefficient = &b.0.insertions[0].coefficient
+                    * atom("vakint::UNKNOWN(vakint::ggppss_int_7,0)");
+                b.1.allow_unknown_master_coefficients = true;
+                b
+            },
+        );
+    }
+    // X13: one master mode per evaluation order
+    both(
+        &mut cells,
+        "X13 one master mode",
+        XEntry::Closure,
+        || x_mixed_modes(x_closure_base()),
+        x_closure_base,
+    );
+    for e in [XEntry::Direct, XEntry::Ports] {
+        both(
+            &mut cells,
+            "X13 one master mode",
+            e,
+            || x_mixed_modes(x_direct_base()),
+            x_direct_base,
+        );
+    }
+    both(
+        &mut cells,
+        "X13 one master mode",
+        XEntry::Vacuum,
+        || x_mixed_modes(x_vacuum_base()),
+        x_vacuum_base,
+    );
+    // X14: the settings' epsilon against vakint::ε in a field
+    let veps = |mut b: XInput| {
+        let x =
+            b.0.vertices
+                .iter_mut()
+                .find(|x| x.factor != Atom::num(1))
+                .or(None);
+        match x {
+            Some(x) => x.factor = &x.factor * atom("vakint::ε"),
+            None => b.0.prefactor.scalars = &b.0.prefactor.scalars * atom("vakint::ε"),
+        }
+        b
+    };
+    let _ = veps;
+    both(
+        &mut cells,
+        "X14 settings' ε vs vakint::ε in a field",
+        XEntry::Closure,
+        || {
+            let mut b = x_closure_base();
+            b.0.prefactor.scalars = &b.0.prefactor.scalars * atom("vakint::ε");
+            b
+        },
+        x_closure_base,
+    );
+    for e in [XEntry::Direct, XEntry::Ports] {
+        both(
+            &mut cells,
+            "X14 settings' ε vs vakint::ε in a field",
+            e,
+            || {
+                let mut b = x_direct_base();
+                b.0.prefactor.scalars = &b.0.prefactor.scalars * atom("vakint::ε");
+                b
+            },
+            x_direct_base,
+        );
+    }
+    both(
+        &mut cells,
+        "X14 settings' ε vs vakint::ε in a field",
+        XEntry::Vacuum,
+        || {
+            let mut b = x_vacuum_base();
+            b.0.prefactor.scalars = &b.0.prefactor.scalars * atom("vakint::ε");
+            b
+        },
+        x_vacuum_base,
+    );
+    // X15: a flavour symbol in the prefactor argument needs nf_power > 0
+    both(
+        &mut cells,
+        "X15 flavour symbol in the argument => nf_power > 0",
+        XEntry::Closure,
+        || {
+            let mut b = x_closure_base();
+            b.2 = &b.2 * atom("vakint::nf");
+            b
+        },
+        x_closure_base,
+    );
+    for e in [XEntry::Direct, XEntry::Ports] {
+        both(
+            &mut cells,
+            "X15 flavour symbol in the argument => nf_power > 0",
+            e,
+            || {
+                let mut b = x_direct_base();
+                b.2 = &b.2 * atom("vakint::nf");
+                b
+            },
+            x_direct_base,
+        );
+    }
+    both(
+        &mut cells,
+        "X15 flavour symbol in the argument => nf_power > 0",
+        XEntry::Vacuum,
+        || {
+            let mut b = x_vacuum_base();
+            b.2 = &b.2 * atom("vakint::nf");
+            b
+        },
+        x_vacuum_base,
+    );
+    // X16: an insertion's hedges against its vertex
+    both(
+        &mut cells,
+        "X16 insertion hedges vs its vertex",
+        XEntry::Closure,
+        || {
+            let v = record("wh-k2-child-ins");
+            let mut v2 = v.clone();
+            v2.insertions[0].hedges.pop();
+            let a = v2.prefactor.total();
+            (v2, symbolic(), a)
+        },
+        || {
+            let v = record("wh-k2-child-ins");
+            let a = v.prefactor.total();
+            (v, symbolic(), a)
+        },
+    );
+    for e in [XEntry::Direct, XEntry::Ports] {
+        both(
+            &mut cells,
+            "X16 insertion hedges vs its vertex",
+            e,
+            || {
+                let mut b = x_direct_base();
+                b.0.insertions[0].hedges.pop();
+                b
+            },
+            x_direct_base,
+        );
+    }
+    cells
+}
+
+/// The cells whose VIOLATING input is accepted on 7f1bee5a4 (rule, entry,
+/// text): asserted refused by the ignored companion test.
+const X_GAPS: &[(&str, XEntry, bool)] = &[
+    (
+        "X1 weight applied_by=vakint = prefactor_scalars",
+        XEntry::Direct,
+        false,
+    ),
+    (
+        "X1 weight applied_by=vakint = prefactor_scalars",
+        XEntry::Direct,
+        true,
+    ),
+    (
+        "X1 weight applied_by=vakint = prefactor_scalars",
+        XEntry::Ports,
+        false,
+    ),
+    (
+        "X1 weight applied_by=vakint = prefactor_scalars",
+        XEntry::Ports,
+        true,
+    ),
+    (
+        "X1 weight applied_by=vakint = prefactor_scalars",
+        XEntry::Vacuum,
+        false,
+    ),
+    (
+        "X1 weight applied_by=vakint = prefactor_scalars",
+        XEntry::Vacuum,
+        true,
+    ),
+    ("X2 original_cycles => loop_sign 1", XEntry::Vacuum, false),
+    (
+        "X3 carried cycles <= original_cycles",
+        XEntry::Vacuum,
+        false,
+    ),
+    (
+        "X4 loop_sign = the closed loops (no original_cycles)",
+        XEntry::Vacuum,
+        false,
+    ),
+];
+
+/// Cells no evaluating entry can reach: a direct value without an external
+/// momentum is refused by the entry's two-point rule first, violating or not.
+const X_UNREACHABLE: &[&str] = &["X7 p2_power needs an external momentum"];
+
+/// THE CROSS-FIELD TABLE: every cell's violating input refused and its valid
+/// twin accepted, except the cells of `X_GAPS` (printed; the companion test
+/// `the_cross_field_rules_hold_for_every_kind` asserts them).
+#[test]
+fn the_cross_field_rules_per_kind_and_form() {
+    let mut wrong = Vec::new();
+    for c in x_cells() {
+        let bad = x_run(c.entry, c.text, (c.bad)());
+        let good = x_run(c.entry, c.text, (c.good)());
+        let gap = X_GAPS
+            .iter()
+            .any(|(r, e, t)| *r == c.rule && *e == c.entry && *t == c.text);
+        let cut = |r: &Result<(), String>| match r {
+            Ok(()) => "ACCEPTED".to_string(),
+            Err(e) => format!("REFUSED {}", e.chars().take(150).collect::<String>()),
+        };
+        eprintln!(
+            "CONTRACT CROSS | {} | {:?} | {} | violating: {} | twin: {}{}",
+            c.rule,
+            c.entry,
+            if c.text { "text" } else { "typed" },
+            cut(&bad),
+            cut(&good),
+            if gap { " | KNOWN GAP" } else { "" }
+        );
+        let text_cannot = |r: &Result<(), String>| {
+            r.as_ref()
+                .is_err_and(|e| e.starts_with("TEXT CANNOT WRITE IT"))
+        };
+        if text_cannot(&bad) || text_cannot(&good) {
+            continue;
+        }
+        if X_UNREACHABLE.contains(&c.rule) {
+            let two_point = |r: &Result<(), String>| {
+                r.as_ref().is_err_and(|e| {
+                    e.contains("a two-point value with one independent external momentum")
+                })
+            };
+            if !(two_point(&bad) && two_point(&good)) {
+                wrong.push(format!(
+                    "{} {:?} text={}: expected unreachable (the two-point rule first)",
+                    c.rule, c.entry, c.text
+                ));
+            }
+            continue;
+        }
+        if good.is_err() {
+            wrong.push(format!(
+                "{} {:?} text={}: the twin is refused: {}",
+                c.rule,
+                c.entry,
+                c.text,
+                cut(&good)
+            ));
+        }
+        if bad.is_ok() != gap {
+            wrong.push(format!(
+                "{} {:?} text={}: violating {}",
+                c.rule,
+                c.entry,
+                c.text,
+                cut(&bad)
+            ));
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+/// The cells of `X_GAPS`: the violating input refused.
+#[test]
+#[ignore = "expected: refused; the rule is enforced for the closure kind only (X_GAPS)"]
+fn the_cross_field_rules_hold_for_every_kind() {
+    let mut accepted = Vec::new();
+    for c in x_cells() {
+        if X_GAPS
+            .iter()
+            .any(|(r, e, t)| *r == c.rule && *e == c.entry && *t == c.text)
+            && x_run(c.entry, c.text, (c.bad)()).is_ok()
+        {
+            accepted.push(format!("{} {:?} text={}", c.rule, c.entry, c.text));
+        }
+    }
+    assert!(accepted.is_empty(), "accepted: {accepted:?}");
+}
+
+/// A huge power inside an INSERTION: the coefficient or the factor times
+/// ((1+UFO::x)^1000000000 - UFO::y)^(-1), through validate(), from_text and
+/// the closure entry (typed and text), each within 5 s: refused by the
+/// exponent rule ("exceeds 64 in modulus") within 1 s.
+#[test]
+#[ignore = "expected: refused by the exponent rule within 1 s; on 7f1bee5a4 validation computes the power first and takes about 117 s"]
+fn a_huge_power_in_an_insertion_is_refused_at_once() {
+    let huge = "((1+UFO::x)^1000000000-UFO::y)^(-1)";
+    let mut wrong = Vec::new();
+    for field in ["coefficient", "factor"] {
+        let mut v = record("wh-k2-child-ins");
+        if field == "coefficient" {
+            v.insertions[0].coefficient = &v.insertions[0].coefficient * atom(huge);
+        } else {
+            v.insertions[0].factor = &v.insertions[0].factor * atom(huge);
+        }
+        let text = v.to_text().unwrap();
+        for way in [
+            "validate",
+            "from_text",
+            "closure entry typed",
+            "closure entry text",
+        ] {
+            let (v, text) = (v.clone(), text.clone());
+            let started = std::time::Instant::now();
+            let got = within(5, move || -> Result<(), String> {
+                match way {
+                    "validate" => v.validate().map_err(|e| e.to_string()),
+                    "from_text" => FactorizedNumerator::from_text(&text)
+                        .map(|_| ())
+                        .map_err(|e| e.to_string()),
+                    "closure entry typed" => closure(&v, &symbolic(), &v.prefactor.total())
+                        .map(|_| ())
+                        .map_err(|e| e.to_string()),
+                    _ => {
+                        let v =
+                            FactorizedNumerator::parse_text(&text).map_err(|e| e.to_string())?;
+                        closure(&v, &symbolic(), &v.prefactor.total())
+                            .map(|_| ())
+                            .map_err(|e| e.to_string())
+                    }
+                }
+            });
+            let seconds = started.elapsed().as_secs_f64();
+            let shown = match &got {
+                None => "TIMED OUT after 5 s".to_string(),
+                Some(Err(_)) => "PANIC".into(),
+                Some(Ok(r)) => format!("{r:?}").chars().take(160).collect(),
+            };
+            eprintln!("CONTRACT HUGE insertion {field} / {way}: {shown} [{seconds:.2}s]");
+            if !(matches!(&got, Some(Ok(Err(e))) if e.contains("exceeds 64 in modulus"))
+                && seconds < 1.0)
+            {
+                wrong.push(format!("{field} / {way}: {shown} [{seconds:.2}s]"));
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "{wrong:#?}");
+}
+
+/// What the TEXT PARSER does with a huge literal power in a factor (before any
+/// rule runs): `VAKINT_TEST_PARSE_INPUT` (default `2^1000000000`) parsed alone
+/// and as a vertex factor of the K1 root through from_text, within 20 s each;
+/// the time and the process's peak memory printed. A measurement.
+#[test]
+#[ignore = "measurement: run explicitly under a memory cap"]
+fn what_the_text_parser_does_with_a_huge_literal_power() {
+    let input = std::env::var("VAKINT_TEST_PARSE_INPUT").unwrap_or_else(|_| "2^1000000000".into());
+    let peak = || {
+        std::fs::read_to_string("/proc/self/status")
+            .ok()
+            .and_then(|s| {
+                s.lines()
+                    .find(|l| l.starts_with("VmHWM"))
+                    .map(|l| l.to_string())
+            })
+            .unwrap_or_default()
+    };
+    eprintln!("CONTRACT PARSE {input}: before {}", peak());
+    init();
+    let parse_input = input.clone();
+    let started = std::time::Instant::now();
+    let got = within(20, move || {
+        symbolica::try_parse!(parse_input.as_str())
+            .map(|a| a.as_view().get_byte_size())
+            .map_err(|e| e.to_string())
+    });
+    eprintln!(
+        "CONTRACT PARSE {input}: parse alone {got:?} [{:.2}s] {}",
+        started.elapsed().as_secs_f64(),
+        peak()
+    );
+    let text = fixture_text("wh-k1-root.record.txt")
+        .lines()
+        .map(|l| {
+            if l.starts_with("vertex\t0\t") {
+                format!("{l}*{input}")
+            } else {
+                l.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    let started = std::time::Instant::now();
+    let got = within(20, move || {
+        FactorizedNumerator::from_text(&text)
+            .map(|_| ())
+            .map_err(|e| e.to_string().chars().take(160).collect::<String>())
+    });
+    eprintln!(
+        "CONTRACT PARSE {input}: as a vertex factor through from_text {got:?} [{:.2}s] {}",
+        started.elapsed().as_secs_f64(),
+        peak()
+    );
+}
