@@ -129,13 +129,11 @@ pub fn epsilon_coefficients(value: &Atom, epsilon: Symbol) -> BTreeMap<i64, Atom
         for factor in factors {
             match factor.as_view() {
                 AtomView::Var(v) if v.get_symbol() == epsilon => order += 1,
-                AtomView::Pow(p)
-                    if matches!(p.get_base_exp().0, AtomView::Var(v) if v.get_symbol() == epsilon) =>
+                AtomView::Pow(p) if matches!(p.get_base_exp().0, AtomView::Var(v) if v.get_symbol() == epsilon) =>
                 {
                     let exponent = p.get_base_exp().1;
-                    order += i64::try_from(exponent).unwrap_or_else(|_| {
-                        panic!("a non-integer power of {epsilon:?}: {factor}")
-                    });
+                    order += i64::try_from(exponent)
+                        .unwrap_or_else(|_| panic!("a non-integer power of {epsilon:?}: {factor}"));
                 }
                 _ => rest *= factor,
             }
@@ -204,6 +202,10 @@ pub fn assert_compared(what: &str, compared: usize, expected: Option<usize>) {
     }
     eprintln!(
         "{what}: COMPARED {compared} records{}",
-        if expected.is_some() { "" } else { " (FILTERED: count not asserted)" }
+        if expected.is_some() {
+            ""
+        } else {
+            " (FILTERED: count not asserted)"
+        }
     );
 }
