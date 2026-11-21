@@ -175,7 +175,8 @@ pub fn validate_uncontracted() -> eyre::Result<()> {
 /// The settings half of [`validate_uncontracted`] (call at start-up, with
 /// the UV settings every R* evaluation of the run will use): with
 /// `GAMMALOOP_UNCONTRACTED_NUMERATOR` on or check, helper VH's C7 settings
-/// exceptions are refused (`uv.vakint.normalization` other than `MSbar`).
+/// exceptions are refused (`uv.vakint.normalization` other than `MSbar`,
+/// `uv.vakint.evaluation_methods` other than `rustred` and `forcer`).
 /// Every record built under them is an error too, so a caller that skips
 /// this check fails each diagram instead of the run.
 pub fn validate_uncontracted_settings(
