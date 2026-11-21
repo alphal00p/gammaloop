@@ -485,6 +485,26 @@ impl FactorizedNumerator {
                 }
             }
         }
+        // the vacuum lines the evaluation integrates (external momenta set to
+        // zero, the closing line at the auxiliary mass, series merged): one
+        // closing line among massless ones, or scaleless; a Taylor step only
+        // raises powers, so every pattern has the same back end and the
+        // evaluation never refuses for the lines' shape
+        let mut sector = self.clone();
+        sector.kind = FactorizedKind::Direct;
+        for edge in sector.edges.iter_mut().filter(|e| !e.is_external()) {
+            for c in edge.momentum[loops..].iter_mut() {
+                *c = 0;
+            }
+            if edge.id == spec.edge {
+                edge.mass_squared = spec.auxiliary_mass_squared.clone();
+            }
+        }
+        if let VacuumBackend::Family = vacuum_backend(&vacuum_lines(&sector), loops)? {
+            return Err(refuse(
+                "every line is massive: not a closure (after series merging the closing line is the only line)",
+            ));
+        }
         Ok(())
     }
 }
@@ -1243,7 +1263,12 @@ fn prepare(
     let base_cut = match vacuum_backend(&base_lines, loops)? {
         VacuumBackend::Closure(cut) => Some(cut),
         VacuumBackend::Scaleless => None,
-        VacuumBackend::Family => return Err(refuse("every line is massive: not a closure")),
+        VacuumBackend::Family => {
+            return Err(internal(
+                "vacuum lines",
+                "every line is massive (validated)",
+            ));
+        }
     };
     let mut reduce = |monomial: &Atom| -> Result<Vec<(Atom, Atom)>> {
         if let Some(found) = memo.get(monomial) {
@@ -1251,8 +1276,9 @@ fn prepare(
         }
         let input = monomial * &base_topology;
         let Some(cut) = &base_cut else {
-            return Err(refuse(
-                "the lines do not form one closing line among massless ones",
+            return Err(internal(
+                "vacuum lines",
+                "a scaleless base with a pattern to reduce (validated)",
             ));
         };
         let (external, inputs) = closure_inputs(vakint, settings, &input, cut)?;
@@ -1273,14 +1299,20 @@ fn prepare(
             VacuumBackend::Closure(cut) => cut,
             VacuumBackend::Scaleless => continue,
             VacuumBackend::Family => {
-                return Err(refuse("every line is massive: not a closure"));
+                return Err(internal(
+                    "vacuum lines",
+                    "every line is massive (validated)",
+                ));
             }
         };
         if cut.line.mass_squared != closing_mass {
-            return Err(refuse(format!(
-                "the derived closing line {} is not the closure's",
-                cut.line.id
-            )));
+            return Err(internal(
+                "vacuum lines",
+                format!(
+                    "the derived closing line {} is not the closure's",
+                    cut.line.id
+                ),
+            ));
         }
         let to_head = |atom: &Atom| atom.replace(S.p.call(1)).with(head.clone());
         let images = cut
@@ -1291,7 +1323,12 @@ fn prepare(
         match &routing {
             None => routing = Some(images),
             Some(first) if *first == images => {}
-            Some(_) => return Err(refuse("the cut routing differs between patterns")),
+            Some(_) => {
+                return Err(internal(
+                    "vacuum lines",
+                    "the cut routing differs between patterns",
+                ));
+            }
         }
         let mut pattern_terms = Vec::new();
         for (block, (structure, degree, _)) in split.iter().enumerate() {

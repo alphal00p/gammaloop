@@ -3525,3 +3525,177 @@ fn the_collision_controls_equal_the_independent_reference() {
         check_independent(&inside, &L2_CUT, &atom("UFO::gs^2"));
     }
 }
+
+// ---------------------------------------------------------------------------
+// REFUSAL TESTS THAT CAN FAIL (A-27): `validate` of a MINIMAL input (a valid
+// record with one defect) gives the variant AND the detail prefix of the
+// REFUSALS list, and the same input without the defect is ACCEPTED.
+// Priority (2): the refusals the R* emitter can reach.
+// ---------------------------------------------------------------------------
+
+/// `bad.validate()` = `Closure { detail }` with `detail` starting with
+/// `prefix`; `good.validate()` = Ok.
+fn assert_closure_refusal(bad: &FactorizedNumerator, good: &FactorizedNumerator, prefix: &str) {
+    good.validate()
+        .unwrap_or_else(|e| panic!("the twin without the defect is refused: {e}"));
+    match bad.validate() {
+        Err(FactorizedError::Closure { detail }) => assert!(
+            detail.starts_with(prefix),
+            "{}: {detail}\n(expected prefix {prefix:?})",
+            bad.label
+        ),
+        other => panic!("{}: expected Closure {prefix:?}, got {other:?}", bad.label),
+    }
+}
+
+/// A closure record with no loop (OQ-25: an inserted counterterm alone).
+fn zero_loop_record() -> FactorizedNumerator {
+    record(
+        "zero loops",
+        0,
+        vec![Some(20)],
+        vec![
+            line(3, 2, 1, &[1], R),
+            leg(20, 2, true, &[1]),
+            leg(21, 1, false, &[1]),
+        ],
+        vec![vertex(1, ""), vertex(2, "")],
+        Vec::new(),
+        None,
+        3,
+        taylor(0, vec![20, 21], false),
+        false,
+    )
+}
+
+#[test]
+fn refusal_zero_loops() {
+    assert_closure_refusal(
+        &zero_loop_record(),
+        &l2_root(2, true),
+        "a closure record has at least one loop",
+    );
+}
+
+#[test]
+fn refusal_taylor_degree_above_two() {
+    let good = l2_root(2, true);
+    let mut bad = good.clone();
+    spec(&mut bad).taylor.as_mut().unwrap().degree = 3;
+    assert_closure_refusal(&bad, &good, "Taylor degree 3 above 2");
+}
+
+/// The order filter that keeps nothing (drop0-odd at degree 1); drop0-odd at
+/// degree 2 keeps order 2. (Reachable on this branch; the assembler's
+/// order-filter refusal may precede it on theirs.)
+#[test]
+fn refusal_orders_keep_nothing() {
+    let mut bad = l2_root(1, true);
+    spec(&mut bad).taylor.as_mut().unwrap().orders = TaylorOrders::DropZeroOdd;
+    let mut good = l2_root(2, true);
+    spec(&mut good).taylor.as_mut().unwrap().orders = TaylorOrders::DropZeroOdd;
+    assert_closure_refusal(
+        &bad,
+        &good,
+        "orders=drop0-odd keeps no order up to degree 1",
+    );
+}
+
+/// An open spinor chain: a projector leaving two bispinor slots open (on
+/// the pre-expanded sector: without a Taylor step the projector may carry
+/// the leg momentum); the twin closes the root with the metric alone.
+#[test]
+fn refusal_open_spinor_slot() {
+    let good = l2_sector();
+    let mut bad = good.clone();
+    let bis = |k: usize| {
+        format!("spenso::{{spenso::representation,spenso::self_dual}}::bis(4,{HEDGE}(120,{k}))")
+    };
+    let projector = bad.projector.as_mut().unwrap();
+    projector.tensor = &projector.tensor
+        * atom(&format!(
+            "spenso::{{linear,spenso::tensor}}::gamma({},{},{MINK}({DIM},{HEDGE}(120,4)))",
+            bis(2),
+            bis(3)
+        ))
+        * atom(&q(20, &format!("{MINK}({DIM},{HEDGE}(120,4))")));
+    match bad.validate() {
+        Err(FactorizedError::Closure { detail }) => assert!(
+            detail.starts_with("open slot ") && detail.contains("is not a Lorentz slot"),
+            "{detail}"
+        ),
+        other => panic!("expected the open-slot refusal, got {other:?}"),
+    }
+    good.validate().unwrap();
+}
+
+/// "every line is massive": a one-loop record whose only internal line is
+/// the closing line (the back end would be a single-scale family, not a
+/// closure); refused by validate (R-15: not later at the evaluation). The
+/// twin: the same loop with a massless line beside the closing one.
+#[test]
+fn refusal_every_line_is_massive() {
+    let bad = record(
+        "one loop, the closing line alone",
+        1,
+        vec![Some(20)],
+        vec![
+            line(3, 1, 1, &[1, 0], R),
+            leg(20, 1, true, &[0, 1]),
+            leg(21, 1, false, &[0, 1]),
+        ],
+        vec![vertex(1, "")],
+        Vec::new(),
+        None,
+        3,
+        taylor(0, vec![20, 21], false),
+        false,
+    );
+    let good = record(
+        "one loop, closing line and a massless line",
+        1,
+        vec![Some(20)],
+        vec![
+            line(1, 1, 2, &[1, 1], "0"),
+            line(3, 2, 1, &[1, 0], R),
+            leg(20, 1, true, &[0, 1]),
+            leg(21, 2, false, &[0, 1]),
+        ],
+        vec![vertex(1, ""), vertex(2, "")],
+        Vec::new(),
+        None,
+        3,
+        taylor(0, vec![20, 21], false),
+        false,
+    );
+    assert_closure_refusal(&bad, &good, "every line is massive: not a closure");
+}
+
+/// A compact slash `gamma(a, b, Q(x, mink(D)))` in the projector of a record
+/// with a Taylor step (the reader's rule R4, `Ports`); without the Taylor
+/// step the same projector is written out.
+#[test]
+fn refusal_compact_slash_under_a_taylor_step() {
+    let mut bad = l2_root(1, true);
+    let slash = atom(&format!(
+        "spenso::{{linear,spenso::tensor}}::gamma(spenso::{{spenso::representation,spenso::self_dual}}::bis(4,{HEDGE}(120,2)),spenso::{{spenso::representation,spenso::self_dual}}::bis(4,{HEDGE}(121,2)),{MOMENTUM}(20,{MINK}({DIM})))"
+    ));
+    let projector = bad.projector.as_mut().unwrap();
+    projector.tensor = &projector.tensor * &slash;
+    let mut good = bad.clone();
+    spec(&mut good).taylor = None;
+    good.expand_compact_slashes().unwrap();
+    assert_ne!(
+        good.projector, bad.projector,
+        "the twin's slash was not written out"
+    );
+    match bad.expand_compact_slashes() {
+        Err(FactorizedError::Ports { detail }) => assert!(
+            detail.starts_with(
+                "a compact slash gamma(a, b, Q(x, mink(D))) in the projector of a record with a Taylor step"
+            ),
+            "{detail}"
+        ),
+        other => panic!("expected the compact-slash refusal, got {other:?}"),
+    }
+}
