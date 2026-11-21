@@ -543,7 +543,7 @@ fn resumed_records_need_matching_evidence() -> Result<()> {
             .evidence
             .ok_or_else(|| eyre!("a closed check ledger returns its dispositions"))?;
         ensure!(
-            evidence["schema"] == "u7a-disposition.v2"
+            evidence["schema"] == ledger::EVIDENCE_SCHEMA
                 && evidence["identity"] == "check:root,child:strict"
                 && evidence["outcome"] == "ok",
             "{evidence:#}"
@@ -1533,7 +1533,7 @@ fn the_run_fails_a_kind_with_nothing_compared() -> Result<()> {
     let check = Switch::new(Mode::Check, &ALL_KINDS);
     let evidence = |identity: Option<String>, ir_hard: serde_json::Value| {
         serde_json::json!({
-            "schema": "u7a-disposition.v2", "identity": identity, "graph": "g",
+            "schema": ledger::EVIDENCE_SCHEMA, "identity": identity, "graph": "g",
             "diagram": "000001", "outcome": "ok", "inert": {},
             "kinds": {
                 "root": {"expected": 2, "attempted": 2, "uncontracted": 2, "zero": 0, "equal": 2,
@@ -1589,7 +1589,7 @@ fn the_run_fails_a_kind_with_nothing_compared() -> Result<()> {
         // a nonzero diagram with nothing compared in any kind; a record
         // without evidence; evidence of another identity
         let empty = serde_json::json!({
-            "schema": "u7a-disposition.v2", "identity": identity, "graph": "z",
+            "schema": ledger::EVIDENCE_SCHEMA, "identity": identity, "graph": "z",
             "diagram": "000009", "outcome": "ok", "inert": {},
             "kinds": {"root": none, "child": none, "ir-hard": none},
         });
@@ -1622,7 +1622,7 @@ fn the_run_fails_a_kind_with_nothing_compared() -> Result<()> {
             let identity = ledger::current_identity();
             let mut tally = ledger::RunTally::new().expect("a tally");
             let empty = serde_json::json!({
-                "schema": "u7a-disposition.v2", "identity": identity, "graph": "z",
+                "schema": ledger::EVIDENCE_SCHEMA, "identity": identity, "graph": "z",
                 "diagram": "000009", "outcome": "ok", "inert": {},
                 "kinds": {"ir-hard": none},
             });
@@ -1755,7 +1755,7 @@ fn the_run_and_the_resume_fail_a_setting_wide_class() -> Result<()> {
             let k1_compared = k1["compared"].as_u64().unwrap_or(0);
             classes.insert("compared".to_owned(), serde_json::json!(2 + k1_compared));
             serde_json::json!({
-                "schema": "u7a-disposition.v2", "identity": identity, "graph": "g",
+                "schema": ledger::EVIDENCE_SCHEMA, "identity": identity, "graph": "g",
                 "diagram": "000001", "outcome": "ok", "inert": {},
                 "kinds": {
                     "root": {"expected": 2 + k1_records, "attempted": 2 + k1_records,
@@ -1805,6 +1805,65 @@ fn the_run_and_the_resume_fail_a_setting_wide_class() -> Result<()> {
             true,
         );
         ensure!(tally.failures().is_empty(), "{:#?}", tally.failures());
+        Ok(())
+    })
+}
+
+/// Review of the follow-ups (ledger lens, finding 1): evidence written
+/// before the record classes existed (`u7a-disposition.v2`, no `shapes`:
+/// e.g. helper VH 2's K5 binaries, 16 K1 roots `declined:open_root` and 35
+/// K2 children compared in one kind) deserialised with an empty shape map,
+/// so the class rule saw nothing and the resume and the run tally accepted
+/// it (an import across pipeline fingerprints reaches both). The schema is
+/// bumped: such evidence is recomputed (`reason=schema:`) and fails the
+/// tally.
+#[test]
+fn evidence_without_record_classes_is_not_reused() -> Result<()> {
+    test_initialise()?;
+    ensure!(
+        ledger::EVIDENCE_SCHEMA != "u7a-disposition.v2",
+        "the schema that wrote no record classes is still current"
+    );
+    with_switch(Switch::new(Mode::Check, &ROOT_CHILD), || -> Result<()> {
+        let identity = ledger::current_identity();
+        let old = serde_json::json!({
+            "schema": "u7a-disposition.v2", "identity": identity, "graph": "g",
+            "diagram": "000001", "outcome": "ok", "inert": {},
+            "kinds": {
+                "root": {"expected": 51, "attempted": 51, "uncontracted": 35, "zero": 0,
+                         "equal": 35, "classes": {"compared": 35, "declined:open_root": 16},
+                         "outcome": "ok"},
+                "child": {"expected": 1, "attempted": 1, "uncontracted": 1, "zero": 0,
+                          "equal": 1, "classes": {"compared": 1}, "outcome": "ok"},
+            },
+        });
+        match ledger::resumed("g", "000001", Some(&old)) {
+            Resumed::Unchecked(reason) if reason.starts_with("schema:") => {}
+            other => return Err(eyre!("evidence without record classes was reused: {other:?}")),
+        }
+        let mut tally = ledger::RunTally::new().ok_or_else(|| eyre!("no tally"))?;
+        tally.add("g/000001", Some(&old), true);
+        let failures = tally.failures();
+        ensure!(
+            failures
+                .iter()
+                .any(|failure| failure.contains("g/000001: a record without the run's evidence")),
+            "{failures:#?}"
+        );
+        // the same counts under the current schema, with their classes, fail
+        // by the class rule (not reused, and the tally fails the class)
+        let mut current = old.clone();
+        current["schema"] = serde_json::json!(ledger::EVIDENCE_SCHEMA);
+        current["kinds"]["root"]["shapes"] =
+            serde_json::json!({"K1": {"declined:open_root": 16}, "K2": {"compared": 35}});
+        current["kinds"]["child"]["shapes"] = serde_json::json!({"K2": {"compared": 1}});
+        ensure!(
+            matches!(
+                ledger::resumed("g", "000001", Some(&current)),
+                Resumed::Unchecked(_)
+            ),
+            "the current evidence with a setting-wide class was reused"
+        );
         Ok(())
     })
 }

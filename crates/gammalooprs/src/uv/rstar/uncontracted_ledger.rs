@@ -68,7 +68,7 @@
 //!
 //! # Resume evidence
 //!
-//! The close returns the dispositions as JSON (`u7a-disposition.v2`) for the
+//! The close returns the dispositions as JSON (`u7a-disposition.v3`) for the
 //! beta's integral record; [`resumed`] reads them back when the beta reuses
 //! a saved record: matching evidence (the same switch identity, graph and
 //! diagram, counts that pass the verdict again) re-prints its lines with
@@ -1770,8 +1770,13 @@ fn finish(frame: Frame, ok: bool) -> Result<Option<Value>> {
 
 /// The schema of the dispositions in a beta integral record.
 /// v2 (pre-review of the U7a delta): `hit_equal` per kind, the verdict's
-/// agreement rule; v1 evidence never matches.
-pub(crate) const EVIDENCE_SCHEMA: &str = "u7a-disposition.v2";
+/// agreement rule; v1 evidence never matches. v3 (item B, the record
+/// classes): `shapes` per kind, read by the class rule; v2 evidence has no
+/// classes, would deserialise with an empty map and pass the class rule
+/// unseen (review of the follow-ups, ledger lens, finding 1: an import
+/// across pipeline fingerprints reaches [`resumed`] and [`RunTally::add`]),
+/// so it never matches either.
+pub(crate) const EVIDENCE_SCHEMA: &str = "u7a-disposition.v3";
 
 /// What a resumed (reused) diagram record says about the switch in force.
 #[derive(Clone, Debug, PartialEq, Eq)]
