@@ -295,6 +295,21 @@ fn the_reserved_extensions_are_rejected() {
     let insertions = GLUON.replace("insertions\t0", "insertions\t1");
     assert!(matches!(
         FactorizedNumerator::parse_text(&insertions),
+        Err(FactorizedError::Reserved { .. })
+    ));
+    // a v3 record may carry insertions: the declared one is missing here
+    let mut marked = read(GLUON);
+    marked.record = Some(DirectRecord {
+        original_cycles: None,
+        depth: None,
+        weights: Vec::new(),
+    });
+    let v3 = marked.to_text().unwrap();
+    assert!(v3.starts_with(&format!("schema\t{FACTORIZED_SCHEMA_V3}\n")));
+    let insertions_v3 = v3.replace("insertions\t0", "insertions\t1");
+    assert_ne!(insertions_v3, v3);
+    assert!(matches!(
+        FactorizedNumerator::parse_text(&insertions_v3),
         Err(FactorizedError::TextSectionCount { .. })
     ));
 }

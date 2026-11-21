@@ -70,7 +70,7 @@ pub use colour::{
     split_local_colour,
 };
 pub use evaluate::{
-    FactorizedValue, MAX_OPEN_PORTS, PortsValue, contract_to_vakint_dots, evaluate_factorized,
+    FactorizedValue, PortsValue, contract_to_vakint_dots, evaluate_factorized,
     evaluate_factorized_ports, to_caller_notation_p, vakint_input,
 };
 #[cfg(feature = "feynkit-ingress")]
@@ -1531,6 +1531,286 @@ impl FactorRules<'_> {
     }
 }
 
+/// The base's factor rules, verbatim (values without new features:
+/// [`FactorizedNumerator::has_new_features`]).
+struct FactorRulesV1<'a> {
+    location: Location,
+    dimension: Symbol,
+    edges: &'a BTreeMap<usize, &'a FactorizedEdge>,
+}
+
+impl FactorRulesV1<'_> {
+    fn loc(&self) -> String {
+        self.location.to_string()
+    }
+
+    fn check_slot(&self, slot: &Slot) -> Result<()> {
+        let rep = slot.rep.as_str();
+        if rep.starts_with("dind(") || is_colour_rep(rep) {
+            return Err(FactorizedError::ColourInFactor {
+                location: self.loc(),
+                tensor: slot.atom.to_canonical_string(),
+            });
+        }
+        let expected = match rep {
+            names::MINK => Atom::var(self.dimension),
+            names::BIS => Atom::num(4),
+            _ => {
+                return Err(FactorizedError::UnsupportedTensor {
+                    location: self.loc(),
+                    tensor: slot.atom.to_canonical_string(),
+                });
+            }
+        };
+        if slot.dim != expected {
+            return Err(FactorizedError::WrongDimension {
+                location: self.loc(),
+                slot: slot.key(),
+                found: slot.dim.to_canonical_string(),
+                expected: expected.to_canonical_string(),
+            });
+        }
+        Ok(())
+    }
+
+    /// The slots of one elementary tensor `f`, after checking its kind.
+    fn element(&self, view: AtomView<'_>, elements: &mut Elements) -> Result<Vec<Slot>> {
+        let AtomView::Fun(f) = view else {
+            unreachable!()
+        };
+        let symbol = f.get_symbol();
+        let name = symbol.get_name();
+        let text = || view.to_owned().to_canonical_string();
+        let args = f.iter().collect::<Vec<_>>();
+        let slots = args.iter().filter_map(|a| as_slot(*a)).collect::<Vec<_>>();
+        // Colour first: a colour tensor is reported as such, whatever its head.
+        if slots
+            .iter()
+            .any(|s| s.rep.starts_with("dind(") || is_colour_rep(&s.rep))
+        {
+            return Err(FactorizedError::ColourInFactor {
+                location: self.loc(),
+                tensor: text(),
+            });
+        }
+        match name {
+            names::GAMMA5 | names::PROJP | names::PROJM => {
+                return Err(FactorizedError::Gamma5 {
+                    location: self.loc(),
+                    tensor: text(),
+                });
+            }
+            names::EPSILON => {
+                return Err(FactorizedError::LeviCivita {
+                    location: self.loc(),
+                    tensor: text(),
+                });
+            }
+            names::STRUCTURE_F | names::GENERATOR_T => {
+                return Err(FactorizedError::ColourInFactor {
+                    location: self.loc(),
+                    tensor: text(),
+                });
+            }
+            _ => {}
+        }
+        for slot in &slots {
+            self.check_slot(slot)?;
+        }
+        let unsupported = || FactorizedError::UnsupportedTensor {
+            location: self.loc(),
+            tensor: text(),
+        };
+        match name {
+            names::METRIC => {
+                if args.len() != 2 || slots.len() != 2 || slots[0].rep != slots[1].rep {
+                    return Err(unsupported());
+                }
+                if self.location == Location::Projector && slots[0].rep != names::MINK {
+                    return Err(unsupported());
+                }
+                Ok(slots)
+            }
+            names::GAMMA => {
+                if self.location == Location::Projector
+                    || args.len() != 3
+                    || slots.len() != 3
+                    || slots[0].rep != names::BIS
+                    || slots[1].rep != names::BIS
+                    || slots[2].rep != names::MINK
+                {
+                    return Err(unsupported());
+                }
+                elements.gammas.push((slots[0].clone(), slots[1].clone()));
+                Ok(slots)
+            }
+            names::MOMENTUM => {
+                if args.len() != 2 || slots.len() != 1 || slots[0].rep != names::MINK {
+                    return Err(unsupported());
+                }
+                let edge = i64::try_from(args[0])
+                    .ok()
+                    .and_then(|e| usize::try_from(e).ok());
+                let Some(edge) = edge else {
+                    return Err(FactorizedError::UnknownEdge {
+                        location: self.loc(),
+                        edge: args[0].to_owned().to_canonical_string(),
+                    });
+                };
+                // `Q(x, ..)` of an edge that is not in the graph is a constant
+                // external vector (reader rule 2: derived, not declared).
+                let Some(known) = self.edges.get(&edge) else {
+                    return Ok(slots);
+                };
+                if self.location == Location::Projector && !known.is_external() {
+                    return Err(FactorizedError::UnsupportedTensor {
+                        location: self.loc(),
+                        tensor: format!("{} (loop momentum in the projector)", text()),
+                    });
+                }
+                Ok(slots)
+            }
+            _ => {
+                if contains_tensor_content(view) {
+                    Err(unsupported())
+                } else {
+                    // A scalar function (e.g. a coupling function): allowed.
+                    check_exact_numbers(view, &self.loc())?;
+                    Ok(Vec::new())
+                }
+            }
+        }
+    }
+
+    /// The slots of `view` that are not contracted inside a product or a sum
+    /// term below it (a multiset: a product folds its own slots, so an
+    /// enclosing product sees each slot as often as it occurs), collecting
+    /// the contracted ones into `sets.dummies`.
+    fn free(
+        &self,
+        view: AtomView<'_>,
+        sets: &mut IndexSets,
+        elements: &mut Elements,
+    ) -> Result<Vec<Slot>> {
+        match view {
+            AtomView::Num(_) => {
+                check_exact_numbers(view, &self.loc())?;
+                Ok(Vec::new())
+            }
+            AtomView::Var(_) => Ok(Vec::new()),
+            AtomView::Fun(f) => {
+                if is_rep_name(f.get_symbol().get_name()) {
+                    return Err(FactorizedError::UnsupportedTensor {
+                        location: self.loc(),
+                        tensor: format!("{} (a bare slot)", view.to_owned().to_canonical_string()),
+                    });
+                }
+                self.element(view, elements)
+            }
+            AtomView::Mul(m) => {
+                let mut all = Vec::new();
+                for part in m.iter() {
+                    all.extend(self.free(part, sets, elements)?);
+                }
+                self.fold(all, sets)
+            }
+            AtomView::Add(a) => {
+                let mut first: Option<(BTreeSet<String>, Vec<Slot>)> = None;
+                for term in a.iter() {
+                    let free = self.free(term, sets, elements)?;
+                    let free = self.fold(free, sets)?;
+                    let keys = free.iter().map(Slot::key).collect::<BTreeSet<_>>();
+                    match &first {
+                        None => first = Some((keys, free)),
+                        Some((left, _)) if *left != keys => {
+                            return Err(FactorizedError::InconsistentSum {
+                                location: self.loc(),
+                                left: left.iter().cloned().collect::<Vec<_>>().join(","),
+                                right: keys.into_iter().collect::<Vec<_>>().join(","),
+                            });
+                        }
+                        Some(_) => {}
+                    }
+                }
+                Ok(first.map(|(_, free)| free).unwrap_or_default())
+            }
+            AtomView::Pow(p) => {
+                let (base, exponent) = p.get_base_exp();
+                let base_free = self.free(base, sets, elements)?;
+                if base_free.is_empty() && !contains_tensor_content(base) {
+                    check_scalar(exponent, &self.loc())?;
+                    return Ok(Vec::new());
+                }
+                let n = i64::try_from(exponent).ok().filter(|n| *n >= 1);
+                let Some(n) = n else {
+                    return Err(FactorizedError::UnsupportedTensor {
+                        location: self.loc(),
+                        tensor: format!(
+                            "{} (a tensor to a non-positive or symbolic power)",
+                            view.to_owned().to_canonical_string()
+                        ),
+                    });
+                };
+                let mut all = Vec::new();
+                for _ in 0..n {
+                    all.extend(base_free.iter().cloned());
+                }
+                Ok(all)
+            }
+        }
+    }
+
+    /// Pair up repeated slots of a product: twice = contracted, more = error.
+    fn fold(&self, all: Vec<Slot>, sets: &mut IndexSets) -> Result<Vec<Slot>> {
+        let mut counts = BTreeMap::<String, (usize, Slot)>::new();
+        let mut order = Vec::new();
+        for slot in all {
+            let key = slot.key();
+            let entry = counts.entry(key.clone()).or_insert_with(|| {
+                order.push(key.clone());
+                (0, slot.clone())
+            });
+            entry.0 += 1;
+        }
+        let mut free = Vec::new();
+        for key in order {
+            let (count, slot) = counts.remove(&key).unwrap();
+            match count {
+                1 => free.push(slot),
+                2 => {
+                    sets.dummies.insert(key, slot);
+                }
+                _ => {
+                    return Err(FactorizedError::IndexOverContracted {
+                        slot: key,
+                        count,
+                        location: self.loc(),
+                    });
+                }
+            }
+        }
+        Ok(free)
+    }
+
+    fn analyse(&self, factor: &Atom) -> Result<(IndexSets, Elements)> {
+        let mut sets = IndexSets::default();
+        let mut elements = Elements::default();
+        let free = self.free(factor.as_view(), &mut sets, &mut elements)?;
+        let free = self.fold(free, &mut sets)?;
+        for slot in free {
+            let key = slot.key();
+            if sets.free.insert(key.clone(), slot).is_some() {
+                return Err(FactorizedError::IndexOverContracted {
+                    slot: key,
+                    count: 2,
+                    location: self.loc(),
+                });
+            }
+        }
+        Ok((sets, elements))
+    }
+}
+
 impl FactorizedNumerator {
     /// A value from plain data, checked by [`Self::validate`].
     pub fn from_parts(parts: FactorizedParts) -> Result<Self> {
@@ -1563,8 +1843,8 @@ impl FactorizedNumerator {
             insertions: Vec::new(),
             record: None,
         };
-        let mut value = value;
-        value.expand_compact_slashes()?;
+        // from_parts builds a value without new features: the base's rules
+        // (no compact-slash expansion, no widened grammar)
         value.validate()?;
         Ok(value)
     }
@@ -1593,16 +1873,17 @@ impl FactorizedNumerator {
         self.vertices.iter().find(|vertex| vertex.id == id)
     }
 
-    /// The slots that stay OPEN in the value (sorted by canonical string):
-    /// without a projector every port; with one, the ports it does not close
+    /// The slots that stay OPEN in the value: without a projector every port
+    /// (in the order of `ports`); with one (sorted by canonical string), the
+    /// ports it does not close
     /// and its own free slots that are not ports (e.g. a fresh Lorentz index
     /// of a Dirac projector `gamma(bis_c, bis_r, mink(D, nu))`). Empty for a
     /// closed scalar value. Assumes a valid value ([`Self::validate`]).
     pub fn open_slots(&self) -> Result<Vec<Atom>> {
         let Some(projector) = &self.projector else {
-            let mut open = self.ports.clone();
-            open.sort_by_key(|port| port.to_canonical_string());
-            return Ok(open);
+            // every port, in the value's own order (the vacuum entry numbers
+            // the open slots by position, as it numbered the ports)
+            return Ok(self.ports.clone());
         };
         let edges = self.check_graph()?;
         let rules = FactorRules {
@@ -1651,6 +1932,9 @@ impl FactorizedNumerator {
     /// (`validate_closure`: the contract's graph, factor and index rules plus
     /// those of the closure kind).
     pub fn validate(&self) -> Result<()> {
+        if !self.has_new_features() {
+            return self.validate_v1();
+        }
         // the record kinds of the R* interface may not name vakint's own
         // symbols (the entries' internal placeholders live there)
         if is_marked(self) {
@@ -2456,8 +2740,9 @@ impl FactorizedNumerator {
             }
         }
         for (key, locations) in &free {
-            if locations.iter().all(|l| *l == Location::Projector) {
-                // An open slot of the projector (checked above).
+            if locations.iter().all(|l| *l == Location::Projector) && !ports.contains(key) {
+                // An open slot of the projector that is not a port (checked
+                // above); a port must still occur once in the factors.
                 continue;
             }
             let in_factors = locations
@@ -2607,6 +2892,9 @@ impl FactorizedNumerator {
     /// their smallest edge id. Errors on open lines and on vertices where a
     /// flow is not conserved or branches.
     pub fn closed_loops(&self) -> Result<Vec<ClosedLoop>> {
+        if !self.has_new_features() {
+            return self.closed_loops_v1();
+        }
         let mut loops = Vec::new();
         let open = if self.projector.is_some() {
             self.open_slots()?
@@ -2718,12 +3006,14 @@ impl FactorizedNumerator {
         Ok(value)
     }
 
-    /// Read one record of the text form without validating it (compact
-    /// slashes in the projector are written out on read:
-    /// [`Self::expand_compact_slashes`]).
+    /// Read one record of the text form without validating it (for a value
+    /// with new features, compact slashes in the projector are written out on
+    /// read: [`Self::expand_compact_slashes`]).
     pub fn parse_text(input: &str) -> Result<Self> {
         let mut value = text::parse_record(input)?;
-        value.expand_compact_slashes()?;
+        if value.has_new_features() {
+            value.expand_compact_slashes()?;
+        }
         Ok(value)
     }
 
@@ -2753,6 +3043,426 @@ impl FactorizedNumerator {
             projector.tensor = expanded;
         }
         Ok(())
+    }
+}
+
+/// The base's validation, for values without new features.
+impl FactorizedNumerator {
+    /// Whether the value uses a feature the base did not have: the closure
+    /// kind, insertion vertices or a schema-v3 direct record. A value without
+    /// any is validated and evaluated by exactly the base's rules (every
+    /// pre-existing entry branches on this once); the widened grammar of the
+    /// new record kinds applies to marked values only.
+    pub fn has_new_features(&self) -> bool {
+        matches!(self.kind, FactorizedKind::Closure(_))
+            || !self.insertions.is_empty()
+            || self.record.is_some()
+    }
+
+    /// The base's `validate`, verbatim (the rules of a value without new
+    /// features: [`FactorizedNumerator::has_new_features`]).
+    pub(crate) fn validate_v1(&self) -> Result<()> {
+        if let FactorizedKind::Closure(_) = self.kind {
+            return Err(FactorizedError::Reserved {
+                feature: "the closure kind (R* remainder with a closing line)".into(),
+            });
+        }
+        if !self.insertions.is_empty() {
+            return Err(FactorizedError::Reserved {
+                feature: "insertion vertices (child counterterms)".into(),
+            });
+        }
+        if self.label.contains(['\t', '\n', '\r']) {
+            return Err(FactorizedError::Graph {
+                detail: "the label contains a TAB or a newline".into(),
+            });
+        }
+        let edges = self.check_graph()?;
+        self.check_momenta_v1()?;
+        // Factors: kinds, dimensions, indices.
+        let mut analysed = Vec::<(Location, IndexSets, Elements)>::new();
+        for edge in &self.edges {
+            let rules = FactorRulesV1 {
+                location: Location::Edge(edge.id),
+                dimension: self.dimension,
+                edges: &edges,
+            };
+            let (sets, elements) = rules.analyse(&edge.factor)?;
+            analysed.push((rules.location, sets, elements));
+        }
+        for vertex in &self.vertices {
+            let rules = FactorRulesV1 {
+                location: Location::Vertex(vertex.id),
+                dimension: self.dimension,
+                edges: &edges,
+            };
+            let (sets, elements) = rules.analyse(&vertex.factor)?;
+            analysed.push((rules.location, sets, elements));
+        }
+        if let Some(projector) = &self.projector {
+            let rules = FactorRulesV1 {
+                location: Location::Projector,
+                dimension: self.dimension,
+                edges: &edges,
+            };
+            let (sets, elements) = rules.analyse(&projector.tensor)?;
+            analysed.push((rules.location, sets, elements));
+        }
+        self.check_locality(&analysed)?;
+        self.check_contraction_v1(&analysed)?;
+        self.check_fermion_orientation_v1(&analysed)?;
+        // Prefactor and masses.
+        let p = &self.prefactor;
+        check_scalar(p.overall.as_view(), "prefactor overall")?;
+        check_scalar(p.scalars.as_view(), "prefactor scalars")?;
+        check_scalar(p.colour.as_view(), "prefactor colour")?;
+        if contains_colour_slot(p.colour.as_view()) {
+            return Err(FactorizedError::NotScalar {
+                location: "prefactor colour".into(),
+                detail: "an open colour index".into(),
+            });
+        }
+        for edge in &self.edges {
+            check_scalar(
+                edge.mass_squared.as_view(),
+                &format!("edge {} mass", edge.id),
+            )?;
+        }
+        let loops = self.closed_loops_v1()?;
+        let n_loops = loops.len();
+        let n_fermion = loops.iter().filter(|l| l.line == LineKind::Fermion).count();
+        let expected_sign = if n_loops % 2 == 0 { 1 } else { -1 };
+        if p.loop_sign != expected_sign {
+            return Err(FactorizedError::LoopSign {
+                found: p.loop_sign,
+                loops: n_loops,
+            });
+        }
+        if p.nf_power as usize != n_fermion {
+            return Err(FactorizedError::NfPower {
+                found: p.nf_power,
+                loops: n_fermion,
+            });
+        }
+        Ok(())
+    }
+
+    /// The base's `check_momenta`, verbatim (the rules of a value without new
+    /// features: [`FactorizedNumerator::has_new_features`]).
+    fn check_momenta_v1(&self) -> Result<()> {
+        let n = self.loops() + self.externals();
+        for edge in &self.edges {
+            if edge.momentum.len() != n {
+                return Err(FactorizedError::MomentumLength {
+                    edge: edge.id,
+                    expected: n,
+                    found: edge.momentum.len(),
+                });
+            }
+        }
+        let basis = self
+            .loop_edges
+            .iter()
+            .enumerate()
+            .map(|(i, e)| (format!("k({})", i + 1), i, *e))
+            .chain(
+                self.external_edges
+                    .iter()
+                    .enumerate()
+                    .map(|(j, e)| (format!("p({})", j + 1), self.loops() + j, *e)),
+            );
+        for (name, position, edge) in basis {
+            let Some(id) = edge else { continue };
+            let Some(edge) = self.edge(id) else {
+                return Err(FactorizedError::MomentumBasis {
+                    detail: format!("{name} names edge {id}, which does not exist"),
+                });
+            };
+            let unit = (0..n).map(|i| i64::from(i == position)).collect::<Vec<_>>();
+            if edge.momentum != unit {
+                return Err(FactorizedError::MomentumBasis {
+                    detail: format!(
+                        "{name} names edge {id}, whose momentum is {:?}",
+                        edge.momentum
+                    ),
+                });
+            }
+        }
+        for vertex in &self.vertices {
+            let mut residual = vec![0i64; n];
+            for edge in &self.edges {
+                if edge.target == Endpoint::Vertex(vertex.id) {
+                    for (r, c) in residual.iter_mut().zip(&edge.momentum) {
+                        *r += c;
+                    }
+                }
+                if edge.source == Endpoint::Vertex(vertex.id) {
+                    for (r, c) in residual.iter_mut().zip(&edge.momentum) {
+                        *r -= c;
+                    }
+                }
+            }
+            if residual.iter().any(|c| *c != 0) {
+                return Err(FactorizedError::MomentumNotConserved {
+                    vertex: vertex.id,
+                    residual,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// The base's `check_contraction`, verbatim (the rules of a value without new
+    /// features: [`FactorizedNumerator::has_new_features`]).
+    fn check_contraction_v1(&self, analysed: &[(Location, IndexSets, Elements)]) -> Result<()> {
+        let mut free = BTreeMap::<String, Vec<Location>>::new();
+        let mut dummies = BTreeMap::<String, Location>::new();
+        for (location, sets, _) in analysed {
+            for key in sets.free.keys() {
+                free.entry(key.clone()).or_default().push(*location);
+            }
+            for key in sets.dummies.keys() {
+                if let Some(other) = dummies.insert(key.clone(), *location) {
+                    return Err(FactorizedError::DummyIndexShared {
+                        slot: key.clone(),
+                        location: other.to_string(),
+                        other: location.to_string(),
+                    });
+                }
+            }
+        }
+        for (key, location) in &dummies {
+            if let Some(others) = free.get(key) {
+                return Err(FactorizedError::DummyIndexShared {
+                    slot: key.clone(),
+                    location: location.to_string(),
+                    other: others[0].to_string(),
+                });
+            }
+        }
+        let ports = self
+            .ports
+            .iter()
+            .map(|p| p.to_canonical_string())
+            .collect::<BTreeSet<_>>();
+        if ports.len() != self.ports.len() {
+            return Err(FactorizedError::Ports {
+                detail: "a port is listed twice".into(),
+            });
+        }
+        for port in &self.ports {
+            match as_slot(port.as_view()) {
+                Some(slot) if slot.rep == names::MINK || slot.rep == names::BIS => {}
+                _ => {
+                    return Err(FactorizedError::Ports {
+                        detail: format!(
+                            "{} is not a Lorentz or spinor slot",
+                            port.to_canonical_string()
+                        ),
+                    });
+                }
+            }
+        }
+        let projector_free = analysed
+            .iter()
+            .find(|(location, _, _)| *location == Location::Projector)
+            .map(|(_, sets, _)| sets.free.keys().cloned().collect::<BTreeSet<_>>());
+        if let Some(projector_free) = &projector_free
+            && *projector_free != ports
+        {
+            return Err(FactorizedError::Ports {
+                detail: format!(
+                    "the projector's free indices {projector_free:?} are not the ports {ports:?}"
+                ),
+            });
+        }
+        for (key, locations) in &free {
+            let in_factors = locations
+                .iter()
+                .filter(|l| **l != Location::Projector)
+                .count();
+            let is_port = ports.contains(key);
+            let expected = if is_port { 1 } else { 2 };
+            if in_factors > expected {
+                return Err(FactorizedError::IndexOverContracted {
+                    slot: key.clone(),
+                    count: in_factors,
+                    location: locations
+                        .iter()
+                        .map(|l| l.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                });
+            }
+            if in_factors < expected {
+                if is_port {
+                    return Err(FactorizedError::Ports {
+                        detail: format!("port {key} does not occur in the factors"),
+                    });
+                }
+                return Err(FactorizedError::IndexUncontracted {
+                    slot: key.clone(),
+                    location: locations[0].to_string(),
+                });
+            }
+        }
+        for port in &ports {
+            if !free.contains_key(port) {
+                return Err(FactorizedError::Ports {
+                    detail: format!("port {port} does not occur in the factors"),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// The base's `check_fermion_orientation`, verbatim (the rules of a value without new
+    /// features: [`FactorizedNumerator::has_new_features`]).
+    fn check_fermion_orientation_v1(
+        &self,
+        analysed: &[(Location, IndexSets, Elements)],
+    ) -> Result<()> {
+        for (location, sets, elements) in analysed {
+            let (rows, columns) = match location {
+                Location::Edge(id) => {
+                    let edge = self.edge(*id).unwrap();
+                    let spinor_free = sets
+                        .free
+                        .values()
+                        .filter(|s| s.rep == names::BIS)
+                        .filter_map(Slot::hedge)
+                        .collect::<BTreeSet<_>>();
+                    let own = edge
+                        .source_hedge
+                        .into_iter()
+                        .chain(edge.target_hedge)
+                        .collect::<BTreeSet<_>>();
+                    if edge.line == LineKind::Fermion {
+                        if spinor_free != own {
+                            return Err(FactorizedError::FermionOrientation {
+                                location: location.to_string(),
+                                detail: format!(
+                                    "free spinor half-edges {spinor_free:?}, expected {own:?}"
+                                ),
+                            });
+                        }
+                    } else if !spinor_free.is_empty() {
+                        return Err(FactorizedError::FermionOrientation {
+                            location: location.to_string(),
+                            detail: format!("a {} line carries spinor indices", edge.line.as_str()),
+                        });
+                    }
+                    (
+                        edge.target_hedge.into_iter().collect::<BTreeSet<_>>(),
+                        edge.source_hedge.into_iter().collect::<BTreeSet<_>>(),
+                    )
+                }
+                Location::Vertex(v) => {
+                    let fermions = self.edges.iter().filter(|e| e.line == LineKind::Fermion);
+                    let mut rows = BTreeSet::new();
+                    let mut columns = BTreeSet::new();
+                    for e in fermions {
+                        if e.source == Endpoint::Vertex(*v) {
+                            rows.extend(e.source_hedge);
+                        }
+                        if e.target == Endpoint::Vertex(*v) {
+                            columns.extend(e.target_hedge);
+                        }
+                    }
+                    (rows, columns)
+                }
+                // no insertion in a value without new features
+                Location::Insertion(_) | Location::Projector => continue,
+            };
+            let local = self.local_hedges(*location);
+            for (row, column) in &elements.gammas {
+                if let Some(h) = row.hedge().filter(|h| local.contains(h))
+                    && !rows.contains(&h)
+                {
+                    return Err(FactorizedError::FermionOrientation {
+                        location: location.to_string(),
+                        detail: format!(
+                            "gamma row index {} is not the outgoing side of a fermion line",
+                            row.key()
+                        ),
+                    });
+                }
+                if let Some(h) = column.hedge().filter(|h| local.contains(h))
+                    && !columns.contains(&h)
+                {
+                    return Err(FactorizedError::FermionOrientation {
+                        location: location.to_string(),
+                        detail: format!(
+                            "gamma column index {} is not the incoming side of a fermion line",
+                            column.key()
+                        ),
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// The base's `closed_loops`, verbatim (the rules of a value without new
+    /// features: [`FactorizedNumerator::has_new_features`]).
+    pub(crate) fn closed_loops_v1(&self) -> Result<Vec<ClosedLoop>> {
+        let mut loops = Vec::new();
+        for line in [LineKind::Fermion, LineKind::Ghost] {
+            let lines = self
+                .edges
+                .iter()
+                .filter(|e| e.line == line)
+                .collect::<Vec<_>>();
+            if !line.is_directed_loop() {
+                continue;
+            }
+            for edge in &lines {
+                if edge.is_external() {
+                    return Err(FactorizedError::OpenLine {
+                        edge: edge.id,
+                        line: line.as_str().into(),
+                    });
+                }
+            }
+            for vertex in &self.vertices {
+                let incoming = lines
+                    .iter()
+                    .filter(|e| e.target == Endpoint::Vertex(vertex.id))
+                    .count();
+                let outgoing = lines
+                    .iter()
+                    .filter(|e| e.source == Endpoint::Vertex(vertex.id))
+                    .count();
+                if incoming != outgoing || incoming > 1 {
+                    return Err(FactorizedError::FlowNotConserved {
+                        vertex: vertex.id,
+                        line: line.as_str().into(),
+                        incoming,
+                        outgoing,
+                    });
+                }
+            }
+            let mut unused = lines.iter().map(|e| e.id).collect::<BTreeSet<_>>();
+            while let Some(start) = unused.pop_first() {
+                let mut cycle = vec![start];
+                let mut current = lines.iter().find(|e| e.id == start).unwrap();
+                loop {
+                    let next = lines
+                        .iter()
+                        .find(|e| e.source == current.target)
+                        .expect("conserved flow");
+                    if next.id == start {
+                        break;
+                    }
+                    unused.remove(&next.id);
+                    cycle.push(next.id);
+                    current = next;
+                }
+                loops.push(ClosedLoop { line, edges: cycle });
+            }
+        }
+        loops.sort_by_key(|l| l.edges.iter().min().copied());
+        Ok(loops)
     }
 }
 

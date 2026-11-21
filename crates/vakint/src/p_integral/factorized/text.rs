@@ -73,7 +73,8 @@ fn open_slots(value: &FactorizedNumerator) -> Result<Vec<String>> {
     Ok(open)
 }
 
-/// Write one record: v1 for kind direct (unchanged), v3 for kind closure.
+/// Write one record: v1 for a value without new features (unchanged), v3
+/// for every other (kind closure, insertions, a direct record).
 pub(super) fn write_record(value: &FactorizedNumerator) -> Result<String> {
     let closure = match &value.kind {
         FactorizedKind::Closure(spec) => Some(spec),
@@ -87,7 +88,7 @@ pub(super) fn write_record(value: &FactorizedNumerator) -> Result<String> {
     }
     let mut lines = Vec::<String>::new();
     match closure {
-        None if value.record.is_some() => {
+        None if value.has_new_features() => {
             lines.push(format!("schema\t{FACTORIZED_SCHEMA_V3}"));
             lines.push(format!("label\t{}", value.label));
             lines.push("kind\tdirect\texternals=conserved".into());
@@ -176,7 +177,7 @@ pub(super) fn write_record(value: &FactorizedNumerator) -> Result<String> {
             one_atom(&projector.tensor, "projector")?
         )),
     }
-    if closure.is_some() || value.record.is_some() {
+    if value.has_new_features() {
         let open = open_slots(value)?;
         lines.push(format!("open\t{}", open.len()));
         for slot in open {
@@ -209,8 +210,15 @@ pub(super) fn write_record(value: &FactorizedNumerator) -> Result<String> {
             list(&info.rows)
         )),
     }
-    if let (None, Some(record)) = (closure, &value.record) {
-        write_direct_section(record, &mut lines)?;
+    if closure.is_none() && value.has_new_features() {
+        // a direct value with new features is a v3 record; one with
+        // insertions but no provenance writes an empty one
+        let empty = DirectRecord {
+            original_cycles: None,
+            depth: None,
+            weights: Vec::new(),
+        };
+        write_direct_section(value.record.as_ref().unwrap_or(&empty), &mut lines)?;
     }
     if let Some(spec) = closure {
         write_closure_section(spec, value, &mut lines)?;
@@ -295,7 +303,7 @@ fn read_direct_section(reader: &mut Reader<'_>) -> Result<DirectRecord> {
     } else {
         0
     };
-    let mut weights = Vec::with_capacity(n);
+    let mut weights = Vec::with_capacity(reader.bounded(n));
     for _ in 0..n {
         let line = reader.expect("weight")?;
         let by = match field(&line, "applied_by")? {
@@ -442,7 +450,7 @@ fn read_closure_section(
     };
     skip_ignored(reader, &mut ignored)?;
     let (_, n) = count_section(reader, "softs")?;
-    let mut softs = Vec::with_capacity(n);
+    let mut softs = Vec::with_capacity(reader.bounded(n));
     for _ in 0..n {
         let line = reader.expect("soft")?;
         let role = field(&line, "role")?;
@@ -475,7 +483,7 @@ fn read_closure_section(
     } else {
         0
     };
-    let mut weights = Vec::with_capacity(n);
+    let mut weights = Vec::with_capacity(reader.bounded(n));
     for _ in 0..n {
         let line = reader.expect("weight")?;
         let by = match field(&line, "applied_by")? {
@@ -520,6 +528,7 @@ struct Line<'a> {
     fields: Vec<&'a str>,
 }
 
+#[derive(Clone)]
 struct Reader<'a> {
     lines: std::iter::Peekable<std::iter::Enumerate<std::str::Lines<'a>>>,
     first: usize,
@@ -528,6 +537,14 @@ struct Reader<'a> {
 }
 
 impl<'a> Reader<'a> {
+    /// A preallocation for a section of `n` declared entries, at most the
+    /// number of lines left (a declared count is the caller's: it must not
+    /// size an allocation; a count larger than the text is refused by the
+    /// section's own count check).
+    fn bounded(&self, n: usize) -> usize {
+        n.min(self.lines.clone().count())
+    }
+
     fn syntax(&self, line: usize, detail: impl Into<String>) -> FactorizedError {
         FactorizedError::TextSyntax {
             line,
@@ -651,6 +668,17 @@ fn integers<T: std::str::FromStr>(line: usize, text: &str, what: &str) -> Result
 }
 
 fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
+    // schema v1: the base's reader, verbatim (a v1 record has no new
+    // features; insertions and the closure kind are Reserved there)
+    {
+        let mut probe = reader.clone();
+        if let Ok(schema) = probe.raw()
+            && schema.key == "schema"
+            && schema.fields.join("\t") == FACTORIZED_SCHEMA
+        {
+            return read_one_v1(reader);
+        }
+    }
     let schema = reader.raw()?;
     if schema.key != "schema" {
         return Err(reader.syntax(schema.number, "a record starts with `schema`"));
@@ -826,7 +854,7 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
     let mut open = None;
     if v3 {
         let (line, n) = count_section(reader, "open")?;
-        let mut slots = Vec::with_capacity(n);
+        let mut slots = Vec::with_capacity(reader.bounded(n));
         for _ in 0..n {
             let slot = reader.expect("open_slot")?;
             slots.push(slot.fields.join("\t"));
@@ -868,7 +896,7 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
         None
     };
     let (insertions_line, n_insertions) = count_section(reader, "insertions")?;
-    let mut insertions = Vec::with_capacity(n_insertions);
+    let mut insertions = Vec::with_capacity(reader.bounded(n_insertions));
     while reader.peek_key() == Some("insertion") {
         let line = reader.expect("insertion")?;
         let vertex: usize = number(
@@ -940,6 +968,13 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
     if end.key != "end" || !end.fields.is_empty() {
         return Err(reader.syntax(end.number, "a record ends with `end`"));
     }
+    if !insertions.is_empty()
+        && record.as_ref().is_some_and(|r: &DirectRecord| {
+            r.original_cycles.is_none() && r.depth.is_none() && r.weights.is_empty()
+        })
+    {
+        record = None;
+    }
     let mut value = FactorizedNumerator {
         label,
         kind: match closure {
@@ -966,7 +1001,9 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
     };
     // rule R4: compact slashes in the projector are written out on read,
     // before the `open` lines are checked against the value
-    value.expand_compact_slashes()?;
+    if value.has_new_features() {
+        value.expand_compact_slashes()?;
+    }
     if let Some((line, slots)) = open {
         let derived = open_slots(&value)?;
         // compare as atoms' canonical strings
@@ -985,6 +1022,235 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
         }
     }
     Ok(value)
+}
+
+/// The base's `read_one`, verbatim (the rules of a value without new
+/// features: [`FactorizedNumerator::has_new_features`]).
+fn read_one_v1(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
+    let schema = reader.raw()?;
+    if schema.key != "schema" {
+        return Err(reader.syntax(schema.number, "a record starts with `schema`"));
+    }
+    let found = schema.fields.join("\t");
+    if found != FACTORIZED_SCHEMA {
+        return Err(FactorizedError::TextSchema {
+            line: schema.number,
+            found,
+        });
+    }
+    let label = reader.expect("label")?.fields.join("\t");
+    let kind = reader.expect("kind")?;
+    match kind.fields.as_slice() {
+        ["direct"] => {}
+        ["closure", ..] => {
+            return Err(FactorizedError::Reserved {
+                feature: "the closure kind (R* remainder with a closing line)".into(),
+            });
+        }
+        _ => return Err(reader.syntax(kind.number, "unknown kind")),
+    }
+    let dimension_line = reader.expect("dimension")?;
+    let dimension = last_atom(&dimension_line, 0)?;
+    let dimension = match dimension.as_view() {
+        AtomView::Var(v) => v.get_symbol(),
+        _ => return Err(reader.syntax(dimension_line.number, "the dimension is not a symbol")),
+    };
+    let momenta = reader.expect("momenta")?;
+    let loops: usize = number(momenta.number, field(&momenta, "loops")?, "loops")?;
+    let externals: usize = number(momenta.number, field(&momenta, "externals")?, "externals")?;
+    let mut loop_edges = Vec::with_capacity(loops);
+    for i in 1..=loops {
+        let line = reader.expect("loop")?;
+        let index: usize = number(
+            line.number,
+            line.fields.first().copied().unwrap_or(""),
+            "loop",
+        )?;
+        if index != i {
+            return Err(reader.syntax(line.number, format!("loop {index}, expected {i}")));
+        }
+        loop_edges.push(edge_ref(line.number, field(&line, "edge")?)?);
+    }
+    let mut external_edges = Vec::with_capacity(externals);
+    for j in 1..=externals {
+        let line = reader.expect("external")?;
+        let index: usize = number(
+            line.number,
+            line.fields.first().copied().unwrap_or(""),
+            "external",
+        )?;
+        if index != j {
+            return Err(reader.syntax(line.number, format!("external {index}, expected {j}")));
+        }
+        external_edges.push(edge_ref(line.number, field(&line, "edge")?)?);
+    }
+    let (edges_line, n_edges) = count_section(reader, "edges")?;
+    let mut edges = Vec::with_capacity(n_edges);
+    while reader.peek_key() == Some("edge") {
+        let line = reader.expect("edge")?;
+        let id: usize = number(
+            line.number,
+            line.fields.first().copied().unwrap_or(""),
+            "edge id",
+        )?;
+        let hedges = field(&line, "hedges")?;
+        let (hs, ht) = hedges
+            .split_once(',')
+            .ok_or_else(|| reader.syntax(line.number, "hedges=<source>,<target>"))?;
+        let line_kind = field(&line, "line")?;
+        let edge = FactorizedEdge {
+            id,
+            source: end_point(line.number, field(&line, "source")?)?,
+            target: end_point(line.number, field(&line, "target")?)?,
+            source_hedge: hedge_of(line.number, hs)?,
+            target_hedge: hedge_of(line.number, ht)?,
+            particle: field(&line, "particle")?.to_string(),
+            line: LineKind::parse(line_kind)
+                .ok_or_else(|| reader.syntax(line.number, format!("unknown line {line_kind}")))?,
+            power: number(line.number, field(&line, "power")?, "power")?,
+            momentum: integers(line.number, field(&line, "momentum")?, "momentum")?,
+            mass_squared: last_atom(&line, 8)?,
+            factor: Atom::num(1),
+        };
+        let factor = reader.expect("edge_factor")?;
+        let fid: usize = number(
+            factor.number,
+            factor.fields.first().copied().unwrap_or(""),
+            "edge id",
+        )?;
+        if fid != id {
+            return Err(reader.syntax(factor.number, format!("edge_factor {fid} after edge {id}")));
+        }
+        let mut edge = edge;
+        edge.factor = last_atom(&factor, 1)?;
+        edges.push(edge);
+    }
+    if edges.len() != n_edges {
+        return Err(FactorizedError::TextSectionCount {
+            line: edges_line,
+            section: "edges".into(),
+            declared: n_edges,
+            found: edges.len(),
+        });
+    }
+    let (vertices_line, n_vertices) = count_section(reader, "vertices")?;
+    let mut vertices = Vec::with_capacity(n_vertices);
+    while reader.peek_key() == Some("vertex") {
+        let line = reader.expect("vertex")?;
+        vertices.push(FactorizedVertex {
+            id: number(
+                line.number,
+                line.fields.first().copied().unwrap_or(""),
+                "vertex id",
+            )?,
+            rule: field(&line, "rule")?.to_string(),
+            factor: last_atom(&line, 2)?,
+        });
+    }
+    if vertices.len() != n_vertices {
+        return Err(FactorizedError::TextSectionCount {
+            line: vertices_line,
+            section: "vertices".into(),
+            declared: n_vertices,
+            found: vertices.len(),
+        });
+    }
+    let (ports_line, n_ports) = count_section(reader, "ports")?;
+    let mut ports = Vec::with_capacity(n_ports);
+    while reader.peek_key() == Some("port") {
+        let line = reader.expect("port")?;
+        ports.push(last_atom(&line, 0)?);
+    }
+    if ports.len() != n_ports {
+        return Err(FactorizedError::TextSectionCount {
+            line: ports_line,
+            section: "ports".into(),
+            declared: n_ports,
+            found: ports.len(),
+        });
+    }
+    let projector_line = reader.expect("projector")?;
+    let projector = match projector_line.fields.as_slice() {
+        ["none"] => None,
+        _ => Some(Projector {
+            p2_power: number(
+                projector_line.number,
+                field(&projector_line, "p2_power")?,
+                "p2_power",
+            )?,
+            tensor: last_atom(&projector_line, 1)?,
+        }),
+    };
+    let signs = reader.expect("prefactor")?;
+    let loop_sign = number(signs.number, field(&signs, "loop_sign")?, "loop_sign")?;
+    let nf_power = number(signs.number, field(&signs, "nf_power")?, "nf_power")?;
+    let overall = last_atom(&reader.expect("prefactor_overall")?, 0)?;
+    let scalars = last_atom(&reader.expect("prefactor_scalars")?, 0)?;
+    let colour = last_atom(&reader.expect("prefactor_colour")?, 0)?;
+    let branch = reader.expect("colour_branch")?;
+    let colour_branch = match branch.fields.as_slice() {
+        ["none"] => None,
+        _ => Some(ColourBranchInfo {
+            index: number(
+                branch.number,
+                branch.fields.first().copied().unwrap_or(""),
+                "colour branch",
+            )?,
+            count: number(branch.number, field(&branch, "of")?, "colour branch count")?,
+            rows: integers(branch.number, field(&branch, "rows")?, "colour rows")?,
+        }),
+    };
+    let insertions = reader.expect("insertions")?;
+    if insertions.fields.as_slice() != ["0"] {
+        return Err(FactorizedError::Reserved {
+            feature: "insertion vertices (child counterterms)".into(),
+        });
+    }
+    if let Some(key) = reader.peek_key()
+        && key != "lines"
+    {
+        let line = reader.raw()?;
+        return Err(reader.syntax(line.number, format!("unknown or misplaced key `{key}`")));
+    }
+    let lines = reader.expect("lines")?;
+    let asserted: usize = number(
+        lines.number,
+        lines.fields.first().copied().unwrap_or(""),
+        "line count",
+    )?;
+    let found = reader.read - reader.first;
+    if asserted != found {
+        return Err(FactorizedError::TextLineCount {
+            line: lines.number,
+            asserted,
+            found,
+        });
+    }
+    let end = reader.raw()?;
+    if end.key != "end" || !end.fields.is_empty() {
+        return Err(reader.syntax(end.number, "a record ends with `end`"));
+    }
+    Ok(FactorizedNumerator {
+        label,
+        kind: FactorizedKind::Direct,
+        dimension,
+        loop_edges,
+        external_edges,
+        edges,
+        vertices,
+        ports,
+        projector,
+        prefactor: Prefactor {
+            overall,
+            loop_sign,
+            nf_power,
+            scalars,
+            colour,
+        },
+        colour_branch,
+        insertions: Vec::new(),
+        record: None,
+    })
 }
 
 /// Parse exactly one record (no validation).

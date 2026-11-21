@@ -36,8 +36,9 @@
 //!    CALLER's notation (`spenso::g(slot, slot)`, `Q(x, slot)` of the
 //!    external leg `x` of the value's own `p(1)`, `spenso::dot(Q(x, mink(D)),
 //!    Q(x, mink(D)))`). A soft external leg (all-zero momentum vector) may
-//!    carry ports. At most [`MAX_OPEN_PORTS`] open Lorentz slots; open spinor
-//!    slots and integer indices are refused.
+//!    carry ports. The ports entry refuses open spinor slots and integer
+//!    indices; the old entries keep their behaviour for every value they
+//!    accepted (no limit on the number of open slots anywhere).
 //!
 //! No numerator algebra happens here beyond idenso's; the mapping of step 2 is
 //! linear substitution. `prefactor` is the caller's scalar (colour, couplings,
@@ -75,6 +76,9 @@ fn evaluation(detail: impl Into<String>) -> FactorizedError {
 /// The vakint momentum of every edge (module documentation, step 2), and
 /// `p(1)`.
 fn vakint_momenta(value: &FactorizedNumerator) -> Result<(Vec<(usize, Atom)>, Atom)> {
+    if !value.has_new_features() {
+        return vakint_momenta_v1(value);
+    }
     vakint_momenta_oriented(value).map(|(momenta, head, _)| (momenta, head))
 }
 
@@ -156,28 +160,20 @@ struct Orientation {
     leg: usize,
 }
 
-/// The most open Lorentz ports a propagator-type value may keep: the
-/// transverse Gram matrix of the tensor reduction with one external momentum
-/// is regular at `d = 4` through rank 7 and singular at rank 8 (a spurious
-/// `1/(d-4)`, N/notes D6 section 3); ranks above 6 are not validated.
-pub const MAX_OPEN_PORTS: usize = 6;
-
-/// The open slots ([`FactorizedNumerator::open_slots`]) the p-integral route
-/// can return: Lorentz slots `mink(D, a)` with a non-integer index `a`, at
-/// most [`MAX_OPEN_PORTS`]. A closed value passes.
+/// The open slots ([`FactorizedNumerator::open_slots`]) the PORTS entry
+/// ([`evaluate_factorized_ports`]) returns in the caller's notation: Lorentz
+/// slots `mink(D, a)` with a non-integer index `a`. A closed value passes.
+/// The old entries ([`vakint_input`], [`evaluate_factorized`]) do not apply
+/// it: they keep their behaviour for every value they accepted. There is no
+/// limit on the number of slots: an open slot is not a loop-tensor rank (the
+/// reduction's own limit, a transverse Gram singular at d = 4 from loop rank
+/// 8, is the same on every entry).
 fn check_open_ports(value: &FactorizedNumerator) -> Result<()> {
     let open = value.open_slots()?;
     if open.is_empty() {
         return Ok(());
     }
     let ports = |detail: String| FactorizedError::Ports { detail };
-    if open.len() > MAX_OPEN_PORTS {
-        return Err(ports(format!(
-            "{} open slots; a propagator-type value keeps at most {MAX_OPEN_PORTS} open \
-             Lorentz slots (close the others with a projector)",
-            open.len()
-        )));
-    }
     for port in &open {
         let Some(slot) = super::as_slot(port.as_view()) else {
             return Err(ports(format!("{port} is not a slot")));
@@ -218,6 +214,9 @@ fn bare_momentum(view: AtomView<'_>) -> Option<i64> {
 /// and mapped to vakint's dot products of the edge momenta (steps 1 and 2),
 /// in the value's dimension symbol; and the seconds of the contraction.
 pub fn contract_to_vakint_dots(value: &FactorizedNumerator) -> Result<(Atom, f64)> {
+    if !value.has_new_features() {
+        return contract_to_vakint_dots_v1(value);
+    }
     // a marked value's own atoms: the reserved namespace and wildcard walk
     // (an unmarked value is not walked: the base behaviour)
     if super::is_marked(value) {
@@ -360,6 +359,9 @@ pub fn vakint_input(
     value: &FactorizedNumerator,
     prefactor: &Atom,
 ) -> Result<(Atom, f64)> {
+    if !value.has_new_features() {
+        return vakint_input_v1(settings, value, prefactor);
+    }
     if let FactorizedKind::Closure(_) = value.kind {
         return Err(FactorizedError::Reserved {
             feature: "the closure kind (R* remainder with a closing line)".into(),
@@ -368,7 +370,6 @@ pub fn vakint_input(
     // a marked value called here directly: the entry check too (A-17)
     super::check_marked_entry(value, prefactor, vk_symbol!(&settings.epsilon_symbol))?;
     value.validate()?;
-    check_open_ports(value)?;
     value.check_insertion_epsilon(vk_symbol!(&settings.epsilon_symbol).get_name())?;
     vakint_input_unchecked(settings, value, prefactor)
 }
@@ -420,7 +421,7 @@ pub(crate) fn vakint_input_unchecked(
 /// caller's tensor-reduction method or notation (record format, section 7).
 /// Values accepted before (no insertion, v1) keep the caller's settings.
 pub(crate) fn is_new_kind(value: &FactorizedNumerator) -> bool {
-    !value.insertions.is_empty() || value.record.is_some()
+    value.has_new_features()
 }
 
 /// The caller's settings with the tensor reduction and the notation pinned to
@@ -442,6 +443,9 @@ pub fn evaluate_factorized(
     value: &FactorizedNumerator,
     prefactor: &Atom,
 ) -> Result<FactorizedValue> {
+    if !value.has_new_features() {
+        return evaluate_factorized_v1(vakint, settings, value, prefactor);
+    }
     // a marked value: the separately supplied prefactor gets the checks of
     // the record's prefactor fields, the settings' epsilon the caller-symbol
     // rule (no-ops for an unmarked value: the base behaviour; the closure
@@ -521,8 +525,26 @@ pub fn evaluate_factorized_ports(
     value: &FactorizedNumerator,
     prefactor: &Atom,
 ) -> Result<PortsValue> {
-    // a ports record is a new kind whatever it carries
+    // a ports record is a new kind whatever it carries: a value without new
+    // features takes the record kinds' rules here (an empty v3 provenance:
+    // the weights stay the v1 rule, `original_cycles` is none)
     let settings = &pinned_settings(settings);
+    let marked;
+    let value = if value.has_new_features() {
+        value
+    } else {
+        marked = FactorizedNumerator {
+            record: Some(super::DirectRecord {
+                original_cycles: None,
+                depth: None,
+                weights: Vec::new(),
+            }),
+            ..value.clone()
+        };
+        &marked
+    };
+    value.validate()?;
+    check_open_ports(value)?;
     let counted = crate::timing::Snapshot::now();
     let started = Instant::now();
     let evaluated = evaluate_factorized(vakint, settings, value, prefactor)?;
@@ -634,4 +656,262 @@ pub fn to_caller_notation_p(value: &FactorizedNumerator, vakint_value: &Atom) ->
         )));
     }
     Ok(mapped)
+}
+
+// The base's old entries, verbatim, for values without new features.
+
+/// The base's `vakint_momenta`, verbatim (the rules of a value without new
+/// features: [`FactorizedNumerator::has_new_features`]).
+fn vakint_momenta_v1(value: &FactorizedNumerator) -> Result<(Vec<(usize, Atom)>, Atom)> {
+    let loops = value.loops();
+    if value.externals() != 1 {
+        return Err(evaluation(format!(
+            "a two-point value with one independent external momentum, not {}",
+            value.externals()
+        )));
+    }
+    let head = S.p.call(1);
+    let first = value
+        .edges
+        .iter()
+        .filter(|edge| edge.is_external())
+        .min_by_key(|edge| edge.id)
+        .ok_or_else(|| evaluation("a value without external legs"))?;
+    if first.momentum[..loops].iter().any(|c| *c != 0) {
+        return Err(evaluation("an external leg carries a loop momentum"));
+    }
+    let along = first.momentum[loops];
+    let into = if first.source == Endpoint::External {
+        along
+    } else {
+        -along
+    };
+    if into != 1 && into != -1 {
+        return Err(evaluation("the first external leg does not carry ±p"));
+    }
+    let mut out = Vec::with_capacity(value.edges.len());
+    for edge in &value.edges {
+        let mut momentum = Atom::Zero;
+        for (i, c) in edge.momentum[..loops].iter().enumerate() {
+            if *c != 0 {
+                momentum += Atom::num(*c) * S.k.call(i as i64 + 1);
+            }
+        }
+        let c = edge.momentum[loops] * into;
+        if c != 0 {
+            momentum += Atom::num(c) * &head;
+        }
+        out.push((edge.id, momentum));
+    }
+    Ok((out, head))
+}
+
+/// The base's `contract_to_vakint_dots`, verbatim (the rules of a value without new
+/// features: [`FactorizedNumerator::has_new_features`]).
+fn contract_to_vakint_dots_v1(value: &FactorizedNumerator) -> Result<(Atom, f64)> {
+    let (momenta, _) = vakint_momenta_v1(value)?;
+    let started = Instant::now();
+    let contracted = value.contract_naively()?;
+    let seconds = started.elapsed().as_secs_f64();
+    let lookup = |id: i64| {
+        momenta
+            .iter()
+            .find(|(edge, _)| *edge as i64 == id)
+            .map(|(_, momentum)| momentum.clone())
+    };
+    let unknown = std::cell::Cell::new(None);
+    let mapped = contracted.replace_map(|part, _, out| {
+        let AtomView::Fun(function) = part else {
+            return;
+        };
+        // idenso writes a contracted pair as `g(Q(e, mink(D)), Q(f, mink(D)))`
+        // (`AlgebraContraction::Fully`) or `dot(..)` of the same arguments.
+        let symbol = function.get_symbol();
+        let name = symbol.get_name();
+        if (name != names::METRIC && name != "spenso::dot") || function.get_nargs() != 2 {
+            return;
+        }
+        let args = function.iter().collect::<Vec<_>>();
+        let (Some(a), Some(b)) = (bare_momentum(args[0]), bare_momentum(args[1])) else {
+            return;
+        };
+        match (lookup(a), lookup(b)) {
+            (Some(left), Some(right)) => **out = S.dot.call((&left, &right)),
+            _ => unknown.set(Some((a, b))),
+        }
+    });
+    if let Some((a, b)) = unknown.get() {
+        return Err(evaluation(format!("a dot of unknown edges {a}, {b}")));
+    }
+    // Open ports (no projector; D6, helper VH): an edge momentum carrying a
+    // port index, `Q(e, mink(D, i))`, becomes the edge's vakint momentum with
+    // that index (`k(j, i)`, `±p(1, i)`), a metric between two ports
+    // `g(mink(D, a), mink(D, b))` vakint's `g(a, b)`; vakint's tensor prepass
+    // reduces them after its denominator match. With a projector every index
+    // is contracted and this changes nothing.
+    let mapped = if value.projector.is_none() && !value.ports.is_empty() {
+        let port_index = |view: AtomView<'_>| match view {
+            AtomView::Fun(rep)
+                if rep.get_symbol().get_name() == names::MINK && rep.get_nargs() == 2 =>
+            {
+                rep.iter().nth(1).map(|index| index.to_owned())
+            }
+            _ => None,
+        };
+        let indexed = |momentum: &Atom, index: &Atom| {
+            momentum.replace_map(|term, _, out| {
+                if let AtomView::Fun(vector) = term
+                    && (vector.get_symbol() == S.k || vector.get_symbol() == S.p)
+                    && vector.get_nargs() == 1
+                {
+                    **out = FunctionBuilder::new(vector.get_symbol())
+                        .add_arg(vector.iter().next().unwrap())
+                        .add_arg(index)
+                        .finish();
+                }
+            })
+        };
+        let unknown = std::cell::Cell::new(None);
+        let open = mapped.replace_map(|part, _, out| {
+            let AtomView::Fun(function) = part else {
+                return;
+            };
+            let symbol = function.get_symbol();
+            let name = symbol.get_name();
+            let args = function.iter().collect::<Vec<_>>();
+            if args.len() != 2 {
+                return;
+            }
+            if name == names::METRIC
+                && let (Some(a), Some(b)) = (port_index(args[0]), port_index(args[1]))
+            {
+                **out = FunctionBuilder::new(S.g).add_arg(&a).add_arg(&b).finish();
+            } else if name == names::MOMENTUM
+                && let (Ok(edge), Some(index)) = (i64::try_from(args[0]), port_index(args[1]))
+            {
+                match lookup(edge) {
+                    Some(momentum) => **out = indexed(&momentum, &index),
+                    None => unknown.set(Some(edge)),
+                }
+            }
+        });
+        if let Some(edge) = unknown.get() {
+            return Err(evaluation(format!(
+                "an open index on the unknown edge {edge}"
+            )));
+        }
+        open
+    } else {
+        mapped
+    };
+    // Nothing of the tensor notation may survive.
+    let mut leftover = None;
+    mapped.as_view().visitor(&mut |part| {
+        if let AtomView::Fun(function) = part {
+            let symbol = function.get_symbol();
+            let name = symbol.get_name();
+            if name == names::MOMENTUM
+                || name == "spenso::dot"
+                || name == names::MINK
+                || name == names::BIS
+                || name == names::METRIC
+                || name == names::GAMMA
+            {
+                leftover = Some(part.to_owned());
+                return false;
+            }
+        }
+        leftover.is_none()
+    });
+    if let Some(part) = leftover {
+        return Err(evaluation(format!(
+            "the contraction left tensor notation: {part}"
+        )));
+    }
+    Ok((mapped, seconds))
+}
+
+/// The base's `vakint_input`, verbatim (the rules of a value without new
+/// features: [`FactorizedNumerator::has_new_features`]).
+fn vakint_input_v1(
+    settings: &VakintSettings,
+    value: &FactorizedNumerator,
+    prefactor: &Atom,
+) -> Result<(Atom, f64)> {
+    if let FactorizedKind::Closure(_) = value.kind {
+        return Err(FactorizedError::Reserved {
+            feature: "the closure kind (R* remainder with a closing line)".into(),
+        });
+    }
+    value.validate()?;
+    let (momenta, head) = vakint_momenta_v1(value)?;
+    let (scalar, seconds) = contract_to_vakint_dots_v1(value)?;
+    let mut topology = Atom::num(1);
+    for edge in value.edges.iter().filter(|edge| !edge.is_external()) {
+        let (Endpoint::Vertex(source), Endpoint::Vertex(target)) = (edge.source, edge.target)
+        else {
+            unreachable!("internal edges have two vertices (validated)");
+        };
+        if !edge.mass_squared.is_zero() {
+            return Err(evaluation("a massive line (p-integrals are massless)"));
+        }
+        let momentum = &momenta
+            .iter()
+            .find(|(id, _)| *id == edge.id)
+            .expect("every edge has a momentum")
+            .1;
+        topology *= S.prop.call((
+            edge.id as i64,
+            S.edge.call((source as i64, target as i64)),
+            momentum,
+            Atom::Zero,
+            Atom::num(edge.power),
+        ));
+    }
+    let p2_power = value.projector.as_ref().map_or(0, |p| p.p2_power);
+    let square = S.dot.call((&head, &head));
+    let epsilon = Atom::var(vk_symbol!(&settings.epsilon_symbol));
+    let in_epsilon = Atom::num(4) - Atom::num(2) * epsilon;
+    let input = (prefactor * square.pow(Atom::num(p2_power)) * scalar * S.topo.call(topology))
+        .replace(Atom::var(value.dimension))
+        .with(in_epsilon);
+    Ok((input, seconds))
+}
+
+/// The base's `evaluate_factorized`, verbatim (the rules of a value without new
+/// features: [`FactorizedNumerator::has_new_features`]).
+fn evaluate_factorized_v1(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    value: &FactorizedNumerator,
+    prefactor: &Atom,
+) -> Result<FactorizedValue> {
+    let (input, contract_seconds) = vakint_input_v1(settings, value, prefactor)?;
+    let loops = value.loops();
+    if value
+        .edges
+        .iter()
+        .filter(|edge| !edge.is_external())
+        .all(|edge| edge.momentum[loops] == 0)
+    {
+        // No internal line carries the external momentum: a scaleless
+        // massless vacuum integral, an exact zero in dimensional
+        // regularisation (refpath's `scaleless_contact`).
+        return Ok(FactorizedValue {
+            value: Atom::Zero,
+            input,
+            contract_seconds,
+            evaluate_seconds: 0.0,
+        });
+    }
+    let started = Instant::now();
+    let result = vakint
+        .evaluate(settings, input.as_view())
+        .map_err(|e| evaluation(e.to_string()))?;
+    Ok(FactorizedValue {
+        value: result,
+        input,
+        contract_seconds,
+        evaluate_seconds: started.elapsed().as_secs_f64(),
+    })
 }

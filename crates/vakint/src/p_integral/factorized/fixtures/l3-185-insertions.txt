@@ -1,4 +1,4 @@
-schema	pint6.factorized-numerator.v1
+schema	pint6.factorized-numerator.v3
 label	graph=B_self_energy_L3_185 remainder=3 sector=0/7 (closure section removed; nf_power of the original diagram)
 kind	direct
 dimension	gammalooprs::{}::dim
@@ -27,15 +27,21 @@ ports	2
 port	spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(0,1))
 port	spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(1,1))
 projector	p2_power=-1	spenso::{symmetric,linear,real,spenso::tensor}::g(spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(0,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(1,1)))
+open	0
 prefactor	loop_sign=1	nf_power=1
 prefactor_overall	1
 prefactor_scalars	(-1+gammalooprs::{}::dim)^(-1)*(𝑖/1152)*UFO::{}::gs_i^2*UFO::{}::gs_minus^4*beta_projection::{}::transverse*𝜋^(-4)
 prefactor_colour	-1*beta::{}::I2R*beta::{}::cA^2
 colour_branch	none
+closure	none
+taylor	none
+softs	0
+original_cycles	none
+depth	none
 insertions	2
 insertion	2	hedges=9,14	cycles=1,0	gammalooprs::{}::ε^(-1)
 insertion_factor	2	(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(5,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index,spenso::index-label:v}::vertex(2,1000))))^2*-1*spenso::{symmetric,linear,real,spenso::tensor}::g(spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(14,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(9,1)))+gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(5,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(14,1)))*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(5,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(9,1)))
 insertion	0	hedges=6,8	cycles=0,1	gammalooprs::{}::ε^(-1)
 insertion_factor	0	(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index,spenso::index-label:v}::vertex(0,1000))))^2*1/2*spenso::{symmetric,linear,real,spenso::tensor}::g(spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(6,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(8,1)))+gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(6,1)))*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge(8,1)))
-lines	40
+lines	46
 end

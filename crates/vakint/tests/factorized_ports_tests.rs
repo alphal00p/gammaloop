@@ -37,9 +37,8 @@ use std::sync::Arc;
 use feynkit_graph::FeynmanDiagram;
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use vakint::p_integral::factorized::{
-    Endpoint, FactorizedEdge, FactorizedVertex, FromFeynkitOptions, LineKind, MAX_OPEN_PORTS,
-    Prefactor, Projector, ProjectorChoice, evaluate_factorized, evaluate_factorized_ports,
-    evaluate_factorized_vacuum,
+    Endpoint, FactorizedEdge, FactorizedVertex, FromFeynkitOptions, LineKind, Prefactor, Projector,
+    ProjectorChoice, evaluate_factorized, evaluate_factorized_ports, evaluate_factorized_vacuum,
 };
 use vakint::p_integral::{FactorizedError, FactorizedNumerator, FactorizedParts};
 use vakint::refpath;
@@ -89,6 +88,21 @@ fn index_of_slot(slot: &Atom) -> Atom {
     match slot.as_view() {
         AtomView::Fun(f) if f.get_nargs() == 2 => f.iter().nth(1).unwrap().to_owned(),
         _ => panic!("not a slot: {slot}"),
+    }
+}
+
+/// The value with an empty schema-v3 direct record: a value WITHOUT any
+/// new-feature marker takes exactly the base's rules in the old entries, so a
+/// test that exercises a new feature there (a soft first leg, a partial or
+/// gamma projector, open slots through the old entries) marks its value.
+fn marked(value: &FactorizedNumerator) -> FactorizedNumerator {
+    FactorizedNumerator {
+        record: Some(vakint::p_integral::factorized::DirectRecord {
+            original_cycles: None,
+            depth: None,
+            weights: Vec::new(),
+        }),
+        ..value.clone()
     }
 }
 
@@ -317,6 +331,9 @@ fn hard_as_vacuum(text: &str) -> FactorizedNumerator {
     v1.push('\n');
     init();
     let mut value = FactorizedNumerator::parse_text(&v1).unwrap_or_else(|e| panic!("{e}\n{v1}"));
+    // open fermion lines, gamma / partial projectors: a marked value (the old
+    // entries keep the base's rules for unmarked ones)
+    value.record = marked(&value).record;
     // the loop edges b_i; the crown vectors become constant vectors 10000 + x
     let loop_edges = value
         .loop_edges
@@ -751,6 +768,7 @@ fn direct_ports_close_to_the_contracted_route_four_loops() {
 /// momentum 0, the smallest id) whose slot is open, coupled to the momentum
 /// of edge 3 (`Q(3, slot)` at vertex 0), and a second port on the outgoing
 /// leg (`Q(4, slot)` at vertex 1).
+/// Marked (an empty v3 direct record): a soft first leg is a new feature.
 fn soft_sunset(ports: usize) -> FactorizedNumerator {
     let d = sym(DIM);
     let edge = |id, source, target, hs: Option<usize>, ht: Option<usize>, momentum: Vec<i64>| {
@@ -807,6 +825,7 @@ fn soft_sunset(ports: usize) -> FactorizedNumerator {
         projector: None,
         prefactor: Prefactor::default(),
     })
+    .map(|value| marked(&value))
     .unwrap()
 }
 
@@ -833,7 +852,8 @@ fn port_refusals_are_precise() {
             .err()
             .unwrap_or_else(|| panic!("{}: accepted", value.label))
     };
-    // more open slots than supported; exactly MAX_OPEN_PORTS passes
+    // no ceiling on the open slots (a slot count is not the loop rank): seven
+    // open slots build the vakint input
     let with_extra = |extra: usize| {
         let mut value = base.clone();
         for i in 0..extra {
@@ -846,15 +866,9 @@ fn port_refusals_are_precise() {
         value.validate().unwrap();
         value
     };
-    let many = with_extra(MAX_OPEN_PORTS - 1);
-    assert_eq!(many.ports.len(), MAX_OPEN_PORTS + 1);
-    match refused(&many) {
-        FactorizedError::Ports { detail } => assert!(detail.contains("at most 6"), "{detail}"),
-        other => panic!("{other}"),
-    }
-    let six = with_extra(MAX_OPEN_PORTS - 2);
-    assert_eq!(six.ports.len(), MAX_OPEN_PORTS);
-    let _ = vakint::p_integral::factorized::vakint_input(&settings, &six, &Atom::num(1)).unwrap();
+    let seven = marked(&with_extra(5));
+    assert_eq!(seven.ports.len(), 7);
+    let _ = vakint::p_integral::factorized::vakint_input(&settings, &seven, &Atom::num(1)).unwrap();
     // an integer index on an open slot (a projector slot that is not a port)
     let mut integer = base.clone();
     let seven = symbolica::function!(sym(MINK), Atom::var(integer.dimension), 7);

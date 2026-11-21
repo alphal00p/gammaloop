@@ -212,6 +212,9 @@ fn is_compact(rep: AtomView<'_>) -> bool {
 /// The checks of the vacuum mode (the contract's graph checks apply where they
 /// do not assume a propagator graph).
 fn validate_vacuum(value: &FactorizedNumerator) -> Result<()> {
+    if !value.has_new_features() {
+        return validate_vacuum_v1(value);
+    }
     if value.kind != FactorizedKind::Direct {
         return Err(FactorizedError::Reserved {
             feature: "the closure kind in the vacuum mode".into(),
@@ -319,6 +322,9 @@ pub fn contract_to_vakint_vacuum_streamed(
 /// Step 2 of the module documentation: an idenso-contracted network in vakint's
 /// vacuum notation.
 pub(super) fn map_to_vakint_vacuum(value: &FactorizedNumerator, contracted: &Atom) -> Result<Atom> {
+    if !value.has_new_features() {
+        return map_to_vakint_vacuum_v1(value, contracted);
+    }
     // the open slots: the ports when there is no projector (raw index PORT + i
     // by position, as always), what a projector leaves open otherwise
     let open = value.open_slots()?;
@@ -1042,15 +1048,26 @@ pub fn vakint_vacuum_input_streamed(
 /// `p(j)` or of the constant external vector `x_j` (an edge outside the
 /// graph); an external vector without either stays `p(j)`.
 pub fn to_caller_notation(value: &FactorizedNumerator, vakint_value: &Atom) -> Atom {
+    if !value.has_new_features() {
+        return to_caller_notation_v1(value, vakint_value);
+    }
     let q = symbolica::symbol!(names::MOMENTUM);
     let open = value.open_slots().unwrap_or_else(|_| value.ports.clone());
-    let rep = open.first().and_then(|port| match port.as_view() {
-        AtomView::Fun(f) => Some(function!(
-            f.get_symbol(),
-            f.iter().next().unwrap().to_owned()
-        )),
-        _ => None,
-    });
+    // the representation `mink(D)` of the caller's scalar products: from the
+    // first open Lorentz slot, else from the first Lorentz port (a projector
+    // that closes every port leaves no open slot; the ports still name D)
+    let rep = open
+        .iter()
+        .chain(value.ports.iter())
+        .find_map(|port| match port.as_view() {
+            AtomView::Fun(f) if f.get_symbol().get_name() == names::MINK && f.get_nargs() == 2 => {
+                Some(function!(
+                    f.get_symbol(),
+                    f.iter().next().unwrap().to_owned()
+                ))
+            }
+            _ => None,
+        });
     // a raw index, or a representation slot `mink(D', raw index)`
     let port = |index: AtomView<'_>| {
         let raw = match index {
@@ -1197,6 +1214,217 @@ pub fn evaluate_factorized_vacuum_streamed(
         pieces,
         contract_seconds,
         evaluate_seconds,
+    })
+}
+
+// The base's vacuum rules and mappings, verbatim, for values without new
+// features.
+
+/// The base's `validate_vacuum`, verbatim (the rules of a value without new
+/// features: [`FactorizedNumerator::has_new_features`]).
+fn validate_vacuum_v1(value: &FactorizedNumerator) -> Result<()> {
+    if value.kind != FactorizedKind::Direct {
+        return Err(FactorizedError::Reserved {
+            feature: "the closure kind in the vacuum mode".into(),
+        });
+    }
+    if !value.insertions.is_empty() {
+        return Err(FactorizedError::Reserved {
+            feature: "insertions".into(),
+        });
+    }
+    let loops = value.loops();
+    if loops == 0 {
+        return Err(error("a vacuum value has at least one loop"));
+    }
+    let mut mass = None::<&Atom>;
+    for edge in &value.edges {
+        if edge.momentum.len() != loops + value.externals() {
+            return Err(error(format!(
+                "edge {}: momentum of the wrong length",
+                edge.id
+            )));
+        }
+        if edge.is_external() {
+            continue;
+        }
+        if edge.momentum[loops..].iter().any(|c| *c != 0) {
+            return Err(error(format!(
+                "edge {} carries an external momentum (not a vacuum integral)",
+                edge.id
+            )));
+        }
+        if !edge.mass_squared.is_zero() {
+            match mass {
+                None => mass = Some(&edge.mass_squared),
+                Some(m) if *m == edge.mass_squared => {}
+                Some(m) => {
+                    return Err(error(format!(
+                        "two mass scales ({m} and {}): single-scale vacua only",
+                        edge.mass_squared
+                    )));
+                }
+            }
+        }
+    }
+    if mass.is_none() {
+        return Err(error(
+            "no massive line: a massless vacuum integral is scaleless",
+        ));
+    }
+    for port in &value.ports {
+        if !matches!(port.as_view(), AtomView::Fun(f) if f.get_symbol().get_name() == names::MINK && f.get_nargs() == 2)
+        {
+            return Err(error(format!(
+                "port {port}: only Lorentz ports mink(D, index) are in the vacuum scope"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// The base's `map_to_vakint_vacuum`, verbatim (the rules of a value without new
+/// features: [`FactorizedNumerator::has_new_features`]).
+fn map_to_vakint_vacuum_v1(value: &FactorizedNumerator, contracted: &Atom) -> Result<Atom> {
+    let port_index = |slot: AtomView<'_>| {
+        value
+            .ports
+            .iter()
+            .position(|port| port.as_view() == slot)
+            .map(|i| PORT + i as i64)
+    };
+    let failure = std::cell::Cell::new(None::<String>);
+    let mapped = contracted.replace_map(|part, _, out| {
+        let AtomView::Fun(function) = part else {
+            return;
+        };
+        let symbol = function.get_symbol();
+        let name = symbol.get_name();
+        // a scalar product of two edge momenta
+        if (name == names::METRIC || name == "spenso::dot") && function.get_nargs() == 2 {
+            let args = function.iter().collect::<Vec<_>>();
+            if let (Some((a, ra)), Some((b, rb))) =
+                (momentum_parts(args[0]), momentum_parts(args[1]))
+                && is_compact(ra)
+                && is_compact(rb)
+            {
+                match (momentum(value, a, None), momentum(value, b, None)) {
+                    (Some(x), Some(y)) => **out = S.dot.call((&x, &y)),
+                    _ => failure.set(Some(format!("a dot of unknown edges {a}, {b}"))),
+                }
+                return;
+            }
+            // a metric between two open ports
+            if name == names::METRIC
+                && let (Some(i), Some(j)) = (port_index(args[0]), port_index(args[1]))
+            {
+                **out = S.g.call((Atom::num(i), Atom::num(j)));
+                return;
+            }
+            return;
+        }
+        // an edge momentum carrying an open port
+        if let Some((edge, slot)) = momentum_parts(part)
+            && let Some(index) = port_index(slot)
+        {
+            match momentum(value, edge, Some(index)) {
+                Some(vector) => **out = vector,
+                None => failure.set(Some(format!("unknown edge {edge}"))),
+            }
+        }
+    });
+    if let Some(detail) = failure.take() {
+        return Err(error(detail));
+    }
+    let mut leftover = None;
+    mapped.as_view().visitor(&mut |part| {
+        if let AtomView::Fun(function) = part {
+            let symbol = function.get_symbol();
+            let name = symbol.get_name();
+            if [
+                names::MOMENTUM,
+                "spenso::dot",
+                names::MINK,
+                names::BIS,
+                names::METRIC,
+                names::GAMMA,
+            ]
+            .contains(&name)
+            {
+                leftover = Some(part.to_owned());
+            }
+        }
+        leftover.is_none()
+    });
+    if let Some(part) = leftover {
+        return Err(error(format!(
+            "outside the vacuum scope (metrics and momenta with open indices) after idenso: {part}"
+        )));
+    }
+    Ok(mapped)
+}
+
+/// The base's `to_caller_notation`, verbatim (the rules of a value without new
+/// features: [`FactorizedNumerator::has_new_features`]).
+fn to_caller_notation_v1(value: &FactorizedNumerator, vakint_value: &Atom) -> Atom {
+    let q = symbolica::symbol!(names::MOMENTUM);
+    let rep = value.ports.first().and_then(|port| match port.as_view() {
+        AtomView::Fun(f) => Some(function!(
+            f.get_symbol(),
+            f.iter().next().unwrap().to_owned()
+        )),
+        _ => None,
+    });
+    // a raw index, or a representation slot `mink(D', raw index)`
+    let port = |index: AtomView<'_>| {
+        let raw = match index {
+            AtomView::Fun(f) if f.get_nargs() == 2 => {
+                f.iter().nth(1).and_then(|i| i64::try_from(i).ok())
+            }
+            _ => i64::try_from(index).ok(),
+        };
+        raw.and_then(|i| usize::try_from(i - PORT).ok())
+            .and_then(|i| value.ports.get(i).cloned())
+    };
+    let constant = value.constant_vectors();
+    let leg = |j: AtomView<'_>| {
+        let j = i64::try_from(j)
+            .ok()
+            .and_then(|j| usize::try_from(j - 1).ok())?;
+        match value.external_edges.get(j) {
+            Some(leg) => *leg,
+            None => constant.get(j - value.externals()).copied(),
+        }
+    };
+    vakint_value.replace_map(|part, _, out| {
+        let AtomView::Fun(function) = part else {
+            return;
+        };
+        let args = function.iter().collect::<Vec<_>>();
+        if function.get_symbol() == S.g && args.len() == 2 {
+            if let (Some(a), Some(b)) = (port(args[0]), port(args[1])) {
+                **out = function!(ETS.metric, a, b);
+            }
+        } else if function.get_symbol() == S.p && args.len() == 2 {
+            if let (Some(x), Some(slot)) = (leg(args[0]), port(args[1])) {
+                **out = function!(q, Atom::num(x as i64), slot);
+            }
+        } else if function.get_symbol() == S.dot && args.len() == 2 {
+            let vector = |v: AtomView<'_>| match v {
+                AtomView::Fun(f) if f.get_symbol() == S.p && f.get_nargs() == 1 => {
+                    leg(f.iter().next().unwrap())
+                }
+                _ => None,
+            };
+            if let (Some(x), Some(y), Some(rep)) = (vector(args[0]), vector(args[1]), rep.as_ref())
+            {
+                **out = function!(
+                    SPENSO_TAG.dot,
+                    function!(q, Atom::num(x as i64), rep),
+                    function!(q, Atom::num(y as i64), rep)
+                );
+            }
+        }
     })
 }
 
