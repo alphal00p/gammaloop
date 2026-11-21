@@ -16,6 +16,7 @@ mod closed;
 #[cfg(test)]
 mod closed_skip_tests;
 mod depth;
+pub mod regularity;
 #[cfg(test)]
 mod depth_tests;
 mod edge_experiment;

@@ -2115,6 +2115,44 @@ impl<'a> Evaluation<'a> {
             .numerator(&self.plan.support, &correction.hard)
             .get_single_atom()?;
         let nested = self.plan.root_boundary.is_some();
+        // IRH-DEPTH round 5 (super::regularity): B is read on the normalised
+        // factors of the closed list; a factor that is not provably regular
+        // refuses the WHOLE correction before H(γ) is integrated. An error
+        // raised while certifying propagates (`?`); a refusal is an ordinary
+        // fallback to today's terms, never fatal, also when nested (round 4
+        // carries only the strict depth alarm as fatal).
+        let quotient_numerator = match super::regularity::certify_graph_correction(
+            self.graph,
+            &correction.hard,
+            &quotient_numerator,
+        )? {
+            Ok(normalised) => normalised,
+            Err(refused) if super::depth::guards() => {
+                super::depth::note(&mut self.depth, |counts| &mut counts.corrections);
+                if nested {
+                    super::depth::note(&mut self.depth, |counts| &mut counts.nested);
+                }
+                eprintln!(
+                    "IR_HARD_DEPTH_REGULARITY graph={} corr={correction_index} factor={} class={} detail={}",
+                    self.graph.name,
+                    refused.factor,
+                    refused.class.label(),
+                    refused.detail,
+                );
+                return Ok(self.refuse_depth(
+                    correction_index,
+                    correction,
+                    0,
+                    quotient_loops,
+                    None,
+                    quotient_loops,
+                    0,
+                    refused.class.label(),
+                    &super::depth::Truncation::default(),
+                ));
+            }
+            Err(_) => quotient_numerator,
+        };
         let bound = super::depth::planner_bound(
             super::depth::quotient_pole_bound(
                 quotient_loops,
@@ -3735,7 +3773,7 @@ impl<'a> Evaluation<'a> {
             // an IR_HARD_CHILD* line: the census parsers count every line
             // with the IR_HARD_CHILD_DEPTH prefix as a depth retry.
             eprintln!(
-                "IR_HARD_DEPTH_SUMMARY graph={} child={} corrections={} bounded={} retried={} raised={} exceeded={} refused={} unbounded={} vanished={} unverified={}",
+                "IR_HARD_DEPTH_SUMMARY graph={} child={} corrections={} bounded={} retried={} raised={} exceeded={} refused={} unbounded={} vanished={} unverified={} unresolved_tensor={} opaque_function={} symbol_in_denominator={} outside_list={}",
                 self.graph.name,
                 self.plan.root_boundary.is_some(),
                 self.depth.corrections,
@@ -3747,6 +3785,10 @@ impl<'a> Evaluation<'a> {
                 self.depth.unbounded,
                 self.depth.vanished,
                 self.depth.unverified,
+                self.depth.unresolved_tensor,
+                self.depth.opaque_function,
+                self.depth.symbol_in_denominator,
+                self.depth.outside_list,
             );
         }
         let elapsed = self.started.elapsed();
