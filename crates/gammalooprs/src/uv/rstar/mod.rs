@@ -59,6 +59,8 @@ mod taylor;
 mod tests;
 mod top_mass;
 mod uncontracted;
+#[cfg(test)]
+mod uncontracted_init_refusal_tests;
 mod uncontracted_ledger;
 #[cfg(test)]
 mod uncontracted_ledger_tests;
@@ -159,8 +161,10 @@ pub use uv::MassiveUvEvaluator;
 /// check), a bad `GAMMALOOP_UNCONTRACTED_TIMING` (every mode), check mode
 /// with `PINT6_CLOSURE_DUMP`, a kind list without a kind this build emits,
 /// an enabled kind whose route is off (`child` with
-/// `GAMMALOOP_UV_CHILDREN=massive`, `ir-hard` off the IR hard child route)
-/// or a bad exception list (`GAMMALOOP_UNCONTRACTED_EXCEPTIONS`) is refused.
+/// `GAMMALOOP_UV_CHILDREN=massive`, `ir-hard` off the IR hard child route),
+/// a quotient route other than `GAMMALOOP_IR_QUOTIENT=rstar` (on and check;
+/// helper VH's C7 settings exception E2) or a bad exception list
+/// (`GAMMALOOP_UNCONTRACTED_EXCEPTIONS`) is refused.
 pub fn validate_uncontracted() -> eyre::Result<()> {
     uncontracted::validate()
 }
