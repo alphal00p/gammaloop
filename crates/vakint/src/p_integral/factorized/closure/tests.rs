@@ -3309,7 +3309,7 @@ fn edge_ids_beyond_i64_are_refused() {
     assert_eq!(fresh, 1);
     let prefix = |id: usize| {
         format!(
-            "edge id {id}: the ids (with 1 fresh loop-vector ids above them) must not exceed i64::MAX"
+            "edge id {id}: the ids (with fresh loop-vector ids up to {id} + 1 above them) must not exceed i64::MAX"
         )
     };
     for id in [usize::MAX, i64::MAX as usize] {
@@ -3500,11 +3500,38 @@ fn every_kind_equals_the_independent_reference() {
     check_independent(&l2_root(1, false), &L2_CUT, &argument);
     check_independent(&l2_child(2), &L2_CUT, &argument);
     check_independent(&l2_sector(), &L2_CUT, &argument);
+    // the order filters BELOW the validation (A-40: the public path refuses
+    // the non-`all` filters on the stacked branch; the retained evaluation
+    // code stays covered by the independent reference)
     for orders in [TaylorOrders::DropZero, TaylorOrders::DropZeroOdd] {
         let mut v = l2_root(2, true);
         spec(&mut v).taylor.as_mut().unwrap().orders = orders;
-        check_independent(&v, &L2_CUT, &argument);
+        check_independent_below_validation(&v, &L2_CUT, &argument);
     }
+}
+
+/// [`check_independent`] through the evaluation BELOW the validation
+/// (`evaluate_validated`), for record shapes the validation refuses.
+fn check_independent_below_validation(
+    value: &FactorizedNumerator,
+    routing: &[(&str, &str)],
+    argument: &Atom,
+) {
+    let vakint = Vakint::new().unwrap();
+    let FactorizedKind::Closure(spec) = &value.kind else {
+        unreachable!()
+    };
+    let got = super::evaluate_validated(&vakint, &settings(), value, spec, argument)
+        .unwrap_or_else(|e| panic!("{}: {e}", value.label));
+    let expected = independent_reference(value, routing, argument);
+    assert!(!expected.is_zero(), "{}: zero reference", value.label);
+    assert!(
+        (&got.vakint_value - &expected).expand().is_zero(),
+        "{}: below validation vs the independent reference\nentry     {}\nreference {}",
+        value.label,
+        got.vakint_value,
+        expected
+    );
 }
 
 /// THE COLLISION WITNESSES against the independent reference: the control
@@ -3585,20 +3612,33 @@ fn refusal_taylor_degree_above_two() {
     assert_closure_refusal(&bad, &good, "Taylor degree 3 above 2");
 }
 
-/// The order filter that keeps nothing (drop0-odd at degree 1); drop0-odd at
-/// degree 2 keeps order 2. (Reachable on this branch; the assembler's
-/// order-filter refusal may precede it on theirs.)
+/// The order filter that keeps nothing (A-40: by a UNIT test of the function
+/// the rule lives in, `orders_keep_any`, so that it stays covered when the
+/// non-`all` filters are refused earlier in validate_closure): drop0-odd at
+/// degree 1 keeps nothing, at degree 2 order 2; drop0 at degree 0 nothing,
+/// at 1 order 1; all always order 0.
 #[test]
 fn refusal_orders_keep_nothing() {
-    let mut bad = l2_root(1, true);
-    spec(&mut bad).taylor.as_mut().unwrap().orders = TaylorOrders::DropZeroOdd;
-    let mut good = l2_root(2, true);
-    spec(&mut good).taylor.as_mut().unwrap().orders = TaylorOrders::DropZeroOdd;
-    assert_closure_refusal(
-        &bad,
-        &good,
-        "orders=drop0-odd keeps no order up to degree 1",
-    );
+    let taylor = |degree: u32, orders: TaylorOrders| TaylorSpec {
+        degree,
+        scaled_edges: vec![20],
+        compensate_mass: true,
+        orders,
+    };
+    for (degree, orders, keeps) in [
+        (1, TaylorOrders::DropZeroOdd, false),
+        (2, TaylorOrders::DropZeroOdd, true),
+        (0, TaylorOrders::DropZero, false),
+        (1, TaylorOrders::DropZero, true),
+        (0, TaylorOrders::All, true),
+    ] {
+        assert_eq!(
+            super::orders_keep_any(&taylor(degree, orders)),
+            keeps,
+            "degree {degree} orders={}",
+            orders.as_str()
+        );
+    }
 }
 
 /// An open spinor chain: a projector leaving two bispinor slots open (on
@@ -4055,5 +4095,164 @@ fn refusal_entry_arguments() {
             "{detail}"
         ),
         other => panic!("{other:?}"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Delta review of 4f3f54110: A-37, A-38, A-21b, A-27(e).
+// ---------------------------------------------------------------------------
+
+/// A-37: a FORMAT defect found by the lines' back end inside validate (a
+/// closing line whose loop momentum has no unit coefficient) is a `Closure`
+/// refusal, not `Evaluation`.
+#[test]
+fn a_closing_line_without_a_unit_coefficient_is_a_closure_refusal() {
+    let good = l2_root(2, true);
+    let mut bad = good.clone();
+    for e in &mut bad.edges {
+        match e.id {
+            2 => e.momentum = vec![-1, 2, 0],
+            3 => e.momentum = vec![0, 2, 0],
+            _ => {}
+        }
+    }
+    bad.loop_edges = vec![None, None];
+    bad.label = "closing line 2 k2".into();
+    assert_closure_refusal(
+        &bad,
+        &good,
+        "the closure's vacuum lines are not one closing line among massless ones: ",
+    );
+}
+
+/// A-38: the fresh loop-vector id of loop i is max + 1 + i: the bound uses
+/// the LARGEST index without a loop edge (here loop 1 of the sector, whose
+/// loop 0 has its edge), not their count.
+#[test]
+fn the_fresh_id_bound_uses_the_top_loop_index() {
+    let mut base = l2_sector();
+    assert!(base.loop_edges[0].is_some());
+    base.loop_edges[1] = None;
+    base.validate().unwrap();
+    let id = i64::MAX as usize - 1;
+    match renumber(&base, 21, id).validate() {
+        Err(FactorizedError::Closure { detail }) => assert!(
+            detail.starts_with(&format!(
+                "edge id {id}: the ids (with fresh loop-vector ids up to {id} + 2 above them) must not exceed i64::MAX"
+            )),
+            "{detail}"
+        ),
+        other => panic!("{other:?}"),
+    }
+    renumber(&base, 21, i64::MAX as usize - 2)
+        .validate()
+        .unwrap();
+}
+
+/// A-21b: without original_cycles the insertions' cycles enter the loop-sign
+/// parity in exact arithmetic (a u32 sum wrapped at 2^32): the refusal names
+/// the true count.
+#[test]
+fn insertion_cycles_without_original_cycles_are_counted_exactly() {
+    let mut v =
+        FactorizedNumerator::from_text(include_str!("../fixtures/wh-k2-child-ins.record.txt"))
+            .unwrap();
+    spec(&mut v).original_cycles = None;
+    v.insertions[0].cycles = (u32::MAX, 1);
+    let carried = v.closed_loops().unwrap().len();
+    let n = carried + u32::MAX as usize + 1;
+    let sign = if n.is_multiple_of(2) { 1 } else { -1 };
+    v.prefactor.loop_sign = -sign;
+    match v.validate() {
+        Err(FactorizedError::LoopSign { found, loops }) => {
+            assert_eq!((found, loops), (-sign, n))
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+/// The one-loop bubble: the closing line and one massless line (its cut has
+/// no loop left: the ORDINARY closure path).
+fn one_loop_bubble() -> FactorizedNumerator {
+    record(
+        "one loop, closing line and a massless line",
+        1,
+        vec![Some(20)],
+        vec![
+            line(1, 1, 2, &[1, 1], "0"),
+            line(3, 2, 1, &[1, 0], R),
+            leg(20, 1, true, &[0, 1]),
+            leg(21, 2, false, &[0, 1]),
+        ],
+        vec![vertex(1, ""), vertex(2, "")],
+        Vec::new(),
+        None,
+        3,
+        taylor(0, vec![20, 21], false),
+        false,
+    )
+}
+
+/// The L2 root with two poled contracted children (the truncation path).
+fn two_poled_root() -> FactorizedNumerator {
+    let eps = "gammalooprs::ε";
+    let mut with = l2_root(1, true);
+    with.vertices.iter_mut().find(|v| v.id == 1).unwrap().factor = atom(&q(1, &hedge(120)));
+    let coefficients = [atom(&format!("{eps}^-1")), atom(&format!("3*{eps}^-1+1/2"))];
+    for (vertex, coefficient) in [1usize, 2].into_iter().zip(&coefficients) {
+        let hedges = with
+            .local_hedges(super::super::Location::Vertex(vertex))
+            .into_iter()
+            .collect::<Vec<_>>();
+        let v = with.vertices.iter_mut().find(|v| v.id == vertex).unwrap();
+        let factor = std::mem::replace(&mut v.factor, Atom::num(1));
+        v.rule = format!("ct:child{vertex}");
+        with.insertions.push(super::super::Insertion {
+            vertex,
+            hedges,
+            cycles: (0, 0),
+            coefficient: coefficient.clone(),
+            factor,
+        });
+    }
+    with
+}
+
+/// A-27(e): each of the four internal-failure CALL SITES of the evaluation,
+/// triggered by the test-only fault injection, reports `Evaluation` with
+/// its stage; the same record without the injection evaluates (the site is
+/// on its path).
+#[test]
+fn every_internal_failure_site_reports_evaluation() {
+    let vakint = Vakint::new().unwrap();
+    for (stage, value, settings) in [
+        ("boundary", l2_root(2, true), settings()),
+        ("lowering and reduction", l2_root(2, true), settings()),
+        ("ordinary closure", one_loop_bubble(), settings()),
+        (
+            "truncation of the insertion product",
+            two_poled_root(),
+            rstar_site_settings(),
+        ),
+    ] {
+        let run = || {
+            evaluate_factorized_closure(
+                &vakint,
+                &settings,
+                std::slice::from_ref(&value),
+                &[value.prefactor.total()],
+            )
+            .map(|_| ())
+        };
+        run().unwrap_or_else(|e| panic!("{stage}: without injection: {e}"));
+        super::INJECT_INTERNAL_FAILURE.with(|c| c.set(Some(stage)));
+        let injected = run();
+        super::INJECT_INTERNAL_FAILURE.with(|c| c.set(None));
+        match injected {
+            Err(FactorizedError::Evaluation { detail }) => {
+                assert_eq!(detail, format!("closure {stage}: injected failure"))
+            }
+            other => panic!("{stage}: {other:?}"),
+        }
     }
 }

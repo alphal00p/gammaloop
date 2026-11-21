@@ -83,6 +83,26 @@ fn internal(stage: &str, error: impl std::fmt::Display) -> FactorizedError {
     }
 }
 
+#[cfg(test)]
+thread_local! {
+    /// TEST-ONLY fault injection: the internal-failure stage to fail (one of
+    /// the four `internal(..)` call sites of the evaluation), per thread.
+    pub(super) static INJECT_INTERNAL_FAILURE: std::cell::Cell<Option<&'static str>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// TEST-ONLY hook, a no-op in a library build: the internal failure the
+/// tests asked for at `stage` (`INJECT_INTERNAL_FAILURE`), as the call site
+/// would report a real one.
+fn injected(stage: &'static str) -> Result<()> {
+    #[cfg(test)]
+    if INJECT_INTERNAL_FAILURE.with(|c| c.get()) == Some(stage) {
+        return Err(internal(stage, "injected failure"));
+    }
+    let _ = stage;
+    Ok(())
+}
+
 fn lambda_symbol() -> Symbol {
     symbolica::symbol!("vakint::closure_lambda")
 }
@@ -211,7 +231,13 @@ impl FactorizedNumerator {
         // ids are written as Q(id, ..) (an i64), and a loop without a loop
         // edge gets the fresh id max + 1 + i ([`loop_vector_id`]): every id,
         // fresh ones included, must be an i64 (no wrap onto an existing id)
-        let fresh = self.loop_edges.iter().filter(|e| e.is_none()).count();
+        // loop_vector_id(i) = max + 1 + i: bounded by the LARGEST loop index
+        // without a loop edge, plus one
+        let fresh = self
+            .loop_edges
+            .iter()
+            .rposition(|e| e.is_none())
+            .map_or(0, |i| i + 1);
         let top = self
             .edges
             .iter()
@@ -224,7 +250,7 @@ impl FactorizedNumerator {
             .is_none_or(|last| last > i64::MAX as usize)
         {
             return Err(refuse(format!(
-                "edge id {top}: the ids (with {fresh} fresh loop-vector ids above them) must not exceed i64::MAX"
+                "edge id {top}: the ids (with fresh loop-vector ids up to {top} + {fresh} above them) must not exceed i64::MAX"
             )));
         }
         self.validate_contract(Some(conserved))?;
@@ -276,7 +302,7 @@ impl FactorizedNumerator {
                     .filter(|c| c.line == super::LineKind::Fermion)
                     .count()
                     + inner_fermion as usize;
-                let n = cycles.len() + (inner_fermion + inner_ghost) as usize;
+                let n = cycles.len() + inner_fermion as usize + inner_ghost as usize;
                 let sign = if n.is_multiple_of(2) { 1 } else { -1 };
                 if p.loop_sign != sign {
                     return Err(FactorizedError::LoopSign {
@@ -436,7 +462,7 @@ impl FactorizedNumerator {
                         taylor.degree
                     )));
                 }
-                if !(1..=taylor.degree).any(|n| taylor.orders.keeps(n)) && !taylor.orders.keeps(0) {
+                if !orders_keep_any(taylor) {
                     return Err(refuse(format!(
                         "orders={} keeps no order up to degree {}",
                         taylor.orders.as_str(),
@@ -500,7 +526,18 @@ impl FactorizedNumerator {
                 edge.mass_squared = spec.auxiliary_mass_squared.clone();
             }
         }
-        if let VacuumBackend::Family = vacuum_backend(&vacuum_lines(&sector), loops)? {
+        // the back end's errors here are FORMAT defects of the record (several
+        // massive lines after merging, a closing line without loop momentum or
+        // without a unit coefficient): a Closure refusal, not "failed inside"
+        let backend =
+            vacuum_backend(&vacuum_lines(&sector), loops).map_err(|error| match error {
+                FactorizedError::Evaluation { detail } => refuse(format!(
+                    "the closure's vacuum lines are not one closing line among massless ones: {}",
+                    detail.trim_start_matches("vacuum: ")
+                )),
+                other => other,
+            })?;
+        if let VacuumBackend::Family = backend {
             return Err(refuse(
                 "every line is massive: not a closure (after series merging the closing line is the only line)",
             ));
@@ -556,6 +593,11 @@ fn vector(head: Symbol, coefficients: &[i64]) -> Atom {
         }
     }
     out
+}
+
+/// Whether the order filter of `taylor` keeps at least one order `0..=degree`.
+pub(super) fn orders_keep_any(taylor: &TaylorSpec) -> bool {
+    (0..=taylor.degree).any(|n| taylor.orders.keeps(n))
 }
 
 /// The summed `(fermion, ghost)` cycles of the insertions, `None` on a u32
@@ -1397,6 +1439,7 @@ fn prepare(
         boundary_patterns,
     )
     .map_err(|e| internal("boundary", e))?;
+    injected("boundary")?;
     Ok(Prepared {
         boundary: Some(boundary),
         tensors,
@@ -1453,114 +1496,131 @@ pub fn evaluate_factorized_closure(
         // rule (no-ops for an unmarked value: the base behaviour)
         super::check_prefactor_argument(value, prefactor)?;
         super::check_epsilon_setting(value, vk_symbol!(&settings.epsilon_symbol))?;
-        // the value must not depend on the caller's tensor-reduction method or
-        // notation (WH-RECORD-FORMAT v1.4 section 7): pinned to what the R*
-        // boundary path uses (FeynKit, dot notation)
-        let mut local = settings.clone();
-        local.tensor_reduction_method = crate::TensorReductionMethod::FeynKit;
-        local.use_dot_product_notation = true;
-        if let Some(depth) = spec.depth {
-            local.number_of_terms_in_epsilon_expansion = depth as i64;
-        }
-        // `depth` counts the terms of the RETURNED product: insertions with
-        // poles of total order n promote n more orders of the integral, which
-        // is evaluated n terms deeper and the product truncated back
-        let epsilon_symbol = vk_symbol!(&settings.epsilon_symbol);
-        value.check_insertion_epsilon(epsilon_symbol.get_name())?;
-        let pole_order = value.insertion_pole_order(epsilon_symbol)?;
-        let returned_terms = local.number_of_terms_in_epsilon_expansion;
-        local.number_of_terms_in_epsilon_expansion += pole_order as i64;
-        let prepared = prepare(vakint, &local, value, spec, prefactor)?;
-        let started = Instant::now();
-        let mut counts = (0, 0, 0);
-        let (mut vakint_value, lower_seconds, reduce_seconds, patterns) = match &prepared.boundary {
-            None => (Atom::Zero, 0.0, 0.0, 0),
-            Some(boundary) => {
-                let direct = boundary
-                    .patterns
-                    .iter()
-                    .all(|p| matches!(p.topology.as_view(), AtomView::Fun(f) if f.get_symbol() == S.topo));
-                if direct {
-                    let (atom, stats) = boundary
-                        .evaluate_with_stats(vakint, &local, BoundaryOptions::default())
-                        .map_err(|e| internal("lowering and reduction", e))?;
-                    let lower = stats.match_seconds
-                        + stats.read_seconds
-                        + stats.classify_seconds
-                        + stats.slot_seconds
-                        + stats.finish_seconds;
-                    counts = (
-                        stats.key_plans,
-                        stats.lowered_entries,
-                        stats.distinct_monomials,
-                    );
-                    (
-                        atom,
-                        lower,
-                        stats.reduce_finalize_seconds,
-                        boundary.patterns.len(),
-                    )
-                } else {
-                    // a loop-free cut (one loop): the ordinary closure per pattern
-                    let mut atom = Atom::Zero;
-                    for (closure, input) in boundary.ordinary() {
-                        atom += closure
-                            .evaluate(vakint, &local, input.as_view())
-                            .map_err(|e| internal("ordinary closure", e))?;
-                    }
-                    (atom, 0.0, 0.0, boundary.patterns.len())
-                }
-            }
-        };
-        for (symbol, tensor) in &prepared.tensors {
-            vakint_value = vakint_value.replace(symbol.clone()).with(tensor.clone());
-        }
-        let vakint_value = if pole_order > 0 {
-            let target = returned_terms - value.loops() as i64 - 1;
-            vakint_value
-                .series(
-                    epsilon_symbol,
-                    Atom::Zero.as_view(),
-                    symbolica::domains::rational::Rational::from(target),
-                )
-                .map_err(|e| internal("truncation of the insertion product", e))?
-                .to_atom()
-                .expand()
-        } else {
-            vakint_value.expand()
-        };
-        let evaluate_seconds = started.elapsed().as_secs_f64();
-        // the caller's notation; with no open slot, scalar products of the
-        // external momenta still come back as spenso::dot(Q(x, mink(D)), ..):
-        // the representation is taken from a placeholder slot
-        let mut caller_view = opened(value)?;
-        if caller_view.ports.is_empty() {
-            caller_view.ports.push(function!(
-                symbolica::symbol!(names::MINK),
-                Atom::var(value.dimension),
-                Atom::num(0)
-            ));
-        }
-        let caller = vacuum::to_caller_notation(&caller_view, &vakint_value);
-        out.value += &caller;
-        out.vakint_value += &vakint_value;
-        out.records.push(ClosureRecordValue {
-            value: caller,
-            vakint_value,
-            patterns,
-            blocks: prepared.blocks,
-            reduced_monomials: prepared.reduced_monomials,
-            contract_seconds: prepared.contract_seconds,
-            split_seconds: prepared.split_seconds,
-            evaluate_seconds,
-            lower_seconds,
-            reduce_seconds,
-            key_plans: counts.0,
-            lowered_entries: counts.1,
-            distinct_monomials: counts.2,
-        });
+        let record = evaluate_validated(vakint, settings, value, spec, prefactor)?;
+        out.value += &record.value;
+        out.vakint_value += &record.vakint_value;
+        out.records.push(record);
     }
     Ok(out)
+}
+
+/// ONE closure record, VALIDATED by the caller (its `validate` and the entry
+/// check passed), times `prefactor`: the evaluation below the validation
+/// (the entry's per-record body; also the tests' handle on the evaluation of
+/// record shapes the validation refuses, e.g. the order filters).
+pub(super) fn evaluate_validated(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    value: &FactorizedNumerator,
+    spec: &ClosureSpec,
+    prefactor: &Atom,
+) -> Result<ClosureRecordValue> {
+    // the value must not depend on the caller's tensor-reduction method or
+    // notation (WH-RECORD-FORMAT v1.4 section 7): pinned to what the R*
+    // boundary path uses (FeynKit, dot notation)
+    let mut local = settings.clone();
+    local.tensor_reduction_method = crate::TensorReductionMethod::FeynKit;
+    local.use_dot_product_notation = true;
+    if let Some(depth) = spec.depth {
+        local.number_of_terms_in_epsilon_expansion = depth as i64;
+    }
+    // `depth` counts the terms of the RETURNED product: insertions with
+    // poles of total order n promote n more orders of the integral, which
+    // is evaluated n terms deeper and the product truncated back
+    let epsilon_symbol = vk_symbol!(&settings.epsilon_symbol);
+    value.check_insertion_epsilon(epsilon_symbol.get_name())?;
+    let pole_order = value.insertion_pole_order(epsilon_symbol)?;
+    let returned_terms = local.number_of_terms_in_epsilon_expansion;
+    local.number_of_terms_in_epsilon_expansion += pole_order as i64;
+    let prepared = prepare(vakint, &local, value, spec, prefactor)?;
+    let started = Instant::now();
+    let mut counts = (0, 0, 0);
+    let (mut vakint_value, lower_seconds, reduce_seconds, patterns) = match &prepared.boundary {
+        None => (Atom::Zero, 0.0, 0.0, 0),
+        Some(boundary) => {
+            let direct = boundary.patterns.iter().all(
+                |p| matches!(p.topology.as_view(), AtomView::Fun(f) if f.get_symbol() == S.topo),
+            );
+            if direct {
+                let (atom, stats) = boundary
+                    .evaluate_with_stats(vakint, &local, BoundaryOptions::default())
+                    .map_err(|e| internal("lowering and reduction", e))?;
+                injected("lowering and reduction")?;
+                let lower = stats.match_seconds
+                    + stats.read_seconds
+                    + stats.classify_seconds
+                    + stats.slot_seconds
+                    + stats.finish_seconds;
+                counts = (
+                    stats.key_plans,
+                    stats.lowered_entries,
+                    stats.distinct_monomials,
+                );
+                (
+                    atom,
+                    lower,
+                    stats.reduce_finalize_seconds,
+                    boundary.patterns.len(),
+                )
+            } else {
+                // a loop-free cut (one loop): the ordinary closure per pattern
+                let mut atom = Atom::Zero;
+                for (closure, input) in boundary.ordinary() {
+                    atom += closure
+                        .evaluate(vakint, &local, input.as_view())
+                        .map_err(|e| internal("ordinary closure", e))?;
+                    injected("ordinary closure")?;
+                }
+                (atom, 0.0, 0.0, boundary.patterns.len())
+            }
+        }
+    };
+    for (symbol, tensor) in &prepared.tensors {
+        vakint_value = vakint_value.replace(symbol.clone()).with(tensor.clone());
+    }
+    let vakint_value = if pole_order > 0 {
+        injected("truncation of the insertion product")?;
+        let target = returned_terms - value.loops() as i64 - 1;
+        vakint_value
+            .series(
+                epsilon_symbol,
+                Atom::Zero.as_view(),
+                symbolica::domains::rational::Rational::from(target),
+            )
+            .map_err(|e| internal("truncation of the insertion product", e))?
+            .to_atom()
+            .expand()
+    } else {
+        vakint_value.expand()
+    };
+    let evaluate_seconds = started.elapsed().as_secs_f64();
+    // the caller's notation; with no open slot, scalar products of the
+    // external momenta still come back as spenso::dot(Q(x, mink(D)), ..):
+    // the representation is taken from a placeholder slot
+    let mut caller_view = opened(value)?;
+    if caller_view.ports.is_empty() {
+        caller_view.ports.push(function!(
+            symbolica::symbol!(names::MINK),
+            Atom::var(value.dimension),
+            Atom::num(0)
+        ));
+    }
+    let caller = vacuum::to_caller_notation(&caller_view, &vakint_value);
+    Ok(ClosureRecordValue {
+        value: caller,
+        vakint_value,
+        patterns,
+        blocks: prepared.blocks,
+        reduced_monomials: prepared.reduced_monomials,
+        contract_seconds: prepared.contract_seconds,
+        split_seconds: prepared.split_seconds,
+        evaluate_seconds,
+        lower_seconds,
+        reduce_seconds,
+        key_plans: counts.0,
+        lowered_entries: counts.1,
+        distinct_monomials: counts.2,
+    })
 }
 
 #[cfg(test)]
