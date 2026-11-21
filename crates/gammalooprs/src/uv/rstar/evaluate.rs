@@ -1903,6 +1903,7 @@ impl<'a> Evaluation<'a> {
             // comparison (a diagnostic failure) fails it as without the guard.
             let limit = super::closed::budget_extra_bytes()
                 .and_then(|extra| super::expression::process_rss_now().map(|rss| rss + extra));
+            let exceeded = self.depth.exceeded;
             let guarded = super::ir_dirac::guarded_unless_diagnostic(
                 limit,
                 super::expression::memory_release(),
@@ -1913,7 +1914,7 @@ impl<'a> Evaluation<'a> {
                     attempt
                 },
             );
-            match guarded {
+            let attempt = match guarded {
                 Ok(attempt) => attempt,
                 Err(error) => {
                     eprintln!(
@@ -1926,7 +1927,18 @@ impl<'a> Evaluation<'a> {
                     );
                     return Err(error);
                 }
-            }
+            };
+            // IRH-DEPTH: the guard declines every error that is not a
+            // diagnostic failure, also the strict `bound_exceeded` one; under
+            // GAMMALOOP_IR_HARD_DEPTH_STRICT=1 it stays fatal
+            // (super::depth::strict).
+            ensure!(
+                !(super::depth::strict() && self.depth.exceeded > exceeded),
+                "IRH-DEPTH: a measured quotient pole exceeds the quotient bound in {} corr={correction_index} (GAMMALOOP_IR_HARD_DEPTH_STRICT=1; declined by the closed-path guard: {})",
+                self.graph.name,
+                attempt.as_ref().err().map_or("", String::as_str)
+            );
+            attempt
         };
         let seconds = started.elapsed().as_secs_f64();
         let reduction = counted.elapsed().fields();
@@ -2375,46 +2387,92 @@ impl<'a> Evaluation<'a> {
                     )?;
                 }
             }
+            // IRH-DEPTH: the insertion excess of every returned row, and the
+            // bound of the rows the moment extraction dropped (B only while
+            // every returned insertion is free of ε: module doc).
+            let excesses = |rows: &[(Atom, Atom, usize)]| {
+                rows.iter()
+                    .map(|(_, insertion, _)| super::depth::excess_poles(insertion))
+                    .collect::<Vec<_>>()
+            };
+            #[allow(unused_mut)]
+            let mut row_excess = excesses(&rows);
+            let dropped_bound = super::depth::dropped_row_bound(bound, row_excess.iter().copied());
             #[cfg(test)]
-            super::depth::apply_row_hook(
-                &super::depth::HookSite {
-                    hard_loops,
+            {
+                // The hook rewrites returned rows (tests): their insertions
+                // are read again, the dropped rows keep the bound above.
+                super::depth::apply_row_hook(
+                    &super::depth::HookSite {
+                        hard_loops,
+                        quotient_loops,
+                        extra,
+                        nested: self.plan.root_boundary.is_some(),
+                        edges: self.edges(&correction.hard),
+                    },
+                    &mut rows,
+                );
+                row_excess = excesses(&rows);
+            }
+            // The bound of every row (B raised by its insertion's excess) and
+            // of the whole correction.
+            let row_bounds = row_excess
+                .iter()
+                .map(|excess| Some(bound? + (*excess)?))
+                .collect::<Vec<_>>();
+            let row_bound = super::depth::correction_bound(dropped_bound, &row_bounds);
+            if row_bound.is_none() && super::depth::guards() {
+                // A row's (or the dropped rows') bound is unknown: refused
+                // before the quotient factors are built.
+                let truncation = super::depth::Truncation {
+                    groups: groups.len(),
+                    vanished_groups,
+                    rows: rows.len(),
+                    zero_rows: rows.iter().filter(|(h, _, _)| h.is_zero()).count(),
+                };
+                return Ok(self.refuse_depth(
+                    correction_index,
+                    correction,
+                    attempts,
                     quotient_loops,
+                    None,
                     extra,
-                },
-                &mut rows,
-            );
+                    0,
+                    "unbounded",
+                    &truncation,
+                ));
+            }
             let hard = self.open_remainder(&correction.preparation[representative])?;
             let outer_started = Instant::now();
             let outcome = self.ir_outer_integrated(&hard, &correction.forest, &rows)?;
-            let (value, outer_stats, valuation, zero_rows) = match outcome {
+            let (value, outer_stats, valuations, zero_rows) = match outcome {
                 Ok(outcome) => outcome,
                 Err(reason) => return Ok(Err(reason)),
             };
-            // The poles the measured rows need, vanished rows included.
-            let needed = usize::try_from(-valuation.min(0)).unwrap_or(0);
-            // The bound of every group and row (each row's raised by its
-            // insertion's own excess).
-            let row_bound = rows.iter().fold(bound, |largest, (_, insertion, _)| {
-                Some(largest?.max(super::depth::row_bound(bound, insertion)?))
-            });
+            // The poles each measured row needs, vanished rows included, and
+            // the largest.
+            let needs = valuations
+                .iter()
+                .map(|valuation| usize::try_from(-(*valuation).min(0)).unwrap_or(0))
+                .collect::<Vec<_>>();
+            let needed = needs.iter().copied().max().unwrap_or(0);
             let truncation = super::depth::Truncation {
                 groups: groups.len(),
                 vanished_groups,
                 rows: rows.len(),
                 zero_rows: zero_rows.len(),
             };
-            // A measured row above B: the proof of B failed (module doc).
-            // Refused at once (no retry to a depth nothing certifies), with
-            // its own count; an error under GAMMALOOP_IR_HARD_DEPTH_STRICT=1.
+            // A measured row above its own bound: the proof of B failed
+            // (module doc). Refused at once (no retry to a depth nothing
+            // certifies), with its own count; an error under
+            // GAMMALOOP_IR_HARD_DEPTH_STRICT=1.
             if super::depth::guards()
-                && let Some(row_bound) = row_bound
-                && needed > row_bound
+                && let Some((row_need, row_limit)) = super::depth::exceeded_row(&needs, &row_bounds)
             {
                 super::depth::note(&mut self.depth, |counts| &mut counts.exceeded);
                 ensure!(
                     !super::depth::strict(),
-                    "IRH-DEPTH: a measured quotient pole exceeds the quotient bound in {} corr={correction_index}: needed={needed} bound={row_bound} (GAMMALOOP_IR_HARD_DEPTH_STRICT=1)",
+                    "IRH-DEPTH: a measured quotient pole exceeds the quotient bound in {} corr={correction_index}: needed={row_need} bound={row_limit} (GAMMALOOP_IR_HARD_DEPTH_STRICT=1)",
                     self.graph.name
                 );
                 return Ok(self.refuse_depth(
@@ -2422,9 +2480,9 @@ impl<'a> Evaluation<'a> {
                     correction,
                     attempts,
                     quotient_loops,
-                    Some(row_bound),
+                    Some(row_limit),
                     extra,
-                    needed,
+                    row_need,
                     "bound_exceeded",
                     &truncation,
                 ));
@@ -2453,7 +2511,9 @@ impl<'a> Evaluation<'a> {
                     rows.len(),
                 );
                 if attempts >= 3 {
-                    return Ok(Err(format!("depth:{target}")));
+                    // The measured need, as before IRH-DEPTH (the target is
+                    // on the IR_HARD_CHILD_DEPTH line above).
+                    return Ok(Err(format!("depth:{needed}")));
                 }
                 if target > needed {
                     super::depth::note(&mut self.depth, |counts| &mut counts.raised);
@@ -2872,15 +2932,16 @@ impl<'a> Evaluation<'a> {
     /// `Σ_k (-1)^k binom(a_j-εL, k)`; then the generic tail (summand
     /// simplification, root projection and regulation, tensor finish) with
     /// the `h_j` substituted last. `Err(reason)` declines the correction.
-    /// Besides the value: the lowest `ε` power of the quotient factors and
-    /// the rows whose `h_j` vanishes (IRH-DEPTH, [`super::depth`]).
+    /// Besides the value: per row, the lowest `ε` power of its quotient
+    /// factors (0 when none has a pole), and the rows whose `h_j` vanishes
+    /// (IRH-DEPTH, [`super::depth`]).
     #[allow(clippy::type_complexity)]
     fn ir_outer_integrated(
         &mut self,
         hard: &RStarIntegrand,
         forests: &[IrForestTerm],
         rows: &[(Atom, Atom, usize)],
-    ) -> Result<std::result::Result<(Atom, String, i64, Vec<usize>), String>> {
+    ) -> Result<std::result::Result<(Atom, String, Vec<i64>, Vec<usize>), String>> {
         use symbolica::{function, id::Replacement};
         // tests: a panic after the hard part's records (`with_outer_panic`)
         #[cfg(test)]
@@ -2906,7 +2967,7 @@ impl<'a> Evaluation<'a> {
         let placeholder = symbolica::symbol!("ir_hard_child_integral");
         let mut assembled = Vec::new();
         let mut uses = 0_usize;
-        let mut valuation = 0_i64;
+        let mut valuations = vec![0_i64; rows.len()];
         for forest in forests {
             for (i, (_, insertion, loops)) in rows.iter().enumerate() {
                 let Some(power) = powers[i] else {
@@ -2917,7 +2978,7 @@ impl<'a> Evaluation<'a> {
                         && let Some(pole) =
                             self.ir_quotient_valuation(hard, forest, insertion, degree)
                     {
-                        valuation = valuation.min(pole);
+                        valuations[i] = valuations[i].min(pole);
                     }
                     continue;
                 };
@@ -2970,7 +3031,7 @@ impl<'a> Evaluation<'a> {
                         else {
                             return Ok(Err("quotient_epsilon_power".into()));
                         };
-                        valuation = valuation.min(pole);
+                        valuations[i] = valuations[i].min(pole);
                     }
                     assembled.push(&h * factor * value);
                 }
@@ -3020,7 +3081,7 @@ impl<'a> Evaluation<'a> {
                     .flatten()
                     .collect::<std::collections::BTreeSet<_>>()
             ),
-            valuation,
+            valuations,
             zero_rows,
         )))
     }
@@ -3631,7 +3692,7 @@ impl<'a> Evaluation<'a> {
             // an IR_HARD_CHILD* line: the census parsers count every line
             // with the IR_HARD_CHILD_DEPTH prefix as a depth retry.
             eprintln!(
-                "IR_HARD_DEPTH_SUMMARY graph={} child={} corrections={} bounded={} retried={} raised={} exceeded={} refused={}",
+                "IR_HARD_DEPTH_SUMMARY graph={} child={} corrections={} bounded={} retried={} raised={} exceeded={} refused={} unbounded={} vanished={} unverified={}",
                 self.graph.name,
                 self.plan.root_boundary.is_some(),
                 self.depth.corrections,
@@ -3640,6 +3701,9 @@ impl<'a> Evaluation<'a> {
                 self.depth.raised,
                 self.depth.exceeded,
                 self.depth.refused,
+                self.depth.unbounded,
+                self.depth.vanished,
+                self.depth.unverified,
             );
         }
         let elapsed = self.started.elapsed();
