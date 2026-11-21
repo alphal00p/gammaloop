@@ -16,26 +16,42 @@
 //! goes through the same `RStarIntegrand::finish_tensor` as today's value,
 //! under the same integration id.
 //!
-//! * Off (unset, `""`, `0`, `off`; the default): nothing is built and nothing
-//!   is printed; the hook calls today's body unchanged.
-//! * On: the record's value replaces today's for that remainder; a refusal
-//!   (ours or vakint's) falls back to today's path for that record only, with
-//!   one `UNCONTRACTED ... outcome=declined:<code>` line. Unknown master
+//! * Off (unset, `""`, `0`, `off`; the default): no record is built and
+//!   nothing is printed; the hook calls today's body unchanged (the closed
+//!   children's `closure_data` is still recorded, a clone of their
+//!   normalisation, and the switch is read).
+//! * On: the record's value replaces today's for that remainder. A DESIGNED
+//!   refusal (the closed lists [`DESIGNED_LOCAL`] and [`DESIGNED_VAKINT`])
+//!   falls back to today's path for that record only, with one
+//!   `UNCONTRACTED ... outcome=declined:<code>` line. Any other refusal is
+//!   `outcome=error:<code>` (a bug of the emitter or of vakint's entry): it
+//!   falls back too, unless `GAMMALOOP_UNCONTRACTED_STRICT=1`, which fails
+//!   the diagram (on in the tests and the gate runs). Unknown master
 //!   coefficients are a hard error (the format: an ALARM fails the diagram).
 //! * Check: our attempt first (it changes no state), then today's path; the
 //!   pole parts are compared algebraically (`UNCONTRACTED_CHECK`); a
-//!   difference fails the diagram; today's value is returned.
+//!   difference fails the diagram, and so does an error outcome (a designed
+//!   refusal is the only way a record goes uncompared); today's value is
+//!   returned. Check-mode times are NOT a timing comparison (our attempt runs
+//!   first and warms vakint's caches): use paired off / on runs.
+//!
+//! Every diagram root evaluation prints one `UNCONTRACTED_SUMMARY` line
+//! (attempted, uncontracted, compared, equal, declined and error counts by
+//! code) with the switch on or check.
 //!
 //! Kinds (`root` = K1 root remainders, `child` = K2 UV children, and the
 //! inert `ir-hard`, `quotient`, `surrogate`, `insertion`): the record's kind
-//! is the innermost special scope, else root / child. In this build only
-//! `root` builds records; `child` is accepted and declines `child_not_built`.
-//! While the switch is on or check the Δ-cache key carries
-//! `#uncontracted=<enabled kinds>` ([`cache_key_suffix`]).
+//! is the innermost special scope, else root / child. In this build `root`
+//! and `child` build records (K1: one external folded by σ, the root
+//! closure as projector; K2: every crown edge an independent external, the
+//! closed child's closure as projector or none for an open child).
+//! In mode on the Δ-cache key carries `#uncontracted=<enabled cacheable
+//! kinds>` ([`cache_key_suffix`]; `child` in this build).
 //!
 //! `GAMMALOOP_UNCONTRACTED_DUMP=<dir>` writes every record
 //! (`<dir>/<kind>/<graph>-id<id>-<pid>-<seq>.record.txt`, a drop-in
-//! `input.txt`) and its value (`.value.txt`, schema `u7a-value.v0`).
+//! `input.txt`) and its value (`.value.txt`, schema `u7a-value.v0`), at most
+//! `GAMMALOOP_UNCONTRACTED_DUMP_MAX` records (default 20000) and 1 GiB.
 
 use std::{
     cell::{Cell, RefCell},
@@ -64,7 +80,7 @@ use vakint::{
     Vakint, VakintSettings,
     p_integral::factorized::{
         ClosureRecordValue, ClosureSpec, Endpoint, FactorizedEdge, FactorizedError, FactorizedKind,
-        FactorizedNumerator, FactorizedVertex, Insertion, LineKind, Prefactor, Projector,
+        FactorizedNumerator, FactorizedVertex, Insertion, LineKind, Prefactor, Projector, SoftLeg,
         TaylorOrders, TaylorSpec, evaluate_factorized_closure,
     },
 };
@@ -166,8 +182,7 @@ impl Kind {
     }
 
     /// Whether this build emits records of this kind (the others are
-    /// accepted and inert). `child` is accepted and declines
-    /// `child_not_built` until the K2 emitter lands.
+    /// accepted and inert).
     pub(crate) fn implemented(self) -> bool {
         matches!(self, Self::Root | Self::Child)
     }
@@ -263,10 +278,20 @@ impl Switch {
             .collect()
     }
 
-    /// `#uncontracted=<enabled kinds>` while on or check with at least one
-    /// enabled kind; `None` otherwise (the Δ-cache key is then today's).
+    /// `#uncontracted=<enabled cacheable kinds>` in mode on with at least one
+    /// enabled kind whose values can reach the Δ cache (`child`, `quotient`,
+    /// `surrogate`, `insertion`; a root value never does); `None` otherwise,
+    /// check mode included (every value is then today's), so the Δ-cache key
+    /// is today's (U7a review M2).
     pub(crate) fn cache_key_suffix(self) -> Option<String> {
-        let kinds = self.enabled_kinds();
+        if self.mode != Mode::On {
+            return None;
+        }
+        let kinds = self
+            .enabled_kinds()
+            .into_iter()
+            .filter(|kind| *kind != Kind::Root && *kind != Kind::IrHard)
+            .collect::<Vec<_>>();
         (!kinds.is_empty()).then(|| format!("#uncontracted={}", join_kinds(&kinds)))
     }
 
@@ -307,7 +332,11 @@ fn environment() -> Switch {
         };
         let switch = Switch::parse(value.as_deref()).unwrap_or_else(|error| panic!("{error}"));
         if switch.mode != Mode::Off {
-            eprintln!("{}", switch.line());
+            eprintln!(
+                "{} strict={}",
+                switch.line(),
+                u8::from(strict_environment())
+            );
         }
         switch
     });
@@ -418,9 +447,9 @@ impl ChildClosure {
 #[derive(Clone, Debug)]
 pub(super) struct ClosureData {
     pub kind: ChildClosure,
-    #[allow(dead_code)] // read by the K2 emitter (after the skeleton)
     pub normalization: Atom,
-    #[allow(dead_code)] // read by the K2 emitter (after the skeleton)
+    /// The open slot (diagnostics; vakint derives `open` from the record).
+    #[allow(dead_code)]
     pub open: Option<Atom>,
 }
 
@@ -437,8 +466,7 @@ pub(super) struct Site<'a> {
     pub closure_data: Option<&'a ClosureData>,
     /// Whether the evaluation has a root projector (callback).
     pub root_projector: bool,
-    /// The carriers of the outer Taylor step (the K2 emitter's crown).
-    #[allow(dead_code)]
+    /// The carriers of the outer Taylor step (the K2 record's crown).
     pub root_edges: &'a [EdgeIndex],
     pub reference_mass_squared: Symbol,
     pub auxiliary_mass_squared: &'a Atom,
@@ -446,7 +474,7 @@ pub(super) struct Site<'a> {
     pub vakint: &'a Vakint,
     pub uv_settings: &'a UVgenerationSettings,
     pub top_mass: Option<TopMassTerms>,
-    /// The settings' ε (the K2 emitter's insertion poles).
+    /// The settings' ε (diagnostics).
     #[allow(dead_code)]
     pub epsilon: Symbol,
     /// Which route today's path takes (`boundary`, `whole`,
@@ -454,34 +482,121 @@ pub(super) struct Site<'a> {
     pub today: String,
 }
 
-/// A record that is not built or not evaluated: today's path takes it.
+/// A record that is not built or not evaluated: today's path takes it when
+/// the refusal is DESIGNED ([`DESIGNED_LOCAL`], [`DESIGNED_VAKINT`]); any
+/// other is an error (U7a review B1).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct Decline {
     pub code: String,
     pub detail: String,
+    /// A designed refusal (the closed lists), not a bug.
+    pub designed: bool,
 }
+
+/// The emitter's designed refusals (U7a review B1), a CLOSED list: a record
+/// the format or this build does not state. Every other local code
+/// (`routing`, `missing_child`, `product_mismatch`, `text`, `taylor`,
+/// `closure_data_missing`, `normalisation_mismatch`, `finish_tensor`,
+/// `vakint:Empty`, ...) is a bug of the emitter or of the site:
+/// `outcome=error:<code>`.
+pub(super) const DESIGNED_LOCAL: &[&str] = &[
+    "pint6_dump",
+    "zero_loops",
+    "kind_not_built",
+    "child_not_built",
+    "open_root",
+    "root_normalisation_opaque",
+    "root_normalisation_momentum",
+    "additional_normalization",
+    "top_mass_mode",
+    "insertion_mass_symbol",
+    "insertions_share_a_vertex",
+    "sigma",
+    "no_closing_line",
+    "root_crown_paired",
+];
+
+/// vakint's designed refusals, matched by the error variant AND the prefix of
+/// its detail (`(variant, detail prefix, code)`; the code is `vakint:<code>`):
+/// the rows of WH-RECORD-FORMAT v1.4 section 8 a K1 / K2 record can reach,
+/// and `all_massive`, the explicit refusal of the closure entry for a
+/// remainder whose only line is the closing one (a massive tadpole: vakint
+/// closure.rs `prepare`, "every line is massive: not a closure"; NOT a
+/// section-8 row, flagged to helper VH). Every other vakint error (the
+/// internal failures the entry wraps as `Closure`, the reader's `Text*`,
+/// `IndexUncontracted`, `MomentumNotConserved`, ...) is an error:
+/// `outcome=error:vakint:<Variant>`.
+pub(super) const DESIGNED_VAKINT: &[(&str, &str, &str)] = &[
+    ("Closure", "Taylor degree ", "taylor_degree"),
+    ("Closure", "the projector contains Q(", "projector_momentum"),
+    ("Ports", "a compact slash gamma(", "compact_slash"),
+    ("Closure", "open slot ", "open_spinor"),
+    (
+        "Insertion",
+        "contains a mass symbol",
+        "insertion_mass_symbol",
+    ),
+    ("Insertion", "the factor has ", "insertion_slots"),
+    (
+        "Closure",
+        "every line is massive: not a closure",
+        "all_massive",
+    ),
+    ("Gamma5", "", "gamma5"),
+    ("LeviCivita", "", "levi_civita"),
+];
 
 impl Decline {
     fn new(code: impl Into<String>, detail: impl Into<String>) -> Self {
+        let code = code.into();
         Self {
-            code: code.into(),
+            designed: DESIGNED_LOCAL.contains(&code.as_str()),
+            code,
             detail: detail.into(),
         }
     }
 
-    /// A refusal of vakint's frozen reader or entry, by error variant.
-    fn vakint(error: &FactorizedError) -> Self {
-        Self::new(format!("vakint:{}", variant(error)), error.to_string())
+    /// A refusal of vakint's frozen reader or entry: designed when its
+    /// variant and detail prefix are a row of [`DESIGNED_VAKINT`], else an
+    /// error by variant.
+    pub(super) fn vakint(error: &FactorizedError) -> Self {
+        let (name, detail) = variant_detail(error);
+        let row = DESIGNED_VAKINT.iter().find(|(variant, prefix, _)| {
+            *variant == name && detail.is_some_and(|detail| detail.starts_with(prefix))
+        });
+        match row {
+            Some((_, _, code)) => Self {
+                code: format!("vakint:{code}"),
+                detail: error.to_string(),
+                designed: true,
+            },
+            None => Self {
+                code: format!("vakint:{name}"),
+                detail: error.to_string(),
+                designed: false,
+            },
+        }
     }
 }
 
-/// The variant name of a vakint factorised error (`Closure`, `Ports`, ...).
-fn variant(error: &FactorizedError) -> String {
-    format!("{error:?}")
-        .split([' ', '{', '('])
-        .next()
-        .unwrap_or("Unknown")
-        .to_owned()
+/// The variant name of a vakint factorised error (`Closure`, `Ports`, ...)
+/// and its `detail` field ("" for the variants matched by name only).
+fn variant_detail(error: &FactorizedError) -> (String, Option<&str>) {
+    match error {
+        FactorizedError::Closure { detail } => ("Closure".into(), Some(detail)),
+        FactorizedError::Ports { detail } => ("Ports".into(), Some(detail)),
+        FactorizedError::Insertion { detail, .. } => ("Insertion".into(), Some(detail)),
+        FactorizedError::Gamma5 { .. } => ("Gamma5".into(), Some("")),
+        FactorizedError::LeviCivita { .. } => ("LeviCivita".into(), Some("")),
+        other => (
+            format!("{other:?}")
+                .split([' ', '{', '('])
+                .next()
+                .unwrap_or("Unknown")
+                .to_owned(),
+            None,
+        ),
+    }
 }
 
 /// Whether vakint's error text is the unknown-master refusal (strict
@@ -501,7 +616,22 @@ pub(super) enum Outcome {
     Value(Atom),
     /// A child counterterm Δ is literally zero: the value is 0, no call.
     Zero,
+    /// A designed refusal: today's path takes the record.
     Declined(Decline),
+    /// Any other refusal (a bug on either side): check mode fails the
+    /// diagram; mode on takes today's path, or fails under
+    /// `GAMMALOOP_UNCONTRACTED_STRICT=1`.
+    Error(Decline),
+}
+
+impl Outcome {
+    fn refused(decline: Decline) -> Self {
+        if decline.designed {
+            Self::Declined(decline)
+        } else {
+            Self::Error(decline)
+        }
+    }
 }
 
 /// One record attempt at the hook, with everything its log line, its dump
@@ -518,6 +648,15 @@ pub(super) struct Attempt {
     pub outcome: Outcome,
     /// The log fields after `loops=` of a record vakint evaluated.
     fields: String,
+    /// Our build (routing, record, round trip), vakint's entry and our
+    /// `finish_tensor`, in seconds (0 when not reached).
+    pub build_seconds: f64,
+    pub evaluate_seconds: f64,
+    pub finish_seconds: f64,
+    /// vakint::timing over the entry.
+    pub delta: Option<vakint::timing::Delta>,
+    /// Insertions rewritten by the Δ momentum-conservation step.
+    pub conserved: usize,
 }
 
 impl Attempt {
@@ -526,8 +665,13 @@ impl Attempt {
         match &self.outcome {
             Outcome::Value(value) => Some(value.clone()),
             Outcome::Zero => Some(Atom::Zero),
-            Outcome::Declined(_) => None,
+            Outcome::Declined(_) | Outcome::Error(_) => None,
         }
+    }
+
+    /// Whether the attempt is an error (not a designed refusal).
+    pub(super) fn is_error(&self) -> bool {
+        matches!(self.outcome, Outcome::Error(_))
     }
 
     fn outcome_name(&self) -> String {
@@ -535,6 +679,7 @@ impl Attempt {
             Outcome::Value(_) => "uncontracted".into(),
             Outcome::Zero => "zero".into(),
             Outcome::Declined(decline) => format!("declined:{}", decline.code),
+            Outcome::Error(decline) => format!("error:{}", decline.code),
         }
     }
 }
@@ -559,26 +704,26 @@ pub(super) fn attempt(
         loops: region.loops,
         closure: closure_name(site, kind),
         text: None,
-        outcome: Outcome::Declined(Decline::new("unbuilt", "")),
+        outcome: Outcome::Error(Decline::new("unbuilt", "")),
         fields: String::new(),
+        build_seconds: 0.0,
+        evaluate_seconds: 0.0,
+        finish_seconds: 0.0,
+        delta: None,
+        conserved: 0,
     };
     let built = if super::pint6_dump::settings().is_some() {
         Err(Decline::new(
             "pint6_dump",
             "PINT6 dumps keep today's records",
         ))
-    } else if kind == Kind::Child {
-        Err(Decline::new(
-            "child_not_built",
-            "the K2 emitter is not in this build",
-        ))
-    } else if kind != Kind::Root {
+    } else if !matches!(kind, Kind::Root | Kind::Child) {
         Err(Decline::new("kind_not_built", kind.as_str()))
     } else if region.loops == 0 {
         Err(Decline::new("zero_loops", "a zero-loop remainder"))
     } else {
         match remainder() {
-            Ok(remainder) => build_root(site, &remainder, id, mode),
+            Ok(remainder) => build(site, &remainder, kind, id, mode),
             Err(error) => Err(Decline::new("routing", format!("{error:#}"))),
         }
     };
@@ -589,12 +734,15 @@ pub(super) fn attempt(
             return Ok(attempt);
         }
         Err(decline) => {
-            attempt.outcome = Outcome::Declined(decline);
+            attempt.outcome = Outcome::refused(decline);
+            attempt.build_seconds = started.elapsed().as_secs_f64();
             return Ok(attempt);
         }
     };
     let build_seconds = started.elapsed().as_secs_f64();
+    attempt.build_seconds = build_seconds;
     attempt.text = Some(built.text.clone());
+    attempt.conserved = built.conserved;
     let mut settings = site.settings.clone();
     settings.number_of_terms_in_epsilon_expansion = i64::try_from(region.loops)?;
     let prefactor = built.record.prefactor.total();
@@ -608,11 +756,14 @@ pub(super) fn attempt(
     );
     let delta = counted.elapsed();
     let evaluate_seconds = evaluate_started.elapsed().as_secs_f64();
+    attempt.evaluate_seconds = evaluate_seconds;
+    attempt.delta = Some(delta);
     let value = match result {
         Ok(value) => value,
         Err(error) => {
             let text = error.to_string();
             if is_unknown_master_text(&text) {
+                tally_unknown_masters();
                 eprintln!(
                     "UNCONTRACTED kind={} graph={} id={id} outcome=error:unknown_masters detail=\"{}\"",
                     kind.as_str(),
@@ -625,24 +776,24 @@ pub(super) fn attempt(
                     attempt.graph
                 ));
             }
-            attempt.outcome = Outcome::Declined(Decline::vakint(&error));
+            attempt.outcome = Outcome::refused(Decline::vakint(&error));
             return Ok(attempt);
         }
     };
     let Some(record) = value.records.into_iter().next() else {
-        attempt.outcome = Outcome::Declined(Decline::new("vakint:Empty", "no record value"));
+        attempt.outcome = Outcome::refused(Decline::new("vakint:Empty", "no record value"));
         return Ok(attempt);
     };
     let finish_started = Instant::now();
     let finished = match RStarIntegrand::finish_tensor(record.value.clone(), id) {
         Ok(finished) => finished,
         Err(error) => {
-            attempt.outcome =
-                Outcome::Declined(Decline::new("finish_tensor", format!("{error:#}")));
+            attempt.outcome = Outcome::refused(Decline::new("finish_tensor", format!("{error:#}")));
             return Ok(attempt);
         }
     };
     let finish_seconds = finish_started.elapsed().as_secs_f64();
+    attempt.finish_seconds = finish_seconds;
     let wall_seconds = started.elapsed().as_secs_f64();
     attempt.fields = timing_fields(
         site,
@@ -672,11 +823,18 @@ pub(super) fn attempt(
     Ok(attempt)
 }
 
+/// The closure of the record's label and log line, from the actual closure:
+/// a closed child's kind; the root's `metric` when its closure is one metric
+/// `g(a, b)`, else `closed`; `none` without a closure.
 fn closure_name(site: &Site<'_>, kind: Kind) -> &'static str {
-    match (kind, site.closure_data) {
-        (Kind::Root, _) => "metric",
-        (_, Some(data)) => data.kind.as_str(),
-        (_, None) if site.root_closure.is_some() => "closed",
+    let metric = |closure: &Atom| {
+        matches!(closure.as_view(), AtomView::Fun(f)
+            if f.get_nargs() == 2 && f.get_symbol().get_name().ends_with("::g"))
+    };
+    match (kind, site.closure_data, site.root_closure) {
+        (Kind::Child, Some(data), _) => data.kind.as_str(),
+        (_, _, Some(closure)) if metric(closure) => "metric",
+        (_, _, Some(_)) => "closed",
         _ => "none",
     }
 }
@@ -822,6 +980,158 @@ pub(super) fn check_failure(attempt: &Attempt, check: &Check, epsilon: Symbol) -
     )
 }
 
+/// The error of an attempt whose refusal is not designed
+/// ([`Outcome::Error`]): it fails the diagram in check mode, and in mode on
+/// under `GAMMALOOP_UNCONTRACTED_STRICT=1`.
+pub(super) fn error_failure(attempt: &Attempt, mode: Mode) -> eyre::Report {
+    let (code, detail) = match &attempt.outcome {
+        Outcome::Error(decline) => (decline.code.as_str(), decline.detail.as_str()),
+        _ => ("none", ""),
+    };
+    eyre!(
+        "UNCONTRACTED kind={} graph={} id={} mode={}: outcome=error:{code}: the record is refused for a reason that is not a designed refusal (a bug of the emitter or of vakint's entry): {detail}",
+        attempt.kind.as_str(),
+        attempt.graph,
+        attempt.id,
+        mode.as_str()
+    )
+}
+
+// ---------------------------------------------------------------------------
+// GAMMALOOP_UNCONTRACTED_STRICT and the per-diagram summary
+// ---------------------------------------------------------------------------
+
+/// The environment variable of the strict switch.
+pub(crate) const STRICT_VARIABLE: &str = "GAMMALOOP_UNCONTRACTED_STRICT";
+
+/// `GAMMALOOP_UNCONTRACTED_STRICT` (`1`/`on`; unset, `""`, `0`, `off`: not
+/// strict): in mode on an error outcome fails the diagram instead of taking
+/// today's path (check mode always fails it). Read once; a bad value
+/// panics.
+fn strict_environment() -> bool {
+    static STRICT: LazyLock<bool> = LazyLock::new(|| match std::env::var(STRICT_VARIABLE) {
+        Err(std::env::VarError::NotPresent) => false,
+        Ok(value) => match value.trim() {
+            "" | "0" | "off" => false,
+            "1" | "on" => true,
+            other => panic!("{STRICT_VARIABLE} must be 0, 1, off or on, not `{other}`"),
+        },
+        Err(std::env::VarError::NotUnicode(value)) => {
+            panic!("{STRICT_VARIABLE}={value:?} is not unicode")
+        }
+    });
+    *STRICT
+}
+
+thread_local! {
+    static TEST_STRICT: Cell<Option<bool>> = const { Cell::new(None) };
+}
+
+/// Whether an error outcome fails the diagram in mode on.
+pub(crate) fn strict() -> bool {
+    TEST_STRICT
+        .with(Cell::get)
+        .unwrap_or_else(strict_environment)
+}
+
+/// Tests: run `f` with the strict switch `strict` on this thread.
+#[cfg(test)]
+pub(crate) fn with_strict<T>(strict: bool, f: impl FnOnce() -> T) -> T {
+    struct Restore(Option<bool>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let previous = self.0;
+            TEST_STRICT.with(|slot| slot.set(previous));
+        }
+    }
+    let _restore = Restore(TEST_STRICT.with(|slot| slot.replace(Some(strict))));
+    f()
+}
+
+/// The outcomes reported on this thread since the last summary.
+#[derive(Clone, Debug, Default)]
+struct Tally {
+    attempted: usize,
+    uncontracted: usize,
+    zero: usize,
+    compared: usize,
+    equal: usize,
+    declined: BTreeMap<String, usize>,
+    error: BTreeMap<String, usize>,
+}
+
+thread_local! {
+    static TALLY: RefCell<Tally> = RefCell::new(Tally::default());
+}
+
+fn tally(attempt: &Attempt, check: Option<&Check>) {
+    TALLY.with(|slot| {
+        let mut tally = slot.borrow_mut();
+        tally.attempted += 1;
+        match &attempt.outcome {
+            Outcome::Value(_) => tally.uncontracted += 1,
+            Outcome::Zero => tally.zero += 1,
+            Outcome::Declined(decline) => {
+                *tally.declined.entry(decline.code.clone()).or_default() += 1
+            }
+            Outcome::Error(decline) => *tally.error.entry(decline.code.clone()).or_default() += 1,
+        }
+        if let Some(check) = check {
+            tally.compared += 1;
+            tally.equal += usize::from(check.equal);
+        }
+    });
+}
+
+/// The unknown-master hard error, counted in the summary.
+pub(super) fn tally_unknown_masters() {
+    TALLY.with(|slot| {
+        let mut tally = slot.borrow_mut();
+        tally.attempted += 1;
+        *tally.error.entry("unknown_masters".into()).or_default() += 1;
+    });
+}
+
+/// `UNCONTRACTED_SUMMARY graph= mode= attempted= uncontracted= zero=
+/// compared= equal= declined=<code:n,..|none> error=<code:n,..|none>
+/// outcome=<ok|error>`: one line per diagram root evaluation (its UV
+/// children's records included), printed by the root's `counterterm` when
+/// the switch is on or check and something was attempted; the tally is
+/// reset. Nested evaluations (children, quotients, IR hard parts,
+/// surrogates) add to the enclosing root's line.
+pub(super) fn log_summary(graph: &str, ok: bool) {
+    let switch = switch();
+    if switch.mode == Mode::Off || classify(false) != Kind::Root {
+        return;
+    }
+    let tally = TALLY.with(|slot| std::mem::take(&mut *slot.borrow_mut()));
+    if tally.attempted == 0 {
+        return;
+    }
+    let list = |map: &BTreeMap<String, usize>| {
+        if map.is_empty() {
+            "none".to_owned()
+        } else {
+            map.iter()
+                .map(|(code, n)| format!("{code}:{n}"))
+                .collect::<Vec<_>>()
+                .join(",")
+        }
+    };
+    eprintln!(
+        "UNCONTRACTED_SUMMARY graph={graph} mode={} attempted={} uncontracted={} zero={} compared={} equal={} declined={} error={} outcome={}",
+        switch.mode.as_str(),
+        tally.attempted,
+        tally.uncontracted,
+        tally.zero,
+        tally.compared,
+        tally.equal,
+        list(&tally.declined),
+        list(&tally.error),
+        if ok { "ok" } else { "error" }
+    );
+}
+
 /// The log lines, the dump and the test capture of one attempt (and its
 /// check in check mode).
 pub(super) fn report(attempt: &Attempt, check: Option<&Check>) {
@@ -837,10 +1147,16 @@ pub(super) fn report(attempt: &Attempt, check: Option<&Check>) {
     match &attempt.outcome {
         Outcome::Value(_) => eprintln!("{head}{}", attempt.fields),
         Outcome::Zero => eprintln!("{head}"),
-        Outcome::Declined(decline) => {
-            eprintln!("{head} detail=\"{}\"", escape(&decline.detail))
+        Outcome::Declined(decline) | Outcome::Error(decline) => {
+            eprintln!(
+                "{head} build_s={:.3} evaluate_s={:.3} detail=\"{}\"",
+                attempt.build_seconds,
+                attempt.evaluate_seconds,
+                escape(&decline.detail)
+            )
         }
     }
+    tally(attempt, check);
     if let Some(check) = check {
         eprintln!(
             "UNCONTRACTED_CHECK kind={} graph={} id={} identical={} equal={} full={} contracted_s={:.3} uncontracted_s={:.3}",
@@ -901,18 +1217,53 @@ pub(super) fn value_text(attempt: &Attempt, check: Option<&Check>) -> String {
         lines.push(format!("identical\t{}", check.identical));
         lines.push(format!("equal\t{}", check.equal));
     }
-    if let Outcome::Declined(decline) = &attempt.outcome {
+    if let Outcome::Declined(decline) | Outcome::Error(decline) = &attempt.outcome {
         lines.push(format!("detail\t{}", escape(&decline.detail)));
     }
     lines.push("end".to_owned());
     lines.join("\n") + "\n"
 }
 
+/// `GAMMALOOP_UNCONTRACTED_DUMP_MAX=<records>` (default 20000): at most that
+/// many attempts are dumped per process, and at most 1 GiB of record text in
+/// all (a five-loop record is MBs); the first refused dump prints one
+/// `UNCONTRACTED_DUMP cap reached` line (U7a review M5).
+fn dump_cap() -> usize {
+    static CAP: LazyLock<usize> = LazyLock::new(|| {
+        std::env::var("GAMMALOOP_UNCONTRACTED_DUMP_MAX")
+            .ok()
+            .map(|value| {
+                value.trim().parse::<usize>().unwrap_or_else(|_| {
+                    panic!("GAMMALOOP_UNCONTRACTED_DUMP_MAX must be a count, not `{value}`")
+                })
+            })
+            .unwrap_or(20_000)
+    });
+    *CAP
+}
+
+const DUMP_MAX_BYTES: usize = 1 << 30;
+
+static DUMPED_BYTES: AtomicUsize = AtomicUsize::new(0);
+
 fn dump(attempt: &Attempt, check: Option<&Check>) {
     let Some(directory) = dump_directory() else {
         return;
     };
     let n = SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let bytes = attempt.text.as_ref().map_or(0, String::len);
+    if n >= dump_cap() || DUMPED_BYTES.fetch_add(bytes, Ordering::Relaxed) + bytes > DUMP_MAX_BYTES
+    {
+        static WARNED: std::sync::Once = std::sync::Once::new();
+        WARNED.call_once(|| {
+            eprintln!(
+                "UNCONTRACTED_DUMP cap reached (records={} max={} max_bytes={DUMP_MAX_BYTES}): later attempts are not dumped",
+                n,
+                dump_cap()
+            )
+        });
+        return;
+    }
     let folder = format!("{directory}/{}", attempt.kind.as_str());
     let _ = std::fs::create_dir_all(&folder);
     let name: String = attempt
@@ -950,6 +1301,7 @@ pub(crate) struct Captured {
     pub contracted: Option<Atom>,
     pub identical: Option<bool>,
     pub equal: Option<bool>,
+    pub conserved: usize,
 }
 
 #[cfg(test)]
@@ -971,6 +1323,7 @@ fn capture(attempt: &Attempt, check: Option<&Check>) {
                 contracted: check.map(|check| check.contracted.clone()),
                 identical: check.map(|check| check.identical),
                 equal: check.map(|check| check.equal),
+                conserved: attempt.conserved,
             });
         }
     });
@@ -1360,40 +1713,176 @@ pub(super) fn conserve(delta: &Atom, node: usize, edges: &[FactorizedEdge]) -> O
     )
 }
 
-fn mentions_mass(atom: &Atom, masses: &[Symbol]) -> bool {
-    masses.iter().any(|mass| atom.contains_symbol(*mass))
+/// The mass symbols of a record whose occurrence in an insertion vakint
+/// refuses ("contains a mass symbol"), as vakint's `mass_symbol_in`
+/// (factorized.rs): every symbol of an edge's mass, and R*'s reference and
+/// auxiliary mass symbols by name (U7a review I5).
+fn insertion_masses(edges: &[FactorizedEdge]) -> BTreeSet<String> {
+    let mut masses = BTreeSet::new();
+    for edge in edges {
+        edge.mass_squared.as_view().visitor(&mut |part| {
+            if let AtomView::Var(v) = part {
+                masses.insert(v.get_symbol().get_name().to_string());
+            }
+            true
+        });
+    }
+    masses
 }
 
-/// The K1 record of one root remainder (`Ok(None)`: a zero insertion).
-fn build_root(
-    site: &Site<'_>,
+/// Whether `atom` contains a mass symbol of [`insertion_masses`] (or one of
+/// R*'s reference / auxiliary mass symbols by name).
+fn mentions_mass(atom: &Atom, masses: &BTreeSet<String>) -> bool {
+    let mut found = false;
+    atom.as_view().visitor(&mut |part| {
+        if let AtomView::Var(v) = part {
+            let symbol = v.get_symbol();
+            let name = symbol.get_name();
+            if masses.contains(name)
+                || name.ends_with("::rstar_reference_mass_squared")
+                || name.ends_with("::rstar_mass_squared")
+            {
+                found = true;
+            }
+        }
+        !found
+    });
+    found
+}
+
+/// How a record states its externals and its closure (U7a-DESIGN 4.1).
+enum Frame<'s> {
+    /// K1: one external `p(1) = Q(x0)`; σ folds every root leg onto ±p(1);
+    /// the root closure is the projector with the c-split.
+    Root {
+        closure: &'s Atom,
+        closed_root: &'s ClosedRootNormalization,
+    },
+    /// K2: every crown edge `x_j` is its own independent `p(j)` (sorted);
+    /// the projector is the closed child's closure (`p2_power=0`, its
+    /// normalisation in `prefactor_scalars`), or none for an open child.
+    Child {
+        externals: Vec<usize>,
+        projector: Option<(Atom, Atom)>,
+    },
+}
+
+/// The K2 frame of a child remainder: its crown and its closure.
+fn child_frame<'s>(
+    site: &Site<'s>,
     remainder: &RStarIntegrand,
-    id: usize,
-    mode: Mode,
-) -> std::result::Result<Option<Built>, Decline> {
-    let graph = site.graph;
-    let region = &site.term.remainder;
-    let (Some(closure), true) = (site.root_closure, site.root_projector) else {
-        return Err(Decline::new("open_root", "no root closure or projector"));
-    };
-    let Some(closed_root) = site.closed_root else {
-        return Err(Decline::new(
-            "root_normalisation_opaque",
-            "a root projector without the closed-root normalisation as data",
-        ));
-    };
-    if site.top_mass != Some(TopMassTerms::Keep) {
+) -> std::result::Result<Frame<'s>, Decline> {
+    if site.top_mass.is_some_and(|mode| mode != TopMassTerms::Keep) {
         return Err(Decline::new(
             "top_mass_mode",
             format!("top-mass terms {:?}", site.top_mass),
         ));
     }
+    let externals = site
+        .root_edges
+        .iter()
+        .map(|edge| usize::from(*edge))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let soft = remainder
+        .soft_edges()
+        .iter()
+        .map(|edge| usize::from(*edge))
+        .collect::<BTreeSet<_>>();
+    if soft != externals.iter().copied().collect::<BTreeSet<_>>() {
+        return Err(Decline::new(
+            "routing",
+            format!(
+                "the crown {externals:?} is not the remainder's soft edges {:?}",
+                soft
+            ),
+        ));
+    }
+    if externals.is_empty() {
+        return Err(Decline::new("routing", "a child without crown edges"));
+    }
+    let projector = match (site.root_closure, site.root_projector, site.closure_data) {
+        (None, false, _) => None,
+        (Some(closure), true, Some(data)) => {
+            if let Some(closed_root) = site.closed_root
+                && closed_root.factor != data.normalization
+                && !(&closed_root.factor - &data.normalization)
+                    .expand()
+                    .is_zero()
+            {
+                return Err(Decline::new(
+                    "normalisation_mismatch",
+                    format!(
+                        "closed child factor {} against the closure normalisation {}",
+                        closed_root.factor, data.normalization
+                    ),
+                ));
+            }
+            Some((closure.clone(), data.normalization.clone()))
+        }
+        (closure, projector, _) => {
+            return Err(Decline::new(
+                "closure_data_missing",
+                format!(
+                    "a child closure {} with a projector {projector} and no closure data",
+                    closure.map_or_else(|| "none".to_owned(), |c| c.to_canonical_string())
+                ),
+            ));
+        }
+    };
+    Ok(Frame::Child {
+        externals,
+        projector,
+    })
+}
+
+/// The record of one K1 root or K2 child remainder (`Ok(None)`: a zero
+/// insertion).
+fn build(
+    site: &Site<'_>,
+    remainder: &RStarIntegrand,
+    kind: Kind,
+    id: usize,
+    mode: Mode,
+) -> std::result::Result<Option<Built>, Decline> {
+    let graph = site.graph;
+    let region = &site.term.remainder;
     if site.uv_settings.vakint.additional_normalization.trim() != "1" {
         return Err(Decline::new(
             "additional_normalization",
             site.uv_settings.vakint.additional_normalization.clone(),
         ));
     }
+    let frame = match kind {
+        Kind::Root => {
+            let (Some(closure), true) = (site.root_closure, site.root_projector) else {
+                return Err(Decline::new("open_root", "no root closure or projector"));
+            };
+            let Some(closed_root) = site.closed_root else {
+                return Err(Decline::new(
+                    "root_normalisation_opaque",
+                    "a root projector without the closed-root normalisation as data",
+                ));
+            };
+            if site.top_mass != Some(TopMassTerms::Keep) {
+                return Err(Decline::new(
+                    "top_mass_mode",
+                    format!("top-mass terms {:?}", site.top_mass),
+                ));
+            }
+            Frame::Root {
+                closure,
+                closed_root,
+            }
+        }
+        Kind::Child => child_frame(site, remainder)?,
+        other => return Err(Decline::new("kind_not_built", other.as_str())),
+    };
+    let externals = match &frame {
+        Frame::Root { closed_root, .. } => vec![usize::from(closed_root.external)],
+        Frame::Child { externals, .. } => externals.clone(),
+    };
     let basis = remainder.basis();
     let loop_edges = basis
         .loop_edges
@@ -1411,30 +1900,49 @@ fn build_root(
         ));
     }
     let loops = loop_edges.len();
+    let width = loops + externals.len();
     let loop_index = loop_edges
         .iter()
         .enumerate()
         .map(|(i, edge)| (*edge, i))
         .collect::<BTreeMap<_, _>>();
     let marked = site.plan.marked_edge;
-    let x0 = closed_root.external;
-    let x0_momentum = function!(GS.emr_mom, usize::from(x0));
-    // σ: every leg -> ±Q(x0)
-    let sign_of = |edge: usize| -> std::result::Result<i64, Decline> {
-        let image = function!(GS.emr_mom, edge).replace_multiple(&closed_root.external_routing);
-        if image == x0_momentum {
-            Ok(1)
-        } else if image == -x0_momentum.clone() {
-            Ok(-1)
-        } else {
-            Err(Decline::new(
-                "sigma",
-                format!("sigma maps Q({edge}) to {image}, not ±Q({x0:?})"),
-            ))
+    // The external slot of a crown momentum Q(e): K1 σ (every leg ->
+    // ±Q(x0) = ±p(1)); K2 the crown edge's own p(j).
+    let slot_of = |edge: usize| -> std::result::Result<(usize, i64), Decline> {
+        match &frame {
+            Frame::Root { closed_root, .. } => {
+                let x0 = function!(GS.emr_mom, usize::from(closed_root.external));
+                let image =
+                    function!(GS.emr_mom, edge).replace_multiple(&closed_root.external_routing);
+                if image == x0 {
+                    Ok((loops, 1))
+                } else if image == -x0.clone() {
+                    Ok((loops, -1))
+                } else {
+                    Err(Decline::new(
+                        "sigma",
+                        format!(
+                            "sigma maps Q({edge}) to {image}, not ±Q({})",
+                            usize::from(closed_root.external)
+                        ),
+                    ))
+                }
+            }
+            Frame::Child { externals, .. } => externals
+                .iter()
+                .position(|x| *x == edge)
+                .map(|j| (loops + j, 1))
+                .ok_or_else(|| {
+                    Decline::new(
+                        "routing",
+                        format!("Q({edge}) is not a crown momentum {externals:?}"),
+                    )
+                }),
         }
     };
     let vector = |edge: EdgeIndex| -> std::result::Result<Vec<i64>, Decline> {
-        let mut out = vec![0i64; loops + 1];
+        let mut out = vec![0i64; width];
         let loop_part = basis.loop_atom::<Atom>(edge, GS.emr_mom, &[], true);
         let ext_part = basis.ext_atom::<Atom>(edge, GS.emr_mom, &[], true);
         let parse = |part: &Atom| {
@@ -1455,7 +1963,8 @@ fn build_root(
             out[*i] += c;
         }
         for (e, c) in parse(&ext_part)? {
-            out[loops] += c * sign_of(e)?;
+            let (slot, sign) = slot_of(e)?;
+            out[slot] += c * sign;
         }
         Ok(out)
     };
@@ -1511,40 +2020,62 @@ fn build_root(
     let mut ends = Vec::<(usize, usize)>::new();
     let mut legs = BTreeSet::new();
     for (pair, edge, _) in graph.iter_edges_of(&region.boundary) {
-        let HedgePair::Unpaired { hedge, flow } = pair else {
-            return Err(Decline::new(
-                "root_crown_paired",
-                format!("crown edge {} has both ends in the root", usize::from(edge)),
-            ));
-        };
         let id = usize::from(edge);
-        let h = usize::from(hedge);
-        let raw_node = graph.node_id(hedge);
-        let raw = usize::from(raw_node);
-        node_index.insert(raw, raw_node);
-        let v = image(raw);
-        let mut momentum = vec![0i64; loops + 1];
-        momentum[loops] = sign_of(id)?;
-        let (source, target, source_hedge, target_hedge) = match flow {
-            Flow::Sink => (Endpoint::External, Endpoint::Vertex(v), None, Some(h)),
-            Flow::Source => (Endpoint::Vertex(v), Endpoint::External, Some(h), None),
-        };
         let info = &table[&id];
-        edges.push(FactorizedEdge {
-            id,
-            source,
-            target,
-            source_hedge,
-            target_hedge,
-            particle: info.particle.clone(),
-            line: info.line,
-            power: 1,
-            mass_squared: Atom::Zero,
-            momentum,
-            factor: Atom::num(1),
-        });
-        ends.push((v, h));
-        legs.insert(h);
+        let (slot, sign) = slot_of(id)?;
+        let mut momentum = vec![0i64; width];
+        momentum[slot] = sign;
+        // (record id, the crown half-edge, whether the leg enters the scope)
+        let pieces = match (pair, &frame) {
+            (HedgePair::Unpaired { hedge, flow }, _) => vec![(id, hedge, flow == Flow::Sink)],
+            (
+                HedgePair::Split {
+                    source,
+                    sink,
+                    split,
+                },
+                Frame::Child { .. },
+            ) => match split {
+                Flow::Sink => vec![(id, sink, true)],
+                Flow::Source => vec![(id, source, false)],
+            },
+            (HedgePair::Paired { source, sink }, Frame::Child { .. }) => {
+                vec![(id, source, false), (100_000 + id, sink, true)]
+            }
+            _ => {
+                return Err(Decline::new(
+                    "root_crown_paired",
+                    format!("crown edge {id} has both ends in the root"),
+                ));
+            }
+        };
+        for (record_id, hedge, inward) in pieces {
+            let h = usize::from(hedge);
+            let raw_node = graph.node_id(hedge);
+            let raw = usize::from(raw_node);
+            node_index.insert(raw, raw_node);
+            let v = image(raw);
+            let (source, target, source_hedge, target_hedge) = if inward {
+                (Endpoint::External, Endpoint::Vertex(v), None, Some(h))
+            } else {
+                (Endpoint::Vertex(v), Endpoint::External, Some(h), None)
+            };
+            edges.push(FactorizedEdge {
+                id: record_id,
+                source,
+                target,
+                source_hedge,
+                target_hedge,
+                particle: info.particle.clone(),
+                line: info.line,
+                power: 1,
+                mass_squared: Atom::Zero,
+                momentum: momentum.clone(),
+                factor: Atom::num(1),
+            });
+            ends.push((v, h));
+            legs.insert(h);
+        }
     }
     // internal edges
     let reference = Atom::var(site.reference_mass_squared);
@@ -1608,10 +2139,7 @@ fn build_root(
         });
     }
     // insertions
-    let masses = [site.reference_mass_squared]
-        .into_iter()
-        .chain(site.auxiliary_mass_squared.get_symbol())
-        .collect::<Vec<_>>();
+    let masses = insertion_masses(&edges);
     let mut insertions = Vec::new();
     let mut conserved = 0;
     for (node, index) in &nodes {
@@ -1710,7 +2238,35 @@ fn build_root(
         .chain(insertions.iter().map(|insertion| &insertion.factor))
         .collect::<Vec<_>>();
     let ports = slots_of(&factor_atoms, &legs);
-    let (p2_power, scalars) = split_root_factor(&closed_root.factor, usize::from(x0))?;
+    let (projector, scalars) = match &frame {
+        Frame::Root {
+            closure,
+            closed_root,
+        } => {
+            let (p2_power, scalars) =
+                split_root_factor(&closed_root.factor, usize::from(closed_root.external))?;
+            (
+                Some(Projector {
+                    tensor: (*closure).clone(),
+                    p2_power,
+                }),
+                scalars,
+            )
+        }
+        Frame::Child {
+            projector: Some((tensor, normalization)),
+            ..
+        } => (
+            Some(Projector {
+                tensor: tensor.clone(),
+                p2_power: 0,
+            }),
+            normalization.clone(),
+        ),
+        Frame::Child {
+            projector: None, ..
+        } => (None, Atom::num(1)),
+    };
     let internal = table
         .iter()
         .filter(|(_, info)| info.source.is_some() && info.target.is_some())
@@ -1737,8 +2293,10 @@ fn build_root(
             .join(";")
     };
     let label = format!(
-        "u7a kind=root graph={} scope=root:{} term={} remaining={} contracted={contracted_label} marked_edge={} closure=metric id={id}",
+        "u7a kind={} graph={} scope={}:{} term={} remaining={} contracted={contracted_label} marked_edge={} closure={} id={id}",
+        kind.as_str(),
         graph.name,
+        kind.as_str(),
         super::plan::join_edge_ids(&super::plan::uv_child_edge_ids(graph, &region.support)),
         if region.insertions.is_empty() {
             "bare".to_owned()
@@ -1746,9 +2304,25 @@ fn build_root(
             format!("remainder_loops={}", region.loops)
         },
         super::plan::join_edge_ids(&super::plan::uv_child_edge_ids(graph, &region.remaining)),
-        usize::from(marked)
+        usize::from(marked),
+        closure_name(site, kind)
     );
+    let independent = matches!(frame, Frame::Child { .. });
+    let softs = if independent {
+        externals
+            .iter()
+            .enumerate()
+            .map(|(j, edge)| SoftLeg {
+                external: j + 1,
+                edge: *edge,
+                root: true,
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
     let n_insertions = insertions.len();
+    let n_externals = externals.len();
     let record = FactorizedNumerator {
         label: label.replace(['\t', '\n', '\r'], " "),
         kind: FactorizedKind::Closure(ClosureSpec {
@@ -1756,28 +2330,25 @@ fn build_root(
             mass_squared: reference.clone(),
             auxiliary_mass_squared: site.auxiliary_mass_squared.clone(),
             power: 1,
-            independent_externals: false,
+            independent_externals: independent,
             taylor: Some(TaylorSpec {
                 degree,
-                scaled_edges: vec![usize::from(x0)],
+                scaled_edges: externals.clone(),
                 compensate_mass: true,
                 orders: TaylorOrders::All,
             }),
-            softs: Vec::new(),
+            softs,
             original_cycles: Some(original_cycles),
             depth: Some(region.loops),
             weights: Vec::new(),
         }),
         dimension: GS.dim,
         loop_edges: loop_edges.iter().map(|edge| Some(*edge)).collect(),
-        external_edges: vec![Some(usize::from(x0))],
+        external_edges: externals.iter().map(|edge| Some(*edge)).collect(),
         edges,
         vertices,
         ports,
-        projector: Some(Projector {
-            tensor: closure.clone(),
-            p2_power,
-        }),
+        projector,
         prefactor: Prefactor {
             overall: Atom::num(1),
             loop_sign: 1,
@@ -1797,7 +2368,7 @@ fn build_root(
         record,
         text,
         degree,
-        externals: 1,
+        externals: n_externals,
         insertions: n_insertions,
         conserved,
     }))
