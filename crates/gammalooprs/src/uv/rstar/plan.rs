@@ -1222,7 +1222,10 @@ impl RStarPlan {
         // GAMMALOOP_IR_DIRAC_CLOSURE (when on): the child's IR hard parts are
         // closed, in the key as `#ir-dirac-closure={mode}`.
         let key = super::ir_dirac::child_key(key, super::ir_dirac::ir_dirac_mode()?);
-        cache.counterterm_with(graph, support, model, key, || {
+        // GAMMALOOP_UNCONTRACTED_NUMERATOR on / check: the fill is a frame of the
+        // diagram ledger and a hit counts the fill's records (U7a delta); off:
+        // `cache.counterterm_with`
+        super::uncontracted_ledger::through_cache(cache, graph, support, model, key, || {
             let started = Instant::now();
             let plan = Self::for_support(graph, model, support, settings)?
                 .with_uv_children(route)

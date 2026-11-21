@@ -59,6 +59,9 @@ mod taylor;
 mod tests;
 mod top_mass;
 mod uncontracted;
+mod uncontracted_ledger;
+#[cfg(test)]
+mod uncontracted_ledger_tests;
 #[cfg(test)]
 mod uncontracted_oracle_k2_tests;
 #[cfg(test)]
@@ -142,4 +145,23 @@ pub use top_mass::{
     split_enabled as top_mass_split_enabled, top_level_switches_line,
     top_level_switches_provenance, top_mass_terms, validate_top_level_switches,
 };
+pub use uncontracted_ledger::{DiagramLedger, Resumed, resumed as uncontracted_resumed};
 pub use uv::MassiveUvEvaluator;
+
+/// `GAMMALOOP_UNCONTRACTED_NUMERATOR`'s initialisation (call at start-up for
+/// an early error): a bad value, `GAMMALOOP_UNCONTRACTED_STRICT=0`, check
+/// mode with `PINT6_CLOSURE_DUMP`, a kind list without a kind this build
+/// emits or a bad exception list (`GAMMALOOP_UNCONTRACTED_EXCEPTIONS`) is
+/// refused.
+pub fn validate_uncontracted() -> eyre::Result<()> {
+    uncontracted::validate()
+}
+
+/// The identity of `GAMMALOOP_UNCONTRACTED_NUMERATOR` for a checkpoint
+/// (U7a delta, U7a.1 (i)): `None` off (an off checkpoint's identity is
+/// unchanged); else the mode, the enabled kinds, strictness and, in check
+/// mode, the exception list's digest (`check:root,child,ir-hard:strict`).
+pub fn uncontracted_identity() -> eyre::Result<Option<String>> {
+    uncontracted::validate()?;
+    Ok(uncontracted_ledger::current_identity())
+}
