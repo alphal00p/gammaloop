@@ -2136,6 +2136,33 @@ fn g3_exponents_are_integer_literals_in_every_field() {
     .unwrap();
 }
 
+/// m-2: a v3 schema line with trailing spaces or a tab is refused with
+/// advice that names v3 (`TextSyntax`), not as an unknown schema of a reader
+/// that "knows v1"; a v1 text keeps its earlier error.
+#[test]
+fn m2_a_v3_schema_with_trailing_whitespace_names_v3() {
+    let clean = fixture_text("wh-k1-root.record.txt");
+    for pad in ["  ", "\t"] {
+        let variant = clean.replacen(
+            "pint6.factorized-numerator.v3",
+            &format!("pint6.factorized-numerator.v3{pad}"),
+            1,
+        );
+        match FactorizedNumerator::from_text(&variant) {
+            Err(FactorizedError::TextSyntax { line: 1, detail }) => {
+                assert!(
+                    detail.contains(
+                        "has trailing whitespace: write exactly pint6.factorized-numerator.v3"
+                    ),
+                    "{detail}"
+                )
+            }
+            other => panic!("{pad:?}: {other:?}"),
+        }
+    }
+    FactorizedNumerator::from_text(&clean).unwrap();
+}
+
 /// MARKED three-loop massive vacuum values through the vacuum entry in
 /// Symbolic and Numerical mode at 3 and 6 terms: the basketball (four lines
 /// of one mass between two vertices) and the all-massive mercedes (the

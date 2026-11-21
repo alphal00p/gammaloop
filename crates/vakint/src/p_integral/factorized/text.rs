@@ -690,6 +690,14 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
     }
     let found = schema.fields.join("\t");
     let v3 = found == FACTORIZED_SCHEMA_V3;
+    if !v3 && found.trim_end() == FACTORIZED_SCHEMA_V3 {
+        return Err(reader.syntax(
+            schema.number,
+            &format!(
+                "the schema {found:?} has trailing whitespace: write exactly {FACTORIZED_SCHEMA_V3}"
+            ),
+        ));
+    }
     if found != FACTORIZED_SCHEMA && !v3 {
         return Err(FactorizedError::TextSchema {
             line: schema.number,
