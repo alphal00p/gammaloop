@@ -629,13 +629,17 @@ pub(super) const DESIGNED_LOCAL: &[&str] = &[
 
 /// vakint's designed refusals, matched by the error variant AND the prefix of
 /// its detail (`(variant, detail prefix, code)`; the code is `vakint:<code>`):
-/// the rows of WH-RECORD-FORMAT v1.4 section 8 a K1 / K2 record can reach,
-/// and `all_massive`, the explicit refusal of the closure entry for a
-/// remainder whose only line is the closing one (a massive tadpole: vakint
-/// closure.rs `prepare`, "every line is massive: not a closure"; NOT a
-/// section-8 row, flagged to helper VH; the emitter now declines that shape
-/// itself, `one_loop_tree_cut`, before vakint sees it). Every other vakint
-/// error (the internal failures the entry wraps as `Closure`, the reader's
+/// the rows of WH-RECORD-FORMAT v1.4 section 8 a K1 / K2 record can reach.
+///
+/// Interim rule (U7-PLAN requirement 13, until the rebase onto helper VH's
+/// frozen REFUSALS list): a `Closure` refusal is designed ONLY with a
+/// section-8 prefix (`Taylor degree `, `the projector contains Q(`, the
+/// open-spinor port `open slot `); any other `Closure` detail is an error,
+/// among them the entry's wrapped internal failures and "every line is
+/// massive: not a closure" (vakint closure.rs `prepare`: a remainder whose
+/// only line is the closing one; NOT a section-8 row; the emitter declines
+/// that shape itself, `one_loop_tree_cut`, so vakint refusing it means the
+/// emitter's shape test missed one). Every other vakint error (the reader's
 /// `Text*`, `IndexUncontracted`, `MomentumNotConserved`, ...) is an error:
 /// `outcome=error:vakint:<Variant>`.
 ///
@@ -643,11 +647,12 @@ pub(super) const DESIGNED_LOCAL: &[&str] = &[
 /// `taylor_degree` (`ω > 2`; r6 has `ω <= 2`), `open_spinor` (a hard part
 /// whose open quark line the IR Dirac closure does not close:
 /// `GAMMALOOP_IR_DIRAC_CLOSURE=off`, or a declined shape other than r6's
-/// `no_spinor`), `insertion_mass_symbol`, `insertion_slots`, `all_massive`
-/// (a one-loop term whose only remaining line is the closing one), `gamma5`
-/// and `levi_civita`; `projector_momentum` and `compact_slash` cannot occur
-/// (the IR Dirac closure `gamma(c, r, mink(D, nu))` is momentum free, and a
-/// local check makes a momentum in it an error, `ir_dirac_closure`).
+/// `no_spinor`), `insertion_mass_symbol`, `insertion_slots`, `gamma5` and
+/// `levi_civita` (a one-loop term whose only remaining line is the closing
+/// one is the emitter's `one_loop_tree_cut`); `projector_momentum` and
+/// `compact_slash` cannot occur (the IR Dirac closure
+/// `gamma(c, r, mink(D, nu))` is momentum free, and a local check makes a
+/// momentum in it an error, `ir_dirac_closure`).
 pub(super) const DESIGNED_VAKINT: &[(&str, &str, &str)] = &[
     ("Closure", "Taylor degree ", "taylor_degree"),
     ("Closure", "the projector contains Q(", "projector_momentum"),
@@ -659,11 +664,6 @@ pub(super) const DESIGNED_VAKINT: &[(&str, &str, &str)] = &[
         "insertion_mass_symbol",
     ),
     ("Insertion", "the factor has ", "insertion_slots"),
-    (
-        "Closure",
-        "every line is massive: not a closure",
-        "all_massive",
-    ),
     ("Gamma5", "", "gamma5"),
     ("LeviCivita", "", "levi_civita"),
 ];
