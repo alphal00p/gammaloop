@@ -755,8 +755,17 @@ fn independent_reference(
     routing: &[(&str, &str)],
     argument: &Atom,
 ) -> Atom {
+    independent_reference_with(value, routing, argument, settings())
+}
+
+/// [`independent_reference`] with the given settings (another depth).
+fn independent_reference_with(
+    value: &FactorizedNumerator,
+    routing: &[(&str, &str)],
+    argument: &Atom,
+    settings: VakintSettings,
+) -> Atom {
     let vakint = Vakint::new().unwrap();
-    let settings = settings();
     let FactorizedKind::Closure(spec) = &value.kind else {
         unreachable!()
     };
@@ -2348,6 +2357,111 @@ fn a_degree_two_insertion_is_routed_and_truncated_like_a_factor() {
             .is_zero(),
         "insertion {}\nindependent (by hand) {expected}",
         got.records[0].vakint_value
+    );
+}
+
+/// An insertion factor that depends on the dimension outside its slots
+/// through integer powers of sums is a Laurent factor, and its VALUE is right
+/// through the expansion: on a contracted (ct:) vertex of the L2 root,
+/// - `1/((D-1)(D-2))` (a projector normalisation, pole order 0): the entry
+///   equals the INDEPENDENT reference of the record with the factor on the
+///   vertex by hand, at the settings' depth, where the O(ε) terms of
+///   1/((3-2ε)(2-2ε)) multiply the integral's poles (the value with the
+///   factor at ε = 0, 1/6, differs);
+/// - `1/(D-4)` (pole order 1): the entry raises the depth by one; it equals
+///   1/(-2ε) times the independent reference of the record without it one
+///   term deeper, truncated at ε^(depth - L - 1).
+#[test]
+fn dimension_dependent_insertion_factors_equal_the_independent_reference() {
+    let compact = format!("{MINK}({DIM})");
+    let polynomial = atom(&format!(
+        "spenso::dot({},{})+spenso::dot({},{})",
+        q(1, &compact),
+        q(2, &compact),
+        q(3, &compact),
+        q(3, &compact)
+    ));
+    let record = |vertex_factor: Atom| {
+        let mut base = l2_root(2, true);
+        base.edges.iter_mut().find(|e| e.id == 21).unwrap().factor = atom(&q(2, &hedge(121)));
+        base.vertices.iter_mut().find(|v| v.id == 2).unwrap().factor = vertex_factor;
+        base
+    };
+    let inserted = |factor: Atom| {
+        let mut with = record(Atom::num(1));
+        let hedges = with
+            .local_hedges(super::super::Location::Vertex(2))
+            .into_iter()
+            .collect::<Vec<_>>();
+        let v = with.vertices.iter_mut().find(|v| v.id == 2).unwrap();
+        v.rule = "ct:child".into();
+        with.insertions.push(super::super::Insertion {
+            vertex: 2,
+            hedges,
+            cycles: (0, 0),
+            coefficient: Atom::num(1),
+            factor,
+        });
+        with.validate().unwrap();
+        with
+    };
+    let vakint = Vakint::new().unwrap();
+    let argument = atom("UFO::gs^2*witness::x");
+    let entry = |with: &FactorizedNumerator| {
+        evaluate_factorized_closure(
+            &vakint,
+            &settings(),
+            std::slice::from_ref(with),
+            std::slice::from_ref(&argument),
+        )
+        .unwrap()
+        .records[0]
+            .vakint_value
+            .clone()
+    };
+    let epsilon = crate::utils::vakint_macros::vk_symbol!(&settings().epsilon_symbol);
+    let in_epsilon = Atom::num(4) - Atom::num(2) * Atom::var(epsilon);
+    // pole order 0
+    let normalisation = atom(&format!("1/(({DIM}-1)*({DIM}-2))"));
+    let with = inserted(&polynomial * &normalisation);
+    assert_eq!(with.insertion_pole_order(epsilon).unwrap(), 0);
+    let got = entry(&with);
+    let expected = independent_reference(&record(&polynomial * &normalisation), &L2_CUT, &argument);
+    assert!(!expected.is_zero());
+    assert!(
+        (&got - &expected).expand().is_zero(),
+        "1/((D-1)(D-2)): entry {got}\nindependent {expected}"
+    );
+    let at_zero = independent_reference(&record(&polynomial / Atom::num(6)), &L2_CUT, &argument);
+    assert!(
+        !(&expected - &at_zero).expand().is_zero(),
+        "the O(eps) terms of the normalisation must matter at this depth"
+    );
+    // pole order 1
+    let pole = atom(&format!("1/({DIM}-4)"));
+    let with = inserted(&polynomial * &pole);
+    assert_eq!(with.insertion_pole_order(epsilon).unwrap(), 1);
+    let got = entry(&with);
+    let mut deeper = settings();
+    deeper.number_of_terms_in_epsilon_expansion += 1;
+    let bare = independent_reference_with(&record(polynomial.clone()), &L2_CUT, &argument, deeper);
+    let target = settings().number_of_terms_in_epsilon_expansion - with.loops() as i64 - 1;
+    let pole_in_epsilon = pole
+        .replace(Atom::var(with.dimension))
+        .with(in_epsilon.clone());
+    let expected = (&pole_in_epsilon * &bare)
+        .series(
+            epsilon,
+            Atom::Zero.as_view(),
+            symbolica::domains::rational::Rational::from(target),
+        )
+        .unwrap()
+        .to_atom()
+        .expand();
+    assert!(!expected.is_zero());
+    assert!(
+        (&got - &expected).expand().is_zero(),
+        "1/(D-4): entry {got}\nindependent, one term deeper {expected}"
     );
 }
 

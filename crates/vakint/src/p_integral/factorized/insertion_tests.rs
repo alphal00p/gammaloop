@@ -858,13 +858,17 @@ fn a_failing_laurent_series_of_an_insertion_is_an_evaluation_failure() {
     assert_eq!(pole.insertion_pole_order(epsilon).unwrap(), 1);
 }
 
-/// An insertion's coefficient and factor are Laurent expressions in ε: ε (and,
-/// in the scalar coefficient, the dimension, which the pole order sets to
-/// 4 - 2ε) may occur only through sums, products and integer powers. Anything
+/// An insertion's coefficient and factor are Laurent expressions in ε: ε and
+/// the dimension (which the pole order sets to 4 - 2ε) may occur only through
+/// sums, products and integer powers. Anything
 /// else has no pole order and is refused at validation, `Insertion` with the
 /// prefix `the dependence on ε is not a Laurent polynomial`: log ε, exp(1/ε),
-/// √ε, ε^x, ε inside the factor's function, the dimension inside a log. The
-/// defect-free twins are accepted with their pole order.
+/// √ε, ε^x, ε inside the factor's function, the dimension inside a log (in
+/// the coefficient and in the factor) or under a square root (factor). The
+/// dimension as a representation slot's dimension argument is no dependence.
+/// The defect-free twins are accepted with their pole order: negative integer
+/// powers of sums (1/(1+ε), 1/((D-1)(D-2)), 1/(D-4)^2), a caller's scalar
+/// function of no ε, a fractional power of another scalar.
 #[test]
 fn a_non_laurent_dependence_on_epsilon_is_refused_at_validation() {
     let eps_atom = atom(EPS);
@@ -878,6 +882,15 @@ fn a_non_laurent_dependence_on_epsilon_is_refused_at_validation() {
         ins(&mut value).coefficient = atom(c);
         value
     };
+    // the factor times `extra`, coefficient 1 (so the pole order is the
+    // factor's own)
+    let with_factor = |extra: &str| {
+        let mut value = good.clone();
+        let factor = ins(&mut value).factor.clone();
+        ins(&mut value).factor = factor * atom(extra);
+        ins(&mut value).coefficient = Atom::num(1);
+        value
+    };
     let prefix = "the dependence on ε is not a Laurent polynomial";
     for (what, value) in [
         ("log(eps)", with_coefficient(&format!("log({EPS})"))),
@@ -889,16 +902,35 @@ fn a_non_laurent_dependence_on_epsilon_is_refused_at_validation() {
             "log of the dimension in the coefficient",
             with_coefficient(&format!("log({DIM}-4)")),
         ),
-        ("eps in a function of the factor", {
-            let mut value = good.clone();
-            let factor = ins(&mut value).factor.clone();
-            ins(&mut value).factor = factor * atom(&format!("exp({EPS})"));
-            value
-        }),
+        (
+            "eps in a function of the factor",
+            with_factor(&format!("exp({EPS})")),
+        ),
+        (
+            "log of the dimension in the factor",
+            with_factor(&format!("log({DIM}-4)")),
+        ),
+        (
+            "a square root of the dimension in the factor",
+            with_factor(&format!("({DIM}-2)^(1/2)")),
+        ),
     ] {
         let error = value.validate().unwrap_err();
         insertion_refusal(&error, C0, prefix, what);
     }
+    // a fractional power of a scalar that is neither eps nor the dimension is
+    // not a dependence on eps; the R* reference mass is refused in an
+    // insertion by the mass rule (whatever its power), not by this one
+    insertion_refusal(
+        &with_coefficient(&format!(
+            "gammalooprs::rstar_reference_mass_squared^(1/2)*{EPS}^-1"
+        ))
+        .validate()
+        .unwrap_err(),
+        C0,
+        "contains a mass symbol ",
+        "the reference mass^(1/2)",
+    );
     for (what, coefficient, order) in [
         ("eps^-1", format!("{EPS}^-1"), 1),
         ("3 eps^-1 + 1/2", format!("3*{EPS}^-1+1/2"), 1),
@@ -910,11 +942,51 @@ fn a_non_laurent_dependence_on_epsilon_is_refused_at_validation() {
             format!("({DIM}-4)/({DIM}-3)"),
             0,
         ),
+        (
+            "a negative power of a sum in eps",
+            format!("1/(1+{EPS})"),
+            0,
+        ),
+        (
+            "a caller's scalar function of no eps",
+            format!("gammalooprs::UNKNOWN(gammalooprs::master7,3)*{EPS}^-2"),
+            2,
+        ),
+        (
+            "a fractional power of another scalar",
+            format!("witness::m2^(1/2)*{EPS}^-1"),
+            1,
+        ),
     ] {
         let value = with_coefficient(&coefficient);
         value
             .validate()
             .unwrap_or_else(|e| panic!("{what} is a Laurent coefficient: {e}"));
+        assert_eq!(
+            value.insertion_pole_order(epsilon).unwrap(),
+            order,
+            "{what}"
+        );
+    }
+    for (what, extra, order) in [
+        ("the dimension only in slots", "1".to_string(), 0),
+        ("a polynomial in the dimension", format!("{DIM}-2"), 0),
+        (
+            "a projector normalisation",
+            format!("1/(({DIM}-1)*({DIM}-2))"),
+            0,
+        ),
+        ("a pole in the dimension", format!("1/({DIM}-4)"), 1),
+        (
+            "a double pole in the dimension",
+            format!("1/({DIM}-4)^2"),
+            2,
+        ),
+    ] {
+        let value = with_factor(&extra);
+        value
+            .validate()
+            .unwrap_or_else(|e| panic!("{what} is a Laurent factor: {e}"));
         assert_eq!(
             value.insertion_pole_order(epsilon).unwrap(),
             order,
