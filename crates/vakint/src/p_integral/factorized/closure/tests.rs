@@ -2632,6 +2632,15 @@ fn a_non_laurent_insertion_is_refused_by_the_closure_entry_before_its_pole_order
 /// The closure entry's error for the L2 root with vertex 1 as a contracted
 /// child of coefficient `coefficient` (its polynomial as the factor).
 fn closure_insertion_error(coefficient: &str) -> FactorizedError {
+    closure_with_insertion(coefficient, &rstar_site_settings()).unwrap_err()
+}
+
+/// The closure entry on the L2 root with vertex 1 as a contracted child of
+/// coefficient `coefficient` (its polynomial as the factor), `settings`.
+fn closure_with_insertion(
+    coefficient: &str,
+    settings: &VakintSettings,
+) -> std::result::Result<ClosureValue, FactorizedError> {
     let mut with = l2_root(1, true);
     with.vertices.iter_mut().find(|v| v.id == 1).unwrap().factor = atom(&q(1, &hedge(120)));
     let hedges = with
@@ -2651,11 +2660,28 @@ fn closure_insertion_error(coefficient: &str) -> FactorizedError {
     let vakint = Vakint::new().unwrap();
     evaluate_factorized_closure(
         &vakint,
-        &rstar_site_settings(),
+        settings,
         std::slice::from_ref(&with),
         &[with.prefactor.total()],
     )
-    .unwrap_err()
+}
+
+/// Validation recognises ε by its name; with an epsilon setting of another
+/// name (`user::ep`) the closure entry applies the pole order's rules with it:
+/// log(user::ep) refused, `Insertion` with the Laurent prefix; the twin with a
+/// pole (user::ep^-1) evaluates.
+#[test]
+fn the_closure_entry_applies_the_laurent_rule_to_an_epsilon_setting_of_another_name() {
+    let mut user = rstar_site_settings();
+    user.epsilon_symbol = "user::ep".into();
+    match closure_with_insertion("log(user::ep)", &user).unwrap_err() {
+        FactorizedError::Insertion { vertex: 1, detail } => assert!(
+            detail.starts_with("the dependence on ε is not a Laurent polynomial"),
+            "{detail}"
+        ),
+        other => panic!("expected the Insertion refusal at vertex 1, got {other:?}"),
+    }
+    closure_with_insertion("user::ep^-1", &user).expect("user::ep^-1 is a Laurent coefficient");
 }
 
 /// Weights with insertions: carried cycles + the insertions' cycles may be

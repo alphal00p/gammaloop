@@ -1099,6 +1099,46 @@ fn momentum_degree(view: AtomView<'_>) -> u64 {
     }
 }
 
+/// The pole order's rules for one insertion, `depends` selecting ε and the
+/// dimension: the dependence on them is a Laurent polynomial
+/// ([`non_laurent_dependence`]) and its bound is at most
+/// [`INSERTION_MAX_EPSILON_POWER`] (`an ε power out of range`).
+fn insertion_epsilon_rules(insertion: &Insertion, depends: &dyn Fn(Symbol) -> bool) -> Result<()> {
+    let v = insertion.vertex;
+    let error = |detail: String| FactorizedError::Insertion { vertex: v, detail };
+    // The pole order (`insertion_pole_order`) is that of coefficient x
+    // factor as a Laurent expression in ε, the dimension set to
+    // 4 - 2ε: ε and the dimension may occur only through sums,
+    // products and integer powers (a representation slot's dimension
+    // argument, mink(D, ..), is not a dependence). Inside a function's
+    // argument, in an exponent or under a non-integer power the
+    // expansion has no pole order (log ε would silently count as 0).
+    for (what, atom) in [
+        ("coefficient", &insertion.coefficient),
+        ("factor", &insertion.factor),
+    ] {
+        if let Some(found) = non_laurent_dependence(atom.as_view(), depends) {
+            return Err(error(format!(
+                "the dependence on ε is not a Laurent polynomial: {found} in the {what}"
+            )));
+        }
+    }
+    // bounded pole order: |trailing power of ε| of coefficient x factor
+    // is at most the bound of the coefficient plus that of the factor
+    let bound = epsilon_power_bound(insertion.coefficient.as_view(), depends)
+        .and_then(|c| epsilon_power_bound(insertion.factor.as_view(), depends)?.checked_add(c));
+    match bound {
+        Some(b) if b <= INSERTION_MAX_EPSILON_POWER => {}
+        _ => {
+            return Err(error(format!(
+                "an ε power out of range: the powers of ε and of the dimension in coefficient x factor reach {}, at most {INSERTION_MAX_EPSILON_POWER} are supported",
+                bound.map_or_else(|| "beyond 2^64".to_string(), |b| b.to_string())
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// The largest bound on |the powers of ε| (the dimension counted as 4 - 2ε)
 /// an insertion's coefficient x factor may reach, the bound of
 /// [`epsilon_power_bound`] (a degree count, so the pole order is at most it;
@@ -2346,40 +2386,11 @@ impl FactorizedNumerator {
             {
                 return Err(error(format!("contains a mass symbol {name}")));
             }
-            // The pole order (`insertion_pole_order`) is that of coefficient x
-            // factor as a Laurent expression in ε, the dimension set to
-            // 4 - 2ε: ε and the dimension may occur only through sums,
-            // products and integer powers (a representation slot's dimension
-            // argument, mink(D, ..), is not a dependence). Inside a function's
-            // argument, in an exponent or under a non-integer power the
-            // expansion has no pole order (log ε would silently count as 0).
+            // the pole order's rules (Laurent in ε, bounded), ε recognised by
+            // its name here (the settings are not known)
             let dimension = self.dimension;
             let depends = |s: Symbol| is_epsilon_symbol(s) || s == dimension;
-            for (what, atom) in [
-                ("coefficient", &insertion.coefficient),
-                ("factor", &insertion.factor),
-            ] {
-                if let Some(found) = non_laurent_dependence(atom.as_view(), &depends) {
-                    return Err(error(format!(
-                        "the dependence on ε is not a Laurent polynomial: {found} in the {what}"
-                    )));
-                }
-            }
-            // bounded pole order: |trailing power of ε| of coefficient x factor
-            // is at most the bound of the coefficient plus that of the factor
-            let bound =
-                epsilon_power_bound(insertion.coefficient.as_view(), &depends).and_then(|c| {
-                    epsilon_power_bound(insertion.factor.as_view(), &depends)?.checked_add(c)
-                });
-            match bound {
-                Some(b) if b <= INSERTION_MAX_EPSILON_POWER => {}
-                _ => {
-                    return Err(error(format!(
-                        "an ε power out of range: the powers of ε and of the dimension in coefficient x factor reach {}, at most {INSERTION_MAX_EPSILON_POWER} are supported",
-                        bound.map_or_else(|| "beyond 2^64".to_string(), |b| b.to_string())
-                    )));
-                }
-            }
+            insertion_epsilon_rules(insertion, &depends)?;
             check_scalar(
                 insertion.coefficient.as_view(),
                 &format!("insertion at vertex {v} coefficient"),
@@ -2444,6 +2455,15 @@ impl FactorizedNumerator {
                     vertex: insertion.vertex,
                     detail: format!("the symbol {name} is not the evaluation's epsilon {epsilon}"),
                 });
+            }
+        }
+        // validation recognises ε by its name; an epsilon setting of another
+        // name gets the pole order's rules here, where it is known
+        if !(epsilon == "ε" || epsilon.ends_with("::ε")) {
+            let dimension = self.dimension;
+            let depends = |s: Symbol| s.get_name() == epsilon || s == dimension;
+            for insertion in &self.insertions {
+                insertion_epsilon_rules(insertion, &depends)?;
             }
         }
         Ok(())

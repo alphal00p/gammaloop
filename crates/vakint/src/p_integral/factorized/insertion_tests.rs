@@ -862,6 +862,39 @@ fn a_failing_laurent_series_of_an_insertion_is_an_evaluation_failure() {
     assert_eq!(pole.insertion_pole_order(epsilon).unwrap(), 1);
 }
 
+/// Validation recognises ε by its name; an epsilon setting of another name
+/// (`user::ep`) gets the pole order's rules where the settings are known, the
+/// entries' input check (here `vakint_input`, the direct and ports path): the
+/// same variant and prefixes; the twin with a pole is accepted.
+#[test]
+fn an_epsilon_setting_of_another_name_gets_the_pole_order_rules_at_the_entry() {
+    let mut user = settings(2);
+    user.epsilon_symbol = "user::ep".into();
+    let good = gluon_surrogate(1);
+    let with = |coefficient: &str| {
+        let mut value = good.clone();
+        ins(&mut value).coefficient = atom(coefficient);
+        value
+    };
+    for (what, coefficient, prefix) in [
+        (
+            "log(user::ep)",
+            "log(user::ep)",
+            "the dependence on ε is not a Laurent polynomial",
+        ),
+        ("user::ep^-65", "user::ep^-65", "an ε power out of range"),
+    ] {
+        let value = with(coefficient);
+        value
+            .validate()
+            .unwrap_or_else(|e| panic!("{what}: validation does not know the settings: {e}"));
+        let error = super::evaluate::vakint_input(&user, &value, &Atom::num(1)).unwrap_err();
+        insertion_refusal(&error, C0, prefix, what);
+    }
+    super::evaluate::vakint_input(&user, &with("user::ep^-1"), &Atom::num(1))
+        .expect("user::ep^-1 is a Laurent coefficient");
+}
+
 /// The pole order is bounded: a bound on |the powers of ε and of the
 /// dimension| of coefficient x factor (degrees: sums the largest, products
 /// added, integer powers times |n|) may reach at most
