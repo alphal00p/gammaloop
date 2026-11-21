@@ -6155,3 +6155,295 @@ fn a_carried_alarm_fails_at_every_public_result() {
     std::fs::remove_dir_all(&root).ok();
 }
 
+/// The scope 1-5 p package of the one- to four-loop catalogue suite
+/// ([`one_to_four_loop_integrals_through_the_1_5_package_equal_the_1_4_library`]).
+const P_PACKAGE_1_5_VARIABLE: &str = "VAKINT_TEST_P_PACKAGE_1_5";
+
+/// The sixteen one- to four-loop p families with unit powers (each top),
+/// a J1 sector whose own key is a residual terminal of a 1-5 package, and
+/// three inputs with numerators or a raised line.
+const ONE_TO_FOUR_LOOP_INPUTS: [&str; 20] = [
+    "topo(P1L(p(1),1,1))",
+    "topo(P1L(p(1),2,1))",
+    "topo(P2L(p(1),1,1,1,1,1))",
+    "topo(P3L_LA(p(1),1,1,1,1,1,1,1,1))",
+    "topo(P3L_BE(p(1),1,1,1,1,1,1,1,1))",
+    "topo(P3L_NO(p(1),1,1,1,1,1,1,1,1))",
+    "dot(k(1),p(1))*topo(P3L_NO(p(1),1,1,1,1,1,1,1,1))",
+    "topo(P4L_LA4(p(1),1,1,1,1,1,1,1,1,1,1,1))",
+    "topo(P4L_J1(p(1),1,1,1,1,1,1,1,1,1,1,1))",
+    "topo(P4L_J1(p(1),1,0,1,1,1,1,1,1,0,0,1))",
+    "(2+3*dot(k(1),k(2))*dot(k(3),k(4)))*topo(P4L_J1(p(1),1,1,1,1,1,1,1,1,1,1,1))",
+    "topo(P4L_J2(p(1),1,1,1,1,1,1,1,1,1,1,1))",
+    "topo(P4L_J4(p(1),1,1,1,1,1,1,1,1,1,1,1))",
+    "topo(P4L_J5(p(1),1,1,1,1,1,1,1,1,1,1,1))",
+    "topo(P4L_J6(p(1),1,1,1,1,1,1,1,1,1,1,1))",
+    "topo(P4L_J11(p(1),1,1,1,1,1,1,1,1,1,1,1))",
+    "topo(P4L_HAHA(p(1),1,1,1,1,1,1,1,1,1,1,2))",
+    "topo(P4L_NO1(p(1),1,1,1,1,1,1,1,1,1,1,1))",
+    "topo(P4L_NO2(p(1),1,1,1,1,1,1,1,1,1,1,1))",
+    "topo(P4L_NO3(p(1),1,1,1,1,1,1,1,1,1,1,1))",
+];
+
+/// The `PResidual(node, k..)` symbols of `expression`, as text.
+fn residual_terminals(expression: &Atom) -> BTreeSet<String> {
+    let mut found = BTreeSet::new();
+    expression.visitor(&mut |part| {
+        if let symbolica::atom::AtomView::Fun(function) = part
+            && function.get_symbol() == crate::p_integral::p_residual_symbol()
+        {
+            found.insert(crate::truncation_guard::plain_name(&part.to_owned()));
+            return false;
+        }
+        true
+    });
+    found
+}
+
+/// Data suite (needs a scope 1-5 package with its own catalogue, named by
+/// `VAKINT_TEST_P_PACKAGE_1_5`, and the scope 1-4 library of
+/// `VAKINT_TEST_P_LIBRARY_1_4`; a five-loop-p build, the package has 20-slot
+/// families): one- to four-loop p-integrals on vakint's ordinary path
+/// (`Vakint::evaluate`) through the 1-5 package equal those through the 1-4
+/// library exactly, in `Symbolic` and `Numerical` mode; in `Retain` mode the
+/// package's residual terminals are resolved (no `PResidual` left) and the
+/// Retain value re-finalizes to the 1-4 library's `Symbolic` value. The
+/// inputs end on the package catalogue's one- to four-loop terminal rows
+/// (rows onto Forcer masters only), checked with the catalogue disabled; a
+/// row that no input reaches (the package presents that sector through
+/// another row with the same combination) must give the same value in that
+/// row's place, and every row is covered one way or the other. The same holds for the package's program INJECTED
+/// (no catalogue of its own: the engine's catalogue chain) and under the
+/// pole-bounded master basis. `VAKINT_TEST_P_PACKAGE_1_5_ROUTE=variable`
+/// takes the package from `VAKINT_P_LIBRARY` (which must name the same
+/// directory) instead of `load_p_library_directory`. Fails, never skips,
+/// without its data.
+#[test]
+#[ignore = "needs VAKINT_TEST_P_PACKAGE_1_5 (a 1-5 package, five-loop-p build) and VAKINT_TEST_P_LIBRARY_1_4"]
+fn one_to_four_loop_integrals_through_the_1_5_package_equal_the_1_4_library() {
+    let package = std::path::PathBuf::from(
+        std::env::var_os(P_PACKAGE_1_5_VARIABLE)
+            .unwrap_or_else(|| panic!("{P_PACKAGE_1_5_VARIABLE} is unset: the suite needs it")),
+    );
+    let library_1_4 = std::path::PathBuf::from(
+        std::env::var_os("VAKINT_TEST_P_LIBRARY_1_4")
+            .unwrap_or_else(|| panic!("VAKINT_TEST_P_LIBRARY_1_4 is unset: the suite needs it")),
+    );
+    let variable_route =
+        std::env::var(format!("{P_PACKAGE_1_5_VARIABLE}_ROUTE")).as_deref() == Ok("variable");
+    Vakint::initialize_vakint_symbols();
+    let mut engine_1_5 = Vakint::new().unwrap();
+    if variable_route {
+        assert_eq!(
+            std::env::var_os(crate::rustred_evaluation::p_data::P_LIBRARY_VARIABLE)
+                .map(std::path::PathBuf::from),
+            Some(package.clone()),
+            "the variable route needs VAKINT_P_LIBRARY = {}",
+            package.display()
+        );
+    } else {
+        assert!(std::env::var_os(crate::rustred_evaluation::p_data::P_LIBRARY_VARIABLE).is_none());
+        engine_1_5
+            .load_p_library_directory(&package, false)
+            .unwrap();
+    }
+    let handle = engine_1_5.p_library().unwrap();
+    assert_eq!(handle.scope(), 1..=5, "{}", package.display());
+    let catalogue = engine_1_5
+        .p_master_catalogue()
+        .expect("the 1-5 package ships its own catalogue");
+    eprintln!(
+        "1-5 package {} (catalogue {}), 1-4 library {}",
+        package.display(),
+        catalogue.data_version(),
+        library_1_4.display()
+    );
+    let mut engine_1_4 = Vakint::new().unwrap();
+    engine_1_4
+        .load_p_library_directory(&library_1_4, false)
+        .unwrap();
+    assert_eq!(engine_1_4.p_library().unwrap().scope(), 1..=4);
+    assert!(engine_1_4.p_library().unwrap().master_catalogue.is_none());
+    // the package's program without its catalogue: injected through RustRed
+    let mut injected = Vakint::new().unwrap();
+    injected
+        .inject_p_library(Arc::clone(&handle.library))
+        .unwrap();
+    // the package with no catalogue at all: its residual terminals stay
+    let mut disabled = Vakint::new().unwrap();
+    disabled
+        .inject_p_library(Arc::clone(&handle.library))
+        .unwrap();
+    disabled.disable_default_p_master_catalogue();
+    // the catalogue's rows onto Forcer masters only (the 1-4 loop ones)
+    let forcer = crate::p_integral::masters::p_master_names().unwrap();
+    let rows: BTreeMap<String, String> = {
+        let text = std::fs::read_to_string(package.join("p-master-catalogue.json")).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&text).unwrap();
+        json["terminals"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|row| {
+                row["combination"].as_array().is_some_and(|terms| {
+                    !terms.is_empty()
+                        && terms.iter().all(|term| {
+                            term["master"].as_str().is_some_and(|m| forcer.contains(&m))
+                        })
+                })
+            })
+            .map(|row| {
+                let key = row["key"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|k| k.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",");
+                (
+                    format!("PResidual({},{key})", row["node"].as_str().unwrap()),
+                    row["combination"].to_string(),
+                )
+            })
+            .collect()
+    };
+    assert!(!rows.is_empty());
+    let terms = 6;
+    let with_terms = |mode| VakintSettings {
+        number_of_terms_in_epsilon_expansion: terms,
+        ..settings(mode, None)
+    };
+    let symbolic = with_terms(RustRedMasterMode::Symbolic);
+    let numerical = with_terms(RustRedMasterMode::Numerical);
+    let retain = with_terms(RustRedMasterMode::Retain);
+    let pole_bounded = VakintSettings {
+        p_master_basis: crate::p_integral::PMasterBasis::PoleBounded,
+        ..symbolic.clone()
+    };
+    let same = |a: &Atom, b: &Atom| a == b || (a - b).expand().is_zero();
+    let mut reached = BTreeSet::new();
+    let mut failures = Vec::new();
+    let mut retain_identical = 0;
+    // per input: its loops, its value with no catalogue (Retain, residual
+    // terminals kept) and the 1-4 library's symbolic value
+    let mut held_values = Vec::new();
+    for text in ONE_TO_FOUR_LOOP_INPUTS {
+        let input = parse(text);
+        let loops = (1..=4).find(|l| text.contains(&format!("P{l}L"))).unwrap();
+        let held = disabled.evaluate(&retain, input.as_view()).unwrap();
+        let terminals = residual_terminals(&held);
+        reached.extend(terminals.iter().cloned());
+        let check = |failures: &mut Vec<String>,
+                     what: &str,
+                     value: Result<Atom, VakintError>,
+                     expected: &Atom| match value {
+            Ok(value) if same(&value, expected) => {}
+            Ok(value) => failures.push(format!("{text} {what}: {value} != {expected}")),
+            Err(error) => failures.push(format!("{text} {what}: {error}")),
+        };
+        let expected = engine_1_4.evaluate(&symbolic, input.as_view()).unwrap();
+        check(
+            &mut failures,
+            "symbolic",
+            engine_1_5.evaluate(&symbolic, input.as_view()),
+            &expected,
+        );
+        check(
+            &mut failures,
+            "pole-bounded basis",
+            engine_1_5.evaluate(&pole_bounded, input.as_view()),
+            &expected,
+        );
+        check(
+            &mut failures,
+            "injected, symbolic",
+            injected.evaluate(&symbolic, input.as_view()),
+            &expected,
+        );
+        let expected_numerical = engine_1_4.evaluate(&numerical, input.as_view()).unwrap();
+        check(
+            &mut failures,
+            "numerical",
+            engine_1_5.evaluate(&numerical, input.as_view()),
+            &expected_numerical,
+        );
+        match engine_1_5.evaluate(&retain, input.as_view()) {
+            Ok(value) => {
+                let left = residual_terminals(&value);
+                if !left.is_empty() {
+                    failures.push(format!("{text} retain: residual terminals left {left:?}"));
+                } else {
+                    let held_1_4 = engine_1_4.evaluate(&retain, input.as_view()).unwrap();
+                    retain_identical += usize::from(same(&value, &held_1_4));
+                    check(
+                        &mut failures,
+                        "retain, re-finalized",
+                        engine_1_5.refinalise_p_retained(&symbolic, value.as_view(), loops),
+                        &expected,
+                    );
+                }
+            }
+            Err(error) => failures.push(format!("{text} retain: {error}")),
+        }
+        eprintln!(
+            "ONE_TO_FOUR {text}: {} residual terminal(s) with no catalogue",
+            terminals.len()
+        );
+        held_values.push((text, loops, held, expected));
+    }
+    // A row that no input reaches through the package (it presents that
+    // sector through another row with the same Forcer-master combination):
+    // put it in place of that row in a value that reaches the other one and
+    // re-finalize through the package; the value must not change.
+    let mut substituted = BTreeSet::new();
+    for (row, combination) in &rows {
+        if reached.contains(row) {
+            continue;
+        }
+        let Some(twin) = rows
+            .iter()
+            .find(|(other, c)| *c == combination && reached.contains(*other))
+            .map(|(other, _)| other)
+        else {
+            continue;
+        };
+        let Some((text, loops, held, expected)) = held_values
+            .iter()
+            .find(|(_, _, held, _)| residual_terminals(held).contains(twin))
+        else {
+            continue;
+        };
+        let swapped = held
+            .replace(parse(twin).to_pattern())
+            .with(parse(row).to_pattern());
+        assert!(
+            residual_terminals(&swapped).contains(row),
+            "{row} in {swapped}"
+        );
+        match engine_1_5.refinalise_p_retained(&symbolic, swapped.as_view(), *loops) {
+            Ok(value) if same(&value, expected) => {
+                substituted.insert(row.clone());
+            }
+            Ok(value) => {
+                failures.push(format!("{row} for {twin} in {text}: {value} != {expected}"))
+            }
+            Err(error) => failures.push(format!("{row} for {twin} in {text}: {error}")),
+        }
+        eprintln!("ONE_TO_FOUR_SUBSTITUTED {row} for {twin} in {text}");
+    }
+    let unreached: Vec<_> = rows
+        .keys()
+        .filter(|row| !reached.contains(*row) && !substituted.contains(*row))
+        .collect();
+    eprintln!(
+        "ONE_TO_FOUR_SUMMARY inputs={} rows={} reached={} substituted={} unreached={unreached:?} \
+         retain_identical_to_1_4={retain_identical} failures={}",
+        ONE_TO_FOUR_LOOP_INPUTS.len(),
+        rows.len(),
+        rows.keys().filter(|row| reached.contains(*row)).count(),
+        substituted.len(),
+        failures.len()
+    );
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+    assert!(unreached.is_empty(), "rows not reached: {unreached:?}");
+}

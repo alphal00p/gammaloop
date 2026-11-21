@@ -2371,4 +2371,143 @@ mod tests {
             other => panic!("unknown scenario {other}"),
         }
     }
+
+    /// The RustRed settings of the one- to four-loop catalogue tests in `mode`
+    /// (G-scheme, four ε terms, one core, FORM never called).
+    fn residual_settings(mode: crate::RustRedMasterMode) -> crate::VakintSettings {
+        crate::VakintSettings {
+            evaluation_order: crate::EvaluationOrder(vec![crate::EvaluationMethod::RustRed(
+                crate::RustRedEvaluationOptions { master_mode: mode },
+            )]),
+            form_exe_path: "/rustred-p-integrals-must-not-call-form".into(),
+            integral_normalization_factor: crate::LoopNormalizationFactor::GScheme,
+            number_of_terms_in_epsilon_expansion: 4,
+            n_cores: 1,
+            ..crate::VakintSettings::default()
+        }
+    }
+
+    /// A three-loop residual terminal `PResidual(P3L_NO, 1,1,1,1,1,1,1,1,0)`
+    /// (the form a 1-5 package gives the non-planar master) is resolved by
+    /// the engine's p master catalogue whichever way the library came: a
+    /// package that ships its own catalogue, no library loaded (the built-in
+    /// chain), a library injected through RustRed. The value is that of the
+    /// row's Forcer master combination, written out here from the row of
+    /// every shipped catalogue and finalized without any catalogue. Without a
+    /// catalogue (disabled) the terminal is refused as before (NoCatalogue).
+    #[test]
+    fn a_one_to_four_loop_residual_terminal_is_resolved_by_the_loaded_catalogue() {
+        use symbolica::atom::AtomCore;
+        crate::Vakint::initialize_vakint_symbols();
+        for name in [P_LIBRARY_VARIABLE, P_MASTER_CATALOGUE_VARIABLE] {
+            assert!(
+                std::env::var_os(name).is_none(),
+                "{name} is set: this test needs the default catalogue chain"
+            );
+        }
+        let root = tempfile::tempdir().unwrap();
+        let probe = root.path().join("residual-package");
+        write_loader_package(&probe, "residual-probe");
+        let mut package = Vakint::new().unwrap();
+        package.load_p_library_directory(&probe, false).unwrap();
+        let plain = Vakint::new().unwrap();
+        let mut injected = Vakint::new().unwrap();
+        injected
+            .inject_p_library(
+                load_p_library(
+                    PLibrarySource::Directory(probe.clone()),
+                    &PLibraryOptions {
+                        verify_descent: false,
+                    },
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        assert!(
+            injected
+                .loaded_p_library()
+                .unwrap()
+                .master_catalogue
+                .is_none()
+        );
+        let mut disabled = Vakint::new().unwrap();
+        disabled.disable_default_p_master_catalogue();
+        let residual =
+            crate::utils::vakint_macros::vk_parse!("PResidual(P3L_NO,1,1,1,1,1,1,1,1,0)").unwrap();
+        assert_eq!(
+            residual.get_symbol(),
+            Some(p_residual_symbol()),
+            "{residual}"
+        );
+        // the P3L_NO row: (1/(d-3)^3) PGamma(-2)^-3 PGamma(-1)^6 PGamma(1)^3 PMaster(no)
+        let combination = crate::utils::vakint_macros::vk_parse!(
+            "(1/(-27+27*(4-2*ε)-9*(4-2*ε)^2+(4-2*ε)^3))*PGamma(-2)^(-3)*PGamma(-1)^(6)*PGamma(1)^(3)*PMaster(no)"
+        )
+        .unwrap();
+        for mode in [
+            crate::RustRedMasterMode::Symbolic,
+            crate::RustRedMasterMode::Numerical,
+        ] {
+            let settings = residual_settings(mode);
+            let reference = plain
+                .refinalise_p_retained(&settings, combination.as_view(), 3)
+                .unwrap();
+            assert!(!reference.is_zero());
+            for (route, engine) in [
+                ("package", &package),
+                ("no library loaded", &plain),
+                ("injected", &injected),
+            ] {
+                let value = engine
+                    .refinalise_p_retained(&settings, residual.as_view(), 3)
+                    .unwrap_or_else(|error| panic!("{route}, {mode}: {error}"));
+                assert!(
+                    value == reference || (&value - &reference).expand().is_zero(),
+                    "{route}, {mode}: {value} != {reference}"
+                );
+            }
+            let refused = disabled
+                .refinalise_p_retained(&settings, residual.as_view(), 3)
+                .unwrap_err();
+            assert!(
+                matches!(
+                    &refused,
+                    crate::VakintError::PMasterCatalogue(
+                        crate::p_integral::PMasterCatalogueError::NoCatalogue { .. }
+                    )
+                ) && refused
+                    .to_string()
+                    .starts_with("no p master catalogue (vakint.p-master-catalogue."),
+                "{mode}: {refused}"
+            );
+        }
+    }
+
+    /// A one- to four-loop evaluation without residual terminals through a
+    /// package that ships its own catalogue keeps the base's finalisation:
+    /// under the pole-bounded master basis (a five-loop setting) the two-loop
+    /// kite gives the value of the original basis, it is not refused for
+    /// want of a five-loop masters directory.
+    #[test]
+    fn the_pole_bounded_basis_leaves_one_to_four_loop_values_alone() {
+        crate::Vakint::initialize_vakint_symbols();
+        let root = tempfile::tempdir().unwrap();
+        let probe = root.path().join("basis-package");
+        write_loader_package(&probe, "basis-probe");
+        let mut engine = Vakint::new().unwrap();
+        engine.load_p_library_directory(&probe, false).unwrap();
+        assert!(engine.p_master_catalogue().is_some());
+        let kite = crate::utils::vakint_macros::vk_parse!("topo(P2L(p(1),1,1,1,1,1))").unwrap();
+        let original = residual_settings(crate::RustRedMasterMode::Symbolic);
+        let pole_bounded = crate::VakintSettings {
+            p_master_basis: crate::p_integral::PMasterBasis::PoleBounded,
+            ..original.clone()
+        };
+        let expected = engine.evaluate(&original, kite.as_view()).unwrap();
+        assert!(!expected.is_zero());
+        let value = engine
+            .evaluate(&pole_bounded, kite.as_view())
+            .unwrap_or_else(|error| panic!("pole-bounded basis: {error}"));
+        assert_eq!(value, expected);
+    }
 }
