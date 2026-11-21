@@ -867,29 +867,27 @@ pub(crate) fn is_unknown_coefficient(view: AtomView<'_>) -> bool {
         && i64::try_from(args[1]).is_ok_and(|k| k.abs() <= UNKNOWN_MAX_ORDER)
 }
 
-/// An upper bound of the degree of `view` in vakint's UNKNOWN atoms (a sum
-/// takes the maximum, a product the sum, a nonnegative integer power
-/// multiplies); `None` for an UNKNOWN atom under a negative power.
-fn unknown_degree(view: AtomView<'_>) -> Option<u64> {
+/// The degree of `view` in vakint's DATA ATOMS ([`is_vakint_data_atom`]:
+/// `UNKNOWN(master, k)` and `MZV(..)`; a sum takes the maximum, a product the
+/// sum); `None` when a data atom stands inside the base of a power (whatever
+/// the exponent: a power, a denominator). A data atom is carried as a LINEAR
+/// FACTOR only: degree at most 1 and never under a power (every monomial of
+/// both catalogues' expanded coefficients has degree 0 or 1).
+fn data_atom_degree(view: AtomView<'_>) -> Option<u64> {
     match view {
-        AtomView::Fun(_) if is_unknown_coefficient(view) => Some(1),
+        AtomView::Fun(_) if is_vakint_data_atom(view) => Some(1),
         AtomView::Add(a) => a
             .iter()
-            .map(unknown_degree)
+            .map(data_atom_degree)
             .try_fold(0, |m, d| Some(m.max(d?))),
         AtomView::Mul(m) => m
             .iter()
-            .map(unknown_degree)
+            .map(data_atom_degree)
             .try_fold(0u64, |s, d| s.checked_add(d?)),
-        AtomView::Pow(p) => {
-            let (base, exponent) = p.get_base_exp();
-            let d = unknown_degree(base)?;
-            match i64::try_from(exponent) {
-                _ if d == 0 => Some(0),
-                Ok(n) if n >= 0 => d.checked_mul(n as u64),
-                _ => None,
-            }
-        }
+        AtomView::Pow(p) => match data_atom_degree(p.get_base_exp().0)? {
+            0 => Some(0),
+            _ => None,
+        },
         _ => Some(0),
     }
 }
@@ -3020,7 +3018,7 @@ impl FactorizedNumerator {
     /// The atom rules of a MARKED value beyond the namespace walk, for
     /// `validate` and the vacuum mode alike: every non-mass record atom
     /// through [`Self::check_opaque_dependence`] (exponents, opaque function
-    /// arguments, data atoms, UNKNOWN linearity), and every nonzero edge mass
+    /// arguments, data atoms, data-atom linearity), and every nonzero edge mass
     /// a plain symbol (`Graph`, prefix `edge <id>: mass `).
     pub(crate) fn check_marked_atoms(&self) -> Result<()> {
         for (field, atom) in self.record_atoms() {
@@ -3041,7 +3039,9 @@ impl FactorizedNumerator {
         Ok(())
     }
 
-    /// EXACT NUMBERS, EXPONENTS AND FUNCTION HEADS (marked values): every
+    /// EXACT NUMBERS, EXPONENTS, DATA ATOMS AND FUNCTION HEADS (marked
+    /// values): vakint's data atoms are linear factors ([`data_atom_degree`],
+    /// prefix `a non-linear vakint data atom in <field>: `); every
     /// number is exact and finite ([`check_exact_numbers`], `InexactNumber`
     /// at `<field>`: Symbolica writes a literal singular form, `zeta(1)`,
     /// `log(0)`, `gamma(0)`, as a non-finite number); every exponent is
@@ -3084,10 +3084,10 @@ impl FactorizedNumerator {
                 first_non_integer_exponent(atom.as_view())
                     .map(|found| format!("a non-integer exponent in {field}: {found}"))
             })
-            .or_else(|| match unknown_degree(atom.as_view()) {
+            .or_else(|| match data_atom_degree(atom.as_view()) {
                 Some(d) if d <= 1 => None,
                 _ => Some(format!(
-                    "a non-linear UNKNOWN in {field}: vakint's UNKNOWN(master, k) atoms are carried linearly (a product, a power or a denominator of them is refused): {}",
+                    "a non-linear vakint data atom in {field}: vakint's data atoms (UNKNOWN(master, k), MZV(..)) are carried as linear factors (a product of two, a power, a denominator, or one inside the base of a power is refused): {}",
                     atom.to_canonical_string()
                 )),
             })

@@ -3017,7 +3017,9 @@ fn the_shipped_catalogue_carries_only_listed_data_atoms() {
 }
 
 /// Every function head and bare name in a catalogue's master coefficients:
-/// only `zeta`, `MZV`, `UNKNOWN` (with a master name and an integer), `pi`.
+/// only `zeta`, `MZV`, `UNKNOWN` (with a master name and an integer), `pi`;
+/// and every monomial of the EXPANDED coefficient has degree 0 or 1 in the
+/// data atoms, none under a power (the linear-factor rule of the records).
 fn catalogue_constants(path: &std::path::Path) {
     let text = wh_fixtures::read_fixture(path);
     let json: serde_json::Value = serde_json::from_str(&text).unwrap();
@@ -3032,6 +3034,40 @@ fn catalogue_constants(path: &std::path::Path) {
                 continue;
             };
             coefficients += 1;
+            // the DEGREE in the data atoms of the expanded coefficient, and
+            // whether one stands under a power (the linear-factor rule)
+            let parsed = atom(
+                &exact
+                    .replace("MZV(", "vakint::MZV(")
+                    .replace("UNKNOWN(", "vakint::UNKNOWN("),
+            )
+            .expand();
+            let is_data = |v: AtomView<'_>| matches!(v, AtomView::Fun(f) if matches!(f.get_symbol().get_name(), "vakint::MZV" | "vakint::UNKNOWN"));
+            let terms = match parsed.as_view() {
+                AtomView::Add(a) => a.iter().map(|x| x.to_owned()).collect::<Vec<_>>(),
+                _ => vec![parsed.clone()],
+            };
+            for term in terms {
+                let factors = match term.as_view() {
+                    AtomView::Mul(m) => m.iter().map(|x| x.to_owned()).collect::<Vec<_>>(),
+                    _ => vec![term.clone()],
+                };
+                let mut degree = 0;
+                for f in &factors {
+                    match f.as_view() {
+                        v if is_data(v) => degree += 1,
+                        AtomView::Pow(p) if is_data(p.get_base_exp().0) => {
+                            *seen
+                                .entry(format!("DATA ATOM UNDER A POWER {f}"))
+                                .or_default() += 1;
+                        }
+                        _ => {}
+                    }
+                }
+                *seen
+                    .entry(format!("monomials of data-atom degree {degree}"))
+                    .or_default() += 1;
+            }
             let mut chars = exact.char_indices().peekable();
             while let Some((i, c)) = chars.next() {
                 if c.is_ascii_alphabetic() || c == '_' {
@@ -3068,7 +3104,13 @@ fn catalogue_constants(path: &std::path::Path) {
     assert!(coefficients > 0);
     let unlisted = seen
         .keys()
-        .filter(|k| k.starts_with("UNLISTED"))
+        .filter(|k| {
+            k.starts_with("UNLISTED")
+                || k.starts_with("DATA ATOM UNDER A POWER")
+                || (k.starts_with("monomials of data-atom degree")
+                    && !k.ends_with(" 0")
+                    && !k.ends_with(" 1"))
+        })
         .collect::<Vec<_>>();
     assert!(
         unlisted.is_empty(),
@@ -3430,18 +3472,46 @@ fn a_marked_three_loop_massive_tadpole_through_the_vacuum_entry() {
 
 /// Every unique v3 record under the roots of `VAKINT_TEST_RECORD_ROOTS`
 /// (colon-separated; files `*.record.txt` and `input.txt`) through
-/// validation only (`from_text`). The roots this split is stated for:
+/// validation only (`from_text`), on the roots
 /// `/common/build-cache/ben/consol:/common/ben/beta/results/consolidation/wh-fixtures`
-/// (live: 2,633 unique v3 records on 2026-11-21, 3,042 later the same day).
-/// EXACTLY 22 are refused, every one a Closure refusal "every line is
-/// massive: not a closure" (one-loop remainders whose only line left is the
-/// closing massive line: a massive tadpole, the producer's designed decline
-/// vakint:all_massive, dumped before the vakint call), and every other record
-/// is accepted; any other refusal or another number of refusals fails.
+/// (LIVE: 2,633 unique v3 records on 2026-11-21, 3,126 later the same day;
+/// the total is printed, not pinned). The 22 records of `REFUSED` (one-loop
+/// remainders whose only line left is the closing massive line: a massive
+/// tadpole, the producer's designed decline vakint:all_massive, dumped
+/// before the vakint call) are, while present, refused with the Closure
+/// detail "every line is massive: not a closure"; every other record is
+/// accepted.
 #[test]
 #[ignore = "external data: VAKINT_TEST_RECORD_ROOTS"]
 fn every_production_record_validates() {
     const ALL_MASSIVE: &str = "every line is massive: not a closure";
+    // the 22 all-massive tadpoles of 2026-11-21 (dumps written before the
+    // vakint call): each, while present, must be refused with ALL_MASSIVE;
+    // no other record may be refused
+    const REFUSED: [&str; 22] = [
+        "/common/build-cache/ben/consol/u7b/runs/b2-a-L3-check-dump/records/child/B_self_energy_L3_169-id2-3472259-001081.record.txt",
+        "/common/build-cache/ben/consol/u7b/runs/b2-a-L3-check-dump/records/child/B_self_energy_L3_169-id2-3472259-001106.record.txt",
+        "/common/build-cache/ben/consol/u7b/runs/b2-a-L3-check-dump/records/root/B_self_energy_L3_032-id4-3472259-000277.record.txt",
+        "/common/build-cache/ben/consol/u7b/runs/b2-a-L3-check-dump/records/root/B_self_energy_L3_072-id4-3472259-000467.record.txt",
+        "/common/build-cache/ben/consol/u7b/runs/b2-a-L3-check-dump/records/root/B_self_energy_L3_072-id4-3472259-000507.record.txt",
+        "/common/build-cache/ben/consol/u7b/runs/b2-a-L3-check-dump/records/root/B_self_energy_L3_101-id4-3472259-000731.record.txt",
+        "/common/build-cache/ben/consol/u7b/runs/b2-a-L3-check-dump/records/root/B_self_energy_L3_105-id4-3472259-000732.record.txt",
+        "/common/build-cache/ben/consol/u7b/runs/b2-a-L3-check-dump/records/root/B_self_energy_L3_163-id3-3472259-001044.record.txt",
+        "/common/build-cache/ben/consol/u7b/runs/b2-a-L3-check-dump/records/root/B_self_energy_L3_164-id3-3472259-001045.record.txt",
+        "/common/build-cache/ben/consol/u7b/runs/b2-a-L3-check-dump/records/root/B_self_energy_L3_266-id4-3472259-001483.record.txt",
+        "/common/build-cache/ben/consol/u7b/runs/b2-a-L3-check-dump/records/root/B_self_energy_L3_266-id4-3472259-001552.record.txt",
+        "/common/build-cache/ben/consol/u7b/runs/b2-a-L3-check-dump/records/root/B_self_energy_L3_271-id3-3472259-001539.record.txt",
+        "/common/build-cache/ben/consol/u7b/runs/b2-a-L3-check-dump/records/root/B_self_energy_L3_272-id3-3472259-001540.record.txt",
+        "/common/build-cache/ben/consol/u7b/runs/b2-a-L3-check-dump/records/root/B_self_energy_L3_273-id3-3472259-001555.record.txt",
+        "/common/build-cache/ben/consol/u7b/runs/b2-a-L3-check-dump/records/root/B_self_energy_L3_274-id3-3472259-001559.record.txt",
+        "/common/build-cache/ben/consol/u7b/runs/b2-a-L3-check-dump/records/root/B_self_energy_L3_275-id3-3472259-001575.record.txt",
+        "/common/build-cache/ben/consol/u7b/runs/b2-a-L3-check-dump/records/root/B_self_energy_L3_276-id3-3472259-001576.record.txt",
+        "/common/build-cache/ben/consol/u7b/runs/b2-a-L3-check-dump/records/root/B_self_energy_L3_353-id3-3472259-001874.record.txt",
+        "/common/build-cache/ben/consol/u7b/runs/b2-a-L3-check-dump/records/root/B_self_energy_L3_354-id3-3472259-001875.record.txt",
+        "/common/build-cache/ben/consol/u7b/runs/rv-b-L4-check/records/root/B_self_energy_L4_0049-id8-1914352-000159.record.txt",
+        "/common/build-cache/ben/consol/u7b/runs/rv-b-L4-check/records/root/B_self_energy_L4_0100-id8-1914352-000216.record.txt",
+        "/common/build-cache/ben/consol/u7b/runs/rv-b-L4-check/records/root/B_self_energy_L4_0100-id8-1914352-000274.record.txt",
+    ];
     let roots =
         wh_fixtures::required_env("VAKINT_TEST_RECORD_ROOTS", "the producer's record roots");
     let mut files = Vec::new();
@@ -3463,6 +3533,10 @@ fn every_production_record_validates() {
         }
     }
     init();
+    let pinned = REFUSED
+        .iter()
+        .filter_map(|p| std::fs::read_to_string(p).ok())
+        .collect::<std::collections::BTreeSet<_>>();
     let started = std::time::Instant::now();
     let mut seen = std::collections::BTreeSet::new();
     let (mut accepted, mut refused) = (
@@ -3493,8 +3567,9 @@ fn every_production_record_validates() {
             Err(e) => {
                 let detail = e.to_string();
                 ids.push(format!("{}\trefused\t{label}\t{detail}", p.display()));
-                let expected = matches!(&e, FactorizedError::Closure { detail }
-                    if detail.starts_with(ALL_MASSIVE));
+                let expected = pinned.contains(&text)
+                    && matches!(&e, FactorizedError::Closure { detail }
+                        if detail.starts_with(ALL_MASSIVE));
                 let prefix = if expected {
                     ALL_MASSIVE.to_string()
                 } else {
@@ -3525,23 +3600,31 @@ fn every_production_record_validates() {
         );
     }
     let refused_total = refused.values().map(Vec::len).sum::<usize>();
-    assert_eq!(
-        refused.keys().collect::<Vec<_>>(),
-        vec![ALL_MASSIVE],
-        "a refusal other than the all-massive tadpole: {refused:?}"
+    let unexpected = refused
+        .iter()
+        .filter(|(k, _)| k.as_str() != ALL_MASSIVE)
+        .collect::<Vec<_>>();
+    assert!(
+        unexpected.is_empty(),
+        "a refusal other than the pinned all-massive tadpoles: {unexpected:?}"
     );
-    // the roots are live (the producer keeps writing records): the 22
-    // all-massive tadpoles are pinned, every other record must validate
-    assert_eq!(refused_total, 22, "the all-massive tadpoles refused");
+    for p in REFUSED {
+        if let Ok(text) = std::fs::read_to_string(p) {
+            match FactorizedNumerator::from_text(&text) {
+                Err(FactorizedError::Closure { detail }) if detail.starts_with(ALL_MASSIVE) => {}
+                other => panic!("{p}: no longer the all-massive refusal: {other:?}"),
+            }
+        }
+    }
+    eprintln!(
+        "PRODUCTION pinned refusals present {} of 22; refused {refused_total}; accepted {accepted} of {} unique",
+        pinned.len(),
+        seen.len()
+    );
     assert_eq!(
         accepted + refused_total,
         seen.len(),
         "every other record accepted"
-    );
-    assert!(
-        seen.len() >= 2633,
-        "fewer records than on 2026-11-21: {}",
-        seen.len()
     );
 }
 
@@ -4732,5 +4815,76 @@ fn the_reviewers_hidden_singular_functions_are_refused_by_name() {
             .unwrap()
             .value;
         assert_same(&got, &(&plain * &t), twin);
+    }
+}
+
+/// vakint's data atoms are LINEAR FACTORS only (the catalogues: every
+/// monomial of their expanded coefficients has degree 0 or 1 in UNKNOWN and
+/// MZV, none under a power), in the insertion coefficient of the real K2
+/// record: (MZV(2,1) - zeta(3))^-1 (zero by Euler's identity, not written
+/// so), 1/MZV(5,3), MZV(5,3)^2, MZV(5,3) MZV(7,3), (1 + MZV(5,3))^2 and
+/// UNKNOWN(master, 0) MZV(5,3) refused at validation and at the entry
+/// (`Insertion`, prefix `a non-linear vakint data atom in <field>: `);
+/// MZV(5,3) ε^-1 and zeta(3) MZV(5,3) (a catalogue product) accepted. zeta:
+/// (zeta(3) - zeta(3))^-1 and (zeta(3)^2 - zeta(3) zeta(3))^-1 are cancelled
+/// by the parser to a non-finite number: refused; (zeta(3) - x)^-1 for a
+/// caller symbol x (not identically zero): accepted.
+#[test]
+fn data_atoms_are_linear_factors_and_no_zero_hides_in_a_denominator() {
+    let base = record("wh-k2-child-ins");
+    let vertex = base.insertions[0].vertex;
+    let with = |c: &str| {
+        let mut v = base.clone();
+        v.insertions[0].coefficient = &v.insertions[0].coefficient * atom(c);
+        v
+    };
+    let prefix = format!("a non-linear vakint data atom in insertion {vertex} coefficient: ");
+    for c in [
+        "(vakint::MZV(2,1)-symbolica::zeta(3))^-1",
+        "1/vakint::MZV(5,3)",
+        "vakint::MZV(5,3)^2",
+        "vakint::MZV(5,3)*vakint::MZV(7,3)",
+        "(1+vakint::MZV(5,3))^2",
+        "vakint::UNKNOWN(vakint::ggppss_int_53,0)*vakint::MZV(5,3)",
+    ] {
+        let v = with(c);
+        for (where_, got) in [
+            ("validation", v.validate()),
+            (
+                "entry",
+                closure(&v, &symbolic(), &v.prefactor.total()).map(|_| ()),
+            ),
+        ] {
+            match got {
+                Err(FactorizedError::Insertion { detail, .. }) => {
+                    assert!(detail.starts_with(&prefix), "{where_} {c}: {detail}")
+                }
+                other => panic!("{where_} {c}: {other:?}"),
+            }
+        }
+    }
+    for c in [
+        format!("vakint::MZV(5,3)*{EPS}^-1"),
+        "symbolica::zeta(3)*vakint::MZV(5,3)".to_string(),
+        "(symbolica::zeta(3)-caller::x)^-1".to_string(),
+    ] {
+        let v = with(&c);
+        v.validate().unwrap_or_else(|e| panic!("{c}: {e}"));
+        closure(&v, &symbolic(), &v.prefactor.total()).unwrap_or_else(|e| panic!("{c}: {e}"));
+    }
+    for c in [
+        "(symbolica::zeta(3)-symbolica::zeta(3))^-1",
+        "(symbolica::zeta(3)^2-symbolica::zeta(3)*symbolica::zeta(3))^-1",
+    ] {
+        eprintln!("CONTRACT ZERO {c} parses to {}", atom(c));
+        let v = with(c);
+        match v.validate() {
+            Err(FactorizedError::InexactNumber { .. }) => {}
+            other => panic!("{c}: {other:?}"),
+        }
+        assert!(
+            closure(&v, &symbolic(), &v.prefactor.total()).is_err(),
+            "{c} at the entry"
+        );
     }
 }
