@@ -218,6 +218,10 @@ pub(crate) fn scoped<T>(
 /// terms other than keep, an `additional_normalization` other than 1. An
 /// error with the kind enabled, never a fallback.
 fn settings_refusal(graph: &str, closed: Option<bool>, uv: &UVgenerationSettings) -> Result<()> {
+    #[cfg(test)]
+    if !SETTINGS_CHECK.with(std::cell::Cell::get) {
+        return Ok(());
+    }
     let refuse = |why: String| {
         Err(eyre!(
             "UNCONTRACTED kind=surrogate graph={graph} outcome=error:surrogate_settings: {why}: every record of the surrogate would decline by design; run the kind with the production settings or drop it from the list"
@@ -1501,6 +1505,26 @@ pub(crate) fn direct(
             value
         }
     }
+}
+
+#[cfg(test)]
+thread_local! {
+    static SETTINGS_CHECK: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
+}
+
+/// Tests: run `f` WITHOUT the K5 site's settings check (to show what the
+/// ledger's generic rules alone catch).
+#[cfg(test)]
+pub(crate) fn without_settings_check<T>(f: impl FnOnce() -> T) -> T {
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let previous = self.0;
+            SETTINGS_CHECK.with(|slot| slot.set(previous));
+        }
+    }
+    let _restore = Restore(SETTINGS_CHECK.with(|slot| slot.replace(false)));
+    f()
 }
 
 /// Tests: run `f` with `provenance` as this thread's surrogate context.
