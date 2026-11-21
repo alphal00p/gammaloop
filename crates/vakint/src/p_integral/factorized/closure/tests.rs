@@ -648,6 +648,322 @@ fn reference(value: &FactorizedNumerator, routing: &[(&str, &str)]) -> Atom {
     total.expand()
 }
 
+/// The vakint vacuum notation of an idenso-contracted network, by a
+/// substitution written HERE (not `map_to_vakint_vacuum`): a scalar product
+/// of two compact momenta `Q(a, mink(D))` -> `dot(v_a, v_b)`, a momentum on
+/// port i of `value.ports` (record order) -> `v_e` with the raw index
+/// 9001 + i, a metric of two ports -> `g(9001 + i, 9001 + j)`; `v_e` from
+/// the edge's momentum vector (`k(l)` loops, `p(j)` externals). Any other
+/// surviving momentum or slot is a failure.
+fn independent_vacuum_map(value: &FactorizedNumerator, contracted: &Atom) -> Atom {
+    let head_of = |text: &str| {
+        let a = atom(text);
+        let AtomView::Fun(f) = a.as_view() else {
+            panic!("{a}")
+        };
+        f.get_symbol()
+    };
+    let q_head = head_of(&q(1, &hedge(1)));
+    let metric = head_of(&format!("{METRIC}({},{})", hedge(1), hedge(2)));
+    let ports = value.ports.clone();
+    let loops = value.loops();
+    let vector = |id: i64, index: Option<i64>| -> Atom {
+        let edge = value
+            .edges
+            .iter()
+            .find(|e| e.id as i64 == id)
+            .unwrap_or_else(|| panic!("unknown edge {id}"));
+        let mut out = Atom::Zero;
+        for (i, c) in edge.momentum.iter().enumerate() {
+            if *c == 0 {
+                continue;
+            }
+            let (h, n) = if i < loops {
+                (S.k, i as i64 + 1)
+            } else {
+                (S.p, (i - loops) as i64 + 1)
+            };
+            out += Atom::num(*c)
+                * match index {
+                    Some(x) => function!(h, Atom::num(n), Atom::num(x)),
+                    None => function!(h, Atom::num(n)),
+                };
+        }
+        out
+    };
+    // Q(e, rep): (e, rep)
+    let momentum = |v: AtomView<'_>| -> Option<(i64, Atom)> {
+        let AtomView::Fun(f) = v else { return None };
+        if f.get_symbol() != q_head || f.get_nargs() != 2 {
+            return None;
+        }
+        let args = f.iter().collect::<Vec<_>>();
+        Some((i64::try_from(args[0]).ok()?, args[1].to_owned()))
+    };
+    let compact = |rep: &Atom| matches!(rep.as_view(), AtomView::Fun(f) if f.get_nargs() == 1);
+    let port = |slot: &Atom| {
+        ports
+            .iter()
+            .position(|p| p == slot)
+            .map(|i| 9001 + i as i64)
+    };
+    let mapped = contracted.replace_map(|part, _, out| {
+        let AtomView::Fun(f) = part else { return };
+        let args = f.iter().collect::<Vec<_>>();
+        let is_product = f.get_symbol() == metric || f.get_symbol().get_name() == "spenso::dot";
+        if is_product && args.len() == 2 {
+            if let (Some((a, ra)), Some((b, rb))) = (momentum(args[0]), momentum(args[1]))
+                && compact(&ra)
+                && compact(&rb)
+            {
+                **out = S.dot.call((vector(a, None), vector(b, None)));
+                return;
+            }
+            if f.get_symbol() == metric
+                && let (Some(i), Some(j)) = (port(&args[0].to_owned()), port(&args[1].to_owned()))
+            {
+                **out = S.g.call((Atom::num(i), Atom::num(j)));
+            }
+            return;
+        }
+        if let Some((e, slot)) = momentum(part)
+            && let Some(i) = port(&slot)
+        {
+            **out = vector(e, Some(i));
+        }
+    });
+    let mut leftover = None;
+    mapped.as_view().visitor(&mut |part| {
+        if let AtomView::Fun(f) = part
+            && (f.get_symbol() == q_head || f.get_symbol() == metric)
+        {
+            leftover = Some(part.to_owned());
+        }
+        leftover.is_none()
+    });
+    assert!(leftover.is_none(), "left after the mapping: {leftover:?}");
+    mapped
+}
+
+/// THE INDEPENDENT REFERENCE (A-25 ii): the contracted reference chain
+/// sharing NONE of `TaylorOrders::keeps`, `map_to_vakint_vacuum` and
+/// `Prefactor::total` with the entry (orders written out, the mapping
+/// [`independent_vacuum_map`], the prefactor ARGUMENT multiplied in by plain
+/// multiplication AFTER the evaluation; exact for an ε-free argument).
+fn independent_reference(
+    value: &FactorizedNumerator,
+    routing: &[(&str, &str)],
+    argument: &Atom,
+) -> Atom {
+    let vakint = Vakint::new().unwrap();
+    let settings = settings();
+    let FactorizedKind::Closure(spec) = &value.kind else {
+        unreachable!()
+    };
+    let loops = value.loops();
+    let lambda = Atom::var(symbolica::symbol!("reference_lambda"));
+    let epsilon = Atom::var(crate::utils::vakint_macros::vk_symbol!(
+        &settings.epsilon_symbol
+    ));
+    let in_epsilon = Atom::num(4) - Atom::num(2) * &epsilon;
+    // the whole numerator, contracted by idenso
+    let mut network = value.factor_product();
+    if let Some(projector) = &value.projector {
+        network *= &projector.tensor;
+    }
+    let contracted = contract_with_idenso(&network, false).unwrap();
+    let mut scalar = independent_vacuum_map(value, &contracted)
+        .replace(Atom::var(value.dimension))
+        .with(in_epsilon.clone())
+        .expand();
+    let (w, compensate) = match &spec.taylor {
+        Some(t) => (t.degree as usize, t.compensate_mass),
+        None => (0, false),
+    };
+    let closing_mass = spec.auxiliary_mass_squared.clone();
+    // the Taylor step on the contracted scalar: p -> lambda p, R -> ..
+    if spec.taylor.is_some() {
+        scalar = scalar.replace_map(|part, _, out| {
+            let AtomView::Fun(f) = part else { return };
+            if f.get_symbol() == S.dot {
+                let n = f
+                    .iter()
+                    .filter(|a| matches!(a, AtomView::Fun(g) if g.get_symbol() == S.p))
+                    .count();
+                if n > 0 {
+                    **out = lambda.pow(Atom::num(n as i64)) * part.to_owned();
+                }
+            } else if f.get_symbol() == S.p && f.get_nargs() == 2 {
+                **out = &lambda * part.to_owned();
+            }
+        });
+        let image = if compensate {
+            (Atom::num(1) - lambda.pow(Atom::num(2))) * &closing_mass
+        } else {
+            closing_mass.clone()
+        };
+        scalar = scalar.replace(spec.mass_squared.clone()).with(image);
+    }
+    // every denominator a symbol a_e + B lambda + C lambda^2
+    let vector = |head, c: &[i64]| {
+        let mut out = Atom::Zero;
+        for (i, x) in c.iter().enumerate() {
+            if *x != 0 {
+                out += Atom::num(*x) * function!(head, Atom::num(i as i64 + 1));
+            }
+        }
+        out
+    };
+    let a = |id: usize| Atom::var(symbolica::symbol!(format!("reference_den_{id}")));
+    let mut integrand = scalar;
+    let internal = value
+        .edges
+        .iter()
+        .filter(|e| !e.is_external())
+        .collect::<Vec<_>>();
+    for edge in &internal {
+        let l = vector(S.k, &edge.momentum[..loops]);
+        let r = vector(S.p, &edge.momentum[loops..]);
+        let mut den = a(edge.id);
+        if spec.taylor.is_some() {
+            if !r.is_zero() {
+                den += Atom::num(2) * &lambda * S.dot.call((&l, &r))
+                    + lambda.pow(Atom::num(2)) * S.dot.call((&r, &r));
+            }
+            if edge.id == spec.edge && compensate {
+                den += lambda.pow(Atom::num(2)) * &closing_mass;
+            }
+        }
+        integrand *= den.pow(Atom::num(-edge.power));
+    }
+    let integrand = if let Some(taylor) = &spec.taylor {
+        let series = integrand
+            .series(symbolica::symbol!("reference_lambda"), 0, w)
+            .unwrap();
+        let mut kept = Atom::Zero;
+        // the kept orders written out (not TaylorOrders::keeps)
+        let kept_orders: Vec<i64> = match taylor.orders {
+            TaylorOrders::All => (0..=w as i64).collect(),
+            TaylorOrders::DropZero => (1..=w as i64).collect(),
+            TaylorOrders::DropZeroOdd => (2..=w as i64).filter(|n| n % 2 == 0).collect(),
+        };
+        for (power, coefficient) in series.terms() {
+            let n = power.numerator().to_i64().unwrap();
+            assert!(power.is_integer() && n >= 0);
+            if kept_orders.contains(&n) {
+                kept += coefficient;
+            }
+        }
+        kept
+    } else {
+        integrand
+    };
+    // patterns: a_e -> 1/b_e, then the (positive) powers of the b_e
+    let b_of = |id: usize| Atom::var(symbolica::symbol!(format!("reference_inv_{id}")));
+    let mut integrand = integrand;
+    for edge in &internal {
+        integrand = integrand
+            .replace(a(edge.id))
+            .with(b_of(edge.id).pow(Atom::num(-1)));
+    }
+    let integrand = integrand.expand();
+    let inverses = internal.iter().map(|e| b_of(e.id)).collect::<Vec<_>>();
+    let by_pattern = integrand.coefficient_list::<i8>(&inverses);
+    // NO prefactor inside: the argument multiplies the result afterwards
+    let prefactor = Atom::num(1);
+    let routing = routing
+        .iter()
+        .map(|(k, image)| symbolica::id::Replacement::new(atom(k).to_pattern(), atom(image)))
+        .collect::<Vec<_>>();
+    let mut total = Atom::Zero;
+    for (monomial, numerator) in by_pattern {
+        let mut powers = BTreeMap::new();
+        for edge in &internal {
+            let mut power = 0;
+            monomial.as_view().visitor(&mut |part| {
+                if part == b_of(edge.id).as_view() {
+                    power = 1;
+                }
+                if let AtomView::Pow(p) = part {
+                    let (base, exp) = p.get_base_exp();
+                    if base == b_of(edge.id).as_view() {
+                        power = i64::try_from(exp).unwrap();
+                        return false;
+                    }
+                }
+                true
+            });
+            assert!(power > 0, "{monomial}: edge {} not a denominator", edge.id);
+            powers.insert(edge.id, power);
+        }
+        let mut topology = Atom::num(1);
+        let mut cut = Atom::num(1);
+        for edge in &internal {
+            let (Endpoint::Vertex(s), Endpoint::Vertex(t)) = (edge.source, edge.target) else {
+                unreachable!()
+            };
+            let mass = if edge.id == spec.edge {
+                closing_mass.clone()
+            } else {
+                Atom::Zero
+            };
+            let l = vector(S.k, &edge.momentum[..loops]);
+            topology *= S.prop.call((
+                edge.id as i64,
+                S.edge.call((s as i64, t as i64)),
+                l.clone(),
+                mass,
+                Atom::num(powers[&edge.id]),
+            ));
+            if edge.id != spec.edge {
+                cut *= S.prop.call((
+                    edge.id as i64,
+                    S.edge.call((s as i64, t as i64)),
+                    l.replace_multiple(&routing).expand(),
+                    Atom::Zero,
+                    Atom::num(powers[&edge.id]),
+                ));
+            }
+        }
+        let input = &prefactor * &numerator * S.topo.call(topology);
+        let reduced = vakint.tensor_reduce(&settings, input.as_view()).unwrap();
+        let expression = crate::VakintExpression::try_from(reduced).unwrap();
+        let closure = MassiveClosure {
+            momentum: S.p.call(1),
+            mass_squared: closing_mass.clone(),
+            power: powers[&spec.edge],
+        };
+        for term in &expression.0 {
+            for (tensor, coefficient) in external_split(&term.numerator.expand()) {
+                assert!(
+                    !coefficient.contains_symbol(S.p),
+                    "{}: external momentum left in {coefficient}",
+                    value.label
+                );
+                let hand = (coefficient.replace_multiple(&routing).expand()
+                    * S.topo.call(cut.clone()))
+                .expand();
+                let closed = closure
+                    .evaluate(&vakint, &settings, hand.as_view())
+                    .unwrap();
+                total += tensor * closed;
+            }
+        }
+    }
+    if let Some(projector) = &value.projector
+        && projector.p2_power != 0
+    {
+        total *= S
+            .dot
+            .call((S.p.call(1), S.p.call(1)))
+            .pow(Atom::num(projector.p2_power));
+    }
+    let argument = argument
+        .replace(Atom::var(value.dimension))
+        .with(in_epsilon.clone());
+    (total * argument).expand()
+}
+
 fn check(value: &FactorizedNumerator, routing: &[(&str, &str)]) -> ClosureRecordValue {
     value
         .validate()
@@ -3146,4 +3462,67 @@ fn a_forged_slash_dummy_is_refused() {
         "{:?}",
         v.validate()
     );
+}
+
+/// The entry against the INDEPENDENT reference, exactly, one record per
+/// kind: root (projector, Taylor step, compensated), child (open ports,
+/// independent externals), pre-expanded sector (no Taylor step), and the
+/// order filters; the argument is ε-free (so that multiplying it after the
+/// evaluation is exact).
+fn check_independent(value: &FactorizedNumerator, routing: &[(&str, &str)], argument: &Atom) {
+    value
+        .validate()
+        .unwrap_or_else(|e| panic!("{}: {e}", value.label));
+    let vakint = Vakint::new().unwrap();
+    let got = evaluate_factorized_closure(
+        &vakint,
+        &settings(),
+        std::slice::from_ref(value),
+        std::slice::from_ref(argument),
+    )
+    .unwrap_or_else(|e| panic!("{}: {e}", value.label));
+    let expected = independent_reference(value, routing, argument);
+    assert!(!expected.is_zero(), "{}: zero reference", value.label);
+    assert!(
+        (&got.records[0].vakint_value - &expected)
+            .expand()
+            .is_zero(),
+        "{}: entry vs the independent reference\nentry     {}\nreference {}",
+        value.label,
+        got.records[0].vakint_value,
+        expected
+    );
+}
+
+#[test]
+fn every_kind_equals_the_independent_reference() {
+    let argument = atom("UFO::gs^2*witness::x");
+    check_independent(&l2_root(2, true), &L2_CUT, &argument);
+    check_independent(&l2_root(1, false), &L2_CUT, &argument);
+    check_independent(&l2_child(2), &L2_CUT, &argument);
+    check_independent(&l2_sector(), &L2_CUT, &argument);
+    for orders in [TaylorOrders::DropZero, TaylorOrders::DropZeroOdd] {
+        let mut v = l2_root(2, true);
+        spec(&mut v).taylor.as_mut().unwrap().orders = orders;
+        check_independent(&v, &L2_CUT, &argument);
+    }
+}
+
+/// THE COLLISION WITNESSES against the independent reference: the control
+/// names `user::closure_tensor_<n>` (what a caller may legally write) in the
+/// prefactor argument and inside a factor, closed (root) and with open ports
+/// (child): the entry equals the reference exactly (the internal names are
+/// refused: `internal_symbol_names_are_refused_in_a_record`).
+#[test]
+fn the_collision_controls_equal_the_independent_reference() {
+    for (value, name) in [
+        (l2_root(2, true), "user::closure_tensor_0"),
+        (l2_child(2), "user::closure_tensor_1"),
+    ] {
+        let x = atom(name);
+        check_independent(&value, &L2_CUT, &(atom("UFO::gs^2") * &x));
+        let mut inside = value.clone();
+        inside.vertices[0].factor = &inside.vertices[0].factor * &x;
+        check_independent(&inside, &L2_CUT, &atom("UFO::gs^2"));
+    }
 }
