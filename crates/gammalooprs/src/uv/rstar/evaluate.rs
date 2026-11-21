@@ -594,11 +594,11 @@ impl RStarPlan {
         evaluation.root_closure = Some(closure);
         evaluation.channel = ("isotropic", "1/(d (d-1) (d+2))");
         evaluation.close_child(child_root.as_ref(), "isotropic");
-        evaluation.closure_data = Some(super::uncontracted::ClosureData {
-            kind: super::uncontracted::ChildClosure::Isotropic,
-            normalization: normalization.clone(),
-            open: None,
-        });
+        evaluation.closure_data = super::uncontracted::closure_data(
+            super::uncontracted::ChildClosure::Isotropic,
+            &normalization,
+            None,
+        );
         let channels = evaluation.counterterm()?;
         Ok(markers
             .iter()
@@ -656,14 +656,14 @@ impl RStarPlan {
                 DiracKind::SelfEnergy => "dirac_self_energy",
             },
         );
-        evaluation.closure_data = Some(super::uncontracted::ClosureData {
-            kind: match boundary.kind {
+        evaluation.closure_data = super::uncontracted::closure_data(
+            match boundary.kind {
                 DiracKind::Vertex => super::uncontracted::ChildClosure::DiracVertex,
                 DiracKind::SelfEnergy => super::uncontracted::ChildClosure::DiracSelfEnergy,
             },
-            normalization: boundary.normalization.clone(),
-            open: matches!(boundary.kind, DiracKind::SelfEnergy).then(|| boundary.index.clone()),
-        });
+            &boundary.normalization,
+            matches!(boundary.kind, DiracKind::SelfEnergy).then_some(&boundary.index),
+        );
         let trace = evaluation.counterterm()?;
         Ok(trace * &boundary.structure)
     }
@@ -3342,7 +3342,15 @@ impl<'a> Evaluation<'a> {
                 return Err(uncontracted::error_failure(&attempt, switch.mode));
             }
             let today_started = Instant::now();
-            let today = self.integrate_ordinary_today(term)?;
+            let today = match self.integrate_ordinary_today(term) {
+                Ok(today) => today,
+                Err(error) => {
+                    // today's path fails the diagram; our attempt is still
+                    // logged and counted in UNCONTRACTED_SUMMARY
+                    uncontracted::report(&attempt, None);
+                    return Err(error);
+                }
+            };
             let check = attempt.value().map(|ours| {
                 uncontracted::compare(
                     &today,
