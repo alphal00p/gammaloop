@@ -91,16 +91,27 @@ thread_local! {
         const { std::cell::Cell::new(None) };
 }
 
-/// TEST-ONLY hook, a no-op in a library build: the internal failure the
-/// tests asked for at `stage` (`INJECT_INTERNAL_FAILURE`), as the call site
-/// would report a real one.
-fn injected(stage: &'static str) -> Result<()> {
+/// TEST-ONLY fault injection INSIDE a wrapped call, a no-op in a library
+/// build: when the tests asked for a failure at `stage`
+/// (`INJECT_INTERNAL_FAILURE`), the wrapped operation's `result` is replaced
+/// by its own NATIVE error `native()` (a `VakintError`, a `SeriesError`), so
+/// that the call site's own `map_err` produces the reported error.
+fn injected<T, E>(
+    stage: &'static str,
+    native: impl FnOnce() -> E,
+    result: std::result::Result<T, E>,
+) -> std::result::Result<T, E> {
     #[cfg(test)]
     if INJECT_INTERNAL_FAILURE.with(|c| c.get()) == Some(stage) {
-        return Err(internal(stage, "injected failure"));
+        return Err(native());
     }
-    let _ = stage;
-    Ok(())
+    let _ = (stage, native);
+    result
+}
+
+/// The native error the injection gives a vakint call.
+fn injected_vakint_error() -> crate::VakintError {
+    crate::p_integral::invalid("injected failure")
 }
 
 fn lambda_symbol() -> Symbol {
@@ -1430,16 +1441,19 @@ fn prepare(
             split_seconds,
         });
     }
-    let boundary = RemainderBoundary::new(
-        value.label.clone(),
-        head,
-        closing_mass,
-        routing.expect("one pattern"),
-        blocks,
-        boundary_patterns,
+    let boundary = injected(
+        "boundary",
+        injected_vakint_error,
+        RemainderBoundary::new(
+            value.label.clone(),
+            head,
+            closing_mass,
+            routing.expect("one pattern"),
+            blocks,
+            boundary_patterns,
+        ),
     )
     .map_err(|e| internal("boundary", e))?;
-    injected("boundary")?;
     Ok(Prepared {
         boundary: Some(boundary),
         tensors,
@@ -1541,10 +1555,12 @@ pub(super) fn evaluate_validated(
                 |p| matches!(p.topology.as_view(), AtomView::Fun(f) if f.get_symbol() == S.topo),
             );
             if direct {
-                let (atom, stats) = boundary
-                    .evaluate_with_stats(vakint, &local, BoundaryOptions::default())
-                    .map_err(|e| internal("lowering and reduction", e))?;
-                injected("lowering and reduction")?;
+                let (atom, stats) = injected(
+                    "lowering and reduction",
+                    injected_vakint_error,
+                    boundary.evaluate_with_stats(vakint, &local, BoundaryOptions::default()),
+                )
+                .map_err(|e| internal("lowering and reduction", e))?;
                 let lower = stats.match_seconds
                     + stats.read_seconds
                     + stats.classify_seconds
@@ -1565,10 +1581,12 @@ pub(super) fn evaluate_validated(
                 // a loop-free cut (one loop): the ordinary closure per pattern
                 let mut atom = Atom::Zero;
                 for (closure, input) in boundary.ordinary() {
-                    atom += closure
-                        .evaluate(vakint, &local, input.as_view())
-                        .map_err(|e| internal("ordinary closure", e))?;
-                    injected("ordinary closure")?;
+                    atom += injected(
+                        "ordinary closure",
+                        injected_vakint_error,
+                        closure.evaluate(vakint, &local, input.as_view()),
+                    )
+                    .map_err(|e| internal("ordinary closure", e))?;
                 }
                 (atom, 0.0, 0.0, boundary.patterns.len())
             }
@@ -1578,17 +1596,23 @@ pub(super) fn evaluate_validated(
         vakint_value = vakint_value.replace(symbol.clone()).with(tensor.clone());
     }
     let vakint_value = if pole_order > 0 {
-        injected("truncation of the insertion product")?;
         let target = returned_terms - value.loops() as i64 - 1;
-        vakint_value
-            .series(
+        injected(
+            "truncation of the insertion product",
+            || symbolica::poly::series::SeriesError::NonPositiveRelativeDepth {
+                depth: symbolica::poly::series::SeriesDepth::Relative(
+                    symbolica::domains::rational::Rational::from(0),
+                ),
+            },
+            vakint_value.series(
                 epsilon_symbol,
                 Atom::Zero.as_view(),
                 symbolica::domains::rational::Rational::from(target),
-            )
-            .map_err(|e| internal("truncation of the insertion product", e))?
-            .to_atom()
-            .expand()
+            ),
+        )
+        .map_err(|e| internal("truncation of the insertion product", e))?
+        .to_atom()
+        .expand()
     } else {
         vakint_value.expand()
     };

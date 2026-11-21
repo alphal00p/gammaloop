@@ -4335,10 +4335,12 @@ fn two_poled_root() -> FactorizedNumerator {
     with
 }
 
-/// A-27(e): each of the four internal-failure CALL SITES of the evaluation,
-/// triggered by the test-only fault injection, reports `Evaluation` with
-/// its stage; the same record without the injection evaluates (the site is
-/// on its path).
+/// A-27(e): each of the four internal-failure CALL SITES of the evaluation:
+/// the test-only fault injection makes the WRAPPED call itself return its
+/// native error (a `VakintError` from the boundary, the lowering, the
+/// ordinary closure; a `SeriesError` from the truncation), and the site's
+/// own `map_err` must report `Evaluation` with the stage's prefix; the same
+/// record without the injection evaluates (the site is on its path).
 #[test]
 fn every_internal_failure_site_reports_evaluation() {
     let vakint = Vakint::new().unwrap();
@@ -4365,9 +4367,18 @@ fn every_internal_failure_site_reports_evaluation() {
         super::INJECT_INTERNAL_FAILURE.with(|c| c.set(Some(stage)));
         let injected = run();
         super::INJECT_INTERNAL_FAILURE.with(|c| c.set(None));
+        // the wrapped call itself failed with its NATIVE error; the site's
+        // own map_err made it Evaluation with the stage's prefix
         match injected {
             Err(FactorizedError::Evaluation { detail }) => {
-                assert_eq!(detail, format!("closure {stage}: injected failure"))
+                assert!(
+                    detail.starts_with(&format!("closure {stage}: ")),
+                    "{stage}: {detail}"
+                );
+                assert!(
+                    detail.contains("injected failure") || detail.contains("depth"),
+                    "{stage}: not the injected native error: {detail}"
+                );
             }
             other => panic!("{stage}: {other:?}"),
         }
