@@ -182,8 +182,7 @@ pub(crate) const NONE_COMPARED: &str = "none_compared";
 /// blank lines and `#` comments skipped; every field required). The code
 /// must be a designed refusal's ([`uncontracted::is_designed_code`]): an
 /// exception excuses only declined records, so a code that is an error
-/// (e.g. `vakint:all_massive` since requirement 13's interim rule; the
-/// single-propagator shape is now the emitter's `one_loop_tree_cut`; the
+/// (e.g. `vakint:Closure`, an undesigned vakint refusal; the
 /// IR hard child route's `ir_hard_route:<head>` and the guard's
 /// `ir_hard_guard:<panic|error>`) would name nothing and is refused
 /// instead. The one run-level row is graph `*` with the code

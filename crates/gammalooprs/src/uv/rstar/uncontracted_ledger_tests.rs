@@ -489,6 +489,7 @@ fn identity_names_mode_kinds_and_strictness() {
     );
     for designed in [
         "vakint:taylor_degree",
+        "vakint:all_massive",
         "pint6_dump",
         "insertion_mass_symbol",
     ] {
@@ -496,10 +497,9 @@ fn identity_names_mode_kinds_and_strictness() {
         assert!(ledger::parse_exceptions(&text).is_ok(), "{designed}");
     }
     // an error is never excepted: a code that is not a designed refusal
-    // (requirement 13's `vakint:all_massive`, lane B's `routing`, `crown`,
-    // `sigma`, a vakint variant) is refused, never silently inert
+    // (lane B's `routing`, `crown`, `sigma`, a vakint variant) is refused,
+    // never silently inert
     for error in [
-        "vakint:all_massive",
         "vakint:Closure",
         "routing",
         "crown",

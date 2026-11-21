@@ -871,7 +871,7 @@ fn closure_data_only_when_enabled() {
 }
 
 /// The designed refusals are a closed list (U7a review B1): the emitter's
-/// codes, and vakint's section-8 rows by variant AND detail prefix; every
+/// codes, and vakint's frozen-list rows by variant AND detail prefix; every
 /// other refusal (the entry's wrapped internal failures, the reader's
 /// syntax errors, our own bugs) is an error.
 #[test]
@@ -914,6 +914,11 @@ fn designed_refusals_are_a_closed_list() {
             },
             "vakint:gamma5",
         ),
+        // the frozen list's ADDENDUM: the backstop behind `one_loop_tree_cut`
+        (
+            closure("every line is massive: not a closure"),
+            "vakint:all_massive",
+        ),
     ] {
         let decline = Decline::vakint(&error);
         assert!(decline.designed, "{error}");
@@ -921,12 +926,8 @@ fn designed_refusals_are_a_closed_list() {
     }
     for (error, code) in [
         // the entry's internal failures (closure.rs 1212 / 1294 / 1317 / 1334)
-        // and, requirement 13 (interim), every Closure detail without a
-        // section-8 prefix: "every line is massive" among them
-        (
-            closure("every line is massive: not a closure"),
-            "vakint:Closure",
-        ),
+        // and every Closure detail without a designed row (requirements 13
+        // and 14)
         (closure("lowering: no key plan"), "vakint:Closure"),
         (
             closure("truncating the insertion product: x"),
@@ -997,7 +998,7 @@ fn designed_refusals_are_a_closed_list() {
     // U7b adds no designed refusal; the U7a delta adds `one_loop_tree_cut`
     // R2-I3 removes `sigma`, `root_crown_paired`, `root_normalisation_momentum`
     assert_eq!(DESIGNED_LOCAL.len(), 12, "{DESIGNED_LOCAL:?}");
-    assert_eq!(uncontracted::DESIGNED_VAKINT.len(), 8);
+    assert_eq!(uncontracted::DESIGNED_VAKINT.len(), 9);
     for code in ["open_root", "insertion_mass_symbol", "one_loop_tree_cut"] {
         assert!(DESIGNED_LOCAL.contains(&code), "{code}");
     }
