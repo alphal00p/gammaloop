@@ -2675,21 +2675,17 @@ impl RStarIntegrand {
         // term to today's path.
         let limit = super::closed::budget_extra_bytes()
             .and_then(|extra| process_rss_bytes().map(|rss| rss + extra));
-        Ok(super::closed::guarded(
-            limit,
-            MEMORY_RELEASE.get().copied(),
-            || {
-                super::closed::closed_moments(
-                    &self.routed,
-                    &self.soft_edges,
-                    degree,
-                    // One root scope: idenso certifies a closed scalar result
-                    // (frontier certificate), read before the uncook.
-                    &|expression| Self::simplify_view_certified(expression.as_view()),
-                    stats,
-                )
-            },
-        ))
+        super::closed::guarded(limit, MEMORY_RELEASE.get().copied(), || {
+            super::closed::closed_moments(
+                &self.routed,
+                &self.soft_edges,
+                degree,
+                // One root scope: idenso certifies a closed scalar result
+                // (frontier certificate), read before the uncook.
+                &|expression| Self::simplify_view_certified(expression.as_view()),
+                stats,
+            )
+        })
     }
 
     /// Put the bare hard term and its local counterterms in the same covariant
