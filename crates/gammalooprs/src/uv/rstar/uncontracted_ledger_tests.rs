@@ -231,6 +231,24 @@ fn agree(a: &Atom, b: &Atom) -> bool {
     a == b || (a - b).expand().is_zero() || uncontracted::agree(a, b).unwrap_or(false)
 }
 
+/// [`ledger::initialise`] with the production routes.
+fn init(
+    switch: Switch,
+    strict: Option<&str>,
+    timing: Option<&str>,
+    pint6: impl FnOnce() -> bool,
+    exceptions: Option<&str>,
+) -> std::result::Result<Exceptions, String> {
+    ledger::initialise(
+        switch,
+        strict,
+        timing,
+        || ledger::Routes::PRODUCTION,
+        pint6,
+        exceptions,
+    )
+}
+
 /// Tests that set the switch's environment: only in a process of their own.
 fn own_process() -> Result<()> {
     ensure!(
@@ -253,15 +271,17 @@ fn strict_is_the_only_behaviour() {
         let error = ledger::parse_strict(Some(refused)).unwrap_err();
         assert!(error.contains(uncontracted::STRICT_VARIABLE), "{error}");
     }
-    // refused in every mode, off included (the variable has no meaning left)
+    // refused with the switch on or check; off reads nothing but the timing
+    // switch, as before the switch existed (review of the U7a delta,
+    // values-and-off finding 2)
     for switch in [
-        Switch::OFF,
         Switch::new(Mode::On, &ROOT_CHILD),
         Switch::new(Mode::Check, &ROOT_CHILD),
     ] {
-        assert!(ledger::initialise(switch, Some("0"), || false, None).is_err());
-        assert!(ledger::initialise(switch, Some("1"), || false, None).is_ok());
+        assert!(init(switch, Some("0"), None, || false, None).is_err());
+        assert!(init(switch, Some("1"), None, || false, None).is_ok());
     }
+    assert!(init(Switch::OFF, Some("0"), None, || false, None).is_ok());
 }
 
 /// `GAMMALOOP_UNCONTRACTED_STRICT=0` refuses the switch where it
@@ -354,14 +374,24 @@ fn on_mode_error_fails_the_diagram() -> Result<()> {
 #[test]
 fn check_with_the_pint6_dump_and_inert_lists_are_refused() {
     let check = Switch::new(Mode::Check, &ROOT_CHILD);
-    let error = ledger::initialise(check, None, || true, None).unwrap_err();
+    let error = init(check, None, None, || true, None).unwrap_err();
     assert!(error.contains("PINT6_CLOSURE_DUMP"), "{error}");
     // mode on keeps the PINT6 dump as a designed decline (today's records)
-    assert!(ledger::initialise(Switch::new(Mode::On, &ROOT_CHILD), None, || true, None).is_ok());
+    assert!(
+        init(
+            Switch::new(Mode::On, &ROOT_CHILD),
+            None,
+            None,
+            || true,
+            None
+        )
+        .is_ok()
+    );
     // a list without a kind this build emits would build no record
     assert!(
-        ledger::initialise(
+        init(
             Switch::new(Mode::Check, &[Kind::Quotient, Kind::Surrogate]),
+            None,
             None,
             || false,
             None
@@ -370,16 +400,17 @@ fn check_with_the_pint6_dump_and_inert_lists_are_refused() {
     );
     // an exception list is read in check mode only
     assert!(
-        ledger::initialise(
+        init(
             Switch::new(Mode::On, &ROOT_CHILD),
+            None,
             None,
             || false,
             Some("/nonexistent")
         )
         .is_err()
     );
-    assert!(ledger::initialise(check, None, || false, Some("/nonexistent")).is_err());
-    assert!(ledger::initialise(Switch::OFF, None, || true, Some("/nonexistent")).is_ok());
+    assert!(init(check, None, None, || false, Some("/nonexistent")).is_err());
+    assert!(init(Switch::OFF, None, None, || true, Some("/nonexistent")).is_ok());
 }
 
 /// Check mode with `PINT6_CLOSURE_DUMP` from the environment: refused where
@@ -930,4 +961,281 @@ fn k3_terms_without_a_record_are_not_expected() -> Result<()> {
         );
         Ok(())
     })
+}
+
+// ---------------------------------------------------------------------------
+// Review of the U7a delta at 6c492c9ddc: the fixes that need new interfaces
+// (the base-interface reproducers are `uncontracted_review_tests`)
+// ---------------------------------------------------------------------------
+
+/// zero-comparison 2: an enabled kind whose route is off is refused at the
+/// switch's initialisation (at 6c492c9ddc `check:child` with
+/// `GAMMALOOP_UV_CHILDREN=massive`, and `check:ir-hard` with
+/// `GAMMALOOP_IR_HARD=off`, passed with `expected=0 outcome=ok`).
+#[test]
+fn a_kind_whose_route_is_off_is_refused() {
+    let routes = |uv_children_rstar, ir_hard_child| ledger::Routes {
+        uv_children_rstar,
+        ir_hard_child,
+    };
+    for mode in [Mode::Check, Mode::On] {
+        let child = Switch::new(mode, &[Kind::Child]);
+        let error = ledger::initialise(child, None, None, || routes(false, true), || false, None)
+            .unwrap_err();
+        assert!(error.contains("GAMMALOOP_UV_CHILDREN=massive"), "{error}");
+        let ir_hard = Switch::new(mode, &[Kind::IrHard]);
+        let error = ledger::initialise(ir_hard, None, None, || routes(true, false), || false, None)
+            .unwrap_err();
+        assert!(error.contains("GAMMALOOP_IR_HARD"), "{error}");
+        // the kinds whose routes are on, and root (always produced)
+        assert!(
+            ledger::initialise(child, None, None, || routes(true, false), || false, None).is_ok()
+        );
+        assert!(
+            ledger::initialise(ir_hard, None, None, || routes(false, true), || false, None).is_ok()
+        );
+        assert!(
+            ledger::initialise(
+                Switch::new(mode, &[Kind::Root]),
+                None,
+                None,
+                || routes(false, false),
+                || false,
+                None
+            )
+            .is_ok()
+        );
+    }
+    // off reads no route
+    assert!(
+        ledger::initialise(
+            Switch::OFF,
+            None,
+            None,
+            || panic!("off reads the routes"),
+            || false,
+            None
+        )
+        .is_ok()
+    );
+}
+
+/// values-and-off 2: the timing switch is validated at the initialisation in
+/// every mode (at 6c492c9ddc a bad value started and then panicked in every
+/// diagram); STRICT is read only with the switch on or check.
+#[test]
+fn the_timing_switch_is_validated_at_start_up() {
+    for switch in [
+        Switch::OFF,
+        Switch::new(Mode::On, &ROOT_CHILD),
+        Switch::new(Mode::Check, &ROOT_CHILD),
+    ] {
+        let error = init(switch, None, Some("yes"), || false, None).unwrap_err();
+        assert!(error.contains(ledger::TIMING_VARIABLE), "{error}");
+        for accepted in [None, Some(""), Some("0"), Some("1"), Some(" on ")] {
+            assert!(
+                init(switch, None, accepted, || false, None).is_ok(),
+                "{accepted:?}"
+            );
+        }
+    }
+    assert_eq!(ledger::parse_timing(Some("1")), Ok(true));
+    assert_eq!(ledger::parse_timing(Some("off")), Ok(false));
+}
+
+/// The dispositions of a section's K3 records by the correction's end
+/// (refusal-integrity 2 and 4, values-and-off 1): in mode on a value the
+/// route then discarded is `declined:ir_hard_route:<head>`, never `taken`;
+/// an exhausted guard budget declines the correction's records
+/// (`ir_hard_guard:budget`, designed); a panic caught inside a record is the
+/// error `ir_hard_guard:panic` and fails the diagram; check mode keeps its
+/// comparisons.
+#[test]
+fn a_declined_correction_reclassifies_its_records() -> Result<()> {
+    use super::uncontracted_ledger::{Section, SectionEnd};
+    test_initialise()?;
+    let ir_hard = [Kind::Root, Kind::Child, Kind::IrHard];
+    // (mode, end, completed records, interrupted, expected line fields, close ok)
+    let cases: [(Mode, SectionEnd, usize, usize, &[(&str, &str)], bool); 6] = [
+        (
+            Mode::On,
+            SectionEnd::Kept,
+            2,
+            0,
+            &[("declined", "none"), ("outcome", "ok")],
+            true,
+        ),
+        (
+            Mode::On,
+            SectionEnd::RouteDeclined("moments:not_a_polynomial".into()),
+            2,
+            0,
+            &[("declined", "ir_hard_route:moments:2"), ("outcome", "ok")],
+            true,
+        ),
+        (
+            Mode::Check,
+            SectionEnd::RouteDeclined("depth:3".into()),
+            2,
+            0,
+            &[("declined", "none"), ("compared", "2"), ("outcome", "ok")],
+            true,
+        ),
+        (
+            Mode::On,
+            SectionEnd::GuardBudget,
+            1,
+            1,
+            &[("declined", "ir_hard_guard:budget:2"), ("outcome", "ok")],
+            true,
+        ),
+        (
+            Mode::Check,
+            SectionEnd::GuardBudget,
+            1,
+            1,
+            &[
+                ("declined", "ir_hard_guard:budget:1"),
+                ("compared", "1"),
+                ("outcome", "ok"),
+            ],
+            true,
+        ),
+        (
+            Mode::On,
+            SectionEnd::GuardFailure("panic:index_out_of_bounds".into()),
+            1,
+            1,
+            &[("error", "ir_hard_guard:panic:1"), ("outcome", "error")],
+            false,
+        ),
+    ];
+    for (mode, end, completed, interrupted, fields, close_ok) in cases {
+        with_switch(Switch::new(mode, &ir_hard), || -> Result<()> {
+            let _ = ledger::take_lines();
+            let diagram = DiagramLedger::open("review_section", "000009")
+                .ok_or_else(|| eyre!("no ledger"))?;
+            let section = Section::open().ok_or_else(|| eyre!("no section"))?;
+            for _ in 0..completed + interrupted {
+                ledger::expect(Kind::IrHard);
+            }
+            for _ in 0..completed {
+                ledger::record_value(Kind::IrHard, mode);
+            }
+            section.close(end.clone());
+            let closed = diagram.close(true);
+            let lines = ledger::take_lines();
+            let line = disposition(&lines, Kind::IrHard)?;
+            for (key, value) in fields {
+                ensure!(
+                    field(line, key) == Some(*value),
+                    "{} {end:?}: {key}={value} expected: {line}",
+                    mode.as_str()
+                );
+            }
+            ensure!(
+                count(line, "expected") == completed + interrupted,
+                "{} {end:?}: {line}",
+                mode.as_str()
+            );
+            ensure!(
+                closed.is_ok() == close_ok,
+                "{} {end:?}: close {closed:?}",
+                mode.as_str()
+            );
+            Ok(())
+        })?;
+    }
+    // the section codes are designed (an exception may name them), the
+    // guard's error is not
+    for code in [
+        "ir_hard_route:moments",
+        "ir_hard_route:depth",
+        "ir_hard_guard:budget",
+    ] {
+        assert!(uncontracted::is_designed_code(code), "{code}");
+    }
+    for code in ["ir_hard_guard:panic", "ir_hard_route:", "ir_hard_route:a:b"] {
+        assert!(!uncontracted::is_designed_code(code), "{code}");
+    }
+    Ok(())
+}
+
+/// refusal-integrity 2: vakint's unknown-master refusal is a diagnostic
+/// failure, so the IR hard child guard (`GAMMALOOP_IR_HARD_CHILD_GUARD=1`)
+/// propagates it instead of declining the correction to today's terms (at
+/// 6c492c9ddc it was a plain error: `Ok(Err("error:..."))`).
+#[test]
+fn unknown_masters_survive_the_child_guard() {
+    let failure = || {
+        uncontracted::unknown_masters_failure(
+            Kind::IrHard,
+            "g",
+            1,
+            "expected master coefficient(s) that are not known yet",
+        )
+    };
+    assert!(super::ir_dirac::is_diagnostic_failure(&failure()));
+    let guarded = super::ir_dirac::guarded_unless_diagnostic(None, None, || {
+        Err::<std::result::Result<(), String>, _>(failure())
+    });
+    assert!(
+        guarded.is_err(),
+        "the guard declined the unknown masters: {guarded:?}"
+    );
+}
+
+/// zero-comparison 3: a remainder of a kind the switch does not enable is
+/// counted inert and listed on the summary line (`inert=<kind>:<n>`), so a
+/// remainder classified into an inert kind is visible.
+#[test]
+fn inert_remainders_are_listed() -> Result<()> {
+    test_initialise()?;
+    with_switch(Switch::new(Mode::Check, &ROOT_CHILD), || -> Result<()> {
+        let _ = ledger::take_lines();
+        let diagram =
+            DiagramLedger::open("review_inert", "000004").ok_or_else(|| eyre!("no ledger"))?;
+        ledger::inert(Kind::Quotient);
+        ledger::inert(Kind::Quotient);
+        ledger::inert(Kind::Surrogate);
+        let evidence = diagram.close(true)?.ok_or_else(|| eyre!("no evidence"))?;
+        let lines = ledger::take_lines();
+        let summary = lines_of(&lines, "UNCONTRACTED_SUMMARY ");
+        ensure!(
+            summary.len() == 1 && field(summary[0], "inert") == Some("quotient:2,surrogate:1"),
+            "{summary:#?}"
+        );
+        ensure!(evidence["inert"]["quotient"] == 2, "{evidence:#}");
+        Ok(())
+    })
+}
+
+/// refusal-integrity 1, the key: an R* child Δ looked up inside a scope of a
+/// kind the switch does not enable carries `#uncontracted-inert=<kind>`
+/// (on and check); an enabled kind's key is unchanged, and off has no suffix.
+#[test]
+fn inert_scope_child_keys_are_their_own() {
+    let check = Switch::new(Mode::Check, &ROOT_CHILD);
+    let on = Switch::new(Mode::On, &ROOT_CHILD);
+    assert_eq!(with_switch(check, uncontracted::cache_key_suffix), None);
+    assert_eq!(
+        with_switch(check, || super::expression::in_dressed_scope(
+            uncontracted::cache_key_suffix
+        ))
+        .as_deref(),
+        Some("#uncontracted-inert=surrogate")
+    );
+    assert_eq!(
+        with_switch(on, || super::expression::in_dressed_scope(
+            uncontracted::cache_key_suffix
+        ))
+        .as_deref(),
+        Some("#uncontracted=child#uncontracted-inert=surrogate")
+    );
+    assert_eq!(
+        with_switch(Switch::OFF, || super::expression::in_dressed_scope(
+            uncontracted::cache_key_suffix
+        )),
+        None
+    );
 }
