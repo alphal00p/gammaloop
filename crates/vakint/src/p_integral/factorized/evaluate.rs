@@ -218,6 +218,11 @@ fn bare_momentum(view: AtomView<'_>) -> Option<i64> {
 /// and mapped to vakint's dot products of the edge momenta (steps 1 and 2),
 /// in the value's dimension symbol; and the seconds of the contraction.
 pub fn contract_to_vakint_dots(value: &FactorizedNumerator) -> Result<(Atom, f64)> {
+    // a marked value's own atoms: the reserved namespace and wildcard walk
+    // (an unmarked value is not walked: the base behaviour)
+    if super::is_marked(value) {
+        value.check_reserved_symbols()?;
+    }
     let (momenta, _) = vakint_momenta(value)?;
     let started = Instant::now();
     let contracted = value.contract_naively()?;

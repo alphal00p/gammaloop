@@ -4591,3 +4591,33 @@ fn every_producer_record_passes_the_namespace_rule() {
     eprintln!("NAMESPACE_RULE producer records={records} 𝑖={i} 𝜋={pi}");
     wh_fixtures::assert_compared("NAMESPACE_RULE", records, Some(75));
 }
+
+/// `contract_to_vakint_dots` (public, takes a value) walks a MARKED value
+/// like the other input functions; an unmarked value is not walked.
+#[test]
+fn contract_to_vakint_dots_walks_a_marked_value() {
+    let direct =
+        FactorizedNumerator::from_text(include_str!("../fixtures/wh-k5-direct.record.txt"))
+            .unwrap();
+    assert!(super::super::is_marked(&direct));
+    let _ = super::super::evaluate::contract_to_vakint_dots(&direct).unwrap();
+    let mut bad = direct.clone();
+    bad.vertices[0].factor =
+        &bad.vertices[0].factor * atom("vakint::dot(vakint::p(1),vakint::p(1))");
+    assert_graph_prefix(
+        super::super::evaluate::contract_to_vakint_dots(&bad).map(|_| ()),
+        &reserved_prefix(
+            "vakint::dot",
+            &format!("vertex {} factor", bad.vertices[0].id),
+        ),
+        "contract_to_vakint_dots",
+    );
+    let mut unmarked = bad.clone();
+    unmarked.record = None;
+    unmarked.insertions.clear();
+    assert!(!super::super::is_marked(&unmarked));
+    assert!(!matches!(
+        super::super::evaluate::contract_to_vakint_dots(&unmarked),
+        Err(FactorizedError::Graph { ref detail }) if detail.starts_with("reserved symbol")
+    ));
+}
