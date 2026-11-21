@@ -30,10 +30,15 @@
 //! The R* closure kind ([`FactorizedKind::Closure`]: a massive closing line
 //! and an unapplied [`TaylorSpec`]) is evaluated by
 //! [`evaluate_factorized_closure`] (module `closure`, text schema
-//! [`FACTORIZED_SCHEMA_V3`]). Reserved for the R* path and REJECTED: counterterm
-//! insertion vertices ([`Insertion`]).
+//! [`FACTORIZED_SCHEMA_V3`]). Counterterm insertion vertices ([`Insertion`])
+//! exist in schema v3 only: a v1 text with `insertions` other than 0 is
+//! `Reserved`, and a value with insertions is written as v3.
 //!
-//! Nothing here changes an existing entry point: the existing
+//! A value WITHOUT a new feature (kind closure, insertions, a v3 direct
+//! record: [`FactorizedNumerator::has_new_features`]) is validated and
+//! evaluated by exactly the rules it had before the R* record kinds: every
+//! pre-existing entry runs the earlier body for it. The widened grammar of
+//! the record kinds applies to marked values only. The existing
 //! `DirectClosureInput` / `RemainderBoundary` paths are untouched.
 //!
 //! Numerator algebra (Lorentz and Dirac contraction, traces, colour) is done
