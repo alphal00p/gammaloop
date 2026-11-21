@@ -47,8 +47,8 @@ use super::{
     uncontracted_ledger::{self as ledger, DiagramLedger, Exception, Exceptions, Resumed},
 };
 
-const L2_22: &str = include_str!("testdata/u7a/l2-d22.dot");
-const L3_36: &str = include_str!("testdata/u7a/l3-d036.dot");
+pub(super) const L2_22: &str = include_str!("testdata/u7a/l2-d22.dot");
+pub(super) const L3_36: &str = include_str!("testdata/u7a/l3-d036.dot");
 const ROOT_CHILD: [Kind; 2] = [Kind::Root, Kind::Child];
 const ALL_KINDS: [Kind; 3] = [Kind::Root, Kind::Child, Kind::IrHard];
 
@@ -100,16 +100,16 @@ fn normalization(graph: &Graph) -> ClosedRootNormalization {
 /// One run: the root's value, its attempts, the ledger's lines and the
 /// timing lines printed inside it, and the dispositions of the diagram
 /// ledger it was given (`diagram`).
-struct Run {
-    value: Result<Atom>,
-    captured: Vec<Captured>,
-    lines: Vec<String>,
-    timing: Vec<String>,
-    evidence: Option<serde_json::Value>,
+pub(super) struct Run {
+    pub(super) value: Result<Atom>,
+    pub(super) captured: Vec<Captured>,
+    pub(super) lines: Vec<String>,
+    pub(super) timing: Vec<String>,
+    pub(super) evidence: Option<serde_json::Value>,
 }
 
 /// The graph name of a DOT's diagram.
-fn graph_name(dot: &str) -> Result<String> {
+pub(super) fn graph_name(dot: &str) -> Result<String> {
     Ok(colour_factored(&load(dot)?)?
         .to_gamma_loop_graph(None, true)?
         .name)
@@ -183,7 +183,7 @@ fn run_n(
     })
 }
 
-fn run(
+pub(super) fn run(
     dot: &str,
     switch: Switch,
     cache: Option<Arc<CountertermCache>>,
@@ -193,18 +193,18 @@ fn run(
 }
 
 /// The `<key>=` value of a log line.
-fn field<'l>(line: &'l str, key: &str) -> Option<&'l str> {
+pub(super) fn field<'l>(line: &'l str, key: &str) -> Option<&'l str> {
     line.split_whitespace()
         .find_map(|token| token.strip_prefix(key)?.strip_prefix('='))
 }
 
-fn count(line: &str, key: &str) -> usize {
+pub(super) fn count(line: &str, key: &str) -> usize {
     field(line, key)
         .and_then(|value| value.parse().ok())
         .unwrap_or_else(|| panic!("no count {key}= in {line}"))
 }
 
-fn lines_of<'l>(lines: &'l [String], head: &str) -> Vec<&'l str> {
+pub(super) fn lines_of<'l>(lines: &'l [String], head: &str) -> Vec<&'l str> {
     lines
         .iter()
         .filter(|line| line.starts_with(head))
@@ -213,7 +213,7 @@ fn lines_of<'l>(lines: &'l [String], head: &str) -> Vec<&'l str> {
 }
 
 /// The disposition line of `kind` (exactly one).
-fn disposition<'l>(lines: &'l [String], kind: Kind) -> Result<&'l str> {
+pub(super) fn disposition<'l>(lines: &'l [String], kind: Kind) -> Result<&'l str> {
     let found = lines_of(lines, "UNCONTRACTED_DISPOSITION ")
         .into_iter()
         .filter(|line| field(line, "kind") == Some(kind.as_str()))
@@ -227,7 +227,7 @@ fn disposition<'l>(lines: &'l [String], kind: Kind) -> Result<&'l str> {
     Ok(found[0])
 }
 
-fn agree(a: &Atom, b: &Atom) -> bool {
+pub(super) fn agree(a: &Atom, b: &Atom) -> bool {
     a == b || (a - b).expand().is_zero() || uncontracted::agree(a, b).unwrap_or(false)
 }
 
@@ -350,8 +350,21 @@ fn on_mode_error_fails_the_diagram() -> Result<()> {
                 mode.as_str()
             );
         }
-        let declined = ledger::with_fault(Kind::Root, "zero_loops", true, || {
-            run(L2_22, on, None, None)
+        // every root record declined: mode on applies the all-declined rule
+        // (pre-review of the U7a delta, finding 7), so the decline is named
+        let named = Exceptions {
+            entries: vec![Exception {
+                graph: graph_name(L2_22)?,
+                kind: Kind::Root,
+                code: "zero_loops".into(),
+                reason: "the test's designed decline".into(),
+            }],
+            digest: Some("test".into()),
+        };
+        let declined = ledger::with_exceptions(named, || {
+            ledger::with_fault(Kind::Root, "zero_loops", true, || {
+                run(L2_22, on, None, None)
+            })
         })?;
         ensure!(
             agree(&declined.value?, &off),
@@ -359,7 +372,7 @@ fn on_mode_error_fails_the_diagram() -> Result<()> {
         );
         let root = disposition(&declined.lines, Kind::Root)?;
         ensure!(
-            field(root, "outcome") == Some("ok")
+            field(root, "outcome") == Some("excepted")
                 && field(root, "declined").is_some_and(|d| d.starts_with("zero_loops:")),
             "{root}"
         );
@@ -376,17 +389,17 @@ fn check_with_the_pint6_dump_and_inert_lists_are_refused() {
     let check = Switch::new(Mode::Check, &ROOT_CHILD);
     let error = init(check, None, None, || true, None).unwrap_err();
     assert!(error.contains("PINT6_CLOSURE_DUMP"), "{error}");
-    // mode on keeps the PINT6 dump as a designed decline (today's records)
-    assert!(
-        init(
-            Switch::new(Mode::On, &ROOT_CHILD),
-            None,
-            None,
-            || true,
-            None
-        )
-        .is_ok()
-    );
+    // mode on too (pre-review of the U7a delta, finding 7: every record
+    // would decline, a setting-wide fallback)
+    let error = init(
+        Switch::new(Mode::On, &ROOT_CHILD),
+        None,
+        None,
+        || true,
+        None,
+    )
+    .unwrap_err();
+    assert!(error.contains("PINT6_CLOSURE_DUMP"), "{error}");
     // a list without a kind this build emits would build no record
     assert!(
         init(
@@ -398,7 +411,7 @@ fn check_with_the_pint6_dump_and_inert_lists_are_refused() {
         )
         .is_err()
     );
-    // an exception list is read in check mode only
+    // an exception list is read in on and check (a missing file refused)
     assert!(
         init(
             Switch::new(Mode::On, &ROOT_CHILD),
@@ -502,11 +515,9 @@ fn identity_names_mode_kinds_and_strictness() {
         check.starts_with("check:root,child:strict:exceptions=") && check.len() > 40,
         "{check}"
     );
-    // the exceptions are a check-mode identity only
-    assert_eq!(
-        ledger::identity_of(Switch::new(Mode::On, &ROOT_CHILD), &named).as_deref(),
-        Some("on:root,child:strict")
-    );
+    // on reads the list too (its all-declined rule, pre-review finding 7)
+    let on = ledger::identity_of(Switch::new(Mode::On, &ROOT_CHILD), &named).unwrap();
+    assert!(on.starts_with("on:root,child:strict:exceptions="), "{on}");
     for bad in [
         "g\troot\tcode\n",
         "g\tnot-a-kind\tcode\twhy\n",
@@ -532,7 +543,7 @@ fn resumed_records_need_matching_evidence() -> Result<()> {
             .evidence
             .ok_or_else(|| eyre!("a closed check ledger returns its dispositions"))?;
         ensure!(
-            evidence["schema"] == "u7a-disposition.v1"
+            evidence["schema"] == "u7a-disposition.v2"
                 && evidence["identity"] == "check:root,child:strict"
                 && evidence["outcome"] == "ok",
             "{evidence:#}"
@@ -572,13 +583,14 @@ fn resumed_records_need_matching_evidence() -> Result<()> {
                         == Resumed::Unchecked(reason.to_owned()),
                     "{reason}"
                 );
+                // one line: the beta recomputes the diagram (pre-review of
+                // the U7a delta, finding 2)
                 let lines = ledger::take_lines();
                 ensure!(
-                    lines.len() == ROOT_CHILD.len() + 1
-                        && lines
-                            .iter()
-                            .all(|line| field(line, "outcome") == Some("unchecked")
-                                && field(line, "reason") == Some(reason)),
+                    lines.len() == 1
+                        && lines[0].starts_with("UNCONTRACTED_RESUME ")
+                        && field(&lines[0], "outcome") == Some("recompute")
+                        && field(&lines[0], "reason") == Some(reason),
                     "{reason}: {lines:#?}"
                 );
             }
@@ -1044,19 +1056,20 @@ fn the_timing_switch_is_validated_at_start_up() {
 }
 
 /// The dispositions of a section's K3 records by the correction's end
-/// (refusal-integrity 2 and 4, values-and-off 1): in mode on a value the
-/// route then discarded is `declined:ir_hard_route:<head>`, never `taken`;
-/// an exhausted guard budget declines the correction's records
-/// (`ir_hard_guard:budget`, designed); a panic caught inside a record is the
-/// error `ir_hard_guard:panic` and fails the diagram; check mode keeps its
-/// comparisons.
+/// (refusal-integrity 2 and 4, values-and-off 1; pre-review findings 3 and
+/// 4): in mode on a value the route then discarded is the error
+/// `ir_hard_route:<head>` and fails the diagram, never `taken`; check mode
+/// keeps its comparisons there; an exhausted guard budget declines the
+/// correction's records (`ir_hard_guard:budget`, designed); a panic or an
+/// error the guard caught makes every record of the correction the error
+/// `ir_hard_guard:<panic|error>` and fails the diagram.
 #[test]
 fn a_declined_correction_reclassifies_its_records() -> Result<()> {
     use super::uncontracted_ledger::{Section, SectionEnd};
     test_initialise()?;
     let ir_hard = [Kind::Root, Kind::Child, Kind::IrHard];
     // (mode, end, completed records, interrupted, expected line fields, close ok)
-    let cases: [(Mode, SectionEnd, usize, usize, &[(&str, &str)], bool); 7] = [
+    let cases: [(Mode, SectionEnd, usize, usize, &[(&str, &str)], bool); 8] = [
         (
             Mode::On,
             SectionEnd::Kept,
@@ -1065,13 +1078,19 @@ fn a_declined_correction_reclassifies_its_records() -> Result<()> {
             &[("declined", "none"), ("outcome", "ok")],
             true,
         ),
+        // pre-review finding 4: a route decline after taken values is an
+        // error in mode on
         (
             Mode::On,
             SectionEnd::RouteDeclined("moments:not_a_polynomial".into()),
             2,
             0,
-            &[("declined", "ir_hard_route:moments:2"), ("outcome", "ok")],
-            true,
+            &[
+                ("declined", "none"),
+                ("error", "ir_hard_route:moments:2"),
+                ("outcome", "error"),
+            ],
+            false,
         ),
         (
             Mode::Check,
@@ -1086,8 +1105,13 @@ fn a_declined_correction_reclassifies_its_records() -> Result<()> {
             SectionEnd::GuardBudget,
             1,
             1,
-            &[("declined", "ir_hard_guard:budget:2"), ("outcome", "ok")],
-            true,
+            // every record declined: mode on's all-declined rule (pre-review
+            // finding 7) fails it unless named
+            &[
+                ("declined", "ir_hard_guard:budget:2"),
+                ("outcome", "uncovered"),
+            ],
+            false,
         ),
         (
             Mode::Check,
@@ -1115,12 +1139,26 @@ fn a_declined_correction_reclassifies_its_records() -> Result<()> {
             ],
             false,
         ),
+        // every record of a section the guard failed is the error, inside
+        // a record or after them (pre-review finding 3)
         (
             Mode::On,
             SectionEnd::GuardFailure("panic:index_out_of_bounds".into()),
             1,
             1,
-            &[("error", "ir_hard_guard:panic:1"), ("outcome", "error")],
+            &[("error", "ir_hard_guard:panic:2"), ("outcome", "error")],
+            false,
+        ),
+        (
+            Mode::Check,
+            SectionEnd::GuardFailure("error:taylor".into()),
+            2,
+            0,
+            &[
+                ("error", "ir_hard_guard:error:2"),
+                ("compared", "0"),
+                ("outcome", "error"),
+            ],
             false,
         ),
     ];
@@ -1141,7 +1179,7 @@ fn a_declined_correction_reclassifies_its_records() -> Result<()> {
                 ledger::expect(Kind::IrHard);
                 ledger::record_unchecked(Kind::IrHard);
             }
-            section.close(end.clone());
+            let _ = section.close(end.clone());
             let closed = diagram.close(true);
             let lines = ledger::take_lines();
             let line = disposition(&lines, Kind::IrHard)?;
@@ -1165,16 +1203,18 @@ fn a_declined_correction_reclassifies_its_records() -> Result<()> {
             Ok(())
         })?;
     }
-    // the section codes are designed (an exception may name them), the
-    // guard's error is not
+    // the guard's budget is the one designed section code (an exception
+    // may name it); the route's declines and the guard's failures are errors
+    // (pre-review findings 3 and 4)
+    assert!(uncontracted::is_designed_code("ir_hard_guard:budget"));
     for code in [
+        "ir_hard_guard:panic",
+        "ir_hard_route:",
+        "ir_hard_route:a:b",
         "ir_hard_route:moments",
         "ir_hard_route:depth",
-        "ir_hard_guard:budget",
+        "ir_hard_route:panic",
     ] {
-        assert!(uncontracted::is_designed_code(code), "{code}");
-    }
-    for code in ["ir_hard_guard:panic", "ir_hard_route:", "ir_hard_route:a:b"] {
         assert!(!uncontracted::is_designed_code(code), "{code}");
     }
     // vakint's text of an exhausted scoped budget (the guard's budget)
@@ -1264,4 +1304,160 @@ fn inert_scope_child_keys_are_their_own() {
         )),
         None
     );
+}
+
+// ---------------------------------------------------------------------------
+// Pre-review of the U7a delta at 86de2ec899: the fixes that need new
+// interfaces (the 86de2ec899-interface reproducers are
+// `uncontracted_prereview_tests`)
+// ---------------------------------------------------------------------------
+
+/// Finding 5: a comparison counted `compared` that did not agree is an
+/// error outcome and fails the diagram, whether or not the hook raised it.
+#[test]
+fn a_compared_record_that_did_not_agree_is_an_error() -> Result<()> {
+    test_initialise()?;
+    with_switch(Switch::new(Mode::Check, &ROOT_CHILD), || -> Result<()> {
+        for (equal, outcome) in [(true, "ok"), (false, "error")] {
+            let _ = ledger::take_lines();
+            let diagram = DiagramLedger::open("prereview_equal", "000005")
+                .ok_or_else(|| eyre!("no ledger"))?;
+            ledger::expect(Kind::Root);
+            ledger::record_compared(Kind::Root, equal);
+            ledger::expect(Kind::Child);
+            ledger::record_compared(Kind::Child, true);
+            let closed = diagram.close(true);
+            let lines = ledger::take_lines();
+            let root = disposition(&lines, Kind::Root)?;
+            ensure!(
+                field(root, "outcome") == Some(outcome) && closed.is_ok() == equal,
+                "equal={equal}: {root} ({closed:?})"
+            );
+            if !equal {
+                let error = format!("{:#}", closed.unwrap_err());
+                ensure!(error.contains("did not agree"), "{error}");
+            }
+        }
+        Ok(())
+    })
+}
+
+/// Finding 6: the run-level exception row is `*<TAB><kind><TAB>none_compared`
+/// only (the graph `*` takes that code, the code takes graph `*`).
+#[test]
+fn run_level_exception_rows() {
+    let row =
+        ledger::parse_exceptions("*\tir-hard\tnone_compared\tno IR correction of order >= 1\n")
+            .unwrap();
+    assert_eq!(row.entries[0].graph, "*");
+    for bad in [
+        "*\troot\tone_loop_tree_cut\twhy\n",
+        "g\troot\tnone_compared\twhy\n",
+    ] {
+        assert!(ledger::parse_exceptions(bad).is_err(), "{bad:?}");
+    }
+}
+
+/// Finding 6: the run tally. An enabled kind with nothing compared over the
+/// run fails it unless the run-level row names it; a nonzero diagram with
+/// nothing compared in any kind fails it; a record without the run's
+/// evidence fails it; the totals are printed per kind.
+#[test]
+fn the_run_fails_a_kind_with_nothing_compared() -> Result<()> {
+    test_initialise()?;
+    let check = Switch::new(Mode::Check, &ALL_KINDS);
+    let evidence = |identity: Option<String>, ir_hard: serde_json::Value| {
+        serde_json::json!({
+            "schema": "u7a-disposition.v2", "identity": identity, "graph": "g",
+            "diagram": "000001", "outcome": "ok", "inert": {},
+            "kinds": {
+                "root": {"expected": 2, "attempted": 2, "uncontracted": 2, "zero": 0, "equal": 2,
+                         "classes": {"compared": 2}, "outcome": "ok"},
+                "child": {"expected": 3, "attempted": 1, "uncontracted": 1, "zero": 0, "equal": 1,
+                          "hit_equal": 2, "classes": {"compared": 1, "hit:compared": 2}, "outcome": "ok"},
+                "ir-hard": ir_hard,
+            },
+        })
+    };
+    let none = serde_json::json!({"expected": 0, "attempted": 0, "uncontracted": 0, "zero": 0,
+                                  "equal": 0, "classes": {}, "outcome": "ok"});
+    let compared = serde_json::json!({"expected": 1, "attempted": 1, "uncontracted": 1, "zero": 0,
+                                      "equal": 1, "classes": {"compared": 1}, "outcome": "ok"});
+    with_switch(check, || -> Result<()> {
+        let identity = ledger::current_identity();
+        // nothing ir-hard over the run: a failure naming the kind
+        let mut tally = ledger::RunTally::new().ok_or_else(|| eyre!("no tally"))?;
+        tally.add(
+            "g/000001",
+            Some(&evidence(identity.clone(), none.clone())),
+            true,
+        );
+        let failures = tally.failures();
+        ensure!(
+            failures.len() == 1 && failures[0].contains("kind ir-hard: no record compared"),
+            "{failures:#?}"
+        );
+        ensure!(
+            tally
+                .fields()
+                .contains("child:expected=3,compared=1,hit_compared=2,"),
+            "{}",
+            tally.fields()
+        );
+        // one compared ir-hard record anywhere in the run passes it
+        tally.add(
+            "g/000002",
+            Some(&evidence(identity.clone(), compared.clone())),
+            true,
+        );
+        ensure!(tally.failures().is_empty(), "{:#?}", tally.failures());
+        // a run-level row accepts the kind
+        let row = ledger::parse_exceptions("*\tir-hard\tnone_compared\tthe test\n")
+            .map_err(|error| eyre!(error))?;
+        ledger::with_exceptions(row, || -> Result<()> {
+            let identity = ledger::current_identity();
+            let mut tally = ledger::RunTally::new().ok_or_else(|| eyre!("no tally"))?;
+            tally.add("g/000001", Some(&evidence(identity, none.clone())), true);
+            ensure!(tally.failures().is_empty(), "{:#?}", tally.failures());
+            Ok(())
+        })?;
+        // a nonzero diagram with nothing compared in any kind; a record
+        // without evidence; evidence of another identity
+        let empty = serde_json::json!({
+            "schema": "u7a-disposition.v2", "identity": identity, "graph": "z",
+            "diagram": "000009", "outcome": "ok", "inert": {},
+            "kinds": {"root": none, "child": none, "ir-hard": none},
+        });
+        let mut tally = ledger::RunTally::new().ok_or_else(|| eyre!("no tally"))?;
+        tally.add(
+            "g/000002",
+            Some(&evidence(identity.clone(), compared.clone())),
+            true,
+        );
+        tally.add("z/000009", Some(&empty), false);
+        ensure!(
+            tally.failures().is_empty(),
+            "a zero diagram: {:#?}",
+            tally.failures()
+        );
+        tally.add("z/000009", Some(&empty), true);
+        tally.add("y/000010", None, true);
+        tally.add(
+            "x/000011",
+            Some(&evidence(
+                Some("on:root,child,ir-hard:strict".into()),
+                compared,
+            )),
+            true,
+        );
+        let failures = tally.failures();
+        ensure!(
+            failures.len() == 3
+                && failures[0].contains("z/000009: the counterterm is nonzero")
+                && failures[1].contains("y/000010: a record without the run's evidence")
+                && failures[2].contains("x/000011: a record without the run's evidence"),
+            "{failures:#?}"
+        );
+        Ok(())
+    })
 }

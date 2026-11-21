@@ -67,6 +67,8 @@ mod uncontracted_oracle_k2_tests;
 #[cfg(test)]
 mod uncontracted_oracle_tests;
 #[cfg(test)]
+mod uncontracted_prereview_tests;
+#[cfg(test)]
 mod uncontracted_refusal_tests;
 #[cfg(test)]
 mod uncontracted_review_tests;
@@ -149,7 +151,7 @@ pub use top_mass::{
     split_enabled as top_mass_split_enabled, top_level_switches_line,
     top_level_switches_provenance, top_mass_terms, validate_top_level_switches,
 };
-pub use uncontracted_ledger::{DiagramLedger, Resumed, resumed as uncontracted_resumed};
+pub use uncontracted_ledger::{DiagramLedger, Resumed, RunTally, resumed as uncontracted_resumed};
 pub use uv::MassiveUvEvaluator;
 
 /// `GAMMALOOP_UNCONTRACTED_NUMERATOR`'s initialisation (call at start-up for
@@ -172,9 +174,18 @@ pub fn uncontracted_ledger_active() -> eyre::Result<bool> {
 
 /// The identity of `GAMMALOOP_UNCONTRACTED_NUMERATOR` for a checkpoint
 /// (U7a delta, U7a.1 (i)): `None` off (an off checkpoint's identity is
-/// unchanged); else the mode, the enabled kinds, strictness and, in check
-/// mode, the exception list's digest (`check:root,child,ir-hard:strict`).
+/// unchanged); else the mode, the enabled kinds, strictness and the
+/// exception list's digest (`check:root,child,ir-hard:strict`).
 pub fn uncontracted_identity() -> eyre::Result<Option<String>> {
     uncontracted::validate()?;
     Ok(uncontracted_ledger::current_identity())
+}
+
+/// The run-level tally of `GAMMALOOP_UNCONTRACTED_NUMERATOR` on / check
+/// ([`RunTally`]; `None` off): the beta adds every diagram record of a loop
+/// order (computed and reused), prints its totals on `UNCONTRACTED_RUN` and
+/// fails the run on its failures (pre-review of the U7a delta, finding 6).
+pub fn uncontracted_run_tally() -> eyre::Result<Option<RunTally>> {
+    uncontracted::validate()?;
+    Ok(RunTally::new())
 }

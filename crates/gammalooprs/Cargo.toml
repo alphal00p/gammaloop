@@ -153,6 +153,12 @@ insta = { workspace = true, features = ["json", "ron", "serde", "toml"] }
 
 [features]
 default = []
+# Witness builds only (pre-review of the U7a delta, finding 4): with
+# GAMMALOOP_UNCONTRACTED_WITNESS=k3_beyond_order every K3 value vakint returns
+# is changed above its valid order by a term the IR hard child route refuses,
+# so that a gate shows mode on failing (not falling back) and check mode seeing
+# it. Never in a production build.
+uncontracted-witness = []
 fail-on-warnings = []
 fjcore = []
 higher_loops = []
