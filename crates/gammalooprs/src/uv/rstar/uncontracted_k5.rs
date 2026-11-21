@@ -1008,11 +1008,16 @@ fn finish_with(
     }
     // U7c delta pre-review N4: a spectator port is only ever a hole's inner
     // half-edge (any other open slot is a builder error, never a port), and
-    // the ports are exactly those the record's STRUCTURE implies: per hole
-    // whose coefficient C_H has a far-end slot, the far end's inner
-    // half-edge when C_H's owner (the kept anchor, or the ct: node holding
-    // it) is in the record and the far end is not, or when the far end is in
-    // the record, not as a leg, and the owner is not
+    // the ports are exactly those the record's STRUCTURE implies. Per hole
+    // whose coefficient C_H has a slot of the far end's inner half-edge
+    // h_out, that slot pairs C_H with the far edge e_out's factor; it is a
+    // port when exactly one side is in the record:
+    // - C_H's side (owner in the record: the kept anchor, or the ct: node
+    //   holding it) with h_out absent from the record, e_out neither inside
+    //   the owner's child (the pair is then closed inside that Delta) nor
+    //   inside another child;
+    // - e_out's side with C_H's owner absent: e_out a remaining (non-leg)
+    //   edge of the record, or inside a contracted child of it.
     if let Some(h) = spectators.iter().find(|h| !inner.contains(h)) {
         return Err(Decline::new(
             "surrogate_stray_slot",
@@ -1021,16 +1026,41 @@ fn finish_with(
             ),
         ));
     }
+    let supports = nodes
+        .iter()
+        .map(|(node, index)| {
+            (
+                *node,
+                super::super::plan::uv_child_edge_ids(graph, &region.insertions[*index].support)
+                    .into_iter()
+                    .collect::<BTreeSet<_>>(),
+            )
+        })
+        .collect::<Vec<_>>();
     let expected = chains
         .iter()
         .filter(|chain| {
-            let owner = free.contains(&chain.vertices[0]) || merge.contains_key(&chain.vertices[0]);
-            let far = record_hedges.contains(&chain.inner[1]);
+            let (anchor, h_out, e_out) =
+                (chain.vertices[0], chain.inner[1], chain.inner_edges[1].0);
+            let owner_child = merge.get(&anchor).copied();
+            let owner = free.contains(&anchor) || owner_child.is_some();
+            let in_child = |node: Option<usize>| {
+                supports.iter().any(|(n, support)| {
+                    node.is_none_or(|node| *n == node) && support.contains(&e_out)
+                })
+            };
+            let in_owner_child = owner_child.is_some() && in_child(owner_child);
+            let in_other_child = supports
+                .iter()
+                .any(|(n, support)| Some(*n) != owner_child && support.contains(&e_out));
+            let remaining = edges
+                .iter()
+                .any(|edge| edge.id == e_out && !edge.is_external());
             chain.far_slot
                 && if owner {
-                    !far
+                    !record_hedges.contains(&h_out) && !in_owner_child && !in_other_child
                 } else {
-                    far && !legs.contains(&chain.inner[1])
+                    (record_hedges.contains(&h_out) && remaining) || in_child(None)
                 }
         })
         .map(|chain| chain.inner[1])
