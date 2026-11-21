@@ -1055,18 +1055,23 @@ fn a_vanished_row_of_a_nonzero_group_keeps_its_quotient_pole() -> Result<()> {
             child.value,
             reference.value
         );
-        // The vanished row's quotient factor is measured (no raise beyond
-        // the measured need): the planner retries at depth 3 and the child
-        // route gets the reference; the guard never fires.
+        // The vanished row's quotient factor is measured, and its insertion's
+        // excess raises the row bound to 3: the planner retries at depth 3
+        // (to the measured need, or to the bound when the measured need of
+        // the chosen row is lower: which row of the group comes first follows
+        // symbolica's term order, which depends on what the process ran
+        // before) and the child route gets the reference; the guard never
+        // fires.
         let DepthCounts {
             corrections,
             retried,
             raised,
+            exceeded,
             refused,
             ..
         } = child.root;
         ensure!(
-            corrections >= 1 && retried >= 1 && raised == 0 && refused == 0,
+            corrections >= 1 && retried == 1 && raised <= 1 && exceeded == 0 && refused == 0,
             "{:?}",
             child.root
         );
