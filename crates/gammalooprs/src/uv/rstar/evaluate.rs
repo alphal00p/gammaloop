@@ -1880,7 +1880,14 @@ impl<'a> Evaluation<'a> {
             }
         }
         #[cfg(test)]
-        let guard = super::ir_dirac::test_child_guard().unwrap_or(*GUARD);
+        let attempt_scope = self
+            .plan
+            .root_boundary
+            .is_none()
+            .then(super::depth::child_attempt_scope);
+        #[cfg(test)]
+        let guard =
+            super::depth::child_guard(super::ir_dirac::test_child_guard().unwrap_or(*GUARD));
         #[cfg(not(test))]
         let guard = *GUARD;
         // GAMMALOOP_UNCONTRACTED_NUMERATOR on / check: the correction's K3
@@ -1940,6 +1947,8 @@ impl<'a> Evaluation<'a> {
             );
             attempt
         };
+        #[cfg(test)]
+        drop(attempt_scope);
         let seconds = started.elapsed().as_secs_f64();
         let reduction = counted.elapsed().fields();
         // with the switch on or check, a route decline after taken K3
@@ -2107,14 +2116,17 @@ impl<'a> Evaluation<'a> {
             .graph
             .numerator(&self.plan.support, &correction.hard)
             .get_single_atom()?;
-        let bound = super::depth::planner_bound(super::depth::quotient_pole_bound(
-            quotient_loops,
-            &quotient_numerator,
-            self.root_closure.as_ref(),
-        ));
+        let nested = self.plan.root_boundary.is_some();
+        let bound = super::depth::planner_bound(
+            super::depth::quotient_pole_bound(
+                quotient_loops,
+                &quotient_numerator,
+                self.root_closure.as_ref(),
+            ),
+            nested,
+        );
         drop(quotient_numerator);
         super::depth::note(&mut self.depth, |counts| &mut counts.corrections);
-        let nested = self.plan.root_boundary.is_some();
         if nested {
             super::depth::note(&mut self.depth, |counts| &mut counts.nested);
         }
@@ -3099,6 +3111,12 @@ impl<'a> Evaluation<'a> {
         insertion: &Atom,
         degree: usize,
     ) -> Option<i64> {
+        #[cfg(test)]
+        let _zero_row = self
+            .plan
+            .root_boundary
+            .is_none()
+            .then(super::depth::zero_row_scope);
         let mut z = self.ir_forest(forest, insertion).ok()?;
         if z.is_zero() {
             return None;

@@ -503,6 +503,7 @@ const FIXED: DepthTest = DepthTest {
     planner: Planner::Fixed,
     bound: BoundOverride::Computed,
     strict: None,
+    guard: None,
 };
 const LEGACY: DepthTest = DepthTest {
     planner: Planner::Legacy,
@@ -1166,4 +1167,145 @@ fn a_vanished_row_of_a_nonzero_group_keeps_its_quotient_pole() -> Result<()> {
     Err(eyre!(
         "no row of the top group needs the full bound and reaches the pole part: {rows:?}"
     ))
+}
+
+// Round 4 (review IRH-DEPTH finding 3): a fatal depth alarm raised in a
+// NESTED evaluation keeps its fatal status through the three boundaries the
+// review found: the vanished-row valuation, the guarded parent's fallback and
+// the counterterm (Δ) cache. The breach is forced in the nested evaluations
+// only ([`BoundOverride::Nested`]): c2-m9's decorated quotients on the hard
+// part {2,3,8} need 2 poles at depth 2 (the start is raised to 2 so the rows
+// are shown); their bound is forced to 1, so each is a measured row above its
+// bound, while the root's corrections keep their computed bound and raise no
+// alarm of their own. The override applies only inside a child-route attempt
+// (or a vanished row's valuation) of the root, never on the root's fallback
+// to today's terms, so a fallback that loses the alarm computes a plain value.
+
+/// The forced nested breach: the nested bound 1 inside `within` of the root.
+fn nested_breach(within: depth::Within, guard: bool, strict: bool) -> Run {
+    Run {
+        start: 2,
+        ..run(DepthTest {
+            bound: BoundOverride::Nested { bound: 1, within },
+            guard: Some(guard),
+            strict: Some(strict),
+            ..FIXED
+        })
+    }
+}
+
+/// `result` must be the strict depth alarm of a nested evaluation.
+fn ensure_alarm(label: &str, result: Result<ChildRun>) -> Result<()> {
+    let error = match result {
+        Ok(run) => {
+            return Err(eyre!(
+                "{label}: GAMMALOOP_IR_HARD_DEPTH_STRICT=1 must fail on a nested breach; it returned {} with {:?}",
+                run.value,
+                run.root
+            ));
+        }
+        Err(error) => format!("{error:#}"),
+    };
+    ensure!(
+        error.contains("IRH-DEPTH") && error.contains("bound=1"),
+        "{label}: not the depth alarm: {error}"
+    );
+    Ok(())
+}
+
+/// A nested breach in a child-route attempt of the root, under both guard
+/// settings. Without STRICT the nested evaluation refuses into today's terms
+/// (counted, the value is today's); with STRICT the run fails, also when the
+/// root runs under GAMMALOOP_IR_HARD_CHILD_GUARD=1 (on 307ac11f2f the guarded
+/// root declined the nested alarm, its own counter unchanged, and its
+/// fallback computed today's value: STRICT was not fatal).
+#[test]
+fn a_nested_alarm_is_fatal_under_both_guard_settings() -> Result<()> {
+    let case = Case::new(&k(2, 1), Some(9))?;
+    let today = case.today()?;
+    for guard in [false, true] {
+        let label = format!("c2-m9 nested breach guard={guard}");
+        let refused = case.child(nested_breach(depth::Within::ChildAttempt, guard, false))?;
+        ensure_same(&label, &refused.value, &today)?;
+        ensure!(
+            refused.root.exceeded >= 1 && refused.root.nested >= 1,
+            "{label}: the nested breach was not forced: {:?}",
+            refused.root
+        );
+        ensure_alarm(
+            &label,
+            case.child(nested_breach(depth::Within::ChildAttempt, guard, true)),
+        )?;
+    }
+    Ok(())
+}
+
+/// Every row of the root's child-route corrections vanishes (a hook), so the
+/// decorated quotients are computed only while the vanished rows are valued
+/// (`ir_quotient_valuation`); the nested breach is forced there only. With
+/// STRICT the run fails under both guard settings (on 307ac11f2f the
+/// valuation turned the forest's error into "no measurement" and the run
+/// succeeded).
+#[test]
+fn a_nested_alarm_while_valuing_a_vanished_row_is_fatal() -> Result<()> {
+    let case = Case::new(&k(2, 1), Some(9))?;
+    let vanish = || -> RowHook {
+        Box::new(|site: &HookSite, rows: &mut Vec<(Atom, Atom, usize)>| {
+            if !site.nested {
+                for (h, _, _) in rows.iter_mut() {
+                    *h = Atom::Zero;
+                }
+            }
+        })
+    };
+    for guard in [false, true] {
+        let label = format!("c2-m9 vanished rows guard={guard}");
+        let refused = case.child(Run {
+            hook: Some(vanish()),
+            ..nested_breach(depth::Within::ZeroRow, guard, false)
+        })?;
+        ensure!(
+            refused.root.exceeded >= 1 && refused.root.nested >= 1,
+            "{label}: the nested breach was not forced: {:?}",
+            refused.root
+        );
+        ensure_alarm(
+            &label,
+            case.child(Run {
+                hook: Some(vanish()),
+                ..nested_breach(depth::Within::ZeroRow, guard, true)
+            }),
+        )?;
+    }
+    Ok(())
+}
+
+/// The nested alarm stored by the shared counterterm (Δ) cache and replayed
+/// by a later evaluation that forces nothing: the replay is the alarm again,
+/// fatal also under GAMMALOOP_IR_HARD_CHILD_GUARD=1 (on 307ac11f2f the cache
+/// replayed the alarm as a plain message, which the guard declined).
+#[test]
+fn a_cached_nested_alarm_stays_fatal() -> Result<()> {
+    for guard in [false, true] {
+        let label = format!("c2-m9 cached alarm guard={guard}");
+        let mut case = Case::new(&k(2, 1), Some(9))?;
+        case.plan = case.plan.with_counterterm_cache(std::sync::Arc::new(
+            crate::uv::counterterm_cache::CountertermCache::default(),
+        ));
+        ensure_alarm(
+            &format!("{label} (computed)"),
+            case.child(nested_breach(depth::Within::ChildAttempt, false, true)),
+        )?;
+        // Nothing forced: only the cache holds the alarm.
+        let replay = case.child(Run {
+            start: 2,
+            ..run(DepthTest {
+                guard: Some(guard),
+                strict: Some(true),
+                ..FIXED
+            })
+        });
+        ensure_alarm(&format!("{label} (replayed)"), replay)?;
+    }
+    Ok(())
 }
