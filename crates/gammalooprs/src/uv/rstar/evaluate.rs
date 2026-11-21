@@ -981,6 +981,10 @@ struct Evaluation<'a> {
     /// Dirac self-energy): read only by the uncontracted records
     /// (`GAMMALOOP_UNCONTRACTED_NUMERATOR`).
     closure_data: Option<super::uncontracted::ClosureData>,
+    /// The diagram ledger of a root evaluation that runs outside one (on or
+    /// check; [`super::uncontracted_ledger`]): closed
+    /// with the evaluation's outcome by [`Self::close_ledger`].
+    ledger: Option<super::uncontracted_ledger::DiagramLedger>,
 }
 
 impl<'a> Evaluation<'a> {
@@ -1027,6 +1031,15 @@ impl<'a> Evaluation<'a> {
     ) -> Result<Self> {
         let started = Instant::now();
         let counted = vakint::timing::Snapshot::now();
+        // GAMMALOOP_UNCONTRACTED_NUMERATOR (on / check):
+        // a root evaluation outside a diagram ledger opens its own, before its
+        // UV children are computed (their records are the diagram's); `None`
+        // with the switch off and for a child plan
+        let ledger = if plan.root_boundary.is_none() {
+            super::uncontracted_ledger::DiagramLedger::implicit(&graph.name)
+        } else {
+            None
+        };
         // The top-level switches act at a top-level root only; read before
         // any work so that a bad value fails early.
         let (top_mass, rstar_terms) = if plan.root_boundary.is_none() {
@@ -1133,6 +1146,7 @@ impl<'a> Evaluation<'a> {
             closed_child: None,
             child_decline: None,
             closure_data: None,
+            ledger,
         })
     }
 
@@ -1198,13 +1212,22 @@ impl<'a> Evaluation<'a> {
             // The counts up to the failure, before the error propagates
             // (log_timing prints them on success).
             self.log_boundary_summary("error");
-            if self.plan.root_boundary.is_none() {
-                // the root's UNCONTRACTED_SUMMARY up to the failure (log_timing
-                // prints it on success; a no-op with the switch off)
-                super::uncontracted::log_summary(&self.graph.name, false);
-            }
         }
-        result
+        self.close_ledger(result)
+    }
+
+    /// The end of a root evaluation with its own diagram ledger: the
+    /// ledger's lines, with the outcome of `result`
+    /// ([`super::uncontracted_ledger::DiagramLedger::close`]); `result`
+    /// unchanged without a ledger.
+    fn close_ledger(&mut self, result: Result<Atom>) -> Result<Atom> {
+        let Some(ledger) = self.ledger.take() else {
+            return result;
+        };
+        let closed = ledger.close(result.is_ok());
+        let value = result?;
+        closed?;
+        Ok(value)
     }
 
     fn counterterm_terms(&mut self) -> Result<Atom> {
@@ -2204,8 +2227,9 @@ impl<'a> Evaluation<'a> {
     /// remainder's loops plus the quotient's extra loops). On: its value, or
     /// today's path for this term when it is declined. Check: our attempt (no
     /// state changes), then today's path; the values must agree through
-    /// `ε^(extra - 1)`; today's value is returned. No record (today's path):
-    /// a zero-loop term (Δ(γ) inserted, no vakint call today, OQ-25) and a
+    /// `ε^(extra - 1)`; today's value is returned. No record (today's path;
+    /// listed as `no_record=` in the diagram's lines, not expected): a
+    /// zero-loop term (Δ(γ) inserted, no vakint call today, OQ-25) and a
     /// correction of order `ω = 0` (K8, out of scope).
     fn integrate_ir_hard_uncontracted(
         &mut self,
@@ -2217,7 +2241,8 @@ impl<'a> Evaluation<'a> {
     ) -> Result<(Atom, usize)> {
         use super::uncontracted::{self as uncontracted, Mode, NoRecord};
         let kind = uncontracted::classify_ir_hard();
-        if !switch.enabled(kind) {
+        let enabled = switch.enabled(kind);
+        if !enabled {
             return self.integrate_ir_hard_today(&call, remainder, soft);
         }
         let no_record = if term.remainder.loops == 0 {
@@ -2228,9 +2253,15 @@ impl<'a> Evaluation<'a> {
             None
         };
         if let Some(why) = no_record {
+            let code = match why {
+                NoRecord::ZeroLoops => "zero_loops",
+                NoRecord::OrderZero => "order_zero",
+            };
+            super::uncontracted_ledger::record_no_record(kind, code);
             uncontracted::no_record(&self.graph.name, why);
             return self.integrate_ir_hard_today(&call, remainder, soft);
         }
+        super::uncontracted_ledger::expect(kind);
         let id = self.integration_id + 1;
         let started = Instant::now();
         let hard = self.edges(call.hard);
@@ -3045,12 +3076,6 @@ impl<'a> Evaluation<'a> {
 
     fn log_timing(&self) {
         self.log_boundary_summary("ok");
-        if self.plan.root_boundary.is_none() {
-            // GAMMALOOP_UNCONTRACTED_NUMERATOR on / check: the root-scope
-            // UNCONTRACTED_SUMMARY of every successful root evaluation
-            // (`counterterm` and `counterterm_from_pole_part`; a no-op off)
-            super::uncontracted::log_summary(&self.graph.name, true);
-        }
         let elapsed = self.started.elapsed();
         let preparation = elapsed.saturating_sub(
             self.proper_uv_elapsed + self.quotient_elapsed + self.integration_elapsed,
@@ -3093,6 +3118,15 @@ impl<'a> Evaluation<'a> {
     /// `bare_closed`: the bare poles are already root-closed (a closed
     /// surrogate pole part), so the root closure is not applied to them again.
     fn counterterm_from_pole_part(&mut self, bare_poles: &Atom, bare_closed: bool) -> Result<Atom> {
+        let result = self.counterterm_from_pole_part_terms(bare_poles, bare_closed);
+        self.close_ledger(result)
+    }
+
+    fn counterterm_from_pole_part_terms(
+        &mut self,
+        bare_poles: &Atom,
+        bare_closed: bool,
+    ) -> Result<Atom> {
         let (_, external_routing) = RStarIntegrand::physical_external_routing(
             self.graph,
             &self.graph.external_filter::<SuBitGraph>(),
@@ -3474,7 +3508,9 @@ impl<'a> Evaluation<'a> {
     /// ([`super::uncontracted`]), under the integration id today's path would
     /// consume. On: its value, or today's path for this record when it is
     /// declined. Check: our attempt (no state changes), then today's path;
-    /// the pole parts must agree; today's value is returned.
+    /// the pole parts must agree; today's value is returned. Every remainder
+    /// of an enabled kind is expected in the diagram's ledger
+    /// ([`super::uncontracted_ledger`]).
     fn integrate_ordinary_uncontracted(
         &mut self,
         term: &UvPreparationTerm,
@@ -3482,9 +3518,11 @@ impl<'a> Evaluation<'a> {
     ) -> Result<Atom> {
         use super::uncontracted::{self as uncontracted, Mode};
         let kind = uncontracted::classify(self.plan.root_boundary.is_some());
-        if !switch.enabled(kind) {
+        let enabled = switch.enabled(kind);
+        if !enabled {
             return self.integrate_ordinary_today(term);
         }
+        super::uncontracted_ledger::expect(kind);
         let id = self.integration_id + 1;
         let started = Instant::now();
         let attempt = {
@@ -3505,7 +3543,7 @@ impl<'a> Evaluation<'a> {
                 Ok(today) => today,
                 Err(error) => {
                     // today's path fails the diagram; our attempt is still
-                    // logged and counted in UNCONTRACTED_SUMMARY
+                    // logged and counted (unchecked) in the diagram's ledger
                     uncontracted::report(&attempt, None);
                     return Err(error);
                 }
