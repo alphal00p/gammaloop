@@ -97,6 +97,20 @@ pub const FACTORIZED_SCHEMA: &str = "pint6.factorized-numerator.v1";
 /// closure are written and read in it; direct records stay v1.
 pub const FACTORIZED_SCHEMA_V3: &str = "pint6.factorized-numerator.v3";
 
+/// The schemas a TextSchema refusal names: the base's text (only v1) for any
+/// line that is not a v3 schema line written inexactly; for such a line (the
+/// v3 name with something around it, e.g. trailing whitespace) both, and how
+/// they must be written.
+fn known_schemas(found: &str) -> String {
+    if found.contains(FACTORIZED_SCHEMA_V3) {
+        format!(
+            "{FACTORIZED_SCHEMA} and {FACTORIZED_SCHEMA_V3}, written exactly, without trailing whitespace"
+        )
+    } else {
+        FACTORIZED_SCHEMA.to_string()
+    }
+}
+
 /// Fully qualified names of the symbols the contract refers to (DOT
 /// notation of FeynGen graphs). Classification is by name, so values built in
 /// another process (or read from text) are recognised.
@@ -595,7 +609,8 @@ pub enum FactorizedError {
     #[error("closure: {detail}")]
     Closure { detail: String },
     #[error(
-        "text line {line}: unknown schema {found:?} (this reader knows {FACTORIZED_SCHEMA} and {FACTORIZED_SCHEMA_V3}, written exactly, without trailing whitespace)"
+        "text line {line}: unknown schema {found:?} (this reader knows {})",
+        known_schemas(found)
     )]
     TextSchema { line: usize, found: String },
     #[error("text line {line}: `lines` asserts {asserted} lines, {found} were read")]
@@ -788,7 +803,9 @@ pub const UNKNOWN_MAX_ORDER: i64 = 64;
 ///   carried linearly;
 /// - `vakint::MZV(n_1, .., n_r)`: a multiple zeta value (a catalogue
 ///   coefficient's constant, kept by `master_catalogue::parse_constant`,
-///   evaluated by `mzv`), 1 to 16 positive integers of at most 64.
+///   evaluated by `mzv`), 1 to 16 positive integers of at most 64, the first
+///   at least 2: exactly the convergent ones vakint's evaluator accepts
+///   (`mzv::evaluable_indices`; MZV(1, ..) diverges).
 /// ζ(n) and π are Symbolica's own symbols (`symbolica::zeta`, `𝜋`), not
 /// vakint's.
 pub const VAKINT_DATA_ATOMS: [(&str, &str); 2] = [
@@ -796,7 +813,10 @@ pub const VAKINT_DATA_ATOMS: [(&str, &str); 2] = [
         "vakint::UNKNOWN",
         "(vakint::<catalogue master>, <integer k, |k| <= 64>)",
     ),
-    ("vakint::MZV", "(<1 to 16 positive integers <= 64>)"),
+    (
+        "vakint::MZV",
+        "(<1 to 16 positive integers <= 64, the first >= 2>)",
+    ),
 ];
 
 /// Whether `name` is a master name of vakint's catalogues by their naming
@@ -822,10 +842,18 @@ fn is_mzv(view: AtomView<'_>) -> bool {
     let AtomView::Fun(f) = view else {
         return false;
     };
-    f.get_symbol().get_name() == "vakint::MZV"
-        && (1..=16).contains(&f.get_nargs())
-        && f.iter()
-            .all(|a| i64::try_from(a).is_ok_and(|n| (1..=64).contains(&n)))
+    if f.get_symbol().get_name() != "vakint::MZV" || !(1..=16).contains(&f.get_nargs()) {
+        return false;
+    }
+    let Some(indices) = f
+        .iter()
+        .map(|a| i64::try_from(a).ok().filter(|n| (1..=64).contains(n)))
+        .collect::<Option<Vec<i64>>>()
+    else {
+        return false;
+    };
+    // the evaluator's own rule (a leading 1 diverges)
+    crate::p_integral::mzv::evaluable_indices(&indices)
 }
 
 /// Whether `view` is one of [`VAKINT_DATA_ATOMS`] in its exact shape.
@@ -864,7 +892,8 @@ pub(crate) fn is_unknown_coefficient(view: AtomView<'_>) -> bool {
     f.get_symbol() == crate::truncation_guard::unknown_coefficient_symbol()
         && args.len() == 2
         && matches!(args[0], AtomView::Var(v) if is_master_name(v.get_symbol().get_name()))
-        && i64::try_from(args[1]).is_ok_and(|k| k.abs() <= UNKNOWN_MAX_ORDER)
+        && i64::try_from(args[1])
+            .is_ok_and(|k| k.unsigned_abs() <= UNKNOWN_MAX_ORDER.unsigned_abs())
 }
 
 /// The degree of `view` in vakint's DATA ATOMS ([`is_vakint_data_atom`]:
@@ -1174,12 +1203,24 @@ pub(crate) fn check_epsilon_setting(value: &FactorizedNumerator, epsilon: Symbol
 /// `vakint_vacuum_input_streamed` (hence `vakint_vacuum_input` and the
 /// vacuum entries), and at the top of `evaluate_factorized` and the vacuum
 /// entry. A no-op for an unmarked value.
+///
+/// INVARIANT: no rule that COMPUTES (a zero test, `together`, `expand`, a
+/// series) runs on an atom that has not passed the SHAPE rules (names, exact
+/// numbers, data atoms, exponents of at most 64, heads, structural shapes):
+/// the record's atoms get them here first ([`FactorizedNumerator::check_marked_atoms`]:
+/// the entries may run this before `validate`), the prefactor argument in
+/// [`check_prefactor_argument`], before the defined-and-finite checks.
 pub(crate) fn check_marked_entry(
     value: &FactorizedNumerator,
     prefactor: &Atom,
     epsilon: Symbol,
     terms: Option<i64>,
 ) -> Result<()> {
+    if is_marked(value) {
+        // the order of `validate`: the reserved names, then the atom rules
+        value.check_reserved_symbols()?;
+        value.check_marked_atoms()?;
+    }
     check_prefactor_argument(value, prefactor, epsilon)?;
     check_epsilon_setting(value, epsilon)?;
     if is_marked(value) {
@@ -1839,7 +1880,7 @@ fn first_non_integer_exponent(view: AtomView<'_>) -> Option<String> {
         if let AtomView::Pow(p) = part {
             let (_, exponent) = p.get_base_exp();
             match i64::try_from(exponent) {
-                Ok(n) if n.abs() <= MAX_CALLER_EXPONENT => {}
+                Ok(n) if n.unsigned_abs() <= MAX_CALLER_EXPONENT.unsigned_abs() => {}
                 Ok(_) => {
                     found = Some(format!(
                         "the exponent {} of {} exceeds {MAX_CALLER_EXPONENT} in modulus",
@@ -2061,7 +2102,7 @@ fn argument_out_of_shape(
     };
     let fits = match shape {
         Id => i64::try_from(a).is_ok_and(|n| (0..=MAX_INDEX_ID).contains(&n)),
-        SignedId => i64::try_from(a).is_ok_and(|n| n.abs() <= MAX_INDEX_ID),
+        SignedId => i64::try_from(a).is_ok_and(|n| n.unsigned_abs() <= MAX_INDEX_ID.unsigned_abs()),
         Positive => i64::try_from(a).is_ok_and(|n| n >= 1),
         Dimension => matches!(a, AtomView::Var(v) if v.get_symbol() == dimension),
         Four => i64::try_from(a) == Ok(4),
@@ -2980,6 +3021,133 @@ impl FactorizedNumerator {
         if is_marked(self) {
             self.check_reserved_symbols()?;
         }
+        self.check_marked_bounds(false)?;
+        if let FactorizedKind::Closure(spec) = &self.kind {
+            self.validate_closure(spec)?;
+        } else {
+            self.validate_contract(None)?;
+        }
+        if is_marked(self) {
+            self.check_marked_atoms()?;
+            // every caller expression outside the insertions: defined, finite
+            self.check_marked_fields(None)?;
+        }
+        Ok(())
+    }
+
+    /// The mutable twin of [`Self::record_atoms`] (tests: put a marker into
+    /// every caller-written atom), destructured the same way.
+    #[cfg(test)]
+    pub(crate) fn record_atoms_mut(&mut self) -> Vec<(String, &mut Atom)> {
+        let FactorizedNumerator {
+            label: _,
+            kind,
+            dimension: _,
+            loop_edges: _,
+            external_edges: _,
+            edges,
+            vertices,
+            ports,
+            projector,
+            prefactor,
+            colour_branch: _,
+            insertions,
+            record,
+        } = self;
+        let mut out = Vec::new();
+        for edge in edges {
+            let FactorizedEdge {
+                id,
+                source: _,
+                target: _,
+                source_hedge: _,
+                target_hedge: _,
+                particle: _,
+                line: _,
+                power: _,
+                mass_squared,
+                momentum: _,
+                factor,
+            } = edge;
+            out.push((format!("edge {id} factor"), factor));
+            out.push((format!("edge {id} mass"), mass_squared));
+        }
+        for vertex in vertices {
+            let FactorizedVertex {
+                id,
+                rule: _,
+                factor,
+            } = vertex;
+            out.push((format!("vertex {id} factor"), factor));
+        }
+        for port in ports {
+            out.push(("ports".to_string(), port));
+        }
+        if let Some(Projector {
+            tensor,
+            p2_power: _,
+        }) = projector
+        {
+            out.push(("projector".to_string(), tensor));
+        }
+        let Prefactor {
+            overall,
+            loop_sign: _,
+            nf_power: _,
+            scalars,
+            colour,
+        } = prefactor;
+        out.push(("prefactor_overall".to_string(), overall));
+        out.push(("prefactor_scalars".to_string(), scalars));
+        out.push(("prefactor_colour".to_string(), colour));
+        for insertion in insertions {
+            let Insertion {
+                vertex,
+                hedges: _,
+                cycles: _,
+                coefficient,
+                factor,
+            } = insertion;
+            out.push((format!("insertion {vertex} coefficient"), coefficient));
+            out.push((format!("insertion {vertex} factor"), factor));
+        }
+        let weights = match (kind, record) {
+            (FactorizedKind::Closure(spec), _) => {
+                let ClosureSpec {
+                    edge: _,
+                    mass_squared,
+                    auxiliary_mass_squared,
+                    power: _,
+                    independent_externals: _,
+                    taylor: _,
+                    softs: _,
+                    original_cycles: _,
+                    depth: _,
+                    weights,
+                } = spec;
+                out.push(("closure mass".to_string(), mass_squared));
+                out.push(("taylor auxiliary mass".to_string(), auxiliary_mass_squared));
+                weights
+            }
+            (FactorizedKind::Direct, Some(record)) => &mut record.weights,
+            (FactorizedKind::Direct, None) => return out,
+        };
+        for (name, _, atom) in weights.iter_mut() {
+            out.push((format!("weight {name}"), atom));
+        }
+        out
+    }
+
+    /// THE BOUNDS of a value with new features, shared by `validate` and the
+    /// vacuum mode's validation (which never calls `validate`): the record's
+    /// depth ([`marked_depth`]), the ids (i64: written as Q(id, ..) and
+    /// edge(source, target); the closure kind bounds its edge ids itself, in
+    /// `validate_closure`, here its vertex ids), the edge powers (summed when
+    /// lines are merged in series: at most 2^31 in absolute value) and, with
+    /// `momenta` (the vacuum mode: `validate` checks them in the contract's
+    /// momentum rules), the momentum coefficients (at most 2^31). `Closure`
+    /// for the closure kind, else `Graph` (`MomentumBasis` for coefficients).
+    pub(crate) fn check_marked_bounds(&self, momenta: bool) -> Result<()> {
         let closure = matches!(self.kind, FactorizedKind::Closure(_));
         let in_kind = |detail: String| {
             if closure {
@@ -2996,29 +3164,26 @@ impl FactorizedNumerator {
         if let Some(depth) = depth {
             marked_depth(i128::try_from(depth).unwrap_or(i128::MAX)).map_err(in_kind)?;
         }
-        // ids are written as Q(id, ..) and edge(source, target): i64 (the
-        // closure kind has its own bound, with its own text, in
-        // validate_closure)
         if let Some(detail) = self.marked_id_overflow(!closure) {
             return Err(in_kind(detail));
         }
-        // edge powers are summed when lines are merged in series: bounded so
-        // that no sum of fewer than 2^32 lines can wrap
         if let Some(edge) = self.edges.iter().find(|e| e.power.unsigned_abs() > 1 << 31) {
             return Err(in_kind(format!(
                 "edge {}: power {} out of range (at most 2^31 in absolute value)",
                 edge.id, edge.power
             )));
         }
-        if let FactorizedKind::Closure(spec) = &self.kind {
-            self.validate_closure(spec)?;
-        } else {
-            self.validate_contract(None)?;
-        }
-        if is_marked(self) {
-            self.check_marked_atoms()?;
-            // every caller expression outside the insertions: defined, finite
-            self.check_marked_fields(None)?;
+        if momenta {
+            for edge in &self.edges {
+                if let Some(c) = edge.momentum.iter().find(|c| c.unsigned_abs() > 1 << 31) {
+                    return Err(FactorizedError::MomentumBasis {
+                        detail: format!(
+                            "edge {}: momentum coefficient {c} out of range (at most 2^31 in absolute value)",
+                            edge.id
+                        ),
+                    });
+                }
+            }
         }
         Ok(())
     }
@@ -3123,9 +3288,11 @@ impl FactorizedNumerator {
         }
     }
 
-    /// Every caller expression of a marked value outside its insertions (edge
-    /// and vertex factors, the projector, the prefactor fields) is defined and
-    /// finite at ε = 0 once the dimension is set to 4 - 2ε: no denominator
+    /// Every caller expression of a marked value outside its insertions (every
+    /// atom of [`Self::record_atoms`] but the insertions' coefficients and
+    /// factors: edge factors and masses, vertex factors, ports, the projector,
+    /// the prefactor fields, the closure line's masses, the WEIGHTS) is defined
+    /// and finite at ε = 0 once the dimension is set to 4 - 2ε: no denominator
     /// vanishes identically, as written or after the substitution, and none
     /// makes a pole (poles belong in insertion coefficients, whose pole order
     /// raises the depth; R1 counts nothing else): `NotScalar` at the field. ε
@@ -3137,19 +3304,11 @@ impl FactorizedNumerator {
     /// lookalike, such as symbolica::ε, is then a plain symbol, refused by the
     /// entry's name rule); a field written in the dimension alone gets both.
     pub(crate) fn check_marked_fields(&self, epsilon: Option<Symbol>) -> Result<()> {
-        let mut fields = Vec::new();
-        for edge in &self.edges {
-            fields.push((format!("edge {} factor", edge.id), &edge.factor));
-        }
-        for vertex in &self.vertices {
-            fields.push((format!("vertex {} factor", vertex.id), &vertex.factor));
-        }
-        if let Some(projector) = &self.projector {
-            fields.push(("projector".to_string(), &projector.tensor));
-        }
-        fields.push(("prefactor_overall".to_string(), &self.prefactor.overall));
-        fields.push(("prefactor_scalars".to_string(), &self.prefactor.scalars));
-        fields.push(("prefactor_colour".to_string(), &self.prefactor.colour));
+        let fields = self
+            .record_atoms()
+            .into_iter()
+            .filter(|(field, _)| !field.starts_with("insertion "))
+            .collect::<Vec<_>>();
         let known = epsilon.or_else(|| {
             self.insertions.iter().find_map(|i| {
                 epsilon_symbol_in(i.coefficient.as_view())
@@ -3221,47 +3380,114 @@ impl FactorizedNumerator {
         self.check_reserved_symbols_except(&[ALLOWED_VAKINT_SYMBOL])
     }
 
-    /// Every caller atom of the record with its field name (the fields of
-    /// [`Self::check_reserved_symbols_except`]).
+    /// EVERY caller-written atom of the record with its field name: edge
+    /// factors and masses, vertex factors, ports, the projector, the three
+    /// prefactor fields, insertion coefficients and factors, the closure
+    /// line's masses, the weights (a closure's or a v3 direct record's). The
+    /// structs are destructured WITHOUT `..`: a new field does not compile
+    /// until it is listed here (an atom) or named as no atom, so that every
+    /// rule that walks this list (the atom rules, the namespace walk's
+    /// counterpart, the defined-and-finite check) reaches it.
     pub(crate) fn record_atoms(&self) -> Vec<(String, &Atom)> {
+        let FactorizedNumerator {
+            label: _,
+            kind,
+            dimension: _,
+            loop_edges: _,
+            external_edges: _,
+            edges,
+            vertices,
+            ports,
+            projector,
+            prefactor,
+            colour_branch: _,
+            insertions,
+            record,
+        } = self;
         let mut out = Vec::new();
-        for edge in &self.edges {
-            out.push((format!("edge {} factor", edge.id), &edge.factor));
-            out.push((format!("edge {} mass", edge.id), &edge.mass_squared));
+        for edge in edges {
+            let FactorizedEdge {
+                id,
+                source: _,
+                target: _,
+                source_hedge: _,
+                target_hedge: _,
+                particle: _,
+                line: _,
+                power: _,
+                mass_squared,
+                momentum: _,
+                factor,
+            } = edge;
+            out.push((format!("edge {id} factor"), factor));
+            out.push((format!("edge {id} mass"), mass_squared));
         }
-        for vertex in &self.vertices {
-            out.push((format!("vertex {} factor", vertex.id), &vertex.factor));
+        for vertex in vertices {
+            let FactorizedVertex {
+                id,
+                rule: _,
+                factor,
+            } = vertex;
+            out.push((format!("vertex {id} factor"), factor));
         }
-        for port in &self.ports {
+        for port in ports {
             out.push(("ports".to_string(), port));
         }
-        if let Some(projector) = &self.projector {
-            out.push(("projector".to_string(), &projector.tensor));
+        if let Some(Projector {
+            tensor,
+            p2_power: _,
+        }) = projector
+        {
+            out.push(("projector".to_string(), tensor));
         }
-        out.push(("prefactor_overall".to_string(), &self.prefactor.overall));
-        out.push(("prefactor_scalars".to_string(), &self.prefactor.scalars));
-        out.push(("prefactor_colour".to_string(), &self.prefactor.colour));
-        for insertion in &self.insertions {
-            out.push((
-                format!("insertion {} coefficient", insertion.vertex),
-                &insertion.coefficient,
-            ));
-            out.push((
-                format!("insertion {} factor", insertion.vertex),
-                &insertion.factor,
-            ));
+        let Prefactor {
+            overall,
+            loop_sign: _,
+            nf_power: _,
+            scalars,
+            colour,
+        } = prefactor;
+        out.push(("prefactor_overall".to_string(), overall));
+        out.push(("prefactor_scalars".to_string(), scalars));
+        out.push(("prefactor_colour".to_string(), colour));
+        for insertion in insertions {
+            let Insertion {
+                vertex,
+                hedges: _,
+                cycles: _,
+                coefficient,
+                factor,
+            } = insertion;
+            out.push((format!("insertion {vertex} coefficient"), coefficient));
+            out.push((format!("insertion {vertex} factor"), factor));
         }
-        let weights = match (&self.kind, &self.record) {
+        let weights = match (kind, record) {
             (FactorizedKind::Closure(spec), _) => {
-                out.push(("closure mass".to_string(), &spec.mass_squared));
-                out.push((
-                    "taylor auxiliary mass".to_string(),
-                    &spec.auxiliary_mass_squared,
-                ));
-                spec.weights.as_slice()
+                let ClosureSpec {
+                    edge: _,
+                    mass_squared,
+                    auxiliary_mass_squared,
+                    power: _,
+                    independent_externals: _,
+                    taylor: _,
+                    softs: _,
+                    original_cycles: _,
+                    depth: _,
+                    weights,
+                } = spec;
+                out.push(("closure mass".to_string(), mass_squared));
+                out.push(("taylor auxiliary mass".to_string(), auxiliary_mass_squared));
+                weights.as_slice()
             }
-            (_, Some(record)) => record.weights.as_slice(),
-            _ => &[],
+            (
+                FactorizedKind::Direct,
+                Some(DirectRecord {
+                    original_cycles: _,
+                    depth: _,
+                    weights,
+                }),
+            ) => weights.as_slice(),
+            (FactorizedKind::Direct, None) => &[],
         };
         for (name, _, atom) in weights {
             out.push((format!("weight {name}"), atom));

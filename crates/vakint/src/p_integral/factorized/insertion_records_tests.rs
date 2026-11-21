@@ -1034,3 +1034,533 @@ fn a_record_depth_other_than_the_settings_terms_is_refused() {
         other => panic!("expected Graph through the direct entry, got {other:?}"),
     }
 }
+
+/// The data atom MZV is accepted exactly where vakint's evaluator is: on the
+/// real K2 child of L3-036, its insertion coefficient times MZV(1) or
+/// MZV(1, 2) (a FIRST index 1 diverges) is refused by validation and by the
+/// entry (it is no data atom: the reserved-name refusal naming vakint::MZV and
+/// the field), typed and through the text form, in Symbolic and Retain mode;
+/// times MZV(2), MZV(2, 1) (a later 1 converges) or MZV(5, 3) it is accepted,
+/// survives the text round trip, and the value is the original one times that
+/// MZV exactly (both poles; in Retain the exact value times it).
+#[test]
+fn an_mzv_is_accepted_exactly_when_it_converges() {
+    let vakint = plain_engine();
+    let original =
+        FactorizedNumerator::from_text(include_str!("fixtures/wh-k2-child-ins.record.txt"))
+            .unwrap();
+    let reference = closure_value(&vakint, &site_settings(), &original);
+    let with = |mzv: &str| {
+        let mut value = original.clone();
+        value.insertions[0].coefficient =
+            &value.insertions[0].coefficient * vk_parse!(mzv).unwrap();
+        value
+    };
+    for bad in ["vakint::MZV(1)", "vakint::MZV(1,2)"] {
+        let value = with(bad);
+        for error in [
+            value.validate().unwrap_err(),
+            evaluate_factorized_closure(
+                &vakint,
+                &site_settings(),
+                std::slice::from_ref(&value),
+                &[value.prefactor.total()],
+            )
+            .unwrap_err(),
+        ] {
+            match &error {
+                FactorizedError::Graph { detail } | FactorizedError::Insertion { detail, .. } => {
+                    assert!(
+                        detail.contains("vakint::MZV")
+                            && detail.contains("insertion 4 coefficient"),
+                        "{bad}: {detail}"
+                    )
+                }
+                other => panic!("{bad}: expected a refusal naming the atom, got {other:?}"),
+            }
+        }
+    }
+    // the text form: written and read back, the same refusal
+    for bad in ["vakint::MZV(1)", "vakint::MZV(1,2)"] {
+        let refused = match with(bad).to_text() {
+            Err(_) => true,
+            Ok(text) => FactorizedNumerator::from_text(&text)
+                .is_err_and(|e| e.to_string().contains("vakint::MZV")),
+        };
+        assert!(refused, "{bad} (text): accepted");
+    }
+    let retain = retain_settings();
+    let retained = closure_value(&vakint, &retain, &original);
+    for good in ["vakint::MZV(2)", "vakint::MZV(2,1)", "vakint::MZV(5,3)"] {
+        let mzv = vk_parse!(good).unwrap();
+        let got = closure_value(&vakint, &site_settings(), &with(good));
+        assert!(
+            (&got - &(&reference * &mzv)).expand().is_zero(),
+            "{good}: not linear"
+        );
+        // Retain: the exact value times the MZV
+        let got = closure_value(&vakint, &retain, &with(good));
+        assert!(
+            (&got - &(&retained * &mzv)).expand().is_zero(),
+            "{good} (Retain): not linear"
+        );
+        // the text form carries it unchanged
+        let read = FactorizedNumerator::from_text(&with(good).to_text().unwrap()).unwrap();
+        assert_eq!(read, with(good), "{good}: text round trip");
+    }
+    // Retain refuses the divergent ones too
+    for bad in ["vakint::MZV(1)", "vakint::MZV(1,2)"] {
+        let value = with(bad);
+        assert!(
+            evaluate_factorized_closure(
+                &vakint,
+                &retain,
+                std::slice::from_ref(&value),
+                &[value.prefactor.total()]
+            )
+            .is_err(),
+            "{bad} (Retain): accepted"
+        );
+    }
+}
+
+/// SIGNED EXTREMES: every caller integer the validator bounds is compared
+/// without a signed absolute value (|i64::MIN| does not exist): on the real
+/// K2 child (insertion coefficient) and the real direct L3-185 record,
+/// x^(i64::MIN), UNKNOWN(master, i64::MIN), MZV(i64::MIN), an index label
+/// hedge(i64::MIN, 1) and the compact slash slash(i64::MIN, 1) in a slot of
+/// a contracted momentum pair, an edge power and a momentum coefficient of
+/// i64::MIN, and each with i64::MIN + 1 and i64::MAX, are refused with the
+/// rule's text, never a panic.
+#[test]
+fn signed_extremes_are_refused_not_a_panic() {
+    let k2 = FactorizedNumerator::from_text(include_str!("fixtures/wh-k2-child-ins.record.txt"))
+        .unwrap();
+    let direct =
+        FactorizedNumerator::from_text(include_str!("fixtures/l3-185-insertions.txt")).unwrap();
+    let d = "gammalooprs::{}::dim";
+    for n in [i64::MIN, i64::MIN + 1, i64::MAX] {
+        for (what, coefficient, text) in [
+            ("x^n", format!("witness::x^({n})"), "exceeds 64 in modulus"),
+            (
+                "UNKNOWN(master, n)",
+                format!("vakint::UNKNOWN(vakint::ggppss_int_1,{n})"),
+                "vakint::UNKNOWN",
+            ),
+            ("MZV(n)", format!("vakint::MZV({n})"), "vakint::MZV"),
+        ] {
+            let mut v = k2.clone();
+            v.insertions[0].coefficient =
+                &v.insertions[0].coefficient * vk_parse!(&coefficient).unwrap();
+            match v.validate() {
+                Err(e) => assert!(e.to_string().contains(text), "{what} at {n}: {e}"),
+                Ok(()) => panic!("{what} at {n}: accepted"),
+            }
+        }
+        // an index label and the compact slash in a slot of a vertex factor
+        // (a caller field: the shape rules)
+        let plain = direct
+            .vertices
+            .iter()
+            .position(|x| direct.insertions.iter().all(|i| i.vertex != x.id))
+            .unwrap();
+        for (what, label, text) in [
+            (
+                "hedge(n, 1)",
+                format!("gammalooprs::hedge({n},1)"),
+                "is not Id",
+            ),
+            (
+                "slash(n, 1)",
+                format!("vakint::slash({n},1)"),
+                "is not SignedId",
+            ),
+        ] {
+            let mut v = direct.clone();
+            // a contracted pair of momenta (spenso contracts g(a, a) to D at
+            // once, which would remove the label)
+            let slot = format!("spenso::mink({d},{label})");
+            v.vertices[plain].factor = &v.vertices[plain].factor
+                * vk_parse!(&format!(
+                    "gammalooprs::Q(8,{slot})*gammalooprs::Q(9,{slot})"
+                ))
+                .unwrap();
+            match v.validate() {
+                Err(e) => assert!(e.to_string().contains(text), "{what} at {n}: {e}"),
+                Ok(()) => panic!("{what} at {n}: accepted"),
+            }
+        }
+        let mut v = direct.clone();
+        v.edges[0].power = n;
+        match v.validate() {
+            Err(e) => assert!(e.to_string().contains("power"), "edge power {n}: {e}"),
+            Ok(()) => panic!("edge power {n}: accepted"),
+        }
+        let mut v = direct.clone();
+        v.edges[0].momentum[0] = n;
+        match v.validate() {
+            Err(e) => assert!(
+                e.to_string().contains("momentum coefficient"),
+                "momentum {n}: {e}"
+            ),
+            Ok(()) => panic!("momentum coefficient {n}: accepted"),
+        }
+    }
+    // the accepted endpoints of the exponent and the UNKNOWN order: +-64
+    for n in [64, -64] {
+        for coefficient in [
+            format!("witness::x^({n})"),
+            format!("vakint::UNKNOWN(vakint::ggppss_int_1,{n})"),
+        ] {
+            let mut v = k2.clone();
+            v.insertions[0].coefficient =
+                &v.insertions[0].coefficient * vk_parse!(&coefficient).unwrap();
+            v.validate()
+                .unwrap_or_else(|e| panic!("{coefficient}: {e}"));
+        }
+    }
+}
+
+/// The BOUNDS at the closure, direct and ports entries, typed and through
+/// the text form (the vacuum entry: vacuum::tests): the real K2 child
+/// (closure) and the real direct L3-185 record (direct, ports) with a depth of
+/// usize::MAX, an edge or a vertex id of i64::MAX + 1, an edge power or a
+/// momentum coefficient of i64::MIN, 1/P(x) in a weight or a vertex factor:
+/// each refused (no panic) with the bound's text.
+#[test]
+fn the_bounds_reach_every_entry_typed_and_through_text() {
+    let vakint = plain_engine();
+    let k2 = FactorizedNumerator::from_text(include_str!("fixtures/wh-k2-child-ins.record.txt"))
+        .unwrap();
+    let direct =
+        FactorizedNumerator::from_text(include_str!("fixtures/l3-185-insertions.txt")).unwrap();
+    let big = i64::MAX as usize + 1;
+    let zero = "1/((witness::x-3)^2-witness::x^2+6*witness::x-9)";
+    type Change = Box<dyn Fn(&mut FactorizedNumerator)>;
+    let cases = || -> Vec<(&'static str, Change, &'static str)> {
+        vec![
+            (
+                "depth usize::MAX",
+                Box::new(move |v: &mut FactorizedNumerator| {
+                    if let FactorizedKind::Closure(spec) = &mut v.kind {
+                        spec.depth = Some(usize::MAX);
+                    } else {
+                        v.record
+                            .get_or_insert_with(|| DirectRecord {
+                                original_cycles: None,
+                                depth: None,
+                                weights: Vec::new(),
+                            })
+                            .depth = Some(usize::MAX);
+                    }
+                }),
+                "depth",
+            ),
+            (
+                "edge id i64::MAX + 1",
+                Box::new(move |v: &mut FactorizedNumerator| {
+                    let last = v.edges.len() - 1;
+                    let old = v.edges[last].id;
+                    v.edges[last].id = big;
+                    for e in v.loop_edges.iter_mut().chain(v.external_edges.iter_mut()) {
+                        if *e == Some(old) {
+                            *e = Some(big);
+                        }
+                    }
+                    if let FactorizedKind::Closure(spec) = &mut v.kind
+                        && spec.edge == old
+                    {
+                        spec.edge = big;
+                    }
+                }),
+                "ids",
+            ),
+            (
+                "vertex id i64::MAX + 1",
+                Box::new(move |v: &mut FactorizedNumerator| {
+                    let last = v.vertices.len() - 1;
+                    let old = v.vertices[last].id;
+                    v.vertices[last].id = big;
+                    for e in &mut v.edges {
+                        for end in [&mut e.source, &mut e.target] {
+                            if *end == Endpoint::Vertex(old) {
+                                *end = Endpoint::Vertex(big);
+                            }
+                        }
+                    }
+                    for i in &mut v.insertions {
+                        if i.vertex == old {
+                            i.vertex = big;
+                        }
+                    }
+                }),
+                "ids",
+            ),
+            (
+                "edge power i64::MIN",
+                Box::new(|v: &mut FactorizedNumerator| v.edges[0].power = i64::MIN),
+                "power",
+            ),
+            (
+                "momentum coefficient i64::MIN",
+                Box::new(|v: &mut FactorizedNumerator| v.edges[0].momentum[0] = i64::MIN),
+                "momentum coefficient",
+            ),
+            (
+                "1/P(x) in a weight",
+                Box::new(move |v: &mut FactorizedNumerator| {
+                    let weights = match &mut v.kind {
+                        FactorizedKind::Closure(spec) => &mut spec.weights,
+                        _ => {
+                            &mut v
+                                .record
+                                .get_or_insert_with(|| DirectRecord {
+                                    original_cycles: None,
+                                    depth: None,
+                                    weights: Vec::new(),
+                                })
+                                .weights
+                        }
+                    };
+                    let bad = vk_parse!(zero).unwrap();
+                    match weights.iter_mut().find(|(name, _, _)| name == "overall") {
+                        Some((_, _, atom)) => *atom = &*atom * &bad,
+                        None => weights.push(("overall".into(), false, bad)),
+                    }
+                }),
+                "a denominator vanishes identically",
+            ),
+        ]
+    };
+    let settings = site_settings();
+    let entries: Vec<(&str, &FactorizedNumerator)> =
+        vec![("closure", &k2), ("direct", &direct), ("ports", &direct)];
+    for (entry, base) in entries {
+        base.validate().unwrap();
+        for (what, change, text) in cases() {
+            let mut v = base.clone();
+            change(&mut v);
+            let run = |v: &FactorizedNumerator| -> std::result::Result<(), String> {
+                match entry {
+                    "closure" => evaluate_factorized_closure(
+                        &vakint,
+                        &settings,
+                        std::slice::from_ref(v),
+                        &[v.prefactor.total()],
+                    )
+                    .map(|_| ()),
+                    "direct" => {
+                        evaluate_factorized(&vakint, &settings, v, &v.prefactor.total()).map(|_| ())
+                    }
+                    _ => evaluate_factorized_ports(&vakint, &settings, v, &v.prefactor.total())
+                        .map(|_| ()),
+                }
+                .map_err(|e| e.to_string())
+            };
+            match run(&v) {
+                Err(e) => assert!(e.contains(text), "{entry} {what} (typed): {e}"),
+                Ok(()) => panic!("{entry} {what} (typed): accepted"),
+            }
+            let refused = match v.to_text() {
+                Err(_) => true,
+                Ok(written) => match FactorizedNumerator::from_text(&written) {
+                    Err(_) => true,
+                    Ok(read) => run(&read).is_err(),
+                },
+            };
+            assert!(refused, "{entry} {what} (text): accepted");
+        }
+    }
+}
+
+/// EVERY CALLER-WRITTEN ATOM ([`FactorizedNumerator::record_atoms`], built
+/// without `..`) outside the insertions gets the defined-and-finite check and
+/// the grammar: on the real K2 child (closure kind, given the producer's
+/// weights section: overall, loop_sign, colour; its scalars weight, applied by
+/// vakint, must equal prefactor_scalars by its own rule) and the real direct
+/// L3-185, each atom multiplied by 1/P(x) (P identically zero) and,
+/// separately, by the caller function witness::f(witness::x) is refused by
+/// validation (no panic; a zero atom takes the marker itself); where the
+/// field's own structural rule does not refuse first (masses, ports, the
+/// closure line, the closure kind's fixed overall, an insertion vertex's
+/// factor 1), with "a denominator vanishes identically" and "a function head
+/// that is not allowed", the field named. A WEIGHT multiplied by the unit
+/// form P(x) + 1 is accepted and the value is unchanged (both poles).
+#[test]
+fn every_caller_written_atom_gets_the_finite_check_and_the_grammar() {
+    let k2 = FactorizedNumerator::from_text(include_str!("fixtures/wh-k2-child-ins.record.txt"))
+        .unwrap();
+    let direct =
+        FactorizedNumerator::from_text(include_str!("fixtures/l3-185-insertions.txt")).unwrap();
+    let zero = parsed("1/((witness::x-3)^2-witness::x^2+6*witness::x-9)");
+    let head = parsed("witness::f(witness::x)");
+    let structural = |field: &str, closure: bool, base: &FactorizedNumerator| {
+        base.insertions
+            .iter()
+            .any(|i| field == format!("vertex {} factor", i.vertex))
+            || field.ends_with(" mass")
+            || field == "ports"
+            || field == "closure mass"
+            || field == "taylor auxiliary mass"
+            || (closure && field == "prefactor_overall")
+    };
+    // the producer's weights section (as on its real K2 records: overall 1,
+    // loop_sign -1, colour -cA^3/4)
+    let mut k2 = k2;
+    if let FactorizedKind::Closure(spec) = &mut k2.kind {
+        spec.weights = vec![
+            ("colour".into(), false, parsed("-1/4*beta::cA^3")),
+            ("loop_sign".into(), false, parsed("-1")),
+            ("overall".into(), false, parsed("1")),
+        ];
+    }
+    let mut weights_seen = 0;
+    for base in [&k2, &direct] {
+        base.validate().unwrap();
+        let closure = matches!(base.kind, FactorizedKind::Closure(_));
+        let fields = base
+            .record_atoms()
+            .into_iter()
+            .map(|(f, _)| f)
+            .filter(|f| !f.starts_with("insertion "))
+            .collect::<Vec<_>>();
+        for (i, field) in fields.iter().enumerate() {
+            weights_seen += usize::from(field.starts_with("weight "));
+            for (marker, text) in [
+                (&zero, "a denominator vanishes identically"),
+                (&head, "a function head that is not allowed"),
+            ] {
+                let mut v = base.clone();
+                {
+                    let mut atoms = v
+                        .record_atoms_mut()
+                        .into_iter()
+                        .filter(|(f, _)| !f.starts_with("insertion "))
+                        .collect::<Vec<_>>();
+                    let (_, atom) = &mut atoms[i];
+                    // a zero field (a massless line's mass) takes the marker
+                    // itself: a product with 0 is 0
+                    **atom = if atom.is_zero() {
+                        marker.clone()
+                    } else {
+                        &**atom * marker
+                    };
+                }
+                let error = v
+                    .validate()
+                    .err()
+                    .unwrap_or_else(|| panic!("{}: {field} x {marker}: accepted", base.label))
+                    .to_string();
+                if !structural(field, closure, base) {
+                    assert!(
+                        error.contains(text) && error.contains(field.as_str()),
+                        "{}: {field} x {marker}: {error}",
+                        base.label
+                    );
+                }
+            }
+        }
+    }
+    assert!(weights_seen >= 1, "no weight field was exercised");
+    // a unit weight keeps the value
+    let vakint = plain_engine();
+    let reference = closure_value(&vakint, &site_settings(), &k2);
+    let mut unit = k2.clone();
+    if let FactorizedKind::Closure(spec) = &mut unit.kind {
+        let (_, _, atom) = &mut spec.weights[2];
+        *atom = &*atom * parsed("((witness::x-3)^2-witness::x^2+6*witness::x-9)+1");
+    }
+    unit.validate().unwrap();
+    let got = closure_value(&vakint, &site_settings(), &unit);
+    assert!(
+        (&got - &reference).expand().is_zero(),
+        "a unit weight changed the value"
+    );
+}
+
+/// The SHAPE rules run before any rule that computes, at every entry: a
+/// TYPED marked value with the vertex factor 1/((1+UFO::x)^1000000000 -
+/// UFO::y) (an exponent beyond 64, whose exact expansion does not end) is
+/// refused within seconds by the closure (K2), direct and ports (L3-185)
+/// entries ("exceeds 64 in modulus"); the vacuum entry: vacuum::tests.
+#[test]
+fn the_shape_rules_run_before_any_computing_rule_at_every_entry() {
+    let vakint = plain_engine();
+    let settings = site_settings();
+    let k2 = FactorizedNumerator::from_text(include_str!("fixtures/wh-k2-child-ins.record.txt"))
+        .unwrap();
+    let direct =
+        FactorizedNumerator::from_text(include_str!("fixtures/l3-185-insertions.txt")).unwrap();
+    let huge = parsed("1/((1+UFO::x)^1000000000-UFO::y)");
+    let with = |base: &FactorizedNumerator| {
+        let mut v = base.clone();
+        let plain = v
+            .vertices
+            .iter()
+            .position(|x| base.insertions.iter().all(|i| i.vertex != x.id))
+            .unwrap();
+        v.vertices[plain].factor = &v.vertices[plain].factor * &huge;
+        v
+    };
+    let (k2, direct) = (with(&k2), with(&direct));
+    let started = std::time::Instant::now();
+    let results = [
+        (
+            "closure",
+            evaluate_factorized_closure(
+                &vakint,
+                &settings,
+                std::slice::from_ref(&k2),
+                &[k2.prefactor.total()],
+            )
+            .map(|_| ()),
+        ),
+        (
+            "direct",
+            evaluate_factorized(&vakint, &settings, &direct, &direct.prefactor.total()).map(|_| ()),
+        ),
+        (
+            "ports",
+            evaluate_factorized_ports(&vakint, &settings, &direct, &direct.prefactor.total())
+                .map(|_| ()),
+        ),
+    ];
+    for (entry, result) in results {
+        match result {
+            Err(e) => assert!(
+                e.to_string().contains("exceeds 64 in modulus"),
+                "{entry}: {e}"
+            ),
+            Ok(()) => panic!("{entry}: accepted"),
+        }
+    }
+    assert!(started.elapsed().as_secs() < 10, "{:?}", started.elapsed());
+}
+
+/// An UNMARKED text with an unknown schema keeps the base's refusal text,
+/// byte for byte (dea282615: "text line {line}: unknown schema {found:?}
+/// (this reader knows {FACTORIZED_SCHEMA})"); only a v3 schema line written
+/// inexactly names both schemas.
+#[test]
+fn an_unknown_schema_keeps_the_base_text() {
+    let error =
+        FactorizedNumerator::from_text("schema\tvakint-factorized/2\nlabel\tx\n").unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "text line 1: unknown schema \"vakint-factorized/2\" (this reader knows pint6.factorized-numerator.v1)"
+    );
+    let error =
+        FactorizedNumerator::from_text("schema\tpint6.factorized-numerator.v3 \nlabel\tx\n")
+            .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("pint6.factorized-numerator.v1 and pint6.factorized-numerator.v3"),
+        "{error}"
+    );
+}
+
+/// `text` parsed (vk_parse! takes no literal here: the crate's `Result` alias).
+fn parsed(text: &str) -> Atom {
+    vk_parse!(text).unwrap()
+}

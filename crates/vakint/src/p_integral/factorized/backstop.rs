@@ -394,6 +394,21 @@ fn undefined_number(view: AtomView<'_>) -> Option<String> {
                     part.to_owned().to_canonical_string()
                 ));
             }
+            // the data atom MZV with indices vakint's evaluator refuses (a
+            // leading 1 diverges; non-integer or non-positive indices)
+            AtomView::Fun(f)
+                if f.get_symbol().get_name() == "vakint::MZV"
+                    && !f
+                        .iter()
+                        .map(|a| i64::try_from(a).ok())
+                        .collect::<Option<Vec<i64>>>()
+                        .is_some_and(|n| crate::p_integral::mzv::evaluable_indices(&n)) =>
+            {
+                found = Some(format!(
+                    "the divergent or malformed data atom {} (an MZV's first index is at least 2)",
+                    part.to_owned().to_canonical_string()
+                ));
+            }
             AtomView::Pow(p) => {
                 let (base, exponent) = p.get_base_exp();
                 let positive = symbolica::domains::rational::Rational::try_from(exponent)
@@ -641,6 +656,17 @@ mod tests {
         }
         for c in [1.5, 1e300] {
             with(Atom::num(c)).unwrap_or_else(|e| panic!("{c}: {e}"));
+        }
+        // the data atom MZV: a leading index 1 diverges (vakint's evaluator
+        // refuses it); the convergent ones pass
+        for bad in ["vakint::MZV(1)", "vakint::MZV(1,2)", "vakint::MZV(0,3)"] {
+            refused(
+                &format!("{eps}^-2*{bad}"),
+                "the divergent or malformed data atom ",
+            );
+        }
+        for good in ["vakint::MZV(2)", "vakint::MZV(2,1)", "vakint::MZV(5,3)"] {
+            check(&format!("{eps}^-2*{good}")).unwrap_or_else(|e| panic!("{good}: {e}"));
         }
     }
 

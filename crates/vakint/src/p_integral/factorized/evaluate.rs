@@ -233,10 +233,11 @@ pub fn contract_to_vakint_dots(value: &FactorizedNumerator) -> Result<(Atom, f64
     if !value.has_new_features() {
         return contract_to_vakint_dots_v1(value);
     }
-    // a marked value's own atoms: the reserved namespace and wildcard walk
-    // (an unmarked value is not walked: the base behaviour)
+    // a marked value: the whole validation (the reserved names, the bounds,
+    // the contract, the atom rules, the defined-and-finite fields), as at the
+    // entries; an unmarked value is not walked (the base behaviour)
     if super::is_marked(value) {
-        value.check_reserved_symbols()?;
+        value.validate()?;
     }
     let (momenta, _) = vakint_momenta(value)?;
     let started = Instant::now();

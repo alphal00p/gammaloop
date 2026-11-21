@@ -78,6 +78,14 @@ fn parse_tags(tags: &[AtomView]) -> Result<Vec<i64>, String> {
     Ok(indices)
 }
 
+/// Whether `indices` are those of an MZV this evaluator accepts (the rule of
+/// `parse_tags`, which a test pins against it): at least one index, every
+/// index at least 1, the first at least 2 (MZV(1, ..) diverges). The data atom
+/// `vakint::MZV(..)` of a marked record is accepted only with such indices.
+pub(crate) fn evaluable_indices(indices: &[i64]) -> bool {
+    !indices.is_empty() && indices[0] >= 2 && indices.iter().all(|&n| n >= 1)
+}
+
 /// Guard bits of the internal summation.
 const GUARD_BITS: u32 = 64;
 
@@ -188,6 +196,39 @@ mod tests {
 
     fn relative_difference(a: Float, b: &Float) -> f64 {
         ((a - b) / b.clone()).to_f64().abs()
+    }
+
+    /// `evaluable_indices` is exactly `parse_tags`'s rule: on every index list
+    /// of length 0 to 3 over {i64::MIN, -1, 0, 1, 2, 3, 64, i64::MAX} the two
+    /// agree.
+    #[test]
+    fn evaluable_indices_is_the_rule_of_the_evaluator() {
+        let values = [i64::MIN, -1, 0, 1, 2, 3, 64, i64::MAX];
+        let mut lists: Vec<Vec<i64>> = vec![Vec::new()];
+        for _ in 0..3 {
+            let longer: Vec<Vec<i64>> = lists
+                .iter()
+                .filter(|l| l.len() == lists.last().unwrap().len())
+                .flat_map(|l| {
+                    values.iter().map(move |&v| {
+                        let mut l = l.clone();
+                        l.push(v);
+                        l
+                    })
+                })
+                .collect();
+            lists.extend(longer);
+        }
+        assert_eq!(lists.len(), 1 + 8 + 64 + 512);
+        for indices in lists {
+            let tag =
+                indices_symbol().call(&indices.iter().map(|&n| Atom::num(n)).collect::<Vec<_>>());
+            assert_eq!(
+                evaluable_indices(&indices),
+                parse_tags(&[tag.as_view()]).is_ok(),
+                "{indices:?}"
+            );
+        }
     }
 
     #[test]

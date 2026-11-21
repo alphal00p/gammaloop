@@ -225,7 +225,15 @@ fn validate_vacuum(value: &FactorizedNumerator) -> Result<()> {
     // `validate`); an unmarked value is not walked (the base behaviour)
     if super::is_marked(value) {
         value.check_reserved_symbols()?;
+    }
+    // the bounds of `validate` (depth, ids, edge powers) and the momentum
+    // coefficients, which `validate` checks in the contract's momentum rules
+    value.check_marked_bounds(true)?;
+    if super::is_marked(value) {
         value.check_marked_atoms()?;
+        // every caller field outside the insertions: defined, finite (the
+        // entry repeats it with the settings' ε)
+        value.check_marked_fields(None)?;
     }
     if !value.insertions.is_empty() {
         // The insertion rules (`Insertion`); the vacuum mode does not run the

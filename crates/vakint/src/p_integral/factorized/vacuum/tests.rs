@@ -1274,3 +1274,154 @@ fn marked_massive_vacuum_values_pass_the_result_check() {
     }
     eprintln!("VACUUM_SYMBOLS {seen:?}");
 }
+
+/// The BOUNDS reach the vacuum entry, typed and through the text form (the
+/// vacuum mode never calls `validate`): a marked two-loop massive sunrise
+/// with its record depth usize::MAX, an edge id or a vertex id of
+/// i64::MAX + 1, an edge power or a momentum coefficient of i64::MIN or
+/// i64::MAX (also 2^31 + 1), and with 1/P(x) (P identically zero) in a vertex
+/// factor: each refused before any evaluation (no panic), with the bound's
+/// text; the unchanged value and the bound itself (2^31) are accepted.
+#[test]
+fn the_bounds_reach_the_vacuum_entry_typed_and_through_text() {
+    let vakint = Vakint::new().unwrap();
+    let settings = no_form_settings();
+    let edges = [
+        (1, 1, 2, vec![1, 0]),
+        (2, 1, 2, vec![0, 1]),
+        (3, 2, 1, vec![1, 1]),
+    ]
+    .iter()
+    .map(|(id, s, t, m)| {
+        let mut e = edge(
+            *id,
+            *s,
+            *t,
+            (2 * id, 2 * id + 1),
+            m,
+            LineKind::Scalar,
+            1,
+            Atom::num(1),
+        );
+        e.mass_squared = atom("witness::msq");
+        e
+    })
+    .collect();
+    let mut base = value(
+        vec![Some(1), Some(2)],
+        Vec::new(),
+        edges,
+        (1..=2).map(|i| vertex(i, Atom::num(1))).collect(),
+        Vec::new(),
+    );
+    base.label = "2L sunrise, every line massive".into();
+    base.record = Some(super::super::DirectRecord {
+        original_cycles: None,
+        depth: None,
+        weights: Vec::new(),
+    });
+    let big = i64::MAX as usize + 1;
+    let renumber_vertex = |v: &mut FactorizedNumerator, id: usize| {
+        let old = v.vertices[1].id;
+        v.vertices[1].id = id;
+        for e in &mut v.edges {
+            for end in [&mut e.source, &mut e.target] {
+                if *end == super::super::Endpoint::Vertex(old) {
+                    *end = super::super::Endpoint::Vertex(id);
+                }
+            }
+        }
+    };
+    type Change = Box<dyn Fn(&mut FactorizedNumerator)>;
+    let cases: Vec<(&str, Change, &str)> = vec![
+        (
+            "depth usize::MAX",
+            Box::new(|v| v.record.as_mut().unwrap().depth = Some(usize::MAX)),
+            "the depth",
+        ),
+        (
+            "edge id i64::MAX + 1",
+            Box::new(move |v| v.edges[2].id = big),
+            "the edge and vertex ids",
+        ),
+        (
+            "vertex id i64::MAX + 1",
+            Box::new(move |v| renumber_vertex(v, big)),
+            "the edge and vertex ids",
+        ),
+        (
+            "edge power i64::MIN",
+            Box::new(|v| v.edges[0].power = i64::MIN),
+            "power",
+        ),
+        (
+            "edge power i64::MAX",
+            Box::new(|v| v.edges[0].power = i64::MAX),
+            "power",
+        ),
+        (
+            "edge power 2^31 + 1",
+            Box::new(|v| v.edges[0].power = (1 << 31) + 1),
+            "power",
+        ),
+        (
+            "momentum coefficient i64::MIN",
+            Box::new(|v| v.edges[0].momentum[0] = i64::MIN),
+            "momentum coefficient",
+        ),
+        (
+            "momentum coefficient i64::MAX",
+            Box::new(|v| v.edges[0].momentum[0] = i64::MAX),
+            "momentum coefficient",
+        ),
+        (
+            "an exponent beyond 64 in a vertex factor",
+            Box::new(|v| v.vertices[0].factor = atom("1/((1+UFO::x)^1000000000-UFO::y)")),
+            "exceeds 64 in modulus",
+        ),
+        (
+            "a caller-written vakint::slash in a vertex factor",
+            Box::new(|v| v.vertices[0].factor = atom("vakint::slash(1,1)")),
+            "slash",
+        ),
+        (
+            "1/P(x) in a vertex factor",
+            Box::new(|v| {
+                v.vertices[0].factor = atom("1/((witness::x-3)^2-witness::x^2+6*witness::x-9)")
+            }),
+            "a denominator vanishes identically",
+        ),
+    ];
+    for (what, change, text) in &cases {
+        let mut v = base.clone();
+        change(&mut v);
+        // typed (within seconds: the shape rules run first)
+        let started = std::time::Instant::now();
+        let typed = evaluate_factorized_vacuum(&vakint, &settings, &v, &Atom::num(1));
+        assert!(
+            started.elapsed().as_secs() < 10,
+            "{what}: {:?}",
+            started.elapsed()
+        );
+        match typed {
+            Err(e) => assert!(e.to_string().contains(text), "{what} (typed): {e}"),
+            Ok(_) => panic!("{what} (typed): accepted"),
+        }
+        // through the text form: refused when written, read or evaluated
+        let refused = match v.to_text() {
+            Err(_) => true,
+            Ok(written) => match FactorizedNumerator::from_text(&written) {
+                Err(_) => true,
+                Ok(read) => {
+                    evaluate_factorized_vacuum(&vakint, &settings, &read, &Atom::num(1)).is_err()
+                }
+            },
+        };
+        assert!(refused, "{what} (text): accepted");
+    }
+    // the bound itself is accepted (the value is evaluated)
+    let mut v = base.clone();
+    v.edges[0].power = 1 << 31;
+    assert!(v.check_marked_bounds(true).is_ok());
+    evaluate_factorized_vacuum(&vakint, &settings, &base, &Atom::num(1)).unwrap();
+}
