@@ -1355,3 +1355,7 @@ fn the_counterterm_cache_replays_the_alarm_class() -> Result<()> {
     ensure!(!depth::is_alarm(&plain), "{plain:#}");
     Ok(())
 }
+
+/// IRH-DEPTH round 5: the regularity witnesses ([`super::regularity`]).
+#[path = "regularity_tests.rs"]
+mod round5;
