@@ -181,7 +181,7 @@ pub const FACTORS: [Entry; 14] = [
         factor: Factor::InsertionCoefficient,
         name: "insertion_coefficient",
         multiplied: "a propagator-insertion surrogate's coefficient vertex (insertions.rs with_coefficient), a vertex numerator of the quotient or of the hard part",
-        certified: "as quotient_vertex_numerator / hard_numerator (it IS a vertex numerator); insertion weights are rejected with ε (PropagatorInsertionEvaluator::validate_weight)",
+        certified: "as quotient_vertex_numerator / hard_numerator (it IS a vertex numerator); insertion group weights are rejected with a pole (PropagatorInsertionEvaluator::validate_weight, a weight with a tensor structure normalised here first: MATRIX-R45)",
         witness: "depth::tests::a_surrogate_coefficient_has_no_excess",
     },
     Entry {
@@ -322,6 +322,12 @@ fn holds_structure(view: AtomView<'_>) -> bool {
         !found
     });
     found
+}
+
+/// Whether `expression` holds a tensor structure (a spenso tensor,
+/// representation or index symbol) anywhere.
+pub fn has_tensor_structure(expression: &Atom) -> bool {
+    holds_structure(expression.as_view())
 }
 
 /// No symbol, no function: a pure number.
