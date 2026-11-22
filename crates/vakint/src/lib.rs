@@ -2830,7 +2830,7 @@ impl VakintSettings {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum LoopNormalizationFactor {
     #[allow(non_camel_case_types)]
     pySecDec,
@@ -2944,6 +2944,109 @@ impl LoopNormalizationFactor {
             }
         };
         Ok((expr, expanded_expr, num_res))
+    }
+}
+
+/// The settings fields that [`LoopNormalizationFactor::validate`] reads, as
+/// [`Vakint::validate_settings`] calls it: the factor; `epsilon_symbol`
+/// (`to_atom`, the series variable, the numerical evaluation's ε and the
+/// error's allowed symbols); `mu_r_sq_symbol` (`log_mu_sq` and the parameter
+/// μ_r² = 1); `number_of_terms_in_epsilon_expansion` capped at
+/// [`Self::MAX_TERMS`] (the series depth); `run_time_decimal_precision`
+/// (`real_to_prec` and the numerical evaluation: `evaluate_series` without a
+/// master catalogue, `evaluate_coefficient`). No other field of the settings
+/// is read on that path (and no field of the engine: the check is a method of
+/// the factor), so the check is a function of this key alone; the test
+/// `the_normalization_key_holds_every_field_the_check_reads` names every
+/// field of [`VakintSettings`] (a new field does not compile there until it
+/// is classified).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct NormalizationKey {
+    factor: LoopNormalizationFactor,
+    epsilon_symbol: String,
+    mu_r_sq_symbol: String,
+    number_of_terms_in_epsilon_expansion: i64,
+    run_time_decimal_precision: u32,
+}
+
+impl NormalizationKey {
+    /// The check needs no depth, while Symbolica's series of the G-scheme Γ
+    /// ratio grows about threefold per term (3.9 s at 11 terms, 83 s at 13,
+    /// unfinished after 13 min and 30 GB at 16), so it stops at 6 terms.
+    const MAX_TERMS: i64 = 6;
+
+    fn of(settings: &VakintSettings) -> Self {
+        Self {
+            factor: settings.integral_normalization_factor.clone(),
+            epsilon_symbol: settings.epsilon_symbol.clone(),
+            mu_r_sq_symbol: settings.mu_r_sq_symbol.clone(),
+            number_of_terms_in_epsilon_expansion: settings
+                .number_of_terms_in_epsilon_expansion
+                .min(Self::MAX_TERMS),
+            run_time_decimal_precision: settings.run_time_decimal_precision,
+        }
+    }
+
+    /// The settings the check evaluates: `settings` with the key's fields
+    /// (the depth capped).
+    fn checked_settings(&self, settings: &VakintSettings) -> VakintSettings {
+        VakintSettings {
+            integral_normalization_factor: self.factor.clone(),
+            epsilon_symbol: self.epsilon_symbol.clone(),
+            mu_r_sq_symbol: self.mu_r_sq_symbol.clone(),
+            number_of_terms_in_epsilon_expansion: self.number_of_terms_in_epsilon_expansion,
+            run_time_decimal_precision: self.run_time_decimal_precision,
+            ..settings.clone()
+        }
+    }
+}
+
+/// The loop-normalisation check of [`Vakint::validate_settings`]: the
+/// factor parsed, expanded in ε and evaluated numerically at μ_r² = 1
+/// ([`LoopNormalizationFactor::validate`]), kept as the two forms the debug
+/// line prints. A function of the [`NormalizationKey`] only, so it is
+/// evaluated once per process and key (`of`; the massive-closure lowering of
+/// an R* boundary validates the settings once per term it lowers, with the
+/// same settings); a refusal is not kept:
+/// each call with a refused key evaluates it again and returns its error.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct NormalizationCheck {
+    expanded: String,
+    evaluated: String,
+}
+
+impl NormalizationCheck {
+    fn of(settings: &VakintSettings) -> Result<Self, VakintError> {
+        static CHECKED: LazyLock<Mutex<HashMap<NormalizationKey, NormalizationCheck>>> =
+            LazyLock::new(Default::default);
+        let key = NormalizationKey::of(settings);
+        let known = CHECKED
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&key)
+            .cloned();
+        if let Some(check) = known {
+            return Ok(check);
+        }
+        // evaluated outside the lock: a concurrent first call of the same key
+        // evaluates it as well, to the same check
+        let check = Self::evaluate(&key, settings)?;
+        CHECKED
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .entry(key)
+            .or_insert_with(|| check.clone());
+        Ok(check)
+    }
+
+    /// The check, evaluated (no memo).
+    fn evaluate(key: &NormalizationKey, settings: &VakintSettings) -> Result<Self, VakintError> {
+        let (_full_atom, expanded, evaluated) =
+            key.factor.validate(&key.checked_settings(settings))?;
+        Ok(Self {
+            expanded: expanded.to_string(),
+            evaluated: evaluated.to_string(),
+        })
     }
 }
 
@@ -5885,19 +5988,12 @@ impl Vakint {
     pub fn validate_settings(&self, settings: &VakintSettings) -> Result<(), VakintError> {
         settings.validate_execution()?;
         // Verify that the chosen normalisation only contains the expected
-        // symbols. The check needs no depth, while Symbolica's series of the
-        // G-scheme Γ ratio grows about threefold per term (3.9 s at 11 terms,
-        // 83 s at 13, unfinished after 13 min and 30 GB at 16), so it stops
-        // at 6 terms.
-        let (_full_atom, expanded, evaluated) =
-            settings
-                .integral_normalization_factor
-                .validate(&VakintSettings {
-                    number_of_terms_in_epsilon_expansion: settings
-                        .number_of_terms_in_epsilon_expansion
-                        .min(6),
-                    ..settings.clone()
-                })?;
+        // symbols (`NormalizationCheck`: at most 6 terms, once per process
+        // and `NormalizationKey`).
+        let NormalizationCheck {
+            expanded,
+            evaluated,
+        } = NormalizationCheck::of(settings)?;
 
         debug!(
             "Loop normalisation factor considered:
@@ -10180,6 +10276,245 @@ mod tests {
             custom("exp(1/eps)^n_loops"),
             Err(VakintError::SymbolicaError(..))
         ));
+    }
+
+    /// The memo of the normalisation check returns what the check evaluated
+    /// afresh returns (the computation `validate_settings` made before the
+    /// memo: the factor validated through at most 6 terms), on a first call
+    /// and on a repeated one, for every built-in factor, a custom one, depths
+    /// below, at and above the cap and two precisions; a refused factor is
+    /// refused on every call, with the check's error.
+    #[test]
+    fn the_normalization_memo_returns_what_a_fresh_evaluation_returns() {
+        let vakint = Vakint::new().unwrap();
+        let unmemoised = |settings: &VakintSettings| {
+            let (_full_atom, expanded, evaluated) = settings
+                .integral_normalization_factor
+                .validate(&VakintSettings {
+                    number_of_terms_in_epsilon_expansion: settings
+                        .number_of_terms_in_epsilon_expansion
+                        .min(6),
+                    ..settings.clone()
+                })?;
+            Ok::<_, VakintError>(NormalizationCheck {
+                expanded: expanded.to_string(),
+                evaluated: evaluated.to_string(),
+            })
+        };
+        for factor in [
+            LoopNormalizationFactor::GScheme,
+            LoopNormalizationFactor::MSbar,
+            LoopNormalizationFactor::FMFTandMATAD,
+            LoopNormalizationFactor::pySecDec,
+            LoopNormalizationFactor::Custom(
+                "(2*𝜋)^(-4*n_loops)*exp(log_mu_sq)^(eps*n_loops)*exp(EulerGamma)^(eps*n_loops)"
+                    .into(),
+            ),
+        ] {
+            for terms in [1, 3, 6, 16] {
+                for precision in [17, 40] {
+                    let settings = VakintSettings {
+                        integral_normalization_factor: factor.clone(),
+                        number_of_terms_in_epsilon_expansion: terms,
+                        run_time_decimal_precision: precision,
+                        evaluation_order: EvaluationOrder::rustred_only(),
+                        ..Default::default()
+                    };
+                    let fresh = unmemoised(&settings).unwrap();
+                    let first = NormalizationCheck::of(&settings).unwrap();
+                    let again = NormalizationCheck::of(&settings).unwrap();
+                    let evaluated =
+                        NormalizationCheck::evaluate(&NormalizationKey::of(&settings), &settings)
+                            .unwrap();
+                    assert_eq!(first, fresh, "{factor} terms={terms} precision={precision}");
+                    assert_eq!(again, fresh, "{factor} terms={terms} precision={precision}");
+                    assert_eq!(
+                        evaluated, fresh,
+                        "{factor} terms={terms} precision={precision}"
+                    );
+                    vakint.validate_settings(&settings).unwrap();
+                }
+            }
+        }
+        let refused = VakintSettings {
+            integral_normalization_factor: LoopNormalizationFactor::Custom(
+                "unknown_symbol^(eps*n_loops)".into(),
+            ),
+            evaluation_order: EvaluationOrder::rustred_only(),
+            ..Default::default()
+        };
+        for _ in 0..2 {
+            let fresh = unmemoised(&refused).unwrap_err().to_string();
+            let memo = NormalizationCheck::of(&refused).unwrap_err();
+            assert!(
+                matches!(memo, VakintError::InvalidLoopNormalization(..)),
+                "{memo}"
+            );
+            assert_eq!(memo.to_string(), fresh);
+            assert_eq!(
+                vakint.validate_settings(&refused).unwrap_err().to_string(),
+                fresh
+            );
+        }
+    }
+
+    /// The memo's key holds every settings field the normalisation check
+    /// reads. Every field of [`VakintSettings`] is named below (a new field
+    /// does not compile until it is classified): the KEY fields, which the
+    /// check reads, and the others, which it does not read
+    /// ([`NormalizationKey`]'s reading). (1) Every non-key field this test can
+    /// set changed at once: the same key and the same WHOLE result of the
+    /// check (the factor's atom, the series, the numerical result with its
+    /// precision and warnings), and the memo returns it. (2) Each key field
+    /// changed alone: another key, and the memo returns that settings' own
+    /// fresh evaluation, which differs from the base's (the factor, ε, μ_r²,
+    /// the depth, the precision): a key without that field would return a
+    /// wrong check.
+    #[test]
+    fn the_normalization_key_holds_every_field_the_check_reads() {
+        type Whole = (Atom, Atom, String, String, String);
+        let whole = |settings: &VakintSettings| -> Whole {
+            let checked = NormalizationKey::of(settings).checked_settings(settings);
+            let (atom, expanded, evaluated) = checked
+                .integral_normalization_factor
+                .validate(&checked)
+                .unwrap();
+            (
+                atom,
+                expanded.to_atom(),
+                expanded.to_string(),
+                format!("{evaluated:?}"),
+                evaluated.to_string(),
+            )
+        };
+        let base = VakintSettings {
+            integral_normalization_factor: LoopNormalizationFactor::MSbar,
+            number_of_terms_in_epsilon_expansion: 3,
+            run_time_decimal_precision: 32,
+            evaluation_order: EvaluationOrder::rustred_only(),
+            ..Default::default()
+        };
+        let VakintSettings {
+            // KEY
+            integral_normalization_factor: _,
+            epsilon_symbol: _,
+            mu_r_sq_symbol: _,
+            number_of_terms_in_epsilon_expansion: _,
+            run_time_decimal_precision: _,
+            // not read by the check: changed in (1)
+            form_exe_path: _,
+            forcer_cache: _,
+            python_exe_path: _,
+            verify_numerator_identification: _,
+            allow_unknown_integrals: _,
+            clean_tmp_dir: _,
+            evaluation_order: _,
+            rustred_artifact_path: _,
+            n_cores: _,
+            p_checkpoint_dir: _,
+            rustred_p_uncovered: _,
+            p_master_basis: _,
+            allow_unknown_master_coefficients: _,
+            tensor_reduction_method: _,
+            precision_for_input_float_rationalization: _,
+            use_dot_product_notation: _,
+            temporary_directory: _,
+            // not read by the check (by reading: no path of
+            // `LoopNormalizationFactor::validate` names them): kept
+            rustred_resources: _,
+            ordered_weight_arithmetic: _,
+            rustred_application_options: _,
+            ordered_cache: _,
+            rustred_scalar_numerator_limits: _,
+            rustred_product_limits: _,
+            rustred_momentum_match_limits: _,
+            rustred_p_relation_cache: _,
+            rustred_p_outside: _,
+        } = &base;
+        let reference = whole(&base);
+        let memo = NormalizationCheck::of(&base).unwrap();
+        assert_eq!(memo.expanded, reference.2);
+        assert_eq!(memo.evaluated, reference.4);
+
+        // (1)
+        let other = VakintSettings {
+            form_exe_path: "/the-normalization-key-test/form".into(),
+            forcer_cache: !base.forcer_cache,
+            python_exe_path: "/the-normalization-key-test/python".into(),
+            verify_numerator_identification: !base.verify_numerator_identification,
+            allow_unknown_integrals: !base.allow_unknown_integrals,
+            clean_tmp_dir: !base.clean_tmp_dir,
+            evaluation_order: EvaluationOrder::forcer_only(),
+            rustred_artifact_path: Some("/the-normalization-key-test/artifact".into()),
+            n_cores: base.n_cores + 7,
+            p_checkpoint_dir: Some("/the-normalization-key-test/checkpoints".into()),
+            rustred_p_uncovered: RustRedPUncoveredPolicy::Retain,
+            p_master_basis: PMasterBasis::PoleBounded,
+            allow_unknown_master_coefficients: !base.allow_unknown_master_coefficients,
+            tensor_reduction_method: TensorReductionMethod::AlphaLoop,
+            precision_for_input_float_rationalization:
+                InputFloatRationalizationPrecision::TargetPrecision,
+            use_dot_product_notation: !base.use_dot_product_notation,
+            temporary_directory: Some("/the-normalization-key-test/tmp".into()),
+            ..base.clone()
+        };
+        assert_eq!(NormalizationKey::of(&other), NormalizationKey::of(&base));
+        assert_eq!(whole(&other), reference);
+        assert_eq!(NormalizationCheck::of(&other).unwrap(), memo);
+
+        // (2)
+        let changed = [
+            (
+                "factor",
+                VakintSettings {
+                    integral_normalization_factor: LoopNormalizationFactor::GScheme,
+                    ..base.clone()
+                },
+            ),
+            (
+                "epsilon_symbol",
+                VakintSettings {
+                    epsilon_symbol: format!("{NAMESPACE}::normalization_key_test_eps"),
+                    ..base.clone()
+                },
+            ),
+            (
+                "mu_r_sq_symbol",
+                VakintSettings {
+                    mu_r_sq_symbol: format!("{NAMESPACE}::normalization_key_test_mursq"),
+                    ..base.clone()
+                },
+            ),
+            (
+                "number_of_terms_in_epsilon_expansion",
+                VakintSettings {
+                    number_of_terms_in_epsilon_expansion: 5,
+                    ..base.clone()
+                },
+            ),
+            (
+                "run_time_decimal_precision",
+                VakintSettings {
+                    run_time_decimal_precision: 50,
+                    ..base.clone()
+                },
+            ),
+        ];
+        for (field, settings) in changed {
+            assert_ne!(
+                NormalizationKey::of(&settings),
+                NormalizationKey::of(&base),
+                "{field}"
+            );
+            let fresh = whole(&settings);
+            assert_ne!(fresh, reference, "{field}");
+            let memo = NormalizationCheck::of(&settings).unwrap();
+            assert_eq!(
+                (memo.expanded, memo.evaluated),
+                (fresh.2, fresh.4),
+                "{field}"
+            );
+        }
     }
 
     /// A FORM executable that only reports `FORM {version}` (M1 review F3).
