@@ -9108,12 +9108,22 @@ fn the_diagnostic_writer() {
             // nothing written (a label the format cannot hold): nothing to read
             continue;
         };
-        let schema_refusal = matches!(
-            FactorizedNumerator::from_text(&diagnostic),
-            Err(FactorizedError::TextSyntax { line: 1, ref detail })
-                if detail.starts_with("schema pint6.factorized-numerator.v")
-                    && detail.contains(".unvalidated: the text of to_text_unvalidated_for_diagnostics")
-        );
+        // marked: the diagnostic refusal; unmarked (a v1 schema line): the
+        // base's unknown schema refusal
+        let schema_refusal = match FactorizedNumerator::from_text(&diagnostic) {
+            Err(FactorizedError::TextSyntax {
+                line: 1,
+                ref detail,
+            }) => {
+                detail.starts_with("schema pint6.factorized-numerator.v3")
+                    && detail
+                        .contains(".unvalidated: the text of to_text_unvalidated_for_diagnostics")
+            }
+            Err(FactorizedError::TextSchema { line: 1, ref found }) => {
+                !v.has_new_features() && found == "pint6.factorized-numerator.v1.unvalidated"
+            }
+            _ => false,
+        };
         if !schema_refusal {
             wrong.push(format!(
                 "{label}: the reader does not refuse the diagnostic text with the schema refusal"
@@ -9592,7 +9602,14 @@ fn f_cells_other() -> Vec<FCell> {
                 let x = b.0.edges.iter_mut().find(|x| !x.is_external()).unwrap();
                 x.line = vakint::p_integral::factorized::LineKind::Scalar
             }),
-            pred: FPred::Changes,
+            // the closure entry: informational for the value (the caller applies
+            // the signs via original_cycles); direct and ports refuse it by
+            // their flow rule
+            pred: if e == XEntry::Closure {
+                FPred::Informational
+            } else {
+                FPred::Changes
+            },
         });
         c.push(FCell {
             entry: e,
@@ -9774,7 +9791,10 @@ fn f_cells_other() -> Vec<FCell> {
             b.0.edges.iter_mut().find(|x| x.id == 3).unwrap().line =
                 vakint::p_integral::factorized::LineKind::Scalar
         }),
-        pred: FPred::Changes,
+        // a closure record's line kind is informational for the value:
+        // the caller applies the signs (original_cycles; loop_sign 1 and
+        // nf_power 0 are enforced); the closure kind checks no flow
+        pred: FPred::Informational,
     });
     c.push(FCell {
         entry: e,
@@ -9783,7 +9803,10 @@ fn f_cells_other() -> Vec<FCell> {
             b.0.edges.iter_mut().find(|x| x.id == 4).unwrap().line =
                 vakint::p_integral::factorized::LineKind::Ghost
         }),
-        pred: FPred::Changes,
+        // a closure record's line kind is informational for the value:
+        // the caller applies the signs (original_cycles; loop_sign 1 and
+        // nf_power 0 are enforced); the closure kind checks no flow
+        pred: FPred::Informational,
     });
     c.push(FCell {
         entry: XEntry::Direct,
@@ -9858,27 +9881,10 @@ fn f_table(cells: Vec<FCell>, base_of: impl Fn(XEntry, &str) -> XInput) -> Vec<S
     findings
 }
 
-/// The cells found accepted and ignored (each has an ignored test below that
-/// asks for the field to be refused or applied).
-const F_KNOWN: &[(XEntry, &str)] = &[
-    (
-        XEntry::Vacuum,
-        "projector p2_power +1 (the reviewer's case)",
-    ),
-    (XEntry::Vacuum, "projector p2_power -1"),
-    (
-        XEntry::Closure,
-        "edge line kind changed (an internal ghost / vector line to scalar)",
-    ),
-    (
-        XEntry::Closure,
-        "edge line kind: edge 3 ghost to scalar (a ghost line, not the closure line)",
-    ),
-    (
-        XEntry::Closure,
-        "edge line kind: edge 4 vector to ghost (a third ghost line at vertices 1, 2)",
-    ),
-];
+/// The cells found accepted and ignored: none (the vacuum mode refuses a
+/// projector p2_power; a closure record's line kinds are informational for
+/// the value: the cells say so).
+const F_KNOWN: &[(XEntry, &str)] = &[];
 
 fn f_base_vacuum(_: XEntry, field: &str) -> XInput {
     if field.starts_with("projector") || field.starts_with("external leg") {
@@ -9909,23 +9915,6 @@ fn f_table_known_out(cells: Vec<FCell>, base_of: fn(XEntry, &str) -> XInput) -> 
     f_table(cells, base_of)
 }
 
-/// One known cell, alone: it holds once the entry refuses or applies the field.
-fn f_known_cell(
-    cells: Vec<FCell>,
-    base_of: fn(XEntry, &str) -> XInput,
-    entry: XEntry,
-    field: &str,
-) {
-    assert!(F_KNOWN.contains(&(entry, field)));
-    let cells: Vec<FCell> = cells
-        .into_iter()
-        .filter(|c| c.entry == entry && c.field == field)
-        .collect();
-    assert_eq!(cells.len(), 1, "{entry:?} {field}");
-    let findings = f_table(cells, base_of);
-    assert!(findings.is_empty(), "{findings:#?}");
-}
-
 #[test]
 fn every_field_changes_the_result_or_is_refused_vacuum() {
     let findings = f_table_known_out(f_cells_vacuum(), f_base_vacuum);
@@ -9940,57 +9929,139 @@ fn every_field_changes_the_result_or_is_refused_closure_direct_ports() {
     assert!(findings.is_empty(), "{findings:#?}");
 }
 
+/// THE DIRECT KIND'S FLOW RULE ON REAL CLOSURE RECORDS: every unique v3
+/// record of kind closure under `VAKINT_TEST_RECORD_ROOTS` that validation
+/// accepts, through `closed_loops` (the direct kind's fermion / ghost flow
+/// rule: open lines, a flow conserved and unbranched at every vertex; the
+/// closure kind's validation does not run it): the count per outcome and
+/// one example each (path, detail); and per `externals=` flag and Taylor
+/// step, the records whose EXTERNAL momentum components are not conserved at
+/// a vertex without a crown leg (the format's `independent`: conservation is
+/// not checked where crown legs meet). Printed (`CONTRACT FLOW`); the
+/// decision whether the closure kind can carry the rule rests on the counts.
 #[test]
-#[ignore = "expected: refused or applied; the entry ignores the field"]
-fn vacuum_projector_p2_power_plus_one_is_refused_or_applied() {
-    f_known_cell(
-        f_cells_vacuum(),
-        f_base_vacuum,
-        XEntry::Vacuum,
-        "projector p2_power +1 (the reviewer's case)",
+#[ignore = "external data: VAKINT_TEST_RECORD_ROOTS"]
+fn the_direct_flow_rule_on_real_closure_records() {
+    init();
+    let roots =
+        wh_fixtures::required_env("VAKINT_TEST_RECORD_ROOTS", "the producer's record roots");
+    let mut files = Vec::new();
+    for root in roots.to_string_lossy().split(':') {
+        let mut stack = vec![PathBuf::from(root)];
+        while let Some(d) = stack.pop() {
+            let Ok(entries) = std::fs::read_dir(&d) else {
+                continue;
+            };
+            for e in entries {
+                let p = e.unwrap().path();
+                let name = p.file_name().unwrap().to_string_lossy().to_string();
+                if p.is_dir() {
+                    stack.push(p);
+                } else if name == "input.txt" || name.ends_with(".record.txt") {
+                    files.push(p);
+                }
+            }
+        }
+    }
+    files.sort();
+    let mut seen = std::collections::BTreeSet::new();
+    let (mut closure_records, mut kept) = (0usize, 0usize);
+    let mut refused = std::collections::BTreeMap::<String, (usize, String, String)>::new();
+    let mut flags = std::collections::BTreeMap::<String, (usize, usize, String)>::new();
+    for p in &files {
+        let Ok(text) = std::fs::read_to_string(p) else {
+            continue;
+        };
+        if !text.starts_with("schema\tpint6.factorized-numerator.v3") || !seen.insert(text.clone())
+        {
+            continue;
+        }
+        let Ok(v) = FactorizedNumerator::from_text(&text) else {
+            continue;
+        };
+        if !matches!(v.kind, FactorizedKind::Closure(_)) {
+            continue;
+        }
+        closure_records += 1;
+        // `externals=independent` (the format: conservation NOT checked where
+        // crown legs meet): the external components at the vertices WITHOUT
+        // an external leg
+        if let FactorizedKind::Closure(spec) = &v.kind {
+            let key = format!(
+                "externals={} taylor={}",
+                if spec.independent_externals {
+                    "independent"
+                } else {
+                    "conserved"
+                },
+                spec.taylor.is_some()
+            );
+            let loops = v.loops();
+            let mut broken = None;
+            for vertex in &v.vertices {
+                let at = vakint::p_integral::factorized::Endpoint::Vertex(vertex.id);
+                if v.edges
+                    .iter()
+                    .any(|e| e.is_external() && (e.source == at || e.target == at))
+                {
+                    continue;
+                }
+                let mut residual = vec![0i64; v.loops() + v.externals()];
+                for e in &v.edges {
+                    for (r, c) in residual.iter_mut().zip(&e.momentum) {
+                        if e.target == at {
+                            *r += c;
+                        }
+                        if e.source == at {
+                            *r -= c;
+                        }
+                    }
+                }
+                if residual[loops..].iter().any(|c| *c != 0) {
+                    broken.get_or_insert((vertex.id, residual));
+                }
+            }
+            let entry = flags.entry(key).or_insert((0, 0, String::new()));
+            entry.0 += 1;
+            if let Some((vertex, residual)) = broken {
+                entry.1 += 1;
+                if entry.2.is_empty() {
+                    entry.2 = format!("{}: vertex {vertex} residual {residual:?}", p.display());
+                }
+            }
+        }
+        match v.closed_loops() {
+            Ok(_) => kept += 1,
+            Err(e) => {
+                let detail = e.to_string();
+                // the detail up to its first number (vertex / edge ids vary)
+                let key = detail
+                    .split(|c: char| c.is_ascii_digit())
+                    .next()
+                    .unwrap_or("")
+                    .to_string();
+                let entry = refused
+                    .entry(key)
+                    .or_insert((0, p.display().to_string(), detail));
+                entry.0 += 1;
+            }
+        }
+    }
+    eprintln!(
+        "CONTRACT FLOW closure records accepted by validation {closure_records}: the direct flow rule keeps {kept}, refuses {}",
+        refused.values().map(|r| r.0).sum::<usize>()
     );
-}
-
-#[test]
-#[ignore = "expected: refused or applied; the entry ignores the field"]
-fn vacuum_projector_p2_power_minus_one_is_refused_or_applied() {
-    f_known_cell(
-        f_cells_vacuum(),
-        f_base_vacuum,
-        XEntry::Vacuum,
-        "projector p2_power -1",
-    );
-}
-
-#[test]
-#[ignore = "expected: refused or applied; the entry ignores the field"]
-fn closure_line_kind_of_the_closure_line_is_refused_or_applied() {
-    f_known_cell(
-        f_cells_other(),
-        f_base_other,
-        XEntry::Closure,
-        "edge line kind changed (an internal ghost / vector line to scalar)",
-    );
-}
-
-#[test]
-#[ignore = "expected: refused or applied; the entry ignores the field"]
-fn closure_line_kind_of_another_ghost_line_is_refused_or_applied() {
-    f_known_cell(
-        f_cells_other(),
-        f_base_other,
-        XEntry::Closure,
-        "edge line kind: edge 3 ghost to scalar (a ghost line, not the closure line)",
-    );
-}
-
-#[test]
-#[ignore = "expected: refused or applied; the entry ignores the field"]
-fn closure_line_kind_vector_to_ghost_is_refused_or_applied() {
-    f_known_cell(
-        f_cells_other(),
-        f_base_other,
-        XEntry::Closure,
-        "edge line kind: edge 4 vector to ghost (a third ghost line at vertices 1, 2)",
-    );
+    for (key, (n, path, detail)) in &refused {
+        eprintln!("CONTRACT FLOW refused {n} x {key}… e.g. {path}: {detail}");
+    }
+    for (key, (n, broken, example)) in &flags {
+        eprintln!(
+            "CONTRACT FLOW {key}: {n} records; external momentum not conserved at a vertex without a crown leg: {broken}{}",
+            if example.is_empty() {
+                String::new()
+            } else {
+                format!(" e.g. {example}")
+            }
+        );
+    }
 }

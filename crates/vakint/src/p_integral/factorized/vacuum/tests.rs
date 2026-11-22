@@ -1729,6 +1729,22 @@ fn to_text_vacuum_refuses_exactly_what_the_vacuum_entry_refuses_and_round_trips_
             Some(false),
         ),
     ];
+    // the record strings (one rule: what the writer would refuse)
+    let mut v = massive.clone();
+    v.vertices[0].rule = String::new();
+    cases.push(("an empty vertex rule".into(), v, Some(false)));
+    let mut v = massive.clone();
+    v.vertices[0].rule = "A\rB".into();
+    cases.push(("a vertex rule with a CR".into(), v, Some(false)));
+    let mut v = massive.clone();
+    v.edges[0].particle = " x".into();
+    cases.push(("a particle with a leading space".into(), v, Some(false)));
+    let mut v = massive.clone();
+    v.label = "a\u{0}b".into();
+    cases.push(("a label with a NUL".into(), v, Some(false)));
+    let mut v = massive.clone();
+    v.label = "sunrise ≤ 3 loops, route=x".into();
+    cases.push(("a label with non-ASCII, '=' and ','".into(), v, Some(true)));
     for cell in weight_cells() {
         cases.push((
             format!("the massive sunrise, weights cell {}", cell.label),
@@ -1828,9 +1844,18 @@ fn to_text_vacuum_refuses_exactly_what_the_vacuum_entry_refuses_and_round_trips_
                     FactorizedNumerator::from_text_vacuum(&diagnostic).map(|_| ()),
                 ),
             ] {
-                if !matches!(r, Err(FactorizedError::TextSyntax { line: 1, ref detail })
-                    if detail.contains(".unvalidated: the text of to_text_unvalidated_for_diagnostics"))
-                {
+                // marked: the diagnostic schema refusal; unmarked (v1): the
+                // base's unknown schema refusal
+                let refused = match &r {
+                    Err(FactorizedError::TextSyntax { line: 1, detail }) => detail
+                        .contains(".unvalidated: the text of to_text_unvalidated_for_diagnostics"),
+                    Err(FactorizedError::TextSchema { line: 1, found }) => {
+                        !super::super::is_marked(v)
+                            && found == "pint6.factorized-numerator.v1.unvalidated"
+                    }
+                    _ => false,
+                };
+                if !refused {
                     wrong.push(format!("{label}: {reader} on the diagnostic text: {r:?}"));
                 }
             }
@@ -1926,7 +1951,7 @@ fn the_vacuum_mode_applies_the_general_contract_with_the_loop_momenta_conserved(
         (1..=2).map(|i| vertex(i, Atom::num(1))).collect(),
         Vec::new(),
     ));
-    contract_to_vakint_vacuum(&sunrise).unwrap();
+    contract_to_vakint_vacuum(&sunrise).map(|_| ()).unwrap();
     // the one-loop fermion trace with two open ports, marked and massive
     let slash = |e: usize, hs: usize, ht: usize| {
         let mu = index(e, 1);
@@ -1949,9 +1974,10 @@ fn the_vacuum_mode_applies_the_general_contract_with_the_loop_momenta_conserved(
     let mut trace = trace;
     trace.prefactor.loop_sign = -1;
     trace.prefactor.nf_power = 1;
-    contract_to_vakint_vacuum(&trace).unwrap();
+    contract_to_vakint_vacuum(&trace).map(|_| ()).unwrap();
     let slot = hedge;
-    let mut cases: Vec<(&str, FactorizedNumerator, fn(&FactorizedError) -> bool)> = Vec::new();
+    type Expected = fn(&FactorizedError) -> bool;
+    let mut cases: Vec<(&str, FactorizedNumerator, Expected)> = Vec::new();
     let mut v = sunrise.clone();
     v.edges[2].momentum = vec![1, 0];
     cases.push(("a loop momentum not conserved", v, |e| {
@@ -2007,9 +2033,176 @@ fn the_vacuum_mode_applies_the_general_contract_with_the_loop_momenta_conserved(
     }
     // the external components are not conserved in the vacuum mode
     let k5 = adapted_k5();
-    contract_to_vakint_vacuum(&k5).unwrap();
+    contract_to_vakint_vacuum(&k5).map(|_| ()).unwrap();
     assert!(matches!(
         k5.validate(),
         Err(FactorizedError::MomentumNotConserved { .. })
     ));
+}
+
+/// The one-loop massive doubled line of the vacuum p2_power witness (`leg`:
+/// with the external leg 20 of p(1); `free`: without external momentum),
+/// with the projector `1` and `p2_power`.
+fn p2_witness(leg: bool, p2_power: i64) -> String {
+    let (momenta, external, edges, line1, leg_lines, lines) = if leg {
+        (
+            "loops=1\texternals=1",
+            "external\t1\tedge=20\n",
+            2,
+            "1,0",
+            "edge\t20\tsource=ext\ttarget=0\thedges=-,120\tparticle=x\tline=vector\tpower=1\tmomentum=0,1\t0\nedge_factor\t20\t1\n",
+            29,
+        )
+    } else {
+        ("loops=1\texternals=0", "", 1, "1", "", 26)
+    };
+    format!(
+        "schema\tpint6.factorized-numerator.v3\nlabel\twitness\nkind\tdirect\texternals=conserved\ndimension\tgammalooprs::{{}}::dim\nmomenta\t{momenta}\nloop\t1\tedge=1\n{external}edges\t{edges}\nedge\t1\tsource=0\ttarget=0\thedges=1,2\tparticle=x\tline=scalar\tpower=2\tmomentum={line1}\thelper_test::{{}}::mass_squared\nedge_factor\t1\t1\n{leg_lines}vertices\t1\nvertex\t0\trule=V\t1\nports\t0\nprojector\tp2_power={p2_power}\t1\nopen\t0\nprefactor\tloop_sign=1\tnf_power=0\nprefactor_overall\t1\nprefactor_scalars\t1\nprefactor_colour\t1\ncolour_branch\tnone\nclosure\tnone\ntaylor\tnone\nsofts\t0\noriginal_cycles\tfermion=0\tghost=0\ndepth\t2\ninsertions\t0\nlines\t{lines}\nend\n"
+    )
+}
+
+/// THE VACUUM MODE DOES NOT APPLY p2_power: a marked vacuum value with a
+/// projector power of p² (+1 and -1; with the external leg of p(1) and
+/// without external momentum) was accepted and evaluated as if p2_power were
+/// 0 (the pole i/(16 π² ε) where p² i/(16 π² ε) is meant): it is REFUSED, with
+/// one text, by the builders, the input functions, the entries, to_text_vacuum
+/// and from_text_vacuum; with p2_power 0 the same value is accepted and
+/// written byte-identical to its text.
+#[test]
+fn the_vacuum_mode_refuses_a_projector_power_of_p_squared() {
+    let vakint = Vakint::new().unwrap();
+    let settings = VakintSettings {
+        number_of_terms_in_epsilon_expansion: 2,
+        ..no_form_settings()
+    };
+    let one = Atom::num(1);
+    for leg in [true, false] {
+        let text = p2_witness(leg, 0);
+        let base = FactorizedNumerator::from_text_vacuum(&text).unwrap();
+        assert_eq!(base.to_text_vacuum().unwrap(), text);
+        evaluate_factorized_vacuum(&vakint, &settings, &base, &one).unwrap();
+        for p2_power in [1, -1] {
+            let expected = format!(
+                "vacuum: projector p2_power={p2_power}: the vacuum mode does not apply (p²)^p2_power (write p² into the projector or a factor; p2_power must be 0)"
+            );
+            let mut v = base.clone();
+            v.projector.as_mut().unwrap().p2_power = p2_power;
+            let results = [
+                ("to_text_vacuum", v.to_text_vacuum().map(|_| ())),
+                (
+                    "from_text_vacuum",
+                    FactorizedNumerator::from_text_vacuum(&p2_witness(leg, p2_power)).map(|_| ()),
+                ),
+                (
+                    "contract_to_vakint_vacuum",
+                    contract_to_vakint_vacuum(&v).map(|_| ()),
+                ),
+                (
+                    "contract_to_vakint_vacuum_streamed",
+                    contract_to_vakint_vacuum_streamed(&settings, &v, 2).map(|_| ()),
+                ),
+                (
+                    "vakint_vacuum_input",
+                    vakint_vacuum_input(&settings, &v, &one).map(|_| ()),
+                ),
+                (
+                    "vakint_vacuum_input_streamed",
+                    vakint_vacuum_input_streamed(&settings, &v, &one, Streaming::Pieces(2))
+                        .map(|_| ()),
+                ),
+                (
+                    "evaluate_factorized_vacuum",
+                    evaluate_factorized_vacuum(&vakint, &settings, &v, &one).map(|_| ()),
+                ),
+                (
+                    "evaluate_factorized_vacuum_streamed",
+                    evaluate_factorized_vacuum_streamed(
+                        &vakint,
+                        &settings,
+                        &v,
+                        &one,
+                        Streaming::Pieces(2),
+                    )
+                    .map(|_| ()),
+                ),
+            ];
+            for (what, r) in results {
+                match r {
+                    Err(FactorizedError::Graph { detail }) => {
+                        assert_eq!(detail, expected, "{what} leg={leg}")
+                    }
+                    other => panic!("{what} leg={leg} p2_power={p2_power}: {other:?}"),
+                }
+            }
+        }
+    }
+}
+
+/// THE VACUUM VALUE DOES NOT DEPEND ON THE FIELDS IT DOES NOT READ, which the
+/// format makes provenance (the label, an edge's particle, a vertex's rule,
+/// the colour branch, which are informational): the marked massive sunrise
+/// with each of them changed is accepted and evaluates to the same value.
+#[test]
+fn the_vacuum_value_does_not_depend_on_its_provenance_fields() {
+    let vakint = Vakint::new().unwrap();
+    let settings = no_form_settings();
+    let one = Atom::num(1);
+    let mut base = value(
+        vec![Some(1), Some(2)],
+        Vec::new(),
+        [
+            (1, 1, 2, vec![1, 0]),
+            (2, 1, 2, vec![0, 1]),
+            (3, 2, 1, vec![1, 1]),
+        ]
+        .iter()
+        .map(|(id, s, t, m)| {
+            let mut e = edge(
+                *id,
+                *s,
+                *t,
+                (2 * id, 2 * id + 1),
+                m,
+                LineKind::Scalar,
+                1,
+                Atom::num(1),
+            );
+            e.mass_squared = atom("witness::msq");
+            e
+        })
+        .collect(),
+        (1..=2).map(|i| vertex(i, Atom::num(1))).collect(),
+        Vec::new(),
+    );
+    base.record = Some(super::super::DirectRecord {
+        original_cycles: None,
+        depth: None,
+        weights: Vec::new(),
+    });
+    let reference = evaluate_factorized_vacuum(&vakint, &settings, &base, &one)
+        .unwrap()
+        .value;
+    let mut variants = Vec::<(&str, FactorizedNumerator)>::new();
+    let mut v = base.clone();
+    v.label = "another label".into();
+    variants.push(("the label", v));
+    let mut v = base.clone();
+    v.edges[0].particle = "phi".into();
+    variants.push(("an edge's particle", v));
+    let mut v = base.clone();
+    v.vertices[0].rule = "V_other".into();
+    variants.push(("a vertex's rule", v));
+    let mut v = base.clone();
+    v.colour_branch = Some(super::super::ColourBranchInfo {
+        index: 1,
+        count: 2,
+        rows: vec![0, 1],
+    });
+    variants.push(("the colour branch", v));
+    for (what, v) in variants {
+        let got = evaluate_factorized_vacuum(&vakint, &settings, &v, &one)
+            .unwrap_or_else(|e| panic!("{what}: {e}"))
+            .value;
+        assert!((&got - &reference).expand().is_zero(), "{what}");
+    }
 }

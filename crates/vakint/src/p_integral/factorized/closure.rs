@@ -307,6 +307,39 @@ impl FactorizedNumerator {
             )));
         }
         self.validate_contract(Some(conserved))?;
+        // `externals=independent` (the record format, section 3: every crown
+        // leg its own p(j), conservation NOT checked where crown legs meet):
+        // at every vertex WITHOUT an external leg the external components are
+        // conserved too (the loop components at every vertex: above)
+        if spec.taylor.is_some() && spec.independent_externals {
+            for vertex in &self.vertices {
+                let at = super::Endpoint::Vertex(vertex.id);
+                if self
+                    .edges
+                    .iter()
+                    .any(|e| e.is_external() && (e.source == at || e.target == at))
+                {
+                    continue;
+                }
+                let mut residual = vec![0i64; loops + externals];
+                for edge in &self.edges {
+                    for (r, c) in residual.iter_mut().zip(&edge.momentum) {
+                        if edge.target == at {
+                            *r += c;
+                        }
+                        if edge.source == at {
+                            *r -= c;
+                        }
+                    }
+                }
+                if residual.iter().any(|c| *c != 0) {
+                    return Err(FactorizedError::MomentumNotConserved {
+                        vertex: vertex.id,
+                        residual,
+                    });
+                }
+            }
+        }
         // weights, exactly once (the record format, section 3): with
         // `original_cycles` the original graph's weights stay with the caller;
         // without, the carried graph's closed loops are applied here

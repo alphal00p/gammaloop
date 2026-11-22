@@ -42,8 +42,11 @@ refusal	Closure	the reference mass <> in the prefactor (it is substituted in the
 refusal	Closure	the reference mass <> is not a symbol (it is substituted everywhere)
 refusal	Closure	vakint's internal Taylor parameter occurs in the record
 refusal	Closure	with original_cycles the prefactor has loop_sign=1, nf_power=0, overall 1 (the original graph's weights stay with the caller); found loop_sign=<> nf_power=<> overall <>
+refusal	Closure|Graph	<> <> is not a record name: a name is non-empty, without control characters (TAB, newline, CR, NUL, ...), '=' or ',', and without leading or trailing whitespace
+refusal	Closure|Graph	<>: the canonical string contains a TAB, newline or CR (the text form cannot hold it)
 refusal	Closure|Graph	a flavour symbol in the record (n_f stays with the caller): in prefactor_scalars <>
 refusal	Closure|Graph	edge <>: power <> out of range (at most 2^31 in absolute value)
+refusal	Closure|Graph	the label <> contains a control character (TAB, newline, CR, NUL, ...): the text form cannot hold it
 refusal	Closure|Graph	the two legs of a paired line carry one momentum, edge e with target=ext and edge 100000 + e with source=ext: edge <> (source=<>, target=<>) carries <>, its partner <> (source=<>, target=<>) <>
 refusal	Closure|Graph	weight <> applied_by=<> <>: <> is <>, not <> (<>)
 refusal	Closure|Graph	weight <> applied_by=<>: not a weight of the record format (scalars, overall, colour, loop_sign, flavour)

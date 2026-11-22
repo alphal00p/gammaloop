@@ -721,7 +721,13 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
     }
     let found = schema.fields.join("\t");
     let v3 = found == FACTORIZED_SCHEMA_V3;
-    if found.ends_with(super::DIAGNOSTIC_SCHEMA_SUFFIX) {
+    // the diagnostic writer's v3 schema line (a marked value's): refused
+    // with its own text; any other unknown schema line (an unmarked value's
+    // `v1.unvalidated` included) gets the base's refusal below, unchanged
+    if found
+        .strip_suffix(super::DIAGNOSTIC_SCHEMA_SUFFIX)
+        .is_some_and(|schema| schema == FACTORIZED_SCHEMA_V3)
+    {
         return Err(FactorizedError::TextSyntax {
             line: schema.number,
             detail: format!(

@@ -2387,6 +2387,121 @@ fn the_entries_add_the_settings_rules_to_the_writer() {
     }
 }
 
+/// `externals=independent` (the record format, section 3: conservation NOT
+/// checked where crown legs meet) checks the external momentum components at
+/// every vertex WITHOUT a crown leg: the K3 Dirac record (independent; the
+/// vendored K2 and K4 records have a crown leg at every vertex) with an
+/// external component added to an internal edge at such a vertex is
+/// refused (`MomentumNotConserved`), typed and by the writer; the K1 root
+/// (conserved, its momenta conserved everywhere) with the flag switched to
+/// independent is accepted with the same closure value (the flag selects a
+/// check; the value does not read it).
+#[test]
+fn independent_externals_are_conserved_away_from_the_crown_legs() {
+    let k3 =
+        FactorizedNumerator::from_text(include_str!("fixtures/wh-k3-dirac.record.txt")).unwrap();
+    assert!(matches!(&k3.kind, FactorizedKind::Closure(s) if s.independent_externals));
+    let crown = |v: &FactorizedNumerator, end: Endpoint| {
+        v.edges
+            .iter()
+            .any(|e| e.is_external() && (e.source == end || e.target == end))
+    };
+    let loops = k3.loops();
+    let i = k3
+        .edges
+        .iter()
+        .position(|e| !e.is_external() && (!crown(&k3, e.source) || !crown(&k3, e.target)))
+        .expect("an internal edge at a vertex without a crown leg");
+    let mut bad = k3.clone();
+    bad.edges[i].momentum[loops] += 1;
+    let e = bad.validate().unwrap_err();
+    assert!(
+        matches!(e, FactorizedError::MomentumNotConserved { .. }),
+        "{e:?}"
+    );
+    assert_eq!(
+        format!("{:?}", bad.to_text().unwrap_err()),
+        format!("{e:?}")
+    );
+    let k1 =
+        FactorizedNumerator::from_text(include_str!("fixtures/wh-k1-root.record.txt")).unwrap();
+    assert!(matches!(&k1.kind, FactorizedKind::Closure(s) if !s.independent_externals));
+    let mut switched = k1.clone();
+    if let FactorizedKind::Closure(spec) = &mut switched.kind {
+        spec.independent_externals = true;
+    }
+    switched.validate().unwrap();
+    let vakint = plain_engine();
+    let value = |v: &FactorizedNumerator| {
+        evaluate_factorized_closure(
+            &vakint,
+            &site_settings(),
+            std::slice::from_ref(v),
+            &[v.prefactor.total()],
+        )
+        .unwrap()
+        .value
+    };
+    assert!((value(&k1) - value(&switched)).expand().is_zero());
+}
+
+/// AN UNMARKED TEXT KEEPS THE BASE'S SCHEMA REFUSAL: only the v3 schema
+/// with the `.unvalidated` suffix (a marked value's diagnostic text) gets the
+/// diagnostic refusal; any other unknown schema line, an unmarked value's
+/// diagnostic `pint6.factorized-numerator.v1.unvalidated` included, is
+/// refused exactly as the base refuses an unknown schema (the base's
+/// `TextSchema` text of dea282615: "text line {line}: unknown schema
+/// {found:?} (this reader knows pint6.factorized-numerator.v1)").
+#[test]
+fn an_unmarked_text_keeps_the_base_schema_refusal() {
+    let base_text = |found: &str| {
+        format!(
+            "text line 1: unknown schema {found:?} (this reader knows pint6.factorized-numerator.v1)"
+        )
+    };
+    let unmarked =
+        FactorizedNumerator::parse_text(include_str!("fixtures/l1-gluon-bubble.txt")).unwrap();
+    assert!(!super::is_marked(&unmarked));
+    let diagnostic = unmarked.to_text_unvalidated_for_diagnostics().unwrap();
+    assert!(diagnostic.starts_with("schema\tpint6.factorized-numerator.v1.unvalidated\n"));
+    let body = diagnostic.split_once('\n').unwrap().1;
+    for found in [
+        "pint6.factorized-numerator.v1.unvalidated",
+        "pint6.factorized-numerator.v2.unvalidated",
+        "pint6.factorized-numerator.v3.unvalidated ",
+        "other.unvalidated",
+        "pint6.factorized-numerator.v4",
+    ] {
+        let text = format!("schema\t{found}\n{body}");
+        for r in [
+            FactorizedNumerator::from_text(&text).map(|_| ()),
+            FactorizedNumerator::parse_text(&text).map(|_| ()),
+            FactorizedNumerator::from_text_vacuum(&text).map(|_| ()),
+        ] {
+            match r {
+                Err(e @ FactorizedError::TextSchema { .. })
+                    if found.trim() != FACTORIZED_SCHEMA_V3.to_string() + ".unvalidated" =>
+                {
+                    assert_eq!(e.to_string(), base_text(found), "{found}")
+                }
+                Err(FactorizedError::TextSchema { .. }) => {}
+                other => panic!("{found}: {other:?}"),
+            }
+        }
+    }
+    // the marked value's diagnostic text: the diagnostic refusal
+    let marked =
+        FactorizedNumerator::from_text(include_str!("fixtures/wh-k5-direct.record.txt")).unwrap();
+    let text = marked.to_text_unvalidated_for_diagnostics().unwrap();
+    match FactorizedNumerator::from_text(&text) {
+        Err(FactorizedError::TextSyntax { line: 1, detail }) => assert_eq!(
+            detail,
+            "schema pint6.factorized-numerator.v3.unvalidated: the text of to_text_unvalidated_for_diagnostics, written without validation for diagnosis, is not a record and is never read (to_text writes a record)"
+        ),
+        other => panic!("{other:?}"),
+    }
+}
+
 /// ONLY SCALARS IS APPLIED BY VAKINT: overall, colour, loop_sign and flavour
 /// with applied_by=vakint are refused, also with their prefactor field equal
 /// to the weight, on the closure and the direct kind, typed and through text,
@@ -2449,7 +2564,9 @@ fn only_scalars_is_applied_by_vakint() {
 /// not carry; a weight against the table, a depth beyond the cap,
 /// an edge power beyond 2^31, a zero denominator in a vertex factor, a closure
 /// value with a direct record, a huge power in an insertion, overall applied
-/// by vakint), to_text(v) is an error exactly when validate(v) is, and when it
+/// by vakint, record strings: an empty vertex rule, a rule with a CR or a
+/// trailing space, a particle with a CR, a label with a NUL, a label with
+/// non-ASCII (accepted)), to_text(v) is an error exactly when validate(v) is, and when it
 /// is not, the text reads back to v (the same record_atoms and the same
 /// fields); the diagnostic writer's text of every one of them is refused by
 /// the reader (its schema line).
@@ -2471,8 +2588,26 @@ fn to_text_refuses_exactly_what_validate_refuses_and_round_trips_the_rest() {
     }
     assert!(bases.len() >= 5, "{} marked fixtures", bases.len());
     type Change = fn(&mut FactorizedNumerator);
-    let changes: [(&str, Change); 10] = [
+    let changes: [(&str, Change); 16] = [
         ("insertions out of vertex order", |v| v.insertions.reverse()),
+        ("an empty vertex rule", |v| {
+            v.vertices[0].rule = String::new()
+        }),
+        ("a vertex rule with a CR", |v| {
+            v.vertices[0].rule = "A\rB".into()
+        }),
+        ("a vertex rule with a trailing space", |v| {
+            v.vertices[0].rule = format!("{} ", v.vertices[0].rule)
+        }),
+        ("a particle with a CR", |v| {
+            v.edges[0].particle = "q\r".into()
+        }),
+        ("a label with a NUL", |v| {
+            v.label = format!("{}\u{0}", v.label)
+        }),
+        ("a label with non-ASCII", |v| {
+            v.label = format!("{} ≤ ε", v.label)
+        }),
         ("overall applied by vakint, its field equal", |v| {
             let w = vec![("overall".to_string(), true, v.prefactor.overall.clone())];
             match &mut v.kind {

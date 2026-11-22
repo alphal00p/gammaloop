@@ -214,7 +214,8 @@ fn is_compact(rep: AtomView<'_>) -> bool {
 /// weights, paired legs, original cycles, atoms, fields, insertions), the
 /// vacuum shape rules (at least one loop; no external momentum on an
 /// internal line; one mass scale, at least one massive line; Lorentz open
-/// slots only), then the general contract with the LOOP components of the
+/// slots only; no projector power of p², which the vacuum evaluation does not
+/// apply), then the general contract with the LOOP components of the
 /// momenta conserved (structure, loop-momentum conservation, per-factor index
 /// analysis, locality, contraction, fermion orientation, scalar prefactor and
 /// masses). Not applied: conservation of the external components (they flow
@@ -309,6 +310,17 @@ pub(crate) fn validate_vacuum(value: &FactorizedNumerator) -> Result<()> {
             )));
         }
     }
+    // the projector's power of p² (`(p²)^p2_power`, the format's step 4):
+    // the vacuum evaluation does not apply it, so a marked value must not
+    // carry one (an unmarked value: the base, which ignores it)
+    if let Some(projector) = &value.projector
+        && projector.p2_power != 0
+    {
+        return Err(refuse(&format!(
+            "projector p2_power={}: the vacuum mode does not apply (p²)^p2_power (write p² into the projector or a factor; p2_power must be 0)",
+            projector.p2_power
+        )));
+    }
     // MARKED SIDE: THE GENERAL CONTRACT, with momentum conservation of the
     // LOOP components only (`validate_contract(Some(loops))`): the graph's
     // structure, the loop momenta conserved at every vertex, the per-factor
@@ -321,6 +333,8 @@ pub(crate) fn validate_vacuum(value: &FactorizedNumerator) -> Result<()> {
     // An unmarked value: the base behaviour (not run).
     if super::is_marked(value) {
         value.validate_contract(Some(loops))?;
+        // the record strings (`check_marked_strings`: what the writer refuses)
+        value.check_marked_strings()?;
     }
     Ok(())
 }

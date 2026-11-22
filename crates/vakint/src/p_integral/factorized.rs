@@ -99,7 +99,9 @@ pub const FACTORIZED_SCHEMA_V3: &str = "pint6.factorized-numerator.v3";
 
 /// The suffix of the schema line of
 /// [`FactorizedNumerator::to_text_unvalidated_for_diagnostics`]: the text of
-/// that writer is not a record, and every reader refuses it.
+/// that writer is not a record, and every reader refuses it (the v3 schema
+/// with the suffix: `TextSyntax`; any other schema line, the v1 one with the
+/// suffix included: the base's unknown schema refusal, unchanged).
 pub const DIAGNOSTIC_SCHEMA_SUFFIX: &str = ".unvalidated";
 
 /// The schemas a TextSchema refusal names: the base's text (only v1) for any
@@ -3218,6 +3220,74 @@ impl FactorizedNumerator {
             self.check_marked_atoms()?;
             // every caller expression outside the insertions: defined, finite
             self.check_marked_fields(None)?;
+            self.check_marked_strings()?;
+        }
+        Ok(())
+    }
+
+    /// THE RECORD STRINGS of a marked value, ONE RULE for every free string
+    /// the text form writes, so that validation refuses what the writer would
+    /// refuse: the LABEL has no control character (TAB, newline, CR, NUL, any
+    /// `char::is_control`); a NAME (an edge's particle, a vertex's rule, a
+    /// weight's name) is non-empty, has no control character, no `=` or `,`
+    /// (the text form's field separators) and no leading or trailing
+    /// whitespace; no atom's canonical string (the record's atoms and the
+    /// dimension) has a TAB, newline or CR. Anything else is written and read
+    /// unchanged (non-ASCII, inner spaces). The softs, the colour branch and the
+    /// kind's externals field hold no free string. `Closure` for the closure
+    /// kind, else `Graph`. Shared by `validate` and the vacuum mode.
+    pub(crate) fn check_marked_strings(&self) -> Result<()> {
+        let closure = matches!(self.kind, FactorizedKind::Closure(_));
+        let refuse = |detail: String| {
+            if closure {
+                FactorizedError::Closure { detail }
+            } else {
+                FactorizedError::Graph { detail }
+            }
+        };
+        if self.label.chars().any(char::is_control) {
+            return Err(refuse(format!(
+                "the label {:?} contains a control character (TAB, newline, CR, NUL, ...): the text form cannot hold it",
+                self.label
+            )));
+        }
+        let mut names = Vec::<(String, &str)>::new();
+        for edge in &self.edges {
+            names.push((format!("edge {} particle", edge.id), edge.particle.as_str()));
+        }
+        for vertex in &self.vertices {
+            names.push((format!("vertex {} rule", vertex.id), vertex.rule.as_str()));
+        }
+        let from_spec = match &self.kind {
+            FactorizedKind::Closure(spec) => spec.weights.as_slice(),
+            FactorizedKind::Direct => &[],
+        };
+        let from_record = self
+            .record
+            .as_ref()
+            .map_or(&[][..], |r| r.weights.as_slice());
+        for (name, _, _) in from_spec.iter().chain(from_record) {
+            names.push(("weight name".to_string(), name.as_str()));
+        }
+        for (field, name) in names {
+            if name.is_empty()
+                || name.chars().any(|c| c.is_control() || c == '=' || c == ',')
+                || name.trim() != name
+            {
+                return Err(refuse(format!(
+                    "{field} {name:?} is not a record name: a name is non-empty, without control characters (TAB, newline, CR, NUL, ...), '=' or ',', and without leading or trailing whitespace"
+                )));
+            }
+        }
+        let dimension = Atom::var(self.dimension);
+        let mut atoms = self.record_atoms();
+        atoms.push(("dimension".to_string(), &dimension));
+        for (field, atom) in atoms {
+            if atom.to_canonical_string().contains(['\t', '\n', '\r']) {
+                return Err(refuse(format!(
+                    "{field}: the canonical string contains a TAB, newline or CR (the text form cannot hold it)"
+                )));
+            }
         }
         Ok(())
     }
@@ -4997,12 +5067,15 @@ impl FactorizedNumerator {
 
     /// The text form WITHOUT validation, to keep the text of a refused value
     /// for diagnosis: NOT a record. Its schema line is the schema followed by
-    /// [`DIAGNOSTIC_SCHEMA_SUFFIX`] (`pint6.factorized-numerator.v3.unvalidated`,
-    /// `….v1.unvalidated` for an unmarked value), which every reader refuses
-    /// (`TextSyntax`): the text is never accepted, also for a valid value
-    /// (whose other lines are [`Self::to_text`]'s); for a value validation
-    /// refuses it may not be that value's text (the writer sorts the
-    /// insertions and drops what the format cannot express).
+    /// [`DIAGNOSTIC_SCHEMA_SUFFIX`], which every reader refuses: a marked
+    /// value's `pint6.factorized-numerator.v3.unvalidated` with `TextSyntax`
+    /// (the detail names this function); an unmarked value's
+    /// `pint6.factorized-numerator.v1.unvalidated` with the base's unknown
+    /// schema refusal (`TextSchema`, the base's text). The text is never
+    /// accepted, also for a valid value (whose other lines are
+    /// [`Self::to_text`]'s); for a value validation refuses it may not be that
+    /// value's text (the writer sorts the insertions and drops what the format
+    /// cannot express).
     pub fn to_text_unvalidated_for_diagnostics(&self) -> Result<String> {
         text::write_record_unvalidated(self)
     }
@@ -5027,9 +5100,11 @@ impl FactorizedNumerator {
     ///
     /// THE VACUUM RULE SET, for a marked value: the record-wide rules of
     /// [`Self::validate`] (reserved names, bounds, weights, paired legs,
-    /// atoms, fields, insertions, original cycles); the vacuum shape rules (at
-    /// least one loop, no external momentum on an internal line, ONE mass
-    /// scale and at least one massive line, Lorentz open slots only); and the
+    /// atoms, fields, insertions, original cycles, record strings); the vacuum
+    /// shape rules (at least one loop, no external momentum on an internal
+    /// line, ONE mass scale and at least one massive line, Lorentz open slots
+    /// only, projector p2_power 0: the vacuum evaluation does not apply
+    /// `(p²)^p2_power`); and the
     /// general contract (graph structure, per-factor index analysis,
     /// locality, contraction, fermion orientation, scalar prefactor fields
     /// and masses) with momentum conservation of the LOOP components at
