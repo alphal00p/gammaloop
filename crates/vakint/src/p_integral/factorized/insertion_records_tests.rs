@@ -2959,7 +2959,9 @@ fn one_hedge_refusal(r: Result<()>, prefix: &str, what: &str) {
 /// 16-19): (29.2) a `Q` of an edge absent from the record is refused; a `Q` of
 /// another record edge (the leg 11) is refused by the boundary rule; (29.3)
 /// slots on the hedge only (the spectator slot moved onto the hedge's second
-/// copy, its port removed), slots on two half-edges outside the record (the
+/// copy, its port removed), slots on the spectator only (the hedge's slot
+/// moved onto the spectator's second copy, declared too: the rule's "slot on
+/// the hedge" condition), slots on two half-edges outside the record (the
 /// hedge's slot moved to the absent half-edge 15, declared too) are refused;
 /// the spectator not declared a port, and a slot on a half-edge of the record
 /// that is not the hedge (the bubble half-edge 16), are refused by the
@@ -2991,6 +2993,16 @@ fn every_one_hedge_rule_has_its_witness() {
         v.validate(),
         "a one-hedge surrogate coefficient vertex (rule ins:scalar_insertion_0): its slots are on the half-edges {9}; a one-hedge insertion carries no slot",
         "slots on the hedge only",
+    );
+    // 29.3: slots on the spectator only
+    let mut v = with_slot(&base, (9, 1), (14, 2));
+    v.ports.retain(|p| *p != port(9));
+    v.ports.push(parsed(&format!("{HEDGE_SLOT}(14,2))")));
+    v.ports.sort_by_key(|p| p.to_canonical_string());
+    one_hedge_refusal(
+        v.validate(),
+        "a one-hedge surrogate coefficient vertex (rule ins:scalar_insertion_0): its slots are on the half-edges {14}; a one-hedge insertion carries no slot",
+        "slots on the spectator only",
     );
     // 29.3: slots on two half-edges outside the record
     let mut v = with_slot(&base, (9, 1), (15, 1));
