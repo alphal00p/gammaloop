@@ -530,6 +530,24 @@ fn ensure_same(label: &str, child: &Atom, today: &Atom) -> Result<()> {
     Ok(())
 }
 
+/// Round 8b: a correction whose quotient carries a declared pole (k > 0)
+/// declines the child route before H(γ) is integrated (`declared_order`,
+/// counted, the value today's): no attempt, no retry, no alarm.
+fn ensure_declined(label: &str, counts: &DepthCounts, reason: &str) -> Result<()> {
+    ensure!(
+        counts.corrections >= 1
+            && counts.taken == 0
+            && counts.declined >= 1
+            && counts.refused >= 1
+            && counts.reason == Some(reason)
+            && counts.retried == 0
+            && counts.raised == 0
+            && counts.exceeded == 0,
+        "{label}: expected the decline {reason}: {counts:?}"
+    );
+    Ok(())
+}
+
 /// One grid point whose child route was wrong (grid.md 2.5): the fixed
 /// child route equals today's path, starts at the quotient bound (no retry,
 /// no refusal) and has the pinned poles (the third method's at its safe
@@ -546,25 +564,10 @@ fn grid_point(
     let today = case.today()?;
     let child = case.child(run(FIXED))?;
     ensure_same(label, &child.value, &today)?;
-    let DepthCounts {
-        corrections,
-        bounded,
-        retried,
-        raised,
-        exceeded,
-        refused,
-        ..
-    } = child.root;
-    ensure!(
-        corrections >= 1
-            && bounded >= 1
-            && retried == 0
-            && raised == 0
-            && exceeded == 0
-            && refused == 0,
-        "{label}: {:?}",
-        child.root
-    );
+    // Round 8b: v1·ε^-J has k_v1 = J > 0: declined (before: taken at the
+    // raised bound).
+    ensure!(child.root.bounded >= 1, "{label}: {:?}", child.root);
+    ensure_declined(label, &child.root, "declared_order")?;
     pinned(label, &today, pins, complete)?;
     let legacy = case.child(run(LEGACY))?;
     ensure!(
@@ -695,14 +698,9 @@ fn row_point(
     let today = case.today()?;
     let child = case.child(run(FIXED))?;
     ensure_same(label, &child.value, &today)?;
-    ensure!(
-        child.root.corrections >= 1
-            && child.root.bounded >= 1
-            && child.root.exceeded == 0
-            && child.root.refused == 0,
-        "{label}: {:?}",
-        child.root
-    );
+    // Round 8b: declined (k_v1 > 0; before: taken).
+    ensure!(child.root.bounded >= 1, "{label}: {:?}", child.root);
+    ensure_declined(label, &child.root, "declared_order")?;
     pinned(label, &today, pins, complete)?;
     let control = Case::new(control, None)?.today()?;
     pinned(
@@ -711,13 +709,20 @@ fn row_point(
         &[(-1, q(-117, 64))],
         true,
     )?;
+    // The planner before IRH-DEPTH misses the pole: legacy − control is not
+    // the reference −117/64 ε⁻¹. Round 8b: the pin to the old wrong value
+    // (+117/32) is dropped where it no longer holds: the legacy emulation
+    // has no retry any more (one attempt at L_q, no guard), so its wrong
+    // value can differ (rB: +151/64).
     let legacy = case.child(run(LEGACY))?;
-    pinned(
+    let missed = pinned(
         &format!("{label} legacy - control"),
         &(&legacy.value - &control),
-        &[(-1, q(117, 32))],
+        &[(-1, q(-117, 64))],
         true,
-    )
+    );
+    ensure!(missed.is_err(), "{label}: the legacy planner must miss the pole");
+    Ok(())
 }
 
 /// rA: v0 = ε³ L0 + ε² X, v1·ε⁻¹: -169/64 ε⁻¹ (generic; massive -91/64 at
@@ -751,18 +756,14 @@ fn a_measured_quotient_pole_still_retries() -> Result<()> {
     let today = case.today()?;
     let child = case.child(run(FIXED))?;
     ensure_same("k0j1", &child.value, &today)?;
-    ensure!(
-        child.root.bounded >= 1 && child.root.retried == 0 && child.root.refused == 0,
-        "{:?}",
-        child.root
-    );
+    // Round 8b: k_v1 = 1 declines on every planner that guards (before: the
+    // bound 2 was taken, and without the raise the shown rows were measured
+    // and retried to 2: no retry exists any more).
+    ensure!(child.root.bounded >= 1, "{:?}", child.root);
+    ensure_declined("k0j1", &child.root, "declared_order")?;
     let measured = case.child(run(NO_RAISE))?;
     ensure_same("k0j1 no raise", &measured.value, &today)?;
-    ensure!(
-        measured.root.retried >= 1 && measured.root.raised == 0 && measured.root.refused == 0,
-        "{:?}",
-        measured.root
-    );
+    ensure_declined("k0j1 no raise", &measured.root, "declared_order")?;
     // 117/32 ε⁻⁴ (massive 117/32 at this safe order).
     pinned("k0j1", &today, &[(-4, q(117, 32))], false)
 }
@@ -803,11 +804,8 @@ fn the_guard_refuses_a_vanished_hard_part_below_the_bound() -> Result<()> {
     let today = case.today()?;
     let child = case.child(run(NO_RAISE))?;
     ensure_same("k3j1 no raise", &child.value, &today)?;
-    ensure!(
-        child.root.refused == 1 && child.root.reason == Some("vanished"),
-        "{:?}",
-        child.root
-    );
+    // Round 8b: declined before H (k_v1 = 1; before: refused `vanished`).
+    ensure_declined("k3j1 no raise", &child.root, "declared_order")?;
     pinned("k3j1 no raise", &child.value, &[(-1, q(-117, 64))], true)
 }
 
@@ -824,23 +822,16 @@ fn the_guard_refuses_a_hidden_row_without_a_known_bound() -> Result<()> {
     let today = case.today()?;
     let unverified = case.child(run(NO_RAISE))?;
     ensure_same("rA0 no raise", &unverified.value, &today)?;
-    ensure!(
-        unverified.root.refused == 1 && unverified.root.reason == Some("unverified"),
-        "{:?}",
-        unverified.root
-    );
+    // Round 8b: declined before H (k_v1 = 1; before: refused `unverified`).
+    ensure_declined("rA0 no raise", &unverified.root, "declared_order")?;
     let unbounded = case.child(run(DepthTest {
         bound: BoundOverride::Unknown,
         ..FIXED
     }))?;
     ensure_same("rA0 unknown bound", &unbounded.value, &today)?;
-    ensure!(
-        unbounded.root.refused >= 1
-            && unbounded.root.reason == Some("unbounded")
-            && unbounded.root.retried == 0,
-        "{:?}",
-        unbounded.root
-    );
+    // Round 8b: the decline precedes the unknown-bound refusal (before:
+    // refused `unbounded`).
+    ensure_declined("rA0 unknown bound", &unbounded.root, "declared_order")?;
     pinned(
         "rA0 unknown bound",
         &unbounded.value,
@@ -892,16 +883,12 @@ fn a_row_without_a_known_bound_is_refused_after_the_first_depth() -> Result<()> 
         ..run(FIXED)
     })?;
     ensure_same("k0j0 opaque row", &child.value, &today)?;
-    ensure!(
-        child.root.bounded == 0
-            && child.root.refused == 1
-            && child.root.unbounded == 1
-            && child.root.retried == 0
-            && child.root.reason == Some("unbounded"),
-        "{:?}",
-        child.root
-    );
-    Ok(())
+    // Round 8b (C4): a row insertion that is not ε-free declines before its
+    // quotient factors are built (before: its row bound was unknown,
+    // refused `unbounded`).
+    ensure!(child.root.bounded == 0, "{:?}", child.root);
+    ensure!(child.root.insertion_not_eps_free == 1, "{:?}", child.root);
+    ensure_declined("k0j0 opaque row", &child.root, "insertion_not_eps_free")
 }
 
 /// A measured need above the bound (pre-review note 3): k0j1 (true need 2)
@@ -910,34 +897,30 @@ fn a_row_without_a_known_bound_is_refused_after_the_first_depth() -> Result<()> 
 /// GAMMALOOP_IR_HARD_DEPTH_STRICT=1.
 #[test]
 fn a_measured_pole_above_the_bound_is_an_alarm() -> Result<()> {
-    let case = Case::new(&k(0, 1), None)?;
-    let today = case.today()?;
-    let below = DepthTest {
-        bound: BoundOverride::Fixed(1),
-        ..FIXED
-    };
-    let child = case.child(run(below))?;
-    ensure_same("k0j1 bound 1", &child.value, &today)?;
-    ensure!(
-        child.root.exceeded >= 1
-            && child.root.refused >= 1
-            && child.root.reason == Some("bound_exceeded")
-            && child.root.retried == 0,
-        "{:?}",
-        child.root
-    );
-    let strict = case.child(run(DepthTest {
-        strict: Some(true),
-        ..below
-    }));
-    let error = match strict {
-        Ok(_) => return Err(eyre!("GAMMALOOP_IR_HARD_DEPTH_STRICT=1 must fail")),
-        Err(error) => format!("{error:#}"),
-    };
-    ensure!(
-        error.contains("IRH-DEPTH") && error.contains("bound=1"),
-        "{error}"
-    );
+    // Round 8b: k0j0 (every k = 0, B = L_q = 1, measured need 1) with the
+    // bound forced to 0; the measured need above B is the typed alarm with
+    // STRICT off AND on (before: k0j1 forced to 1, refused `bound_exceeded`
+    // without STRICT; k0j1 now declines before any measurement).
+    let case = Case::new(L3_006, None)?;
+    for strict in [false, true] {
+        let below = DepthTest {
+            bound: BoundOverride::Fixed(0),
+            strict: Some(strict),
+            ..FIXED
+        };
+        let error = match case.child(run(below)) {
+            Ok(run) => {
+                return Err(eyre!(
+                    "strict={strict}: a measured need above B must fail: {:?}",
+                    run.root
+                ));
+            }
+            Err(error) => error,
+        };
+        ensure!(depth::is_alarm(&error), "strict={strict}: {error:#}");
+        let text = format!("{error:#}");
+        ensure!(text.contains("IRH-DEPTH") && text.contains("bound=0"), "{text}");
+    }
     Ok(())
 }
 
@@ -969,12 +952,17 @@ fn nested_child_calls_keep_their_quotient_pole() -> Result<()> {
     })?;
     ensure_same("c2-m9 nested", &child.value, &today)?;
     let root = child.root;
+    // Round 8b: every nested correction whose quotient holds v1·ε⁻¹ declines
+    // (declared_order) before H; no nested attempt hides a pole, every
+    // refusal is such a decline, no retry, no alarm (before: every nested
+    // call was bounded and taken at its bound 2, on hard {2,3,8}).
     ensure!(
         root.nested >= 1
             && root.nested_bounded == root.nested
+            && root.declared_order >= 1
+            && root.declined == root.refused
             && root.retried == 0
-            && root.exceeded == 0
-            && root.refused == 0,
+            && root.exceeded == 0,
         "{root:?}"
     );
     let sites = sites.borrow();
@@ -984,11 +972,8 @@ fn nested_child_calls_keep_their_quotient_pole() -> Result<()> {
         .filter(|site| site.edges == "2,3,8")
         .collect::<Vec<_>>();
     ensure!(
-        !deep.is_empty()
-            && deep
-                .iter()
-                .all(|site| site.hard_loops == 1 && site.quotient_loops == 1 && site.extra == 2),
-        "the nested calls on hard {{2,3,8}} start at their bound 2: {sites:?}"
+        deep.is_empty(),
+        "the nested calls on hard {{2,3,8}} decline before H: {sites:?}"
     );
     eprintln!(
         "IRH_DEPTH_NESTED c2-m9 attempts={} nested={} on_2_3_8={}",
@@ -1006,12 +991,10 @@ fn nested_child_calls_keep_their_quotient_pole() -> Result<()> {
     // The order the fix changes (tests review, finding 2).
     let log = |symbol| symbolica::function!(symbolica::atom::Symbol::LOG, Atom::var(symbol));
     let log_ratio = log(super::top_mass::auxiliary_mass_squared()) - log(GS.mu_r_sq);
-    pinned(
-        "c2-m9 legacy - today",
-        &(&legacy.value - &today),
-        &[(-1, q(351, 32) * log_ratio - q(697, 64))],
-        true,
-    )
+    // Round 8b: the legacy emulation has no retry any more; its miss is
+    // asserted (above), its old value (with log(M²/μᵣ²)) is not pinned.
+    let _ = log_ratio;
+    Ok(())
 }
 
 /// The trailing ε order of `value` (`None` when zero).
@@ -1114,59 +1097,21 @@ fn a_vanished_row_of_a_nonzero_group_keeps_its_quotient_pole() -> Result<()> {
             test,
         })
     };
-    for (_, target) in group {
-        // The value of the hooked correction: from depth 3 on, every row's
-        // coefficient is shown through the order its quotient needs.
-        let reference = hooked(target, true, 3, FIXED)?;
-        // The same without the row's contribution: the row must reach the
-        // pole part.
-        let without = hooked(target, false, 3, FIXED)?;
-        if same(&reference.value, &without.value)? {
-            continue;
-        }
-        let child = hooked(target, true, 0, FIXED)?;
-        ensure!(
-            same(&child.value, &reference.value)?,
-            "child route {} differs from the reference {}",
-            child.value,
-            reference.value
-        );
-        // The vanished row's quotient factor is measured at depth 1, its
-        // insertion's excess raises its row bound to 3; a row whose measured
-        // need is lower is retried to the bound instead (raised): skip it.
-        if child.root.raised != 0 {
-            continue;
-        }
-        let DepthCounts {
-            corrections,
-            retried,
-            exceeded,
-            refused,
-            ..
-        } = child.root;
-        ensure!(
-            corrections >= 1 && retried == 1 && exceeded == 0 && refused == 0,
-            "{:?}",
-            child.root
-        );
-        // Measurement alone: no raise to the bound, the same retry to 3.
-        let measured = hooked(target, true, 0, NO_RAISE)?;
-        ensure!(
-            same(&measured.value, &reference.value)?,
-            "without the raise, child route {} differs from the reference {}",
-            measured.value,
-            reference.value
-        );
-        ensure!(
-            measured.root.retried == 1 && measured.root.raised == 0 && measured.root.refused == 0,
-            "{:?}",
-            measured.root
-        );
-        return Ok(());
+    // Round 8b (C4): the hooked row's insertion E/ε² is not ε-free; the
+    // correction declines before its quotient factors are built, on every
+    // planner that guards, and the value is today's (the hook never reaches
+    // the generic path). Before round 8b its quotient factor was measured
+    // while its h vanished and the depth retried to 3 (no measurement
+    // decides the depth now).
+    let today = case.today()?;
+    let (_, target) = group.first().ok_or_else(|| eyre!("no row"))?;
+    for (label, start, test) in [("fixed", 0, FIXED), ("deep", 3, FIXED), ("no raise", 0, NO_RAISE)] {
+        let child = hooked(target, true, start, test)?;
+        ensure_same(label, &child.value, &today)?;
+        ensure!(child.root.insertion_not_eps_free >= 1, "{label}: {:?}", child.root);
+        ensure_declined(label, &child.root, "insertion_not_eps_free")?;
     }
-    Err(eyre!(
-        "no row of the top group needs the full bound and reaches the pole part: {rows:?}"
-    ))
+    Ok(())
 }
 
 // Round 4 (review IRH-DEPTH finding 3): a fatal depth alarm raised in a
@@ -1183,10 +1128,14 @@ fn a_vanished_row_of_a_nonzero_group_keeps_its_quotient_pole() -> Result<()> {
 
 /// The forced nested breach: the nested bound 1 inside `within` of the root.
 fn nested_breach(within: depth::Within, guard: bool, strict: bool) -> Run {
+    // Round 8b: on c0-m9 (L3_006 with the marked line 9: every k = 0, so the
+    // nested corrections are taken at B = L_q = 1 and measure a need of 1)
+    // the nested bound is forced to 0 (before: c2-m9, whose nested
+    // corrections now decline, forced to 1).
     Run {
-        start: 2,
+        start: 0,
         ..run(DepthTest {
-            bound: BoundOverride::Nested { bound: 1, within },
+            bound: BoundOverride::Nested { bound: 0, within },
             guard: Some(guard),
             strict: Some(strict),
             ..FIXED
@@ -1215,7 +1164,7 @@ fn ensure_alarm(label: &str, result: Result<ChildRun>) -> Result<()> {
         }
     };
     ensure!(
-        error.contains("IRH-DEPTH") && error.contains("bound=1"),
+        error.contains("IRH-DEPTH") && error.contains("bound=0"),
         "{label}: not the depth alarm: {error}"
     );
     Ok(())
@@ -1229,21 +1178,18 @@ fn ensure_alarm(label: &str, result: Result<ChildRun>) -> Result<()> {
 /// fallback computed today's value: STRICT was not fatal).
 #[test]
 fn a_nested_alarm_is_fatal_under_both_guard_settings() -> Result<()> {
-    let case = Case::new(&k(2, 1), Some(9))?;
-    let today = case.today()?;
+    // Round 8b: a measured need above B is the typed alarm with STRICT off
+    // too (before: without STRICT the nested evaluation refused into today's
+    // value).
+    let case = Case::new(L3_006, Some(9))?;
     for guard in [false, true] {
-        let label = format!("c2-m9 nested breach guard={guard}");
-        let refused = case.child(nested_breach(depth::Within::ChildAttempt, guard, false))?;
-        ensure_same(&label, &refused.value, &today)?;
-        ensure!(
-            refused.root.exceeded >= 1 && refused.root.nested >= 1,
-            "{label}: the nested breach was not forced: {:?}",
-            refused.root
-        );
-        ensure_alarm(
-            &label,
-            case.child(nested_breach(depth::Within::ChildAttempt, guard, true)),
-        )?;
+        for strict in [false, true] {
+            let label = format!("c0-m9 nested breach guard={guard} strict={strict}");
+            ensure_alarm(
+                &label,
+                case.child(nested_breach(depth::Within::ChildAttempt, guard, strict)),
+            )?;
+        }
     }
     Ok(())
 }
@@ -1256,7 +1202,10 @@ fn a_nested_alarm_is_fatal_under_both_guard_settings() -> Result<()> {
 /// succeeded).
 #[test]
 fn a_nested_alarm_while_valuing_a_vanished_row_is_fatal() -> Result<()> {
-    let case = Case::new(&k(2, 1), Some(9))?;
+    // Round 8b: the vanished rows are valued only under STRICT (a
+    // cross-check); without it nothing is valued and no nested evaluation
+    // runs there (before: valued always, the breach refused without STRICT).
+    let case = Case::new(L3_006, Some(9))?;
     let vanish = || -> RowHook {
         Box::new(|site: &HookSite, rows: &mut Vec<(Atom, Atom, usize)>| {
             if !site.nested {
@@ -1267,15 +1216,15 @@ fn a_nested_alarm_while_valuing_a_vanished_row_is_fatal() -> Result<()> {
         })
     };
     for guard in [false, true] {
-        let label = format!("c2-m9 vanished rows guard={guard}");
-        let refused = case.child(Run {
+        let label = format!("c0-m9 vanished rows guard={guard}");
+        let unvalued = case.child(Run {
             hook: Some(vanish()),
             ..nested_breach(depth::Within::ZeroRow, guard, false)
         })?;
         ensure!(
-            refused.root.exceeded >= 1 && refused.root.nested >= 1,
-            "{label}: the nested breach was not forced: {:?}",
-            refused.root
+            unvalued.root.exceeded == 0,
+            "{label}: a vanished row was valued without STRICT: {:?}",
+            unvalued.root
         );
         ensure_alarm(
             &label,
@@ -1298,8 +1247,8 @@ fn a_nested_alarm_while_valuing_a_vanished_row_is_fatal() -> Result<()> {
 #[test]
 fn a_cached_nested_alarm_stays_fatal() -> Result<()> {
     for guard in [false, true] {
-        let label = format!("c2-m9 cached alarm guard={guard}");
-        let mut case = Case::new(&k(2, 1), Some(9))?;
+        let label = format!("c0-m9 cached alarm guard={guard}");
+        let mut case = Case::new(L3_006, Some(9))?;
         case.plan = case.plan.with_counterterm_cache(std::sync::Arc::new(
             crate::uv::counterterm_cache::CountertermCache::default(),
         ));
@@ -1309,7 +1258,7 @@ fn a_cached_nested_alarm_stays_fatal() -> Result<()> {
         )?;
         // Nothing forced: only the cache holds the alarm.
         let replay = case.child(Run {
-            start: 2,
+            start: 0,
             ..run(DepthTest {
                 guard: Some(guard),
                 strict: Some(true),

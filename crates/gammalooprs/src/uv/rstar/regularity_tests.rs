@@ -213,17 +213,19 @@ fn the_witnesses_are_the_reviewed_inputs() {
 /// (`project_physical_root_mode`: `tensor · σ(global_prefactor.num)`), on
 /// `route` ("child" or "closed").
 fn projected(case: &Case, route: &'static str, test: DepthTest) -> Result<(Atom, DepthCounts)> {
+    // Round 8b: the prefactor multiplication as the TYPED scalar root
+    // (`projected_counterterm_scalar`); as an opaque callback the child route
+    // declines it (round8b_e).
     let prefactor = case.graph.global_prefactor.num.clone();
-    let projector = move |tensor: &Atom| -> Result<Atom> { Ok(tensor * &prefactor) };
     let (value, counts) = depth::with_depth_test(test, || {
         depth::collect(|| {
             with_ir_hard(route, || {
-                case.plan.projected_counterterm(
+                case.plan.projected_counterterm_scalar(
                     &case.graph,
                     case.model(),
                     &case.vakint,
                     &case.settings,
-                    &projector,
+                    &prefactor,
                 )
             })
         })
@@ -232,15 +234,20 @@ fn projected(case: &Case, route: &'static str, test: DepthTest) -> Result<(Atom,
     Ok((value?, counts))
 }
 
-/// A child run certified without a refusal, the bound raised to the hidden
-/// pole: no retry, no exceeded alarm.
+/// Round 8b: a quotient factor (or the prefactor) with a declared pole
+/// (k > 0, the bound above the quotient's loops) declines the child route
+/// before H(γ) is integrated (`declared_order`, counted): no retry, no
+/// exceeded alarm. Before round 8b the bound was raised and the child route
+/// took the correction (`ensure_raised`).
 fn ensure_raised(label: &str, counts: &DepthCounts) -> Result<()> {
     ensure!(
         counts.corrections >= 1
-            && counts.taken >= 1
+            && counts.taken == 0
             && counts.bounded >= 1
             && counts.exceeded == 0
-            && counts.refused == 0
+            && counts.declined >= 1
+            && counts.declared_order >= 1
+            && counts.reason == Some("declared_order")
             && counts.retried == 0,
         "{label}: {counts:?}"
     );
@@ -285,16 +292,15 @@ fn the_visible_tensor_pole_is_bounded() -> Result<()> {
     pinned("tensor-visible", &today, &[(-4, q(117, 32))], false)?;
     let (child, counts) = projected(&case, "child", FIXED)?;
     ensure_same("tensor-visible", &child, &today)?;
-    ensure!(
-        counts.bounded >= 1 && counts.exceeded == 0 && counts.refused == 0,
-        "{counts:?}"
-    );
-    let (round3, counts3) = regularity::as_round3(|| projected(&case, "child", FIXED))?;
-    ensure_same("tensor-visible round3", &round3, &today)?;
-    ensure!(
-        counts3.exceeded >= 1 && counts3.reason == Some("bound_exceeded"),
-        "{counts3:?}"
-    );
+    // Round 8b: k_v1 = 1 declines (before: the bound was raised to 2).
+    ensure_raised("tensor-visible", &counts)?;
+    // Round 3's bound (1) against the measured need 2: since round 8b a
+    // measured need above the bound is the fatal DepthAlarm (before: a
+    // refusal to today's value).
+    match regularity::as_round3(|| projected(&case, "child", FIXED)) {
+        Ok((_, counts3)) => eyre::bail!("round 3's breach must be the alarm: {counts3:?}"),
+        Err(error) => ensure!(depth::is_alarm(&error), "{error:#}"),
+    }
     Ok(())
 }
 
@@ -328,12 +334,14 @@ fn the_numerator_prefactor_pole_is_read() -> Result<()> {
     // complete outer coefficients are measured after the root projector,
     // which applies the prefactor; the need exceeds B and the correction is
     // refused to today's value (before: +117/32 with no refusal).
+    // Round 8b: the round-3 emulation (bound 1, the prefactor not read) no
+    // longer values the vanished rows (only STRICT does, as a cross-check),
+    // so it is round 3 again: accepted silently with a missed pole (before
+    // round 8b: refused bound_exceeded through the vanished-row valuation).
     let (round3, counts3) = regularity::as_round3(|| projected(&case, "child", FIXED))?;
-    ensure!(
-        counts3.exceeded >= 1 && counts3.refused >= 1 && counts3.reason == Some("bound_exceeded"),
-        "{counts3:?}"
-    );
-    ensure_same("prefactor round3", &round3, &today)
+    ensure!(counts3.refused == 0, "{counts3:?}");
+    ensure!(!super::same(&round3, &today)?, "round 3 must miss the prefactor's pole");
+    Ok(())
 }
 
 /// One matrix cell (projected as beta): the child route equals today's path
@@ -472,10 +480,11 @@ fn the_hard_vertex_spellings_agree() -> Result<()> {
         .iter()
         .map(|counts| counts.as_ref().and_then(|counts| counts.reason))
         .collect::<Vec<_>>();
+    // Round 8b: the explicit spelling declines on v1·ε⁻¹ (before: RIGHT).
     ensure!(
         reasons
             == [
-                None,
+                Some("declared_order"),
                 Some("symbol_in_denominator"),
                 Some("unresolved_tensor"),
                 Some("unresolved_tensor")
@@ -801,6 +810,8 @@ use Disposition::{Loud, Refused, Right};
 
 const SID: Disposition = Refused("symbol_in_denominator");
 const UT: Disposition = Refused("unresolved_tensor");
+/// Round 8b: a declared pole on the quotient side declines the child route.
+const DO: Disposition = Refused("declared_order");
 
 /// The three child-route settings of every cell.
 const MODES: [(&str, DepthTest); 3] = [
@@ -899,7 +910,9 @@ fn matrix_r45_quotient_vertex() -> Result<()> {
             let dot = modify(&hard_v0(), "v1", "numerator", times(&s.text()));
             modify(&dot, "graph", "numerator", times(&s.text()))
         },
-        [Right, Right, Right, Right],
+        // Round 8b: k_v1 = 1 in every spelling declines (before: RIGHT at the
+        // raised bound).
+        [DO, DO, DO, DO],
     )
 }
 
@@ -912,7 +925,8 @@ fn matrix_r45_quotient_edge() -> Result<()> {
             let dot = modify(&hard_v0(), "v1 ->", "numerator", times(&s.text()));
             modify(&dot, "graph", "numerator", times(&s.text()))
         },
-        [Right, Right, Right, Right],
+        // Round 8b: k_e4 = 1 declines (before: RIGHT).
+        [DO, DO, DO, DO],
     )
 }
 
@@ -952,7 +966,9 @@ fn matrix_r45_hard_vertex_hidden_rows() -> Result<()> {
             let dot = modify(&base, "v0", "numerator", times(&s.text()));
             modify(&dot, "graph", "numerator", times(&s.text()))
         },
-        [Right, SID, UT, UT],
+        // Round 8b: v1·ε⁻¹ declines the explicit spelling (before: RIGHT);
+        // the hard-numerator refusals still come first.
+        [DO, SID, UT, UT],
     )
 }
 
@@ -966,7 +982,9 @@ fn matrix_r45_numerator_prefactor() -> Result<()> {
         // The trace: vakint's conversion fails on both routes ('¿'); the
         // Dirac trace: this test's projector leaves the bispinor trace
         // unevaluated, 0 on both routes (beta refuses both before R*).
-        [Right, Right, Loud, Right],
+        // Round 8b: k_prefactor = 1 declines (before: RIGHT at the raised
+        // bound; the Dirac trace RIGHT with value 0).
+        [DO, DO, Loud, DO],
     )
 }
 
@@ -1001,16 +1019,20 @@ fn matrix_r45_nested_decorated_quotient() -> Result<()> {
         }
         // v1 lies in the hard part of some correction of the nested
         // evaluations: a 1/(d−4) or a trace there is refused (hard_numerator).
-        let expected = match spelling {
-            Spelling::Epsilon => Right,
-            Spelling::DimensionMinusFour => SID,
-            Spelling::Trace | Spelling::DiracTrace => UT,
+        // Round 8b: where v1 is on the quotient side (the root's correction
+        // and some nested ones) its k = 1 declines; where it is in the hard
+        // part the hard-numerator refusal stays; the last reason counted is
+        // either (before: RIGHT, SID, UT).
+        let expected: &[Disposition] = match spelling {
+            Spelling::Epsilon => &[DO],
+            Spelling::DimensionMinusFour => &[DO, SID],
+            Spelling::Trace | Spelling::DiracTrace => &[DO, UT],
         };
         for (mode, test) in MODES {
             let cell = format!("nested-v1 {spelling:?} {mode}");
             let child = case.child(run(test)).map(|run| (run.value, run.root));
             match classify(&cell, &today, child, true) {
-                Ok(found) if found == expected => {}
+                Ok(found) if expected.contains(&found) => {}
                 Ok(found) => wrong.push(format!("{cell}: {found:?}, expected {expected:?}")),
                 Err(error) => wrong.push(format!("{error:#}")),
             }
@@ -1112,11 +1134,12 @@ fn matrix_r45_a_poleful_root_projector_callback_is_measured() -> Result<()> {
                             super::laurent(&super::record(&child)?, -1)?,
                             super::laurent(&super::record(today)?, -1)?
                         )
-                    } else if counts.exceeded >= 1
-                        && counts.refused >= 1
-                        && counts.reason == Some("bound_exceeded")
+                    } else if counts.exceeded == 0
+                        && counts.taken == 0
+                        && counts.opaque_projector >= 1
+                        && counts.reason == Some("opaque_projector")
                     {
-                        "refused_exceeded".to_owned()
+                        "declined_opaque".to_owned()
                     } else if counts.taken >= 1 && counts.refused == 0 {
                         "right".to_owned()
                     } else {
@@ -1130,14 +1153,12 @@ fn matrix_r45_a_poleful_root_projector_callback_is_measured() -> Result<()> {
                 ),
             };
             eprintln!("IRH_R45_CALLBACK {cell} {outcome}");
-            let expected: &[&str] = match (spelling, mode) {
-                (Spelling::Epsilon | Spelling::DimensionMinusFour, "strict") => &["strict_alarm"],
-                (Spelling::Epsilon | Spelling::DimensionMinusFour, _) => &["refused_exceeded"],
-                (Spelling::Trace, _) => &["loud"],
-                // The trace is left unevaluated by the callback: today's value
-                // (0), with or without the measurement seeing the pole.
-                (Spelling::DiracTrace, "strict") => &["right", "strict_alarm"],
-                (Spelling::DiracTrace, _) => &["right", "refused_exceeded"],
+            // Round 8b (R1): an opaque callback is never certified nor probed:
+            // the child route declines it (today's value), STRICT or not
+            // (before: refused bound_exceeded, the alarm under STRICT).
+            let expected: &[&str] = match spelling {
+                Spelling::Trace => &["loud"],
+                _ => &["declined_opaque"],
             };
             if !expected.contains(&outcome.as_str()) {
                 unexpected.push(format!("{cell}: {outcome}, expected one of {expected:?}"));
@@ -1415,23 +1436,21 @@ fn a_rank_ten_reduction_coefficient_pole_is_read() -> Result<()> {
     Ok(())
 }
 
-/// IRH-DEPTH round 8 (r47 finding 5): a typed fatal error returned by the
-/// root projector inside the unit-insertion probe (`callback_excess`) must
-/// propagate; it is not "the probe measured nothing".
+/// IRH-DEPTH round 8 (r47 finding 5), adapted at the 8a + 8b integration:
+/// a typed fatal error returned by the root projector must propagate; it is
+/// never "the probe measured nothing". Round 8b removed the unit-insertion
+/// probe (`callback_excess`) from the depth decision: an opaque root
+/// projector declines the child correction to the generic path
+/// (`opaque_projector`), so the projector is never called on a probe input.
 ///
 /// The carrier is the review's finding-1 input (r47/analytic, `minus-one`):
 /// hidden (v0·ε³, v1·ε⁻¹) with the hard vertex v0 and the graph numerator
-/// times `1/(1+(d−4)/ε)`. There the child correction is taken at bound 2
-/// with three groups and ZERO rows, so the guard probes the root projector
-/// callback on the unit insertion's outer orders (`callback_excess`); on
-/// the literal tensor-hidden the rows are shown and the probe is not
-/// reached (round-8 trial: probe_calls=0). The projector here is
-/// beta's (the graph prefactor) except on the probe's inputs (the
-/// renamed regulator `irh_callback_probe_epsilon`), where it forwards a
-/// typed [`depth::DepthAlarm`], as a public projector that delegates a
-/// normalisation to a nested R* evaluation would. The alarm must reach the
-/// caller (`depth::is_alarm`); the correction must not be admitted as
-/// `callback_unprobed` (nor as `Some(0)` from another order).
+/// times `1/(1+(d−4)/ε)`, where round 8a's probe was reached. (1) A
+/// projector that forwards a typed [`depth::DepthAlarm`] only on the old
+/// probe's inputs (the renamed regulator `irh_callback_probe_epsilon`) is
+/// never called on one, and the correction is not taken (no
+/// `callback_unprobed`). (2) A projector that forwards the alarm on every
+/// input: the alarm reaches the caller (`depth::is_alarm`).
 #[test]
 fn a_typed_alarm_from_the_projector_in_the_unit_probe_propagates() -> Result<()> {
     use std::sync::{
@@ -1446,28 +1465,39 @@ fn a_typed_alarm_from_the_projector_in_the_unit_probe_propagates() -> Result<()>
     let prefactor = case.graph.global_prefactor.num.clone();
     let probed = Arc::new(AtomicUsize::new(0));
     let seen = Arc::clone(&probed);
-    let projector = move |tensor: &Atom| -> Result<Atom> {
-        if tensor.contains_symbol(probe) {
-            seen.fetch_add(1, Ordering::SeqCst);
-            return Err(depth::alarm(
-                "IRH-DEPTH round 8 test: a nested evaluation's typed alarm forwarded by the projector".into(),
-            ));
+    let on_probe = {
+        let prefactor = prefactor.clone();
+        move |tensor: &Atom| -> Result<Atom> {
+            if tensor.contains_symbol(probe) {
+                seen.fetch_add(1, Ordering::SeqCst);
+                return Err(depth::alarm(
+                    "IRH-DEPTH round 8 test: a nested evaluation's typed alarm forwarded by the projector".into(),
+                ));
+            }
+            Ok(tensor * &prefactor)
         }
-        Ok(tensor * &prefactor)
     };
-    let (value, counts) = depth::with_depth_test(FIXED, || {
-        depth::collect(|| {
-            with_ir_hard("child", || {
-                case.plan.projected_counterterm(
-                    &case.graph,
-                    case.model(),
-                    &case.vakint,
-                    &case.settings,
-                    &projector,
-                )
+    let always = |_: &Atom| -> Result<Atom> {
+        Err(depth::alarm(
+            "IRH-DEPTH round 8 test: a typed alarm raised by the projector on every input".into(),
+        ))
+    };
+    let run_with = |projector: &dyn Fn(&Atom) -> Result<Atom>| {
+        depth::with_depth_test(FIXED, || {
+            depth::collect(|| {
+                with_ir_hard("child", || {
+                    case.plan.projected_counterterm(
+                        &case.graph,
+                        case.model(),
+                        &case.vakint,
+                        &case.settings,
+                        &projector,
+                    )
+                })
             })
         })
-    });
+    };
+    let (value, counts) = run_with(&on_probe);
     let calls = probed.load(Ordering::SeqCst);
     eprintln!(
         "IRH_R8_PROBE_ALARM probe_calls={calls} counts={counts:?} result={}",
@@ -1476,20 +1506,28 @@ fn a_typed_alarm_from_the_projector_in_the_unit_probe_propagates() -> Result<()>
             Err(error) => format!("Err(alarm={}: {error:#})", depth::is_alarm(error)),
         }
     );
-    ensure!(
-        calls >= 1,
-        "the unit probe never called the projector on this case (counts {counts:?}): the test does not reach callback_excess"
-    );
+    ensure!(calls == 0, "the projector was probed {calls} time(s): the unit probe is back");
     match value {
-        Err(error) if depth::is_alarm(&error) => Ok(()),
-        Err(error) => Err(eyre::eyre!(
-            "the probe's typed alarm became an untyped error: {error:#}"
-        )),
-        Ok(_) => Err(eyre::eyre!(
-            "the probe's typed alarm was lost: the projector returned a DepthAlarm on {calls} probe call(s) and the correction was admitted (callback_unprobed={}, taken={}, refused={})",
+        Err(error) => ensure!(
+            depth::is_alarm(&error),
+            "an error that lost the alarm class: {error:#}"
+        ),
+        Ok(_) => ensure!(
+            counts.callback_unprobed == 0 && counts.taken == 0,
+            "an opaque projector's correction was admitted (callback_unprobed={}, taken={}, refused={})",
             counts.callback_unprobed,
             counts.taken,
             counts.refused
+        ),
+    }
+    let (value, counts) = run_with(&always);
+    match value {
+        Err(error) if depth::is_alarm(&error) => Ok(()),
+        Err(error) => Err(eyre::eyre!(
+            "the projector's typed alarm became an untyped error: {error:#}"
+        )),
+        Ok(_) => Err(eyre::eyre!(
+            "the projector's typed alarm was lost (counts {counts:?})"
         )),
     }
 }

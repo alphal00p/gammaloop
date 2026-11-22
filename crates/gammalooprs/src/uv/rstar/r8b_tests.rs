@@ -234,7 +234,10 @@ fn label_poles(value: &Atom) -> String {
 /// spelling of −1 and every route (child STRICT off and on, closed, off)
 /// the unweighted counterterm equals the literal's on the projected path
 /// (`off`); the literal's equals −1 times `base`'s on that path.
-fn unweighted_matrix(label: &str, base: &str, term: &str) -> Result<()> {
+/// `taken`: the child route takes the correction (every declared order is
+/// 0: the spellings normalise to −1); otherwise it declines it
+/// (`declared_order`, the k3j1 carrier's v1·ε⁻¹).
+fn unweighted_matrix(label: &str, base: &str, term: &str, taken: bool) -> Result<()> {
     let base_case = Case::new(base, None)?;
     let (base_value, _) = unweighted(&base_case, "off", false)?;
     drop(base_case);
@@ -245,7 +248,31 @@ fn unweighted_matrix(label: &str, base: &str, term: &str) -> Result<()> {
         for (route, strict) in [("off", false), ("closed", false), ("child", false), ("child", true)] {
             let cell = format!("{label} {name} {route} strict={strict}");
             let value = match unweighted(&case, route, strict) {
-                Ok((value, _)) => value,
+                Ok((value, counts)) => {
+                    if route == "child" {
+                        // The quotient form ε/(ε+d−4) on a HARD factor keeps
+                        // round 5's conservative refusal (a d-denominator of
+                        // the hard part that vanishes at d = 4), counted; its
+                        // value is checked like every other cell's.
+                        let hard_form = name == "form" && (term == "v0" || term == "v2 ->");
+                        let disposition = if taken {
+                            (counts.taken >= 1 && counts.declined == 0 && counts.exceeded == 0)
+                                || (hard_form
+                                    && counts.taken == 0
+                                    && counts.reason == Some("symbol_in_denominator"))
+                        } else {
+                            counts.taken == 0
+                                && ((counts.declined >= 1
+                                    && counts.reason == Some("declared_order"))
+                                    || (hard_form
+                                        && counts.reason == Some("symbol_in_denominator")))
+                        };
+                        if !disposition {
+                            failures.push(format!("{cell}: disposition {counts:?}"));
+                        }
+                    }
+                    value
+                }
                 Err(error) => {
                     failures.push(format!("{cell}: error {error:#}"));
                     continue;
@@ -288,37 +315,37 @@ fn unweighted_matrix(label: &str, base: &str, term: &str) -> Result<()> {
 /// order 0 at d = 4 − 2ε: no finite truncation of it is the value).
 #[test]
 fn round8b_a_hard_vertex_spellings_equal_the_literal() -> Result<()> {
-    unweighted_matrix("hard v0", L3_006, "v0")
+    unweighted_matrix("hard v0", L3_006, "v0", true)
 }
 
 /// (a) the review's own carrier: k3j1 (v0·ε³, v1·ε⁻¹).
 #[test]
 fn round8b_a_hard_vertex_spellings_on_k3j1() -> Result<()> {
-    unweighted_matrix("hard v0 k3j1", &k(3, 1), "v0")
+    unweighted_matrix("hard v0 k3j1", &k(3, 1), "v0", false)
 }
 
 /// (b) The refutation (topo/refute): the same spellings on the quotient
 /// vertex v1 gave 117/256 on the child AND on the generic route.
 #[test]
 fn round8b_b_quotient_vertex_spellings_equal_the_literal() -> Result<()> {
-    unweighted_matrix("quotient v1", L3_006, "v1")
+    unweighted_matrix("quotient v1", L3_006, "v1", true)
 }
 
 /// (b) the refutation's carrier: k3j1.
 #[test]
 fn round8b_b_quotient_vertex_spellings_on_k3j1() -> Result<()> {
-    unweighted_matrix("quotient v1 k3j1", &k(3, 1), "v1")
+    unweighted_matrix("quotient v1 k3j1", &k(3, 1), "v1", false)
 }
 
 /// (c) A quotient edge (v1 → v3, edge 4) and a hard edge (v2 → v3).
 #[test]
 fn round8b_c_quotient_edge_spellings_equal_the_literal() -> Result<()> {
-    unweighted_matrix("quotient edge v1->v3", L3_006, "v1 ->")
+    unweighted_matrix("quotient edge v1->v3", L3_006, "v1 ->", true)
 }
 
 #[test]
 fn round8b_c_hard_edge_spellings_equal_the_literal() -> Result<()> {
-    unweighted_matrix("hard edge v2->v3", L3_006, "v2 ->")
+    unweighted_matrix("hard edge v2->v3", L3_006, "v2 ->", true)
 }
 
 /// (c)/(a) through the typed closed root (beta's production form): the
@@ -336,6 +363,13 @@ fn round8b_c_typed_root_spellings_equal_the_literal() -> Result<()> {
                 let value = match typed(&case, route, strict) {
                     Ok((value, counts)) => {
                         eprintln!("IRH_R8B_CELL {cell} counts={counts:?}");
+                        let hard_form = name == "form" && term == "v0";
+                        if route == "child"
+                            && !(counts.taken >= 1 && counts.declined == 0 && counts.exceeded == 0)
+                            && !(hard_form && counts.reason == Some("symbol_in_denominator"))
+                        {
+                            failures.push(format!("{cell}: the typed root must be taken: {counts:?}"));
+                        }
                         value
                     }
                     Err(error) => {
