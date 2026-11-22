@@ -45,6 +45,7 @@ refusal	Closure	with original_cycles the prefactor has loop_sign=1, nf_power=0, 
 refusal	Closure|Graph	<> <> is not a record name: a name is non-empty, without control characters (TAB, newline, CR, NUL, ...), '=' or ',', and without leading or trailing whitespace
 refusal	Closure|Graph	<>: the canonical string contains a TAB, newline or CR (the text form cannot hold it)
 refusal	Closure|Graph	a flavour symbol in the record (n_f stays with the caller): in prefactor_scalars <>
+refusal	Closure|Graph	edge <>: an external leg with an id of at least 100000 is the second leg of a paired line, but its partner <> is <>
 refusal	Closure|Graph	edge <>: power <> out of range (at most 2^31 in absolute value)
 refusal	Closure|Graph	the label <> contains a control character (TAB, newline, CR, NUL, ...): the text form cannot hold it
 refusal	Closure|Graph	the two legs of a paired line carry one momentum, edge e with target=ext and edge 100000 + e with source=ext: edge <> (source=<>, target=<>) carries <>, its partner <> (source=<>, target=<>) <>

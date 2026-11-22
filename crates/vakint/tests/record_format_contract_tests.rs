@@ -8499,7 +8499,8 @@ fn the_number_bound_is_4096_bits() {
 /// absent (100013 the leg of p(3)); (c) 100013 also in scaled_edges (the value
 /// against the record without); (d) the 100013 line removed (its Q still in
 /// the insertion factor); (e) the leg renumbered 100099 (no edge 99). Each
-/// outcome printed.
+/// outcome printed; (b) and (e) are refused by the unpartnered-leg rule
+/// (correction 30: the partner absent from the record).
 #[test]
 #[ignore = "external data: VAKINT_TEST_RECORD_FILE (the producer's paired-leg sample)"]
 fn the_paired_crown_leg_cells() {
@@ -8603,9 +8604,13 @@ fn the_paired_crown_leg_cells() {
     }
     b.ports
         .retain(|p| !p.to_canonical_string().contains("hedge(24,1)"));
-    let _ = value_of(
+    let absent = value_of(
         "degree 2, the partner 13 absent (100013 the leg of p(3))",
         b,
+    );
+    assert!(
+        matches!(&absent, Err(e) if e.contains("edge 100013: an external leg with an id of at least 100000 is the second leg of a paired line, but its partner 13 is absent from the record")),
+        "{absent:?}"
     );
     // (c) 100013 also in scaled_edges
     let mut c = degree2(base.clone());
@@ -8654,6 +8659,10 @@ fn the_paired_crown_leg_cells() {
     }
     let _ = Endpoint::External;
     let renumbered = value_of("degree 2, the leg renumbered 100099 (no edge 99)", e);
+    assert!(
+        matches!(&renumbered, Err(e) if e.contains("edge 100099: an external leg with an id of at least 100000 is the second leg of a paired line, but its partner 99 is absent from the record")),
+        "{renumbered:?}"
+    );
     if let (Ok(x), Ok(y)) = (&equal, &renumbered) {
         eprintln!(
             "CONTRACT PAIRED renumbered 100099 vs 100013: the values are {}",
@@ -8917,9 +8926,8 @@ fn a_typed_coefficient_that_is_not_a_plain_number() {
 /// LINE written in the other orientation, refused by the rule's one
 /// orientation (e target=ext, 100000 + e source=ext), not normalised; (c)
 /// the leg renamed 100003, whose "partner" 3 is an INTERNAL edge (another
-/// momentum): no pair, not checked by the rule (any refusal is another
-/// rule's). Printed, and the values of the accepted ones against the
-/// sample's.
+/// momentum): refused by the unpartnered-leg rule (correction 30). Printed,
+/// and the values of the accepted ones against the sample's.
 #[test]
 #[ignore = "external data: VAKINT_TEST_RECORD_FILE (the producer's paired-leg sample)"]
 fn paired_leg_variants() {
@@ -8969,7 +8977,7 @@ fn paired_leg_variants() {
             b,
         ),
         (
-            "(c) the leg renamed 100003: its partner 3 is an internal edge",
+            "(c) the leg renamed 100003: its partner 3 is an internal edge (refused)",
             c,
         ),
     ] {
@@ -8992,8 +9000,8 @@ fn paired_leg_variants() {
         let by_the_rule = matches!(&got, Err(e) if e.contains("the two legs of a paired line"));
         if label.starts_with("(c)") {
             assert!(
-                !by_the_rule,
-                "{label}: refused by the paired-leg rule: {got:?}"
+                matches!(&got, Err(e) if e.contains("edge 100003: an external leg with an id of at least 100000 is the second leg of a paired line, but its partner 3 is not an external edge")),
+                "{label}: {got:?}"
             );
         } else {
             assert!(

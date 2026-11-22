@@ -3562,6 +3562,14 @@ fn wildcard_names_are_refused() {
     ));
 }
 
+/// The two crown legs of an L2 record (20 into vertex 1, 21 out of vertex 2,
+/// both p(1)) renumbered as the two legs of one paired line: 20 -> `id`,
+/// 21 -> `id - 100000` (an external leg with an id >= 100000 needs its
+/// partner).
+fn paired_legs_at(value: &FactorizedNumerator, id: usize) -> FactorizedNumerator {
+    renumber(&renumber(value, 20, id), 21, id - 100_000)
+}
+
 /// Rename edge `old` to `new` everywhere in a record (ids, loop / external
 /// edges, the closing edge, every `Q(old, ..)`).
 fn renumber(value: &FactorizedNumerator, old: usize, new: usize) -> FactorizedNumerator {
@@ -3634,15 +3642,18 @@ fn edge_ids_beyond_i64_are_refused() {
             "edge id {id}: the ids (with fresh loop-vector ids up to {id} + 1 above them) must not exceed i64::MAX"
         )
     };
+    // the crown legs renumbered as one paired line (an external leg with an
+    // id >= 100000 is the second leg of a paired line: refused without its
+    // partner, correction 30)
     for id in [usize::MAX, i64::MAX as usize] {
-        match renumber(&base, 21, id).validate() {
+        match paired_legs_at(&base, id).validate() {
             Err(FactorizedError::Closure { detail }) => {
                 assert!(detail.starts_with(&prefix(id)), "{id}: {detail}")
             }
             other => panic!("{id}: {other:?}"),
         }
     }
-    renumber(&base, 21, i64::MAX as usize - 1)
+    paired_legs_at(&base, i64::MAX as usize - 1)
         .validate()
         .unwrap();
 }
@@ -4582,15 +4593,25 @@ fn a_closing_line_without_a_unit_coefficient_is_a_closure_refusal() {
 
 /// the fresh loop-vector id of loop i is max + 1 + i: the bound uses
 /// the LARGEST index without a loop edge (here loop 1 of the sector, whose
-/// loop 0 has its edge), not their count.
+/// loop 0 has its edge), not their count. The crown legs hold the large ids
+/// as one paired line; the sector's `Q(20)` stays `Q(20)`, a constant vector
+/// (the shape rule bounds a `Q` id by 2^32 - 1; this test validates only).
 #[test]
 fn the_fresh_id_bound_uses_the_top_loop_index() {
     let mut base = l2_sector();
     assert!(base.loop_edges[0].is_some());
     base.loop_edges[1] = None;
     base.validate().unwrap();
+    let at = |id: usize| {
+        let mut v = paired_legs_at(&base, id);
+        let q = |e: usize| atom(&format!("{}({e},x__)", MOMENTUM));
+        for x in &mut v.vertices {
+            x.factor = x.factor.replace(q(id)).with(q(20));
+        }
+        v
+    };
     let id = i64::MAX as usize - 1;
-    match renumber(&base, 21, id).validate() {
+    match at(id).validate() {
         Err(FactorizedError::Closure { detail }) => assert!(
             detail.starts_with(&format!(
                 "edge id {id}: the ids (with fresh loop-vector ids up to {id} + 2 above them) must not exceed i64::MAX"
@@ -4599,9 +4620,7 @@ fn the_fresh_id_bound_uses_the_top_loop_index() {
         ),
         other => panic!("{other:?}"),
     }
-    renumber(&base, 21, i64::MAX as usize - 2)
-        .validate()
-        .unwrap();
+    at(i64::MAX as usize - 2).validate().unwrap();
 }
 
 /// without original_cycles the insertions' cycles enter the loop-sign

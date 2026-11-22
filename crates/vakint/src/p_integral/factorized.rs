@@ -3569,9 +3569,13 @@ impl FactorizedNumerator {
     /// `ext`), and both carry exactly the same momentum vector (each leg's Q
     /// is routed through the momentum it declares: unequal ones evaluate to
     /// another value). Another orientation of the same physical line (a leg
-    /// reversed with its momentum negated) is refused, not normalised. A leg
-    /// `100000 + e` whose `e` is absent or an INTERNAL edge is no pair and is
-    /// not checked here. `Closure` for the closure kind, else `Graph`.
+    /// reversed with its momentum negated) is refused, not normalised. An
+    /// external leg with an id of at least 100000 belongs to a paired line
+    /// (the record format's correction 30): it is the second leg of the pair
+    /// with `id - 100000`, or the first leg of the pair with `id + 100000`;
+    /// otherwise (its partner `id - 100000` absent from the record, or an
+    /// internal edge) it is refused. `Closure` for the closure kind, else
+    /// `Graph`.
     pub(crate) fn check_paired_legs(&self) -> Result<()> {
         let external = |id: usize| self.edges.iter().find(|e| e.id == id && e.is_external());
         let end = |p: &Endpoint| match p {
@@ -3590,6 +3594,26 @@ impl FactorizedNumerator {
             .iter()
             .filter(|e| e.is_external() && e.id >= 100_000)
         {
+            let e = leg.id - 100_000;
+            // the FIRST leg of a pair whose second leg is id + 100000 (its own
+            // id may reach 100000 too) belongs to that pair
+            let first_leg = leg
+                .id
+                .checked_add(100_000)
+                .and_then(|p| external(p))
+                .is_some();
+            let missing = match self.edges.iter().find(|x| x.id == e) {
+                _ if first_leg => None,
+                None => Some("absent from the record"),
+                Some(x) if !x.is_external() => Some("not an external edge"),
+                Some(_) => None,
+            };
+            if let Some(why) = missing {
+                return Err(refuse(format!(
+                    "edge {}: an external leg with an id of at least 100000 is the second leg of a paired line, but its partner {e} is {why}",
+                    leg.id
+                )));
+            }
             if let Some(partner) = external(leg.id - 100_000)
                 && (partner.momentum != leg.momentum
                     || partner.target != Endpoint::External
