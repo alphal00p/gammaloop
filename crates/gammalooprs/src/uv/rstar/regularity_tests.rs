@@ -328,7 +328,20 @@ fn the_numerator_prefactor_pole_is_read() -> Result<()> {
     pinned("prefactor today", &today, &[(-1, q(-117, 64))], true)?;
     let (child, counts) = projected(&case, "child", FIXED)?;
     ensure_same("prefactor", &child, &today)?;
-    ensure_raised("prefactor", &counts)?;
+    // Round 8i (8a + 8b integration): a graph weight's declared k is read
+    // through the weight normaliser, which refuses a pole (8a's contract):
+    // the correction is refused in its class, today's value (round 8b:
+    // declined with declared_order, `ensure_raised`).
+    ensure!(
+        counts.corrections >= 1
+            && counts.taken == 0
+            && counts.exceeded == 0
+            && counts.refused >= 1
+            && counts.pole_in_fixed_factor >= 1
+            && counts.reason == Some("pole_in_fixed_factor")
+            && counts.retried == 0,
+        "prefactor: {counts:?}"
+    );
     // Without the certificate (round 3's B = 1) the prefactor's pole is now
     // caught by the second line of defence (MATRIX-R45 review): the rows'
     // complete outer coefficients are measured after the root projector,
@@ -735,6 +748,10 @@ const SID: Disposition = Refused("symbol_in_denominator");
 const UT: Disposition = Refused("unresolved_tensor");
 /// Round 8b: a declared pole on the quotient side declines the child route.
 const DO: Disposition = Refused("declared_order");
+/// Round 8i (8a + 8b integration): a graph weight with a pole is refused by
+/// the weight normaliser (`regularity::normalise_weight`, round 8a's
+/// contract), the correction refused in its class, today's value.
+const PIF: Disposition = Refused("pole_in_fixed_factor");
 
 /// The three child-route settings of every cell.
 const MODES: [(&str, DepthTest); 3] = [
@@ -907,7 +924,11 @@ fn matrix_r45_numerator_prefactor() -> Result<()> {
         // unevaluated, 0 on both routes (beta refuses both before R*).
         // Round 8b: k_prefactor = 1 declines (before: RIGHT at the raised
         // bound; the Dirac trace RIGHT with value 0).
-        [DO, DO, Loud, DO],
+        // Round 8i (8a + 8b integration): the prefactor's declared k is read
+        // through the weight normaliser, which refuses a pole: the
+        // correction is refused (pole_in_fixed_factor), today's value
+        // (round 8b: declined, declared_order).
+        [PIF, PIF, Loud, PIF],
     )
 }
 
