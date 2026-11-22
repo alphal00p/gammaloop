@@ -5365,3 +5365,85 @@ fn has_compact_slash_is_what_the_expansion_opens() {
         );
     }
 }
+
+/// ONE VALIDATION (REC-LEAN R1b): `ValidatedRecord::write` validates once and
+/// writes the text `to_text` writes; it errs exactly when validation errs,
+/// with validation's error, as `to_text` does (the writer's gate, unchanged),
+/// and hands the value back. `evaluate_validated_closure` of the token
+/// returns what `evaluate_factorized_closure` of the raw record returns
+/// (value, vakint value, the record's value and counts) WITHOUT validating
+/// the record again, while the raw entry still validates it (once per call)
+/// and still refuses a record that validation refuses. Validations counted
+/// on this thread.
+#[test]
+fn a_validated_record_is_validated_once_and_evaluates_as_the_raw_entry() {
+    use super::super::{VALIDATIONS, ValidatedRecord};
+    let count = || VALIDATIONS.with(|n| n.get());
+    let vakint = Vakint::new().unwrap();
+    for (degree, compensate) in [(0, true), (1, true), (2, false)] {
+        let value = l2_root(degree, compensate);
+        let prefactor = value.prefactor.total();
+        let expected_text = value.to_text().unwrap();
+        let before = count();
+        let (text, token) = ValidatedRecord::write(value.clone()).unwrap();
+        assert_eq!(
+            count() - before,
+            1,
+            "one validation for the writer and the token"
+        );
+        assert_eq!(text, expected_text);
+        assert!(*token.record() == value);
+        let before = count();
+        let validated = evaluate_validated_closure(
+            &vakint,
+            &settings(),
+            std::slice::from_ref(&token),
+            std::slice::from_ref(&prefactor),
+        )
+        .unwrap();
+        assert_eq!(count() - before, 0, "the validated entry does not validate");
+        let before = count();
+        let raw = evaluate_factorized_closure(
+            &vakint,
+            &settings(),
+            std::slice::from_ref(&value),
+            std::slice::from_ref(&prefactor),
+        )
+        .unwrap();
+        assert_eq!(count() - before, 1, "the raw entry validates");
+        assert_eq!(validated.value, raw.value, "{}", value.label);
+        assert_eq!(validated.vakint_value, raw.vakint_value, "{}", value.label);
+        assert_eq!(validated.records.len(), raw.records.len());
+        for (a, b) in validated.records.iter().zip(&raw.records) {
+            assert_eq!(a.value, b.value);
+            assert_eq!(a.vakint_value, b.vakint_value);
+            assert_eq!(
+                (a.patterns, a.blocks, a.key_plans, a.lowered_entries),
+                (b.patterns, b.blocks, b.key_plans, b.lowered_entries)
+            );
+        }
+        // the reader's token is the from_text record
+        let read = ValidatedRecord::read(&text).unwrap();
+        assert!(*read.record() == FactorizedNumerator::from_text(&text).unwrap());
+    }
+    // the writer's gate: a value validation refuses is not written, with
+    // validation's error, and comes back; the raw entry refuses it as before
+    let mut bad = l2_root(1, true);
+    bad.vertices[0].rule = String::new();
+    let refusal = bad.validate().unwrap_err();
+    assert_eq!(bad.to_text().unwrap_err(), refusal);
+    let (error, back) = ValidatedRecord::write(bad.clone()).unwrap_err();
+    assert_eq!(error, refusal);
+    assert!(back == bad);
+    assert!(matches!(ValidatedRecord::new(bad.clone()), Err(e) if e == refusal));
+    assert_eq!(
+        evaluate_factorized_closure(
+            &vakint,
+            &settings(),
+            std::slice::from_ref(&bad),
+            &[bad.prefactor.total()],
+        )
+        .unwrap_err(),
+        refusal
+    );
+}

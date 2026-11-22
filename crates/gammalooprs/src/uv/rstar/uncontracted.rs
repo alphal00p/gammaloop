@@ -131,7 +131,7 @@ use vakint::{
     p_integral::factorized::{
         ClosureRecordValue, ClosureSpec, Endpoint, FactorizedEdge, FactorizedError, FactorizedKind,
         FactorizedNumerator, FactorizedVertex, Insertion, LineKind, Prefactor, Projector, SoftLeg,
-        TaylorOrders, TaylorSpec, evaluate_factorized_closure,
+        TaylorOrders, TaylorSpec, ValidatedRecord, evaluate_validated_closure,
     },
 };
 
@@ -1450,7 +1450,9 @@ pub(super) fn attempt<R: std::borrow::Borrow<RStarIntegrand>>(
     let prefactor = built.record.prefactor.total();
     let counted = vakint::timing::Snapshot::now();
     let evaluate_started = Instant::now();
-    let result = evaluate_factorized_closure(
+    // the record was validated once, by the writer or the reader
+    // (`ValidatedRecord`): the entry does not validate it again
+    let result = evaluate_validated_closure(
         site.vakint,
         &settings,
         std::slice::from_ref(&built.record),
@@ -2333,7 +2335,7 @@ fn insertion_hook(kind: Kind, node: usize, delta: &mut Atom, edges: &mut [Factor
 /// vakint evaluates: what vakint's frozen reader returns for `text`
 /// ([`read_back`]).
 pub(super) struct Built {
-    pub record: FactorizedNumerator,
+    pub record: ValidatedRecord,
     pub text: String,
     pub degree: u32,
     pub externals: usize,
@@ -3364,18 +3366,18 @@ fn momentum_ids(atom: &Atom) -> BTreeSet<usize> {
 /// `round_trip` (both records printed), never a fallback. The text is written
 /// in both modes (the `record=` digest, `record_bytes=`, the dump).
 pub(super) fn read_back(
-    built: FactorizedNumerator,
+    built: ValidatedRecord,
     text: &str,
     kind: Kind,
     mode: Mode,
     graph: &str,
     id: usize,
-) -> std::result::Result<FactorizedNumerator, Decline> {
+) -> std::result::Result<ValidatedRecord, Decline> {
     let change = built.reader_change();
     #[cfg(test)]
-    let built_copy = built.clone();
+    let built_copy = built.record().clone();
     #[cfg(test)]
-    let capture = |evaluated: &FactorizedNumerator| {
+    let capture = |evaluated: &ValidatedRecord| {
         capture_read_back(ReadBack {
             kind,
             graph: graph.to_owned(),
@@ -3384,7 +3386,7 @@ pub(super) fn read_back(
             change,
             built: built_copy.clone(),
             text: text.to_owned(),
-            evaluated: evaluated.clone(),
+            evaluated: evaluated.record().clone(),
         })
     };
     if readback_log_enabled() {
@@ -3405,7 +3407,7 @@ pub(super) fn read_back(
         capture(&built);
         return Ok(built);
     }
-    let read = FactorizedNumerator::from_text(text).map_err(|error| Decline::vakint(&error))?;
+    let read = ValidatedRecord::read(text).map_err(|error| Decline::vakint(&error))?;
     #[cfg(test)]
     capture(&read);
     if mode == Mode::Check && change.is_none() && read != built {
@@ -3422,6 +3424,20 @@ pub(super) fn read_back(
         ));
     }
     Ok(read)
+}
+
+/// vakint's writer with the token ([`ValidatedRecord::write`]: validate, then
+/// write, the error exactly validation's) for every writer of ours: a refusal
+/// is routed as `to_text`'s was (validation's error is vakint's frozen list,
+/// matched as `from_text`'s is; a writer failure on a record that validates
+/// is `text`).
+pub(super) fn write_record(
+    record: FactorizedNumerator,
+) -> std::result::Result<(String, ValidatedRecord), Decline> {
+    ValidatedRecord::write(record).map_err(|(error, record)| match record.validate() {
+        Err(_) => Decline::vakint(&error),
+        Ok(()) => Decline::new("text", error.to_string()),
+    })
 }
 
 /// `GAMMALOOP_UNCONTRACTED_READBACK=1`: one `UNCONTRACTED_READBACK` line per
@@ -4207,11 +4223,9 @@ fn build(
     }
     // the writer validates first and returns exactly validation's error: a
     // refusal of vakint's frozen list, matched as from_text's is; `text` is
-    // kept for a writer failure on a record that validates
-    let text = record.to_text().map_err(|error| match record.validate() {
-        Err(_) => Decline::vakint(&error),
-        Ok(()) => Decline::new("text", error.to_string()),
-    })?;
+    // kept for a writer failure on a record that validates; ONE validation
+    // for the writer and the token (`ValidatedRecord::write`)
+    let (text, record) = write_record(record)?;
     // what vakint's reader returns for `text` (on: the record itself for a
     // fixed point of the reader; check: read back and compared)
     let record = read_back(record, &text, kind, mode, &graph.name, id)?;

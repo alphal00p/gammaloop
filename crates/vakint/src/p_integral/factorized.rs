@@ -70,6 +70,7 @@ use symbolica::coefficient::CoefficientView;
 
 pub use closure::{
     ClosureRecordValue, ClosureValue, MAX_CLOSURE_TAYLOR_DEGREE, evaluate_factorized_closure,
+    evaluate_validated_closure,
 };
 pub use colour::{
     ColourMode, ColourRow, MergedColourTerm, colour_coefficient, merge_colour_channels,
@@ -563,6 +564,74 @@ impl ReaderChange {
             Self::InsertionSlash => "insertion_slash",
         }
     }
+}
+
+/// A record VALIDATED in this process ([`FactorizedNumerator::validate`]
+/// passed) and unchanged since: every constructor validates the value it
+/// wraps, and the wrapper gives no mutable access. Validation reads no
+/// settings (a function of the record alone), so an entry that takes this
+/// type ([`evaluate_validated_closure`]) need not validate the record again;
+/// every other check of the entry stays. A raw record given to any entry is
+/// validated there, as before.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ValidatedRecord(FactorizedNumerator);
+
+impl ValidatedRecord {
+    /// [`FactorizedNumerator::validate`] the value.
+    pub fn new(value: FactorizedNumerator) -> Result<Self> {
+        value.validate()?;
+        Ok(Self(value))
+    }
+
+    /// THE WRITER with the token: the value validated and written as
+    /// [`FactorizedNumerator::to_text`] writes a marked value (validate, then
+    /// the same lines; the error is exactly validation's), ONE validation for
+    /// both. An unmarked value is validated too (`to_text` writes it without).
+    /// On an error the value is handed back with it.
+    pub fn write(
+        value: FactorizedNumerator,
+    ) -> std::result::Result<(String, Self), (FactorizedError, FactorizedNumerator)> {
+        if let Err(error) = value.validate() {
+            return Err((error, value));
+        }
+        match text::write_record_body(&value) {
+            Ok(text) => Ok((text, Self(value))),
+            Err(error) => Err((error, value)),
+        }
+    }
+
+    /// [`FactorizedNumerator::from_text`] (read, then validate).
+    pub fn read(input: &str) -> Result<Self> {
+        FactorizedNumerator::from_text(input).map(Self)
+    }
+
+    pub fn record(&self) -> &FactorizedNumerator {
+        &self.0
+    }
+
+    pub fn into_record(self) -> FactorizedNumerator {
+        self.0
+    }
+}
+
+impl std::borrow::Borrow<FactorizedNumerator> for ValidatedRecord {
+    fn borrow(&self) -> &FactorizedNumerator {
+        &self.0
+    }
+}
+
+impl std::ops::Deref for ValidatedRecord {
+    type Target = FactorizedNumerator;
+
+    fn deref(&self) -> &FactorizedNumerator {
+        &self.0
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Tests: [`FactorizedNumerator::validate`] calls on this thread.
+    pub(crate) static VALIDATIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// Plain data for [`FactorizedNumerator::from_parts`].
@@ -3306,6 +3375,8 @@ impl FactorizedNumerator {
     /// (`validate_closure`: the contract's graph, factor and index rules plus
     /// those of the closure kind).
     pub fn validate(&self) -> Result<()> {
+        #[cfg(test)]
+        VALIDATIONS.with(|n| n.set(n.get() + 1));
         if !self.has_new_features() {
             return self.validate_v1();
         }

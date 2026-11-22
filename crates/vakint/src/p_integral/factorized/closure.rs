@@ -1596,10 +1596,43 @@ pub fn evaluate_factorized_closure(
     records: &[FactorizedNumerator],
     prefactors: &[Atom],
 ) -> Result<ClosureValue> {
+    closure_entry(vakint, settings, records, prefactors, Validation::Each)
+}
+
+/// [`evaluate_factorized_closure`] of records VALIDATED in this process
+/// ([`super::ValidatedRecord`]): the same entry and every check of it, except
+/// the records' own `validate`, which their type proves (validation is a
+/// function of the record alone).
+pub fn evaluate_validated_closure(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    records: &[super::ValidatedRecord],
+    prefactors: &[Atom],
+) -> Result<ClosureValue> {
+    closure_entry(vakint, settings, records, prefactors, Validation::Proven)
+}
+
+/// Whether the closure entry validates each record ([`evaluate_factorized_closure`])
+/// or its records are validated already ([`evaluate_validated_closure`]).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Validation {
+    Each,
+    Proven,
+}
+
+/// The closure entry: [`evaluate_factorized_closure`]'s body for raw and for
+/// validated records.
+fn closure_entry<R: std::borrow::Borrow<FactorizedNumerator>>(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    records: &[R],
+    prefactors: &[Atom],
+    validation: Validation,
+) -> Result<ClosureValue> {
     // unknown master coefficients: strict refusal once, on this call's summed value.
     if let Some(_boundary) = crate::public_result_boundary() {
         let inner = crate::unknown_master_coefficients_carried(settings);
-        let result = evaluate_factorized_closure(vakint, &inner, records, prefactors)?;
+        let result = closure_entry(vakint, &inner, records, prefactors, validation)?;
         vakint
             .refuse_unknown_master_coefficients(settings, &result.vakint_value)
             .map_err(|error| FactorizedError::Evaluation {
@@ -1620,13 +1653,16 @@ pub fn evaluate_factorized_closure(
         records: Vec::with_capacity(records.len()),
     };
     for (value, prefactor) in records.iter().zip(prefactors) {
+        let value: &FactorizedNumerator = std::borrow::Borrow::borrow(value);
         let FactorizedKind::Closure(spec) = &value.kind else {
             return Err(refuse(format!(
                 "{}: not a closure record (kind direct: evaluate_factorized / evaluate_factorized_vacuum)",
                 value.label
             )));
         };
-        value.validate()?;
+        if validation == Validation::Each {
+            value.validate()?;
+        }
         // a marked value: the separately supplied prefactor gets the checks of
         // the record's prefactor fields, the settings' epsilon the caller-symbol
         // rule (no-ops for an unmarked value: the base behaviour)
