@@ -8584,3 +8584,456 @@ fn the_paired_crown_leg_cells() {
         );
     }
 }
+
+// ===========================================================================
+// THE PROBE POINT, WEIGHT EQUALITY, NON-PLAIN NUMBERS, PAIRED-LEG VARIANTS
+// AND THE DIAGNOSTIC WRITER
+// ===========================================================================
+
+/// One validation-and-evaluation within `seconds`, a panic caught.
+fn guarded(seconds: u64, f: impl FnOnce() -> Result<(), String> + Send + 'static) -> String {
+    let started = std::time::Instant::now();
+    let shown = match within(seconds, f) {
+        None => format!("TIMED OUT after {seconds} s"),
+        Some(Err(_)) => "PANIC".into(),
+        Some(Ok(Ok(()))) => "ACCEPTED".into(),
+        Some(Ok(Err(e))) => format!("REFUSED {}", e.chars().take(200).collect::<String>()),
+    };
+    format!("{shown} [{:.2}s]", started.elapsed().as_secs_f64())
+}
+
+/// An inner inverse that vanishes exactly at the zero test's probe point
+/// (10007 for the first symbol, 10108 for the second): a legitimate rational
+/// function, not identically zero: accepted, never a panic, as an insertion
+/// coefficient (typed, text), a vertex factor (typed, text) and in the
+/// prefactor argument.
+#[test]
+fn an_inverse_vanishing_at_the_probe_point() {
+    let shapes = [
+        "(1/(UFO::x-10007)+UFO::y)^-1",
+        "(1/(UFO::x-10108)+UFO::y)^-1",
+        "(1/(UFO::y-10108)+UFO::x)^-1",
+        "(1/(UFO::x-10007)+1/(UFO::y-10108))^-1",
+        "(1/(UFO::x-10007)+1/(UFO::y-10007))^-1",
+        "(1/(UFO::x-10007)+1/(UFO::y-10108)+UFO::z)^-1",
+    ];
+    let mut wrong = Vec::new();
+    for shape in shapes {
+        for (field, text) in [
+            ("insertion coefficient", false),
+            ("insertion coefficient", true),
+            ("vertex factor", false),
+            ("vertex factor", true),
+            ("prefactor argument", false),
+        ] {
+            let shape_owned = shape.to_string();
+            let got = guarded(20, move || {
+                let (v, arg) = match field {
+                    "insertion coefficient" => {
+                        let mut v = record("wh-k2-child-ins");
+                        v.insertions[0].coefficient = atom(&format!("{EPS}^-1*{shape_owned}"));
+                        let a = v.prefactor.total();
+                        (v, a)
+                    }
+                    "vertex factor" => {
+                        let mut v = record("wh-k1-root");
+                        let x = v
+                            .vertices
+                            .iter_mut()
+                            .find(|x| x.factor != Atom::num(1))
+                            .unwrap();
+                        x.factor = &x.factor * atom(&shape_owned);
+                        let a = v.prefactor.total();
+                        (v, a)
+                    }
+                    _ => {
+                        let v = record("wh-k1-root");
+                        let a = v.prefactor.total() * atom(&shape_owned);
+                        (v, a)
+                    }
+                };
+                let v = if text {
+                    FactorizedNumerator::from_text(&v.to_text().map_err(|e| e.to_string())?)
+                        .map_err(|e| e.to_string())?
+                } else {
+                    v.validate().map_err(|e| e.to_string())?;
+                    v
+                };
+                closure(&v, &symbolic(), &arg)
+                    .map(|_| ())
+                    .map_err(|e| e.to_string())
+            });
+            eprintln!(
+                "CONTRACT PROBE | {shape} | {field} | {} | {got}",
+                if text { "text" } else { "typed" }
+            );
+            if !got.starts_with("ACCEPTED") {
+                wrong.push(format!("{shape} {field} text={text}: {got}"));
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "{wrong:#?}");
+}
+
+fn with_named_weight(mut i: XInput, name: &str, by_vakint: bool, w: &str) -> XInput {
+    let entry = (name.to_string(), by_vakint, atom(w));
+    match &mut i.0.kind {
+        FactorizedKind::Closure(spec) => spec.weights.push(entry),
+        _ => i.0.record.as_mut().unwrap().weights.push(entry),
+    }
+    i
+}
+
+/// Weight equality is the atoms' canonical form, no expansion: printed
+/// outcomes for `flavour applied_by=vakint nf^2` with nf_power 2, `scalars
+/// applied_by=vakint 2*(x+1)` against prefactor_scalars 2*x+2, `overall
+/// applied_by=vakint 1/4` with prefactor_overall 1/4, and with
+/// prefactor_overall 1 and prefactor_scalars 1/4 (the vacuum sunrise: no
+/// original_cycles) and on the direct record.
+#[test]
+fn weight_equality_cases() {
+    let cases: Vec<(&str, fn() -> XInput)> = vec![
+        (
+            "flavour applied_by=vakint nf^2, nf_power 2 (vacuum)",
+            || {
+                let mut b = x_vacuum_base();
+                b.0.prefactor.nf_power = 2;
+                let b = with_named_weight(b, "flavour", true, "vakint::nf^2");
+                let a = b.0.prefactor.total();
+                (b.0, b.1, a)
+            },
+        ),
+        ("flavour applied_by=vakint 2, nf_power 2 (vacuum)", || {
+            let mut b = x_vacuum_base();
+            b.0.prefactor.nf_power = 2;
+            let b = with_named_weight(b, "flavour", true, "2");
+            let a = b.0.prefactor.total();
+            (b.0, b.1, a)
+        }),
+        (
+            "scalars applied_by=vakint 2*(x+1), prefactor_scalars 2*x+2 (vacuum)",
+            || {
+                let mut b = x_vacuum_base();
+                b.0.prefactor.scalars = atom("2*caller::x+2");
+                let b = with_weight(b, true, "2*(caller::x+1)");
+                let a = b.0.prefactor.total();
+                (b.0, b.1, a)
+            },
+        ),
+        (
+            "scalars applied_by=vakint 2*(x+1), prefactor_scalars 2*(x+1) (vacuum)",
+            || {
+                let mut b = x_vacuum_base();
+                b.0.prefactor.scalars = atom("2*(caller::x+1)");
+                let b = with_weight(b, true, "2*(caller::x+1)");
+                let a = b.0.prefactor.total();
+                (b.0, b.1, a)
+            },
+        ),
+        (
+            "overall applied_by=vakint 1/4, prefactor_overall 1/4 (vacuum)",
+            || {
+                let mut b = x_vacuum_base();
+                b.0.prefactor.overall = atom("1/4");
+                let b = with_named_weight(b, "overall", true, "1/4");
+                let a = b.0.prefactor.total();
+                (b.0, b.1, a)
+            },
+        ),
+        (
+            "overall applied_by=vakint 1/4, prefactor_overall 1, prefactor_scalars 1/4 (vacuum)",
+            || {
+                let mut b = x_vacuum_base();
+                b.0.prefactor.scalars = atom("1/4");
+                let b = with_named_weight(b, "overall", true, "1/4");
+                let a = b.0.prefactor.total();
+                (b.0, b.1, a)
+            },
+        ),
+        (
+            "overall applied_by=vakint 1/4, prefactor_overall 1/4 (direct L2-17, original_cycles)",
+            || {
+                let mut b = x_direct_base();
+                b.0.prefactor.overall = atom("1/4");
+                let b = with_named_weight(b, "overall", true, "1/4");
+                let a = b.0.prefactor.total();
+                (b.0, b.1, a)
+            },
+        ),
+    ];
+    for (label, make) in cases {
+        let entry = if label.contains("direct") {
+            XEntry::Direct
+        } else {
+            XEntry::Vacuum
+        };
+        for text in [false, true] {
+            let got = x_run(entry, text, make());
+            eprintln!(
+                "CONTRACT WEQ | {label} | {} | {}",
+                if text { "text" } else { "typed" },
+                match &got {
+                    Ok(()) => "ACCEPTED".to_string(),
+                    Err(e) => format!("REFUSED {}", e.chars().take(200).collect::<String>()),
+                }
+            );
+        }
+    }
+}
+
+/// A TYPED insertion coefficient whose number is not a plain rational: a
+/// rational-polynomial coefficient with a 10^6-bit integer, and a finite-field
+/// coefficient: refused (the exact-number rule or the bit bound) or accepted:
+/// printed.
+#[test]
+fn a_typed_coefficient_that_is_not_a_plain_number() {
+    use symbolica::coefficient::Coefficient;
+    use symbolica::domains::integer::Z;
+    init();
+    let big = atom("caller::x+2^1000000");
+    let rp = std::panic::catch_unwind(|| {
+        let rp: symbolica::domains::rational_polynomial::RationalPolynomial<
+            symbolica::domains::integer::IntegerRing,
+            u16,
+        > = big.to_rational_polynomial(&Z, &Z, None);
+        Atom::num(Coefficient::RationalPolynomial(rp))
+    });
+    let ff = std::panic::catch_unwind(|| {
+        use symbolica::domains::finite_field::{FiniteFieldCore, Zp64};
+        let f = Zp64::new(1_000_000_007);
+        let e = f.to_element(5);
+        Atom::num(Coefficient::from_finite_field(f, e))
+    });
+    for (label, c) in [
+        (
+            "a rational-polynomial coefficient with a 10^6-bit integer",
+            rp,
+        ),
+        ("a finite-field coefficient", ff),
+    ] {
+        match c {
+            Err(_) => eprintln!("CONTRACT NONPLAIN | {label}: Symbolica panics building it"),
+            Ok(c) => {
+                eprintln!(
+                    "CONTRACT NONPLAIN | {label}: built, {} bytes",
+                    c.as_view().get_byte_size()
+                );
+                let got = guarded(20, move || {
+                    let mut v = record("wh-k2-child-ins");
+                    v.insertions[0].coefficient = &v.insertions[0].coefficient * &c;
+                    v.validate().map_err(|e| e.to_string())
+                });
+                eprintln!("CONTRACT NONPLAIN | {label}: validation {got}");
+            }
+        }
+    }
+}
+
+/// Paired-leg variants on the producer's sample (`VAKINT_TEST_RECORD_FILE`),
+/// at Taylor degree 2: (a) the leg 100013 with the NEGATED vector of its
+/// partner; (b) the leg reoriented (source the vertex, target external) with
+/// the negated vector: the same physical line; (c) the leg renamed 100003,
+/// whose "partner" 3 is an INTERNAL edge (another momentum). Printed, and the
+/// values of the accepted ones against the sample's.
+#[test]
+#[ignore = "external data: VAKINT_TEST_RECORD_FILE (the producer's paired-leg sample)"]
+fn paired_leg_variants() {
+    use vakint::p_integral::factorized::Endpoint;
+    init();
+    let path = wh_fixtures::required_env("VAKINT_TEST_RECORD_FILE", "the paired-leg sample");
+    let mut base = FactorizedNumerator::from_text(&wh_fixtures::read_fixture(&path)).unwrap();
+    if let FactorizedKind::Closure(spec) = &mut base.kind {
+        spec.taylor.as_mut().unwrap().degree = 2;
+    }
+    let value = |v: &FactorizedNumerator| {
+        closure(v, &symbolic(), &v.prefactor.total())
+            .map(|r| r.value)
+            .map_err(|e| e.to_string())
+    };
+    let reference = value(&base).unwrap();
+    let qmap = |v: &mut FactorizedNumerator, from: i64, to: i64| {
+        let head = "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q";
+        for i in v.insertions.iter_mut() {
+            i.factor = i
+                .factor
+                .replace(atom(&format!("{head}({from},x__)")))
+                .with(atom(&format!("{head}({to},x__)")));
+        }
+    };
+    let mut a = base.clone();
+    let leg = a.edges.iter_mut().find(|e| e.id == 100013).unwrap();
+    leg.momentum = leg.momentum.iter().map(|c| -c).collect();
+    let mut b = base.clone();
+    let leg = b.edges.iter_mut().find(|e| e.id == 100013).unwrap();
+    leg.momentum = leg.momentum.iter().map(|c| -c).collect();
+    let (s, t) = (leg.source, leg.target);
+    leg.source = t;
+    leg.target = s;
+    let (sh, th) = (leg.source_hedge, leg.target_hedge);
+    leg.source_hedge = th;
+    leg.target_hedge = sh;
+    let _ = Endpoint::External;
+    let mut c = base.clone();
+    c.edges.iter_mut().find(|e| e.id == 100013).unwrap().id = 100003;
+    c.edges.sort_by_key(|e| e.id);
+    qmap(&mut c, 100013, 100003);
+    for (label, v) in [
+        ("(a) the leg with the negated vector of its partner", a),
+        (
+            "(b) the leg reoriented (vertex -> external) with the negated vector",
+            b,
+        ),
+        (
+            "(c) the leg renamed 100003: its partner 3 is an internal edge",
+            c,
+        ),
+    ] {
+        let got = v
+            .validate()
+            .map_err(|e| e.to_string())
+            .and_then(|()| value(&v));
+        let shown = match &got {
+            Ok(x) => format!(
+                "ACCEPTED; the value {} the sample's",
+                if (x - &reference).expand().is_zero() {
+                    "EQUALS"
+                } else {
+                    "DIFFERS FROM"
+                }
+            ),
+            Err(e) => format!("REFUSED {}", e.chars().take(200).collect::<String>()),
+        };
+        eprintln!("CONTRACT PAIRED2 {label}: {shown}");
+    }
+}
+
+/// The paired-leg rule over real records with a paired leg
+/// (`VAKINT_TEST_PAIRED_LIST`: a file of record paths): validation only;
+/// counts by outcome; a refusal by the paired-leg rule fails.
+#[test]
+#[ignore = "external data: VAKINT_TEST_PAIRED_LIST"]
+fn the_paired_leg_rule_on_real_records() {
+    init();
+    let list = wh_fixtures::required_env("VAKINT_TEST_PAIRED_LIST", "a file of record paths");
+    let mut seen = std::collections::BTreeSet::new();
+    let (mut accepted, mut legs) = (0usize, 0usize);
+    let mut refused = std::collections::BTreeMap::<String, (usize, String)>::new();
+    for path in std::fs::read_to_string(&list).unwrap().lines() {
+        let Ok(text) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        if !text.starts_with("schema\tpint6.factorized-numerator.v3") || !seen.insert(text.clone())
+        {
+            continue;
+        }
+        legs += text
+            .lines()
+            .filter(|l| {
+                l.starts_with("edge\t1") && l.split('\t').nth(1).is_some_and(|id| id.len() >= 6)
+            })
+            .count();
+        match FactorizedNumerator::from_text(&text) {
+            Ok(_) => accepted += 1,
+            Err(e) => {
+                let key: String = e.to_string().chars().take(60).collect();
+                let entry = refused.entry(key).or_insert((0, path.to_string()));
+                entry.0 += 1;
+            }
+        }
+    }
+    eprintln!(
+        "CONTRACT PAIREDREAL unique v3 records {} ({legs} paired legs): accepted {accepted}",
+        seen.len()
+    );
+    for (k, (n, p)) in &refused {
+        eprintln!("CONTRACT PAIREDREAL refused {n} x {k} e.g. {p}");
+    }
+    assert!(
+        !refused.keys().any(|k| k.contains("paired line")),
+        "a refusal by the paired-leg rule"
+    );
+}
+
+/// THE DIAGNOSTIC WRITER: for an accepted value its text equals `to_text`'s;
+/// for a refused value the reader refuses its text. Over the rule x field
+/// inputs, the cross-field violating inputs and the named writer cases.
+#[test]
+#[ignore = "expected: the reader refuses the diagnostic text of every refused value; on 1cda2814c two refused values write a text the reader accepts: a closure value carrying a direct record (the text cannot hold it) and typed insertions out of vertex order (written sorted)"]
+fn the_diagnostic_writer() {
+    let mut cases: Vec<(String, FactorizedNumerator)> = Vec::new();
+    for name in ["wh-k1-root", "wh-k2-child-ins", "wh-k5-direct"] {
+        let base = record(name);
+        cases.push((format!("{name}"), base.clone()));
+        for (field, put) in field_setters(&base) {
+            for (rule, text) in [
+                ("reserved namespace", "vakint::closure_lambda"),
+                ("caller function", "caller::f(caller::x)"),
+                ("exponent above 64", "caller::x^65"),
+                (
+                    "zero denominator",
+                    "((caller::x-3)^2-caller::x^2+6*caller::x-9)^-1",
+                ),
+            ] {
+                let mut v = base.clone();
+                put(&mut v, &atom(text));
+                cases.push((format!("{name} {rule} in {field}"), v));
+            }
+        }
+    }
+    for c in x_cells() {
+        if !c.text {
+            cases.push((format!("cross-field {} {:?}", c.rule, c.entry), (c.bad)().0));
+            cases.push((
+                format!("cross-field twin {} {:?}", c.rule, c.entry),
+                (c.good)().0,
+            ));
+        }
+    }
+    let k1 = record("wh-k1-root");
+    let ids = k1
+        .vertices
+        .iter()
+        .filter(|x| x.factor != Atom::num(1))
+        .map(|x| x.id)
+        .take(2)
+        .collect::<Vec<_>>();
+    let mut two = with_insertion_at(
+        &with_insertion_at(&k1, ids[0], &format!("{EPS}^-1")),
+        ids[1],
+        "1",
+    );
+    two.insertions.reverse();
+    cases.push(("two insertions out of vertex order".into(), two));
+    let mut wrong = Vec::new();
+    let (mut accepted, mut refused) = (0, 0);
+    for (label, v) in &cases {
+        let diagnostic = v.to_text_unvalidated_for_diagnostics();
+        match v.validate() {
+            Ok(()) => {
+                accepted += 1;
+                let checked = v.to_text().map_err(|e| e.to_string());
+                if diagnostic.as_ref().ok() != checked.as_ref().ok() {
+                    wrong.push(format!(
+                        "{label}: accepted, but the diagnostic text differs from to_text"
+                    ));
+                }
+            }
+            Err(_) => {
+                refused += 1;
+                if let Ok(t) = &diagnostic
+                    && FactorizedNumerator::from_text(t).is_ok()
+                {
+                    wrong.push(format!(
+                        "{label}: refused, but the reader accepts its diagnostic text"
+                    ));
+                }
+            }
+        }
+    }
+    eprintln!(
+        "CONTRACT DIAG {} cases: {accepted} accepted, {refused} refused; {} wrong",
+        cases.len(),
+        wrong.len()
+    );
+    assert!(wrong.is_empty(), "{wrong:#?}");
+}
