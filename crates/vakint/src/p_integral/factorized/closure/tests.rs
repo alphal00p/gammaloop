@@ -1066,7 +1066,7 @@ fn l2_root_orders_filters_are_refused() {
         );
         // the text form keeps the field: parse_text reads it, from_text
         // (which validates) refuses it
-        let text = value.to_text().unwrap();
+        let text = value.to_text_unvalidated_for_diagnostics().unwrap();
         assert!(text.contains(&format!("orders={}", orders.as_str())));
         let parsed = FactorizedNumerator::parse_text(&text).unwrap();
         refused(parsed.validate(), "parsed");
@@ -4187,7 +4187,7 @@ fn refusal_weight_applied_by_vakint_differs() {
     let bad = with(&base, |v| {
         spec(v).weights = vec![("scalars".into(), true, &scalars * atom("UFO::two"))]
     });
-    assert_closure_refusal(&bad, &good, "weight scalars applied_by=vakint is ");
+    assert_closure_refusal(&bad, &good, "weight scalars applied_by=vakint ");
 }
 
 #[test]

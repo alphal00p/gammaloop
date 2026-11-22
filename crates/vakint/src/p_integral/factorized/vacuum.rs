@@ -236,6 +236,7 @@ fn validate_vacuum(value: &FactorizedNumerator) -> Result<()> {
     value.check_marked_bounds(true)?;
     if super::is_marked(value) {
         value.check_marked_prefactor()?;
+        value.check_paired_legs()?;
         value.check_vacuum_original_cycles()?;
         value.check_marked_atoms()?;
         // every caller field outside the insertions: defined, finite (the

@@ -2279,7 +2279,7 @@ fn field_setters(v: &FactorizedNumerator) -> Vec<(&'static str, Setter)> {
     out.push((
         "weights",
         Box::new(|v, x| {
-            let w = ("extra".to_string(), false, x.clone());
+            let w = ("overall".to_string(), false, x.clone());
             match &mut v.kind {
                 FactorizedKind::Closure(spec) => spec.weights.push(w),
                 _ => v.record.as_mut().unwrap().weights.push(w),
@@ -5830,13 +5830,13 @@ fn data_atoms_taylor_weights_epsilon_and_tensor_rules() {
     let mut v = k1.clone();
     if let FactorizedKind::Closure(spec) = &mut v.kind {
         spec.weights
-            .push(("w".into(), true, atom("caller::not_the_scalars")));
+            .push(("scalars".into(), true, atom("caller::not_the_scalars")));
     }
     check(
         "a weight applied_by=vakint different from prefactor_scalars",
         v.validate(),
         true,
-        "weight w applied_by=vakint is",
+        "weight scalars applied_by=vakint",
     );
     let mut v = k2.clone();
     let x = v
@@ -5868,7 +5868,7 @@ fn data_atoms_taylor_weights_epsilon_and_tensor_rules() {
     let mut v = k1.clone();
     if let FactorizedKind::Closure(spec) = &mut v.kind {
         spec.weights
-            .push(("w".into(), false, atom(&format!("1/({DIM}-4)"))));
+            .push(("overall".into(), false, atom(&format!("1/({DIM}-4)"))));
     }
     match closure(&v, &symbolic(), &v.prefactor.total()) {
         Ok(r) => {
@@ -7143,7 +7143,7 @@ fn x_vacuum_base() -> XInput {
 }
 
 fn with_weight(mut i: XInput, by_vakint: bool, w: &str) -> XInput {
-    let entry = ("w".to_string(), by_vakint, atom(w));
+    let entry = ("scalars".to_string(), by_vakint, atom(w));
     match &mut i.0.kind {
         FactorizedKind::Closure(spec) => spec.weights.push(entry),
         _ => i.0.record.as_mut().unwrap().weights.push(entry),
@@ -7761,7 +7761,7 @@ fn a_huge_power_in_an_insertion_is_refused_at_once() {
         } else {
             v.insertions[0].factor = &v.insertions[0].factor * atom(huge);
         }
-        let text = v.to_text().unwrap();
+        let text = v.to_text_unvalidated_for_diagnostics().unwrap();
         for way in [
             "validate",
             "from_text",

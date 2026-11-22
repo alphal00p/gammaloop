@@ -788,7 +788,7 @@ fn contract_to_vakint_dots_v1(value: &FactorizedNumerator) -> Result<(Atom, f64)
     if let Some((a, b)) = unknown.get() {
         return Err(evaluation(format!("a dot of unknown edges {a}, {b}")));
     }
-    // Open ports (no projector): an edge momentum carrying a
+    // Open ports (no projector; D6, helper VH): an edge momentum carrying a
     // port index, `Q(e, mink(D, i))`, becomes the edge's vakint momentum with
     // that index (`k(j, i)`, `±p(1, i)`), a metric between two ports
     // `g(mink(D, a), mink(D, b))` vakint's `g(a, b)`; vakint's tensor prepass

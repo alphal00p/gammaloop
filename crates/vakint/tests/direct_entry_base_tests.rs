@@ -144,7 +144,9 @@ fn a_marked_value_is_written_as_v3_and_an_unmarked_one_as_v1() {
         factor: Atom::num(1),
     });
     assert!(with_insertion.has_new_features());
-    let written = with_insertion.to_text().unwrap();
+    let written = with_insertion
+        .to_text_unvalidated_for_diagnostics()
+        .unwrap();
     assert_eq!(schema(&written), format!("schema\t{FACTORIZED_SCHEMA_V3}"));
     assert!(written.contains("\ninsertions\t1\n"), "{written}");
     let back = FactorizedNumerator::parse_text(&written).unwrap();

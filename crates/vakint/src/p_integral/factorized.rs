@@ -1673,6 +1673,11 @@ fn insertion_epsilon_rules(
                 "a non-integer exponent in insertion {v} {what}: {found}"
             )));
         }
+        if let Some(found) = first_oversized_number(atom.as_view()) {
+            return Err(error(format!(
+                "a number beyond {MAX_NUMBER_BITS} bits in insertion {v} {what}: {found}"
+            )));
+        }
     }
     for (what, atom) in [
         ("coefficient", &insertion.coefficient),
@@ -1929,6 +1934,33 @@ pub const MAX_CALLER_EXPONENT: i64 = 64;
 /// read as `x^-1` and accepted; an expression equal to an integer, `π`,
 /// `sqrt(2)`, a symbol, a rational `1/2` are refused; nothing is expanded
 /// to decide); with the exponent named.
+/// The prefactor field a weight is checked against ([`WEIGHT_RULES`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum WeightField {
+    Scalars,
+    Overall,
+    Colour,
+    /// the prefactor's loop_sign (neutral 1)
+    LoopSign,
+    /// the prefactor's nf_power (neutral 0)
+    NfPower,
+}
+
+/// THE WEIGHTS TABLE of the record format (section 9: `weight <name>
+/// applied_by=beta|vakint <atom>`, the kinds colour, flavour, loop_sign,
+/// overall and scalars; OQ-17: a weight the caller applies ("beta") stays out
+/// of the prefactor, one vakint applies is in it): each weight name with ITS
+/// OWN prefactor field. Applied by vakint, the field equals the weight;
+/// applied by the caller, the field is neutral (1; nf_power 0). A name not in
+/// the table, and a name listed twice, are refused.
+pub(crate) const WEIGHT_RULES: [(&str, WeightField); 5] = [
+    ("scalars", WeightField::Scalars),
+    ("overall", WeightField::Overall),
+    ("colour", WeightField::Colour),
+    ("loop_sign", WeightField::LoopSign),
+    ("flavour", WeightField::NfPower),
+];
+
 /// The largest numerator or denominator a marked value's numbers may have,
 /// in bits: far above the real records (whose largest number has 35 bits);
 /// it keeps a number that a text's literal power made huge at parse time
@@ -1938,24 +1970,25 @@ pub const MAX_NUMBER_BITS: usize = 4096;
 /// The first number of `view` whose numerator or denominator has more than
 /// [`MAX_NUMBER_BITS`] bits, described by its decimal size.
 fn first_oversized_number(view: AtomView<'_>) -> Option<String> {
-    // 4096 bits are 1234 decimal digits at most
-    let max_digits = (MAX_NUMBER_BITS as f64 * std::f64::consts::LOG10_2).ceil() as usize;
     let mut found = None;
     view.visitor(&mut |part| {
         if found.is_some() {
             return false;
         }
         if let AtomView::Num(n) = part
-            && matches!(n.get_coeff_view(), CoefficientView::Large(..))
+            && let CoefficientView::Large(re, im) = n.get_coeff_view()
         {
-            let text = part.to_owned().to_canonical_string();
-            let digits = text
-                .split(|c: char| !c.is_ascii_digit())
-                .map(str::len)
-                .max()
-                .unwrap_or(0);
-            if digits > max_digits {
-                found = Some(format!("a number of {digits} decimal digits"));
+            // the exact bit lengths of |numerator| and denominator, real and
+            // imaginary parts
+            for (what, r) in [("real", re.to_rat()), ("imaginary", im.to_rat())] {
+                let bits = [
+                    ("numerator", r.numerator_ref().significant_bits()),
+                    ("denominator", r.denominator_ref().significant_bits()),
+                ];
+                if let Some((which, b)) = bits.iter().find(|(_, b)| *b > MAX_NUMBER_BITS as u64) {
+                    found = Some(format!("a {what} part whose {which} has {b} bits"));
+                    break;
+                }
             }
         }
         found.is_none()
@@ -3152,6 +3185,7 @@ impl FactorizedNumerator {
         self.check_marked_bounds(false)?;
         if is_marked(self) {
             self.check_marked_prefactor()?;
+            self.check_paired_legs()?;
             // a projector power of p^2 needs an external momentum (the
             // closure kind's rule, for the direct kind too: with no external
             // p, (p^2)^n has no value)
@@ -3164,6 +3198,10 @@ impl FactorizedNumerator {
                 });
             }
         }
+        // the contract / closure rules; their insertion rules compute (zero
+        // tests, together / expand, series) only after the cheap bounds they
+        // depend on (exponents of at most 64, numbers of at most 4096 bits:
+        // insertion_epsilon_rules); the remaining atom rules after them
         if let FactorizedKind::Closure(spec) = &self.kind {
             self.validate_closure(spec)?;
         } else {
@@ -3284,7 +3322,8 @@ impl FactorizedNumerator {
         out
     }
 
-    /// THE WEIGHTS of a marked value (the record format's OQ-17 rule, section
+    /// THE WEIGHTS of a marked value, by [`WEIGHT_RULES`] (the record format's
+    /// weights rule, section
     /// 3), for every kind and both weight sources (a closure's ClosureSpec,
     /// a direct record): a weight `applied_by=vakint` must equal
     /// prefactor_scalars (atom equality after normalisation); a weight applied
@@ -3327,27 +3366,43 @@ impl FactorizedNumerator {
             .record
             .as_ref()
             .map_or(&[][..], |r| r.weights.as_slice());
+        let mut seen = std::collections::BTreeSet::new();
         for (name, by_vakint, atom) in from_spec.iter().chain(from_record) {
-            if *by_vakint {
-                if *atom != p.scalars {
-                    return Err(refuse(format!(
-                        "weight {name} applied_by=vakint is {atom}, prefactor_scalars is {}",
-                        p.scalars
-                    )));
-                }
-                continue;
-            }
-            let one = Atom::num(1);
-            let counterpart = match name.as_str() {
-                "overall" => (p.overall != one).then(|| format!("prefactor_overall {}", p.overall)),
-                "colour" => (p.colour != one).then(|| format!("prefactor_colour {}", p.colour)),
-                "loop_sign" => (p.loop_sign != 1).then(|| format!("loop_sign {}", p.loop_sign)),
-                "flavour" => (p.nf_power != 0).then(|| format!("nf_power {}", p.nf_power)),
-                _ => None,
-            };
-            if let Some(found) = counterpart {
+            let applied = if *by_vakint { "vakint" } else { "beta" };
+            if !seen.insert(name.as_str()) {
                 return Err(refuse(format!(
-                    "weight {name} applied_by=beta, but the prefactor has {found} (a weight the caller applies is 1 in the prefactor)"
+                    "weight {name} is listed twice (each weight is applied once)"
+                )));
+            }
+            let Some((_, field)) = WEIGHT_RULES.iter().find(|(n, _)| *n == name.as_str()) else {
+                return Err(refuse(format!(
+                    "weight {name} applied_by={applied}: not a weight of the record format (scalars, overall, colour, loop_sign, flavour)"
+                )));
+            };
+            // the field's value as an atom, and its neutral value
+            let (label, value, neutral) = match field {
+                WeightField::Scalars => ("prefactor_scalars", p.scalars.clone(), Atom::num(1)),
+                WeightField::Overall => ("prefactor_overall", p.overall.clone(), Atom::num(1)),
+                WeightField::Colour => ("prefactor_colour", p.colour.clone(), Atom::num(1)),
+                WeightField::LoopSign => ("loop_sign", Atom::num(p.loop_sign), Atom::num(1)),
+                WeightField::NfPower => {
+                    ("nf_power", Atom::num(i64::from(p.nf_power)), Atom::num(0))
+                }
+            };
+            let (expected, why) = if *by_vakint {
+                (
+                    atom.clone(),
+                    "a weight vakint applies is its prefactor field",
+                )
+            } else {
+                (
+                    neutral,
+                    "a weight the caller applies leaves its prefactor field neutral",
+                )
+            };
+            if value != expected {
+                return Err(refuse(format!(
+                    "weight {name} applied_by={applied} {atom}: {label} is {value}, not {expected} ({why})"
                 )));
             }
         }
@@ -3420,6 +3475,41 @@ impl FactorizedNumerator {
                      original_cycles fermion={fermion} ghost={ghost}"
                 ),
             });
+        }
+        Ok(())
+    }
+
+    /// PAIRED LEGS (the record format, section 3: a crown line with both ends in
+    /// the scope is two legs, `e` and `100000 + e`): when a marked record has
+    /// an external edge `100000 + e` and an external edge `e`, the two carry
+    /// exactly the same momentum vector (each leg's Q is routed through the
+    /// momentum it declares: unequal ones evaluate to another value). `Closure`
+    /// for the closure kind, else `Graph`.
+    pub(crate) fn check_paired_legs(&self) -> Result<()> {
+        let external = |id: usize| self.edges.iter().find(|e| e.id == id && e.is_external());
+        for leg in self
+            .edges
+            .iter()
+            .filter(|e| e.is_external() && e.id >= 100_000)
+        {
+            if let Some(partner) = external(leg.id - 100_000)
+                && partner.momentum != leg.momentum
+            {
+                let (id, a, other, b) = (leg.id, &leg.momentum, partner.id, &partner.momentum);
+                return Err(if matches!(self.kind, FactorizedKind::Closure(_)) {
+                    FactorizedError::Closure {
+                        detail: format!(
+                            "the two legs of a paired line carry one momentum: edge {id} carries {a:?}, its partner {other} {b:?}"
+                        ),
+                    }
+                } else {
+                    FactorizedError::Graph {
+                        detail: format!(
+                            "the two legs of a paired line carry one momentum: edge {id} carries {a:?}, its partner {other} {b:?}"
+                        ),
+                    }
+                });
+            }
         }
         Ok(())
     }
@@ -4870,9 +4960,21 @@ impl FactorizedNumerator {
         Ok(loops)
     }
 
-    /// The versioned text form ([`FACTORIZED_SCHEMA`]).
+    /// The versioned text form ([`FACTORIZED_SCHEMA`]). A MARKED value is
+    /// validated first: a value validation refuses is not written, and the
+    /// error is EXACTLY validation's (the same variant and detail), so that a
+    /// caller can route it like the reader's.
     pub fn to_text(&self) -> Result<String> {
         text::write_record(self)
+    }
+
+    /// The text form WITHOUT validation, to keep the text of a refused value
+    /// for diagnosis: NOT evidence of validity (the reader may refuse it, and
+    /// for a value validation refuses it may not be that value's text: the
+    /// writer sorts the insertions and drops what the format cannot express);
+    /// for a valid value the same text as [`Self::to_text`].
+    pub fn to_text_unvalidated_for_diagnostics(&self) -> Result<String> {
+        text::write_record_unvalidated(self)
     }
 
     /// Read one record of the text form and [`Self::validate`] it.

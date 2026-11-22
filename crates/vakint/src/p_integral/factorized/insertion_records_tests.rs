@@ -1670,13 +1670,19 @@ fn the_weights_agree_with_the_prefactor_on_every_kind() {
         ..site_settings()
     };
     let bad = with_weights(&base, vec![("scalars".into(), true, parsed("2"))]);
-    let text = "weight scalars applied_by=vakint is 2, prefactor_scalars is 1";
+    let text = "weight scalars applied_by=vakint 2: prefactor_scalars is 1";
     let graph = |e: FactorizedError, what: &str| match e {
         FactorizedError::Graph { detail } => assert!(detail.starts_with(text), "{what}: {detail}"),
         other => panic!("{what}: expected Graph, got {other:?}"),
     };
     graph(bad.validate().unwrap_err(), "validate");
-    let written = bad.to_text().unwrap();
+    // the writer refuses it with validation's error; its text, written for
+    // diagnosis, is refused by the reader
+    assert_eq!(
+        format!("{:?}", bad.to_text().unwrap_err()),
+        format!("{:?}", bad.validate().unwrap_err())
+    );
+    let written = bad.to_text_unvalidated_for_diagnostics().unwrap();
     assert!(written.contains("applied_by=vakint\t2"), "{written}");
     graph(
         FactorizedNumerator::from_text(&written).unwrap_err(),
@@ -1752,7 +1758,7 @@ fn the_weights_agree_with_the_prefactor_on_every_kind() {
     match k2.validate() {
         Err(FactorizedError::Closure { detail }) => {
             assert!(
-                detail.starts_with("weight scalars applied_by=vakint is 2"),
+                detail.starts_with("weight scalars applied_by=vakint 2"),
                 "{detail}"
             )
         }
@@ -1854,11 +1860,11 @@ fn a_huge_power_in_an_insertion_is_refused_before_any_computation() {
     }
 }
 
-/// A marked value's numbers have at most 4096 bits (the real records' largest
-/// has 35): on the real direct L3-185, a vertex factor times 2^5000 is refused,
-/// typed and through the text form ("a number beyond 4096 bits"); times
-/// 2^4000 it is accepted. (A text's literal power of numbers, 2^1000000000,
-/// is evaluated by Symbolica's parser into such a number before any rule.)
+/// A marked value's numbers have at most 4096 bits, EXACTLY (the bit length
+/// of |numerator| and of the denominator, real and imaginary parts): on the
+/// real direct L3-185, a vertex factor times N with |N| of 4095 and 4096 bits
+/// is accepted, of 4097 refused ("a number beyond 4096 bits"); the same for
+/// 1/N, for -N, and for N 𝑖 (the imaginary part); typed and through text.
 #[test]
 fn a_number_beyond_4096_bits_is_refused() {
     let direct =
@@ -1868,20 +1874,520 @@ fn a_number_beyond_4096_bits_is_refused() {
         .iter()
         .position(|x| direct.insertions.iter().all(|i| i.vertex != x.id))
         .unwrap();
-    let with = |n: u32| {
-        let mut v = direct.clone();
-        v.vertices[plain].factor = &v.vertices[plain].factor * Atom::num(2).pow(Atom::num(n));
-        v
-    };
-    let big = with(5000);
-    for result in [
-        big.validate(),
-        FactorizedNumerator::from_text(&big.to_text().unwrap()).map(|_| ()),
-    ] {
-        match result {
-            Err(e) => assert!(e.to_string().contains("a number beyond 4096 bits"), "{e}"),
-            Ok(()) => panic!("2^5000 accepted"),
+    let id = direct.vertices[plain].id;
+    let base_text = direct.to_text().unwrap();
+    // N = 2^(bits - 1): exactly `bits` bits
+    let number = |bits: u32| Atom::num(2).pow(Atom::num(bits as i64 - 1));
+    let forms: [(&str, fn(Atom) -> Atom); 4] = [
+        ("N", |n| n),
+        ("-N", |n| -n),
+        ("1/N", |n| Atom::num(1) / n),
+        ("N i", |n| n * Atom::i()),
+    ];
+    let mut wrong = Vec::new();
+    for bits in [4095u32, 4096, 4097] {
+        for (form, make) in &forms {
+            let factor = make(number(bits));
+            let mut v = direct.clone();
+            v.vertices[plain].factor = &v.vertices[plain].factor * &factor;
+            let accepted = bits <= 4096;
+            let typed = v.validate();
+            // the text: the vendored text with the factor multiplied in
+            let prefix = format!("vertex\t{id}\t");
+            let text = base_text
+                .lines()
+                .map(|line| {
+                    if line.starts_with(&prefix) {
+                        let (head, atom) = line.rsplit_once('\t').unwrap();
+                        format!("{head}\t({atom})*({})", factor.to_canonical_string())
+                    } else {
+                        line.to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+                + "\n";
+            let read = FactorizedNumerator::from_text(&text).map(|_| ());
+            for (how, r) in [("typed", typed), ("text", read)] {
+                match (&r, accepted) {
+                    (Ok(()), true) => {}
+                    (Err(e), false) if e.to_string().contains("a number beyond 4096 bits") => {}
+                    _ => wrong.push(format!("{bits} bits {form} {how}: {r:?}")),
+                }
+            }
         }
     }
-    with(4000).validate().unwrap();
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+/// One cell of the weights table ([`WEIGHT_RULES`]): the weight (name,
+/// applied by vakint, atom), the prefactor change, accepted or not.
+pub(super) struct WeightCell {
+    pub label: &'static str,
+    pub weights: Vec<(&'static str, bool, &'static str)>,
+    pub prefactor: fn(&mut Prefactor),
+    pub accepted: bool,
+}
+
+/// EVERY CELL of the weights table ([`WEIGHT_RULES`]: each weight name with
+/// its own prefactor field), with the reviewer's witnesses: applied by vakint
+/// the field equals the weight, applied by the caller the field is neutral
+/// (1; nf_power 0); a name the format does not list and a name listed twice
+/// are refused.
+pub(super) fn weight_cells() -> Vec<WeightCell> {
+    let keep: fn(&mut Prefactor) = |_| {};
+    let scalars_two: fn(&mut Prefactor) = |p| p.scalars = Atom::num(2);
+    let overall_two: fn(&mut Prefactor) = |p| p.overall = Atom::num(2);
+    let colour_two: fn(&mut Prefactor) = |p| p.colour = Atom::num(2);
+    let sign_minus: fn(&mut Prefactor) = |p| p.loop_sign = -1;
+    let nf_one: fn(&mut Prefactor) = |p| p.nf_power = 1;
+    let cell = |label, weights, prefactor, accepted| WeightCell {
+        label,
+        weights,
+        prefactor,
+        accepted,
+    };
+    vec![
+        cell(
+            "scalars by vakint 2, prefactor_scalars 2",
+            vec![("scalars", true, "2")],
+            scalars_two,
+            true,
+        ),
+        cell(
+            "scalars by vakint 2, prefactor_scalars 1",
+            vec![("scalars", true, "2")],
+            keep,
+            false,
+        ),
+        cell(
+            "scalars by the caller 2, prefactor_scalars 1",
+            vec![("scalars", false, "2")],
+            keep,
+            true,
+        ),
+        cell(
+            "scalars by the caller 2, prefactor_scalars 2",
+            vec![("scalars", false, "2")],
+            scalars_two,
+            false,
+        ),
+        cell(
+            "overall by vakint 1, prefactor_overall 1",
+            vec![("overall", true, "1")],
+            keep,
+            true,
+        ),
+        cell(
+            "overall by vakint 2, prefactor_overall 1",
+            vec![("overall", true, "2")],
+            keep,
+            false,
+        ),
+        cell(
+            "overall by the caller 2, prefactor_overall 1",
+            vec![("overall", false, "2")],
+            keep,
+            true,
+        ),
+        cell(
+            "overall by the caller 2, prefactor_overall 2",
+            vec![("overall", false, "2")],
+            overall_two,
+            false,
+        ),
+        cell(
+            "colour by vakint 1, prefactor_colour 1",
+            vec![("colour", true, "1")],
+            keep,
+            true,
+        ),
+        cell(
+            "colour by vakint 2, prefactor_colour 1",
+            vec![("colour", true, "2")],
+            keep,
+            false,
+        ),
+        cell(
+            "colour by the caller 2, prefactor_colour 1",
+            vec![("colour", false, "2")],
+            keep,
+            true,
+        ),
+        cell(
+            "colour by the caller 2, prefactor_colour 2",
+            vec![("colour", false, "2")],
+            colour_two,
+            false,
+        ),
+        cell(
+            "loop_sign by vakint 1, loop_sign 1",
+            vec![("loop_sign", true, "1")],
+            keep,
+            true,
+        ),
+        cell(
+            "loop_sign by vakint -1, loop_sign 1",
+            vec![("loop_sign", true, "-1")],
+            keep,
+            false,
+        ),
+        cell(
+            "loop_sign by the caller -1, loop_sign 1",
+            vec![("loop_sign", false, "-1")],
+            keep,
+            true,
+        ),
+        cell(
+            "loop_sign by the caller -1, loop_sign -1",
+            vec![("loop_sign", false, "-1")],
+            sign_minus,
+            false,
+        ),
+        cell(
+            "flavour by vakint 0, nf_power 0",
+            vec![("flavour", true, "0")],
+            keep,
+            true,
+        ),
+        cell(
+            "flavour by vakint 1, nf_power 0",
+            vec![("flavour", true, "1")],
+            keep,
+            false,
+        ),
+        cell(
+            "flavour by the caller 1, nf_power 0",
+            vec![("flavour", false, "1")],
+            keep,
+            true,
+        ),
+        cell(
+            "flavour by the caller 1, nf_power 1",
+            vec![("flavour", false, "1")],
+            nf_one,
+            false,
+        ),
+        cell(
+            "an unlisted name by the caller",
+            vec![("extra", false, "7")],
+            keep,
+            false,
+        ),
+        cell(
+            "an unlisted name by vakint",
+            vec![("extra", true, "1")],
+            keep,
+            false,
+        ),
+        cell(
+            "overall listed twice",
+            vec![("overall", false, "1"), ("overall", false, "1")],
+            keep,
+            false,
+        ),
+    ]
+}
+
+/// `value` with the cell's weights (in its closure spec or its direct
+/// record) and prefactor change.
+pub(super) fn with_weight_cell(
+    value: &FactorizedNumerator,
+    cell: &WeightCell,
+) -> FactorizedNumerator {
+    let mut v = value.clone();
+    let weights = cell
+        .weights
+        .iter()
+        .map(|(n, by, a)| (n.to_string(), *by, parsed(a)))
+        .collect::<Vec<_>>();
+    match &mut v.kind {
+        FactorizedKind::Closure(spec) => spec.weights = weights,
+        FactorizedKind::Direct => {
+            v.record
+                .get_or_insert_with(|| DirectRecord {
+                    original_cycles: None,
+                    depth: None,
+                    weights: Vec::new(),
+                })
+                .weights = weights
+        }
+    }
+    (cell.prefactor)(&mut v.prefactor);
+    v
+}
+
+/// The text form of a value whose typed form may be refused (the writer
+/// refuses it): the valid base's text with the cell's weights section and
+/// prefactor lines spliced in.
+pub(super) fn text_of_weight_cell(base: &FactorizedNumerator, cell: &WeightCell) -> String {
+    let text = base.to_text().unwrap();
+    let mut changed = base.clone();
+    (cell.prefactor)(&mut changed.prefactor);
+    let p = &changed.prefactor;
+    let mut out = Vec::new();
+    let mut in_weights = false;
+    for line in text.lines() {
+        let key = line.split('\t').next().unwrap_or("");
+        if in_weights && key == "weight" {
+            continue;
+        }
+        in_weights = false;
+        match key {
+            "prefactor" => out.push(format!(
+                "prefactor\tloop_sign={}\tnf_power={}",
+                p.loop_sign, p.nf_power
+            )),
+            "prefactor_overall" => out.push(format!(
+                "prefactor_overall\t{}",
+                p.overall.to_canonical_string()
+            )),
+            "prefactor_scalars" => out.push(format!(
+                "prefactor_scalars\t{}",
+                p.scalars.to_canonical_string()
+            )),
+            "prefactor_colour" => out.push(format!(
+                "prefactor_colour\t{}",
+                p.colour.to_canonical_string()
+            )),
+            "weights" => in_weights = true,
+            "depth" => {
+                out.push(format!("weights\t{}", cell.weights.len()));
+                for (n, by, a) in &cell.weights {
+                    let by = if *by { "vakint" } else { "beta" };
+                    out.push(format!("weight\t{n}\tapplied_by={by}\t{a}"));
+                }
+                out.push(line.to_string());
+            }
+            _ => out.push(line.to_string()),
+        }
+        if key == "weights" {
+            continue;
+        }
+    }
+    // the `lines` count (the number of lines the record has)
+    let delta = out.len() as i64 - text.lines().count() as i64;
+    out.iter()
+        .map(|line| {
+            match line
+                .strip_prefix("lines\t")
+                .and_then(|n| n.parse::<i64>().ok())
+            {
+                Some(n) => format!("lines\t{}", n + delta),
+                None => line.clone(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n"
+}
+
+/// THE WEIGHTS TABLE on the closure (the K2 child), direct and ports (the
+/// real direct K5 L2-17) kinds, typed and through text (the vacuum kind:
+/// vacuum::tests): every cell accepted or refused as the table says; the
+/// refusals also at the closure, direct and ports entries; an unknown
+/// `applied_by` string is refused by the text reader.
+#[test]
+fn every_cell_of_the_weights_table_holds_for_every_kind() {
+    let vakint = plain_engine();
+    let k2 = FactorizedNumerator::from_text(include_str!("fixtures/wh-k2-child-ins.record.txt"))
+        .unwrap();
+    let k5 =
+        FactorizedNumerator::from_text(include_str!("fixtures/wh-k5-direct.record.txt")).unwrap();
+    let k5_settings = VakintSettings {
+        number_of_terms_in_epsilon_expansion: k5.record.as_ref().unwrap().depth.unwrap() as i64,
+        ..site_settings()
+    };
+    let mut wrong = Vec::new();
+    for (kind, base) in [("closure", &k2), ("direct", &k5)] {
+        for cell in weight_cells() {
+            let typed = with_weight_cell(base, &cell).validate();
+            let text =
+                FactorizedNumerator::from_text(&text_of_weight_cell(base, &cell)).map(|_| ());
+            for (form, r) in [("typed", &typed), ("text", &text)] {
+                if r.is_ok() != cell.accepted {
+                    wrong.push(format!("{kind} {form} {}: {r:?}", cell.label));
+                }
+            }
+            if !cell.accepted {
+                let v = with_weight_cell(base, &cell);
+                let entries: Vec<(&str, bool)> = if kind == "closure" {
+                    vec![(
+                        "closure entry",
+                        evaluate_factorized_closure(
+                            &vakint,
+                            &site_settings(),
+                            std::slice::from_ref(&v),
+                            &[v.prefactor.total()],
+                        )
+                        .is_err(),
+                    )]
+                } else {
+                    vec![
+                        (
+                            "direct entry",
+                            evaluate_factorized(&vakint, &k5_settings, &v, &v.prefactor.total())
+                                .is_err(),
+                        ),
+                        (
+                            "ports entry",
+                            evaluate_factorized_ports(
+                                &vakint,
+                                &k5_settings,
+                                &v,
+                                &v.prefactor.total(),
+                            )
+                            .is_err(),
+                        ),
+                    ]
+                };
+                for (entry, refused) in entries {
+                    if !refused {
+                        wrong.push(format!("{kind} {entry} {}: accepted", cell.label));
+                    }
+                }
+            }
+        }
+        // an unknown applied_by string
+        let text = text_of_weight_cell(base, &weight_cells()[0])
+            .replace("applied_by=vakint", "applied_by=caller");
+        if FactorizedNumerator::from_text(&text).is_ok() {
+            wrong.push(format!("{kind}: applied_by=caller accepted"));
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+/// THE WRITER VALIDATES FIRST: over the vendored records and the violating
+/// inputs the tests build (insertions out of vertex order, which the writer
+/// would sort; another auxiliary mass, which a pre-expanded record's text does
+/// not carry; a weight against the table, a depth beyond the cap,
+/// an edge power beyond 2^31, a zero denominator in a vertex factor, a closure
+/// value with a direct record, a huge power in an insertion), to_text(v) is an
+/// error exactly when validate(v) is, and when it is not, the text reads back
+/// to v (the same record_atoms and the same fields).
+#[test]
+fn to_text_refuses_exactly_what_validate_refuses_and_round_trips_the_rest() {
+    let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("src/p_integral/factorized/fixtures");
+    let mut bases = Vec::new();
+    for entry in std::fs::read_dir(&dir).unwrap() {
+        let path = entry.unwrap().path();
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        if let Ok(v) = FactorizedNumerator::from_text(&text)
+            && super::is_marked(&v)
+        {
+            bases.push((path.file_name().unwrap().to_string_lossy().to_string(), v));
+        }
+    }
+    assert!(bases.len() >= 5, "{} marked fixtures", bases.len());
+    type Change = fn(&mut FactorizedNumerator);
+    let changes: [(&str, Change); 9] = [
+        ("insertions out of vertex order", |v| v.insertions.reverse()),
+        ("another auxiliary mass", |v| {
+            if let FactorizedKind::Closure(spec) = &mut v.kind {
+                spec.auxiliary_mass_squared = parsed("witness::other_mass");
+            }
+        }),
+        ("unchanged", |_| {}),
+        ("a weight by vakint against prefactor_scalars", |v| {
+            let w = vec![("scalars".to_string(), true, Atom::num(7))];
+            match &mut v.kind {
+                FactorizedKind::Closure(spec) => spec.weights = w,
+                FactorizedKind::Direct => {
+                    v.record
+                        .get_or_insert_with(|| DirectRecord {
+                            original_cycles: None,
+                            depth: None,
+                            weights: Vec::new(),
+                        })
+                        .weights = w
+                }
+            }
+        }),
+        ("a depth beyond the cap", |v| match &mut v.kind {
+            FactorizedKind::Closure(spec) => spec.depth = Some(33),
+            FactorizedKind::Direct => {
+                v.record
+                    .get_or_insert_with(|| DirectRecord {
+                        original_cycles: None,
+                        depth: None,
+                        weights: Vec::new(),
+                    })
+                    .depth = Some(33)
+            }
+        }),
+        ("an edge power beyond 2^31", |v| {
+            v.edges[0].power = (1 << 31) + 1
+        }),
+        ("a zero denominator in a vertex factor", |v| {
+            let i = v
+                .vertices
+                .iter()
+                .position(|x| v.insertions.iter().all(|n| n.vertex != x.id))
+                .unwrap_or(0);
+            v.vertices[i].factor =
+                &v.vertices[i].factor * parsed("1/((witness::x-3)^2-witness::x^2+6*witness::x-9)");
+        }),
+        ("a closure value with a direct record", |v| {
+            if matches!(v.kind, FactorizedKind::Closure(_)) {
+                v.record = Some(DirectRecord {
+                    original_cycles: None,
+                    depth: None,
+                    weights: Vec::new(),
+                });
+            }
+        }),
+        ("a huge power in an insertion", |v| {
+            if let Some(i) = v.insertions.first_mut() {
+                i.coefficient = &i.coefficient * parsed("((1+UFO::x)^1000000000-UFO::y)^(-1)");
+            }
+        }),
+    ];
+    let mut wrong = Vec::new();
+    for (name, base) in &bases {
+        for (what, change) in changes.iter() {
+            let mut v = base.clone();
+            change(&mut v);
+            let valid = v.validate().is_ok();
+            match v.to_text() {
+                // WRITER ERRORS = VALIDATION ERRORS
+                Err(e) if !valid => {
+                    if format!("{e:?}") != format!("{:?}", v.validate().unwrap_err()) {
+                        wrong.push(format!(
+                            "{name} {what}: the writer's error is not validation's: {e}"
+                        ));
+                    }
+                }
+                Err(e) => wrong.push(format!("{name} {what}: valid but not written: {e}")),
+                Ok(_) if !valid => {
+                    wrong.push(format!("{name} {what}: refused by validate but written"))
+                }
+                Ok(text) => match FactorizedNumerator::from_text(&text) {
+                    Ok(read) => {
+                        if read.record_atoms() != v.record_atoms()
+                            || read
+                                .edges
+                                .iter()
+                                .map(|e| (e.id, e.power, e.momentum.clone()))
+                                .collect::<Vec<_>>()
+                                != v.edges
+                                    .iter()
+                                    .map(|e| (e.id, e.power, e.momentum.clone()))
+                                    .collect::<Vec<_>>()
+                            || read.record != v.record
+                        {
+                            wrong.push(format!(
+                                "{name} {what}: the text reads back to another value"
+                            ));
+                        }
+                    }
+                    Err(e) => wrong.push(format!("{name} {what}: written but not read: {e}")),
+                },
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }

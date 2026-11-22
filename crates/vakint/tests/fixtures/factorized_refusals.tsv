@@ -40,12 +40,14 @@ refusal	Closure	the projector contains Q(<>, ..): with a Taylor step it acts aft
 refusal	Closure	the projector contains the momentum of internal edge <>
 refusal	Closure	the reference mass <> in the prefactor (it is substituted in the integrand only)
 refusal	Closure	the reference mass <> is not a symbol (it is substituted everywhere)
+refusal	Closure	the two legs of a paired line carry one momentum: edge <> carries <>, its partner <> <>
 refusal	Closure	vakint's internal Taylor parameter occurs in the record
 refusal	Closure	with original_cycles the prefactor has loop_sign=1, nf_power=0, overall 1 (the original graph's weights stay with the caller); found loop_sign=<> nf_power=<> overall <>
 refusal	Closure|Graph	a flavour symbol in the record (n_f stays with the caller): in prefactor_scalars <>
 refusal	Closure|Graph	edge <>: power <> out of range (at most 2^31 in absolute value)
-refusal	Closure|Graph	weight <> applied_by=beta, but the prefactor has <> (a weight the caller applies is 1 in the prefactor)
-refusal	Closure|Graph	weight <> applied_by=vakint is <>, prefactor_scalars is <>
+refusal	Closure|Graph	weight <> applied_by=<> <>: <> is <>, not <> (<>)
+refusal	Closure|Graph	weight <> applied_by=<>: not a weight of the record format (scalars, overall, colour, loop_sign, flavour)
+refusal	Closure|Graph	weight <> is listed twice (each weight is applied once)
 refusal	Colour	<> open colour slots; v1 closes exactly two adjoint legs
 refusal	Colour	closed-network reducer failed: <>
 refusal	Colour	colour algebra: <>
@@ -118,6 +120,7 @@ refusal	Graph	the depth <> of the record differs from the settings' number of te
 refusal	Graph	the evaluation methods mix master modes: <> (a marked value needs one mode for every RustRed and Forcer method)
 refusal	Graph	the label contains a TAB or a newline
 refusal	Graph	the record and its insertions carry <> fermion / <> ghost cycles, more than original_cycles fermion=<> ghost=<>
+refusal	Graph	the two legs of a paired line carry one momentum: edge <> carries <>, its partner <> <>
 refusal	Graph	vacuum: <>
 refusal	Graph	vertex <>: bad rule name
 refusal	Graph	vertex id <> occurs twice
@@ -126,6 +129,7 @@ refusal	Insertion	a contracted vertex (rule <>) has hedges <>, its incident half
 refusal	Insertion	a denominator vanishes identically<> (undefined, not a pole of any order): <> in the <>
 refusal	Insertion	a fractional power of ε
 refusal	Insertion	a non-integer exponent in insertion <> <>: <>
+refusal	Insertion	a number beyond <> bits in insertion <> <>: <>
 refusal	Insertion	a surrogate coefficient vertex (rule <>) has <> hedges, not the two inner boundary half-edges
 refusal	Insertion	an ε power out of range
 refusal	Insertion	an ε power out of range: the insertions' pole order overflows

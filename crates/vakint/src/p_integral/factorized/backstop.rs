@@ -42,21 +42,14 @@ use crate::VakintSettings;
 use crate::utils::vakint_macros::vk_symbol;
 
 /// vakint's internal names (without the `vakint::` namespace), exact.
-const INTERNAL_EXACT: [&str; 34] = [
+const INTERNAL_EXACT: [&str; 27] = [
     // the factorised entries
     "closure_lambda",
     "slash",
     // vakint's symbol table and its input / analysis placeholders
-    "ERROR",
-    "dot_dummy_ind",
-    "dot_pow",
-    "input_coefficient",
     "partial_numerical_input",
     "rustred_input",
     "normalization_input",
-    "tensor_scalar_coefficient",
-    "feynkit_external_vector",
-    "feynkit_opaque_index",
     "momentum_match_parameter",
     "coordinate_limit_spectator",
     "coordinate_metadata",
@@ -91,13 +84,11 @@ const INTERNAL_EXACT: [&str; 34] = [
 
 /// Families of internal names made with format strings: a prefix and a
 /// suffix around the formatted part (the code's pattern in the comment).
-const INTERNAL_FAMILIES: [(&str, &str); 6] = [
+const INTERNAL_FAMILIES: [(&str, &str); 4] = [
     ("closure_tensor_", ""), // closure_tensor_{n} (the closure entry's slot placeholders)
     ("graph_entry_branch_", ""), // graph_entry_branch_{i} (the graph entry's colour branches)
     ("input_coefficient_placeholder_", ""), // input_coefficient_placeholder_{index} (lib.rs)
     ("coordinate_metadata_", ""), // coordinate_metadata_{i} (rational_series.rs)
-    ("momentum_match_source_", ""), // momentum_match_source_{axis} (momentum mapping)
-    ("vakint_master_transport_", ""), // vakint_master_transport_{axis} (five-loop transport)
 ];
 
 /// vakint's input-notation heads: internal in a value returned in the
@@ -125,7 +116,10 @@ const NOTATION_HEADS: [&str; 12] = [
 /// internal. Test code: the check itself allows every name that is not
 /// internal.
 #[cfg(test)]
-const REVIEWED_OUTPUT: [&str; 201] = [
+const REVIEWED_OUTPUT: [&str; 203] = [
+    // base placeholders without evidence of internality (out of the deny table)
+    "momentum_match_source_1",
+    "vakint_master_transport_1",
     // names a backend can keep in a returned value (out of the deny table):
     // a Retain value's RustRed family tags, unsubstituted masters z<n>,
     // loop-momentum and rotated-momentum names, pinched topology names
@@ -841,7 +835,7 @@ mod tests {
             "pow_",
             "idx___",
             "topo",
-            "dot_dummy_ind",
+            "partial_numerical_input",
         ] {
             assert!(internal(name, false), "{name} is internal");
         }

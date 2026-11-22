@@ -1387,7 +1387,7 @@ fn the_bounds_reach_the_vacuum_entry_typed_and_through_text() {
             Box::new(|v| {
                 v.record.as_mut().unwrap().weights = vec![("scalars".into(), true, Atom::num(2))]
             }),
-            "weight scalars applied_by=vakint is 2",
+            "weight scalars applied_by=vakint 2",
         ),
         (
             "an exponent beyond 64 in a vertex factor",
@@ -1540,4 +1540,67 @@ fn p2_power_needs_an_external_momentum_on_the_direct_kind() {
         ),
         Ok(()) => panic!("accepted"),
     }
+}
+
+/// THE WEIGHTS TABLE on the vacuum kind (a marked two-loop massive sunrise),
+/// typed (the vacuum mode's validation, and the vacuum entry for the
+/// refusals) and through text: every cell as the table says.
+#[test]
+fn every_cell_of_the_weights_table_holds_for_the_vacuum_kind() {
+    use super::super::insertion_records_tests::{
+        text_of_weight_cell, weight_cells, with_weight_cell,
+    };
+    let vakint = Vakint::new().unwrap();
+    let settings = no_form_settings();
+    let edges = [
+        (1, 1, 2, vec![1, 0]),
+        (2, 1, 2, vec![0, 1]),
+        (3, 2, 1, vec![1, 1]),
+    ]
+    .iter()
+    .map(|(id, s, t, m)| {
+        let mut e = edge(
+            *id,
+            *s,
+            *t,
+            (2 * id, 2 * id + 1),
+            m,
+            LineKind::Scalar,
+            1,
+            Atom::num(1),
+        );
+        e.mass_squared = atom("witness::msq");
+        e
+    })
+    .collect();
+    let mut base = value(
+        vec![Some(1), Some(2)],
+        Vec::new(),
+        edges,
+        (1..=2).map(|i| vertex(i, Atom::num(1))).collect(),
+        Vec::new(),
+    );
+    base.record = Some(super::super::DirectRecord {
+        original_cycles: None,
+        depth: None,
+        weights: Vec::new(),
+    });
+    let mut wrong = Vec::new();
+    for cell in weight_cells() {
+        let v = with_weight_cell(&base, &cell);
+        let typed = contract_to_vakint_vacuum(&v).map(|_| ());
+        if typed.is_ok() != cell.accepted {
+            wrong.push(format!("typed {}: {typed:?}", cell.label));
+        }
+        let text = FactorizedNumerator::from_text(&text_of_weight_cell(&base, &cell)).map(|_| ());
+        if text.is_ok() != cell.accepted {
+            wrong.push(format!("text {}: {text:?}", cell.label));
+        }
+        if !cell.accepted
+            && evaluate_factorized_vacuum(&vakint, &settings, &v, &Atom::num(1)).is_ok()
+        {
+            wrong.push(format!("vacuum entry {}: accepted", cell.label));
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
