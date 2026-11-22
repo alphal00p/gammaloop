@@ -1005,6 +1005,11 @@ fn matrix_r45_numerator_prefactor() -> Result<()> {
         // through the weight normaliser, which refuses a pole: the
         // correction is refused (pole_in_fixed_factor), today's value
         // (round 8b: declined, declared_order).
+        // Repair RC-B1 (on 8i): the typed root built from the Dirac-traced
+        // prefactor is not a closed scalar, so it would be opaque
+        // (opaque_projector); the weight normaliser reads the prefactor
+        // first and refuses it at the weight boundary (pole_in_fixed_factor),
+        // today's value either way.
         [PIF, PIF, Loud, PIF],
     )
 }
