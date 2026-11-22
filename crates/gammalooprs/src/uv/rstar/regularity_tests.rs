@@ -323,9 +323,17 @@ fn the_numerator_prefactor_pole_is_read() -> Result<()> {
     let (child, counts) = projected(&case, "child", FIXED)?;
     ensure_same("prefactor", &child, &today)?;
     ensure_raised("prefactor", &counts)?;
+    // Without the certificate (round 3's B = 1) the prefactor's pole is now
+    // caught by the second line of defence (MATRIX-R45 review): the rows'
+    // complete outer coefficients are measured after the root projector,
+    // which applies the prefactor; the need exceeds B and the correction is
+    // refused to today's value (before: +117/32 with no refusal).
     let (round3, counts3) = regularity::as_round3(|| projected(&case, "child", FIXED))?;
-    ensure!(counts3.refused == 0, "{counts3:?}");
-    pinned("prefactor round3", &round3, &[(-1, q(117, 32))], true)
+    ensure!(
+        counts3.exceeded >= 1 && counts3.refused >= 1 && counts3.reason == Some("bound_exceeded"),
+        "{counts3:?}"
+    );
+    ensure_same("prefactor round3", &round3, &today)
 }
 
 /// One matrix cell (projected as beta): the child route equals today's path
