@@ -3037,6 +3037,41 @@ fn every_one_hedge_rule_has_its_witness() {
     );
 }
 
+/// THE RULES THAT HOLD UNCHANGED, on a one-hedge insertion (l5-59943, hedge 9
+/// at vertex 4, whose incident half-edges are 9, 16 and 18): a single hedge
+/// that is a half-edge of the record but not at the vertex (20, of the leg 11
+/// at vertex 5) is refused by "no boundary half-edge sits at the vertex"; a
+/// ONE-HEDGE `ct:` (vertex 4 renamed `ct:`) by the contracted vertex's rule (a
+/// `ct:` keeps exactly its vertex's incident half-edges); and the momentum
+/// rule (29.2) reads the COEFFICIENT too: a `Q` of an absent edge there is
+/// refused by it (before the coefficient's scalar rule).
+#[test]
+fn the_unchanged_rules_hold_for_a_one_hedge_insertion() {
+    let base = FactorizedNumerator::from_text(GG_59943).unwrap();
+    let mut v = base.clone();
+    v.insertions[0].hedges = vec![20];
+    one_hedge_refusal(
+        v.validate(),
+        "no boundary half-edge sits at the vertex",
+        "a single hedge not at its vertex",
+    );
+    let mut v = base.clone();
+    v.vertices.iter_mut().find(|x| x.id == 4).unwrap().rule = "ct:scalar_insertion_0".into();
+    one_hedge_refusal(
+        v.validate(),
+        "a contracted vertex (rule ct:scalar_insertion_0) has hedges [9], its incident half-edges are {9, 16, 18}",
+        "a one-hedge ct:",
+    );
+    let mut v = base.clone();
+    v.insertions[0].coefficient =
+        &v.insertions[0].coefficient * parsed(&format!("{MOMENTUM_HEAD}(77,{HEDGE_SLOT}(14,1)))"));
+    one_hedge_refusal(
+        v.validate(),
+        "a one-hedge surrogate coefficient vertex (rule ins:scalar_insertion_0): its coefficient has the momentum Q(77) of an edge that is not in the record",
+        "an absent edge's momentum in the coefficient",
+    );
+}
+
 /// THE PRODUCER'S READINGS of correction 29. (a) The momentum rule compares
 /// with the RECORD edge owning the hedge, which can be the paired leg
 /// 100000 + e_in: l5-59943 with its leg 5 written as the pair 100005 (into
