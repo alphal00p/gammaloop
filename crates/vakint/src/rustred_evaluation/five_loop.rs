@@ -584,6 +584,8 @@ impl Vakint {
                 "witnesses": witnesses.len(),
                 "threads": threads,
                 "groups": groups.as_ref().map(witness_screen::NumeratorGroups::shape),
+                "opaque_atoms": groups.as_ref().map(witness_screen::NumeratorGroups::opaque_atoms),
+                "opaque_switch": witness_screen::opaque_coefficients_enabled(),
                 "refusal": refusal,
                 "screen_rejected": count(|s| matches!(s, Status::Rejected)),
                 "screen_admitted": count(|s| matches!(s, Status::Admitted(_))),
