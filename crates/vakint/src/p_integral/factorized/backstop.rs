@@ -1122,7 +1122,7 @@ fn after() { let _ = symbol!("witness::kept_b"); }
     /// as that constructor). A site missing here, a count that differs and an
     /// entry no site matches all fail.
     #[rustfmt::skip]
-    const REVIEWED_SITES: [(&str, &str, &str, usize, &str); 170] = [
+    const REVIEWED_SITES: [(&str, &str, &str, usize, &str); 171] = [
         ("display.rs", "NamespacedSymbol::parse", "&self.name", 1, "data"),
         ("display.rs", "NamespacedSymbol::parse", "full_name", 1, "data"),
         ("display.rs", "SymbolBuilder::new", "NamespacedSymbol::parse(&self.name)", 1, "data"),
@@ -1250,6 +1250,7 @@ fn after() { let _ = symbol!("witness::kept_b"); }
         ("rustred_evaluation/five_loop.rs", "vk_symbol!", "settings.epsilon_symbol.as_str()", 1, "settings"),
         ("rustred_evaluation/five_loop.rs", "vk_symbol!", "settings.mu_r_sq_symbol.as_str()", 1, "settings"),
         ("rustred_evaluation/five_loop/r2_fixtures.rs", "vakint_parse!", "text", 2, "data"),
+        ("rustred_evaluation/five_loop/witness_screen.rs", "vk_parse!", "&settings.epsilon_symbol", 1, "settings"),
         ("rustred_evaluation/masters.rs", "vk_parse!", "&constant.symbol", 1, "data"),
         ("rustred_evaluation/masters.rs", "vk_parse!", "exact", 1, "data"),
         ("rustred_evaluation/masters.rs", "vk_parse!", "expression", 1, "data"),
