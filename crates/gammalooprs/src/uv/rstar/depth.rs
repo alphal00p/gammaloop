@@ -375,6 +375,9 @@ pub(super) fn is_alarm(error: &eyre::Report) -> bool {
     error.chain().any(|cause| {
         cause.is::<DepthAlarm>()
             || cause.is::<CheckFailure>()
+            // IRH-DEPTH round 8b (C1): a scalar d at an ε expansion that
+            // could not be replaced by 4 − 2ε refuses the diagram.
+            || cause.is::<crate::uv::approx::integrated::DimensionAtTruncation>()
             || cause
                 .downcast_ref::<crate::uv::counterterm_cache::CachedError>()
                 .is_some_and(|cached| is_alarm(cached.cause()))
