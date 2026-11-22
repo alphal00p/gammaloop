@@ -292,6 +292,10 @@ pub enum Refusal {
     /// every vacuum integral or into `h_j` after the truncation) has a pole
     /// or an order that cannot be read.
     PoleInFixedFactor,
+    /// A division by zero or a non-finite number (symbolica's infinity or an
+    /// indeterminate): only the weight normaliser ([`normalise_weight`])
+    /// raises it (review N1, round 8a).
+    NonFinite,
 }
 
 impl Refusal {
@@ -303,6 +307,7 @@ impl Refusal {
             Self::SymbolInDenominator => "symbol_in_denominator",
             Self::OutsideList => "outside_list",
             Self::PoleInFixedFactor => "pole_in_fixed_factor",
+            Self::NonFinite => "non_finite",
         }
     }
 }
@@ -492,8 +497,24 @@ pub fn contract_closed(expression: &Atom) -> Option<Atom> {
 /// in a denominator; `hard`: a factor of the hard part, integrated and
 /// TRUNCATED before `d = 4-2ε` is substituted in it, so a `d` or a closed
 /// trace in one of its denominators is a hidden pole of `h_j` that the
-/// truncation cannot see (refused, not contracted).
-fn walk(view: AtomView<'_>, denominator: bool, hard: bool) -> Normalised {
+/// truncation cannot see (refused, not contracted). `finite` (the weight
+/// normaliser only; the correction factors keep `false`): a non-finite
+/// number, a denominator that normalises to zero, or a sub-expression whose
+/// normal form is non-finite is refused AT that sub-expression
+/// ([`Refusal::NonFinite`]), so a 1/0 cannot vanish under a further
+/// inversion (`(1 + 1/0)^-1` is 0 in symbolica).
+fn walk(view: AtomView<'_>, denominator: bool, hard: bool, finite: bool) -> Normalised {
+    let result = walk_inner(view, denominator, hard, finite)?;
+    if finite && !result.is_finite() {
+        return Err((
+            Refusal::NonFinite,
+            format!("{} normalises to {}", short(view), short(result.as_view())),
+        ));
+    }
+    Ok(result)
+}
+
+fn walk_inner(view: AtomView<'_>, denominator: bool, hard: bool, finite: bool) -> Normalised {
     let epsilon = GS.dim_epsilon;
     match view {
         AtomView::Num(_) => Ok(view.to_owned()),
@@ -594,20 +615,29 @@ fn walk(view: AtomView<'_>, denominator: bool, hard: bool) -> Normalised {
             } else {
                 base.to_owned()
             };
-            let base = walk(base.as_view(), inside, hard)?;
+            let base = walk(base.as_view(), inside, hard, finite)?;
+            if finite && inverted && (base.is_zero() || base.together().is_zero()) {
+                return Err((
+                    Refusal::NonFinite,
+                    format!(
+                        "a division by zero: the denominator of {} is 0 at d = 4-2ε",
+                        short(view)
+                    ),
+                ));
+            }
             Ok(base.pow(exponent.to_owned()))
         }
         AtomView::Mul(product) => {
             let mut result = Atom::one();
             for factor in product.iter() {
-                result *= walk(factor, denominator, hard)?;
+                result *= walk(factor, denominator, hard, finite)?;
             }
             Ok(result)
         }
         AtomView::Add(sum) => {
             let terms = sum
                 .iter()
-                .map(|term| walk(term, denominator, hard))
+                .map(|term| walk(term, denominator, hard, finite))
                 .collect::<std::result::Result<Vec<_>, _>>()?;
             Ok(Atom::add_many(terms.iter()))
         }
@@ -622,7 +652,7 @@ pub fn normalise(factor: Factor, expression: &Atom) -> std::result::Result<Atom,
         factor,
         Factor::HardNumerator | Factor::AdditionalNormalisation | Factor::IrDiracClosure
     );
-    walk(expression.as_view(), false, hard).map_err(|(class, detail)| Refused {
+    walk(expression.as_view(), false, hard, false).map_err(|(class, detail)| Refused {
         class,
         factor: entry(factor).name,
         detail,
@@ -685,7 +715,13 @@ pub fn ensure_regular_weight(name: &str, expression: &Atom) -> std::result::Resu
 /// non-integer exponent of an `ε`-dependent base, an open index or a
 /// tensor that does not contract to a scalar, any symbol other than `ε`,
 /// `π`, `e` and the dimension spellings), a pole (order `< 0`), an order
-/// that cannot be read, and a weight that normalises to exactly ZERO. A
+/// that cannot be read, a NON-FINITE value or a division by zero at any
+/// stage (round 8a, review N1: `(d − 4 + 2ε)⁻¹` normalised to `⧞`, which
+/// has no `ε` and read as order 0), a value whose zero cannot be decided
+/// (a function, a non-integer power or an inexact number left after
+/// simplification: the value must be a rational function of `ε` with exact
+/// coefficients over `Q(i)`, `π` and `e`), and a weight that normalises to
+/// exactly ZERO. A
 /// zero is refused, not returned: a weight of 0 makes the whole diagram 0,
 /// which is exactly how a lost value looks (the r47 finding-2 defect turned
 /// the unit weight into a zero result); a graph whose weights cancel is
@@ -745,6 +781,13 @@ pub enum WeightRefusal {
     Unreadable,
     /// The weight normalises to exactly zero.
     Zero,
+    /// A division by zero, or a value that is not a finite number
+    /// (symbolica's infinity `⧞` or an indeterminate), at any stage.
+    NonFinite,
+    /// A value whose zero (or pole) the normaliser cannot decide: a function
+    /// (e.g. `zeta(3)`, `log(2)`), a non-integer power (`2^(1/2)`) or an
+    /// inexact (floating-point) number left after simplification.
+    Undecidable,
 }
 
 impl WeightRefusal {
@@ -756,6 +799,8 @@ impl WeightRefusal {
             Self::Pole => "pole",
             Self::Unreadable => "unreadable_order",
             Self::Zero => "zero",
+            Self::NonFinite => "non_finite",
+            Self::Undecidable => "undecidable",
         }
     }
 }
@@ -794,6 +839,60 @@ fn weight_symbol(symbol: Symbol) -> bool {
     symbol == GS.dim_epsilon || symbol == Symbol::PI || symbol == Symbol::E
 }
 
+/// Whether `value` is a rational function of `ε` (and `π`, `e`) whose
+/// coefficients are exact, finite complex rationals: no function, no
+/// non-integer power, no float, finite-field or nested rational-polynomial
+/// coefficient, no infinity or indeterminate.
+fn decidable(value: &Atom) -> std::result::Result<(), (WeightRefusal, String)> {
+    use symbolica::coefficient::CoefficientView;
+    let mut refusal = None;
+    value.visitor(&mut |view| {
+        if refusal.is_some() {
+            return false;
+        }
+        match view {
+            AtomView::Num(number) => match number.get_coeff_view() {
+                CoefficientView::Natural(..) | CoefficientView::Large(..) => {}
+                CoefficientView::Infinity(_) | CoefficientView::Indeterminate => {
+                    refusal = Some((WeightRefusal::NonFinite, format!("the number {}", short(view))));
+                }
+                _ => {
+                    refusal = Some((
+                        WeightRefusal::Undecidable,
+                        format!("the inexact number {}", short(view)),
+                    ));
+                }
+            },
+            AtomView::Fun(_) => {
+                refusal = Some((WeightRefusal::Undecidable, format!("the function {}", short(view))));
+            }
+            AtomView::Pow(power) => {
+                let (_, exponent) = power.get_base_exp();
+                let integer = matches!(exponent, AtomView::Num(number)
+                    if number.get_coeff_view().to_owned().is_integer());
+                if !integer {
+                    refusal = Some((
+                        WeightRefusal::Undecidable,
+                        format!("the non-integer power {}", short(view)),
+                    ));
+                }
+            }
+            AtomView::Var(variable) if !weight_symbol(variable.get_symbol()) => {
+                refusal = Some((
+                    WeightRefusal::UnknownSymbol,
+                    format!("the symbol {}", variable.get_symbol().get_name()),
+                ));
+            }
+            _ => {}
+        }
+        refusal.is_none()
+    });
+    match refusal {
+        Some(refusal) => Err(refusal),
+        None => Ok(()),
+    }
+}
+
 /// THE weight normaliser ([`NormalisedWeight`]): `name` must be a graph
 /// weight of the closed list ([`FACTORS`]: `overall_factor`,
 /// `numerator_prefactor`, `projector`), else `outside_list`.
@@ -819,11 +918,18 @@ pub fn normalise_weight(
         .with(Atom::var(GS.dim))
         .replace(vakint.form_epsilon)
         .with(Atom::var(GS.dim_epsilon));
-    let unsupported = |(class, detail): (Refusal, String)| {
-        refuse(WeightRefusal::Unsupported(class), detail)
+    let unsupported = |(class, detail): (Refusal, String)| match class {
+        Refusal::NonFinite => refuse(WeightRefusal::NonFinite, detail),
+        class => refuse(WeightRefusal::Unsupported(class), detail),
     };
+    if !expression.is_finite() {
+        return Err(refuse(
+            WeightRefusal::NonFinite,
+            format!("{} is not finite", short(expression.as_view())),
+        ));
+    }
     // Closed traces in denominators (and nested ones) contracted, d = 4-2ε.
-    let mut normalised = walk(expression.as_view(), false, false).map_err(unsupported)?;
+    let mut normalised = walk(expression.as_view(), false, false, true).map_err(unsupported)?;
     if holds_structure(normalised.as_view()) {
         // A closed trace in a numerator: the whole scalar is contracted.
         let contracted = contract_closed(&normalised).ok_or_else(|| {
@@ -835,7 +941,7 @@ pub fn normalise_weight(
                 ),
             )
         })?;
-        normalised = walk(contracted.as_view(), false, false).map_err(unsupported)?;
+        normalised = walk(contracted.as_view(), false, false, true).map_err(unsupported)?;
     }
     let mut unknown = None;
     normalised.visitor(&mut |view| {
@@ -857,6 +963,15 @@ pub fn normalise_weight(
         ));
     }
     let value = normalised.together();
+    // The value must be a rational function of ε with exact, finite
+    // coefficients over Q(i) and π, e: then its zero and its order are
+    // decided exactly (review N1).
+    decidable(&value).map_err(|(class, detail)| {
+        refuse(
+            class,
+            format!("{detail} in {} (normalised {})", short(expression.as_view()), short(value.as_view())),
+        )
+    })?;
     if value.is_zero() {
         return Err(refuse(
             WeightRefusal::Zero,
