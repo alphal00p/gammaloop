@@ -1798,7 +1798,8 @@ fn masses_are_plain_symbols() {
 }
 
 /// Every producer v3 record (all 75 under the wh-fixtures root, runs/
-/// excluded) and every vendored one is ACCEPTED by validation (from_text
+/// excluded) and every vendored one (13: 10 of the fixture export, 3 of the
+/// published one-hedge cases) is ACCEPTED by validation (from_text
 /// validates): the grammar rules refuse no real record.
 #[test]
 #[ignore = "external data: VAKINT_TEST_WH_FIXTURES"]
@@ -1848,7 +1849,7 @@ fn every_real_record_validates() {
         "refused real records:\n{}",
         refused.join("\n")
     );
-    wh_fixtures::assert_compared("REAL_RECORDS_VALIDATE", accepted, Some(85));
+    wh_fixtures::assert_compared("REAL_RECORDS_VALIDATE", accepted, Some(88));
 }
 
 // ===========================================================================
@@ -3471,7 +3472,9 @@ fn a_marked_three_loop_massive_tadpole_through_the_vacuum_entry() {
 /// validation only (`from_text`), on the roots
 /// `/common/build-cache/ben/consol:/common/ben/beta/results/consolidation/wh-fixtures`
 /// (LIVE: 2,633 unique v3 records on 2026-11-21, 3,126 later the same day;
-/// the total is printed, not pinned). The 22 records of `REFUSED`
+/// the total is printed, not pinned; files under a directory named
+/// `controls`, the producer's control inputs, are validated and printed
+/// apart, not asserted). The 22 records of `REFUSED`
 /// (one-loop remainders whose only line left is the closing massive line: a
 /// massive tadpole, the producer's designed decline vakint:all_massive,
 /// dumped before the vakint call) are, while present, refused with the
@@ -3523,6 +3526,10 @@ fn every_production_record_validates() {
     let roots =
         wh_fixtures::required_env("VAKINT_TEST_RECORD_ROOTS", "the producer's record roots");
     let mut files = Vec::new();
+    // the producer's CONTROL records (a directory named `controls`: inputs
+    // it writes to probe the reader, some meant to be refused) are not
+    // production records: validated and printed apart, not asserted
+    let mut controls = Vec::new();
     for root in roots.to_string_lossy().split(':') {
         let mut stack = vec![PathBuf::from(root)];
         while let Some(d) = stack.pop() {
@@ -3535,12 +3542,30 @@ fn every_production_record_validates() {
                 if p.is_dir() {
                     stack.push(p);
                 } else if name == "input.txt" || name.ends_with(".record.txt") {
-                    files.push(p);
+                    if p.components().any(|c| c.as_os_str() == "controls") {
+                        controls.push(p);
+                    } else {
+                        files.push(p);
+                    }
                 }
             }
         }
     }
     init();
+    controls.sort();
+    for p in &controls {
+        let outcome = match std::fs::read_to_string(p)
+            .map_err(|e| e.to_string())
+            .and_then(|t| FactorizedNumerator::from_text(&t).map_err(|e| e.to_string()))
+        {
+            Ok(_) => "accepted".to_string(),
+            Err(e) => format!("refused: {}", e.chars().take(160).collect::<String>()),
+        };
+        eprintln!(
+            "PRODUCTION CONTROL {} (not asserted): {outcome}",
+            p.display()
+        );
+    }
     let pinned = REFUSED
         .iter()
         .filter_map(|p| std::fs::read_to_string(p).ok())
