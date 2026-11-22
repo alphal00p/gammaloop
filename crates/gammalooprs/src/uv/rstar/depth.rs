@@ -433,6 +433,10 @@ pub(super) struct DepthCounts {
     /// cell RIGHT needs these (MATRIX-R45 review).
     pub taken: usize,
     pub nested_taken: usize,
+    /// Corrections with no shown row whose root projector callback the unit
+    /// insertion probe could not evaluate (admitted, certified by contract
+    /// only: `IR_HARD_DEPTH_CALLBACK_UNPROBED`).
+    pub callback_unprobed: usize,
     /// Tests: the last refusal's reason.
     pub reason: Option<&'static str>,
 }
@@ -459,6 +463,7 @@ impl DepthCounts {
         self.pole_in_fixed_factor += other.pole_in_fixed_factor;
         self.taken += other.taken;
         self.nested_taken += other.nested_taken;
+        self.callback_unprobed += other.callback_unprobed;
         self.reason = other.reason.or(self.reason);
     }
 }
