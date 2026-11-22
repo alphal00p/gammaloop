@@ -1381,6 +1381,29 @@ pub(crate) fn check_data_atoms_catalogue(
     if !is_marked(value) {
         return Ok(());
     }
+    // Only an UNKNOWN master coefficient of an insertion is looked up: the
+    // engine's catalogue (the built-in five-loop one is parsed on its first
+    // use) is fetched when an insertion carries one, not for every record.
+    let unknown = |atom: &Atom| {
+        let mut found = false;
+        atom.as_view().visitor(&mut |part| {
+            if is_unknown_coefficient(part)
+                && let AtomView::Fun(f) = part
+                && let Some(AtomView::Var(_)) = f.iter().next()
+            {
+                found = true;
+            }
+            !found
+        });
+        found
+    };
+    if !value
+        .insertions
+        .iter()
+        .any(|insertion| unknown(&insertion.coefficient) || unknown(&insertion.factor))
+    {
+        return Ok(());
+    }
     let Some(catalogue) = vakint.p_master_catalogue() else {
         return Ok(());
     };
