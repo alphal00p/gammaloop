@@ -55,6 +55,7 @@ use symbolica::id::Replacement;
 
 use super::super::numerator::{MatchedScalarInput, ScalarNumeratorForm};
 use crate::symbols::S;
+use crate::utils::vakint_macros::vk_parse;
 use crate::{ReplacementRules, VakintError, VakintSettings, VakintTerm};
 
 /// One `P_(s, r)`: rational scalar-product polynomial of degree `degree`
@@ -74,6 +75,25 @@ pub(super) struct NumeratorGroups {
     /// independence proof.
     opaque: Vec<Atom>,
     groups: Vec<Group>,
+    /// Tensor grammar, regulated route: the lowering parts with
+    /// regulator-dependent weights (then `groups` is empty and `coefficients`
+    /// are the regulator-free classes).
+    regulated: Option<Regulated>,
+}
+
+/// The regulated form `sum_(class c, part j) c * R_(c,j)(ε) * P_j` of a
+/// tensor-reduced numerator: `P_j` a homogeneous rational scalar-product
+/// polynomial of degree `d_j`, `R_(c,j)` a rational function of the regulator
+/// alone, given by its exact values at `points` regulator values. Every
+/// `R_(c,j)` times the common denominator `Q` of all of them is a polynomial
+/// of degree below `points`, and `Q` does not vanish at the points, so a sum
+/// `sum_j R_(c,j) * w_j` with rational `w_j` vanishes identically if and only
+/// if it vanishes at every point.
+struct Regulated {
+    /// Distinct `(d_j, P_j)`.
+    parts: Vec<(u32, Atom)>,
+    /// `(class, part, values of R at the points)`, one per distinct pair.
+    entries: Vec<(usize, usize, Vec<Rational>)>,
 }
 
 /// Exact weights of one lowered key, by independent slot: distinct
@@ -134,6 +154,16 @@ pub(super) enum Screen {
 
 fn rational(view: AtomView) -> Option<Rational> {
     Rational::try_from(view).ok()
+}
+
+/// The regulator symbol of `settings` (its `epsilon_symbol`, if that parses
+/// as a variable): the tensor grammar's regulated route keys on it.
+pub(super) fn regulator_symbol(settings: &VakintSettings) -> Option<Symbol> {
+    let regulator = vk_parse!(&settings.epsilon_symbol).ok()?;
+    match regulator.as_view() {
+        AtomView::Var(variable) => Some(variable.get_symbol()),
+        _ => None,
+    }
 }
 
 /// Whether the opaque coefficient atoms are on (debug switch
@@ -234,6 +264,129 @@ fn substitute_opaque(view: AtomView, opaque: &[Atom], values: &[Atom]) -> Atom {
         }
         AtomView::Num(_) | AtomView::Var(_) => view.to_owned(),
     }
+}
+
+/// Whether `view` has the variable `symbol` outside function atoms (opaque
+/// atoms may carry it inside: they are independent of it in the zero test).
+fn has_free_variable(view: AtomView, symbol: Symbol) -> bool {
+    match view {
+        AtomView::Var(variable) => variable.get_symbol() == symbol,
+        AtomView::Num(_) | AtomView::Fun(_) => false,
+        AtomView::Add(sum) => sum.iter().any(|term| has_free_variable(term, symbol)),
+        AtomView::Mul(product) => product
+            .iter()
+            .any(|factor| has_free_variable(factor, symbol)),
+        AtomView::Pow(power) => {
+            has_free_variable(power.get_base(), symbol)
+                || has_free_variable(power.get_exp(), symbol)
+        }
+    }
+}
+
+/// Degree of a polynomial in `regulator` with rational coefficients, or
+/// `None` for anything else.
+fn regulator_degree(view: AtomView, regulator: Symbol) -> Option<u32> {
+    match view {
+        AtomView::Num(_) => rational(view).map(|_| 0),
+        AtomView::Var(variable) => (variable.get_symbol() == regulator).then_some(1),
+        AtomView::Add(sum) => sum.iter().try_fold(0u32, |degree, term| {
+            Some(degree.max(regulator_degree(term, regulator)?))
+        }),
+        AtomView::Mul(product) => product.iter().try_fold(0u32, |degree, factor| {
+            degree.checked_add(regulator_degree(factor, regulator)?)
+        }),
+        AtomView::Pow(power) => {
+            let exponent = rational(power.get_exp())?;
+            if !exponent.is_integer() || exponent.is_negative() {
+                return None;
+            }
+            let exponent = u32::try_from(exponent.numerator().to_i64()?).ok()?;
+            regulator_degree(power.get_base(), regulator)?.checked_mul(exponent)
+        }
+        AtomView::Fun(_) => None,
+    }
+}
+
+/// A rational function of the regulator alone as `number * prod_b b^(e_b)`
+/// with polynomial bases `b` (the regulator itself or a polynomial in it). A
+/// sum that is not a polynomial is first brought to one fraction (`together`).
+fn decompose_regulator(view: AtomView, regulator: Symbol) -> Option<(Atom, BTreeMap<Atom, i64>)> {
+    fn collect(
+        view: AtomView,
+        exponent: i64,
+        regulator: Symbol,
+        rewrite: bool,
+        number: &mut Atom,
+        bases: &mut BTreeMap<Atom, i64>,
+    ) -> Option<()> {
+        match view {
+            AtomView::Num(_) => {
+                rational(view)?;
+                *number = &*number * &view.to_owned().pow(Atom::num(exponent));
+            }
+            AtomView::Var(variable) if variable.get_symbol() == regulator => {
+                *bases.entry(view.to_owned()).or_insert(0) += exponent;
+            }
+            AtomView::Add(_) if regulator_degree(view, regulator).is_some() => {
+                *bases.entry(view.to_owned()).or_insert(0) += exponent;
+            }
+            AtomView::Add(_) if rewrite => {
+                let fraction = view.to_owned().together();
+                collect(
+                    fraction.as_view(),
+                    exponent,
+                    regulator,
+                    false,
+                    number,
+                    bases,
+                )?;
+            }
+            AtomView::Mul(product) => {
+                for factor in product.iter() {
+                    collect(factor, exponent, regulator, rewrite, number, bases)?;
+                }
+            }
+            AtomView::Pow(power) => {
+                let power_exponent = rational(power.get_exp())?;
+                if !power_exponent.is_integer() {
+                    return None;
+                }
+                let power_exponent = power_exponent.numerator().to_i64()?;
+                collect(
+                    power.get_base(),
+                    exponent.checked_mul(power_exponent)?,
+                    regulator,
+                    rewrite,
+                    number,
+                    bases,
+                )?;
+            }
+            _ => return None,
+        }
+        Some(())
+    }
+    let mut number = Atom::one();
+    let mut bases = BTreeMap::new();
+    collect(view, 1, regulator, true, &mut number, &mut bases)?;
+    bases.retain(|_, exponent| *exponent != 0);
+    Some((number, bases))
+}
+
+/// Deterministic, well spread sample value of variable `index` at `point`.
+/// `generic` (tensor grammar) draws each value independently; otherwise the
+/// plain grammar's original points (each variable a quadratic in the point).
+fn sample_value(index: usize, point: usize, generic: bool) -> Atom {
+    let numerator = if generic {
+        let mut z = ((index as u64) << 32 | point as u64).wrapping_add(0x9E37_79B9_7F4A_7C15);
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        ((z ^ (z >> 31)) % 999_983) as i64 + 1
+    } else {
+        7919 * (index as i64 + 1)
+            + 104_729 * (point as i64 + 1)
+            + (index as i64 + 3) * (point as i64 + 5) * (point as i64 + 7)
+    };
+    Atom::num(numerator) / Atom::num(1_000_003)
 }
 
 /// Polynomial or rational function of plain variables with rational numbers
@@ -354,13 +507,32 @@ impl NumeratorGroups {
     /// exactly decidable grammar described in the module documentation.
     #[cfg(test)]
     pub(super) fn new(numerator: AtomView) -> Option<Self> {
-        Self::try_new(numerator).ok()
+        Self::try_new_with(numerator, opaque_coefficients_enabled()).ok()
     }
 
     /// [`Self::new`], with the reason of a refusal; opaque coefficient atoms
     /// as set by the debug switch ([`opaque_coefficients_enabled`]).
-    pub(super) fn try_new(numerator: AtomView) -> Result<Self, Refusal> {
-        Self::try_new_with(numerator, opaque_coefficients_enabled())
+    pub(super) fn try_new(numerator: AtomView, regulator: Option<Symbol>) -> Result<Self, Refusal> {
+        Self::try_new_regulated(numerator, opaque_coefficients_enabled(), regulator)
+    }
+
+    /// [`Self::try_new_with`]; a tensor-reduced numerator first tries the
+    /// regulated route ([`Regulated`]) with the regulator symbol `regulator`.
+    pub(super) fn try_new_regulated(
+        numerator: AtomView,
+        opaque: bool,
+        regulator: Option<Symbol>,
+    ) -> Result<Self, Refusal> {
+        if let Some(regulator) = regulator
+            && opaque
+            && has_opaque_atom(numerator)
+        {
+            let distributed = numerator.to_owned().expand_in(Atom::var(S.dot));
+            if let Ok(groups) = Self::regulated(distributed.as_view(), regulator) {
+                return Ok(groups);
+            }
+        }
+        Self::try_new_with(numerator, opaque)
     }
 
     /// [`Self::try_new`]; with `opaque`, a tensor-reduced numerator (one
@@ -450,6 +622,7 @@ impl NumeratorGroups {
             symbols,
             opaque: opaque_atoms,
             groups,
+            regulated: None,
         };
         let count = decomposition.coefficients.len();
         if opaque {
@@ -465,9 +638,247 @@ impl NumeratorGroups {
         }
     }
 
-    /// Distinct coefficients and groups, for diagnostics.
+    /// The regulated route of the tensor grammar on a distributed numerator
+    /// (see [`Regulated`]); `regulator` is the symbol of ε. Each term's
+    /// coefficient factors split into a regulator part (plain factors in ε
+    /// alone) and a class (every other coefficient factor: couplings, opaque
+    /// atoms; ε may occur only inside opaque atoms, which the zero test treats
+    /// as independent of it). The distinct classes are free of ε, so their
+    /// independence over Q (proven, or folded onto an exactly verified basis)
+    /// is their independence over Q(ε): a lowered key vanishes exactly if and
+    /// only if every class's regulator sum vanishes identically.
+    fn regulated(numerator: AtomView, regulator: Symbol) -> Result<Self, Refusal> {
+        let terms = match numerator {
+            AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
+            term => vec![term],
+        };
+        let mut classes = Vec::<Atom>::new();
+        let mut parts = Vec::<(u32, Atom)>::new();
+        let mut decomposed = BTreeMap::<Atom, (Atom, BTreeMap<Atom, i64>)>::new();
+        // (class, part) -> its terms' numbers and regulator factorizations.
+        let mut contributions = BTreeMap::<(usize, usize), Vec<(Atom, Atom)>>::new();
+        for term in terms {
+            let factors = match term {
+                AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+                factor => vec![factor],
+            };
+            let mut number = Atom::one();
+            let mut regulated = Atom::one();
+            let mut class = Atom::one();
+            let mut scalar_products = Atom::one();
+            let mut degree = 0u32;
+            for factor in factors {
+                if contains_loop_momentum(factor, true) {
+                    degree = scalar_product_degree(factor)
+                        .and_then(|factor| degree.checked_add(factor))
+                        .ok_or_else(|| Refusal::LoopFactor(excerpt(factor)))?;
+                    scalar_products *= factor.to_owned();
+                } else if let AtomView::Num(_) = factor {
+                    rational(factor).ok_or_else(|| Refusal::NonRationalNumber(excerpt(factor)))?;
+                    number *= factor.to_owned();
+                } else if is_plain(factor)
+                    && factor
+                        .get_all_symbols(true)
+                        .iter()
+                        .all(|symbol| *symbol == regulator)
+                {
+                    regulated *= factor.to_owned();
+                } else if is_plain_or_opaque(factor) && !has_free_variable(factor, regulator) {
+                    class *= factor.to_owned();
+                } else {
+                    return Err(Refusal::Coefficient(excerpt(factor)));
+                }
+            }
+            if number.is_zero() || class.is_zero() || regulated.is_zero() {
+                continue;
+            }
+            if !decomposed.contains_key(&regulated) {
+                let factorization = decompose_regulator(regulated.as_view(), regulator)
+                    .ok_or_else(|| Refusal::Coefficient(excerpt(regulated.as_view())))?;
+                decomposed.insert(regulated.clone(), factorization);
+            }
+            let class = match classes.iter().position(|known| *known == class) {
+                Some(index) => index,
+                None => {
+                    classes.push(class);
+                    classes.len() - 1
+                }
+            };
+            let part = (degree, scalar_products);
+            let part = match parts.iter().position(|known| *known == part) {
+                Some(index) => index,
+                None => {
+                    parts.push(part);
+                    parts.len() - 1
+                }
+            };
+            contributions
+                .entry((class, part))
+                .or_default()
+                .push((number, regulated));
+        }
+        // Common denominator: each base's lowest exponent; the degree bound of
+        // every regulator part times it.
+        let mut lowest = BTreeMap::<Atom, i64>::new();
+        for (_, bases) in decomposed.values() {
+            for (base, exponent) in bases {
+                let low = lowest.entry(base.clone()).or_insert(0);
+                *low = (*low).min(*exponent);
+            }
+        }
+        let degrees = lowest
+            .keys()
+            .map(|base| Some((base.clone(), regulator_degree(base.as_view(), regulator)?)))
+            .collect::<Option<BTreeMap<_, _>>>()
+            .ok_or_else(|| Refusal::Coefficient("regulator base".into()))?;
+        let mut bound = 0u64;
+        for (_, bases) in decomposed.values() {
+            let mut degree = 0u64;
+            for (base, low) in &lowest {
+                let exponent = bases.get(base).copied().unwrap_or(0);
+                degree += u64::from(degrees[base]) * (exponent - low) as u64;
+            }
+            bound = bound.max(degree);
+        }
+        if bound > 256 {
+            return Err(Refusal::Coefficient(format!(
+                "regulator degree bound {bound} above 256"
+            )));
+        }
+        // bound + 1 distinct regulator values where no base vanishes.
+        let mut points = Vec::<Vec<Atom>>::new();
+        let mut candidate = 0i64;
+        while points.len() as u64 <= bound {
+            candidate += 1;
+            if candidate > 4 * (bound as i64 + 8) {
+                return Err(Refusal::Coefficient("no regulator points".into()));
+            }
+            let value = Atom::num(2 * candidate + 1) / Atom::num(17);
+            let point = [Replacement::new(Atom::var(regulator), value)];
+            let values = lowest
+                .keys()
+                .map(|base| evaluate(base, &point, &[], &[]).filter(|value| !value.is_zero()))
+                .collect::<Option<Vec<_>>>();
+            if let Some(values) = values {
+                points.push(values);
+            }
+        }
+        let regulator_values = |regulated: &Atom, number: &Atom| -> Option<Vec<Rational>> {
+            let (factor, bases) = &decomposed[regulated];
+            points
+                .iter()
+                .map(|values| {
+                    let mut value = number * factor;
+                    for (base, base_value) in lowest.keys().zip(values) {
+                        if let Some(exponent) = bases.get(base) {
+                            value = value * base_value.pow(Atom::num(*exponent));
+                        }
+                    }
+                    rational(value.as_view())
+                })
+                .collect()
+        };
+        let mut entries = BTreeMap::<(usize, usize), Vec<Rational>>::new();
+        for ((class, part), terms) in &contributions {
+            let mut sum = vec![Rational::zero(); points.len()];
+            for (number, regulated) in terms {
+                let values = regulator_values(regulated, number)
+                    .ok_or_else(|| Refusal::Coefficient("regulator value".into()))?;
+                for (total, value) in sum.iter_mut().zip(&values) {
+                    *total = &*total + value;
+                }
+            }
+            entries.insert((*class, *part), sum);
+        }
+        // The classes: proven independent over Q, or folded onto a basis.
+        let symbols = classes
+            .iter()
+            .flat_map(|class| class.get_all_symbols(true))
+            .chain(std::iter::once(regulator))
+            .collect::<BTreeSet<_>>();
+        let mut opaque = Vec::new();
+        for class in &classes {
+            collect_opaque(class.as_view(), &mut opaque);
+        }
+        let class_groups = Self {
+            coefficients: classes,
+            symbols,
+            opaque,
+            groups: Vec::new(),
+            regulated: None,
+        };
+        let count = class_groups.coefficients.len();
+        let (basis, lambdas) = if count <= 1 {
+            ((0..count).collect::<Vec<_>>(), BTreeMap::new())
+        } else {
+            class_groups
+                .basis_relations()
+                .ok_or(Refusal::DependentCoefficients(count))?
+        };
+        let position = basis
+            .iter()
+            .enumerate()
+            .map(|(position, original)| (*original, position))
+            .collect::<BTreeMap<_, _>>();
+        let mut folded = BTreeMap::<(usize, usize), Vec<Rational>>::new();
+        for ((class, part), values) in entries {
+            let targets = match lambdas.get(&class) {
+                None => vec![(position[&class], Rational::one())],
+                Some(lambda) => lambda
+                    .iter()
+                    .map(|(target, weight)| Some((*target, rational(weight.as_view())?)))
+                    .collect::<Option<Vec<_>>>()
+                    .ok_or(Refusal::DependentCoefficients(count))?,
+            };
+            for (target, weight) in targets {
+                let total = folded
+                    .entry((target, part))
+                    .or_insert_with(|| vec![Rational::zero(); values.len()]);
+                for (total, value) in total.iter_mut().zip(&values) {
+                    *total = &*total + &(value * &weight);
+                }
+            }
+        }
+        let entries = folded
+            .into_iter()
+            .filter(|(_, values)| values.iter().any(|value| !value.is_zero()))
+            .map(|((class, part), values)| (class, part, values))
+            .collect();
+        let Self {
+            coefficients,
+            symbols,
+            opaque,
+            ..
+        } = class_groups;
+        Ok(Self {
+            coefficients: basis
+                .iter()
+                .map(|original| coefficients[*original].clone())
+                .collect(),
+            symbols,
+            opaque,
+            groups: Vec::new(),
+            regulated: Some(Regulated { parts, entries }),
+        })
+    }
+
+    /// Distinct coefficients and groups, for diagnostics (regulated route:
+    /// classes and scalar-product parts).
     pub(super) fn shape(&self) -> (usize, usize) {
-        (self.coefficients.len(), self.groups.len())
+        match &self.regulated {
+            Some(regulated) => (self.coefficients.len(), regulated.parts.len()),
+            None => (self.coefficients.len(), self.groups.len()),
+        }
+    }
+
+    /// Regulator points of the regulated route (`None`: not regulated).
+    pub(super) fn regulator_points(&self) -> Option<usize> {
+        self.regulated.as_ref().map(|regulated| {
+            regulated
+                .entries
+                .first()
+                .map_or(0, |(_, _, values)| values.len())
+        })
     }
 
     /// Number of distinct opaque coefficient atoms, for diagnostics.
@@ -481,7 +892,7 @@ impl NumeratorGroups {
         if self.coefficients.len() <= 1 {
             return true;
         }
-        self.evaluation_rows().is_some_and(full_row_rank)
+        self.evaluation_rows(false).is_some_and(full_row_rank)
     }
 
     /// Tensor grammar: an exact basis of the coefficients' span over Q, with
@@ -497,11 +908,31 @@ impl NumeratorGroups {
     /// proven independent as before. `None` (full lowering) at a pole or when
     /// a candidate relation does not hold.
     fn fold_onto_basis(self) -> Option<Self> {
-        let count = self.coefficients.len();
-        if count <= 1 {
+        if self.coefficients.len() <= 1 {
             return Some(self);
         }
-        let rows = self.evaluation_rows()?;
+        let (basis, lambdas) = self.basis_relations()?;
+        if lambdas.is_empty() {
+            return Some(self);
+        }
+        let position = basis
+            .iter()
+            .enumerate()
+            .map(|(position, original)| (*original, position))
+            .collect::<BTreeMap<_, _>>();
+        self.fold_parts(basis, lambdas, position)
+    }
+
+    /// The basis of [`Self::fold_onto_basis`] (original indices, in order) and,
+    /// for every other coefficient, its exactly verified expansion
+    /// `(basis position, lambda)`. `None` at a pole, above 96 coefficients
+    /// (cubic cost) or when a candidate relation does not hold.
+    #[allow(clippy::type_complexity)]
+    fn basis_relations(&self) -> Option<(Vec<usize>, BTreeMap<usize, Vec<(usize, Atom)>>)> {
+        if self.coefficients.len() > 96 {
+            return None;
+        }
+        let rows = self.evaluation_rows(true)?;
         // Echelon rows with their pivot column and their combination of
         // original rows (only basis rows occur in a combination).
         let mut echelon = Vec::<(Vec<Atom>, usize, BTreeMap<usize, Atom>)>::new();
@@ -532,7 +963,7 @@ impl NumeratorGroups {
             }
         }
         if relations.is_empty() {
-            return Some(self);
+            return Some((basis, BTreeMap::new()));
         }
         // Verify every candidate relation exactly.
         for (_, combination) in &relations {
@@ -562,6 +993,16 @@ impl NumeratorGroups {
                 (dependent, lambda)
             })
             .collect::<BTreeMap<_, _>>();
+        Some((basis, lambdas))
+    }
+
+    /// Fold the coefficients' parts onto the basis (see [`Self::fold_onto_basis`]).
+    fn fold_parts(
+        self,
+        basis: Vec<usize>,
+        lambdas: BTreeMap<usize, Vec<(usize, Atom)>>,
+        position: BTreeMap<usize, usize>,
+    ) -> Option<Self> {
         let mut parts = BTreeMap::<(usize, u32), Vec<Atom>>::new();
         for group in self.groups {
             match lambdas.get(&group.coefficient) {
@@ -612,31 +1053,26 @@ impl NumeratorGroups {
             symbols: self.symbols,
             opaque: self.opaque,
             groups,
+            regulated: None,
         })
     }
 
     /// Exact values of every coefficient at `count + 2` deterministic rational
-    /// points, or `None` at a pole.
-    fn evaluation_rows(&self) -> Option<Vec<Vec<Atom>>> {
+    /// points ([`sample_value`]), or `None` at a pole.
+    fn evaluation_rows(&self, generic: bool) -> Option<Vec<Vec<Atom>>> {
         let count = self.coefficients.len();
         let symbols = self.symbols.iter().copied().collect::<Vec<_>>();
         // Two extra points tolerate an unlucky singular square sample.
+        // A large prime denominator avoids the small rational poles of
+        // physical coefficients. A pole or an unlucky singular sample only
+        // fails the proof (full lowering).
         let points = (0..count + 2)
             .map(|point| {
                 symbols
                     .iter()
                     .enumerate()
                     .map(|(index, symbol)| {
-                        // A large prime denominator avoids the small rational
-                        // poles of physical coefficients. A pole or an unlucky
-                        // singular sample only fails the proof (full lowering).
-                        let numerator = 7919 * (index as i64 + 1)
-                            + 104_729 * (point as i64 + 1)
-                            + (index as i64 + 3) * (point as i64 + 5) * (point as i64 + 7);
-                        Replacement::new(
-                            Atom::var(*symbol),
-                            Atom::num(numerator) / Atom::num(1_000_003),
-                        )
+                        Replacement::new(Atom::var(*symbol), sample_value(index, point, generic))
                     })
                     .collect::<Vec<_>>()
             })
@@ -645,13 +1081,7 @@ impl NumeratorGroups {
         let opaque_values = (0..count + 2)
             .map(|point| {
                 (0..self.opaque.len())
-                    .map(|atom| {
-                        let index = (symbols.len() + atom) as i64;
-                        let numerator = 7919 * (index + 1)
-                            + 104_729 * (point as i64 + 1)
-                            + (index + 3) * (point as i64 + 5) * (point as i64 + 7);
-                        Atom::num(numerator) / Atom::num(1_000_003)
-                    })
+                    .map(|atom| sample_value(symbols.len() + atom, point, generic))
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
@@ -693,6 +1123,10 @@ impl NumeratorGroups {
         let Ok(descriptor) = super::select(&matched.canonical_topology) else {
             return Ok(None);
         };
+        if let Some(regulated) = &self.regulated {
+            return self
+                .screen_regulated(regulated, settings, &matched, descriptor, scalar, admitted);
+        }
         // Numeric masses scale each group weight; a symbolic mass separates
         // group degrees instead and must be independent of all coefficients.
         let mut numeric_mass = None;
@@ -753,6 +1187,81 @@ impl NumeratorGroups {
                 .map(|(key, _)| key)
                 .collect(),
         )))
+    }
+
+    /// [`Self::screen`] on the regulated route: each distinct part is lowered
+    /// once; a key's weight in a slot (class, and degree for a symbolic mass)
+    /// is a rational function of ε given by its values at the regulator
+    /// points, and it vanishes identically exactly when all of them vanish.
+    fn screen_regulated(
+        &self,
+        regulated: &Regulated,
+        settings: &VakintSettings,
+        matched: &ReplacementRules,
+        descriptor: &super::ParentDescriptor,
+        scalar: &FamilyScalarNumeratorService<'_>,
+        admitted: &(dyn Fn(&IntegralKey) -> Result<bool, VakintError> + Sync),
+    ) -> Result<Option<Screen>, VakintError> {
+        if regulated.entries.is_empty() {
+            return Ok(Some(Screen::Admitted(Vec::new())));
+        }
+        let mut numeric_mass = None;
+        let mut lowered = Vec::with_capacity(regulated.parts.len());
+        for (degree, part) in &regulated.parts {
+            let group = Group {
+                coefficient: 0,
+                degree: *degree,
+                part: part.clone(),
+            };
+            let Some(keys) = self.lower_group(
+                settings,
+                matched,
+                descriptor,
+                &group,
+                scalar,
+                &mut numeric_mass,
+            ) else {
+                return Ok(None);
+            };
+            let Some(keys) = keys
+                .into_iter()
+                .map(|(key, weight)| Some((key, rational(weight.as_view())?)))
+                .collect::<Option<Vec<_>>>()
+            else {
+                return Ok(None);
+            };
+            lowered.push(keys);
+        }
+        let numeric = numeric_mass.as_ref().expect("mass mode is set").is_some();
+        let mut sums = BTreeMap::<IntegralKey, BTreeMap<(usize, u32), Vec<Rational>>>::new();
+        for (class, part, values) in &regulated.entries {
+            let slot = (*class, if numeric { 0 } else { regulated.parts[*part].0 });
+            for (key, weight) in &lowered[*part] {
+                let total = sums
+                    .entry(key.clone())
+                    .or_default()
+                    .entry(slot)
+                    .or_insert_with(|| vec![Rational::zero(); values.len()]);
+                for (total, value) in total.iter_mut().zip(values) {
+                    *total = &*total + &(value * weight);
+                }
+            }
+        }
+        let support = sums
+            .into_iter()
+            .filter(|(_, slots)| {
+                slots
+                    .values()
+                    .any(|values| values.iter().any(|value| !value.is_zero()))
+            })
+            .map(|(key, _)| key)
+            .collect::<Vec<_>>();
+        for key in &support {
+            if !admitted(key)? {
+                return Ok(Some(Screen::Rejected));
+            }
+        }
+        Ok(Some(Screen::Admitted(support)))
     }
 
     /// Lower one group through the unchanged matcher route at unit mass and
@@ -1065,12 +1574,82 @@ mod tests {
         );
     }
 
+    /// The regulated route on the ladder: the screened support equals the
+    /// full weighted lowering's on every verified witness, also when keys
+    /// cancel only through an identity of rational functions of ε
+    /// (4/(4-2ε) - 2ε/(4-2ε) - 1 = 0) or between classes after folding.
+    #[test]
+    fn regulated_support_equals_full_weighted_lowering_support() {
+        Vakint::initialize_vakint_symbols();
+        for numerator in [
+            // 213-like: a rational regulator sum times coupling * tensor terms.
+            "((5-2*ε)/(-2*(4-2*ε)+(4-2*ε)^2+(4-2*ε)^3)-2/(-2*(4-2*ε)+(4-2*ε)^2+(4-2*ε)^3))*(1024/27*ε*gs^10*dot(k(3),k(3))^2*dot(k(1),k(4))+1024/81*ε^2*gs^10*dot(k(3),k(3))^2*dot(k(1),k(4))+7*gs^10*dot(k(1),k(2))*dot(k(3),k(3))*dot(k(2),k(5)))*p(6,hedge(10,1))*p(6,hedge(23,1))
+            +(4-2*ε)^-1*ε^3*gs^10*g(hedge(10,1),hedge(23,1))*dot(k(1),k(3))*dot(k(2),k(2))*dot(k(4),k(5))",
+            // Cancellation through 4/(4-2ε) - 2ε/(4-2ε) - 1 = 0 on the
+            // dot(k(1),k(1))*dot(k(2),k(5))^2 part, keys of the rest survive.
+            "g(hedge(1,1),hedge(2,1))*gs^10*(4*(4-2*ε)^-1*dot(k(1),k(1))*dot(k(2),k(5))^2-2*ε*(4-2*ε)^-1*dot(k(1),k(1))*dot(k(2),k(5))^2-dot(k(1),k(1))*dot(k(2),k(5))^2+ε^2*dot(k(3),k(4))*dot(k(1),k(2))^2)",
+            // Dependent classes (x*(1+x) = x + x^2) folded, regulator powers.
+            "x*g(hedge(1,1),hedge(2,1))*ε*dot(k(1),k(1))*dot(k(2),k(4))+x^2*g(hedge(1,1),hedge(2,1))*ε^2*dot(k(2),k(2))*dot(k(3),k(5))-x*(1+x)*g(hedge(1,1),hedge(2,1))*ε^3*(3-2*ε)^-2*dot(k(4),k(4))*dot(k(1),k(5))",
+        ] {
+            assert_screened_support_equals_full_weighted_lowering_support(numerator, None, true);
+        }
+    }
+
+    /// The regulated route's shape on a 213-like term, its refusal of a
+    /// coefficient mixing the regulator with another variable outside a
+    /// function, and the plain grammar's numerators never take it.
+    #[test]
+    fn regulated_route_shape_and_refusals() {
+        Vakint::initialize_vakint_symbols();
+        let settings = VakintSettings::default();
+        let regulator = regulator_symbol(&settings);
+        assert!(regulator.is_some());
+        let term = vk_parse!(
+            "((5-2*ε)/(-2*(4-2*ε)+(4-2*ε)^2+(4-2*ε)^3)-2/(-2*(4-2*ε)+(4-2*ε)^2+(4-2*ε)^3))*(1024/27*ε*gs_i^9*dot(k(3),k(3))^2+1024/81*ε^2*gs_i^9*dot(k(3),k(3))^2+7*gs_i^9*dot(k(1),k(2))*dot(k(3),k(3)))*p(6,hedge(10,1))*p(6,hedge(23,1))+(4-2*ε)^-1*ε^3*gs_i^9*g(hedge(10,1),hedge(23,1))*dot(k(1),k(3))*dot(k(2),k(2))"
+        )
+        .unwrap();
+        let groups = NumeratorGroups::try_new_regulated(term.as_view(), true, regulator).unwrap();
+        // Classes gs_i^9*p*p and gs_i^9*g; parts dot(k3,k3)^2,
+        // dot(k1,k2)*dot(k3,k3), dot(k1,k3)*dot(k2,k2).
+        assert_eq!(groups.shape(), (2, 3));
+        assert!(groups.regulator_points().unwrap() >= 4);
+        // (ε + gs) mixes the regulator with a coupling outside a function: not
+        // regulated (the other routes may still group it).
+        let mixed = vk_parse!("(ε+gs)*g(hedge(1,1),hedge(2,1))*dot(k(1),k(1))").unwrap();
+        assert!(
+            NumeratorGroups::try_new_regulated(mixed.as_view(), true, regulator)
+                .unwrap()
+                .regulator_points()
+                .is_none()
+        );
+        // No opaque atom: the plain grammar, never the regulated route.
+        let plain = vk_parse!("ε*dot(k(1),k(1))+ε^2*dot(k(2),k(2))").unwrap();
+        assert!(
+            NumeratorGroups::try_new_regulated(plain.as_view(), true, regulator)
+                .unwrap()
+                .regulator_points()
+                .is_none()
+        );
+        // The switch off: the plain grammar for every numerator.
+        assert!(NumeratorGroups::try_new_regulated(term.as_view(), false, regulator).is_err());
+    }
+
     /// The ladder of [`grouped_support_equals_full_weighted_lowering_support`]
     /// with `numerator`: grouped (opaque atoms on, expected `shape` if given) and full
     /// supports agree on every verified witness.
     fn assert_grouped_support_equals_full_weighted_lowering_support(
         numerator: &str,
         shape: Option<(usize, usize)>,
+    ) {
+        assert_screened_support_equals_full_weighted_lowering_support(numerator, shape, false);
+    }
+
+    /// [`assert_grouped_support_equals_full_weighted_lowering_support`]; with
+    /// `regulated`, the numerator must take the regulated route.
+    fn assert_screened_support_equals_full_weighted_lowering_support(
+        numerator: &str,
+        shape: Option<(usize, usize)>,
+        regulated: bool,
     ) {
         let settings = VakintSettings::default();
         let topologies = crate::Topologies::generate_topologies().unwrap();
@@ -1090,7 +1669,17 @@ mod tests {
         .unwrap();
         let numerator = vk_parse!(numerator).unwrap();
         let scalar_form = VakintTerm::scalar_product_form(&settings, numerator.as_view()).unwrap();
-        let groups = NumeratorGroups::try_new_with(scalar_form.as_view(), true).unwrap();
+        let groups = if regulated {
+            NumeratorGroups::try_new_regulated(
+                scalar_form.as_view(),
+                true,
+                regulator_symbol(&settings),
+            )
+            .unwrap()
+        } else {
+            NumeratorGroups::try_new_with(scalar_form.as_view(), true).unwrap()
+        };
+        assert_eq!(groups.regulator_points().is_some(), regulated);
         if let Some(shape) = shape {
             assert_eq!(groups.shape(), shape);
         }
@@ -1160,6 +1749,7 @@ mod tests {
         )
         .unwrap();
         for numerator in [
+            "((5-2*ε)/(-2*(4-2*ε)+(4-2*ε)^2+(4-2*ε)^3)-2/(-2*(4-2*ε)+(4-2*ε)^2+(4-2*ε)^3))*(1024/27*ε*gs^10*dot(k(3),k(3))^2+7*gs^10*dot(k(1),k(2))*dot(k(3),k(3)))*p(6,hedge(10,1))*p(6,hedge(23,1))+(4-2*ε)^-1*ε^3*gs^10*g(hedge(10,1),hedge(23,1))*dot(k(1),k(3))*dot(k(2),k(2))",
             "g(hedge(1,1),hedge(2,1))*gs^10*(4-2*ε)*dot(k(1),k(1))",
             "p(6,hedge(1,1))*p(6,hedge(2,1))*gs^10*dot(k(2),k(2))-dot(p(6),p(6))*g(hedge(1,1),hedge(2,1))*gs^10/(3-2*ε)*dot(k(1),k(2))",
             "256/81*gs^10*g(hedge(1,1),hedge(2,1))*(4-2*ε)*(dot(k(2),k(3))-dot(k(1),k(2)))*(dot(k(3),k(4))-dot(k(1),k(4)))*dot(k(4),k(4))*dot(k(5),k(5))+7/3*gs^10*p(6,hedge(1,1))*p(6,hedge(2,1))/(3-2*ε)*dot(k(1),k(2))^2*dot(k(3),k(5))^2",
@@ -1167,7 +1757,10 @@ mod tests {
             let numerator = vk_parse!(numerator).unwrap();
             let scalar_form =
                 VakintTerm::scalar_product_form(&settings, numerator.as_view()).unwrap();
-            assert!(NumeratorGroups::try_new_with(scalar_form.as_view(), true).is_ok());
+            assert!(
+                NumeratorGroups::try_new(scalar_form.as_view(), regulator_symbol(&settings))
+                    .is_ok()
+            );
             assert!(screened_selection_matches_reference(
                 &engine,
                 &settings,
@@ -1485,7 +2078,8 @@ mod tests {
             let numerator = recorded_atom(record, "numerator");
             let scalar_form =
                 VakintTerm::scalar_product_form(&settings, numerator.as_view()).unwrap();
-            let grouping = NumeratorGroups::try_new(scalar_form.as_view());
+            let grouping =
+                NumeratorGroups::try_new(scalar_form.as_view(), regulator_symbol(&settings));
             let started = std::time::Instant::now();
             assert!(
                 screened_selection_matches_reference(
@@ -1591,6 +2185,15 @@ mod tests {
             let started = std::time::Instant::now();
             let expanded_opaque = describe(NumeratorGroups::try_new_with(expanded.as_view(), true));
             let group_seconds = started.elapsed().as_secs_f64();
+            let started = std::time::Instant::now();
+            let production =
+                NumeratorGroups::try_new(scalar_form.as_view(), regulator_symbol(&settings));
+            let production_points = production
+                .as_ref()
+                .ok()
+                .and_then(NumeratorGroups::regulator_points);
+            let production = describe(production);
+            let production_seconds = started.elapsed().as_secs_f64();
             println!(
                 "{}",
                 serde_json::json!({
@@ -1602,6 +2205,9 @@ mod tests {
                     "opaque": describe(NumeratorGroups::try_new_with(scalar_form.as_view(), true)),
                     "expanded_top": top(expanded.as_view()),
                     "expanded_opaque": expanded_opaque,
+                    "production": production,
+                    "production_regulator_points": production_points,
+                    "production_seconds": production_seconds,
                     "scalar_seconds": scalar_seconds,
                     "expand_seconds": expand_seconds,
                     "group_seconds": group_seconds,

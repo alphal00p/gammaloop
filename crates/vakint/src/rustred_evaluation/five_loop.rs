@@ -502,7 +502,10 @@ impl Vakint {
         } else {
             // The full key starts with this witness-independent scalar form.
             let scalar_form = VakintTerm::scalar_product_form(settings, numerator)?;
-            witness_screen::NumeratorGroups::try_new(scalar_form.as_view())
+            witness_screen::NumeratorGroups::try_new(
+                scalar_form.as_view(),
+                witness_screen::regulator_symbol(settings),
+            )
         };
         let refusal = groups.as_ref().err().map(ToString::to_string);
         let groups = groups.ok();
@@ -585,6 +588,7 @@ impl Vakint {
                 "threads": threads,
                 "groups": groups.as_ref().map(witness_screen::NumeratorGroups::shape),
                 "opaque_atoms": groups.as_ref().map(witness_screen::NumeratorGroups::opaque_atoms),
+                "regulator_points": groups.as_ref().and_then(witness_screen::NumeratorGroups::regulator_points),
                 "opaque_switch": witness_screen::opaque_coefficients_enabled(),
                 "refusal": refusal,
                 "screen_rejected": count(|s| matches!(s, Status::Rejected)),
