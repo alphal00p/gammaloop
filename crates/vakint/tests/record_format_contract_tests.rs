@@ -9147,3 +9147,850 @@ fn the_diagnostic_writer() {
     );
     assert!(wrong.is_empty(), "{wrong:#?}");
 }
+
+// ===========================================================================
+// EVERY FIELD CHANGES THE RESULT OR IS REFUSED: one field of a valid value V
+// changed alone, at each entry: the result changes as the record format
+// predicts, or the value is refused; accepted with V's result means the
+// entry ignores the field
+// ===========================================================================
+
+/// A value's result at its entry (the value itself, Symbolic).
+fn f_value(entry: XEntry, (v, s, arg): &XInput) -> Result<Atom, String> {
+    let vakint = engine();
+    match entry {
+        XEntry::Closure => evaluate_factorized_closure(
+            &vakint,
+            s,
+            std::slice::from_ref(v),
+            std::slice::from_ref(arg),
+        )
+        .map(|r| r.value),
+        XEntry::Direct => {
+            vakint::p_integral::factorized::evaluate_factorized(&vakint, s, v, arg).map(|r| r.value)
+        }
+        XEntry::Ports => evaluate_factorized_ports(&vakint, s, v, arg).map(|r| r.value),
+        XEntry::Vacuum => {
+            vakint::p_integral::factorized::evaluate_factorized_vacuum(&vakint, s, v, arg)
+                .map(|r| r.value)
+        }
+    }
+    .map_err(|e| e.to_string())
+}
+
+/// What the format predicts for the changed value.
+enum FPred {
+    /// the result times this atom
+    Times(&'static str),
+    /// the result of this explicit spelling
+    Spelled(Box<dyn Fn() -> XInput>),
+    /// a different result (no closed-form prediction here)
+    Changes,
+    /// refused, or the result times this atom (a rule may refuse it first)
+    TimesOrRefused(&'static str),
+    /// the format declares the field informational (provenance): the result
+    /// is V's; printed as such
+    Informational,
+}
+
+struct FCell {
+    entry: XEntry,
+    field: &'static str,
+    change: Box<dyn Fn() -> XInput>,
+    pred: FPred,
+}
+
+/// The one-loop massive doubled line with an external leg p (a marked vacuum
+/// value): edge 1 a self-loop at vertex 0 of power 2, mass caller::m2,
+/// momentum k(1); edge 2 the external leg, momentum p(1); a projector of
+/// p2_power `p2` (None for p2 = 0) and the vertex factor `factor`.
+fn f_leg_vacuum(p2: i64, factor: &str) -> XInput {
+    use vakint::p_integral::factorized::{
+        DirectRecord, Endpoint, FactorizedEdge, FactorizedVertex, LineKind, Prefactor, Projector,
+    };
+    init();
+    let v = FactorizedNumerator {
+        label: "one-loop doubled line with an external leg".into(),
+        kind: FactorizedKind::Direct,
+        dimension: symbolica::symbol!("gammalooprs::dim"),
+        loop_edges: vec![Some(1)],
+        external_edges: vec![Some(2)],
+        edges: vec![
+            FactorizedEdge {
+                id: 1,
+                source: Endpoint::Vertex(0),
+                target: Endpoint::Vertex(0),
+                source_hedge: Some(1),
+                target_hedge: Some(2),
+                particle: "x".into(),
+                line: LineKind::Scalar,
+                power: 2,
+                mass_squared: atom("caller::m2"),
+                momentum: vec![1, 0],
+                factor: Atom::num(1),
+            },
+            FactorizedEdge {
+                id: 2,
+                source: Endpoint::External,
+                target: Endpoint::Vertex(0),
+                source_hedge: None,
+                target_hedge: Some(3),
+                particle: "x".into(),
+                line: LineKind::Scalar,
+                power: 1,
+                mass_squared: Atom::Zero,
+                momentum: vec![0, 1],
+                factor: Atom::num(1),
+            },
+        ],
+        vertices: vec![FactorizedVertex {
+            id: 0,
+            rule: "V".into(),
+            factor: atom(factor),
+        }],
+        ports: Vec::new(),
+        projector: (p2 != 0).then(|| Projector {
+            tensor: Atom::num(1),
+            p2_power: p2,
+        }),
+        prefactor: Prefactor {
+            scalars: atom("UFO::gs^2"),
+            ..Prefactor::default()
+        },
+        colour_branch: None,
+        insertions: Vec::new(),
+        record: Some(DirectRecord {
+            original_cycles: None,
+            depth: None,
+            weights: Vec::new(),
+        }),
+    };
+    let a = v.prefactor.total();
+    (v, symbolic(), a)
+}
+
+const DOT_P: &str = "spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))";
+
+fn f_with(base: fn() -> XInput, f: impl Fn(&mut XInput) + 'static) -> Box<dyn Fn() -> XInput> {
+    Box::new(move || {
+        let mut b = base();
+        f(&mut b);
+        b
+    })
+}
+
+/// The prefactor argument recomputed from the changed record.
+fn f_rearg(b: &mut XInput) {
+    b.2 = b.0.prefactor.total();
+}
+
+fn f_cells_vacuum() -> Vec<FCell> {
+    let leg0: fn() -> XInput = || f_leg_vacuum(0, "1");
+    let sun: fn() -> XInput = x_vacuum_base;
+    let mut c: Vec<FCell> = Vec::new();
+    let e = XEntry::Vacuum;
+    c.push(FCell {
+        entry: e,
+        field: "projector p2_power +1 (the reviewer's case)",
+        change: Box::new(|| f_leg_vacuum(1, "1")),
+        pred: FPred::Spelled(Box::new(|| f_leg_vacuum(0, DOT_P))),
+    });
+    c.push(FCell {
+        entry: e,
+        field: "projector p2_power -1",
+        change: Box::new(|| f_leg_vacuum(-1, "1")),
+        pred: FPred::Spelled(Box::new(|| f_leg_vacuum(0, &format!("({DOT_P})^-1")))),
+    });
+    c.push(FCell {
+        entry: e,
+        field: "projector tensor 2 (p2_power 0)",
+        change: f_with(leg0, |b| {
+            b.0.projector = Some(vakint::p_integral::factorized::Projector {
+                tensor: Atom::num(2),
+                p2_power: 0,
+            })
+        }),
+        pred: FPred::Times("2"),
+    });
+    c.push(FCell {
+        entry: e,
+        field: "prefactor overall 2 (argument recomputed)",
+        change: f_with(sun, |b| {
+            b.0.prefactor.overall = Atom::num(2);
+            f_rearg(b)
+        }),
+        pred: FPred::Times("2"),
+    });
+    c.push(FCell {
+        entry: e,
+        field: "prefactor scalars x3 (argument recomputed)",
+        change: f_with(sun, |b| {
+            b.0.prefactor.scalars = &b.0.prefactor.scalars * Atom::num(3);
+            f_rearg(b)
+        }),
+        pred: FPred::Times("3"),
+    });
+    c.push(FCell {
+        entry: e,
+        field: "prefactor colour 5 (argument recomputed)",
+        change: f_with(sun, |b| {
+            b.0.prefactor.colour = Atom::num(5);
+            f_rearg(b)
+        }),
+        pred: FPred::Times("5"),
+    });
+    c.push(FCell { entry: e, field: "prefactor scalars x3, the argument kept (the entry multiplies the caller's argument)", change: f_with(sun, |b| b.0.prefactor.scalars = &b.0.prefactor.scalars * Atom::num(3)), pred: FPred::Informational });
+    c.push(FCell {
+        entry: e,
+        field: "prefactor loop_sign -1",
+        change: f_with(sun, |b| {
+            b.0.prefactor.loop_sign = -1;
+            f_rearg(b)
+        }),
+        pred: FPred::TimesOrRefused("-1"),
+    });
+    c.push(FCell {
+        entry: e,
+        field: "prefactor nf_power 1",
+        change: f_with(sun, |b| {
+            b.0.prefactor.nf_power = 1;
+            f_rearg(b)
+        }),
+        pred: FPred::TimesOrRefused("vakint::nf"),
+    });
+    c.push(FCell {
+        entry: e,
+        field: "vertex factor x2",
+        change: f_with(sun, |b| {
+            let x = &mut b.0.vertices[0];
+            x.factor = &x.factor * Atom::num(2)
+        }),
+        pred: FPred::Times("2"),
+    });
+    c.push(FCell {
+        entry: e,
+        field: "vertex rule renamed",
+        change: f_with(sun, |b| b.0.vertices[0].rule = "W".into()),
+        pred: FPred::Informational,
+    });
+    c.push(FCell {
+        entry: e,
+        field: "edge factor x2",
+        change: f_with(sun, |b| b.0.edges[0].factor = Atom::num(2)),
+        pred: FPred::Times("2"),
+    });
+    c.push(FCell {
+        entry: e,
+        field: "edge power 2",
+        change: f_with(sun, |b| b.0.edges[0].power = 2),
+        pred: FPred::Changes,
+    });
+    c.push(FCell {
+        entry: e,
+        field: "edge mass another symbol",
+        change: f_with(sun, |b| b.0.edges[0].mass_squared = atom("caller::m3")),
+        pred: FPred::Changes,
+    });
+    c.push(FCell {
+        entry: e,
+        field: "edge momentum reversed on one line",
+        change: f_with(sun, |b| {
+            b.0.edges[0].momentum = b.0.edges[0].momentum.iter().map(|x| -x).collect()
+        }),
+        pred: FPred::Changes,
+    });
+    c.push(FCell {
+        entry: e,
+        field: "edge particle renamed",
+        change: f_with(sun, |b| b.0.edges[0].particle = "y".into()),
+        pred: FPred::Informational,
+    });
+    c.push(FCell {
+        entry: e,
+        field: "edge line kind fermion",
+        change: f_with(sun, |b| {
+            b.0.edges[0].line = vakint::p_integral::factorized::LineKind::Fermion
+        }),
+        pred: FPred::Changes,
+    });
+    c.push(FCell {
+        entry: e,
+        field: "record depth 2 (settings 3)",
+        change: f_with(sun, |b| set_depth(&mut b.0, 2)),
+        pred: FPred::Changes,
+    });
+    c.push(FCell {
+        entry: e,
+        field: "record original_cycles (0,0)",
+        change: f_with(sun, |b| {
+            b.0.record.as_mut().unwrap().original_cycles = Some((0, 0))
+        }),
+        pred: FPred::Informational,
+    });
+    c.push(FCell {
+        entry: e,
+        field: "weight scalars applied_by=vakint = prefactor_scalars",
+        change: f_with(sun, |b| {
+            let s = b.0.prefactor.scalars.clone();
+            b.0.record
+                .as_mut()
+                .unwrap()
+                .weights
+                .push(("scalars".into(), true, s))
+        }),
+        pred: FPred::Informational,
+    });
+    c.push(FCell {
+        entry: e,
+        field: "colour branch set",
+        change: f_with(sun, |b| {
+            b.0.colour_branch = Some(vakint::p_integral::factorized::ColourBranchInfo {
+                index: 1,
+                count: 2,
+                rows: vec![0],
+            })
+        }),
+        pred: FPred::Informational,
+    });
+    c.push(FCell {
+        entry: e,
+        field: "prefactor argument x2",
+        change: f_with(sun, |b| b.2 = &b.2 * Atom::num(2)),
+        pred: FPred::Times("2"),
+    });
+    c.push(FCell {
+        entry: e,
+        field: "external leg momentum 0 (leg kept)",
+        change: Box::new(|| {
+            let mut b = f_leg_vacuum(1, "1");
+            b.0.edges[1].momentum = vec![0, 0];
+            b
+        }),
+        pred: FPred::Changes,
+    });
+    c
+}
+
+fn f_cells_other() -> Vec<FCell> {
+    let cl: fn() -> XInput = x_closure_base;
+    let cl2: fn() -> XInput = || {
+        let v = record("wh-k2-child-ins");
+        let a = v.prefactor.total();
+        (v, symbolic(), a)
+    };
+    let di: fn() -> XInput = x_direct_base;
+    let mut c: Vec<FCell> = Vec::new();
+    for e in [XEntry::Closure, XEntry::Direct, XEntry::Ports] {
+        let base = if e == XEntry::Closure { cl } else { di };
+        c.push(FCell {
+            entry: e,
+            field: "prefactor overall 2 (argument recomputed)",
+            change: f_with(base, |b| {
+                b.0.prefactor.overall = Atom::num(2);
+                f_rearg(b)
+            }),
+            pred: FPred::TimesOrRefused("2"),
+        });
+        c.push(FCell {
+            entry: e,
+            field: "prefactor scalars x3 (argument recomputed)",
+            change: f_with(base, |b| {
+                b.0.prefactor.scalars = &b.0.prefactor.scalars * Atom::num(3);
+                f_rearg(b)
+            }),
+            pred: FPred::Times("3"),
+        });
+        c.push(FCell {
+            entry: e,
+            field: "prefactor colour 5 (argument recomputed)",
+            change: f_with(base, |b| {
+                b.0.prefactor.colour = Atom::num(5);
+                f_rearg(b)
+            }),
+            pred: FPred::TimesOrRefused("5"),
+        });
+        c.push(FCell { entry: e, field: "prefactor scalars x3, the argument kept (the entry multiplies the caller's argument)", change: f_with(base, |b| b.0.prefactor.scalars = &b.0.prefactor.scalars * Atom::num(3)), pred: FPred::Informational });
+        c.push(FCell {
+            entry: e,
+            field: "prefactor loop_sign -1",
+            change: f_with(base, |b| {
+                b.0.prefactor.loop_sign = -1;
+                f_rearg(b)
+            }),
+            pred: FPred::TimesOrRefused("-1"),
+        });
+        c.push(FCell {
+            entry: e,
+            field: "prefactor nf_power 1",
+            change: f_with(base, |b| {
+                b.0.prefactor.nf_power = 1;
+                f_rearg(b)
+            }),
+            pred: FPred::TimesOrRefused("vakint::nf"),
+        });
+        c.push(FCell {
+            entry: e,
+            field: "vertex factor x2",
+            change: f_with(base, |b| {
+                let x =
+                    b.0.vertices
+                        .iter_mut()
+                        .find(|x| x.factor != Atom::num(1))
+                        .unwrap();
+                x.factor = &x.factor * Atom::num(2)
+            }),
+            pred: FPred::Times("2"),
+        });
+        c.push(FCell {
+            entry: e,
+            field: "vertex rule renamed (an ordinary vertex)",
+            change: f_with(base, |b| {
+                let x =
+                    b.0.vertices
+                        .iter_mut()
+                        .find(|x| !x.rule.starts_with("ct:") && !x.rule.starts_with("ins:"))
+                        .unwrap();
+                x.rule = format!("{}_renamed", x.rule)
+            }),
+            pred: FPred::Informational,
+        });
+        c.push(FCell {
+            entry: e,
+            field: "edge factor x2 (an internal edge)",
+            change: f_with(base, |b| {
+                let x = b.0.edges.iter_mut().find(|x| !x.is_external()).unwrap();
+                x.factor = &x.factor * Atom::num(2)
+            }),
+            pred: FPred::Times("2"),
+        });
+        c.push(FCell {
+            entry: e,
+            field: "edge power 2 (a massless internal edge)",
+            change: f_with(base, |b| {
+                let x =
+                    b.0.edges
+                        .iter_mut()
+                        .find(|x| !x.is_external() && x.mass_squared.is_zero())
+                        .unwrap();
+                x.power = 2
+            }),
+            pred: FPred::Changes,
+        });
+        c.push(FCell {
+            entry: e,
+            field: "edge particle renamed",
+            change: f_with(base, |b| {
+                let x = b.0.edges.iter_mut().find(|x| !x.is_external()).unwrap();
+                x.particle = "renamed".into()
+            }),
+            pred: FPred::Informational,
+        });
+        c.push(FCell {
+            entry: e,
+            field: "edge line kind changed (an internal ghost / vector line to scalar)",
+            change: f_with(base, |b| {
+                let x = b.0.edges.iter_mut().find(|x| !x.is_external()).unwrap();
+                x.line = vakint::p_integral::factorized::LineKind::Scalar
+            }),
+            pred: FPred::Changes,
+        });
+        c.push(FCell {
+            entry: e,
+            field: "colour branch set",
+            change: f_with(base, |b| {
+                b.0.colour_branch = Some(vakint::p_integral::factorized::ColourBranchInfo {
+                    index: 1,
+                    count: 2,
+                    rows: vec![0],
+                })
+            }),
+            pred: FPred::Informational,
+        });
+        c.push(FCell {
+            entry: e,
+            field: "prefactor argument x2",
+            change: f_with(base, |b| b.2 = &b.2 * Atom::num(2)),
+            pred: FPred::Times("2"),
+        });
+        c.push(FCell {
+            entry: e,
+            field: "original_cycles (1,1) (more than carried)",
+            change: f_with(base, |b| match &mut b.0.kind {
+                FactorizedKind::Closure(spec) => spec.original_cycles = Some((1, 1)),
+                _ => b.0.record.as_mut().unwrap().original_cycles = Some((1, 1)),
+            }),
+            pred: FPred::Informational,
+        });
+        c.push(FCell {
+            entry: e,
+            field: "weight scalars applied_by=vakint = prefactor_scalars",
+            change: f_with(base, |b| {
+                let s = b.0.prefactor.scalars.clone();
+                match &mut b.0.kind {
+                    FactorizedKind::Closure(spec) => spec.weights.push(("scalars".into(), true, s)),
+                    _ => {
+                        b.0.record
+                            .as_mut()
+                            .unwrap()
+                            .weights
+                            .push(("scalars".into(), true, s))
+                    }
+                }
+            }),
+            pred: FPred::Informational,
+        });
+        // insertions (the closure: the K2 record; direct / ports: L2-17's surrogate insertion)
+        let ib = if e == XEntry::Closure { cl2 } else { di };
+        c.push(FCell {
+            entry: e,
+            field: "insertion coefficient x2",
+            change: f_with(ib, |b| {
+                b.0.insertions[0].coefficient = &b.0.insertions[0].coefficient * Atom::num(2)
+            }),
+            pred: FPred::Times("2"),
+        });
+        c.push(FCell {
+            entry: e,
+            field: "insertion factor x2",
+            change: f_with(ib, |b| {
+                b.0.insertions[0].factor = &b.0.insertions[0].factor * Atom::num(2)
+            }),
+            pred: FPred::Times("2"),
+        });
+        c.push(FCell {
+            entry: e,
+            field: "insertion cycles (1,0)",
+            change: f_with(ib, |b| b.0.insertions[0].cycles = (1, 0)),
+            pred: FPred::Changes,
+        });
+        c.push(FCell {
+            entry: e,
+            field: "projector set: tensor 2 (direct: none before; closure: x2)",
+            change: f_with(base, |b| match &mut b.0.projector {
+                Some(p) => p.tensor = &p.tensor * Atom::num(2),
+                None => {
+                    b.0.projector = Some(vakint::p_integral::factorized::Projector {
+                        tensor: Atom::num(2),
+                        p2_power: 0,
+                    })
+                }
+            }),
+            pred: FPred::TimesOrRefused("2"),
+        });
+        c.push(FCell {
+            entry: e,
+            field: "projector p2_power +1",
+            change: f_with(base, |b| match &mut b.0.projector {
+                Some(p) => p.p2_power += 1,
+                None => {
+                    b.0.projector = Some(vakint::p_integral::factorized::Projector {
+                        tensor: Atom::num(1),
+                        p2_power: 1,
+                    })
+                }
+            }),
+            pred: FPred::Changes,
+        });
+    }
+    // the closure kind's own fields
+    let e = XEntry::Closure;
+    c.push(FCell {
+        entry: e,
+        field: "depth 3 (was 2)",
+        change: f_with(cl, |b| set_depth(&mut b.0, 3)),
+        pred: FPred::Changes,
+    });
+    c.push(FCell {
+        entry: e,
+        field: "taylor degree 1 (was 2)",
+        change: f_with(cl, |b| {
+            if let FactorizedKind::Closure(s) = &mut b.0.kind {
+                s.taylor.as_mut().unwrap().degree = 1
+            }
+        }),
+        pred: FPred::Changes,
+    });
+    c.push(FCell {
+        entry: e,
+        field: "taylor compensate_mass flipped",
+        change: f_with(cl, |b| {
+            if let FactorizedKind::Closure(s) = &mut b.0.kind {
+                let t = s.taylor.as_mut().unwrap();
+                t.compensate_mass = !t.compensate_mass
+            }
+        }),
+        pred: FPred::Changes,
+    });
+    c.push(FCell {
+        entry: e,
+        field: "taylor auxiliary mass another symbol",
+        change: f_with(cl, |b| {
+            if let FactorizedKind::Closure(s) = &mut b.0.kind {
+                s.auxiliary_mass_squared = atom("gammalooprs::{scalar}::other_mass")
+            }
+        }),
+        pred: FPred::Changes,
+    });
+    c.push(FCell {
+        entry: e,
+        field: "externals flag flipped (independent <-> conserved)",
+        change: f_with(cl, |b| {
+            if let FactorizedKind::Closure(s) = &mut b.0.kind {
+                s.independent_externals = !s.independent_externals
+            }
+        }),
+        pred: FPred::Informational,
+    });
+    c.push(FCell {
+        entry: e,
+        field: "softs: a soft role flipped",
+        change: f_with(cl, |b| {
+            if let FactorizedKind::Closure(s) = &mut b.0.kind {
+                if let Some(x) = s.softs.first_mut() {
+                    x.root = !x.root
+                }
+            }
+        }),
+        pred: FPred::Informational,
+    });
+    c.push(FCell {
+        entry: e,
+        field: "closure line power 2 (the closing edge's too)",
+        change: f_with(cl, |b| {
+            let id = if let FactorizedKind::Closure(s) = &mut b.0.kind {
+                s.power = 2;
+                s.edge
+            } else {
+                unreachable!()
+            };
+            b.0.edges.iter_mut().find(|x| x.id == id).unwrap().power = 2
+        }),
+        pred: FPred::Changes,
+    });
+    c.push(FCell {
+        entry: e,
+        field: "edge line kind: edge 3 ghost to scalar (a ghost line, not the closure line)",
+        change: f_with(cl, |b| {
+            b.0.edges.iter_mut().find(|x| x.id == 3).unwrap().line =
+                vakint::p_integral::factorized::LineKind::Scalar
+        }),
+        pred: FPred::Changes,
+    });
+    c.push(FCell {
+        entry: e,
+        field: "edge line kind: edge 4 vector to ghost (a third ghost line at vertices 1, 2)",
+        change: f_with(cl, |b| {
+            b.0.edges.iter_mut().find(|x| x.id == 4).unwrap().line =
+                vakint::p_integral::factorized::LineKind::Ghost
+        }),
+        pred: FPred::Changes,
+    });
+    c.push(FCell {
+        entry: XEntry::Direct,
+        field: "record depth 3 with settings 3",
+        change: f_with(di, |b| {
+            set_depth(&mut b.0, 3);
+            b.1.number_of_terms_in_epsilon_expansion = 3
+        }),
+        pred: FPred::Changes,
+    });
+    c.push(FCell {
+        entry: XEntry::Direct,
+        field: "ports: one port dropped",
+        change: f_with(di, |b| {
+            b.0.ports.pop();
+        }),
+        pred: FPred::Changes,
+    });
+    c
+}
+
+/// Runs the cells: (field, outcome); the findings returned.
+fn f_table(cells: Vec<FCell>, base_of: impl Fn(XEntry, &str) -> XInput) -> Vec<String> {
+    let mut findings = Vec::new();
+    for cell in cells {
+        let base = base_of(cell.entry, cell.field);
+        let v0 = f_value(cell.entry, &base);
+        let changed = (cell.change)();
+        // each entry runs its own validation (the vacuum entry its own rule set)
+        let got = f_value(cell.entry, &changed);
+        let same = |a: &Atom, b: &Atom| (a - b).expand().is_zero();
+        let outcome = match (&v0, &got) {
+            (Err(e), _) => format!("BASE FAILS {}", e.chars().take(100).collect::<String>()),
+            (_, Err(e)) => format!("refused: {}", e.chars().take(140).collect::<String>()),
+            (Ok(v), Ok(g)) => {
+                let predicted = match &cell.pred {
+                    FPred::Times(t) | FPred::TimesOrRefused(t) => Some(v * atom(t)),
+                    FPred::Spelled(s) => f_value(cell.entry, &s()).ok(),
+                    _ => None,
+                };
+                match (&cell.pred, predicted) {
+                    (FPred::Informational, _) if same(g, v) => {
+                        "accepted, the result V's (the format: informational / provenance)"
+                            .to_string()
+                    }
+                    (FPred::Informational, _) => {
+                        "accepted, the result CHANGED (informational field)".to_string()
+                    }
+                    (_, _) if same(g, v) => "ACCEPTED AND IGNORED".to_string(),
+                    (_, Some(p)) if same(g, &p) => "changes the result as predicted".to_string(),
+                    (FPred::Changes, _) => "changes the result".to_string(),
+                    (_, Some(_)) => {
+                        "ACCEPTED WITH ANOTHER RESULT (not the predicted one)".to_string()
+                    }
+                    (_, None) => {
+                        "changes the result (the prediction could not be evaluated)".to_string()
+                    }
+                }
+            }
+        };
+        eprintln!(
+            "CONTRACT FIELD | {:?} | {} | {outcome}",
+            cell.entry, cell.field
+        );
+        if outcome.starts_with("ACCEPTED AND IGNORED")
+            || outcome.starts_with("ACCEPTED WITH ANOTHER")
+            || outcome.contains("CHANGED")
+        {
+            findings.push(format!("{:?} {}: {outcome}", cell.entry, cell.field));
+        }
+    }
+    findings
+}
+
+/// The cells found accepted and ignored (each has an ignored test below that
+/// asks for the field to be refused or applied).
+const F_KNOWN: &[(XEntry, &str)] = &[
+    (
+        XEntry::Vacuum,
+        "projector p2_power +1 (the reviewer's case)",
+    ),
+    (XEntry::Vacuum, "projector p2_power -1"),
+    (
+        XEntry::Closure,
+        "edge line kind changed (an internal ghost / vector line to scalar)",
+    ),
+    (
+        XEntry::Closure,
+        "edge line kind: edge 3 ghost to scalar (a ghost line, not the closure line)",
+    ),
+    (
+        XEntry::Closure,
+        "edge line kind: edge 4 vector to ghost (a third ghost line at vertices 1, 2)",
+    ),
+];
+
+fn f_base_vacuum(_: XEntry, field: &str) -> XInput {
+    if field.starts_with("projector") || field.starts_with("external leg") {
+        f_leg_vacuum(0, "1")
+    } else {
+        x_vacuum_base()
+    }
+}
+
+fn f_base_other(e: XEntry, field: &str) -> XInput {
+    if e == XEntry::Closure && field.starts_with("insertion") {
+        let v = record("wh-k2-child-ins");
+        let a = v.prefactor.total();
+        (v, symbolic(), a)
+    } else if e == XEntry::Closure {
+        x_closure_base()
+    } else {
+        x_direct_base()
+    }
+}
+
+/// The table without the known cells: every other cell must hold.
+fn f_table_known_out(cells: Vec<FCell>, base_of: fn(XEntry, &str) -> XInput) -> Vec<String> {
+    let cells = cells
+        .into_iter()
+        .filter(|c| !F_KNOWN.contains(&(c.entry, c.field)))
+        .collect();
+    f_table(cells, base_of)
+}
+
+/// One known cell, alone: it holds once the entry refuses or applies the field.
+fn f_known_cell(
+    cells: Vec<FCell>,
+    base_of: fn(XEntry, &str) -> XInput,
+    entry: XEntry,
+    field: &str,
+) {
+    assert!(F_KNOWN.contains(&(entry, field)));
+    let cells: Vec<FCell> = cells
+        .into_iter()
+        .filter(|c| c.entry == entry && c.field == field)
+        .collect();
+    assert_eq!(cells.len(), 1, "{entry:?} {field}");
+    let findings = f_table(cells, base_of);
+    assert!(findings.is_empty(), "{findings:#?}");
+}
+
+#[test]
+fn every_field_changes_the_result_or_is_refused_vacuum() {
+    let findings = f_table_known_out(f_cells_vacuum(), f_base_vacuum);
+    eprintln!("CONTRACT FIELD vacuum findings: {findings:#?}");
+    assert!(findings.is_empty(), "{findings:#?}");
+}
+
+#[test]
+fn every_field_changes_the_result_or_is_refused_closure_direct_ports() {
+    let findings = f_table_known_out(f_cells_other(), f_base_other);
+    eprintln!("CONTRACT FIELD other findings: {findings:#?}");
+    assert!(findings.is_empty(), "{findings:#?}");
+}
+
+#[test]
+#[ignore = "expected: refused or applied; the entry ignores the field"]
+fn vacuum_projector_p2_power_plus_one_is_refused_or_applied() {
+    f_known_cell(
+        f_cells_vacuum(),
+        f_base_vacuum,
+        XEntry::Vacuum,
+        "projector p2_power +1 (the reviewer's case)",
+    );
+}
+
+#[test]
+#[ignore = "expected: refused or applied; the entry ignores the field"]
+fn vacuum_projector_p2_power_minus_one_is_refused_or_applied() {
+    f_known_cell(
+        f_cells_vacuum(),
+        f_base_vacuum,
+        XEntry::Vacuum,
+        "projector p2_power -1",
+    );
+}
+
+#[test]
+#[ignore = "expected: refused or applied; the entry ignores the field"]
+fn closure_line_kind_of_the_closure_line_is_refused_or_applied() {
+    f_known_cell(
+        f_cells_other(),
+        f_base_other,
+        XEntry::Closure,
+        "edge line kind changed (an internal ghost / vector line to scalar)",
+    );
+}
+
+#[test]
+#[ignore = "expected: refused or applied; the entry ignores the field"]
+fn closure_line_kind_of_another_ghost_line_is_refused_or_applied() {
+    f_known_cell(
+        f_cells_other(),
+        f_base_other,
+        XEntry::Closure,
+        "edge line kind: edge 3 ghost to scalar (a ghost line, not the closure line)",
+    );
+}
+
+#[test]
+#[ignore = "expected: refused or applied; the entry ignores the field"]
+fn closure_line_kind_vector_to_ghost_is_refused_or_applied() {
+    f_known_cell(
+        f_cells_other(),
+        f_base_other,
+        XEntry::Closure,
+        "edge line kind: edge 4 vector to ghost (a third ghost line at vertices 1, 2)",
+    );
+}
