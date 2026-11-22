@@ -3072,6 +3072,62 @@ fn the_unchanged_rules_hold_for_a_one_hedge_insertion() {
     );
 }
 
+/// THE SPECTATOR'S SIDE of a spinor chain (a quark coefficient): the
+/// producer's quark case l5-175270 (hedge 4, the source half-edge of the leg 3:
+/// a ROW; the spectator 7 a COLUMN, closed by the Dirac projector) is
+/// accepted; with one term's chain transposed at the spectator,
+/// `gamma(bis(h4), bis(x), mink(a)) * gamma(bis(h7), bis(x), mink(b)) *
+/// Q(3, mink(b))` for `gamma(bis(h4), bis(h7), mink(a))` (x a contracted spinor
+/// dummy, the spectator a ROW), it is refused by the fermion orientation rule
+/// at the insertion: the spectator takes the side opposite to the hedge's, as
+/// the second hedge of the two-hedge form does.
+#[test]
+fn the_spectator_takes_the_other_side_of_the_spinor_chain() {
+    let text = include_str!("fixtures/gg-l5-175270-child-5-6-7-8.record.txt");
+    FactorizedNumerator::from_text(text).unwrap();
+    let bis = |label: &str| {
+        format!("spenso::{{spenso::representation,spenso::self_dual}}::bis(4,{label})")
+    };
+    let hedge = |h: usize| format!("gammalooprs::{{spenso::index}}::hedge({h},1)");
+    let mink = |label: &str| {
+        format!(
+            "spenso::{{spenso::representation,spenso::self_dual}}::mink(gammalooprs::{{}}::dim,{label})"
+        )
+    };
+    let gamma = "spenso::{linear,spenso::tensor}::gamma";
+    let (a, b, x) = (
+        "gammalooprs::{}::insertion_slash_0",
+        "gammalooprs::{}::insertion_slash_8",
+        "gammalooprs::{}::insertion_slash_9",
+    );
+    let chain = format!("{gamma}({},{},{})", bis(&hedge(4)), bis(&hedge(7)), mink(a));
+    assert_eq!(text.matches(&chain).count(), 1);
+    let transposed = text.replacen(
+        &chain,
+        &format!(
+            "{gamma}({},{},{})*{gamma}({},{},{})*{MOMENTUM_HEAD}(3,{})",
+            bis(&hedge(4)),
+            bis(x),
+            mink(a),
+            bis(&hedge(7)),
+            bis(x),
+            mink(b),
+            mink(b)
+        ),
+        1,
+    );
+    match FactorizedNumerator::from_text(&transposed) {
+        Err(FactorizedError::FermionOrientation { location, detail }) => {
+            assert_eq!(location, "insertion at vertex 2");
+            assert!(
+                detail.starts_with("gamma row index ") && detail.contains("is on the spectator 7"),
+                "{detail}"
+            );
+        }
+        other => panic!("the transposed chain: {other:?}"),
+    }
+}
+
 /// THE PRODUCER'S READINGS of correction 29. (a) The momentum rule compares
 /// with the RECORD edge owning the hedge, which can be the paired leg
 /// 100000 + e_in: l5-59943 with its leg 5 written as the pair 100005 (into

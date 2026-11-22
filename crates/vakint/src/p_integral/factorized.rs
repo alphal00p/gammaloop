@@ -5053,6 +5053,56 @@ impl FactorizedNumerator {
                     });
                 }
             }
+            self.check_spectator_side(location, elements)?;
+        }
+        Ok(())
+    }
+
+    /// The SPECTATOR's side of a ONE-HEDGE surrogate (correction 29): the
+    /// far end of the chain, outside the record, takes the side opposite to
+    /// the hedge's, as the second hedge of the two-hedge form does: a gamma
+    /// index on a half-edge outside the record is a COLUMN when the hedge is
+    /// the source half-edge of a fermion line (a row), a ROW when it is its
+    /// target half-edge (a column), and no gamma index at all when the hedge
+    /// is on no fermion line. `FermionOrientation` at the insertion.
+    fn check_spectator_side(&self, location: &Location, elements: &Elements) -> Result<()> {
+        let Location::Insertion(v) = location else {
+            return Ok(());
+        };
+        let Some(insertion) = self.insertions.iter().find(|i| i.vertex == *v) else {
+            return Ok(());
+        };
+        if insertion.hedges.len() != 1
+            || !self.vertex(*v).is_some_and(|x| x.rule.starts_with("ins:"))
+        {
+            return Ok(());
+        }
+        let h = insertion.hedges[0];
+        let present = self.hedges();
+        let line = self.edges.iter().find(|e| {
+            e.line == LineKind::Fermion && (e.source_hedge == Some(h) || e.target_hedge == Some(h))
+        });
+        let (side, spectator) = match line {
+            Some(e) if e.source_hedge == Some(h) => {
+                ("a row (the source half-edge of a fermion line)", "column")
+            }
+            Some(_) => ("a column (the target half-edge of a fermion line)", "row"),
+            None => ("on no fermion line", "none"),
+        };
+        for (row, column) in &elements.gammas {
+            for (slot, kind) in [(row, "row"), (column, "column")] {
+                if let Some(s) = slot.hedge().filter(|s| !present.contains(s))
+                    && kind != spectator
+                {
+                    return Err(FactorizedError::FermionOrientation {
+                        location: location.to_string(),
+                        detail: format!(
+                            "gamma {kind} index {} is on the spectator {s}, the far end of the chain of the hedge {h}, which is {side}: the spectator takes the other side",
+                            slot.key()
+                        ),
+                    });
+                }
+            }
         }
         Ok(())
     }

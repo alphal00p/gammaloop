@@ -108,6 +108,7 @@ refusal	Evaluation	vacuum: <>
 refusal	Evaluation	vakint notation left after the mapping to the caller's notation: <>
 refusal	FermionOrientation	a <> line carries spinor indices
 refusal	FermionOrientation	free spinor half-edges <>, expected <>
+refusal	FermionOrientation	gamma <> index <> is on the spectator <>, the far end of the chain of the hedge <>, which is <>: the spectator takes the other side
 refusal	FermionOrientation	gamma column index <> is not the incoming side of a fermion line
 refusal	FermionOrientation	gamma row index <> is not the outgoing side of a fermion line
 refusal	Graph	<> contains <>
