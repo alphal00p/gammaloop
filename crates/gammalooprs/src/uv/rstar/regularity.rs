@@ -156,22 +156,22 @@ pub const FACTORS: [Entry; 17] = [
         factor: Factor::QuotientVertexNumerator,
         name: "quotient_vertex_numerator",
         multiplied: "Graph::numerator(support, hard) (numerator/uninit.rs fill_in_reduced: graph[node].get_num()), the integrand of every forest step of Z̃_F(G/γ; E_j) (Evaluation::ir_forest, quotient)",
-        certified: "normalise + excess at run time, per correction, before H(γ) is integrated (Evaluation::ir_hard_child); its excess is in B",
-        witness: "depth_tests::round5::the_quotient_vertex_pole_is_read_in_every_spelling",
+        certified: "round 8b: its declared order k_v (normalise + excess of THIS vertex numerator alone, d = 4-2ε; 0 by type without ε) at run time, per correction, before H(γ) is integrated (regularity::certify_graph_correction); k_v > 0 declines the child route (declared_order); a scalar d is 4-2ε before every expansion of the forest steps (C1)",
+        witness: "depth_tests::round8b::round8b_b_quotient_vertex_spellings_equal_the_literal",
     },
     Entry {
         factor: Factor::QuotientEdgeNumerator,
         name: "quotient_edge_numerator",
         multiplied: "Graph::numerator(support, hard) (fill_in_reduced: e.data.num), as the vertex numerators",
-        certified: "as quotient_vertex_numerator (the same product)",
-        witness: "depth_tests::round5::the_quotient_edge_pole_is_read_in_every_spelling",
+        certified: "as quotient_vertex_numerator, per edge (k_e of this edge numerator alone)",
+        witness: "depth_tests::round8b::round8b_c_quotient_edge_spellings_equal_the_literal",
     },
     Entry {
         factor: Factor::HardNumerator,
         name: "hard_numerator",
         multiplied: "Graph::numerator(hard, ∅): the integrand of H(γ) (Evaluation::integrate_ir_hard_term); its tensor leaves are the insertions E_j",
-        certified: "normalise at run time before H(γ) is integrated (grammar of every possible E_j); its explicit scalar poles stay in h_j, but h_j is truncated before d = 4-2ε is substituted in it, so a d-denominator that vanishes at d = 4 (symbol_in_denominator) or any tensor in a denominator (unresolved_tensor, not contracted) is refused",
-        witness: "depth_tests::round5::the_hard_vertex_spellings_agree",
+        certified: "normalise at run time before H(γ) is integrated (grammar of every possible E_j); its explicit scalar poles stay in h_j, exact through ε^(B-1) because d = 4-2ε before the single-mass truncation (round 8b, C1: integrate.rs single_mass_truncation); a d-denominator that vanishes at d = 4 (symbol_in_denominator) or any tensor in a denominator (unresolved_tensor, not contracted) is still refused",
+        witness: "depth_tests::round8b::round8b_a_hard_vertex_spellings_equal_the_literal",
     },
     Entry {
         factor: Factor::PropagatorPower,
@@ -184,22 +184,22 @@ pub const FACTORS: [Entry; 17] = [
         factor: Factor::InsertionCoefficient,
         name: "insertion_coefficient",
         multiplied: "a propagator-insertion surrogate's coefficient vertex (insertions.rs with_coefficient), a vertex numerator of the quotient or of the hard part",
-        certified: "as quotient_vertex_numerator / hard_numerator (it IS a vertex numerator); insertion group weights are rejected with a pole (PropagatorInsertionEvaluator::validate_weight, a weight with a tensor structure normalised here first: MATRIX-R45)",
+        certified: "as quotient_vertex_numerator / hard_numerator (it IS a vertex numerator); regular by construction: an N-loop insertion over an N-loop scalar chain, truncated at ε^(N-1) after d = 4-2ε (round 8b, C1: insertion_coefficient_truncation), so k = 0; insertion group weights are rejected with a pole (PropagatorInsertionEvaluator::validate_weight, a weight with a tensor structure normalised here first: MATRIX-R45)",
         witness: "depth::tests::a_surrogate_coefficient_has_no_excess",
     },
     Entry {
         factor: Factor::GraphNumeratorPrefactor,
         name: "numerator_prefactor",
         multiplied: "not by R*: the caller's root projector (beta src/integrate.rs project_physical_root_mode: tensor · σ(global_prefactor.num), and closed_root_scalar_normalization), i.e. onto h_j z_j after the outer Taylor step",
-        certified: "normalise + excess at run time (Graph::global_prefactor.num); its excess is in B; beta refuses a non-regular one at its public boundary (no route carries finite orders through a callback applied after an inner pole projection)",
-        witness: "depth_tests::round5::a_numerator_prefactor_pole_is_read_in_every_spelling",
+        certified: "round 8b: its declared order k_prefactor (normalise + excess of the prefactor alone, never multiplied into another factor) when a root projector applies it; not read by the unweighted API, which does not apply it; k_prefactor > 0 declines; beta refuses a non-regular one at its public boundary",
+        witness: "depth_tests::round8b::round8b_d_a_regular_prefactor_is_no_strict_alarm",
     },
     Entry {
         factor: Factor::GraphProjector,
         name: "projector",
         multiplied: "not by R* nor by beta's R* path (beta only multiplies it in its direct integration, src/inputs.rs)",
-        certified: "normalise + excess at run time (Graph::global_prefactor.projector), in B as the prefactor; beta refuses a non-regular one",
-        witness: "depth_tests::round5::a_projector_pole_is_read",
+        certified: "round 8b: NOT read (it is applied by no R* route: the review's finding 4, a zero projector erased every quotient excess); beta refuses a non-regular one at its public boundary",
+        witness: "depth_tests::round8b::round8b_d_the_stored_projector_moves_nothing",
     },
     Entry {
         factor: Factor::OverallFactor,
@@ -212,7 +212,7 @@ pub const FACTORS: [Entry; 17] = [
         factor: Factor::RootClosure,
         name: "root_closure",
         multiplied: "z_j · closure (Evaluation::ir_outer_integrated); a metric or Dirac closure",
-        certified: "normalise + excess at run time; its excess is in B",
+        certified: "round 8b: its declared order k_closure (normalise + excess at run time); k_closure > 0 declines",
         witness: "depth::tests::the_bound_adds_the_quotient_loops_and_every_excess",
     },
     Entry {
@@ -226,14 +226,14 @@ pub const FACTORS: [Entry; 17] = [
         factor: Factor::RootProjector,
         name: "root_projector",
         multiplied: "the caller's root projector callback on the complete outer polynomial (Evaluation::ir_outer_integrated)",
-        certified: "a callback is opaque: by contract (documented on RStarPlan::projected_counterterm) regular in ε, and MEASURED at run time (MATRIX-R45 review): every shown row's need is read on its complete outer coefficient after the callback and the tensor finish (a pole is a need above the row's bound: refused, the alarm under STRICT); with no shown row the callback is probed on the unit insertion's outer orders (Evaluation::callback_excess), a pole refuses (bound_exceeded); a probe the callback cannot evaluate (beta's projector needs the hard part's boundary slots) is counted (callback_unprobed, IR_HARD_DEPTH_CALLBACK_UNPROBED) and admitted. Certified by contract only: such an unprobed callback on a correction whose every row vanished, and a callback whose pole depends on the tensor structure of a row the moment extraction dropped. Beta's multiplies σ(numerator_prefactor) (certified above, refused by beta when poleful) and the fixed normalisations i p², d−1, d_A",
-        witness: "depth_tests::round5::matrix_r45_a_poleful_root_projector_callback_is_measured",
+        certified: "round 8b (release ruling R1): only in its TYPED form X ↦ factor · σ(X) (ClosedRootNormalization given as data by the _scalar entry points: beta's closed metric root, c = transverse·σ(prefactor)/(i q²)/(d−1); gammaloop's own UV child closures 1/(d(d−1)(d+2)), 1/(Tr[1] d), 1/Tr[1], and the surrogate closed root 1): k_projector is the order of factor at d = 4-2ε, and the child route APPLIES this form (Evaluation::child_root_projection), so the certified scalar is the one multiplied; an opaque callback is never probed: the child route declines (opaque_projector)",
+        witness: "depth_tests::round8b::round8b_e_an_opaque_callback_declines_without_a_probe",
     },
     Entry {
         factor: Factor::RowInsertion,
         name: "row_insertion",
         multiplied: "E_j of each row, the decorated quotient's insertion (Evaluation::ir_forest)",
-        certified: "excess per returned row (depth::excess_poles); a dropped row is bounded through hard_numerator and moment_reduction",
+        certified: "round 8b (C4): ε-free by construction (a leaf of the hard numerator's tensor structure, its scalars in h_j: moments::hard_moments), checked on every returned row (depth::eps_free); a row that is not declines (insertion_not_eps_free); a dropped row has a vanishing coefficient at depth B",
         witness: "depth_tests::a_row_without_a_known_bound_is_refused_after_the_first_depth",
     },
     Entry {
@@ -1012,58 +1012,248 @@ pub fn normalise_weight(
     Ok(NormalisedWeight { value, order })
 }
 
-/// The factors of one IR correction (the run-time entries of [`FACTORS`]).
-pub(super) struct CorrectionFactors<'a> {
-    /// `Graph::numerator(support, hard)`: the quotient's vertex and edge
-    /// numerators.
-    pub quotient: &'a Atom,
-    /// `Graph::numerator(hard, ∅)`.
-    pub hard: &'a Atom,
-    /// `Graph::global_prefactor.num`.
-    pub prefactor: &'a Atom,
-    /// `Graph::global_prefactor.projector`.
-    pub projector: &'a Atom,
+/// IRH-DEPTH round 8b: one declared order of the topological certificate
+/// (TOPOLOGICAL-BOUND.md section 1): a non-negative integer `k` per factor,
+/// kept separately, never summed with signs (a positive order of one factor
+/// never offsets another factor's pole: the review's finding 4).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct Declared {
+    /// The [`FACTORS`] name of the factor kind.
+    pub factor: &'static str,
+    /// Which factor (`v3`, `e7`, `root`, …).
+    pub label: String,
+    pub k: usize,
 }
 
-/// Certify one correction (module doc): the normalised product of the
-/// factors whose excess enters `B` (quotient numerators, prefactor,
-/// projector; the root closure and the rows are read by the depth module),
-/// or the first refusal.
-pub(super) fn certify_correction(
-    factors: &CorrectionFactors<'_>,
-) -> std::result::Result<Atom, Refused> {
-    let quotient = normalise(Factor::QuotientVertexNumerator, factors.quotient)?;
-    // The hard numerator: its grammar only (its scalar poles are h_j's).
-    let _ = normalise(Factor::HardNumerator, factors.hard)?;
-    let prefactor = normalise(Factor::GraphNumeratorPrefactor, factors.prefactor)?;
-    let projector = normalise(Factor::GraphProjector, factors.projector)?;
-    Ok(quotient * prefactor * projector)
+/// How the root projection of an evaluation is given (IRH-DEPTH round 8b,
+/// release ruling R1).
+#[derive(Clone, Copy, Debug)]
+pub(super) enum RootProjection<'a> {
+    /// No root projector: the value is the unprojected counterterm.
+    Absent,
+    /// The typed regular form `X ↦ factor · σ(X)` (a fixed routing `σ` of the
+    /// external momenta and a declared scalar normalisation); its `k` is the
+    /// pole order of `factor` at `d = 4 − 2ε`.
+    Typed(&'a Atom),
+    /// An opaque callback: nothing certifies it; the child route declines.
+    Opaque,
 }
 
-/// [`certify_correction`] for one correction of `graph`: `quotient` is
-/// `Graph::numerator(support, hard)` (already built by the caller), the
-/// hard numerator, prefactor and projector are read from `graph`.
+/// The topological certificate of one IR correction, computed from the graph
+/// and the declared orders BEFORE any expression of the correction is built:
+/// `B = L_q + Σ k`, `L_q = loops(support) − loops(hard)`.
+#[derive(Clone, Debug)]
+pub(super) struct Certificate {
+    pub quotient_loops: usize,
+    pub declared: Vec<Declared>,
+}
+
+impl Certificate {
+    /// `B`.
+    pub fn bound(&self) -> usize {
+        self.quotient_loops + self.declared.iter().map(|declared| declared.k).sum::<usize>()
+    }
+
+    /// The first factor with a declared order above 0 (the child route then
+    /// declines: TOPOLOGICAL-BOUND.md C2).
+    pub fn positive(&self) -> Option<&Declared> {
+        self.declared.iter().find(|declared| declared.k > 0)
+    }
+
+    /// The nonzero orders as a log field (`-` when every `k` is 0).
+    pub fn label(&self) -> String {
+        let positive = self
+            .declared
+            .iter()
+            .filter(|declared| declared.k > 0)
+            .map(|declared| format!("{}:{}={}", declared.factor, declared.label, declared.k))
+            .collect::<Vec<_>>();
+        if positive.is_empty() {
+            "-".to_owned()
+        } else {
+            positive.join(",")
+        }
+    }
+}
+
+/// The declared order `k` of one listed factor (round 8b): normalised as in
+/// round 5 (a closed trace in a denominator contracted, `d = 4 − 2ε`; an
+/// unresolved tensor, an opaque function or a symbol in a denominator is
+/// refused), then `max(0, −ord_ε)` of each of its multiplicative factors
+/// read on its own ([`super::depth::excess_poles`]). A factor without `ε`
+/// (every model Feynman rule: no ε, no d in 80,681 L5 DOTs) has `k = 0` by
+/// type. `Err` with `PoleInFixedFactor` when the order cannot be read.
+fn declared_order(factor: Factor, label: String, expression: &Atom) -> std::result::Result<Declared, Refused> {
+    let k = certified_excess(factor, expression)?.ok_or_else(|| Refused {
+        class: Refusal::PoleInFixedFactor,
+        factor: entry(factor).name,
+        detail: format!("{label}: the ε order cannot be read ({})", short(expression.as_view())),
+    })?;
+    Ok(Declared {
+        factor: entry(factor).name,
+        label,
+        k,
+    })
+}
+
+/// The vertex and edge numerators of the quotient `G/γ` one by one, as
+/// `Graph::numerator(support, hard)` multiplies them
+/// (`numerator/uninit.rs fill_in_reduced`): every edge of `support − hard`
+/// with its end vertices not in `hard`, then the vertices whose crown lies in
+/// `support`. Each is read before any product, so no factor's order can
+/// offset another's.
+fn quotient_factors(
+    graph: &crate::graph::Graph,
+    support: &linnet::half_edge::subgraph::SuBitGraph,
+    hard: &linnet::half_edge::subgraph::SuBitGraph,
+) -> Vec<(Factor, String, Atom)> {
+    use linnet::half_edge::{
+        NodeIndex,
+        involution::HedgePair,
+        subgraph::{Inclusion, ModifySubSet, SubSetLike, SubSetOps, subset::SubSet},
+    };
+    let mut factors = Vec::new();
+    let mut seen: SubSet<NodeIndex> = SubSet::empty(graph.n_nodes());
+    for (node, _, _) in graph.underlying.iter_nodes_of(hard) {
+        seen.add(node);
+    }
+    let not_ignored = support.subtract(hard);
+    for (pair, edge, data) in graph.underlying.iter_edges_of(&not_ignored) {
+        if let HedgePair::Paired { source, sink } = pair {
+            for end in [graph.node_id(source), graph.node_id(sink)] {
+                if !seen[end] {
+                    seen.add(end);
+                    factors.push((
+                        Factor::QuotientVertexNumerator,
+                        format!("v{}", usize::from(end)),
+                        Atom::one() * graph[end].get_num(),
+                    ));
+                }
+            }
+            factors.push((
+                Factor::QuotientEdgeNumerator,
+                format!("e{}", usize::from(edge)),
+                data.data.num.value.clone(),
+            ));
+        }
+    }
+    let unseen = !seen;
+    for node in unseen.included_iter() {
+        if graph
+            .iter_crown(node)
+            .all(|hedge| support.includes(&hedge) || graph[graph[&hedge]].is_dummy)
+        {
+            factors.push((
+                Factor::QuotientVertexNumerator,
+                format!("v{}", usize::from(node)),
+                Atom::one() * graph[node].get_num(),
+            ));
+        }
+    }
+    factors
+}
+
+/// The certificate of one IR correction (round 8b): `L_q` and the declared
+/// orders of every factor that multiplies the quotient side of the product
+/// `h_j · z_j · closure · compensation · root projection`, each on its own:
+/// * every quotient vertex and edge numerator (`k_v`, the decorated
+///   quotient's integrand);
+/// * the root closure (`k_closure`);
+/// * the root projection (`k_projector`): 0 without one; the declared scalar
+///   normalisation's order for the typed form; an opaque callback is not
+///   certified (the child route declines before this is used);
+/// * the graph's numerator prefactor (`k_prefactor`), only where it is
+///   applied: by the caller's root projector (beta's multiplies
+///   `σ(global_prefactor.num)`); the unweighted API does not apply it.
+///
+/// The graph's stored projector is NOT read: no R* route and no beta R* path
+/// applies it (the review's finding 4: a zero projector erased every
+/// quotient excess). The hard numerator is checked for its grammar only (its
+/// scalar poles are `h_j`'s, exact through `ε^(B−1)` once d = 4 − 2ε before
+/// the truncation, C1). `ω`, the hard loops, the rows `E_j` (ε-free by
+/// construction, asserted per row), the compensation and the tensor finish
+/// add nothing (TOPOLOGICAL-BOUND.md section 2).
 pub(super) fn certify_graph_correction(
     graph: &crate::graph::Graph,
+    support: &linnet::half_edge::subgraph::SuBitGraph,
     hard: &linnet::half_edge::subgraph::SuBitGraph,
-    quotient: &Atom,
-) -> eyre::Result<std::result::Result<Atom, Refused>> {
+    root_closure: Option<&Atom>,
+    projection: RootProjection<'_>,
+) -> eyre::Result<std::result::Result<Certificate, Refused>> {
     use crate::uv::UltravioletGraph;
+    let hard_loops = graph.n_loops(hard);
+    let quotient_loops = graph.n_loops(support).saturating_sub(hard_loops);
     #[cfg(test)]
     if ROUND3.with(|slot| slot.get()) {
-        return Ok(Ok(quotient.clone()));
+        // The round-3 planner: one order, read on the quotient numerator
+        // as written (their product), the prefactor not read.
+        let quotient = graph
+            .numerator(support, hard)
+            .get_single_atom()
+            .map_err(|error| eyre::eyre!("the quotient numerator: {error}"))?;
+        return Ok(Ok(Certificate {
+            quotient_loops,
+            declared: vec![Declared {
+                factor: "round3",
+                label: "quotient".to_owned(),
+                k: super::depth::excess_poles(&quotient).unwrap_or(0),
+            }],
+        }));
     }
     let empty: linnet::half_edge::subgraph::SuBitGraph = graph.underlying.empty_subgraph();
     let hard_numerator = graph
         .numerator(hard, &empty)
         .get_single_atom()
         .map_err(|error| eyre::eyre!("the hard numerator: {error}"))?;
-    Ok(certify_correction(&CorrectionFactors {
-        quotient,
-        hard: &hard_numerator,
-        prefactor: &graph.global_prefactor.num,
-        projector: &graph.global_prefactor.projector,
-    }))
+    Ok((|| {
+        // The hard numerator: its grammar only.
+        let _ = normalise(Factor::HardNumerator, &hard_numerator)?;
+        let mut declared = Vec::new();
+        for (factor, label, expression) in quotient_factors(graph, support, hard) {
+            declared.push(declared_order(factor, label, &expression)?);
+        }
+        if let Some(closure) = root_closure {
+            declared.push(declared_order(Factor::RootClosure, "root".to_owned(), closure)?);
+        }
+        match projection {
+            RootProjection::Absent => {}
+            RootProjection::Typed(factor) => {
+                // The declared normalisation (beta: transverse · σ(prefactor)
+                // / (i q²) / (d − 1); a UV child closure's 1/(d (d−1) (d+2)),
+                // 1/(Tr[1] d), 1/Tr[1]): its scalar order at d = 4 − 2ε; an
+                // external invariant in a denominator is ε-free.
+                let k = super::depth::excess_poles(factor).ok_or_else(|| Refused {
+                    class: Refusal::PoleInFixedFactor,
+                    factor: entry(Factor::RootProjector).name,
+                    detail: format!(
+                        "the ε order of the typed root normalisation cannot be read ({})",
+                        short(factor.as_view())
+                    ),
+                })?;
+                declared.push(Declared {
+                    factor: entry(Factor::RootProjector).name,
+                    label: "typed".to_owned(),
+                    k,
+                });
+                declared.push(declared_order(
+                    Factor::GraphNumeratorPrefactor,
+                    "prefactor".to_owned(),
+                    &graph.global_prefactor.num,
+                )?);
+            }
+            RootProjection::Opaque => {
+                declared.push(declared_order(
+                    Factor::GraphNumeratorPrefactor,
+                    "prefactor".to_owned(),
+                    &graph.global_prefactor.num,
+                )?);
+            }
+        }
+        Ok(Certificate {
+            quotient_loops,
+            declared,
+        })
+    })())
 }
 
 /// A fixed factor that must be regular ([`Refusal::PoleInFixedFactor`]):
