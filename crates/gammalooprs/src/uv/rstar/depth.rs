@@ -499,7 +499,8 @@ pub(super) struct DepthCounts {
     /// generic path before integrating H (counted in `refused` too, with
     /// their reason): an opaque root projector callback (R1), a declared
     /// order `k > 0` of a factor (C2), a row insertion `E_j` that is not
-    /// ε-free (C4).
+    /// ε-free (C4), a forest whose steps do not partition the quotient's
+    /// loops (C5, `forest_loops`: counted in `declined` only).
     pub declined: usize,
     pub opaque_projector: usize,
     pub declared_order: usize,
@@ -575,6 +576,7 @@ pub(super) fn refused(counts: &mut DepthCounts, reason: &'static str) {
             note(counts, |counts| &mut counts.declined);
             note(counts, |counts| &mut counts.insertion_not_eps_free);
         }
+        "forest_loops" => note(counts, |counts| &mut counts.declined),
         _ => {}
     }
     counts.reason = Some(reason);

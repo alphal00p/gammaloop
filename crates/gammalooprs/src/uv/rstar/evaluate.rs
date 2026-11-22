@@ -2344,6 +2344,35 @@ impl<'a> Evaluation<'a> {
         let declines = super::depth::guards() && !super::regularity::is_round3();
         #[cfg(not(test))]
         let declines = super::depth::guards();
+        // C5: the steps of every forest partition the quotient G/γ, so their
+        // regions' loops add up to L_q (the premise of B's (a) rows: each
+        // step's K has at most its region's loops of poles). An assert in
+        // debug builds; in release a forest that does not partition declines
+        // (`forest_loops`, counted).
+        let partition = correction.forest.iter().find_map(|forest| {
+            let loops = forest
+                .steps
+                .iter()
+                .map(|step| step.argument.loops)
+                .sum::<usize>();
+            (loops != quotient_loops).then_some(loops)
+        });
+        debug_assert!(
+            partition.is_none() || !declines,
+            "IRH-DEPTH: the steps of a forest of {} corr={correction_index} have {partition:?} loops, the quotient {quotient_loops}",
+            self.graph.name
+        );
+        if declines && let Some(loops) = partition {
+            return Ok(self.decline_child(
+                correction_index,
+                correction,
+                quotient_loops,
+                bound,
+                &declared,
+                "forest_loops",
+                &format!("a forest's steps have {loops} loops, the quotient {quotient_loops}"),
+            ));
+        }
         if declines {
             let reason = match (opaque, certificate.positive()) {
                 (true, _) => Some((
