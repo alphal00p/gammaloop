@@ -10,18 +10,23 @@
 //! part with one has at least four legs, `local_dod <= 0`); the variants
 //! below raise it to 1 and 2 to test what a positive degree would do:
 //!
-//! * the leg is scaled exactly as its partner: the record with the two legs'
-//!   roles swapped (13 into vertex 3, 100013 out of vertex 4, every `Q(13)`
-//!   <-> `Q(100013)`, `external 3 edge=13` kept) has the same value, and so
-//!   has the record whose `scaled_edges` also lists 100013 or lists 100013
-//!   instead of 13 (vakint scales the momentum `p(j)` that a leg carries,
-//!   `scaled_edges` only has to cover every `p(j)`);
+//! * the leg is scaled exactly as its partner: the record whose
+//!   `scaled_edges` also lists 100013 or lists 100013 instead of 13 has the
+//!   same value (vakint scales the momentum `p(j)` that a leg carries,
+//!   `scaled_edges` only has to cover every `p(j)`); the record with the two
+//!   legs' roles swapped (13 into vertex 3, 100013 out of vertex 4, every
+//!   `Q(13)` <-> `Q(100013)`) is REFUSED by vakint's paired-line rule (edge
+//!   `e` leaves the record, edge `100000 + e` enters it: the emitter's
+//!   form), at every degree;
 //! * an undeclared `Q(100000 + e)` (the leg's line dropped, or the factor
 //!   naming an id without a line) is REFUSED, at degree 0 and above: every
 //!   record the emitter writes has a `taylor` line, and vakint's closure
 //!   validation refuses a constant external vector with a Taylor step;
 //! * the pre-pick-8 form `Q(13)` in the insertion at vertex 3 is refused
 //!   (`not a boundary momentum of the insertion`).
+//! * a leg that does not mirror its partner's momentum is REFUSED by vakint's
+//!   paired-line rule (the two legs of a paired line carry one momentum); the
+//!   emitter's guard (`declared_momenta`) refuses it on the record value too.
 
 use eyre::{Result, ensure, eyre};
 use symbolica::{
@@ -177,18 +182,19 @@ fn pick8_paired_leg_scales_like_its_partner_at_a_positive_degree() -> Result<()>
     ensure!(RECORD.contains("taylor\tdegree=0\tcompensate_mass=1\tscaled_edges=0,1,13\t"));
     ensure!(RECORD.contains("edge\t100013\tsource=ext\ttarget=3\thedges=-,25\t"));
     ensure!(RECORD.contains("insertion\t3\thedges=5,18,25\t"));
-    // degree 0 (the record as written): the legs swapped agree too
+    // degree 0 (the record as written); the legs swapped are refused by
+    // vakint's paired-line rule (not the emitter's form)
     let base = evaluate(&vakint, RECORD).map_err(|e| eyre!("degree 0: {e}"))?;
-    let base_swapped = evaluate(&vakint, &swapped(RECORD)).map_err(|e| eyre!("{e}"))?;
     eprintln!(
         "PICK8 degree 0: zero={} len={}",
         base.is_zero(),
         base.to_string().len()
     );
-    ensure!(
-        atoms_equal(&base, &base_swapped),
-        "degree 0: swapped legs differ"
-    );
+    refused(
+        "degree 0 legs swapped",
+        evaluate(&vakint, &swapped(RECORD)),
+        "the two legs of a paired line carry one momentum",
+    )?;
     let mut nonzero = false;
     for degree in [1, 2] {
         let text = with_degree(RECORD, degree);
@@ -200,8 +206,12 @@ fn pick8_paired_leg_scales_like_its_partner_at_a_positive_degree() -> Result<()>
             "PICK8 degree {degree}: zero={zero} len={} differs_from_degree_0={differs_from_0}",
             value.to_string().len()
         );
+        refused(
+            &format!("degree {degree} legs swapped"),
+            evaluate(&vakint, &swapped(&text)),
+            "the two legs of a paired line carry one momentum",
+        )?;
         for (what, variant) in [
-            ("legs swapped", swapped(&text)),
             (
                 "scaled_edges=0,1,13,100013",
                 with_scaled(&text, "0,1,13,100013"),
@@ -318,10 +328,19 @@ fn pick8_guard_refuses_undeclared_and_unmirrored_legs() -> Result<()> {
         let good =
             FactorizedNumerator::from_text(&text).map_err(|e| eyre!("degree {degree}: {e}"))?;
         guard_value(&good).map_err(|e| eyre!("degree {degree}: {e}"))?;
-        let swapped_value = FactorizedNumerator::from_text(&swapped(&text))
+        // vakint's reader refuses the swapped form (its paired-line rule); the
+        // guard is checked on the unvalidated value: it is not the emitter's
+        // form either (100000 + e is always the INCOMING leg)
+        let read = FactorizedNumerator::from_text(&swapped(&text));
+        ensure!(
+            read.as_ref().is_err_and(|e| e
+                .to_string()
+                .contains("the two legs of a paired line carry one momentum")),
+            "degree {degree} swapped: vakint's reader did not refuse it: {:?}",
+            read.map(|_| ())
+        );
+        let swapped_value = FactorizedNumerator::parse_text(&swapped(&text))
             .map_err(|e| eyre!("degree {degree} swapped: {e}"))?;
-        // vakint evaluates it equally, but it is not the emitter's form
-        // (100000 + e is always the INCOMING leg)
         value_refused(
             &format!("degree {degree} legs swapped"),
             &swapped_value,
@@ -368,40 +387,23 @@ fn pick8_guard_refuses_undeclared_and_unmirrored_legs() -> Result<()> {
     Ok(())
 }
 
-/// The negative control the guard exists for: a leg that does NOT mirror its
-/// partner (100013 carrying p(2), not p(3)) is accepted by vakint (only the
-/// loop components of an independent-externals record must conserve) and at
-/// degree 2 its value silently differs; at degree 0 every external momentum
-/// is scaled to zero and the value is the same.
+/// The negative control the guard was written for: a leg that does NOT
+/// mirror its partner (100013 carrying p(2), not p(3)). vakint's paired-line
+/// rule refuses it at every degree (the two legs of a paired line carry one
+/// momentum), so it can no longer change a value silently; the emitter's
+/// guard refuses the same value (`pick8_guard_refuses_undeclared_and_unmirrored_legs`).
 #[test]
-fn pick8_an_unmirrored_leg_is_silent_in_vakint() -> Result<()> {
+fn pick8_an_unmirrored_leg_is_refused_by_vakint() -> Result<()> {
     test_initialise()?;
     let vakint = Vakint::new()?;
     for degree in [0, 2] {
         let text = with_degree(RECORD, degree);
-        let value = evaluate(&vakint, &text).map_err(|e| eyre!("degree {degree}: {e}"))?;
-        let changed = evaluate(&vakint, &leg_momentum_changed(&text));
-        match &changed {
-            Ok(other) => eprintln!(
-                "PICK8 SILENT degree {degree} leg momentum p(2): evaluated, equal={}",
-                atoms_equal(&value, other)
-            ),
-            Err(error) => {
-                eprintln!("PICK8 SILENT degree {degree} leg momentum p(2): refused: {error:.300}")
-            }
-        }
-        let other = changed.map_err(|e| eyre!("degree {degree}: vakint refused: {e}"))?;
-        if degree == 0 {
-            ensure!(
-                atoms_equal(&value, &other),
-                "degree 0: the changed leg differs"
-            );
-        } else {
-            ensure!(
-                !atoms_equal(&value, &other),
-                "degree {degree}: the changed leg agrees"
-            );
-        }
+        evaluate(&vakint, &text).map_err(|e| eyre!("degree {degree}: {e}"))?;
+        refused(
+            &format!("degree {degree} leg momentum p(2)"),
+            evaluate(&vakint, &leg_momentum_changed(&text)),
+            "the two legs of a paired line carry one momentum",
+        )?;
     }
     Ok(())
 }
