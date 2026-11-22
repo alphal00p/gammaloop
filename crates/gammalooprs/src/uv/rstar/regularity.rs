@@ -129,6 +129,9 @@ pub enum Factor {
     RowInsertion,
     Compensation,
     MomentReduction,
+    AdditionalNormalisation,
+    VakintNormalisation,
+    IrDiracClosure,
 }
 
 /// One entry of [`FACTORS`].
@@ -148,7 +151,7 @@ pub struct Entry {
 /// THE closed list: every factor of the product, where it is multiplied and
 /// how it is certified. A factor not named here is refused
 /// ([`Refusal::OutsideList`]).
-pub const FACTORS: [Entry; 14] = [
+pub const FACTORS: [Entry; 17] = [
     Entry {
         factor: Factor::QuotientVertexNumerator,
         name: "quotient_vertex_numerator",
@@ -216,15 +219,15 @@ pub const FACTORS: [Entry; 14] = [
         factor: Factor::RootNormalisation,
         name: "root_normalisation",
         multiplied: "the caller's closed-root normalisation c = transverse·σ(prefactor)/(i q²)/(d−1) (beta closed_root_scalar_normalization) after Taylor",
-        certified: "σ(prefactor) as numerator_prefactor; i q² is the external invariant (ε-free), d−1 is regular at d = 4; beta builds it from these alone",
+        certified: "σ(prefactor) as numerator_prefactor; i q² is the external invariant (ε-free), d−1 is regular at d = 4; beta builds it from these alone. On the child route the closed-root factor is applied through the root projector callback, so it is measured as root_projector (MATRIX-R45 review)",
         witness: "depth_tests::round5::the_fixed_normalisations_are_regular",
     },
     Entry {
         factor: Factor::RootProjector,
         name: "root_projector",
         multiplied: "the caller's root projector callback on the complete outer polynomial (Evaluation::ir_outer_integrated)",
-        certified: "a callback is opaque: by contract (documented on RStarPlan::projected_counterterm) regular in ε; beta's multiplies σ(numerator_prefactor) (certified above, refused by beta when poleful) and the fixed normalisations i p², d−1, d_A",
-        witness: "depth_tests::round5::a_numerator_prefactor_pole_is_read_in_every_spelling",
+        certified: "a callback is opaque: by contract (documented on RStarPlan::projected_counterterm) regular in ε, and MEASURED at run time (MATRIX-R45 review): every shown row's need is read on its complete outer coefficient after the callback and the tensor finish (a pole is a need above the row's bound: refused, the alarm under STRICT); with no shown row the callback is probed on the unit insertion's outer orders (Evaluation::callback_excess), a pole refuses (bound_exceeded), an empty probe refuses (unverified). A callback whose pole depends on the tensor structure of a row the moment extraction dropped remains certified by contract only. Beta's multiplies σ(numerator_prefactor) (certified above, refused by beta when poleful) and the fixed normalisations i p², d−1, d_A",
+        witness: "depth_tests::round5::matrix_r45_a_poleful_root_projector_callback_is_measured",
     },
     Entry {
         factor: Factor::RowInsertion,
@@ -244,8 +247,29 @@ pub const FACTORS: [Entry; 14] = [
         factor: Factor::MomentReduction,
         name: "moment_reduction",
         multiplied: "the vacuum tensor reduction of the quotient integrals with a monomial insertion (vakint, closed.rs)",
-        certified: "the complete coefficient of a polynomial tensor integrand is regular at d = 4 (module doc); its premise is hard_numerator's normalisation",
-        witness: "depth_tests::round5::the_fixed_normalisations_are_regular",
+        certified: "the complete coefficient of a polynomial tensor integrand is regular at d = 4 (module doc); its premise is hard_numerator's normalisation. An intermediate coefficient is not (a rank-ten Weingarten coefficient has 1/(d-4)): an R* insertion coefficient's Laurent order is also read after d = 4-2ε before its closure integral (integrate.rs insertion_coefficient_valuation), and the outer coefficient of every row is measured after the tensor finish and the root projector (Evaluation::ir_outer_integrated)",
+        witness: "depth_tests::round5::a_rank_ten_reduction_coefficient_pole_is_read",
+    },
+    Entry {
+        factor: Factor::AdditionalNormalisation,
+        name: "additional_normalisation",
+        multiplied: "uv_settings.vakint.additional_normalization, parsed and multiplied as N^loops into every vacuum integral: the quotient K's and the hard part H(γ) (approx/integrated.rs to_vakint, rstar/expression.rs physical remainder)",
+        certified: "normalise (hard semantics: it enters H(γ) before the truncation) at run time per correction; it must be regular (excess 0), else the correction is refused (pole_in_fixed_factor)",
+        witness: "depth_tests::round5::a_poleful_additional_normalisation_is_refused",
+    },
+    Entry {
+        factor: Factor::VakintNormalisation,
+        name: "vakint_normalisation",
+        multiplied: "uv_settings.vakint.normalization, the named loop normalisation vakint multiplies into every vacuum integral (settings.rs true_settings)",
+        certified: "the named schemes (MSbar, FMFTandMATAD, GScheme, pySecDec) are fixed code, regular at d = 4 (π, exp and Γ factors of ε per loop); any other (custom) string is refused on the child route (outside_list)",
+        witness: "depth_tests::round5::a_poleful_additional_normalisation_is_refused",
+    },
+    Entry {
+        factor: Factor::IrDiracClosure,
+        name: "ir_dirac_closure",
+        multiplied: "GAMMALOOP_IR_DIRAC_CLOSURE (on by default): the closure γ(column,row,μ) multiplied into every remainder of H(γ) (times_momentum_free), and its normalisation 1/Tr[1] or 1/(Tr[1] d) multiplied into h_j after the truncation (ir_dirac::reassemble)",
+        certified: "normalise (hard semantics) at run time per correction; the normalisation must be regular (excess 0), else the correction is refused (pole_in_fixed_factor); the representation dimensions behind Tr[1] are polynomial slots (normalise)",
+        witness: "depth_tests::round5::a_poleful_dirac_closure_normalisation_is_refused",
     },
 ];
 
@@ -264,6 +288,10 @@ pub enum Refusal {
     OpaqueFunction,
     SymbolInDenominator,
     OutsideList,
+    /// A fixed factor that must be regular (a normalisation multiplied into
+    /// every vacuum integral or into `h_j` after the truncation) has a pole
+    /// or an order that cannot be read.
+    PoleInFixedFactor,
 }
 
 impl Refusal {
@@ -274,6 +302,7 @@ impl Refusal {
             Self::OpaqueFunction => "opaque_function",
             Self::SymbolInDenominator => "symbol_in_denominator",
             Self::OutsideList => "outside_list",
+            Self::PoleInFixedFactor => "pole_in_fixed_factor",
         }
     }
 }
@@ -322,6 +351,43 @@ fn holds_structure(view: AtomView<'_>) -> bool {
         !found
     });
     found
+}
+
+/// An argument of a tensor structure that cannot hide a pole: a number, a
+/// symbol, a polynomial in symbols with numeric coefficients (non-negative
+/// integer powers, no function), or a tensor structure whose every argument
+/// is a slot.
+fn slot(view: AtomView<'_>) -> bool {
+    match view {
+        AtomView::Fun(function) => {
+            structural(function.get_symbol()) && function.iter().all(slot)
+        }
+        view => polynomial(view),
+    }
+}
+
+/// A polynomial in symbols with numeric coefficients.
+fn polynomial(view: AtomView<'_>) -> bool {
+    match view {
+        AtomView::Num(_) | AtomView::Var(_) => true,
+        AtomView::Fun(_) => false,
+        AtomView::Add(sum) => sum.iter().all(polynomial),
+        AtomView::Mul(product) => product.iter().all(polynomial),
+        AtomView::Pow(power) => {
+            let (base, exponent) = power.get_base_exp();
+            let AtomView::Num(number) = exponent else {
+                return false;
+            };
+            let number = number.get_coeff_view().to_owned();
+            let negative = match &number {
+                symbolica::coefficient::Coefficient::Complex(value) => {
+                    !value.is_real() || value.re.is_negative()
+                }
+                _ => true,
+            };
+            number.is_integer() && !negative && polynomial(base)
+        }
+    }
 }
 
 /// Whether `expression` holds a tensor structure (a spenso tensor,
@@ -455,8 +521,23 @@ fn walk(view: AtomView<'_>, denominator: bool, hard: bool) -> Normalised {
                     return Err((Refusal::UnresolvedTensor, short(view)));
                 }
                 // A tensor structure in a numerator: a polynomial factor (its
-                // contractions give polynomials in d). Representation
-                // dimensions are metadata.
+                // contractions give polynomials in d) when every argument is
+                // a slot (`slot`): a number, a symbol, a polynomial (a
+                // representation dimension d or 4-2ε) or a structure of
+                // slots. Any other argument, a scalar argument of a tensor or
+                // a dimension such as -2/(d-4) or 1/ε (a trace of the unit or
+                // a closure normalisation 1/Tr[1] turns it into a pole), is
+                // refused (regularity review of MATRIX-R45, findings 3, 4).
+                if let Some(argument) = function.iter().find(|argument| !slot(*argument)) {
+                    return Err((
+                        Refusal::UnresolvedTensor,
+                        format!(
+                            "a tensor argument that is not a slot: {} in {}",
+                            short(argument),
+                            short(view)
+                        ),
+                    ));
+                }
                 return Ok(view.to_owned());
             }
             if constant(symbol) && function.iter().all(numeric) {
@@ -537,7 +618,10 @@ fn walk(view: AtomView<'_>, denominator: bool, hard: bool) -> Normalised {
 /// trace in a denominator contracted, `d = 4-2ε` in every scalar; refused
 /// in the classes of [`Refusal`].
 pub fn normalise(factor: Factor, expression: &Atom) -> std::result::Result<Atom, Refused> {
-    let hard = factor == Factor::HardNumerator;
+    let hard = matches!(
+        factor,
+        Factor::HardNumerator | Factor::AdditionalNormalisation | Factor::IrDiracClosure
+    );
     walk(expression.as_view(), false, hard).map_err(|(class, detail)| Refused {
         class,
         factor: entry(factor).name,
@@ -641,9 +725,71 @@ pub(super) fn certify_graph_correction(
     }))
 }
 
+/// A fixed factor that must be regular ([`Refusal::PoleInFixedFactor`]):
+/// normalised (refused in its class), then its excess must be `Some(0)`.
+pub fn certify_regular(factor: Factor, expression: &Atom) -> std::result::Result<(), Refused> {
+    let normalised = normalise(factor, expression)?;
+    match super::depth::excess_poles(&normalised) {
+        Some(0) => Ok(()),
+        excess => Err(Refused {
+            class: Refusal::PoleInFixedFactor,
+            factor: entry(factor).name,
+            detail: format!(
+                "excess {} ({})",
+                excess.map_or("unreadable".to_owned(), |excess| excess.to_string()),
+                short(expression.as_view())
+            ),
+        }),
+    }
+}
+
+/// The named loop normalisations of vakint (entry `vakint_normalisation`).
+pub const NAMED_NORMALISATIONS: [&str; 4] = ["MSbar", "FMFTandMATAD", "GScheme", "pySecDec"];
+
+/// The settings factors of one correction (entries `additional_normalisation`
+/// and `vakint_normalisation`): the free-form `N` multiplied as `N^loops`
+/// into every vacuum integral must parse and be regular; the named loop
+/// normalisation must be one of the fixed schemes.
+pub fn certify_vakint_normalisations(
+    additional: &str,
+    named: &str,
+) -> std::result::Result<(), Refused> {
+    if !NAMED_NORMALISATIONS.contains(&named) {
+        return Err(Refused {
+            class: Refusal::OutsideList,
+            factor: entry(Factor::VakintNormalisation).name,
+            detail: format!("a custom loop normalisation: {named}"),
+        });
+    }
+    let parsed = symbolica::try_parse!(additional).map_err(|error| Refused {
+        class: Refusal::OpaqueFunction,
+        factor: entry(Factor::AdditionalNormalisation).name,
+        detail: format!("{additional}: {error}"),
+    })?;
+    certify_regular(Factor::AdditionalNormalisation, &parsed)
+}
+
+/// The IR Dirac closure of one correction (entry `ir_dirac_closure`): the
+/// closure multiplied into `H(γ)` is normalised with the hard part's
+/// semantics; its normalisation, multiplied into `h_j` after the truncation,
+/// must be regular.
+pub fn certify_dirac_closure(
+    closure: &Atom,
+    normalization: &Atom,
+) -> std::result::Result<(), Refused> {
+    let _ = normalise(Factor::IrDiracClosure, closure)?;
+    certify_regular(Factor::IrDiracClosure, normalization)
+}
+
 #[cfg(test)]
 thread_local! {
     static ROUND3: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Tests: whether [`as_round3`] is active on this thread.
+#[cfg(test)]
+pub(super) fn is_round3() -> bool {
+    ROUND3.with(|slot| slot.get())
 }
 
 /// Tests: run `f` without this module's certificate on this thread (the

@@ -237,6 +237,7 @@ fn projected(case: &Case, route: &'static str, test: DepthTest) -> Result<(Atom,
 fn ensure_raised(label: &str, counts: &DepthCounts) -> Result<()> {
     ensure!(
         counts.corrections >= 1
+            && counts.taken >= 1
             && counts.bounded >= 1
             && counts.exceeded == 0
             && counts.refused == 0
@@ -765,8 +766,13 @@ fn classify(
     let disposition = if counts.refused >= 1 {
         Refused(counts.reason.unwrap_or("unknown"))
     } else {
+        // RIGHT needs the child route itself to give the value
+        // (`outcome=child`): a correction counted in `corrections` can still
+        // decline to today's terms (MATRIX-R45 review).
         ensure!(
-            counts.corrections >= 1 && (!nested || counts.nested >= 1),
+            counts.corrections >= 1
+                && counts.taken >= 1
+                && (!nested || (counts.nested >= 1 && counts.nested_taken >= 1)),
             "{label}: the child route was not taken (nested={nested}): {counts:?}"
         );
         Right
@@ -971,17 +977,18 @@ fn matrix_r45_every_listed_factor_reads_every_spelling() -> Result<()> {
 }
 
 /// The root projector callback (entry root_projector) carrying the pole
-/// itself. The callback is opaque to R*: it is certified by CONTRACT
-/// (`RStarPlan::projected_counterterm`: regular in ε), not at run time, and
-/// beta's callback multiplies only σ(numerator_prefactor), refused by beta
-/// when poleful, and fixed regular normalisations. A caller that breaks the
-/// contract gets a wrong child value in the explicit and 1/(d−4) spellings
-/// (+117/32 against today's −117/64, also under STRICT and the guard: no
-/// row measures the callback). This test PINS that known gap of the public
-/// API (MATRIX-R45 open item), so a change of it is noticed; it is not
-/// reachable from beta.
+/// itself. The callback is opaque to R*; before the MATRIX-R45 review it was
+/// certified by contract only and a caller that broke the contract got a
+/// wrong child value in the explicit and 1/(d−4) spellings (+117/32 against
+/// today's −117/64, under STRICT and the guard too: no row measured the
+/// callback). Every row's need is now also measured on its complete outer
+/// coefficient after the callback and the tensor finish
+/// (`placeholder_valuations`), so the pole exceeds the row's bound: refused
+/// (`bound_exceeded`, today's value) without STRICT, the fatal alarm with it.
+/// The trace spelling is LOUD on both routes (vakint), the Dirac trace
+/// spelling gives today's value. No cell is WRONG.
 #[test]
-fn matrix_r45_a_poleful_root_projector_callback_is_outside_the_contract() -> Result<()> {
+fn matrix_r45_a_poleful_root_projector_callback_is_measured() -> Result<()> {
     let case = Case::new(&hard_v0(), None)?;
     let mut unexpected = Vec::new();
     for spelling in SPELLINGS {
@@ -1007,23 +1014,52 @@ fn matrix_r45_a_poleful_root_projector_callback_is_outside_the_contract() -> Res
         let today = run("closed", FIXED).map(|(value, _)| value);
         for (mode, test) in MODES {
             let cell = format!("callback {spelling:?} {mode}");
-            let found = classify(&cell, &today, run("child", test), false);
-            eprintln!("IRH_R45_CALLBACK {cell} {:?}", found.as_ref().map_err(|e| format!("{e:#}")));
-            let pinned = match (spelling, &found) {
-                (Spelling::Epsilon | Spelling::DimensionMinusFour, Err(error)) => {
-                    let error = format!("{error:#}");
-                    error.contains("WRONG child_pole=117/32 today_pole=-117/64")
+            let child = run("child", test);
+            let outcome = match (&today, child) {
+                (Err(_), Err(_)) => "loud".to_owned(),
+                (Ok(_), Err(error)) if depth::is_alarm(&error) && mode == "strict" => {
+                    "strict_alarm".to_owned()
                 }
-                (Spelling::Trace, Ok(Loud)) => true,
-                (Spelling::DiracTrace, Ok(Right)) => true,
-                _ => false,
+                (Ok(today), Ok((child, counts))) => {
+                    if !super::same(&child, today)? {
+                        format!(
+                            "WRONG child_pole={} today_pole={}",
+                            super::laurent(&super::record(&child)?, -1)?,
+                            super::laurent(&super::record(today)?, -1)?
+                        )
+                    } else if counts.exceeded >= 1
+                        && counts.refused >= 1
+                        && counts.reason == Some("bound_exceeded")
+                    {
+                        "refused_exceeded".to_owned()
+                    } else if counts.taken >= 1 && counts.refused == 0 {
+                        "right".to_owned()
+                    } else {
+                        format!("other {counts:?}")
+                    }
+                }
+                (today, child) => format!(
+                    "mismatch today={:?} child={:?}",
+                    today.as_ref().err().map(|e| format!("{e:#}")),
+                    child.err().map(|e| format!("{e:#}"))
+                ),
             };
-            if !pinned {
-                unexpected.push(format!("{cell}: {:?}", found.map_err(|e| format!("{e:#}"))));
+            eprintln!("IRH_R45_CALLBACK {cell} {outcome}");
+            let expected: &[&str] = match (spelling, mode) {
+                (Spelling::Epsilon | Spelling::DimensionMinusFour, "strict") => &["strict_alarm"],
+                (Spelling::Epsilon | Spelling::DimensionMinusFour, _) => &["refused_exceeded"],
+                (Spelling::Trace, _) => &["loud"],
+                // The trace is left unevaluated by the callback: today's value
+                // (0), with or without the measurement seeing the pole.
+                (Spelling::DiracTrace, "strict") => &["right", "strict_alarm"],
+                (Spelling::DiracTrace, _) => &["right", "refused_exceeded"],
+            };
+            if !expected.contains(&outcome.as_str()) {
+                unexpected.push(format!("{cell}: {outcome}, expected one of {expected:?}"));
             }
         }
     }
-    ensure!(unexpected.is_empty(), "the pinned callback gap changed: {unexpected:#?}");
+    ensure!(unexpected.is_empty(), "{unexpected:#?}");
     Ok(())
 }
 
@@ -1068,5 +1104,228 @@ fn matrix_r45_the_overall_canonical_table_is_current() -> Result<()> {
         "IRH_R45_CANONICAL_TABLE missing or stale rows:\n{}",
         wrong.join("\n")
     );
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// MATRIX-R45 review (2026-11-22): the closed list's new entries and the
+// slot rule of tensor arguments.
+
+/// A case of L3_006 hard-v0 with the vakint loop normalisations of the
+/// settings replaced.
+fn case_with_normalisation(additional: &str, named: Option<&str>) -> Result<Case> {
+    use crate::feyngen::feynkit::FeynmanDiagramGammaLoopExt;
+    crate::initialisation::test_initialise()?;
+    let vakint = vakint::Vakint::new()?;
+    let diagram = super::colour_factored(&super::load(&hard_v0())?)?;
+    let graph = diagram.to_gamma_loop_graph(None, true)?;
+    let mut settings = super::settings();
+    settings.vakint.additional_normalization = additional.to_owned();
+    if let Some(named) = named {
+        settings.vakint.normalization = named.to_owned();
+    }
+    let plan = super::RStarPlan::with_automatic_edge(&graph, diagram.model(), &settings)?;
+    let children = with_ir_hard("closed", || {
+        plan.evaluate_uv_children(&graph, diagram.model(), &super::mass(), &vakint, &settings)
+    })?;
+    Ok(Case {
+        graph,
+        plan,
+        diagram,
+        vakint,
+        settings,
+        children,
+    })
+}
+
+/// Entries additional_normalisation and vakint_normalisation (regularity
+/// review, finding 1, blocking): `N` of `vakint.additional_normalization` is
+/// multiplied as `N^loops` into every vacuum integral, the quotient K's
+/// included, and was in no bound: with N = ε⁻¹ or −2/(d−4) the probe measured
+/// a quotient pole above B (exceeded, fatal under STRICT). It is now
+/// certified per correction before H(γ) is integrated: a pole in it refuses
+/// the correction (`pole_in_fixed_factor`, or the class of its spelling), a
+/// regular N (1, 1+ε) is admitted. A custom named normalisation is refused
+/// (`outside_list`). Every cell gives today's value, none is exceeded.
+#[test]
+fn a_poleful_additional_normalisation_is_refused() -> Result<()> {
+    let mut wrong = Vec::new();
+    let cells: Vec<(String, Disposition)> = vec![
+        ("1".to_owned(), Right),
+        (format!("1+({EPS})"), Right),
+        (Spelling::Epsilon.text(), Refused("pole_in_fixed_factor")),
+        (Spelling::DimensionMinusFour.text(), SID),
+        (Spelling::Trace.text(), Refused("unresolved_tensor")),
+        (Spelling::DiracTrace.text(), Refused("unresolved_tensor")),
+    ];
+    for (normalisation, expected) in cells {
+        // N^loops of a trace with fixed slots repeats them (the Dirac trace
+        // spelling): the UV children fail before any route, LOUD.
+        let case = match case_with_normalisation(&normalisation, None) {
+            Ok(case) => case,
+            Err(error) if expected != Right => {
+                eprintln!("IRH_R45 additional_normalisation {normalisation} LOUD at the UV children: {error:#}");
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
+        let today = projected(&case, "closed", FIXED).map(|(value, _)| value);
+        for (mode, test) in MODES {
+            let cell = format!("additional_normalisation {normalisation} {mode}");
+            match classify(&cell, &today, projected(&case, "child", test), false) {
+                Ok(found) if found == expected => {}
+                Ok(Loud) if expected != Right => {}
+                Ok(found) => wrong.push(format!("{cell}: {found:?}, expected {expected:?}")),
+                Err(error) => wrong.push(format!("{error:#}")),
+            }
+        }
+    }
+    // The named schemes are admitted, a custom one is refused.
+    for named in regularity::NAMED_NORMALISATIONS {
+        ensure!(regularity::certify_vakint_normalisations("1", named).is_ok(), "{named}");
+    }
+    let custom = regularity::certify_vakint_normalisations("1", "irh_r45_custom").map_err(|r| r.class);
+    ensure!(custom == Err(regularity::Refusal::OutsideList), "{custom:?}");
+    for spelling in SPELLINGS {
+        ensure!(
+            regularity::certify_vakint_normalisations(&spelling.text(), "MSbar").is_err(),
+            "{spelling:?} admitted"
+        );
+    }
+    ensure!(wrong.is_empty(), "{wrong:#?}");
+    Ok(())
+}
+
+/// Entry ir_dirac_closure (regularity review, finding 5): the IR Dirac
+/// closure multiplied into H(γ) and its normalisation multiplied into h_j
+/// after the truncation are certified; a pole in the normalisation (every
+/// spelling) is refused, the production forms 1/Tr[1] = 1/4 and
+/// 1/(Tr[1] d) are admitted, and a bispinor dimension that is not a slot
+/// polynomial is refused.
+#[test]
+fn a_poleful_dirac_closure_normalisation_is_refused() -> Result<()> {
+    crate::initialisation::test_initialise()?;
+    let parse = |text: &str| symbolica::try_parse!(text).map_err(|error| eyre::eyre!("{error}"));
+    let bis = |dim: &str, n: usize| format!("{BIS}({dim},{HEDGE}({n},1))");
+    let mink = format!("{MINK}(4,{HEDGE}(85,1))");
+    let closure = parse(&format!("{GAMMA}({},{},{mink})", bis("4", 83), bis("4", 84)))?;
+    for regular in ["1/4".to_owned(), format!("1/(4*{DIM})")] {
+        let normalization = parse(&regular)?;
+        ensure!(
+            regularity::certify_dirac_closure(&closure, &normalization).is_ok(),
+            "{regular} refused"
+        );
+    }
+    for spelling in SPELLINGS {
+        let normalization = parse(&format!("(1/4)*({})", spelling.text()))?;
+        let refused = regularity::certify_dirac_closure(&closure, &normalization);
+        ensure!(refused.is_err(), "{spelling:?} admitted");
+    }
+    let refused = regularity::certify_dirac_closure(&closure, &parse(&format!("(1/4)*({})", Spelling::Epsilon.text()))?)
+        .map_err(|r| r.class);
+    ensure!(refused == Err(regularity::Refusal::PoleInFixedFactor), "{refused:?}");
+    for dim in [format!("(-2)/({DIM}-4)"), format!("({EPS})^(-1)")] {
+        let poleful = parse(&format!("{GAMMA}({},{},{mink})", bis(&dim, 83), bis(&dim, 84)))?;
+        let refused = regularity::certify_dirac_closure(&poleful, &parse("1/4")?).map_err(|r| r.class);
+        ensure!(refused == Err(regularity::Refusal::UnresolvedTensor), "bis({dim}): {refused:?}");
+    }
+    Ok(())
+}
+
+/// Regularity review, findings 3 and 4: a tensor structure's arguments are
+/// slots (numbers, symbols, polynomials such as d or 4−2ε, structures of
+/// slots). A scalar argument of a tensor that hides a pole, and a
+/// representation dimension −2/(d−4) or 1/ε, were admitted as regular
+/// (`Some(0)`) or unreadable; they are refused (`unresolved_tensor`) for the
+/// quotient and the hard numerator and rejected as graph weights. The
+/// production slots stay admitted.
+#[test]
+fn a_tensor_argument_must_be_a_slot() -> Result<()> {
+    crate::initialisation::test_initialise()?;
+    let parse = |text: &str| symbolica::try_parse!(text).map_err(|error| eyre::eyre!("{error}"));
+    let mink = |dim: &str, n: usize| format!("{MINK}({dim},{HEDGE}({n},1))");
+    let bis = |dim: &str, n: usize| format!("{BIS}({dim},{HEDGE}({n},1))");
+    let refused = [
+        format!("irh_r45_probe::{{spenso::tensor}}::T({},{})", mink("4", 86), tensor()),
+        format!("irh_r45_probe::{{spenso::tensor}}::T({},({EPS})^(-1))", mink("4", 86)),
+        format!("({METRIC}({},{}))^2", mink(&format!("(-2)/({DIM}-4)"), 81), mink(&format!("(-2)/({DIM}-4)"), 82)),
+        format!(
+            "{GAMMA}({},{},{})*{GAMMA}({},{},{})",
+            bis(&format!("(-2)/({DIM}-4)"), 83),
+            bis(&format!("(-2)/({DIM}-4)"), 84),
+            mink("4", 85),
+            bis(&format!("(-2)/({DIM}-4)"), 84),
+            bis(&format!("(-2)/({DIM}-4)"), 83),
+            mink("4", 85)
+        ),
+        format!(
+            "{GAMMA}({},{},{})",
+            bis(&format!("({EPS})^(-1)"), 83),
+            bis(&format!("({EPS})^(-1)"), 84),
+            mink("4", 85)
+        ),
+    ];
+    for text in &refused {
+        let atom = parse(text)?;
+        for factor in [Factor::QuotientVertexNumerator, Factor::HardNumerator] {
+            let outcome = regularity::certified_excess(factor, &atom).map_err(|r| r.class);
+            ensure!(
+                outcome == Err(regularity::Refusal::UnresolvedTensor),
+                "{factor:?} {text}: {outcome:?}"
+            );
+        }
+        ensure!(
+            regularity::ensure_regular_weight("numerator_prefactor", &atom).is_err(),
+            "weight {text} accepted"
+        );
+    }
+    let admitted = [
+        format!("({METRIC}({},{}))^2", mink("4", 81), mink("4", 82)),
+        format!("({METRIC}({},{}))^2", mink(DIM, 81), mink(DIM, 82)),
+        format!("({METRIC}({},{}))^2", mink(&format!("4-2*{EPS}"), 81), mink(&format!("4-2*{EPS}"), 82)),
+        format!("{GAMMA}({},{},{})", bis("4", 83), bis("4", 84), mink(DIM, 85)),
+    ];
+    for text in &admitted {
+        let atom = parse(text)?;
+        for factor in [Factor::QuotientVertexNumerator, Factor::HardNumerator] {
+            let outcome = regularity::certified_excess(factor, &atom).map_err(|r| r.class);
+            ensure!(outcome == Ok(Some(0)), "{factor:?} {text}: {outcome:?}");
+        }
+    }
+    Ok(())
+}
+
+/// Entry moment_reduction (regularity review, finding 2): every rank-ten
+/// orthogonal Weingarten coefficient in a symbolic d has a 1/(d−4) (excess
+/// 1), which a series in ε with d symbolic does not see. The Laurent order
+/// of an R* insertion coefficient is now read after d = 4−2ε as well, so
+/// the closure integral is requested one order deeper; a coefficient
+/// regular at d = 4 (rank eight, 1/(d−1)) keeps its order.
+#[test]
+fn a_rank_ten_reduction_coefficient_pole_is_read() -> Result<()> {
+    crate::initialisation::test_initialise()?;
+    use crate::utils::GS;
+    let d = Atom::var(GS.dim);
+    let valuation = |coefficient: &Atom| {
+        super::super::integrate::insertion_coefficient_valuation(coefficient, GS.dim_epsilon)
+    };
+    ensure!(valuation(&(Atom::num(-2) / (&d - Atom::num(4))))? == Some(-1));
+    ensure!(valuation(&(Atom::one() / (&d - Atom::num(1))))? == Some(0));
+    ensure!(valuation(&(Atom::var(GS.dim_epsilon).pow(Atom::num(-1)) / (&d - Atom::num(4))))? == Some(-2));
+    ensure!(valuation(&Atom::Zero)?.is_none());
+    for (rank, pole) in [(8_usize, 0_i64), (10, -1)] {
+        let table = feynkit_tensor::OrthogonalWeingarten::for_rank(rank, d.clone())
+            .map_err(|error| eyre::eyre!("{error}"))?;
+        let mut lowest = 0_i64;
+        for (coset, coefficient) in table.coefficients() {
+            let excess = regularity::certified_excess(Factor::MomentReduction, coefficient);
+            let order = valuation(coefficient)?;
+            eprintln!("IRH_R45_WEINGARTEN rank={rank} {coset:?} excess={excess:?} order={order:?}");
+            if let Some(order) = order {
+                lowest = lowest.min(order);
+            }
+        }
+        ensure!(lowest == pole, "rank {rank}: lowest order {lowest}, expected {pole}");
+    }
     Ok(())
 }

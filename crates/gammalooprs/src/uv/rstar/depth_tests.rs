@@ -1204,7 +1204,15 @@ fn ensure_alarm(label: &str, result: Result<ChildRun>) -> Result<()> {
                 run.root
             ));
         }
-        Err(error) => format!("{error:#}"),
+        Err(error) => {
+            // The class, not only the text (MATRIX-R45 review): a lost class
+            // is a declinable error.
+            ensure!(
+                super::depth::is_alarm(&error),
+                "{label}: the error lost the alarm class: {error:#}"
+            );
+            format!("{error:#}")
+        }
     };
     ensure!(
         error.contains("IRH-DEPTH") && error.contains("bound=1"),
@@ -1353,6 +1361,49 @@ fn the_counterterm_cache_replays_the_alarm_class() -> Result<()> {
         )
         .expect_err("the computation fails");
     ensure!(!depth::is_alarm(&plain), "{plain:#}");
+    Ok(())
+}
+
+/// MATRIX-R45 review (nested-and-cache, finding 1): a Δ that exhausts the
+/// scoped budget of a guarded child attempt is not stored. The guard
+/// declines with `budget`, and the fallback outside any budget computes the
+/// same Δ again (before: it replayed the guard's budget error and the
+/// diagram failed).
+#[test]
+fn a_guard_budget_error_is_not_kept_by_the_cache() -> Result<()> {
+    use symbolica::utils::resources::checkpoint;
+    let case = Case::new(&k(2, 1), Some(9))?;
+    let cache = crate::uv::counterterm_cache::CountertermCache::default();
+    let declined: std::result::Result<Atom, String> =
+        super::closed::guarded(Some(1), None, || {
+            let delta = cache.counterterm_with(
+                &case.graph,
+                &case.plan.support,
+                case.model(),
+                "irh-r45-poison".into(),
+                || {
+                    checkpoint().map_err(eyre::Report::new)?;
+                    Ok(Atom::num(7))
+                },
+            )?;
+            Ok(Ok(delta))
+        })?;
+    ensure!(
+        declined == Err("budget".to_owned()),
+        "the guarded attempt was not a budget decline: {declined:?}"
+    );
+    let fallback = cache.counterterm_with(
+        &case.graph,
+        &case.plan.support,
+        case.model(),
+        "irh-r45-poison".into(),
+        || Ok(Atom::num(7)),
+    );
+    ensure!(
+        fallback.is_ok(),
+        "the fallback replays the guard's budget error: {:#}",
+        fallback.unwrap_err()
+    );
     Ok(())
 }
 

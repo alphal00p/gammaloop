@@ -121,7 +121,8 @@ impl<'a> CountertermPrewarmPlan<'a> {
 /// A failed computation is stored with its whole error, and every lookup
 /// replays it as a [`CachedError`]: the classes of its causes survive the
 /// cache (a fatal IRH-DEPTH alarm, `rstar::depth::DepthAlarm`, stays one on
-/// every later hit).
+/// every later hit). A transient failure ([`CachedError::is_transient`], an
+/// exhausted resource budget) is not stored: the next lookup computes again.
 type Entry = Arc<OnceLock<std::result::Result<Atom, CachedError>>>;
 
 /// An error of a cached computation, replayed on a lookup. Its message is the
@@ -141,6 +142,30 @@ impl CachedError {
     fn replay(&self) -> eyre::Report {
         eyre::Report::new(self.clone())
     }
+
+    /// A transient failure, never kept by the cache: an exhausted resource
+    /// budget (a `ResourceLimitError` in the chain, also one replayed).
+    pub(crate) fn is_transient(&self) -> bool {
+        is_resource_limit(&self.0)
+    }
+}
+
+/// Tests: `error` as the cache replays a stored error.
+#[cfg(test)]
+pub(crate) fn replay_for_tests(error: eyre::Report) -> eyre::Report {
+    CachedError(Arc::new(error)).replay()
+}
+
+/// Whether `error` carries a symbolica `ResourceLimitError` anywhere in its
+/// chain, also one inside a replayed [`CachedError`].
+pub(crate) fn is_resource_limit(error: &eyre::Report) -> bool {
+    use symbolica::utils::resources::ResourceLimitError;
+    error.chain().any(|cause| {
+        cause.downcast_ref::<ResourceLimitError>().is_some()
+            || cause
+                .downcast_ref::<CachedError>()
+                .is_some_and(|cached| is_resource_limit(cached.cause()))
+    })
 }
 
 impl std::fmt::Display for CachedError {
@@ -589,46 +614,76 @@ impl CountertermCache {
         };
         timing.lap(CacheTimingPhase::Key);
         drop(identity_stage);
-        let (entry, existing) = {
-            let _stage = StageSpan::new("gamma.delta.cache_map");
-            let mut entries = self.entries.lock().expect("counterterm cache poisoned");
-            timing.lap(CacheTimingPhase::MapLockWait);
-            let existing = entries.contains_key(&key);
-            let entry = entries.entry(key).or_default().clone();
-            drop(entries);
-            timing.lap(CacheTimingPhase::MapLockHold);
-            (entry, existing)
-        };
-        if existing {
-            self.hits.fetch_add(1, Ordering::Relaxed);
-            if entry.get().is_none() {
-                self.waits.fetch_add(1, Ordering::Relaxed);
+        // A transient error (an exhausted resource budget, e.g. the scoped
+        // budget of a guarded child attempt) is never kept: the entry is
+        // removed, the computing lookup returns the error unstored, and a
+        // lookup that only waited on that entry computes again under its own
+        // budget (MATRIX-R45 review, nested-and-cache finding 1).
+        let mut compute = Some(compute);
+        let mut rounds = 0_usize;
+        let (entry, existing) = loop {
+            rounds += 1;
+            let (entry, existing) = {
+                let _stage = StageSpan::new("gamma.delta.cache_map");
+                let mut entries = self.entries.lock().expect("counterterm cache poisoned");
+                timing.lap(CacheTimingPhase::MapLockWait);
+                let existing = entries.contains_key(&key);
+                let entry = entries.entry(key.clone()).or_default().clone();
+                drop(entries);
+                timing.lap(CacheTimingPhase::MapLockHold);
+                (entry, existing)
+            };
+            if existing {
+                self.hits.fetch_add(1, Ordering::Relaxed);
+                if entry.get().is_none() {
+                    self.waits.fetch_add(1, Ordering::Relaxed);
+                }
             }
-        }
-        let _permit = if entry.get().is_none() {
-            let _stage = StageSpan::new("gamma.delta.compute_permit_wait");
-            self.compute_limit
-                .as_ref()
-                .and_then(|limit| limit.acquire(graph.n_loops(support)))
-        } else {
-            None
+            let _permit = if entry.get().is_none() {
+                let _stage = StageSpan::new("gamma.delta.compute_permit_wait");
+                self.compute_limit
+                    .as_ref()
+                    .and_then(|limit| limit.acquire(graph.n_loops(support)))
+            } else {
+                None
+            };
+            let resolve_stage = StageSpan::new("gamma.delta.cache_resolve");
+            let mut computed = false;
+            let result = timing.resolve(&entry, |timing| {
+                computed = true;
+                self.misses.fetch_add(1, Ordering::Relaxed);
+                let result = compute.take().expect("one computation per lookup")();
+                timing.lap(CacheTimingPhase::Initializer);
+                let _stage = StageSpan::new("gamma.delta.cache_store");
+                let result = result
+                    .and_then(|value| identity.canonicalize_delta(&value))
+                    .inspect(|_| {
+                        self.stores.fetch_add(1, Ordering::Relaxed);
+                    })
+                    .map_err(|error| CachedError(Arc::new(error)));
+                timing.lap(CacheTimingPhase::Store);
+                result
+            });
+            drop(resolve_stage);
+            if let Err(error) = result
+                && error.is_transient()
+            {
+                let mut entries = self.entries.lock().expect("counterterm cache poisoned");
+                if entries
+                    .get(&key)
+                    .is_some_and(|stored| Arc::ptr_eq(stored, &entry))
+                {
+                    entries.remove(&key);
+                }
+                drop(entries);
+                if computed || compute.is_none() || rounds >= 3 {
+                    return Err(error.replay());
+                }
+                continue;
+            }
+            break (entry, existing);
         };
-        let resolve_stage = StageSpan::new("gamma.delta.cache_resolve");
-        let result = timing.resolve(&entry, |timing| {
-            self.misses.fetch_add(1, Ordering::Relaxed);
-            let result = compute();
-            timing.lap(CacheTimingPhase::Initializer);
-            let _stage = StageSpan::new("gamma.delta.cache_store");
-            let result = result
-                .and_then(|value| identity.canonicalize_delta(&value))
-                .inspect(|_| {
-                    self.stores.fetch_add(1, Ordering::Relaxed);
-                })
-                .map_err(|error| CachedError(Arc::new(error)));
-            timing.lap(CacheTimingPhase::Store);
-            result
-        });
-        drop(resolve_stage);
+        let result = entry.get().expect("resolved above");
         let canonical = result.as_ref().map_err(CachedError::replay)?;
         debug_tags!(#uv, #integrated, #cache;
             stage = "uv_counterterm_cache_lookup",
