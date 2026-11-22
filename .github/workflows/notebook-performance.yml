@@ -1,0 +1,119 @@
+name: Notebook performance
+
+on:
+  workflow_call:
+    inputs:
+      candidate:
+        type: string
+        required: true
+      baseline:
+        type: string
+        required: true
+    secrets:
+      SYMBOLICA_LICENSE_SIGNED:
+        required: true
+      NIXCI_NETRC:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  cells:
+    name: Example notebook cell timings
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      RAYON_NUM_THREADS: "1"
+      MPLBACKEND: Agg
+      PYTHONHASHSEED: "0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.candidate }}
+          path: candidate
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.baseline }}
+          path: baseline
+          persist-credentials: false
+      - id: framework
+        name: Read the pinned statistics framework
+        run: |
+          revision=$(cat candidate/benchmarks/performance/gammabench.rev)
+          [[ "$revision" =~ ^[0-9a-f]{40}$ ]]
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: alphal00p/gammabench
+          ref: ${{ steps.framework.outputs.revision }}
+          path: gammabench
+          persist-credentials: false
+      - uses: ./candidate/.github/actions/nix-ci-cache
+        with:
+          netrc: ${{ secrets.NIXCI_NETRC }}
+      - id: runtimes
+        name: Build each revision's native notebook runtime
+        env:
+          GAMMALOOP_DEVELOP_SPEC: '{"package":"alphal00p-notebook-host","profile":"ci-optim"}'
+        run: |
+          set -euo pipefail
+          candidate_sha=$(git -C candidate rev-parse HEAD)
+          for revision in candidate baseline; do
+            if [[ "$revision" == baseline && ! -f baseline/examples/notebooks/symbolica-host/Cargo.toml ]]; then
+              echo "Base predates the native notebook host; collect candidate timings for the initial baseline."
+              continue
+            fi
+            subject_sha=$(git -C "$revision" rev-parse HEAD)
+            nix build --accept-flake-config --impure -f candidate/nix/notebook-performance.nix \
+              --argstr runner "git+file://$PWD/candidate?rev=$candidate_sha&shallow=1" \
+              --argstr subject "git+file://$PWD/$revision?rev=$subject_sha&shallow=1" \
+              --out-link "$RUNNER_TEMP/notebook-$revision"
+            test -x "$RUNNER_TEMP/notebook-$revision/bin/python"
+          done
+      - name: Check cell instrumentation against the pinned Marimo runtime
+        run: "$RUNNER_TEMP/notebook-candidate/bin/python candidate/scripts/test_measure_notebook_cells.py"
+      - name: Compare notebook cells on this runner
+        env:
+          SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED }}
+        run: |
+          set -euo pipefail
+          : "${SYMBOLICA_LICENSE:?Notebook timings require the Symbolica license}"
+          baseline_args=()
+          if [[ -f baseline/examples/notebooks/symbolica-host/Cargo.toml ]]; then
+            baseline_args=(--baseline-python "$RUNNER_TEMP/notebook-baseline/bin/python")
+          fi
+          PYTHONPATH="$PWD/gammabench/src" python3 \
+            candidate/.github/scripts/notebook_cell_gate.py \
+            --baseline-root "$PWD/baseline" --candidate-root "$PWD/candidate" \
+            "${baseline_args[@]}" --candidate-python "$RUNNER_TEMP/notebook-candidate/bin/python" \
+            --output "$RUNNER_TEMP/notebook-cells.json" --summary "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: notebook-cells-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/notebook-cells.json
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Cache built runtimes for subsequent comparisons
+        if: always() && steps.runtimes.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          outputs=("$(readlink -f "$RUNNER_TEMP/notebook-candidate")")
+          if [[ -L "$RUNNER_TEMP/notebook-baseline" ]]; then
+            outputs+=("$(readlink -f "$RUNNER_TEMP/notebook-baseline")")
+          fi
+          # Keep upload metadata separate from the signed substitution cache.
+          metadata=$(mktemp -d)
+          trap 'rm -rf "$metadata"' EXIT
+          XDG_CACHE_HOME="$metadata" NIX_CACHE_HOME="$metadata/nix" \
+            nix copy --netrc-file "$RUNNER_TEMP/nixci.netrc" \
+              --to 'https://cache.nix-ci.com?compression=xz&parallel-compression=true' \
+              "${outputs[@]}"
+      - name: Remove cache credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/nixci.netrc"
