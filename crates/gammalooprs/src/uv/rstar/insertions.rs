@@ -1299,6 +1299,11 @@ mod tests {
     }
 
     fn serial_bubbles(count: usize) -> Result<FeynmanDiagram> {
+        serial_bubbles_with(count, Atom::one() + Atom::var(GS.dim_epsilon))
+    }
+
+    /// [`serial_bubbles`] with each insertion's numerator `scalar · (Q·k)`.
+    fn serial_bubbles_with(count: usize, scalar: Atom) -> Result<FeynmanDiagram> {
         let model = Arc::new(Model::from_json(
             r#"{
             "name":"insertion_identity","restriction":null,"orders":[],
@@ -1354,8 +1359,7 @@ mod tests {
             numerators.push((
                 left,
                 SymbolicTensor::infer(
-                    (Atom::one() + Atom::var(GS.dim_epsilon))
-                        * function!(SPENSO_TAG.dot, vector(boundary.0), vector(internal.0)),
+                    &scalar * function!(SPENSO_TAG.dot, vector(boundary.0), vector(internal.0)),
                 )?,
             ));
             previous = right;
@@ -1398,6 +1402,67 @@ mod tests {
         // Cache reuse must not change tensor owners or the regulator depth.
         let repeated = evaluator.pole_part(&diagram, &vakint)?.unwrap();
         super::super::tests::assert_same_counterterm(&repeated.poles, &direct)
+    }
+
+    /// IRH-DEPTH round 8b (C1): a factor equal to −1 at d = 4 − 2ε inside a
+    /// propagator insertion, spelled `1/(1+(d−4)/ε)` or `ε/(ε+d−4)`, reaches
+    /// the surrogate's normalised insertion coefficient (its truncation at
+    /// ε^(N−1)) and the original counterterm: both equal the literal −1's.
+    #[test]
+    fn round8b_an_insertion_coefficient_spelling_equals_the_literal() -> Result<()> {
+        test_initialise()?;
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let dimension = Atom::var(GS.dim);
+        let mut settings = super::super::tests::settings();
+        settings.vakint.normalization = "GScheme".into();
+        let vakint = Vakint::new()?;
+        let run = |scalar: Atom| -> Result<(Atom, Atom)> {
+            let diagram = serial_bubbles_with(2, scalar)?;
+            let evaluator = PropagatorInsertionEvaluator::new(settings.clone());
+            let extracted = evaluator
+                .pole_part(&diagram, &vakint)?
+                .expect("proper insertions");
+            let graph = diagram.to_gamma_loop_graph(None, true)?;
+            let plan = RStarPlan::with_automatic_edge(&graph, diagram.model(), &settings)?;
+            let recovered = plan.counterterm_from_pole_part(
+                &graph,
+                diagram.model(),
+                &vakint,
+                &settings,
+                &extracted.poles,
+            )?;
+            Ok((extracted.poles, recovered))
+        };
+        let (literal_poles, literal_counterterm) = run(Atom::num(-1))?;
+        let cross = Atom::one() / (Atom::one() + (&dimension - Atom::num(4)) / &epsilon);
+        let form = &epsilon / (&epsilon + &dimension - Atom::num(4));
+        let mut failures = Vec::new();
+        for (name, scalar) in [("cross", cross), ("form", form)] {
+            let (poles, counterterm) = run(scalar)?;
+            let difference = |a: &Atom, b: &Atom| -> Result<bool> {
+                let difference = super::super::tests::canonical_tensor(
+                    &crate::uv::approx::integrated::Integrated::dimensionally_regularized(
+                        &(a - b),
+                    ),
+                )?;
+                Ok(difference
+                    .series(GS.dim_epsilon, 0, -1)?
+                    .to_atom()
+                    .expand()
+                    .together()
+                    .is_zero())
+            };
+            if !difference(&poles, &literal_poles)? {
+                failures.push(format!("{name}: bare poles {poles} against {literal_poles}"));
+            }
+            if !difference(&counterterm, &literal_counterterm)? {
+                failures.push(format!(
+                    "{name}: counterterm {counterterm} against {literal_counterterm}"
+                ));
+            }
+        }
+        assert!(failures.is_empty(), "{failures:#?}");
+        Ok(())
     }
 
     #[test]
