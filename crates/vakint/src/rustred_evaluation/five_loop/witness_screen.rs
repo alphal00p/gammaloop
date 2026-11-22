@@ -808,7 +808,9 @@ impl NumeratorGroups {
             regulated: None,
         };
         let count = class_groups.coefficients.len();
-        let (basis, lambdas) = if count <= 1 {
+        // A single class too: an unexpanded identically zero class reduces
+        // to a zero row, whose relation is verified and folded away.
+        let (basis, lambdas) = if count == 0 {
             ((0..count).collect::<Vec<_>>(), BTreeMap::new())
         } else {
             class_groups
@@ -889,7 +891,9 @@ impl NumeratorGroups {
     /// Prove linear independence of the distinct coefficients over Q with a
     /// nonsingular matrix of exact values at deterministic rational points.
     fn coefficients_are_independent(&self) -> bool {
-        if self.coefficients.len() <= 1 {
+        // A single coefficient needs one nonzero exact value too: an
+        // unexpanded identically zero coefficient is refused.
+        if self.coefficients.is_empty() {
             return true;
         }
         self.evaluation_rows(false).is_some_and(full_row_rank)
@@ -908,7 +912,8 @@ impl NumeratorGroups {
     /// proven independent as before. `None` (full lowering) at a pole or when
     /// a candidate relation does not hold.
     fn fold_onto_basis(self) -> Option<Self> {
-        if self.coefficients.len() <= 1 {
+        // A single coefficient too: identically zero, it is folded away.
+        if self.coefficients.is_empty() {
             return Some(self);
         }
         let (basis, lambdas) = self.basis_relations()?;
@@ -1591,8 +1596,64 @@ mod tests {
             // Dependent classes (x*(1+x) = x + x^2) folded, regulator powers.
             "x*g(hedge(1,1),hedge(2,1))*ε*dot(k(1),k(1))*dot(k(2),k(4))+x^2*g(hedge(1,1),hedge(2,1))*ε^2*dot(k(2),k(2))*dot(k(3),k(5))-x*(1+x)*g(hedge(1,1),hedge(2,1))*ε^3*(3-2*ε)^-2*dot(k(4),k(4))*dot(k(1),k(5))",
         ] {
-            assert_screened_support_equals_full_weighted_lowering_support(numerator, None, true);
+            assert_screened_support_equals_full_weighted_lowering_support(
+                numerator, None, true, false,
+            );
         }
+    }
+
+    /// Review finding L1: a single coefficient (or class) that is an
+    /// unexpanded identical zero is never certified nonzero. In the tensor
+    /// grammar it is folded away (empty support, as the full lowering's on
+    /// every ladder witness); the plain grammar refuses it (full lowering).
+    #[test]
+    fn identically_zero_single_coefficient_is_not_certified_nonzero() {
+        Vakint::initialize_vakint_symbols();
+        let settings = VakintSettings::default();
+        let regulator = regulator_symbol(&settings);
+        // (numerator, regulator given, takes the regulated route)
+        for (numerator, given, regulated) in [
+            // tensor grammar, grouped route
+            (
+                "((x+1)^2-x^2-2*x-1)*g(hedge(1,1),hedge(2,1))*dot(k(1),k(2))*dot(k(3),k(4))",
+                false,
+                false,
+            ),
+            // regulated route: an identically zero class times a regulator
+            (
+                "((x+1)^2-x^2-2*x-1)*ε*g(hedge(1,1),hedge(2,1))*dot(k(1),k(2))*dot(k(3),k(4))",
+                true,
+                true,
+            ),
+            // a vanishing regulator part: no regulator point, grouped fallback
+            (
+                "((ε+1)^2-ε^2-2*ε-1)*g(hedge(1,1),hedge(2,1))*dot(k(1),k(2))*dot(k(3),k(4))",
+                true,
+                false,
+            ),
+        ] {
+            let parsed = vk_parse!(numerator).unwrap();
+            let groups = NumeratorGroups::try_new_regulated(
+                parsed.as_view(),
+                true,
+                if given { regulator } else { None },
+            )
+            .unwrap();
+            assert_eq!(groups.shape().0, 0, "{numerator}: no coefficient survives");
+            assert_eq!(
+                groups.regulator_points().is_some(),
+                regulated,
+                "{numerator}"
+            );
+            assert_screened_support_equals_full_weighted_lowering_support(
+                numerator, None, regulated, true,
+            );
+        }
+        let plain = vk_parse!("((x+1)^2-x^2-2*x-1)*dot(k(1),k(2))").unwrap();
+        assert!(matches!(
+            NumeratorGroups::try_new_with(plain.as_view(), true),
+            Err(Refusal::DependentCoefficients(1))
+        ));
     }
 
     /// The regulated route's shape on a 213-like term, its refusal of a
@@ -1641,7 +1702,9 @@ mod tests {
         numerator: &str,
         shape: Option<(usize, usize)>,
     ) {
-        assert_screened_support_equals_full_weighted_lowering_support(numerator, shape, false);
+        assert_screened_support_equals_full_weighted_lowering_support(
+            numerator, shape, false, false,
+        );
     }
 
     /// [`assert_grouped_support_equals_full_weighted_lowering_support`]; with
@@ -1650,6 +1713,7 @@ mod tests {
         numerator: &str,
         shape: Option<(usize, usize)>,
         regulated: bool,
+        vanishing: bool,
     ) {
         let settings = VakintSettings::default();
         let topologies = crate::Topologies::generate_topologies().unwrap();
@@ -1720,7 +1784,7 @@ mod tests {
                             .iter()
                             .map(|term| term.integral().clone())
                             .collect::<Vec<_>>();
-                        assert!(!expected.is_empty());
+                        assert_eq!(expected.is_empty(), vanishing);
                         assert_eq!(grouped, expected);
                         compared += 1;
                     }
