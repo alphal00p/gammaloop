@@ -3473,8 +3473,9 @@ fn a_marked_three_loop_massive_tadpole_through_the_vacuum_entry() {
 /// `/common/build-cache/ben/consol:/common/ben/beta/results/consolidation/wh-fixtures`
 /// (LIVE: 2,633 unique v3 records on 2026-11-21, 3,126 later the same day;
 /// the total is printed, not pinned; files under a directory named
-/// `controls`, the producer's control inputs, are validated and printed
-/// apart, not asserted). The 22 records of `REFUSED`
+/// `controls`, the producer's control inputs, are validated apart, each
+/// against its pinned outcome in `CONTROLS`: exactly those 4 files, 2
+/// accepted and 2 refused by the named rules). The 22 records of `REFUSED`
 /// (one-loop remainders whose only line left is the closing massive line: a
 /// massive tadpole, the producer's designed decline vakint:all_massive,
 /// dumped before the vakint call) are, while present, refused with the
@@ -3527,8 +3528,24 @@ fn every_production_record_validates() {
         wh_fixtures::required_env("VAKINT_TEST_RECORD_ROOTS", "the producer's record roots");
     let mut files = Vec::new();
     // the producer's CONTROL records (a directory named `controls`: inputs
-    // it writes to probe the reader, some meant to be refused) are not
-    // production records: validated and printed apart, not asserted
+    // it writes to probe the reader, two of them meant to be refused) are not
+    // production records: validated apart, each against its outcome here
+    // (the file name; None = accepted, else the start of the refusal);
+    // another control file, or one missing, fails
+    const CONTROLS: [(&str, Option<&str>); 4] = [
+        ("c0-unchanged.record.txt", None),
+        (
+            "c1-trace.record.txt",
+            Some("prefactor scalars: must be free of indices and momenta"),
+        ),
+        (
+            "c2-dimeps.record.txt",
+            Some(
+                "closure: with original_cycles the prefactor has loop_sign=1, nf_power=0, overall 1 (the original graph's weights stay with the caller)",
+            ),
+        ),
+        ("c3-regular-ratio.record.txt", None),
+    ];
     let mut controls = Vec::new();
     for root in roots.to_string_lossy().split(':') {
         let mut stack = vec![PathBuf::from(root)];
@@ -3553,19 +3570,44 @@ fn every_production_record_validates() {
     }
     init();
     controls.sort();
+    let mut wrong_controls = Vec::new();
     for p in &controls {
-        let outcome = match std::fs::read_to_string(p)
+        let outcome = std::fs::read_to_string(p)
             .map_err(|e| e.to_string())
-            .and_then(|t| FactorizedNumerator::from_text(&t).map_err(|e| e.to_string()))
-        {
-            Ok(_) => "accepted".to_string(),
-            Err(e) => format!("refused: {}", e.chars().take(160).collect::<String>()),
+            .and_then(|t| FactorizedNumerator::from_text(&t).map_err(|e| e.to_string()));
+        let name = p.file_name().unwrap().to_string_lossy().to_string();
+        let expected = CONTROLS.iter().find(|(n, _)| *n == name).map(|(_, e)| *e);
+        let pinned = match (&outcome, expected) {
+            (Ok(_), Some(None)) => true,
+            (Err(e), Some(Some(start))) => e.starts_with(start),
+            _ => false,
         };
+        if !pinned {
+            wrong_controls.push(format!(
+                "{}: {outcome:?}, expected {expected:?}",
+                p.display()
+            ));
+        }
         eprintln!(
-            "PRODUCTION CONTROL {} (not asserted): {outcome}",
-            p.display()
+            "PRODUCTION CONTROL {}: {}{}",
+            p.display(),
+            match &outcome {
+                Ok(_) => "accepted".to_string(),
+                Err(e) => format!("refused: {}", e.chars().take(160).collect::<String>()),
+            },
+            if pinned {
+                " (as pinned)"
+            } else {
+                " (NOT AS PINNED)"
+            }
         );
     }
+    assert!(wrong_controls.is_empty(), "{wrong_controls:?}");
+    assert_eq!(
+        controls.len(),
+        CONTROLS.len(),
+        "the control records: {controls:?}"
+    );
     let pinned = REFUSED
         .iter()
         .filter_map(|p| std::fs::read_to_string(p).ok())
