@@ -88,7 +88,7 @@ use std::{
     time::Instant,
 };
 
-use eyre::{Result, eyre};
+use eyre::Result;
 use linnet::half_edge::{
     involution::{EdgeIndex, Flow, HedgePair},
     subgraph::{SuBitGraph, SubSetOps},
@@ -890,11 +890,10 @@ pub(super) fn attempt<R: std::borrow::Borrow<RStarIntegrand>>(
                     attempt.graph,
                     escape(&text)
                 );
-                return Err(eyre!(
-                    "UNCONTRACTED kind={} graph={} id={id}: vakint refuses the record's unknown master coefficients: {text}",
-                    kind.as_str(),
-                    attempt.graph
-                ));
+                // Fails the diagram by design (module doc): typed, so that a
+                // guarded child attempt does not decline it to today's terms
+                // (MATRIX-R45 review, nested-and-cache finding 2).
+                return Err(unknown_masters_failure(kind.as_str(), &attempt.graph, id, &text));
             }
             attempt.outcome = Outcome::refused(Decline::vakint(&error));
             return Ok(attempt);
@@ -1200,6 +1199,14 @@ impl std::error::Error for Failure {}
 
 pub(super) fn failure(message: String) -> eyre::Report {
     eyre::Report::new(Failure(message))
+}
+
+/// The error of vakint's unknown-master refusal of a record: it fails the
+/// diagram (a [`Failure`], same text as before).
+pub(super) fn unknown_masters_failure(kind: &str, graph: &str, id: usize, text: &str) -> eyre::Report {
+    failure(format!(
+        "UNCONTRACTED kind={kind} graph={graph} id={id}: vakint refuses the record's unknown master coefficients: {text}"
+    ))
 }
 
 /// The error of a failed check (`equal=false`): it fails the diagram.
