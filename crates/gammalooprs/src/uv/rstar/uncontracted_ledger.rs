@@ -2100,11 +2100,15 @@ struct KindTotals {
 /// (pre-review of the U7a delta, finding 6): per enabled kind the expected,
 /// compared / taken, hit and declined totals; and the run-level rules:
 ///
-/// * an enabled kind with no compared (check) or taken (on) record, direct
-///   or through a Δ-cache hit, over the whole run fails the run, unless the
-///   exception list has the run-level row `*<TAB><kind><TAB>none_compared`
-///   (a run whose diagrams legitimately have no record of the kind, e.g.
-///   a subset without IR corrections of order ω >= 1);
+/// * an enabled kind NAMED IN A `:<kinds>` LIST (U8, ruling D1) with no
+///   compared (check) or taken (on) record, direct or through a Δ-cache
+///   hit, over the whole run fails the run, unless the exception list has
+///   the run-level row `*<TAB><kind><TAB>none_compared` (a run whose
+///   diagrams legitimately have no record of the kind, e.g. a subset
+///   without IR corrections of order ω >= 1); a kind enabled by the
+///   default or a bare `on` / `check` with no such record is a notice
+///   ([`RunTally::notices`], [`RunTally::default_no_record`]) and leaves
+///   the run's outcome alone;
 /// * with every kind this build emits enabled (`root,child,ir-hard`), a
 ///   diagram whose counterterm is nonzero with no compared / taken record in
 ///   any kind and no excepted kind fails the run (with a partial kind list a
@@ -2120,6 +2124,9 @@ struct KindTotals {
 pub struct RunTally {
     mode: Mode,
     kinds: Vec<Kind>,
+    /// U8: the enabled kinds named in a `:<kinds>` list (the kind-level
+    /// rule binds them only).
+    explicit: Vec<Kind>,
     totals: BTreeMap<Kind, KindTotals>,
     /// Per enabled kind and record class: records, compared / taken (hits
     /// included) and the setting codes' declines.
@@ -2135,6 +2142,7 @@ impl RunTally {
         (switch.mode != Mode::Off).then(|| Self {
             mode: switch.mode,
             kinds: switch.enabled_kinds(),
+            explicit: switch.explicit_kinds(),
             totals: BTreeMap::new(),
             shapes: BTreeMap::new(),
             diagrams: 0,
@@ -2245,18 +2253,59 @@ impl RunTally {
         )
     }
 
+    /// The enabled kinds with no compared (check) or taken (on) record over
+    /// the run and no run-level exception, with their totals.
+    fn without_record(&self) -> Vec<(Kind, KindTotals)> {
+        let exceptions = exceptions();
+        self.kinds
+            .iter()
+            .filter_map(|kind| {
+                let totals = self.totals.get(kind).cloned().unwrap_or_default();
+                let evidence = if self.mode == Mode::Check {
+                    totals.compared + totals.hit_compared
+                } else {
+                    totals.taken + totals.hit_taken
+                };
+                (evidence == 0 && !exceptions.names("*", *kind, NONE_COMPARED))
+                    .then_some((*kind, totals))
+            })
+            .collect()
+    }
+
+    /// U8: the enabled kinds that are NOT named in a `:<kinds>` list (the
+    /// default, a bare `on` / `check`) and took (on) or compared (check) no
+    /// record over the run: a notice, not a failure (ruling D1).
+    pub fn default_no_record(&self) -> Vec<&'static str> {
+        self.without_record()
+            .into_iter()
+            .filter(|(kind, _)| !self.explicit.contains(kind))
+            .map(|(kind, _)| kind.as_str())
+            .collect()
+    }
+
+    /// U8: one notice per [`Self::default_no_record`] kind.
+    pub fn notices(&self) -> Vec<String> {
+        self.without_record()
+            .into_iter()
+            .filter(|(kind, _)| !self.explicit.contains(kind))
+            .map(|(kind, totals)| {
+                format!(
+                    "kind {}: no record {} over the run ({} expected, {} declined); default kind, not binding",
+                    kind.as_str(),
+                    self.verb(),
+                    totals.expected,
+                    totals.declined
+                )
+            })
+            .collect()
+    }
+
     /// The run-level failures (empty: the run passes these rules).
     pub fn failures(&self) -> Vec<String> {
-        let exceptions = exceptions();
         let mut failures = self.failures.clone();
-        for kind in &self.kinds {
-            let totals = self.totals.get(kind).cloned().unwrap_or_default();
-            let evidence = if self.mode == Mode::Check {
-                totals.compared + totals.hit_compared
-            } else {
-                totals.taken + totals.hit_taken
-            };
-            if evidence == 0 && !exceptions.names("*", *kind, NONE_COMPARED) {
+        for (kind, totals) in self.without_record() {
+            // U8: only a kind named in a list binds (else a notice)
+            if self.explicit.contains(&kind) {
                 failures.push(format!(
                     "kind {}: no record {} over the run ({} expected, {} declined); a run-level exception (*<TAB>{}<TAB>{NONE_COMPARED}<TAB>reason in {EXCEPTIONS_VARIABLE}) is required",
                     kind.as_str(),

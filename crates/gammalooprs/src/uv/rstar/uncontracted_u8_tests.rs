@@ -431,3 +431,117 @@ fn demote_default_leaves_a_written_value() -> Result<()> {
     );
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// G-4: the run-level rule binds only the kinds named in a list (ruling D1)
+// ---------------------------------------------------------------------------
+
+/// A run of one diagram under `switch` that takes (on) / compares (check)
+/// one record of each kind in `kinds`: its tally's failures, notices and
+/// default kinds without a record.
+fn tally_of(switch: Switch, kinds: &[Kind]) -> Result<(Vec<String>, Vec<String>, Vec<&'static str>)> {
+    with_switch(switch, || {
+        with_hole_cut(HoleCut::Form, || {
+            let mut tally = ledger::RunTally::new().ok_or_else(|| eyre!("no tally"))?;
+            let opened = ledger::DiagramLedger::open("u8-g4", "000001")
+                .ok_or_else(|| eyre!("no ledger"))?;
+            for kind in kinds {
+                ledger::expect(*kind);
+                ledger::record_value(*kind, switch.mode);
+            }
+            let evidence = opened.close(true)?;
+            tally.add("u8-g4/000001", evidence.as_ref(), true);
+            Ok((tally.failures(), tally.notices(), tally.default_no_record()))
+        })
+    })
+}
+
+const U7B: [Kind; 3] = [Kind::Root, Kind::Child, Kind::IrHard];
+
+/// A default (or bare) kind with no record over the run is a notice, not a
+/// failure.
+#[test]
+fn run_tally_default_kind_without_record_is_a_notice() -> Result<()> {
+    for switch in [Switch::DEFAULT_ON, parse(Some("on")), parse(Some("check"))] {
+        let (failures, notices, no_record) = tally_of(switch, &U7B)?;
+        ensure!(failures.is_empty(), "{switch:?}: {failures:#?}");
+        ensure!(no_record == vec!["surrogate"], "{switch:?}: {no_record:?}");
+        let verb = if switch.mode == Mode::Check {
+            "compared"
+        } else {
+            "taken"
+        };
+        ensure!(
+            notices
+                == vec![format!(
+                    "kind surrogate: no record {verb} over the run (0 expected, 0 declined); default kind, not binding"
+                )],
+            "{switch:?}: {notices:#?}"
+        );
+    }
+    // the measured L1 case: root records only
+    let (failures, _, no_record) = tally_of(Switch::DEFAULT_ON, &[Kind::Root])?;
+    ensure!(
+        failures.is_empty() && no_record == vec!["child", "ir-hard", "surrogate"],
+        "{failures:#?} {no_record:?}"
+    );
+    Ok(())
+}
+
+/// A listed kind with no record fails the run with the existing message,
+/// byte for byte, and gives no notice.
+#[test]
+fn run_tally_listed_kind_without_record_fails() -> Result<()> {
+    let (failures, notices, no_record) =
+        tally_of(parse(Some("on:root,child,ir-hard,surrogate")), &U7B)?;
+    ensure!(
+        failures
+            == vec![
+                "kind surrogate: no record taken over the run (0 expected, 0 declined); a run-level exception (*<TAB>surrogate<TAB>none_compared<TAB>reason in GAMMALOOP_UNCONTRACTED_EXCEPTIONS) is required"
+                    .to_owned()
+            ],
+        "{failures:#?}"
+    );
+    ensure!(notices.is_empty() && no_record.is_empty(), "{notices:#?}");
+    let (failures, ..) = tally_of(parse(Some("check:root,child,ir-hard,surrogate")), &U7B)?;
+    ensure!(
+        failures.len() == 1 && failures[0].starts_with("kind surrogate: no record compared"),
+        "{failures:#?}"
+    );
+    Ok(())
+}
+
+/// A list binds its own kinds only: `on:root,surrogate` with root records
+/// only fails on surrogate and gives no notice.
+#[test]
+fn run_tally_mixed() -> Result<()> {
+    let (failures, notices, no_record) = tally_of(parse(Some("on:root,surrogate")), &[Kind::Root])?;
+    ensure!(
+        failures.len() == 1 && failures[0].starts_with("kind surrogate: no record taken"),
+        "{failures:#?}"
+    );
+    ensure!(notices.is_empty() && no_record.is_empty(), "{notices:#?}");
+    // every kind with a record: nothing either way
+    let (failures, notices, _) = tally_of(Switch::DEFAULT_ON, &DEFAULT_KINDS)?;
+    ensure!(failures.is_empty() && notices.is_empty(), "{failures:#?} {notices:#?}");
+    Ok(())
+}
+
+/// A run-level exception covers a default kind too: no notice.
+#[test]
+fn run_tally_exception_covers_a_default_kind() -> Result<()> {
+    let exceptions = ledger::parse_exceptions("*\tsurrogate\tnone_compared\tno insertion in this set\n")
+        .map_err(|error| eyre!(error))?;
+    let (failures, notices, no_record) = ledger::with_exceptions(exceptions.clone(), || {
+        tally_of(Switch::DEFAULT_ON, &U7B)
+    })?;
+    ensure!(
+        failures.is_empty() && notices.is_empty() && no_record.is_empty(),
+        "{failures:#?} {notices:#?}"
+    );
+    let (failures, ..) = ledger::with_exceptions(exceptions, || {
+        tally_of(parse(Some("on:root,child,ir-hard,surrogate")), &U7B)
+    })?;
+    ensure!(failures.is_empty(), "{failures:#?}");
+    Ok(())
+}

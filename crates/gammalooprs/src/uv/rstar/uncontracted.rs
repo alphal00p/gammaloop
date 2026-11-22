@@ -28,6 +28,10 @@
 //!   wins over a default. A written value (`on`, `check`, a list) keeps
 //!   every refusal below. A default run and an explicit
 //!   `on:root,child,ir-hard,surrogate` run have one identity.
+//! * The run-level rule "an enabled kind with no record over the run fails
+//!   the run" binds only the kinds named in a `:<kinds>` list; a default
+//!   or bare `on` / `check` kind without a record is a notice
+//!   ([`super::uncontracted_ledger::RunTally::notices`]).
 //! * Off (`""`, `0`, `off`, and unset without [`UNSET_IS_ON`]): no record is
 //!   built, nothing is allocated and nothing is printed; the hook calls
 //!   today's body unchanged. Only the switch is read (a thread-local and a
