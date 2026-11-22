@@ -1089,12 +1089,15 @@ impl Certificate {
 /// The declared order `k` of one listed factor (round 8b): normalised as in
 /// round 5 (a closed trace in a denominator contracted, `d = 4 − 2ε`; an
 /// unresolved tensor, an opaque function or a symbol in a denominator is
-/// refused), then `max(0, −ord_ε)` of each of its multiplicative factors
-/// read on its own ([`super::depth::excess_poles`]). A factor without `ε`
+/// refused), then `max(0, −ord_ε)` of the factor as a whole, its Laurent
+/// valuation at d = 4 − 2ε ([`super::depth::factor_pole_order`]; repair
+/// C1-5: before, the pole orders of its multiplicative pieces were summed,
+/// an upper bound that declined regular products such as 2ε/(4−d)). Only
+/// ONE factor is read at a time: no product of factors. A factor without `ε`
 /// (every model Feynman rule: no ε, no d in 80,681 L5 DOTs) has `k = 0` by
 /// type. `Err` with `PoleInFixedFactor` when the order cannot be read.
 fn declared_order(factor: Factor, label: String, expression: &Atom) -> std::result::Result<Declared, Refused> {
-    let k = certified_excess(factor, expression)?.ok_or_else(|| Refused {
+    let k = super::depth::factor_pole_order(&normalise(factor, expression)?).ok_or_else(|| Refused {
         class: Refusal::PoleInFixedFactor,
         factor: entry(factor).name,
         detail: format!("{label}: the ε order cannot be read ({})", short(expression.as_view())),

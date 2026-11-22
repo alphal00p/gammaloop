@@ -228,6 +228,63 @@ pub(super) fn excess_poles(expression: &Atom) -> Option<usize> {
     Some(excess)
 }
 
+/// IRH-DEPTH round 8b repair (C1-5): the pole order `max(0, −ord_ε f)` of
+/// ONE factor `f` (a vertex or edge numerator, the root closure, the typed
+/// root normalisation, the prefactor), read on the factor AS A WHOLE at
+/// `d = 4 − 2ε`: its Laurent valuation, so a regular factor spelled as a
+/// product (`2ε/(4−d) = 1`) has order 0. [`excess_poles`] sums the pieces'
+/// orders instead (an upper bound of this one). Different factors are never
+/// combined here: each `k` of the certificate is one factor's order, kept
+/// separately (a positive order never offsets another factor's pole). A
+/// tensor-valued factor is read on its formal terms: its contractions give
+/// polynomials in `d`, which only raise orders (a closed trace in a
+/// denominator is contracted by the round-5 normaliser before this). `None`
+/// as for [`excess_poles`].
+pub(super) fn factor_pole_order(expression: &Atom) -> Option<usize> {
+    let epsilon = GS.dim_epsilon;
+    if !expression.contains_symbol(epsilon) && !expression.contains_symbol(GS.dim) {
+        return Some(0);
+    }
+    let regulated = Integrated::dimensionally_regularized(expression);
+    if !regulated.contains_symbol(epsilon) {
+        return Some(0);
+    }
+    let representation = &spenso::network::tags::SPENSO_TAG.representation;
+    let scalars = regulated.replace_map(|view, _, out| {
+        if let AtomView::Fun(function) = view
+            && function.get_symbol().has_tag(representation)
+        {
+            **out = Atom::num(1);
+        }
+    });
+    let mut opaque = false;
+    scalars.visitor(&mut |view| {
+        if let AtomView::Fun(function) = view
+            && function
+                .iter()
+                .any(|argument| argument.contains_symbol(epsilon))
+        {
+            opaque = true;
+        }
+        !opaque
+    });
+    if opaque {
+        return None;
+    }
+    let series = regulated
+        .series(epsilon, 0, SeriesDepth::relative(1))
+        .ok()?;
+    if series.is_zero() {
+        return Some(0);
+    }
+    let exponent = series.get_trailing_exponent();
+    if !exponent.is_integer() {
+        return None;
+    }
+    let order = exponent.numerator().to_i64()?;
+    usize::try_from(-order.min(0)).ok()
+}
+
 /// IRH-DEPTH round 8b (C4): a row insertion `E_j` is free of `ε` and of a
 /// scalar `d` outside representation dimensions (`mink(d, i)`): a leaf of the
 /// hard numerator's tensor structure, its scalars in `h_j`
