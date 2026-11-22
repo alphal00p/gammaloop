@@ -437,6 +437,39 @@ and the discovery or confirmation measurements behind them.
 For a proposed change, use the exact-run link in its Actions summary or open
 the #link("https://alphal00p.github.io/gammabench/previews/")[PR previews].
 
+=== Marimo notebook cells
+
+The *Example notebook cell timings* job runs the Marimo apps in `examples/`
+and each crate's `examples/` directory. It builds a native Python runtime for
+each revision, then runs whole notebooks in fresh processes on the same host.
+Each enabled cell has its own elapsed wall time. An exception or an enabled
+cell that never finishes fails collection. Environment builds, kernel startup
+and browser painting fall outside the cell timer. For the streaming layout
+example, the cell timer ends when it starts the background animation.
+
+The runner alternates baseline and candidate for five pairs. A slowdown must
+exceed *both 20% and 50 ms* and meet the paired gate's noise and agreement
+checks. A suspected regression or noisy measurement triggers five independent
+confirmation pairs for that notebook. A regression must reproduce in both
+batches. When one batch passes and the other is noisy, the combined samples
+must also pass. Confirmed regressions and unresolved comparisons block readiness.
+Cells without a counterpart are listed as added or removed. A baseline that
+predates the combined native notebook host gets an explicit baseline-unavailable
+result after the candidate examples have executed successfully.
+
+The job summary names affected cells; its `notebook-cells-` artifact retains
+the individual timings, source identities, interaction settings and verdicts.
+To run one comparison locally, use the same pinned gammabench framework and
+native interpreters as `.github/workflows/notebook-performance.yml`:
+
+```bash
+python3 .github/scripts/notebook_cell_gate.py \
+  --baseline-root "$base" --baseline-python "$base_python" \
+  --candidate-root "$head" --candidate-python "$head_python" \
+  --notebook examples/notebooks/feynkit/05_four_loop_numerator_marimo.py \
+  --output notebook-cells.json
+```
+
 === Measurement procedure
 
 GammaLoop's adapter in `.github/scripts/run_performance.py` prepares one suite per
