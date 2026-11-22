@@ -55,6 +55,32 @@ use crate::symbols::S;
 use crate::utils::vakint_macros::vk_symbol;
 use crate::{Vakint, VakintSettings};
 
+/// The reference of the tests: the value of [`evaluate_factorized`] on
+/// vakint's former route for an open tensor (the open loop indices mapped to
+/// vakint's notation and reduced by vakint's tensor prepass inside
+/// `Vakint::evaluate`), on the same pinned settings; `None` for a value whose
+/// tensor the adapter does not reduce (the two routes are then one).
+#[cfg(test)]
+pub(crate) fn evaluate_factorized_prepass_route(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    value: &FactorizedNumerator,
+    prefactor: &Atom,
+) -> std::result::Result<Option<Atom>, String> {
+    let settings = &pinned_settings(settings);
+    let (_, _, reduced) =
+        vakint_input_reduced(settings, value, prefactor).map_err(|e| e.to_string())?;
+    if !reduced {
+        return Ok(None);
+    }
+    let (input, _, _) =
+        vakint_input_parts(settings, value, prefactor, false).map_err(|e| e.to_string())?;
+    vakint
+        .evaluate(settings, input.as_view())
+        .map(Some)
+        .map_err(|e| e.to_string())
+}
+
 /// A value of [`evaluate_factorized`] and what it was made of.
 #[derive(Clone, Debug)]
 pub struct FactorizedValue {
@@ -230,8 +256,19 @@ fn bare_momentum(view: AtomView<'_>) -> Option<i64> {
 /// and mapped to vakint's dot products of the edge momenta (steps 1 and 2),
 /// in the value's dimension symbol; and the seconds of the contraction.
 pub fn contract_to_vakint_dots(value: &FactorizedNumerator) -> Result<(Atom, f64)> {
+    contract_to_vakint_dots_with(value, true).map(|(mapped, seconds, _)| (mapped, seconds))
+}
+
+/// [`contract_to_vakint_dots`] and whether the open tensor was reduced here
+/// (`reduce_open_tensor`, tried when `reduce`): then no loop momentum carries
+/// an open index and the scalar goes to vakint's integral entry, as the
+/// contracted route's.
+fn contract_to_vakint_dots_with(
+    value: &FactorizedNumerator,
+    reduce: bool,
+) -> Result<(Atom, f64, bool)> {
     if !value.has_new_features() {
-        return contract_to_vakint_dots_v1(value);
+        return contract_to_vakint_dots_v1(value).map(|(mapped, seconds)| (mapped, seconds, false));
     }
     // a marked value: the whole validation (the reserved names, the bounds,
     // the contract, the atom rules, the defined-and-finite fields), as at the
@@ -240,9 +277,67 @@ pub fn contract_to_vakint_dots(value: &FactorizedNumerator) -> Result<(Atom, f64
         value.validate()?;
     }
     let (momenta, _) = vakint_momenta(value)?;
+    // Open slots (`open_slots`: the ports without a projector,
+    // or what a projector leaves open); see below.
+    let open_slots = if value.projector.is_none() {
+        !value.ports.is_empty()
+    } else {
+        !value.open_slots()?.is_empty()
+    };
     let started = Instant::now();
-    let contracted = value.contract_naively()?;
+    // An open tensor is contracted and reduced here, on idenso's typed tensor,
+    // the way the contracted route reduces it (`reduce_open_tensor`); vakint's
+    // evaluation then receives a scalar numerator whose only open indices are
+    // carried by the external momentum and metrics.
+    let reduced = if open_slots && reduce && !former_route_only() {
+        let phase = crate::p_integral::phases::start();
+        let reduced = reduce_open_tensor(value);
+        crate::p_integral::phases::end("front.open_tensor_reduction", phase);
+        match reduced {
+            Ok(reduced) => Some(reduced),
+            Err(fallback) => {
+                log_open_tensor(value, &format!("fallback:{}", fallback.as_str()));
+                None
+            }
+        }
+    } else {
+        None
+    };
+    let reduced_here = reduced.is_some();
+    let contracted = match reduced {
+        Some(reduced) => reduced,
+        None => value.contract_naively()?,
+    };
     let seconds = started.elapsed().as_secs_f64();
+    if !reduced_here {
+        let mapped = map_to_vakint(&momenta, contracted, open_slots)?;
+        return Ok((mapped, seconds, false));
+    }
+    // Reduced here: a refusal of the mapping, or a loop momentum that kept an
+    // open index, takes the former route (its own value or its own error).
+    let fallback = match map_to_vakint(&momenta, contracted, open_slots) {
+        Err(_) => OpenTensorFallback::Mapping,
+        Ok(_) if forced(OpenTensorFallback::Mapping) => OpenTensorFallback::Mapping,
+        Ok(mapped) => {
+            if has_loop_index(mapped.as_view()) || forced(OpenTensorFallback::LoopIndex) {
+                OpenTensorFallback::LoopIndex
+            } else {
+                log_open_tensor(value, "reduced");
+                return Ok((mapped, seconds, true));
+            }
+        }
+    };
+    log_open_tensor(value, &format!("fallback:{}", fallback.as_str()));
+    contract_to_vakint_dots_with(value, false)
+}
+
+/// A value's contracted scalar in vakint's notation (module
+/// documentation, steps 2 and 4): idenso's dots of edge momenta become
+/// vakint's `dot`s of the edges' momenta; with open slots, an edge momentum
+/// with an open index becomes the edge's vakint momentum with that index and
+/// a metric of two open slots vakint's `g`; nothing of the tensor notation
+/// may be left.
+fn map_to_vakint(momenta: &[(usize, Atom)], contracted: Atom, open_slots: bool) -> Result<Atom> {
     let lookup = |id: i64| {
         momenta
             .iter()
@@ -273,18 +368,13 @@ pub fn contract_to_vakint_dots(value: &FactorizedNumerator) -> Result<(Atom, f64
     if let Some((a, b)) = unknown.get() {
         return Err(evaluation(format!("a dot of unknown edges {a}, {b}")));
     }
-    // Open slots (`open_slots`: the ports without a projector,
-    // or what a projector leaves open): an edge momentum carrying an open
-    // index, `Q(e, mink(D, i))`, becomes the edge's vakint momentum with that
-    // index (`k(j, i)`, `±p(1, i)`), a metric between two open slots
-    // `g(mink(D, a), mink(D, b))` vakint's `g(a, b)`; vakint's tensor prepass
-    // reduces them after its denominator match. A closed value (every index
-    // contracted) is unchanged by this.
-    let open_slots = if value.projector.is_none() {
-        !value.ports.is_empty()
-    } else {
-        !value.open_slots()?.is_empty()
-    };
+    // Open slots: an edge momentum carrying an open index, `Q(e, mink(D, i))`,
+    // becomes the edge's vakint momentum with that index (`k(j, i)`,
+    // `±p(1, i)`), a metric between two open slots `g(mink(D, a), mink(D, b))`
+    // vakint's `g(a, b)`; after `reduce_open_tensor` only the external momentum
+    // carries open indices (where it declined, vakint's tensor prepass reduces
+    // the loop momenta after its denominator match). A closed value (every
+    // index contracted) is unchanged by this.
     let mapped = if open_slots {
         let port_index = |view: AtomView<'_>| match view {
             AtomView::Fun(rep)
@@ -364,20 +454,285 @@ pub fn contract_to_vakint_dots(value: &FactorizedNumerator) -> Result<(Atom, f64
             "the contraction left tensor notation: {part}"
         )));
     }
-    Ok((mapped, seconds))
+    Ok(mapped)
+}
+
+/// Why [`reduce_open_tensor`] left an open tensor to vakint's tensor prepass
+/// (the former route, which then evaluates the value exactly as before).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum OpenTensorFallback {
+    /// The external leg of vakint's `p(1)` could not be oriented.
+    Orientation,
+    /// A loop momentum has no edge carrying exactly that momentum (the
+    /// record's `loop i edge=e` line missing, or `Q(e)` not `k(i)`).
+    LoopBasis,
+    /// idenso's contraction of the routed product failed.
+    Contraction,
+    /// FeynKit's reducer (or idenso's cooking) did not accept the tensor.
+    Reducer,
+    /// idenso's closing of the reduced tensor failed.
+    Closing,
+    /// After the reduction a loop momentum still carries an open index.
+    LoopIndex,
+    /// A five-loop value: the former route keeps `Vakint::evaluate`'s
+    /// five-loop master transport.
+    FiveLoop,
+    /// The reduced scalar's mapping to vakint's notation, or its integrand,
+    /// was refused.
+    Mapping,
+    /// Vakint's integral entry refused the reduced integrand, or the result
+    /// check refused its value.
+    Integral,
+}
+
+impl OpenTensorFallback {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Orientation => "orientation",
+            Self::LoopBasis => "loop_basis",
+            Self::Contraction => "contraction",
+            Self::Reducer => "reducer",
+            Self::Closing => "closing",
+            Self::LoopIndex => "loop_index",
+            Self::FiveLoop => "five_loop",
+            Self::Mapping => "mapping",
+            Self::Integral => "integral",
+        }
+    }
+
+    /// Every reason, in the order the route can take them.
+    #[cfg(test)]
+    pub(crate) const ALL: [Self; 9] = [
+        Self::FiveLoop,
+        Self::Orientation,
+        Self::LoopBasis,
+        Self::Contraction,
+        Self::Reducer,
+        Self::Closing,
+        Self::Mapping,
+        Self::LoopIndex,
+        Self::Integral,
+    ];
+}
+
+#[cfg(test)]
+thread_local! {
+    /// The tests' forced fallback: the route takes `reason` at its own site,
+    /// as if that step had refused.
+    pub(crate) static FORCED_FALLBACK: std::cell::Cell<Option<OpenTensorFallback>> =
+        const { std::cell::Cell::new(None) };
+    /// The tests' view of the last `VAKINT_OPEN_TENSOR` route taken.
+    pub(crate) static LAST_ROUTE: std::cell::RefCell<Option<String>> =
+        const { std::cell::RefCell::new(None) };
+    /// The tests' reference: the entries take the former route everywhere
+    /// (no reduction in the adapter), exactly the code before it existed.
+    pub(crate) static FORMER_ROUTE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Whether the tests ask for the former route everywhere (always false
+/// outside the tests).
+fn former_route_only() -> bool {
+    #[cfg(test)]
+    {
+        FORMER_ROUTE.with(|former| former.get())
+    }
+    #[cfg(not(test))]
+    {
+        false
+    }
+}
+
+/// Whether the tests force the fallback `reason` (always false outside the
+/// tests).
+fn forced(reason: OpenTensorFallback) -> bool {
+    #[cfg(test)]
+    {
+        FORCED_FALLBACK.with(|forced| forced.get() == Some(reason))
+    }
+    #[cfg(not(test))]
+    {
+        let _ = reason;
+        false
+    }
+}
+
+/// The open tensor of `value` (its factor product and projector, edge momenta
+/// `Q(e, ..)`, open slots `mink(D, i)`) reduced as the contracted route
+/// reduces a propagator-type tensor (gammalooprs'
+/// `RStarIntegrand::integrate_physical_numerator`): every edge momentum is
+/// written in the loop-edge basis (`Q(loop_edge(i), ..)`, the record's `loop`
+/// lines) and the first external leg's momentum (a linear substitution), idenso
+/// contracts the routed product without expanding it (the production chain:
+/// `infer_indexed`, `simplify_algebra`, `to_dots`), FeynKit's
+/// [`feynkit_tensor::TensorReducer`] (integrated vectors: the loop edges'
+/// momenta; external vector: the first leg's momentum) reduces the cooked
+/// tensor, and idenso's chain closes the reducer's metrics and dummy pairs.
+/// The loop momenta then carry no open index: the tensors left are the
+/// metrics and the external momentum with the open indices, with
+/// scalar-product coefficients (inverse powers of the external invariant
+/// included). All tensor algebra is idenso's and FeynKit's. Not in dot
+/// notation of vakint yet (the caller maps it). On a fallback the evaluation
+/// takes the former route (vakint's tensor prepass).
+pub(crate) fn reduce_open_tensor(
+    value: &FactorizedNumerator,
+) -> std::result::Result<Atom, OpenTensorFallback> {
+    use OpenTensorFallback as Fallback;
+    use idenso::{CookMode, CookSettings};
+    let _step = crate::timing::contract();
+    let loops = value.loops();
+    let refused = |reason: Fallback, failed: bool| {
+        if failed || forced(reason) {
+            Err(reason)
+        } else {
+            Ok(())
+        }
+    };
+    // Five loops: Vakint::evaluate transports a five-loop master before its
+    // canonicalisation, the integral entry does not.
+    refused(Fallback::FiveLoop, loops >= 5)?;
+    refused(Fallback::Orientation, false)?;
+    let (_, _, orientation) = vakint_momenta_oriented(value).map_err(|_| Fallback::Orientation)?;
+    let leg = orientation.leg;
+    let along = value.edge(leg).ok_or(Fallback::Orientation)?.momentum[loops];
+    let mut basis = Vec::with_capacity(loops);
+    for (i, edge) in value.loop_edges.iter().enumerate() {
+        let edge = edge
+            .and_then(|id| value.edge(id))
+            .ok_or(Fallback::LoopBasis)?;
+        let unit = edge
+            .momentum
+            .iter()
+            .enumerate()
+            .all(|(j, c)| *c == i64::from(j == i));
+        if !unit {
+            return Err(Fallback::LoopBasis);
+        }
+        basis.push(edge.id);
+    }
+    refused(Fallback::LoopBasis, basis.len() != loops)?;
+    let q = symbolica::symbol!(names::MOMENTUM);
+    let phase = crate::p_integral::phases::start();
+    let mut product = value.factor_product();
+    if let Some(projector) = &value.projector {
+        product *= &projector.tensor;
+    }
+    let routed = product.replace_map(|part, _, out| {
+        let AtomView::Fun(function) = part else {
+            return;
+        };
+        if function.get_symbol().get_name() != names::MOMENTUM || function.get_nargs() != 2 {
+            return;
+        }
+        let mut args = function.iter();
+        let (Some(id), Some(slot)) = (args.next(), args.next()) else {
+            return;
+        };
+        let Ok(id) = usize::try_from(id) else {
+            return;
+        };
+        if id == leg || basis.contains(&id) {
+            return;
+        }
+        let Some(edge) = value.edge(id) else {
+            return;
+        };
+        let mut sum = Atom::Zero;
+        for (i, c) in edge.momentum[..loops].iter().enumerate() {
+            if *c != 0 {
+                sum += Atom::num(*c) * symbolica::function!(q, Atom::num(basis[i] as i64), slot);
+            }
+        }
+        let c = edge.momentum[loops] * along;
+        if c != 0 {
+            sum += Atom::num(c) * symbolica::function!(q, Atom::num(leg as i64), slot);
+        }
+        **out = sum;
+    });
+    crate::p_integral::phases::end("open.route", phase);
+    let phase = crate::p_integral::phases::start();
+    let routed = super::oracle::contract_with_idenso_unexpanded(&routed, false)
+        .map_err(|_| Fallback::Contraction)?;
+    refused(Fallback::Contraction, false)?;
+    crate::p_integral::phases::end("open.contract", phase);
+    let mink = symbolica::function!(symbolica::symbol!(names::MINK), Atom::var(value.dimension));
+    let mut reducer = feynkit_tensor::TensorReducer::new(Atom::var(value.dimension))
+        .with_external_vector(symbolica::function!(q, Atom::num(leg as i64), &mink))
+        .map_err(|_| Fallback::Reducer)?;
+    for edge in &basis {
+        reducer = reducer
+            .with_integrated_vector(symbolica::function!(q, Atom::num(*edge as i64), &mink))
+            .map_err(|_| Fallback::Reducer)?;
+    }
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let phase = crate::p_integral::phases::start();
+    let cooked = cooking
+        .try_cook(routed.as_view())
+        .map_err(|_| Fallback::Reducer)?;
+    let source = reducer.admit(cooked).map_err(|_| Fallback::Reducer)?;
+    let reduced = reducer
+        .reduce(&source)
+        .and_then(|reduction| reduction.into_expression())
+        .map_err(|_| Fallback::Reducer)?;
+    let reduced = cooking.uncook(reduced.expression().as_view());
+    refused(Fallback::Reducer, false)?;
+    crate::p_integral::phases::end("open.reduce", phase);
+    let phase = crate::p_integral::phases::start();
+    let closed = super::oracle::contract_with_idenso_unexpanded(&reduced, false)
+        .map_err(|_| Fallback::Closing)?;
+    refused(Fallback::Closing, false)?;
+    crate::p_integral::phases::end("open.close", phase);
+    Ok(closed)
+}
+
+/// Whether a loop momentum of vakint's notation carries an index in `atom`
+/// (`k(i, a)`): the loop tensor rank vakint's tensor prepass reduces.
+pub(crate) fn has_loop_index(atom: AtomView<'_>) -> bool {
+    let mut found = false;
+    atom.visitor(&mut |part| {
+        if matches!(part, AtomView::Fun(f) if f.get_symbol() == S.k && f.get_nargs() != 1) {
+            found = true;
+        }
+        !found
+    });
+    found
+}
+
+/// `VAKINT_OPEN_TENSOR route=reduced|fallback:<reason> label=".."` on stderr
+/// with `VAKINT_RECORD_LOG=1` (one line per value with open slots).
+fn log_open_tensor(value: &FactorizedNumerator, route: &str) {
+    #[cfg(test)]
+    LAST_ROUTE.with(|last| last.replace(Some(route.to_owned())));
+    if crate::timing::record_log_enabled() {
+        eprintln!("VAKINT_OPEN_TENSOR route={route} label={:?}", value.label);
+    }
 }
 
 /// The integrand vakint receives for `value` (module documentation): the
 /// prefactor, `dot(p(1), p(1))^p2_power`, the contracted scalar and the
 /// topology, with `D → 4 − 2ε` (ε of the settings); and the contraction's
-/// seconds.
+/// seconds. An open tensor of a value with new features arrives reduced
+/// (`reduce_open_tensor`): the integrand is then the scalar p-integral of
+/// vakint's integral entry.
 pub fn vakint_input(
     settings: &VakintSettings,
     value: &FactorizedNumerator,
     prefactor: &Atom,
 ) -> Result<(Atom, f64)> {
+    vakint_input_reduced(settings, value, prefactor).map(|(input, seconds, _)| (input, seconds))
+}
+
+/// [`vakint_input`] and whether the adapter reduced its open tensor
+/// (`reduce_open_tensor`): the input then goes to [`Vakint::evaluate_integral`].
+fn vakint_input_reduced(
+    settings: &VakintSettings,
+    value: &FactorizedNumerator,
+    prefactor: &Atom,
+) -> Result<(Atom, f64, bool)> {
     if !value.has_new_features() {
-        return vakint_input_v1(settings, value, prefactor);
+        return vakint_input_v1(settings, value, prefactor)
+            .map(|(input, seconds)| (input, seconds, false));
     }
     if let FactorizedKind::Closure(_) = value.kind {
         return Err(FactorizedError::Reserved {
@@ -399,19 +754,56 @@ pub fn vakint_input(
     value.validate()?;
     check_open_ports(value)?;
     value.check_insertion_epsilon(vk_symbol!(&settings.epsilon_symbol).get_name())?;
-    vakint_input_unchecked(settings, value, prefactor)
+    vakint_input_parts(settings, value, prefactor, true)
 }
 
 /// [`vakint_input`] without the contract checks (the reference of the tests:
 /// a numerator contracted into one vertex factor by hand, as a caller's
 /// contracted path holds it).
+#[cfg(test)]
 pub(crate) fn vakint_input_unchecked(
     settings: &VakintSettings,
     value: &FactorizedNumerator,
     prefactor: &Atom,
 ) -> Result<(Atom, f64)> {
+    vakint_input_parts(settings, value, prefactor, true).map(|(input, seconds, _)| (input, seconds))
+}
+
+/// The integrand of [`vakint_input_unchecked`] and whether its open tensor
+/// was reduced by the adapter (tried when `reduce`).
+fn vakint_input_parts(
+    settings: &VakintSettings,
+    value: &FactorizedNumerator,
+    prefactor: &Atom,
+    reduce: bool,
+) -> Result<(Atom, f64, bool)> {
     let (momenta, head) = vakint_momenta(value)?;
-    let (scalar, seconds) = contract_to_vakint_dots(value)?;
+    let (scalar, seconds, reduced) = contract_to_vakint_dots_with(value, reduce)?;
+    match vakint_integrand(settings, value, prefactor, &momenta, &head, scalar) {
+        Ok(input) => Ok((input, seconds, reduced)),
+        // the reduced route's integrand refused: the former route, its own
+        // integrand or its own error
+        Err(_) if reduced => {
+            log_open_tensor(
+                value,
+                &format!("fallback:{}", OpenTensorFallback::Mapping.as_str()),
+            );
+            vakint_input_parts(settings, value, prefactor, false)
+        }
+        Err(error) => Err(error),
+    }
+}
+
+/// `prefactor × dot(p(1), p(1))^p2_power × scalar × topo(Π prop(..))` with
+/// `D → 4 − 2ε` (module documentation, step 3).
+fn vakint_integrand(
+    settings: &VakintSettings,
+    value: &FactorizedNumerator,
+    prefactor: &Atom,
+    momenta: &[(usize, Atom)],
+    head: &Atom,
+    scalar: Atom,
+) -> Result<Atom> {
     let mut topology = Atom::num(1);
     for edge in value.edges.iter().filter(|edge| !edge.is_external()) {
         let (Endpoint::Vertex(source), Endpoint::Vertex(target)) = (edge.source, edge.target)
@@ -435,13 +827,14 @@ pub(crate) fn vakint_input_unchecked(
         ));
     }
     let p2_power = value.projector.as_ref().map_or(0, |p| p.p2_power);
-    let square = S.dot.call((&head, &head));
+    let square = S.dot.call((head, head));
     let epsilon = Atom::var(vk_symbol!(&settings.epsilon_symbol));
     let in_epsilon = Atom::num(4) - Atom::num(2) * epsilon;
-    let input = (prefactor * square.pow(Atom::num(p2_power)) * scalar * S.topo.call(topology))
-        .replace(Atom::var(value.dimension))
-        .with(in_epsilon);
-    Ok((input, seconds))
+    Ok(
+        (prefactor * square.pow(Atom::num(p2_power)) * scalar * S.topo.call(topology))
+            .replace(Atom::var(value.dimension))
+            .with(in_epsilon),
+    )
 }
 
 /// Whether `value` is one of the record kinds of the R* interface (a record
@@ -499,7 +892,8 @@ pub fn evaluate_factorized(
     } else {
         settings
     };
-    let (input, contract_seconds) = vakint_input(settings, value, prefactor)?;
+    let (mut input, mut contract_seconds, reduced) =
+        vakint_input_reduced(settings, value, prefactor)?;
     let loops = value.loops();
     if value
         .edges
@@ -518,10 +912,41 @@ pub fn evaluate_factorized(
         });
     }
     let started = Instant::now();
-    let result = vakint
-        .evaluate(settings, input.as_view())
-        .map_err(|e| evaluation(e.to_string()))?;
-    super::backstop::check_result(value, prefactor, settings, &result, true)?;
+    // A tensor reduced by the adapter is a scalar p-integral: vakint's
+    // integral entry, the one the contracted route calls on its reduced
+    // tensor. A refusal there, or of its value by the result check, takes the
+    // former route: the whole evaluation (canonicalisation and tensor prepass
+    // included) of the former integrand, with its own value or its own error.
+    let mut reduced_result = None;
+    if reduced {
+        reduced_result = vakint
+            .evaluate_integral(settings, input.as_view())
+            .ok()
+            .filter(|result| {
+                !forced(OpenTensorFallback::Integral)
+                    && super::backstop::check_result(value, prefactor, settings, result, true)
+                        .is_ok()
+            });
+        if reduced_result.is_none() {
+            log_open_tensor(
+                value,
+                &format!("fallback:{}", OpenTensorFallback::Integral.as_str()),
+            );
+            let (former, seconds, _) = vakint_input_parts(settings, value, prefactor, false)?;
+            input = former;
+            contract_seconds += seconds;
+        }
+    }
+    let result = match reduced_result {
+        Some(result) => result,
+        None => {
+            let result = vakint
+                .evaluate(settings, input.as_view())
+                .map_err(|e| evaluation(e.to_string()))?;
+            super::backstop::check_result(value, prefactor, settings, &result, true)?;
+            result
+        }
+    };
     Ok(FactorizedValue {
         value: result,
         input,
