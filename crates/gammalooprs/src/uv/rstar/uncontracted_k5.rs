@@ -747,6 +747,69 @@ fn eps_dependence(atom: AtomView<'_>, eps: Symbol) -> std::result::Result<bool, 
     }
 }
 
+/// The record's id of the edge that owns the hole anchor's inner half-edge
+/// `hedge` (of the graph edge `edge`, e_in): `edge` itself, or the incoming
+/// leg `PAIRED_LEG_OFFSET + edge` of a paired crown edge whose sink is the
+/// anchor (uncontracted.rs `paired_leg_id`); any other owner, or none, is
+/// the error `surrogate_chain`.
+pub(crate) fn anchor_leg(
+    edges: &[FactorizedEdge],
+    hedge: usize,
+    edge: usize,
+) -> std::result::Result<usize, Decline> {
+    match edges
+        .iter()
+        .find(|e| e.source_hedge == Some(hedge) || e.target_hedge == Some(hedge))
+    {
+        Some(owner) if owner.id == edge || owner.id == super::PAIRED_LEG_OFFSET + edge => {
+            Ok(owner.id)
+        }
+        Some(owner) => Err(chain_error(format!(
+            "the anchor's inner half-edge {hedge} belongs to the record edge {}, not to {edge} or its paired leg",
+            owner.id
+        ))),
+        None => Err(chain_error(format!(
+            "the anchor's inner half-edge {hedge} is not a half-edge of the record"
+        ))),
+    }
+}
+
+/// C_H written in the anchor's record edge `anchor_edge` ([`anchor_leg`]):
+/// `Q(e_out)` -> `s Q(anchor_edge)` (the chain conserves the momentum, `s = +1`
+/// when one end enters the chain and the other leaves it) and, when the
+/// anchor's leg is a paired crown edge's incoming leg, `Q(e_in)` ->
+/// `Q(anchor_edge)` (both legs carry e_in's momentum in its orientation).
+pub(crate) fn in_anchor_edge(
+    factor: Atom,
+    inner_edges: [(usize, bool); 2],
+    anchor_edge: usize,
+) -> Atom {
+    let [(e_in, in_sink), (e_out, out_sink)] = inner_edges;
+    if !factor.contains_symbol(GS.emr_mom) {
+        return factor;
+    }
+    let sign = if in_sink != out_sink { 1 } else { -1 };
+    let mut replacements = Vec::new();
+    if e_out != e_in {
+        replacements.push(symbolica::id::Replacement::new(
+            function!(GS.emr_mom, e_out, crate::utils::W_.x___).to_pattern(),
+            (Atom::num(sign) * function!(GS.emr_mom, anchor_edge, crate::utils::W_.x___))
+                .to_pattern(),
+        ));
+    }
+    if anchor_edge != e_in {
+        replacements.push(symbolica::id::Replacement::new(
+            function!(GS.emr_mom, e_in, crate::utils::W_.x___).to_pattern(),
+            function!(GS.emr_mom, anchor_edge, crate::utils::W_.x___).to_pattern(),
+        ));
+    }
+    if replacements.is_empty() {
+        factor
+    } else {
+        factor.replace_multiple(&replacements)
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn finish_with(
     provenance: &Provenance,
@@ -844,16 +907,13 @@ fn finish_with(
         // e_in, the anchor's own edge (the chain conserves the momentum: Q(e_out)
         // = s Q(e_in), s = +1 when one end enters the chain and the other
         // leaves it), so that an absent e_out never stands as a constant vector
-        let [(e_in, in_sink), (e_out, out_sink)] = chain.inner_edges;
-        let factor = if e_out != e_in && factor.contains_symbol(GS.emr_mom) {
-            let sign = if in_sink != out_sink { 1 } else { -1 };
-            factor.replace_multiple(&[symbolica::id::Replacement::new(
-                function!(GS.emr_mom, e_out, crate::utils::W_.x___).to_pattern(),
-                (Atom::num(sign) * function!(GS.emr_mom, e_in, crate::utils::W_.x___)).to_pattern(),
-            )])
-        } else {
-            factor
-        };
+        let (e_in, _) = chain.inner_edges[0];
+        // ... and in the RECORD's name of that edge at the anchor: `e_in`, or
+        // the incoming leg `PAIRED_LEG_OFFSET + e_in` when e_in is a paired
+        // crown edge of the record whose sink is the anchor (beta's pick 8;
+        // the same rename as `crown_legs_at_node` makes in a ct: Delta)
+        let anchor_edge = anchor_leg(edges, chain.inner[0], e_in)?;
+        let factor = in_anchor_edge(factor, chain.inner_edges, anchor_edge);
         vertex.rule = format!("ins:{}", vertex.rule);
         let mut hedges = chain
             .inner
