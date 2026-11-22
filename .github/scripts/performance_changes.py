@@ -6,7 +6,8 @@ import os
 import re
 import subprocess
 
-PATTERNS = (
+# fnmatch's '*' includes '/', so nested crate sources and examples are covered.
+SHARED_INPUTS = (
     "Cargo.toml",
     "Cargo.lock",
     "build.rs",
@@ -14,7 +15,6 @@ PATTERNS = (
     ".cargo/*",
     "crates/*.rs",
     "crates/*/Cargo.toml",
-    "tests/Cargo.toml",
     "crates/*/form_src/*",
     "crates/*/templates/*",
     "crates/*/assets/*",
@@ -22,21 +22,40 @@ PATTERNS = (
     "flake.nix",
     "flake.lock",
     "nix/*",
-    "benchmarks/performance/*",
-    ".github/scripts/run_performance.py",
-    ".github/scripts/performance_metadata.py",
     ".github/scripts/performance_changes.py",
-    ".github/workflows/performance.yml",
     ".github/workflows/performance-main.yml",
     ".github/workflows/nixci-readiness.yml",
 )
+CLI_INPUTS = SHARED_INPUTS + (
+    "tests/Cargo.toml",
+    "benchmarks/performance/*",
+    ".github/scripts/run_performance.py",
+    ".github/scripts/performance_metadata.py",
+    ".github/workflows/performance.yml",
+)
+NOTEBOOK_INPUTS = SHARED_INPUTS + (
+    "examples/*.py",
+    "examples/notebooks/*",
+    "crates/*/examples/*",
+    "crates/*.py",
+    "crates/*/src/*",
+    "crates/*/data/*",
+    "crates/linnet-render-py/*",
+    "crates/*/typst/*",
+    "vendor/*",
+    "docs/api/python/spynso3.pyi",
+    "benchmarks/performance/gammabench.rev",
+    "scripts/measure-notebook-cells.py",
+    "scripts/test_measure_notebook_cells.py",
+    ".github/scripts/notebook_cell_gate.py",
+    ".github/actions/nix-ci-cache/*",
+    ".github/workflows/notebook-performance.yml",
+)
 
 
-def requires_measurement(paths):
-    # fnmatch's '*' includes '/': a crate's nested Rust files and manifests
-    # remain covered without depending on shell globstar settings.
+def requires_measurement(paths, patterns=CLI_INPUTS):
     return any(
-        fnmatch.fnmatchcase(path, pattern) for path in paths for pattern in PATTERNS
+        fnmatch.fnmatchcase(path, pattern) for path in paths for pattern in patterns
     )
 
 
@@ -65,9 +84,12 @@ def main():
         .split("\0")
     )
     required = str(requires_measurement(paths)).lower()
+    notebooks = str(requires_measurement(paths, NOTEBOOK_INPUTS)).lower()
     with open(os.environ["GITHUB_OUTPUT"], "a") as output:
         output.write(f"run-performance={required}\n")
+        output.write(f"run-notebooks={notebooks}\n")
     print(f"Fresh performance comparison required: {required}")
+    print(f"Notebook cell comparison required: {notebooks}")
 
 
 if __name__ == "__main__":
