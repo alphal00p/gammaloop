@@ -1839,7 +1839,11 @@ fn evidence_without_record_classes_is_not_reused() -> Result<()> {
         });
         match ledger::resumed("g", "000001", Some(&old)) {
             Resumed::Unchecked(reason) if reason.starts_with("schema:") => {}
-            other => return Err(eyre!("evidence without record classes was reused: {other:?}")),
+            other => {
+                return Err(eyre!(
+                    "evidence without record classes was reused: {other:?}"
+                ));
+            }
         }
         let mut tally = ledger::RunTally::new().ok_or_else(|| eyre!("no tally"))?;
         tally.add("g/000001", Some(&old), true);
@@ -1972,7 +1976,10 @@ fn the_ir_dirac_closure_off_is_refused_with_ir_hard() {
                 None,
             )
             .unwrap_err();
-            assert!(error.contains("GAMMALOOP_IR_DIRAC_CLOSURE must be"), "{error}");
+            assert!(
+                error.contains("GAMMALOOP_IR_DIRAC_CLOSURE must be"),
+                "{error}"
+            );
         }
         assert!(
             ledger::initialise(
