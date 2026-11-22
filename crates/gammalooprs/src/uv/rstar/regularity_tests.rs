@@ -18,7 +18,7 @@ use super::super::{
     depth::{self, DepthCounts, DepthTest},
     regularity::{self, Factor},
 };
-use super::{Case, EPS, FIXED, L3_006, ensure_same, fnv, pinned, q, scaled};
+use super::{Case, EPS, FIXED, L3_006, ensure_same, fnv, pinned, q, run, scaled};
 
 const DIM: &str = "gammalooprs::{}::dim";
 const MINK: &str = "spenso::{spenso::representation,spenso::self_dual}::mink";
@@ -32,12 +32,38 @@ fn tensor() -> String {
     format!("(-2)/(({METRIC}({},{}))^2-4)", slot(81), slot(82))
 }
 
-/// ε⁻¹ in the three spellings of the mechanical matrix.
+const BIS: &str = "spenso::{spenso::representation,spenso::self_dual}::bis";
+const GAMMA: &str = "spenso::{linear,spenso::tensor}::gamma";
+
+/// A closed Dirac trace with fresh slots: `−8/(tr(γ_a γ^a) − 16)`, with
+/// `tr(γ_a γ^a) = d tr 1 = 4d`, equal to 1/ε in d = 4−2ε (MATRIX-R45,
+/// testdata/irh_matrix/gen_matrix.py).
+fn dirac_trace() -> String {
+    format!("(-8)/({}-16)", dirac_product())
+}
+
+/// `tr(γ_a γ^a)` with fresh slots (bispinor 83, 84; Lorentz 85).
+fn dirac_product() -> String {
+    let bis = |n: usize| format!("{BIS}(4,{HEDGE}({n},1))");
+    let mink = format!("{MINK}(4,{HEDGE}(85,1))");
+    format!(
+        "{GAMMA}({},{},{mink})*{GAMMA}({},{},{mink})",
+        bis(83),
+        bis(84),
+        bis(84),
+        bis(83)
+    )
+}
+
+/// ε⁻¹ in the spellings of the mechanical matrix: explicit, a `1/(d−4)`
+/// form, a closed metric trace (the review's), a closed Dirac trace
+/// (MATRIX-R45).
 #[derive(Clone, Copy, Debug)]
 enum Spelling {
     Epsilon,
     DimensionMinusFour,
     Trace,
+    DiracTrace,
 }
 
 impl Spelling {
@@ -46,14 +72,16 @@ impl Spelling {
             Self::Epsilon => format!("({EPS})^(-1)"),
             Self::DimensionMinusFour => format!("(-2)/({DIM}-4)"),
             Self::Trace => tensor(),
+            Self::DiracTrace => dirac_trace(),
         }
     }
 }
 
-const SPELLINGS: [Spelling; 3] = [
+const SPELLINGS: [Spelling; 4] = [
     Spelling::Epsilon,
     Spelling::DimensionMinusFour,
     Spelling::Trace,
+    Spelling::DiracTrace,
 ];
 
 /// The span of the first `field="…"` of `line` not preceded by a lowercase
@@ -347,9 +375,19 @@ fn matrix(
     fixture: impl Fn(Spelling) -> String,
     pin: Option<Atom>,
 ) -> Result<Vec<Option<DepthCounts>>> {
+    matrix_over(label, &SPELLINGS, fixture, pin)
+}
+
+/// [`matrix`] over `spellings`.
+fn matrix_over(
+    label: &str,
+    spellings: &[Spelling],
+    fixture: impl Fn(Spelling) -> String,
+    pin: Option<Atom>,
+) -> Result<Vec<Option<DepthCounts>>> {
     let mut first = None::<Atom>;
     let mut all = Vec::new();
-    for spelling in SPELLINGS {
+    for &spelling in spellings {
         let cell_label = format!("{label} {spelling:?}");
         let Some((today, counts)) = cell(&cell_label, &fixture(spelling))? else {
             all.push(None);
@@ -404,11 +442,11 @@ fn the_quotient_edge_pole_is_read_in_every_spelling() -> Result<()> {
     .map(|_| ())
 }
 
-/// Entry hard_numerator: v0 · ε⁴ · ε⁻¹ (three spellings) with v1·ε⁻¹, the
+/// Entry hard_numerator: v0 · ε⁴ · ε⁻¹ (every spelling) with v1·ε⁻¹, the
 /// k3j1 point: −117/64. The hard part is integrated and truncated before
 /// d = 4−2ε is substituted in it: −2/(d−4) and the trace hide a pole of h_j
 /// from the truncation (round 5 before this rule: +117/32 against today's
-/// −117/64). Both are refused (symbol_in_denominator, unresolved_tensor)
+/// −117/64). They are refused (symbol_in_denominator, unresolved_tensor)
 /// into today's value; the explicit spelling is read.
 #[test]
 fn the_hard_vertex_spellings_agree() -> Result<()> {
@@ -426,18 +464,30 @@ fn the_hard_vertex_spellings_agree() -> Result<()> {
         .map(|counts| counts.as_ref().and_then(|counts| counts.reason))
         .collect::<Vec<_>>();
     ensure!(
-        reasons == [None, Some("symbol_in_denominator"), Some("unresolved_tensor")],
+        reasons
+            == [
+                None,
+                Some("symbol_in_denominator"),
+                Some("unresolved_tensor"),
+                Some("unresolved_tensor")
+            ],
         "{reasons:?}"
     );
     Ok(())
 }
 
 /// Entries numerator_prefactor and root_projector: hard-v0 with the graph
-/// prefactor ε⁻¹ (three spellings), applied in the root projector.
+/// prefactor ε⁻¹ (explicit, 1/(d−4), metric trace), applied in the root
+/// projector. The Dirac-trace spelling is not in this pole comparison: this
+/// test's projector (`tensor · prefactor`) leaves a bispinor trace
+/// unevaluated, so both routes give 0 there (MATRIX-R45
+/// `matrix_r45_numerator_prefactor`, child = today); beta refuses every
+/// non-regular prefactor before R*.
 #[test]
 fn a_numerator_prefactor_pole_is_read_in_every_spelling() -> Result<()> {
-    matrix(
+    matrix_over(
         "prefactor",
+        &SPELLINGS[..3],
         |spelling| modify(&hard_v0(), "graph", "numerator_prefactor", times(&spelling.text())),
         Some(q(-117, 64)),
     )
@@ -637,5 +687,386 @@ fn a_refusal_is_a_fallback_under_the_guard_and_strict() -> Result<()> {
             }
         }
     }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// MATRIX-R45: the mechanical variant matrix (coordinator requirement, 0
+// WRONG). Every attribute that enters the product × ε⁻¹ in every spelling
+// ([`SPELLINGS`]) × the child route under the production planner, STRICT and
+// the guard, against today's (generic) path. A cell is RIGHT (the child route
+// itself succeeded, no refusal, and equals today's value exactly), REFUSED
+// (loud and counted, today's value; the class is pinned), LOUD (both routes
+// fail with an error, no value) or WRONG (a value different from today's: the
+// test fails). The native half (beta binaries, the DOT attributes) is
+// testdata/irh_matrix/gen_matrix.py with its expected table
+// testdata/irh_matrix/expected.tsv.
+// ---------------------------------------------------------------------------
+
+/// A MATRIX-R45 disposition.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Disposition {
+    Right,
+    Refused(&'static str),
+    Loud,
+}
+
+use Disposition::{Loud, Refused, Right};
+
+const SID: Disposition = Refused("symbol_in_denominator");
+const UT: Disposition = Refused("unresolved_tensor");
+
+/// The three child-route settings of every cell.
+const MODES: [(&str, DepthTest); 3] = [
+    ("child", FIXED),
+    (
+        "strict",
+        DepthTest {
+            strict: Some(true),
+            ..FIXED
+        },
+    ),
+    (
+        "guard",
+        DepthTest {
+            guard: Some(true),
+            ..FIXED
+        },
+    ),
+];
+
+/// Classify one child run against today's; a WRONG value, a child-only
+/// failure or a child route that is not taken fail the test.
+fn classify(
+    label: &str,
+    today: &Result<Atom>,
+    child: Result<(Atom, DepthCounts)>,
+    nested: bool,
+) -> Result<Disposition> {
+    let (today, child, counts) = match (today, child) {
+        (Err(today), Err(child)) => {
+            eprintln!("IRH_R45 {label} LOUD today={today:#} child={child:#}");
+            return Ok(Loud);
+        }
+        (Err(today), Ok((child, _))) => {
+            eyre::bail!("{label}: today's path fails ({today:#}) but the child route returns {child}")
+        }
+        (Ok(_), Err(child)) => eyre::bail!("{label}: the child route alone fails: {child:#}"),
+        (Ok(today), Ok((child, counts))) => (today, child, counts),
+    };
+    if !super::same(&child, today)? {
+        eyre::bail!(
+            "{label}: WRONG child_pole={} today_pole={} counts={counts:?}",
+            super::laurent(&super::record(&child)?, -1)?,
+            super::laurent(&super::record(today)?, -1)?,
+        );
+    }
+    ensure!(counts.exceeded == 0, "{label}: exceeded {counts:?}");
+    let disposition = if counts.refused >= 1 {
+        Refused(counts.reason.unwrap_or("unknown"))
+    } else {
+        ensure!(
+            counts.corrections >= 1 && (!nested || counts.nested >= 1),
+            "{label}: the child route was not taken (nested={nested}): {counts:?}"
+        );
+        Right
+    };
+    eprintln!(
+        "IRH_R45 {label} {disposition:?} today_pole={} counts={counts:?}",
+        super::laurent(&super::record(today)?, -1)?
+    );
+    Ok(disposition)
+}
+
+/// One attribute of the root (projected as beta): every spelling under every
+/// mode, against `expected` (one disposition per spelling, the same under
+/// every mode).
+fn r45_root(label: &str, fixture: impl Fn(Spelling) -> String, expected: [Disposition; 4]) -> Result<()> {
+    let mut wrong = Vec::new();
+    for (spelling, expected) in SPELLINGS.into_iter().zip(expected) {
+        let case = Case::new(&fixture(spelling), None)?;
+        let today = projected(&case, "closed", FIXED).map(|(value, _)| value);
+        for (mode, test) in MODES {
+            let cell = format!("{label} {spelling:?} {mode}");
+            match classify(&cell, &today, projected(&case, "child", test), false) {
+                Ok(found) if found == expected => {}
+                Ok(found) => wrong.push(format!("{cell}: {found:?}, expected {expected:?}")),
+                Err(error) => wrong.push(format!("{error:#}")),
+            }
+        }
+    }
+    ensure!(wrong.is_empty(), "{label}: {wrong:#?}");
+    Ok(())
+}
+
+/// Entry quotient_vertex_numerator on the base hard-v0 (v0·ε³).
+#[test]
+fn matrix_r45_quotient_vertex() -> Result<()> {
+    r45_root(
+        "v1",
+        |s| {
+            let dot = modify(&hard_v0(), "v1", "numerator", times(&s.text()));
+            modify(&dot, "graph", "numerator", times(&s.text()))
+        },
+        [Right, Right, Right, Right],
+    )
+}
+
+/// Entry quotient_edge_numerator: the quotient edge 4 (v1 → v3).
+#[test]
+fn matrix_r45_quotient_edge() -> Result<()> {
+    r45_root(
+        "e4",
+        |s| {
+            let dot = modify(&hard_v0(), "v1 ->", "numerator", times(&s.text()));
+            modify(&dot, "graph", "numerator", times(&s.text()))
+        },
+        [Right, Right, Right, Right],
+    )
+}
+
+/// Entry hard_numerator: the hard vertex v0 on the base (v0·ε³·S).
+#[test]
+fn matrix_r45_hard_vertex() -> Result<()> {
+    r45_root(
+        "v0",
+        |s| {
+            let dot = modify(&hard_v0(), "v0", "numerator", times(&s.text()));
+            modify(&dot, "graph", "numerator", times(&s.text()))
+        },
+        [Right, SID, UT, UT],
+    )
+}
+
+/// Entry hard_numerator: the hard edge 7 (v2 → v4) on the base.
+#[test]
+fn matrix_r45_hard_edge() -> Result<()> {
+    r45_root(
+        "e7",
+        |s| {
+            let dot = modify(&hard_v0(), "v2 ->", "numerator", times(&s.text()));
+            modify(&dot, "graph", "numerator", times(&s.text()))
+        },
+        [Right, SID, UT, UT],
+    )
+}
+
+/// Entry hard_numerator with every row hidden: v0·ε⁴·S, v1·ε⁻¹ (k3j1).
+#[test]
+fn matrix_r45_hard_vertex_hidden_rows() -> Result<()> {
+    r45_root(
+        "v0k3j1",
+        |s| {
+            let base = scaled(L3_006, &[("v0", 4), ("v1", -1)]);
+            let dot = modify(&base, "v0", "numerator", times(&s.text()));
+            modify(&dot, "graph", "numerator", times(&s.text()))
+        },
+        [Right, SID, UT, UT],
+    )
+}
+
+/// Entries numerator_prefactor, root_projector (beta's callback multiplies
+/// σ(prefactor)) and root_normalisation: the graph prefactor.
+#[test]
+fn matrix_r45_numerator_prefactor() -> Result<()> {
+    r45_root(
+        "pref",
+        |s| modify(&hard_v0(), "graph", "numerator_prefactor", times(&s.text())),
+        // The trace: vakint's conversion fails on both routes ('¿'); the
+        // Dirac trace: this test's projector leaves the bispinor trace
+        // unevaluated, 0 on both routes (beta refuses both before R*).
+        [Right, Right, Loud, Right],
+    )
+}
+
+/// Entry projector: the graph projector (R* does not multiply it; read in
+/// B).
+#[test]
+fn matrix_r45_projector() -> Result<()> {
+    r45_root(
+        "proj",
+        |s| modify(&hard_v0(), "graph", "projector", times(&s.text())),
+        [Right, Right, Right, Right],
+    )
+}
+
+/// The nested cells: c2-m9 (k2j1 with the marked line 9; its only
+/// child-route condition is in the child calls nested in the root, the R*
+/// of its decorated quotients, IRH-DEPTH.md 2.6) with v1's ε⁻¹ in every
+/// spelling, on the unprojected path as the nested tests (round 2-4). RIGHT
+/// requires nested child calls (`nested ≥ 1`); the refusals are counted in
+/// the root's collect scope, the nested evaluations included.
+#[test]
+fn matrix_r45_nested_decorated_quotient() -> Result<()> {
+    let mut wrong = Vec::new();
+    for spelling in SPELLINGS {
+        let base = scaled(L3_006, &[("v0", 2)]);
+        let dot = modify(&base, "v1", "numerator", times(&spelling.text()));
+        let dot = modify(&dot, "graph", "numerator", times(&spelling.text()));
+        let case = Case::new(&dot, Some(9))?;
+        let today = case.today();
+        if matches!(spelling, Spelling::Epsilon) {
+            pinned("c2-m9 r45", today.as_ref().map_err(|e| eyre::eyre!("{e:#}"))?, &[(-2, q(-117, 64))], false)?;
+        }
+        // v1 lies in the hard part of some correction of the nested
+        // evaluations: a 1/(d−4) or a trace there is refused (hard_numerator).
+        let expected = match spelling {
+            Spelling::Epsilon => Right,
+            Spelling::DimensionMinusFour => SID,
+            Spelling::Trace | Spelling::DiracTrace => UT,
+        };
+        for (mode, test) in MODES {
+            let cell = format!("nested-v1 {spelling:?} {mode}");
+            let child = case.child(run(test)).map(|run| (run.value, run.root));
+            match classify(&cell, &today, child, true) {
+                Ok(found) if found == expected => {}
+                Ok(found) => wrong.push(format!("{cell}: {found:?}, expected {expected:?}")),
+                Err(error) => wrong.push(format!("{error:#}")),
+            }
+        }
+    }
+    ensure!(wrong.is_empty(), "{wrong:#?}");
+    Ok(())
+}
+
+/// Every entry of the closed list × every spelling, at the certificate: the
+/// normalised factor shows the pole (excess ≥ 1) or is refused; never read
+/// as regular. The graph weights are refused at beta's boundary in every
+/// spelling.
+#[test]
+fn matrix_r45_every_listed_factor_reads_every_spelling() -> Result<()> {
+    crate::initialisation::test_initialise()?;
+    let x = symbolica::parse!("irh_r45_test::x");
+    let mut wrong = Vec::new();
+    for entry in regularity::FACTORS {
+        for spelling in SPELLINGS {
+            let pole = symbolica::try_parse!(&spelling.text()).map_err(|error| eyre::eyre!("{error}"))?;
+            let outcome = regularity::certified_excess(entry.factor, &(&x * &pole));
+            eprintln!("IRH_R45_UNIT {} {spelling:?} {outcome:?}", entry.name);
+            match outcome {
+                Ok(Some(n)) if n >= 1 => {}
+                Err(_) => {}
+                other => wrong.push(format!("{} {spelling:?}: {other:?}", entry.name)),
+            }
+        }
+    }
+    for spelling in SPELLINGS {
+        let pole = symbolica::try_parse!(&spelling.text()).map_err(|error| eyre::eyre!("{error}"))?;
+        for name in ["overall_factor", "numerator_prefactor", "projector"] {
+            if regularity::ensure_regular_weight(name, &pole).is_ok() {
+                wrong.push(format!("weight {name} {spelling:?} accepted"));
+            }
+        }
+    }
+    // The Dirac trace contracts to 4d.
+    let dirac = symbolica::try_parse!(&dirac_product()).map_err(|error| eyre::eyre!("{error}"))?;
+    let contracted = regularity::contract_closed(&dirac);
+    let expected = Atom::num(16) - Atom::num(8) * Atom::var(crate::utils::GS.dim_epsilon);
+    ensure!(
+        contracted.as_ref().is_some_and(|trace| (trace - &expected).expand().is_zero()),
+        "tr(γ_a γ^a) = {contracted:?}"
+    );
+    ensure!(wrong.is_empty(), "{wrong:#?}");
+    Ok(())
+}
+
+/// The root projector callback (entry root_projector) carrying the pole
+/// itself. The callback is opaque to R*: it is certified by CONTRACT
+/// (`RStarPlan::projected_counterterm`: regular in ε), not at run time, and
+/// beta's callback multiplies only σ(numerator_prefactor), refused by beta
+/// when poleful, and fixed regular normalisations. A caller that breaks the
+/// contract gets a wrong child value in the explicit and 1/(d−4) spellings
+/// (+117/32 against today's −117/64, also under STRICT and the guard: no
+/// row measures the callback). This test PINS that known gap of the public
+/// API (MATRIX-R45 open item), so a change of it is noticed; it is not
+/// reachable from beta.
+#[test]
+fn matrix_r45_a_poleful_root_projector_callback_is_outside_the_contract() -> Result<()> {
+    let case = Case::new(&hard_v0(), None)?;
+    let mut unexpected = Vec::new();
+    for spelling in SPELLINGS {
+        let pole = symbolica::try_parse!(&spelling.text()).map_err(|error| eyre::eyre!("{error}"))?;
+        let run = |route: &'static str, test: DepthTest| -> Result<(Atom, DepthCounts)> {
+            let pole = pole.clone();
+            let projector = move |tensor: &Atom| -> Result<Atom> { Ok(tensor * &pole) };
+            let (value, counts) = depth::with_depth_test(test, || {
+                depth::collect(|| {
+                    with_ir_hard(route, || {
+                        case.plan.projected_counterterm(
+                            &case.graph,
+                            case.model(),
+                            &case.vakint,
+                            &case.settings,
+                            &projector,
+                        )
+                    })
+                })
+            });
+            Ok((value?, counts))
+        };
+        let today = run("closed", FIXED).map(|(value, _)| value);
+        for (mode, test) in MODES {
+            let cell = format!("callback {spelling:?} {mode}");
+            let found = classify(&cell, &today, run("child", test), false);
+            eprintln!("IRH_R45_CALLBACK {cell} {:?}", found.as_ref().map_err(|e| format!("{e:#}")));
+            let pinned = match (spelling, &found) {
+                (Spelling::Epsilon | Spelling::DimensionMinusFour, Err(error)) => {
+                    let error = format!("{error:#}");
+                    error.contains("WRONG child_pole=117/32 today_pole=-117/64")
+                }
+                (Spelling::Trace, Ok(Loud)) => true,
+                (Spelling::DiracTrace, Ok(Right)) => true,
+                _ => false,
+            };
+            if !pinned {
+                unexpected.push(format!("{cell}: {:?}", found.map_err(|e| format!("{e:#}"))));
+            }
+        }
+    }
+    ensure!(unexpected.is_empty(), "the pinned callback gap changed: {unexpected:#?}");
+    Ok(())
+}
+
+/// The DOT overall factor of gen_matrix.py's `overall-<spelling>` variants:
+/// the production factor times the spelling (and its regular neighbour).
+fn overall_variants() -> Vec<(String, String)> {
+    let production = "(feynkit_generator_factor::{}::AutG(1))^(-1)*feynkit_generator_factor::{}::ExternalFermionOrderingSign(1)";
+    let mut variants = vec![
+        ("eps", Spelling::Epsilon.text()),
+        ("dm4", Spelling::DimensionMinusFour.text()),
+        ("gtr", Spelling::Trace.text()),
+        ("dtr", Spelling::DiracTrace.text()),
+        ("gtr3", tensor().replace("-4)", "-3)")),
+    ]
+    .into_iter()
+    .map(|(name, factor)| (format!("overall-{name}"), format!("({production})*({factor})")))
+    .collect::<Vec<_>>();
+    variants.push(("overall-none".into(), production.into()));
+    variants
+}
+
+/// gen_matrix.py writes the manifest's overall_factor binding from
+/// testdata/irh_matrix/overall_canonical.tsv; it must be the canonical
+/// string beta compares with (`diagram.overall_factor()`, the parsed DOT
+/// attribute).
+#[test]
+fn matrix_r45_the_overall_canonical_table_is_current() -> Result<()> {
+    crate::initialisation::test_initialise()?;
+    let table = include_str!("testdata/irh_matrix/overall_canonical.tsv");
+    let mut wrong = Vec::new();
+    for (name, text) in overall_variants() {
+        let canonical = symbolica::try_parse!(&text)
+            .map_err(|error| eyre::eyre!("{error}"))?
+            .to_canonical_string();
+        let line = format!("{name}\t{canonical}");
+        if !table.lines().any(|row| row == line) {
+            wrong.push(line);
+        }
+    }
+    ensure!(
+        wrong.is_empty(),
+        "IRH_R45_CANONICAL_TABLE missing or stale rows:\n{}",
+        wrong.join("\n")
+    );
     Ok(())
 }
