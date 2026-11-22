@@ -3471,28 +3471,27 @@ fn a_marked_three_loop_massive_tadpole_through_the_vacuum_entry() {
 /// validation only (`from_text`), on the roots
 /// `/common/build-cache/ben/consol:/common/ben/beta/results/consolidation/wh-fixtures`
 /// (LIVE: 2,633 unique v3 records on 2026-11-21, 3,126 later the same day;
-/// the total is printed, not pinned). THREE CLASSES: (1) the 22 records of
-/// `REFUSED` (one-loop remainders whose only line left is the closing
-/// massive line: a massive tadpole, the producer's designed decline
-/// vakint:all_massive, dumped before the vakint call) are, while present,
-/// refused with the Closure detail "every line is massive: not a closure";
-/// (2) records refused with exactly the ONE-HEDGE surrogate rule (an
-/// `Insertion` refusal "a surrogate coefficient vertex (rule ins:…) has 1
-/// hedges, not the two inner boundary half-edges": records of a later
-/// producer version, inputs of a later format version) are counted and
-/// printed, not pinned; (3) every other record is accepted: any other
-/// refusal fails. The count per refusal rule and root is printed
-/// (`PRODUCTION RULE <root> | <rule> | <n>`: the two classes, and the
-/// weights rules, the paired-leg rule and any other rule, which must be 0).
+/// the total is printed, not pinned). The 22 records of `REFUSED`
+/// (one-loop remainders whose only line left is the closing massive line: a
+/// massive tadpole, the producer's designed decline vakint:all_massive,
+/// dumped before the vakint call) are, while present, refused with the
+/// Closure detail "every line is massive: not a closure"; every other record
+/// is accepted: any other refusal fails, the one-hedge surrogate records
+/// included (accepted since the record format's correction 29: a refusal
+/// by a one-hedge surrogate rule is counted and FAILS). The count per
+/// refusal rule and root is printed (`PRODUCTION RULE <root> | <rule> |
+/// <n>`: the tadpoles, and the one-hedge surrogate rules, the weights rules,
+/// the paired-leg rule and any other rule, which must be 0).
 #[test]
 #[ignore = "external data: VAKINT_TEST_RECORD_ROOTS"]
 fn every_production_record_validates() {
     const ALL_MASSIVE: &str = "every line is massive: not a closure";
-    const ONE_HEDGE: &str = "one-hedge surrogate vertex (a later format version)";
+    const ONE_HEDGE: &str = "a one-hedge surrogate rule (accepted since correction 29)";
     let one_hedge = |e: &FactorizedError| {
         matches!(e, FactorizedError::Insertion { detail, .. }
-            if detail.starts_with("a surrogate coefficient vertex (rule ins:")
-                && detail.ends_with(") has 1 hedges, not the two inner boundary half-edges"))
+            if detail.starts_with("a one-hedge surrogate coefficient vertex (rule ins:")
+                || (detail.starts_with("a surrogate coefficient vertex (rule ins:")
+                    && detail.contains(" hedges, not the two inner boundary half-edges")))
     };
     // the 22 all-massive tadpoles of 2026-11-21 (dumps written before the
     // vakint call): each, while present, must be refused with ALL_MASSIVE;
@@ -3591,7 +3590,7 @@ fn every_production_record_validates() {
                 let rule = if expected {
                     "all-massive tadpole (pinned)"
                 } else if one_hedge(&e) {
-                    "one-hedge surrogate vertex"
+                    "a one-hedge surrogate rule"
                 } else if detail.contains("weight ") && detail.contains("applied_by=") {
                     "a weights rule"
                 } else if detail.contains("the two legs of a paired line") {
@@ -3634,7 +3633,7 @@ fn every_production_record_validates() {
     for root in roots.to_string_lossy().split(':') {
         for rule in [
             "all-massive tadpole (pinned)",
-            "one-hedge surrogate vertex",
+            "a one-hedge surrogate rule",
             "a weights rule",
             "the paired-leg rule",
             "any other rule",
@@ -3645,7 +3644,12 @@ fn every_production_record_validates() {
             );
         }
     }
-    for rule in ["a weights rule", "the paired-leg rule", "any other rule"] {
+    for rule in [
+        "a one-hedge surrogate rule",
+        "a weights rule",
+        "the paired-leg rule",
+        "any other rule",
+    ] {
         assert!(
             !by_rule.keys().any(|(_, r)| *r == rule),
             "records refused by {rule}: {by_rule:?}"
@@ -3654,11 +3658,11 @@ fn every_production_record_validates() {
     let refused_total = refused.values().map(Vec::len).sum::<usize>();
     let unexpected = refused
         .iter()
-        .filter(|(k, _)| k.as_str() != ALL_MASSIVE && k.as_str() != ONE_HEDGE)
+        .filter(|(k, _)| k.as_str() != ALL_MASSIVE)
         .collect::<Vec<_>>();
     assert!(
         unexpected.is_empty(),
-        "a refusal other than the pinned all-massive tadpoles and the one-hedge surrogate class: {unexpected:?}"
+        "a refusal other than the pinned all-massive tadpoles: {unexpected:?}"
     );
     for p in REFUSED {
         if let Ok(text) = std::fs::read_to_string(p) {
@@ -3669,7 +3673,7 @@ fn every_production_record_validates() {
         }
     }
     eprintln!(
-        "PRODUCTION pinned refusals present {} of 22; one-hedge surrogate class {} (counted, not pinned); refused {refused_total}; accepted {accepted} of {} unique",
+        "PRODUCTION pinned refusals present {} of 22; one-hedge surrogate refusals {} (must be 0); refused {refused_total}; accepted {accepted} of {} unique",
         pinned.len(),
         refused.get(ONE_HEDGE).map_or(0, Vec::len),
         seen.len()

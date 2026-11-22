@@ -4172,6 +4172,56 @@ impl FactorizedNumerator {
         })
     }
 
+    /// A ONE-HEDGE surrogate coefficient vertex (the record format's
+    /// correction 29: a kept hole that the record cuts, chain[0] in the
+    /// record and chain[L] not, so its one inner boundary half-edge in the
+    /// record is the hedge `h`, at the vertex), its MOMENTA (29.2): every
+    /// `Q(e)` of the insertion's coefficient and factor is that of the
+    /// RECORD edge owning `h` (a paired leg 100000 + e included): a `Q` of
+    /// an edge not in the record (read elsewhere as a constant vector, which
+    /// the Taylor step does not scale) is refused here; a `Q` of another
+    /// record edge is refused by the boundary rule of the index analysis.
+    /// Its SLOTS (29.3) are checked after the analysis, on its FREE slots.
+    /// Any kind (closure, direct, ports, vacuum). `Insertion` at the vertex.
+    fn check_one_hedge_surrogate(&self, insertion: &Insertion, rule: &str) -> Result<()> {
+        let v = insertion.vertex;
+        let h = insertion.hedges[0];
+        let error = |detail: String| FactorizedError::Insertion { vertex: v, detail };
+        let owner = self
+            .edges
+            .iter()
+            .find(|e| e.source_hedge == Some(h) || e.target_hedge == Some(h))
+            .map_or_else(|| "?".to_string(), |e| e.id.to_string());
+        let id = |a: Option<AtomView<'_>>| {
+            a.and_then(|a| i64::try_from(a).ok())
+                .and_then(|n| usize::try_from(n).ok())
+        };
+        for (what, atom) in [
+            ("coefficient", &insertion.coefficient),
+            ("factor", &insertion.factor),
+        ] {
+            let mut absent = None;
+            atom.as_view().visitor(&mut |part| {
+                if let AtomView::Fun(f) = part {
+                    let symbol = f.get_symbol();
+                    if symbol.get_name() == names::MOMENTUM
+                        && let Some(e) = id(f.iter().next())
+                        && self.edge(e).is_none()
+                    {
+                        absent.get_or_insert(e);
+                    }
+                }
+                true
+            });
+            if let Some(e) = absent {
+                return Err(error(format!(
+                    "a one-hedge surrogate coefficient vertex (rule {rule}): its {what} has the momentum Q({e}) of an edge that is not in the record (only the momentum of its hedge's edge {owner} may stand there)"
+                )));
+            }
+        }
+        Ok(())
+    }
+
     /// The structural rules of the insertions ([`Insertion`]) and the index
     /// analysis of their factors (for the locality, contraction and
     /// orientation checks of the whole value).
@@ -4221,12 +4271,17 @@ impl FactorizedNumerator {
                     )));
                 }
             } else if vertex.rule.starts_with("ins:") {
-                if insertion.hedges.len() != 2 {
-                    return Err(error(format!(
-                        "a surrogate coefficient vertex (rule {}) has {} hedges, not the two inner boundary half-edges",
-                        vertex.rule,
-                        insertion.hedges.len()
-                    )));
+                match insertion.hedges.len() {
+                    2 => {}
+                    // a hole the record cuts (correction 29): the one inner
+                    // boundary half-edge of the chain in the record
+                    1 => self.check_one_hedge_surrogate(insertion, &vertex.rule)?,
+                    n => {
+                        return Err(error(format!(
+                            "a surrogate coefficient vertex (rule {}) has {n} hedges, not the two inner boundary half-edges (or one, when the far end of the chain is outside the record)",
+                            vertex.rule
+                        )));
+                    }
                 }
             } else {
                 return Err(error(format!(
@@ -4287,6 +4342,27 @@ impl FactorizedNumerator {
                         slot: key.clone(),
                         location: Location::Insertion(v).to_string(),
                     });
+                }
+            }
+            // a ONE-HEDGE surrogate (correction 29.3), on its FREE slots (a
+            // contracted pair is no slot): none (a ghost coefficient), or
+            // slots on its hedge and on exactly one half-edge outside the
+            // record, the spectator (a declared port: the locality rule above)
+            if vertex.rule.starts_with("ins:") && insertion.hedges.len() == 1 {
+                let h = insertion.hedges[0];
+                let slots = sets
+                    .free
+                    .values()
+                    .filter_map(Slot::hedge)
+                    .collect::<BTreeSet<_>>();
+                let others = slots.iter().filter(|x| **x != h).collect::<Vec<_>>();
+                let spectator =
+                    slots.contains(&h) && others.len() == 1 && !present.contains(others[0]);
+                if !slots.is_empty() && !spectator {
+                    return Err(error(format!(
+                        "a one-hedge surrogate coefficient vertex (rule {}): its slots are on the half-edges {slots:?}; a one-hedge insertion carries no slot, or slots on its hedge {h} and on exactly one half-edge outside the record (the spectator, a declared port)",
+                        vertex.rule
+                    )));
                 }
             }
             if sets.free.len() > INSERTION_MAX_SLOTS {
