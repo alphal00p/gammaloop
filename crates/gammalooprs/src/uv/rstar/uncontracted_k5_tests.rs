@@ -2807,3 +2807,58 @@ fn k5_direct_record_is_its_own_record_class() -> Result<()> {
     );
     Ok(())
 }
+
+/// Beta's guard on the DIRECT record (the coordinator's decision on beta's
+/// suggestion (i)): `build_direct` calls `declared_momenta` after its
+/// `from_text`, as `build` does for K1 / K2. The k5-direct case (L2 17), its
+/// coefficient `-1/2 gs^2 Q(3).Q(3)` changed to `-1/2 gs^2 Q(3).Q(99)` (the
+/// same degree; `Q(99)` is no edge of the record, so vakint's reader takes it
+/// as a constant vector and no K5 rule sees it): our attempt is the ERROR
+/// `undeclared_momentum` (never a decline) with no value, and the hook
+/// fails; unchanged, the same case compares equal
+/// (k5_direct_record_and_value_equal_the_fixture).
+#[test]
+fn k5_direct_record_with_an_undeclared_momentum_is_an_error() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let prepared = prepare(L2_17_DOT, &vakint)?;
+        let text = K5_DIRECT
+            .lines()
+            .map(|line| {
+                if line.starts_with("insertion_factor\t") {
+                    let at = line.rfind("::Q(3,").expect("the coefficient's second Q(3)");
+                    format!("{}::Q(99,{}", &line[..at], &line[at + "::Q(3,".len()..])
+                } else {
+                    line.to_owned()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        ensure!(text.contains("::Q(99,"), "no probe in the coefficient");
+        let fixture = record(&text)?;
+        let diagram = with_branch(&prepared.surrogate, &fixture)?;
+        let graph = diagram.to_gamma_loop_graph(None, true)?;
+        let (value, captured, _) = direct_run(
+            &graph,
+            &diagram,
+            Some(&prepared.provenance),
+            &vakint,
+            check_surrogate(),
+            true,
+        );
+        let attempt = captured
+            .iter()
+            .find(|attempt| attempt.kind == Kind::Surrogate)
+            .ok_or_else(|| eyre!("no surrogate attempt: {captured:?}"))?;
+        ensure!(
+            attempt.outcome == "error:undeclared_momentum",
+            "not the guard's error: {} {:?}",
+            attempt.outcome,
+            attempt.detail
+        );
+        ensure!(attempt.value.is_none(), "an erroneous record has a value");
+        ensure!(value.is_err(), "the direct hook passed an erroneous record");
+        Ok(())
+    })
+}
