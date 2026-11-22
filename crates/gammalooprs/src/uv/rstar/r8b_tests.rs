@@ -780,3 +780,183 @@ fn repair_rc_s1_one_projection_object() -> Result<()> {
     ensure!(same_scalar(&off, &consistent)?, "off: the closed scalars took the callback");
     Ok(())
 }
+
+// ---- IRH-ATTACK (helper VH 2, 2026-11-22, public patch irh-attack-gltest.patch of
+// 20261122T1304Z-gltest-typed-root, base 19ddf454fc): the four adversarial cells as regression tests in their
+// PRESENT form on the G-G stack (round 8 integrated + the round-8b repair). T = g_ab g^ab with fresh 4-dimensional
+// slots (as every DOT writes its Lorentz slots). Every cell prints an `IRH_ATTACK_CELL` line.
+
+/// T = g_ab g^ab, a closed metric trace with fresh slots.
+fn attack_trace() -> String {
+    let g = "spenso::{symmetric,linear,real,spenso::tensor}::g";
+    let m = |h: u32| {
+        format!("spenso::{{spenso::representation,spenso::self_dual}}::mink(4,gammalooprs::{{spenso::index}}::hedge({h},1))")
+    };
+    format!("({g}({},{}))^2", m(81), m(82))
+}
+
+/// One run of `projected_counterterm_scalar` (the typed scalar root projection given as data).
+fn attack_scalar(case: &Case, route: &'static str, factor: &Atom) -> Result<(Atom, DepthCounts)> {
+    let test = DepthTest {
+        strict: Some(false),
+        ..FIXED
+    };
+    let (value, counts) = depth::with_depth_test(test, || {
+        depth::collect(|| {
+            with_ir_hard(route, || {
+                case.plan.projected_counterterm_scalar(
+                    &case.graph,
+                    case.model(),
+                    &case.vakint,
+                    &case.settings,
+                    factor,
+                )
+            })
+        })
+    });
+    eprintln!("IRH_ATTACK_SCALAR route={route} counts={counts:?}");
+    Ok((value?, counts))
+}
+
+/// IRH-ATTACK F-B (typed root from the RAW traced prefactor): the child route never takes a traced typed factor; it
+/// DECLINES (counted, `opaque_projector`, repair RC-B1) to the generic route, or the cell is refused on both routes
+/// (the 0/0 spelling −2ε/(T−4): vakint's "invalid input integral" on both). The child equals the generic route.
+/// Present form, a listed limit (BATCH2-ON-STACK.md "Listed limits"; helper VH 2's PRODUCIBLE.md: no producer writes
+/// a trace into a weight): this API multiplies the factor it is GIVEN, so a raw factor whose trace has 4-dimensional
+/// slots is read at T = 4 on both routes (the +1 literal's value for the −1 spelling 1/(1+(T−4)/ε)). Beta normalises
+/// every weight at entry (round 8a, the trace contracted in d) and passes that one object; with the normalised data
+/// the cell equals the literal (`repair_rc_b1_a_traced_prefactor_in_the_typed_data_declines`; helper VH 2's beta
+/// cells y-pt-*/a-tr-pf-*, 20261122T1343Z-attack-r8b-repair).
+#[test]
+fn irh_attack_typed_root_with_a_traced_prefactor_declines() -> Result<()> {
+    let t = attack_trace();
+    let cells = [
+        ("literal+1", "1".to_owned()),
+        ("trace-cross", format!("1/(1+({t}-4)/{EPS})")),
+        ("trace-one", format!("-2*{EPS}/({t}-4)")),
+    ];
+    let mut literal_plus_one = None::<Atom>;
+    let mut failures = Vec::new();
+    for (name, factor) in cells.iter() {
+        let dot = times(L3_006, "graph", "numerator_prefactor", factor);
+        let case = Case::new(&dot, None)?;
+        let off = typed(&case, "off", false);
+        let child = typed(&case, "child", false);
+        eprintln!(
+            "IRH_ATTACK_CELL typed prefactor {name} off={:?} child={:?}",
+            off.as_ref().map(|(v, _)| v.to_string()).map_err(|e| format!("{e:#}")),
+            child.as_ref().map(|(v, c)| (v.to_string(), format!("{c:?}"))).map_err(|e| format!("{e:#}")),
+        );
+        match (off, child) {
+            (Ok((off, _)), Ok((child, counts))) => {
+                if *name == "literal+1" {
+                    if counts.taken == 0 {
+                        failures.push(format!("{name}: the literal is not taken: {counts:?}"));
+                    }
+                    literal_plus_one = Some(off.clone());
+                } else {
+                    if !(counts.taken == 0 && counts.declined >= 1 && counts.reason == Some("opaque_projector")) {
+                        failures.push(format!("{name}: a traced typed factor must decline: {counts:?}"));
+                    }
+                    if *name == "trace-cross"
+                        && let Some(reference) = &literal_plus_one
+                        && !same_scalar(&off, reference)?
+                    {
+                        failures.push(format!("{name}: off is not the T = 4 reading (the +1 literal's value)"));
+                    }
+                }
+                if !same_scalar(&child, &off)? {
+                    failures.push(format!("{name}: the child differs from off"));
+                }
+            }
+            (Err(_), Err(_)) if *name == "trace-one" => {}
+            (off, child) => failures.push(format!(
+                "{name}: off ok={} child ok={}: the routes disagree on refusing",
+                off.is_ok(),
+                child.is_ok()
+            )),
+        }
+    }
+    ensure!(failures.is_empty(), "{failures:#?}");
+    Ok(())
+}
+
+/// IRH-ATTACK F-B at the public typed scalar entry (`projected_counterterm_scalar`): a factor −1 spelled through a
+/// closed metric trace. Present form: the child DECLINES it (`opaque_projector`, repair RC-B1: a traced factor is not
+/// a closed scalar) and equals the generic route; both multiply the factor as given (T = 4 with 4-dimensional slots:
+/// the +1 value for both spellings). Listed limit as above: the caller passes a normalised factor (beta does).
+#[test]
+fn irh_attack_typed_scalar_api_with_a_traced_factor_declines() -> Result<()> {
+    let t = attack_trace();
+    let case = Case::new(L3_006, None)?;
+    let parse = |text: &str| -> Result<Atom> {
+        symbolica::try_parse!(text).map_err(|error| eyre!("{text}: {error}"))
+    };
+    let (plus_one, _) = attack_scalar(&case, "off", &Atom::num(1))?;
+    let mut failures = Vec::new();
+    for (name, text) in [
+        ("trace-cross", format!("1/(1+({t}-4)/{EPS})")),
+        ("trace-form", format!("{EPS}/({EPS}+{t}-4)")),
+    ] {
+        let factor = parse(&text)?;
+        let (off, _) = attack_scalar(&case, "off", &factor)?;
+        let (child, counts) = attack_scalar(&case, "child", &factor)?;
+        eprintln!("IRH_ATTACK_CELL scalar api {name} off={off} child={child} counts={counts:?}");
+        if !(counts.taken == 0 && counts.declined >= 1 && counts.reason == Some("opaque_projector")) {
+            failures.push(format!("{name}: a traced typed factor must decline: {counts:?}"));
+        }
+        if !same(&child, &off)? {
+            failures.push(format!("{name}: the child differs from off"));
+        }
+        if !same(&off, &plus_one)? {
+            failures.push(format!("{name}: off is not the T = 4 reading (the +1 value)"));
+        }
+    }
+    ensure!(failures.is_empty(), "{failures:#?}");
+    Ok(())
+}
+
+/// IRH-ATTACK F-A at the source, EXPECTED CURRENT BEHAVIOUR (not the spec): (d−4+2ε)/(2d−8+4ε), 1/2 as a rational
+/// function of d and ε and 0/0 at d = 4 − 2ε, is NOT refused by the C1 regulation or the certificate's normalisation:
+/// both return 0. A LISTED constructed-input limit (BATCH2-ON-STACK.md "Listed limits"; helper VH 2's PRODUCIBLE.md:
+/// no producer writes d or ε into a numerator or weight); not fixed in this batch. This test fails when the
+/// behaviour changes (then the listing and this test are updated together).
+#[test]
+fn irh_attack_a_vanishing_denominator_is_zero_today_listed_limit() -> Result<()> {
+    crate::initialisation::test_initialise()?;
+    let d = Atom::var(GS.dim);
+    let epsilon = Atom::var(GS.dim_epsilon);
+    let zz = (&d - Atom::num(4) + Atom::num(2) * &epsilon)
+        / (Atom::num(2) * &d - Atom::num(8) + Atom::num(4) * &epsilon);
+    let regulated = Integrated::regulated_for_expansion(&zz, "irh_attack")
+        .map_err(|error| eyre!("regulated_for_expansion refused (the listed limit changed): {error:#}"))?;
+    eprintln!("IRH_ATTACK_CELL regulated_for_expansion accepted as {}", &*regulated);
+    ensure!(regulated.expand().is_zero(), "regulated_for_expansion: {} (expected 0 today)", &*regulated);
+    let normalised = super::super::regularity::normalise(
+        super::super::regularity::Factor::QuotientVertexNumerator,
+        &zz,
+    )
+    .map_err(|refused| eyre!("normalise refused (the listed limit changed): {refused}"))?;
+    eprintln!("IRH_ATTACK_CELL normalise accepted as {normalised}");
+    ensure!(normalised.expand().is_zero(), "normalise: {normalised} (expected 0 today)");
+    Ok(())
+}
+
+/// IRH-ATTACK F-A end to end on the unweighted API, EXPECTED CURRENT BEHAVIOUR: quotient vertex v1 of L3_006 times
+/// the 0/0 spelling of 1/2 gives 0 on the generic, closed and child routes (the literal 1/2 gives a nonzero
+/// counterterm). LISTED constructed-input limit (BATCH2-ON-STACK.md "Listed limits"; helper VH 2's PRODUCIBLE.md);
+/// not fixed in this batch.
+#[test]
+fn irh_attack_a_vanishing_denominator_on_a_quotient_vertex_is_zero_today_listed_limit() -> Result<()> {
+    let zz = format!("({DIM}-4+2*{EPS})/(2*{DIM}-8+4*{EPS})");
+    let literal = Case::new(&spelled(L3_006, "v1", "1/2"), None)?;
+    let (reference, _) = unweighted(&literal, "off", false)?;
+    ensure!(!reference.is_zero(), "the literal 1/2's counterterm is zero");
+    let case = Case::new(&spelled(L3_006, "v1", &zz), None)?;
+    for route in ["off", "closed", "child"] {
+        let (value, counts) = unweighted(&case, route, false)?;
+        eprintln!("IRH_ATTACK_CELL zz v1 {route} value={value} counts={counts:?}");
+        ensure!(value.is_zero(), "{route}: {value} (expected 0 today: the listed limit changed)");
+    }
+    Ok(())
+}
