@@ -59,7 +59,8 @@ retries = 0
 
 [[profile.default.overrides]]
 # The four-loop uncontracted check == off runs (U7a: K1 roots and K2 children of
-# a whole L4 diagram, check and on mode, each against off): 170-345 s on four test
+# a whole L4 diagram, check and on mode, each against off; REC-LEAN's on against
+# check, the same diagrams): 170-345 s on four test
 # threads (helper VH round 2, R2-I5); _l4_100 took 54 s, at the default bound.
 # Per test, no retry; a default-profile override also applies under the other
 # profiles (ci, ci_gammaloop, test_gammaloop): fifteen minutes there too.
@@ -68,6 +69,7 @@ test(=uv::rstar::uncontracted_tests::k1_check_equals_off_l4_40)
 or test(=uv::rstar::uncontracted_tests::k1_check_equals_off_l4_42)
 or test(=uv::rstar::uncontracted_tests::k1_check_equals_off_l4_49)
 or test(=uv::rstar::uncontracted_tests::k1_check_equals_off_l4_100)
+or test(/^uv::rstar::uncontracted_tests::on_evaluates_what_check_reads_l4_/)
 """
 slow-timeout = { period = "60s", terminate-after = 15 }
 retries = 0

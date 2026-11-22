@@ -1241,6 +1241,7 @@ fn build_direct(
     model: &Model,
     uv: &UVgenerationSettings,
     loops: usize,
+    mode: Mode,
 ) -> std::result::Result<BuiltDirect, Decline> {
     if uv.vakint.additional_normalization.trim() != "1" {
         return Err(Decline::new(
@@ -1481,7 +1482,8 @@ fn build_direct(
         Err(_) => Decline::vakint(&error),
         Ok(()) => Decline::new("text", error.to_string()),
     })?;
-    let record = FactorizedNumerator::from_text(&text).map_err(|error| Decline::vakint(&error))?;
+    // what vakint's reader returns for `text`, as in `build`
+    let record = super::read_back(record, &text, Kind::Surrogate, mode, &graph.name, 0)?;
     // beta's guard (pick 8), as for every K1 / K2 record: a direct record has
     // no Taylor step, where vakint reads an undeclared Q(x) as a constant
     // vector, so `undeclared_momentum` is a real check here
@@ -1495,6 +1497,7 @@ fn build_direct(
 
 /// Our attempt at the direct record (no state changes). `Err`: a hard error
 /// (unknown masters, an exhausted budget), which fails the diagram.
+#[allow(clippy::too_many_arguments)]
 fn attempt_direct(
     provenance: &Provenance,
     graph: &Graph,
@@ -1502,6 +1505,7 @@ fn attempt_direct(
     vakint: &Vakint,
     uv: &UVgenerationSettings,
     loops: usize,
+    mode: Mode,
 ) -> Result<Attempt> {
     let started = Instant::now();
     let kind = Kind::Surrogate;
@@ -1533,7 +1537,7 @@ fn attempt_direct(
     } else if loops == 0 {
         Err(Decline::new("zero_loops", "a zero-loop surrogate"))
     } else {
-        build_direct(provenance, graph, model, uv, loops)
+        build_direct(provenance, graph, model, uv, loops, mode)
     };
     let built = match built {
         Ok(built) => built,
@@ -1655,7 +1659,7 @@ pub(crate) fn direct(
     uncontracted_ledger::expect(kind);
     let started = Instant::now();
     let attempt = with_context(provenance.clone(), || {
-        attempt_direct(provenance, graph, model, vakint, uv, loops)
+        attempt_direct(provenance, graph, model, vakint, uv, loops, switch.mode)
     })?;
     #[cfg(test)]
     let attempt = uncontracted_ledger::inject(attempt);

@@ -1430,6 +1430,87 @@ fn k1_check_equals_off() -> Result<()> {
     Ok(())
 }
 
+/// REC-LEAN R1a: ON evaluates exactly the record CHECK reads back. One
+/// diagram, kinds root and child, run in check and in on with every record
+/// captured where [`uncontracted::read_back`] decides
+/// ([`uncontracted::assert_on_evaluates_what_check_reads`]: each built record
+/// is a fixed point of vakint's reader or is read back, a fixed point reads
+/// back EQUAL, on evaluates the record check reads back); then the record
+/// VALUES: every attempt of on has the outcome and the value of the same
+/// attempt in check (vakint's value of the same record). The reader changes
+/// of the check run, by name.
+fn on_evaluates_what_check_reads(what: &str, dot: &str) -> Result<BTreeMap<String, usize>> {
+    with_production_piece_limit(|| -> Result<BTreeMap<String, usize>> {
+        test_initialise()?;
+        let diagram = colour_factored(&load(dot)?)?;
+        let vakint = Vakint::new()?;
+        let (checked, check_reads) = uncontracted::with_read_backs(|| {
+            root_run_with(&diagram, Switch::new(Mode::Check, &ROOT_CHILD), &vakint)
+        });
+        let (_, check_attempts, _) = checked?;
+        let (on, on_reads) = uncontracted::with_read_backs(|| {
+            root_run_with(&diagram, Switch::new(Mode::On, &ROOT_CHILD), &vakint)
+        });
+        let (_, on_attempts, _) = on?;
+        ensure!(!on_reads.is_empty(), "{what}: no record written");
+        let changes =
+            uncontracted::assert_on_evaluates_what_check_reads(what, &on_reads, &check_reads)?;
+        let values = |attempts: &[Captured]| {
+            attempts
+                .iter()
+                .map(|a| {
+                    (
+                        a.kind,
+                        a.graph.clone(),
+                        a.id,
+                        a.outcome.clone(),
+                        a.value.clone(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        ensure!(
+            values(&on_attempts) == values(&check_attempts),
+            "{what}: on and check give other record outcomes or values"
+        );
+        eprintln!(
+            "REC_LEAN_READBACK {what} records={} attempts={} changes={changes:?}",
+            on_reads.len(),
+            on_attempts.len()
+        );
+        Ok(changes)
+    })
+}
+
+#[test]
+fn on_evaluates_what_check_reads_l2_l3() -> Result<()> {
+    for (name, dot) in [
+        ("L2/0", include_str!("testdata/l2-d0.dot")),
+        ("L2/8", include_str!("testdata/l2-d8.dot")),
+        ("L2/12", include_str!("testdata/l2-d12.dot")),
+        ("L3/185", include_str!("testdata/l3-d185.dot")),
+        ("L3/36", include_str!("testdata/u7a/l3-d036.dot")),
+    ] {
+        on_evaluates_what_check_reads(name, dot)?;
+    }
+    Ok(())
+}
+
+#[test]
+fn on_evaluates_what_check_reads_l4_40() -> Result<()> {
+    on_evaluates_what_check_reads("L4/40", include_str!("testdata/u7a/l4-d040.dot")).map(|_| ())
+}
+
+#[test]
+fn on_evaluates_what_check_reads_l4_49() -> Result<()> {
+    on_evaluates_what_check_reads("L4/49", include_str!("testdata/u7a/l4-d049.dot")).map(|_| ())
+}
+
+#[test]
+fn on_evaluates_what_check_reads_l4_100() -> Result<()> {
+    on_evaluates_what_check_reads("L4/100", include_str!("testdata/u7a/l4-d100.dot")).map(|_| ())
+}
+
 #[test]
 fn k1_check_equals_off_l4_40() -> Result<()> {
     equals_off("L4/40", include_str!("testdata/u7a/l4-d040.dot"), &[])

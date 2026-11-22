@@ -5140,3 +5140,228 @@ fn the_carried_cycle_count_identifies_each_insertion_span() {
     ];
     assert_eq!(carried_cycles(&cycle_graph(2, &open, &[])), (0, 0));
 }
+
+/// The records of the fixture directory that read as one record with new
+/// features (the vendored records), by file name.
+fn vendored_records() -> Vec<(String, FactorizedNumerator)> {
+    let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("src/p_integral/factorized/fixtures");
+    let mut records = Vec::new();
+    for entry in std::fs::read_dir(&dir).unwrap() {
+        let path = entry.unwrap().path();
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        if let Ok(value) = FactorizedNumerator::from_text(&text)
+            && value.has_new_features()
+        {
+            records.push((
+                path.file_name().unwrap().to_string_lossy().to_string(),
+                value,
+            ));
+        }
+    }
+    records.sort_by(|a, b| a.0.cmp(&b.0));
+    records
+}
+
+/// A compact slash `gamma(a, b, Q(e, mink(D)))` on two fresh bispinor
+/// half-edges.
+fn compact_slash_atom(e: usize) -> Atom {
+    atom(&format!(
+        "spenso::{{linear,spenso::tensor}}::gamma(spenso::{{spenso::representation,spenso::self_dual}}::bis(4,{HEDGE}(130,2)),spenso::{{spenso::representation,spenso::self_dual}}::bis(4,{HEDGE}(131,2)),{MOMENTUM}({e},{MINK}({DIM})))"
+    ))
+}
+
+/// A FIXED POINT of the reader (`reader_change` none) reads back EQUAL
+/// (`PartialEq`, every field) and its text is a fixed point of the writer:
+/// over the vendored records (read back from their text) and the records the
+/// tests BUILD in memory (the L2 root remainder at every Taylor degree, with
+/// and without the mass compensation), as a writer of ours builds them. This
+/// is the property an R* caller relies on when it evaluates a fixed point
+/// without reading its text back.
+#[test]
+fn reader_fixed_points_read_back_equal() {
+    let mut values = vendored_records();
+    for (degree, compensate) in [(0, true), (1, true), (2, true), (2, false)] {
+        values.push((
+            format!("built l2_root({degree}, {compensate})"),
+            l2_root(degree, compensate),
+        ));
+    }
+    let mut fixed = 0;
+    for (name, value) in &values {
+        let Some(change) = value.reader_change() else {
+            let text = value.to_text().unwrap_or_else(|e| panic!("{name}: {e}"));
+            let back =
+                FactorizedNumerator::from_text(&text).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert!(
+                back == *value,
+                "{name}: a fixed point reads back to another record\n{value:#?}\n{back:#?}"
+            );
+            assert_eq!(back.to_text().unwrap(), text, "{name}");
+            fixed += 1;
+            continue;
+        };
+        panic!(
+            "{name}: not a fixed point of the reader: {}",
+            change.as_str()
+        );
+    }
+    // 15 vendored records with new features + 4 built ones: every one a fixed
+    // point (measured)
+    assert_eq!(fixed, values.len());
+    assert!(fixed >= 19, "{fixed} fixed points");
+}
+
+/// `reader_change` names every normalisation of the text form: each change
+/// below, applied to a fixed point, is reported with its reason (the first in
+/// the text's order), and the reader does change such a value (it reads back
+/// to another record, or refuses it: the compact slash under a Taylor step),
+/// so a caller that skips the reader for a fixed point only skips it where it
+/// is a no-op. A value without new features is not classified (`SchemaV1`).
+#[test]
+fn reader_change_names_every_normalisation_of_the_text() {
+    use super::super::ReaderChange as C;
+    let mut bases = vendored_records();
+    bases.push(("built l2_root(2, true)".into(), l2_root(2, true)));
+    type Change = fn(&mut FactorizedNumerator) -> bool;
+    let changes: [(C, Change); 9] = [
+        (C::EdgeOrder, |v| {
+            v.edges.reverse();
+            v.edges.len() >= 2
+        }),
+        (C::VertexOrder, |v| {
+            v.vertices.reverse();
+            v.vertices.len() >= 2
+        }),
+        (C::PortOrder, |v| {
+            v.ports.reverse();
+            v.ports.len() >= 2
+        }),
+        (C::ProjectorSlash, |v| match &mut v.projector {
+            Some(projector) => {
+                projector.tensor = &projector.tensor * &compact_slash_atom(20);
+                true
+            }
+            None => false,
+        }),
+        (C::SoftOrder, |v| match &mut v.kind {
+            FactorizedKind::Closure(spec) => {
+                spec.softs.reverse();
+                spec.softs.len() >= 2
+            }
+            FactorizedKind::Direct => false,
+        }),
+        (C::AuxiliaryMass, |v| match &mut v.kind {
+            FactorizedKind::Closure(spec) => {
+                spec.taylor = None;
+                spec.auxiliary_mass_squared = atom(MAUX);
+                spec.mass_squared != spec.auxiliary_mass_squared
+            }
+            FactorizedKind::Direct => false,
+        }),
+        (C::EmptyProvenance, |v| {
+            let direct = matches!(v.kind, FactorizedKind::Direct) && !v.insertions.is_empty();
+            v.record = Some(super::super::DirectRecord {
+                original_cycles: None,
+                depth: None,
+                weights: Vec::new(),
+            });
+            direct
+        }),
+        (C::InsertionOrder, |v| {
+            v.insertions.reverse();
+            v.insertions.len() >= 2
+                && v.insertions.first().map(|i| i.vertex) != v.insertions.last().map(|i| i.vertex)
+        }),
+        (C::InsertionSlash, |v| match v.insertions.first_mut() {
+            Some(insertion) => {
+                insertion.factor = &insertion.factor * &compact_slash_atom(20);
+                true
+            }
+            None => false,
+        }),
+    ];
+    let mut seen = BTreeMap::<&str, usize>::new();
+    for (name, base) in &bases {
+        assert_eq!(base.reader_change(), None, "{name}");
+        for (expected, change) in &changes {
+            let mut v = base.clone();
+            if !change(&mut v) || v == *base {
+                continue;
+            }
+            assert_eq!(
+                v.reader_change(),
+                Some(*expected),
+                "{name}: {}",
+                expected.as_str()
+            );
+            *seen.entry(expected.as_str()).or_default() += 1;
+            // the reader changes it (or refuses it); a value the writer
+            // refuses is not written (validation, unchanged)
+            if let Ok(text) = v.to_text() {
+                match FactorizedNumerator::from_text(&text) {
+                    Ok(back) => assert!(
+                        back != v,
+                        "{name}: {}: the reader left the value unchanged",
+                        expected.as_str()
+                    ),
+                    Err(error) => assert!(
+                        matches!(*expected, C::ProjectorSlash),
+                        "{name}: {}: {error}",
+                        expected.as_str()
+                    ),
+                }
+            }
+        }
+    }
+    for (expected, _) in &changes {
+        assert!(
+            seen.get(expected.as_str()).is_some_and(|n| *n > 0),
+            "{} never exercised: {seen:?}",
+            expected.as_str()
+        );
+    }
+    let v1 =
+        FactorizedNumerator::from_text(include_str!("../fixtures/l1-gluon-bubble.txt")).unwrap();
+    assert_eq!(v1.reader_change(), Some(C::SchemaV1));
+}
+
+/// `has_compact_slash` is exactly "the expansion opens something": on atoms
+/// with no slash, a bare momentum, a slash with an index (not compact), one
+/// or two compact slashes, a compact slash inside a sum, a power and a
+/// function argument.
+#[test]
+fn has_compact_slash_is_what_the_expansion_opens() {
+    let slash = compact_slash_atom(3);
+    let indexed = atom(&format!(
+        "spenso::{{linear,spenso::tensor}}::gamma(spenso::{{spenso::representation,spenso::self_dual}}::bis(4,{HEDGE}(130,2)),spenso::{{spenso::representation,spenso::self_dual}}::bis(4,{HEDGE}(131,2)),{})",
+        hedge(140)
+    ));
+    let cases = [
+        (atom("1"), false),
+        (atom(&q(3, &format!("{MINK}({DIM})"))), false),
+        (indexed.clone(), false),
+        (&indexed * &atom(&q(3, &hedge(140))), false),
+        (slash.clone(), true),
+        (&slash * &compact_slash_atom(4), true),
+        (&slash + &atom(R), true),
+        (&(&slash + &atom(R)) * &atom(MAUX), true),
+        (
+            function!(symbolica::symbol!("gammalooprs::wrap"), &slash),
+            true,
+        ),
+    ];
+    for (value, expected) in cases {
+        for scope in [-1, 5] {
+            let opened = super::super::expand_compact_slash(&value, scope) != value;
+            assert_eq!(opened, expected, "{value}");
+        }
+        assert_eq!(
+            super::super::has_compact_slash(value.as_view()),
+            expected,
+            "{value}"
+        );
+    }
+}

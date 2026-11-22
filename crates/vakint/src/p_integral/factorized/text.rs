@@ -13,7 +13,8 @@
 use super::{
     ClosureSpec, ColourBranchInfo, DirectRecord, Endpoint, FACTORIZED_SCHEMA, FACTORIZED_SCHEMA_V3,
     FactorizedEdge, FactorizedError, FactorizedKind, FactorizedNumerator, FactorizedVertex,
-    Insertion, LineKind, Prefactor, Projector, Result, SoftLeg, TaylorOrders, TaylorSpec,
+    Insertion, LineKind, Prefactor, Projector, ReaderChange, Result, SoftLeg, TaylorOrders,
+    TaylorSpec,
 };
 use symbolica::atom::{Atom, AtomCore, AtomView};
 
@@ -87,6 +88,74 @@ pub(super) fn write_record(value: &FactorizedNumerator) -> Result<String> {
         value.validate()?;
     }
     write_record_body(value)
+}
+
+/// [`FactorizedNumerator::reader_change`]: what [`write_record_body`] and
+/// [`parse_record`] (with [`FactorizedNumerator::parse_text`]'s projector
+/// step) change in a value with new features, in the order of the text: the
+/// edges, vertices and ports the writer sorts; the projector's compact
+/// slashes the reader opens; a closure's soft legs the writer sorts and the
+/// auxiliary mass a pre-expanded closure's text does not carry (read as the
+/// closing mass); a direct value's empty provenance next to insertions (read
+/// as none); the insertions the writer and the reader sort and their factors'
+/// compact slashes the reader opens. Every other field is written and read as
+/// it is (the label and the names the writer accepts unchanged, the numbers
+/// exactly, the atoms as canonical strings).
+pub(super) fn reader_change(value: &FactorizedNumerator) -> Option<ReaderChange> {
+    if !value.has_new_features() {
+        return Some(ReaderChange::SchemaV1);
+    }
+    if !value.edges.is_sorted_by_key(|e| e.id) {
+        return Some(ReaderChange::EdgeOrder);
+    }
+    if !value.vertices.is_sorted_by_key(|v| v.id) {
+        return Some(ReaderChange::VertexOrder);
+    }
+    if !value
+        .ports
+        .iter()
+        .map(Atom::to_canonical_string)
+        .is_sorted()
+    {
+        return Some(ReaderChange::PortOrder);
+    }
+    if value
+        .projector
+        .as_ref()
+        .is_some_and(|p| super::has_compact_slash(p.tensor.as_view()))
+    {
+        return Some(ReaderChange::ProjectorSlash);
+    }
+    match &value.kind {
+        FactorizedKind::Closure(spec) => {
+            if !spec.softs.is_sorted_by_key(|s| s.external) {
+                return Some(ReaderChange::SoftOrder);
+            }
+            if spec.taylor.is_none() && spec.auxiliary_mass_squared != spec.mass_squared {
+                return Some(ReaderChange::AuxiliaryMass);
+            }
+        }
+        FactorizedKind::Direct => {
+            if !value.insertions.is_empty()
+                && value.record.as_ref().is_some_and(|r| {
+                    r.original_cycles.is_none() && r.depth.is_none() && r.weights.is_empty()
+                })
+            {
+                return Some(ReaderChange::EmptyProvenance);
+            }
+        }
+    }
+    if !value.insertions.is_sorted_by_key(|i| i.vertex) {
+        return Some(ReaderChange::InsertionOrder);
+    }
+    if value
+        .insertions
+        .iter()
+        .any(|i| super::has_compact_slash(i.factor.as_view()))
+    {
+        return Some(ReaderChange::InsertionSlash);
+    }
+    None
 }
 
 /// The writer without validation

@@ -517,6 +517,54 @@ pub struct DirectRecord {
     pub weights: Vec<(String, bool, Atom)>,
 }
 
+/// What reading a value's text back (`from_text(to_text(value))`) would
+/// change in its structure: the normalisations of the writer and the reader
+/// ([`FactorizedNumerator::reader_change`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum ReaderChange {
+    /// A value without new features: written and read by the base's v1
+    /// text form (not classified here).
+    SchemaV1,
+    /// Edges not sorted by id (the writer sorts them).
+    EdgeOrder,
+    /// Vertices not sorted by id (the writer sorts them).
+    VertexOrder,
+    /// Ports not sorted by their canonical strings (the writer sorts them).
+    PortOrder,
+    /// A compact slash `gamma(a, b, Q(x, mink(D)))` in the projector: opened
+    /// on read (rule R4), or refused there under a Taylor step.
+    ProjectorSlash,
+    /// Soft legs of a closure not sorted by external (the writer sorts them).
+    SoftOrder,
+    /// A closure without a Taylor step (pre-expanded) whose auxiliary mass is
+    /// not its closing mass: the text carries none, the reader sets the
+    /// closing mass.
+    AuxiliaryMass,
+    /// A direct value with insertions and an empty provenance: read as none.
+    EmptyProvenance,
+    /// Insertions not sorted by vertex (the writer and the reader sort them).
+    InsertionOrder,
+    /// A compact slash in an insertion factor: opened on read (rule R4).
+    InsertionSlash,
+}
+
+impl ReaderChange {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::SchemaV1 => "schema_v1",
+            Self::EdgeOrder => "edge_order",
+            Self::VertexOrder => "vertex_order",
+            Self::PortOrder => "port_order",
+            Self::ProjectorSlash => "projector_slash",
+            Self::SoftOrder => "soft_order",
+            Self::AuxiliaryMass => "auxiliary_mass",
+            Self::EmptyProvenance => "empty_provenance",
+            Self::InsertionOrder => "insertion_order",
+            Self::InsertionSlash => "insertion_slash",
+        }
+    }
+}
+
 /// Plain data for [`FactorizedNumerator::from_parts`].
 #[derive(Clone, Debug)]
 pub struct FactorizedParts {
@@ -747,28 +795,18 @@ pub(crate) fn as_slot(view: AtomView<'_>) -> Option<Slot> {
 /// Everything else is returned unchanged. A substitution, no algebra.
 pub fn expand_compact_slash(expression: &Atom, scope: i64) -> Atom {
     let counter = std::cell::Cell::new(0_i64);
-    let slash = symbolica::symbol!("vakint::slash");
+    let slash = slash_head();
     expression.replace_map(|part, _, out| {
-        let AtomView::Fun(gamma) = part else {
+        let Some(CompactSlash {
+            gamma,
+            args,
+            momentum,
+            margs,
+            rep,
+        }) = compact_slash(part)
+        else {
             return;
         };
-        if gamma.get_symbol().get_name() != names::GAMMA || gamma.get_nargs() != 3 {
-            return;
-        }
-        let args = gamma.iter().collect::<Vec<_>>();
-        let AtomView::Fun(momentum) = args[2] else {
-            return;
-        };
-        if momentum.get_symbol().get_name() != names::MOMENTUM || momentum.get_nargs() != 2 {
-            return;
-        }
-        let margs = momentum.iter().collect::<Vec<_>>();
-        let AtomView::Fun(rep) = margs[1] else {
-            return;
-        };
-        if rep.get_symbol().get_name() != names::MINK || rep.get_nargs() != 1 {
-            return;
-        }
         let n = counter.get();
         counter.set(n + 1);
         let dimension = rep.iter().next().unwrap().to_owned();
@@ -781,6 +819,71 @@ pub fn expand_compact_slash(expression: &Atom, scope: i64) -> Atom {
             &slot
         ) * symbolica::function!(momentum.get_symbol(), margs[0].to_owned(), &slot);
     })
+}
+
+/// The head of an opened slash's dummy index, `vakint::slash(scope, n)`
+/// (defined by its first use).
+fn slash_head() -> Symbol {
+    symbolica::symbol!("vakint::slash")
+}
+
+/// The parts of a COMPACT slash `gamma(a, b, Q(x, mink(D)))` (rule R4).
+struct CompactSlash<'a> {
+    gamma: symbolica::atom::representation::FunView<'a>,
+    args: Vec<AtomView<'a>>,
+    momentum: symbolica::atom::representation::FunView<'a>,
+    margs: Vec<AtomView<'a>>,
+    rep: symbolica::atom::representation::FunView<'a>,
+}
+
+/// `part` as a COMPACT slash (rule R4), or `None`: the one shape test of
+/// [`expand_compact_slash`] and [`has_compact_slash`].
+fn compact_slash(part: AtomView<'_>) -> Option<CompactSlash<'_>> {
+    let AtomView::Fun(gamma) = part else {
+        return None;
+    };
+    if gamma.get_symbol().get_name() != names::GAMMA || gamma.get_nargs() != 3 {
+        return None;
+    }
+    let args = gamma.iter().collect::<Vec<_>>();
+    let AtomView::Fun(momentum) = args[2] else {
+        return None;
+    };
+    if momentum.get_symbol().get_name() != names::MOMENTUM || momentum.get_nargs() != 2 {
+        return None;
+    }
+    let margs = momentum.iter().collect::<Vec<_>>();
+    let AtomView::Fun(rep) = margs[1] else {
+        return None;
+    };
+    if rep.get_symbol().get_name() != names::MINK || rep.get_nargs() != 1 {
+        return None;
+    }
+    Some(CompactSlash {
+        gamma,
+        args,
+        momentum,
+        margs,
+        rep,
+    })
+}
+
+/// Whether `expression` holds a COMPACT slash `gamma(a, b, Q(x, mink(D)))`
+/// anywhere, i.e. whether [`expand_compact_slash`] (any scope) would write
+/// one out: the same shape test on every subexpression, without building the
+/// expansion. It defines the dummies' head as the expansion does, so that a
+/// record that is not read back (its reader would open nothing) defines the
+/// same symbols, in the same order, as one that is.
+pub fn has_compact_slash(expression: AtomView<'_>) -> bool {
+    let _ = slash_head();
+    let mut found = false;
+    expression.visitor(&mut |part| {
+        if !found && compact_slash(part).is_some() {
+            found = true;
+        }
+        !found
+    });
+    found
 }
 
 /// The one symbol of vakint's namespace a record of the R* interface may
@@ -5273,6 +5376,22 @@ impl FactorizedNumerator {
         let value = Self::parse_text(input)?;
         value.validate()?;
         Ok(value)
+    }
+
+    /// The first structural change reading this value's text back would make
+    /// (`from_text(to_text(self))`), `None` for a FIXED POINT of the reader:
+    /// a value with new features whose edges, vertices, ports, soft legs and
+    /// insertions are in the writer's order, with no compact slash in its
+    /// projector or any insertion factor, no auxiliary mass the text drops
+    /// and no provenance the reader drops (the normalisations of
+    /// [`Self::to_text`] and [`Self::parse_text`]). Every field is written
+    /// and read; the atoms are written as canonical strings and parsed back,
+    /// which this cheap test does not repeat: that a fixed point reads back
+    /// EQUAL is the tested property (`reader_fixed_points_read_back_equal`).
+    /// Validation is not part of it (a value validation refuses is not
+    /// written).
+    pub fn reader_change(&self) -> Option<ReaderChange> {
+        text::reader_change(self)
     }
 
     /// THE VACUUM MODE'S text form: the value validated as the vacuum entry

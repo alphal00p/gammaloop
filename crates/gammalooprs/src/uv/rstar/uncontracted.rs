@@ -2118,6 +2118,146 @@ pub(crate) fn with_capture<T>(f: impl FnOnce() -> T) -> (T, Vec<Captured>) {
     (out, captured)
 }
 
+/// Tests: one record written by a writer of ours ([`read_back`]): the record
+/// built, its text, the reader change and the record vakint evaluates.
+#[cfg(test)]
+#[derive(Clone, Debug)]
+pub(crate) struct ReadBack {
+    pub kind: Kind,
+    pub graph: String,
+    pub id: usize,
+    pub mode: Mode,
+    pub change: Option<vakint::p_integral::factorized::ReaderChange>,
+    pub built: FactorizedNumerator,
+    pub text: String,
+    pub evaluated: FactorizedNumerator,
+}
+
+#[cfg(test)]
+thread_local! {
+    static READ_BACKS: RefCell<Option<Vec<ReadBack>>> = const { RefCell::new(None) };
+}
+
+#[cfg(test)]
+fn capture_read_back(read: ReadBack) {
+    READ_BACKS.with(|slot| {
+        if let Some(list) = slot.borrow_mut().as_mut() {
+            list.push(read);
+        }
+    });
+}
+
+/// Tests: run `f` and return every record [`read_back`] saw on this thread
+/// inside it.
+#[cfg(test)]
+pub(crate) fn with_read_backs<T>(f: impl FnOnce() -> T) -> (T, Vec<ReadBack>) {
+    let previous = READ_BACKS.with(|slot| slot.replace(Some(Vec::new())));
+    let out = f();
+    let reads = READ_BACKS
+        .with(|slot| slot.replace(previous))
+        .unwrap_or_default();
+    (out, reads)
+}
+
+/// Tests: the records of an ON run and a CHECK run of the same input. Every
+/// record built is written as before, and a fixed point of the reader reads
+/// back EQUAL: `from_text(to_text(built)) == built` (`PartialEq`), its text
+/// the writer's fixed point; the ON run evaluates exactly the record the
+/// CHECK run reads back, record by record (the same key and order: kind,
+/// graph, id), from the same built record and text; the ON run's fixed points
+/// skip the reader (the record evaluated is the one built), every other
+/// record is read back in both runs. Returns the reader changes of the check
+/// run by name (`none` for a fixed point).
+#[cfg(test)]
+pub(crate) fn assert_on_evaluates_what_check_reads(
+    what: &str,
+    on: &[ReadBack],
+    check: &[ReadBack],
+) -> Result<BTreeMap<String, usize>> {
+    use eyre::ensure;
+    for read in on.iter().chain(check) {
+        let key = format!(
+            "{what}: {} {} id {} ({})",
+            read.kind.as_str(),
+            read.graph,
+            read.id,
+            read.mode.as_str()
+        );
+        ensure!(
+            read.built.to_text().map_err(|e| eyre!("{key}: {e}"))? == read.text,
+            "{key}: the text is not the built record's"
+        );
+        let back = FactorizedNumerator::from_text(&read.text).map_err(|e| eyre!("{key}: {e}"))?;
+        if read.change.is_none() {
+            ensure!(
+                back == read.built,
+                "{key}: a fixed point reads back to another record\n{:#?}\n{back:#?}",
+                read.built
+            );
+            ensure!(
+                back.to_text().map_err(|e| eyre!("{key}: {e}"))? == read.text,
+                "{key}: the text of a fixed point is not the writer's fixed point"
+            );
+        }
+        let expected = if read.mode == Mode::On && read.change.is_none() {
+            &read.built
+        } else {
+            &back
+        };
+        ensure!(
+            read.evaluated == *expected,
+            "{key}: the record evaluated is not {}",
+            if read.mode == Mode::On && read.change.is_none() {
+                "the record built"
+            } else {
+                "the record read back"
+            }
+        );
+    }
+    ensure!(
+        on.len() == check.len(),
+        "{what}: {} records on, {} in check",
+        on.len(),
+        check.len()
+    );
+    let mut changes = BTreeMap::<String, usize>::new();
+    for (on, check) in on.iter().zip(check) {
+        ensure!(
+            (on.kind, &on.graph, on.id) == (check.kind, &check.graph, check.id),
+            "{what}: the runs build other records: on {} {} id {}, check {} {} id {}",
+            on.kind.as_str(),
+            on.graph,
+            on.id,
+            check.kind.as_str(),
+            check.graph,
+            check.id
+        );
+        ensure!(
+            on.built == check.built && on.text == check.text && on.change == check.change,
+            "{what}: {} {} id {}: the record built differs between on and check",
+            on.kind.as_str(),
+            on.graph,
+            on.id
+        );
+        ensure!(
+            on.evaluated == check.evaluated,
+            "{what}: {} {} id {}: on evaluates another record than the one check reads back",
+            on.kind.as_str(),
+            on.graph,
+            on.id
+        );
+        *changes
+            .entry(
+                check
+                    .change
+                    .map_or("none", |change| change.as_str())
+                    .to_owned(),
+            )
+            .or_default() += 1;
+    }
+    Ok(changes)
+}
+
 /// Why the K3 hook builds no record for a remainder term of an IR hard part
 /// whose kind is enabled (today's path takes it, no line is printed): a
 /// zero-loop term (Δ(γ) inserted, no vakint call today, OQ-25) or a
@@ -2189,7 +2329,9 @@ fn insertion_hook(kind: Kind, node: usize, delta: &mut Atom, edges: &mut [Factor
 // The record (K1)
 // ---------------------------------------------------------------------------
 
-/// A record built and read back through vakint's frozen reader.
+/// A record built and written by vakint's writer (`text`), and the record
+/// vakint evaluates: what vakint's frozen reader returns for `text`
+/// ([`read_back`]).
 pub(super) struct Built {
     pub record: FactorizedNumerator,
     pub text: String,
@@ -3209,6 +3351,89 @@ fn momentum_ids(atom: &Atom) -> BTreeSet<usize> {
 ///   momentum `p(j)` a leg carries and checks the loop components only of a
 ///   record with independent externals, so a leg whose momentum differed
 ///   from its partner's would NOT be refused by vakint.
+/// The record vakint evaluates, after vakint's writer wrote `text` from
+/// `built` (every writer of ours: `build`, K5's `build_direct`): the record
+/// vakint's reader returns for `text`. Mode on: `built` itself when it is a
+/// FIXED POINT of the reader ([`FactorizedNumerator::reader_change`] is
+/// none: no compact slash to open, nothing out of the writer's order, no field
+/// the text drops), which the reader would return unchanged (the tested
+/// property: `reader_fixed_points_read_back_equal` in vakint, and check mode
+/// below on every record it builds); any other record is read back,
+/// `from_text(text)`, exactly as before. Check: always read back, and a fixed
+/// point that does not read back EQUAL (`PartialEq`) is the error
+/// `round_trip` (both records printed), never a fallback. The text is written
+/// in both modes (the `record=` digest, `record_bytes=`, the dump).
+pub(super) fn read_back(
+    built: FactorizedNumerator,
+    text: &str,
+    kind: Kind,
+    mode: Mode,
+    graph: &str,
+    id: usize,
+) -> std::result::Result<FactorizedNumerator, Decline> {
+    let change = built.reader_change();
+    #[cfg(test)]
+    let built_copy = built.clone();
+    #[cfg(test)]
+    let capture = |evaluated: &FactorizedNumerator| {
+        capture_read_back(ReadBack {
+            kind,
+            graph: graph.to_owned(),
+            id,
+            mode,
+            change,
+            built: built_copy.clone(),
+            text: text.to_owned(),
+            evaluated: evaluated.clone(),
+        })
+    };
+    if readback_log_enabled() {
+        eprintln!(
+            "UNCONTRACTED_READBACK kind={} graph={graph} id={id} mode={} change={} path={}",
+            kind.as_str(),
+            mode.as_str(),
+            change.map_or("none", |change| change.as_str()),
+            if mode == Mode::On && change.is_none() {
+                "memory"
+            } else {
+                "text"
+            }
+        );
+    }
+    if mode == Mode::On && change.is_none() {
+        #[cfg(test)]
+        capture(&built);
+        return Ok(built);
+    }
+    let read = FactorizedNumerator::from_text(text).map_err(|error| Decline::vakint(&error))?;
+    #[cfg(test)]
+    capture(&read);
+    if mode == Mode::Check && change.is_none() && read != built {
+        eprintln!(
+            "UNCONTRACTED_ROUND_TRIP kind={} graph={graph} id={id}: a fixed point of the reader reads back to another record\n--- built\n{built:#?}\n--- read back\n{read:#?}\n--- text\n{text}--- end",
+            kind.as_str()
+        );
+        return Err(Decline::new(
+            "round_trip",
+            format!(
+                "the record {:?} is a fixed point of vakint's reader but reads back to another record",
+                built.label
+            ),
+        ));
+    }
+    Ok(read)
+}
+
+/// `GAMMALOOP_UNCONTRACTED_READBACK=1`: one `UNCONTRACTED_READBACK` line per
+/// record written (its reader change and whether it was read back); off by
+/// default (no line).
+fn readback_log_enabled() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| {
+        std::env::var("GAMMALOOP_UNCONTRACTED_READBACK").is_ok_and(|value| value == "1")
+    })
+}
+
 pub(super) fn declared_momenta(record: &FactorizedNumerator) -> std::result::Result<(), Decline> {
     let undeclared = record
         .edges
@@ -3987,7 +4212,9 @@ fn build(
         Err(_) => Decline::vakint(&error),
         Ok(()) => Decline::new("text", error.to_string()),
     })?;
-    let record = FactorizedNumerator::from_text(&text).map_err(|error| Decline::vakint(&error))?;
+    // what vakint's reader returns for `text` (on: the record itself for a
+    // fixed point of the reader; check: read back and compared)
+    let record = read_back(record, &text, kind, mode, &graph.name, id)?;
     declared_momenta(&record)?;
     Ok(Some(Built {
         record,

@@ -1179,6 +1179,89 @@ fn k5_l2_17_check_and_on_equal_off() -> Result<()> {
     })
 }
 
+/// REC-LEAN R1a for the K5 writers (`build_direct` and the surrogate's
+/// remainders through `build`): the whole evaluator in check and in on with
+/// every record captured where it is read back or not
+/// ([`uncontracted::assert_on_evaluates_what_check_reads`]), and every
+/// attempt of on with the outcome and the value of the same attempt in check.
+fn k5_on_evaluates_what_check_reads(
+    original: &feynkit_graph::FeynmanDiagram,
+    vakint: &Vakint,
+) -> Result<BTreeMap<String, usize>> {
+    let evaluator = PropagatorInsertionEvaluator::new(settings());
+    let run = |switch: Switch| -> Result<Vec<Captured>> {
+        with_switch(switch, || {
+            let ledger = DiagramLedger::open(original.name(), "k5-readback");
+            let (value, captured) =
+                with_capture(|| evaluator.pole_part_closing_root(original, vakint, true));
+            if let Some(ledger) = ledger {
+                ledger.close(value.is_ok())?;
+            }
+            value?.ok_or_else(|| eyre!("no insertion"))?;
+            Ok(captured)
+        })
+    };
+    let (check, check_reads) = uncontracted::with_read_backs(|| run(check_surrogate()));
+    let check = check?;
+    let (on, on_reads) = uncontracted::with_read_backs(|| run(on_surrogate()));
+    let on = on?;
+    ensure!(
+        on_reads.iter().any(|read| read.kind == Kind::Surrogate),
+        "no surrogate record written"
+    );
+    let changes = uncontracted::assert_on_evaluates_what_check_reads(
+        original.name(),
+        &on_reads,
+        &check_reads,
+    )?;
+    let values = |attempts: &[Captured]| {
+        attempts
+            .iter()
+            .map(|a| {
+                (
+                    a.kind,
+                    a.graph.clone(),
+                    a.id,
+                    a.outcome.clone(),
+                    a.value.clone(),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    ensure!(
+        values(&on) == values(&check),
+        "on and check give other record outcomes or values"
+    );
+    eprintln!(
+        "REC_LEAN_READBACK {} records={} attempts={} changes={changes:?}",
+        original.name(),
+        on_reads.len(),
+        on.len()
+    );
+    Ok(changes)
+}
+
+#[test]
+fn k5_l2_17_on_evaluates_what_check_reads() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let original = colour_factored(&load(L2_17_DOT)?)?;
+        k5_on_evaluates_what_check_reads(&original, &vakint).map(|_| ())
+    })
+}
+
+#[test]
+#[ignore = "about a minute (L5)"]
+fn k5_l5_22807_on_evaluates_what_check_reads() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let original = colour_factored(&load(L5_22807_DOT)?)?;
+        k5_on_evaluates_what_check_reads(&original, &vakint).map(|_| ())
+    })
+}
+
 /// The whole evaluator (`pole_part_closing_root`) in off, check and on mode
 /// inside a diagram ledger: every surrogate record compared and equal in
 /// check (at least `min_records`), the diagrams' ledgers close ok, on == off
