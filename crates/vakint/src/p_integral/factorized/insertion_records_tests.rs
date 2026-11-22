@@ -1931,6 +1931,52 @@ fn a_number_beyond_65536_bits_is_refused() {
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
+/// THE COST OF THE NUMBER BOUND (a measurement: printed, not asserted). The
+/// gluon case l5-59943 with its insertion factor multiplied by a scalar on a
+/// number N of `VAKINT_TEST_COST_BITS` bits (default: the bound),
+/// `VAKINT_TEST_COST_SHAPE` = `single` (`N + gs`: N stays a number of its own,
+/// not folded into the factor's rational coefficients) or `nested` (`((N gs +
+/// 1)^64 + 1)^64`, the exponent bound used twice on a coupling): the seconds
+/// of `validate()` and of the closure entry (`COST` lines).
+#[test]
+#[ignore = "a measurement: VAKINT_TEST_COST_BITS, VAKINT_TEST_COST_SHAPE"]
+fn the_cost_of_a_number_at_the_bound() {
+    let bits = std::env::var("VAKINT_TEST_COST_BITS")
+        .ok()
+        .and_then(|b| b.parse::<i64>().ok())
+        .unwrap_or(MAX_NUMBER_BITS as i64);
+    let shape = std::env::var("VAKINT_TEST_COST_SHAPE").unwrap_or_else(|_| "single".into());
+    let n = Atom::num(2).pow(Atom::num(bits - 1));
+    let g = parsed("UFO::{}::gs_minus");
+    let scalar = match shape.as_str() {
+        "single" => n + g,
+        "nested" => ((n * g + Atom::num(1)).pow(Atom::num(64)) + Atom::num(1)).pow(Atom::num(64)),
+        other => panic!("VAKINT_TEST_COST_SHAPE {other:?}: single or nested"),
+    };
+    let mut v = FactorizedNumerator::from_text(GG_59943).unwrap();
+    v.insertions[0].factor = &v.insertions[0].factor * &scalar;
+    let started = std::time::Instant::now();
+    let checked = v.validate();
+    eprintln!(
+        "COST bits={bits} shape={shape} validate seconds={:.3} {:?}",
+        started.elapsed().as_secs_f64(),
+        checked.as_ref().err()
+    );
+    checked.unwrap();
+    let started = std::time::Instant::now();
+    let got = evaluate_factorized_closure(
+        &plain_engine(),
+        &site_settings(),
+        std::slice::from_ref(&v),
+        &[v.prefactor.total()],
+    );
+    eprintln!(
+        "COST bits={bits} shape={shape} closure entry seconds={:.3} ok={}",
+        started.elapsed().as_secs_f64(),
+        got.is_ok()
+    );
+}
+
 /// One cell of the weights table ([`WEIGHT_RULES`]): the weight (name,
 /// applied by vakint, atom), the prefactor change, accepted or not.
 pub(super) struct WeightCell {
