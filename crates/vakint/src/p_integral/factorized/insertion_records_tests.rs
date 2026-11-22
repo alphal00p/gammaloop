@@ -2387,6 +2387,86 @@ fn the_entries_add_the_settings_rules_to_the_writer() {
     }
 }
 
+/// THE CARRIED-CYCLE CAP COUNTS AN INSERTION'S SPAN AS ONE NODE (the record
+/// format's R2: carried closed cycles, insertion span = one node, plus the
+/// insertions' cycles, at most original_cycles): on the K5 surrogate root
+/// (original_cycles fermion=1 ghost=0; the `ins:` insertion at vertex 8 spans
+/// vertices 8 and 9), a ghost cycle 5 -> 8~9 -> 6 -> 7 -> 5 through the
+/// insertion (edges 10, 12, 13 ghost, edge 11 reversed and ghost) and its
+/// ordinary twin (the ghost cycle 1 -> 6 -> 7 -> 1 of edges 9, 13 and edge 6
+/// reversed) are both refused by the cap, typed and through text; with
+/// original_cycles ghost=1 both are accepted; the cut path (edge 13 left a
+/// vector line) and the unmodified record are accepted.
+#[test]
+fn the_carried_cycle_cap_counts_an_insertion_span_as_one_node() {
+    let text = include_str!("fixtures/wh-k5-surrogate.record.txt");
+    let edit = |pairs: &[(&str, &str)], ghost: u32| {
+        let mut t = text.to_string();
+        for (a, b) in pairs {
+            assert_eq!(t.matches(a).count(), 1, "{a}");
+            t = t.replace(a, b);
+        }
+        t.replace(
+            "original_cycles\tfermion=1\tghost=0",
+            &format!("original_cycles\tfermion=1\tghost={ghost}"),
+        )
+    };
+    let span: &[(&str, &str)] = &[
+        (
+            "edge\t10\tsource=5\ttarget=8\thedges=18,19\tparticle=Q\tline=vector\tpower=1\tmomentum=0,1,0,0\t0",
+            "edge\t10\tsource=5\ttarget=8\thedges=18,19\tparticle=Q\tline=ghost\tpower=1\tmomentum=0,1,0,0\t0",
+        ),
+        (
+            "edge\t11\tsource=5\ttarget=7\thedges=20,21\tparticle=Q\tline=vector\tpower=1\tmomentum=0,-1,0,1\t0",
+            "edge\t11\tsource=7\ttarget=5\thedges=21,20\tparticle=Q\tline=ghost\tpower=1\tmomentum=0,1,0,-1\t0",
+        ),
+        (
+            "edge\t12\tsource=9\ttarget=6\thedges=22,23\tparticle=Q\tline=vector\tpower=1\tmomentum=0,1,0,0\t0",
+            "edge\t12\tsource=9\ttarget=6\thedges=22,23\tparticle=Q\tline=ghost\tpower=1\tmomentum=0,1,0,0\t0",
+        ),
+        (
+            "edge\t13\tsource=6\ttarget=7\thedges=24,25\tparticle=Q\tline=vector\tpower=1\tmomentum=1,1,0,0\t0",
+            "edge\t13\tsource=6\ttarget=7\thedges=24,25\tparticle=Q\tline=ghost\tpower=1\tmomentum=1,1,0,0\t0",
+        ),
+    ];
+    let ordinary: &[(&str, &str)] = &[
+        (
+            "edge\t6\tsource=1\ttarget=7\thedges=10,11\tparticle=Q\tline=vector\tpower=1\tmomentum=-1,0,0,-1\tgammalooprs::{scalar}::rstar_reference_mass_squared",
+            "edge\t6\tsource=7\ttarget=1\thedges=11,10\tparticle=Q\tline=ghost\tpower=1\tmomentum=1,0,0,1\tgammalooprs::{scalar}::rstar_reference_mass_squared",
+        ),
+        (
+            "edge\t9\tsource=1\ttarget=6\thedges=16,17\tparticle=Q\tline=vector\tpower=1\tmomentum=1,0,0,0\t0",
+            "edge\t9\tsource=1\ttarget=6\thedges=16,17\tparticle=Q\tline=ghost\tpower=1\tmomentum=1,0,0,0\t0",
+        ),
+        (
+            "edge\t13\tsource=6\ttarget=7\thedges=24,25\tparticle=Q\tline=vector\tpower=1\tmomentum=1,1,0,0\t0",
+            "edge\t13\tsource=6\ttarget=7\thedges=24,25\tparticle=Q\tline=ghost\tpower=1\tmomentum=1,1,0,0\t0",
+        ),
+    ];
+    let expected = "the carried graph and its insertions have 1 fermion and 1 ghost cycles, more than original_cycles fermion=1 ghost=0";
+    for (what, pairs) in [("through the insertion", span), ("ordinary", ordinary)] {
+        let refused = edit(pairs, 0);
+        let typed = FactorizedNumerator::parse_text(&refused).unwrap();
+        for (form, r) in [
+            ("typed", typed.validate()),
+            ("text", FactorizedNumerator::from_text(&refused).map(|_| ())),
+        ] {
+            match r {
+                Err(FactorizedError::Closure { detail }) => {
+                    assert_eq!(detail, expected, "{what} {form}")
+                }
+                other => panic!("{what} {form}: {other:?}"),
+            }
+        }
+        FactorizedNumerator::from_text(&edit(pairs, 1))
+            .unwrap_or_else(|e| panic!("{what} with ghost=1: {e}"));
+    }
+    // the cut path (edge 13 back to a vector line: the ghost path does not
+    // close) and the unmodified record: accepted
+    FactorizedNumerator::from_text(&edit(&span[..3], 0)).unwrap();
+    FactorizedNumerator::from_text(text).unwrap();
+}
+
 /// `externals=independent` (the record format, section 3: conservation NOT
 /// checked where crown legs meet) checks the external momentum components at
 /// every vertex WITHOUT a crown leg: the K3 Dirac record (independent; the

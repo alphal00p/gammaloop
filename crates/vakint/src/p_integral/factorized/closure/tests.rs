@@ -4998,3 +4998,122 @@ fn contract_to_vakint_dots_walks_a_marked_value() {
         Err(FactorizedError::Graph { ref detail }) if detail.starts_with("reserved symbol")
     ));
 }
+
+/// A graph for the carried-cycle count: `lines` (id, source, target,
+/// source half-edge, target half-edge, line kind; source / target `None` =
+/// external), vertices 1..=`vertices`, and `insertions` (vertex, boundary
+/// half-edges).
+fn cycle_graph(
+    vertices: usize,
+    lines: &[(
+        usize,
+        Option<usize>,
+        Option<usize>,
+        Option<usize>,
+        Option<usize>,
+        LineKind,
+    )],
+    insertions: &[(usize, Vec<usize>)],
+) -> FactorizedNumerator {
+    let end = |v: Option<usize>| v.map_or(Endpoint::External, Endpoint::Vertex);
+    FactorizedNumerator {
+        label: "cycle graph".into(),
+        kind: FactorizedKind::Direct,
+        dimension: FactorizedNumerator::default_dimension(),
+        loop_edges: Vec::new(),
+        external_edges: Vec::new(),
+        edges: lines
+            .iter()
+            .map(|(id, s, t, hs, ht, line)| FactorizedEdge {
+                id: *id,
+                source: end(*s),
+                target: end(*t),
+                source_hedge: *hs,
+                target_hedge: *ht,
+                particle: "x".into(),
+                line: *line,
+                power: 1,
+                mass_squared: Atom::Zero,
+                momentum: Vec::new(),
+                factor: Atom::num(1),
+            })
+            .collect(),
+        vertices: (1..=vertices)
+            .map(|id| FactorizedVertex {
+                id,
+                rule: if insertions.iter().any(|(v, _)| *v == id) {
+                    "ins:x".into()
+                } else {
+                    "v".into()
+                },
+                factor: Atom::num(1),
+            })
+            .collect(),
+        ports: Vec::new(),
+        projector: None,
+        prefactor: Prefactor::default(),
+        colour_branch: None,
+        insertions: insertions
+            .iter()
+            .map(|(vertex, hedges)| super::super::Insertion {
+                vertex: *vertex,
+                hedges: hedges.clone(),
+                cycles: (0, 0),
+                coefficient: Atom::num(1),
+                factor: Atom::num(1),
+            })
+            .collect(),
+        record: None,
+    }
+}
+
+/// THE CARRIED-CYCLE COUNT (R2: an insertion's span is ONE node): a
+/// fermion cycle closed through an insertion (1 -> 2, the span {2, 3}, 3 ->
+/// 1); a ghost cycle through TWO insertions (1 -> 2, {2, 3}, 3 -> 4, {4, 5},
+/// 5 -> 1); a ghost cycle through a span of THREE vertices (1 -> 2, {2, 3,
+/// 4}, 4 -> 1); each counts one cycle, and none without the insertions
+/// (the open paths). An open crown ghost line (external -> 1 -> 2 ->
+/// external) is no cycle.
+#[test]
+fn the_carried_cycle_count_identifies_each_insertion_span() {
+    use LineKind::{Fermion, Ghost};
+    // half-edges: edge e has source half-edge 10e and target half-edge 10e + 1
+    let h = |e: usize| (Some(10 * e), Some(10 * e + 1));
+    let line = |e: usize, s: usize, t: usize, kind: LineKind| {
+        let (hs, ht) = h(e);
+        (e, Some(s), Some(t), hs, ht, kind)
+    };
+    let fermion = [line(1, 1, 2, Fermion), line(2, 3, 1, Fermion)];
+    // the insertion at vertex 2 with the boundary half-edge 20 (edge 2 at 3)
+    assert_eq!(
+        carried_cycles(&cycle_graph(3, &fermion, &[(2, vec![11, 20])])),
+        (1, 0)
+    );
+    assert_eq!(carried_cycles(&cycle_graph(3, &fermion, &[])), (0, 0));
+    let two = [
+        line(1, 1, 2, Ghost),
+        line(2, 3, 4, Ghost),
+        line(3, 5, 1, Ghost),
+    ];
+    let both = [(2, vec![11, 20]), (4, vec![21, 30])];
+    assert_eq!(carried_cycles(&cycle_graph(5, &two, &both)), (0, 1));
+    assert_eq!(carried_cycles(&cycle_graph(5, &two, &both[..1])), (0, 0));
+    // a span of three vertices: the insertion at 2 with half-edges at 3 and 4
+    let wide = [
+        line(1, 1, 2, Ghost),
+        line(2, 4, 1, Ghost),
+        line(3, 3, 5, LineKind::Scalar),
+    ];
+    assert_eq!(
+        carried_cycles(&cycle_graph(5, &wide, &[(2, vec![11, 30, 20])])),
+        (0, 1)
+    );
+    assert_eq!(carried_cycles(&cycle_graph(5, &wide, &[])), (0, 0));
+    // an open crown ghost line
+    let open = [
+        (1, None, Some(1), None, Some(11), Ghost),
+        line(2, 1, 2, Ghost),
+        (3, Some(2), None, Some(30), None, Ghost),
+    ];
+    assert_eq!(carried_cycles(&cycle_graph(2, &open, &[])), (0, 0));
+}

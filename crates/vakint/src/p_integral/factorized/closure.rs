@@ -163,9 +163,17 @@ pub(super) fn contains_atom(hay: AtomView<'_>, needle: AtomView<'_>) -> bool {
     found
 }
 
-/// `(fermion, ghost)` closed cycles of the carried graph; a line through
-/// external legs (an open quark line of a hard part) is not a cycle.
+/// `(fermion, ghost)` closed cycles of the carried graph, an insertion's span
+/// counted as ONE node (the record format's R2; the nodes of
+/// `closed_loops`, [`FactorizedNumerator::flow_nodes`]: an insertion's vertex
+/// with the vertices of its boundary half-edges); a line through external
+/// legs (an open quark line of a hard part) is not a cycle.
 fn carried_cycles(value: &FactorizedNumerator) -> (u32, u32) {
+    let nodes = value.flow_nodes();
+    let node_of = |end: super::Endpoint| match end {
+        super::Endpoint::Vertex(v) => Some(nodes.get(&v).copied().unwrap_or(v)),
+        super::Endpoint::External => None,
+    };
     let mut out = [0u32; 2];
     for (slot, kind) in [super::LineKind::Fermion, super::LineKind::Ghost]
         .into_iter()
@@ -184,11 +192,9 @@ fn carried_cycles(value: &FactorizedNumerator) -> (u32, u32) {
             let mut current = *start;
             visited.insert(current.id);
             loop {
-                let next = match current.target {
-                    super::Endpoint::Vertex(v) => lines
-                        .iter()
-                        .find(|e| e.source == super::Endpoint::Vertex(v)),
-                    super::Endpoint::External => None,
+                let next = match node_of(current.target) {
+                    Some(node) => lines.iter().find(|e| node_of(e.source) == Some(node)),
+                    None => None,
                 };
                 match next {
                     Some(next) if next.id == start.id => {
