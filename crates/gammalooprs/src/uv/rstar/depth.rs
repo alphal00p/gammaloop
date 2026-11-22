@@ -145,15 +145,18 @@
 //!   `IR_HARD_DEPTH_DECLINED` line, the `declined=` fields of
 //!   `IR_HARD_DEPTH_SUMMARY`) when any `k > 0` (`declared_order`), when the
 //!   root projector is an opaque callback (`opaque_projector`: only the typed
-//!   form `factor · σ(X)` is certified, and it is the form applied), and when
+//!   form `factor · σ(X)` with a closed-scalar `factor` is certified, and it
+//!   is the form applied on every route where it covers the input; an outer
+//!   polynomial it does not cover declines, `projector_scope`), and when
 //!   a row insertion `E_j` is not ε-free (`insertion_not_eps_free`). On
 //!   production every `k` is 0, so `B = L_q`, the old first depth.
 //! * The measured valuation of the rows (z_j, and the complete outer
 //!   coefficient after the root projection) stays as a cross-check: a need
 //!   above `B` is the [`DepthAlarm`], fatal at any nesting depth, through the
-//!   guard, the cache and a vanished row's valuation, with or without STRICT.
-//!   STRICT (`GAMMALOOP_IR_HARD_DEPTH_STRICT=1`, off in production) adds the
-//!   vanished rows' valuations to the cross-check.
+//!   guard and the cache, with or without STRICT. STRICT
+//!   (`GAMMALOOP_IR_HARD_DEPTH_STRICT=1`, off in production) adds the
+//!   vanished rows' valuations to the cross-check: they are valued ONLY under
+//!   STRICT (an alarm raised there is fatal too).
 //! * C1: a scalar `d` is `4 − 2ε` before every expansion in `ε`
 //!   ([`crate::uv::approx::integrated::Integrated::regulated_for_expansion`]),
 //!   on every route, so `h_j` is exact through `ε^(B−1)` whatever the
