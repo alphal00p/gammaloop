@@ -1363,3 +1363,7 @@ mod round5;
 /// IRH-DEPTH round 8b: C1, the topological certificate and the declines.
 #[path = "r8b_tests.rs"]
 mod round8b;
+
+/// IRH-DEPTH round 8 on the G-G stack: the K3 records under C1 and the declines.
+#[path = "r8_k3_tests.rs"]
+mod round8_k3;

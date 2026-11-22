@@ -722,11 +722,13 @@ fn a_refusal_is_a_fallback_under_the_guard_and_strict() -> Result<()> {
 }
 
 /// U7b: the uncontracted K3 path (`GAMMALOOP_UNCONTRACTED_NUMERATOR`, kind
-/// `IrHard`) integrates the remainders of H(γ) only after the round-5
-/// certificate, so it honours the same refusals and the same raised bounds:
-/// Astra's three −117/64 witnesses and the hard-vertex matrix row, with K3
-/// on and in check, the uncontracted strict switch on (a K3 error fails the
-/// run instead of falling back).
+/// `IrHard`) integrates the remainders of H(γ) only after the certificate, so
+/// it honours the same refusals and (round 8) the same declines: Astra's
+/// three −117/64 witnesses and the hard-vertex matrix row, with K3 on and in
+/// check, the uncontracted strict switch on (a K3 error fails the run instead
+/// of falling back). Round 8 on U7b: a declined or refused correction builds
+/// no K3 record (before round 8 the bound was raised and K3 records were
+/// built at the raised depth).
 mod k3 {
     use super::super::super::uncontracted::{
         Kind, Mode, Switch, with_capture, with_strict, with_switch,
@@ -762,8 +764,23 @@ mod k3 {
                 let (child, counts, k3) = child_k3(&case, mode)?;
                 eprintln!("IRH_R6_K3 {cell} k3_attempts={k3} counts={counts:?}");
                 ensure_same(&cell, &child, &today)?;
-                ensure_raised(&cell, &counts)?;
-                ensure!(k3 >= 1, "{cell}: the K3 path was not exercised");
+                // Round 8 (U7b): a declared quotient pole declines the child
+                // route (`ensure_raised`, round 8b); the prefactor's pole is
+                // refused by the weight normaliser (round 8i); either way
+                // before H(γ): no K3 record, today's value (before: raised,
+                // K3 attempts >= 1).
+                if label == "prefactor" {
+                    ensure!(
+                        counts.taken == 0
+                            && counts.exceeded == 0
+                            && counts.refused >= 1
+                            && counts.reason == Some("pole_in_fixed_factor"),
+                        "{cell}: {counts:?}"
+                    );
+                } else {
+                    ensure_raised(&cell, &counts)?;
+                }
+                ensure!(k3 == 0, "{cell}: a declined correction wrote {k3} K3 record(s)");
             }
         }
         Ok(())
@@ -771,8 +788,11 @@ mod k3 {
 
     #[test]
     fn the_uncontracted_k3_path_honours_the_refusals() -> Result<()> {
+        // Round 8 (U7b): v1·ε⁻¹ declares k = 1, so the literal spelling
+        // declines (`declared_order`, before: taken at the raised bound); the
+        // hard numerator's refusals stay (read first).
         let expected = [
-            None,
+            Some("declared_order"),
             Some("symbol_in_denominator"),
             Some("unresolved_tensor"),
             Some("unresolved_tensor"),
@@ -792,6 +812,8 @@ mod k3 {
                 if reason.is_some() {
                     ensure!(counts.refused >= 1, "{cell}: {counts:?}");
                 }
+                // Round 8 (U7b): refused or declined before H(γ): no record.
+                ensure!(k3 == 0, "{cell}: a declined correction wrote {k3} K3 record(s)");
             }
         }
         Ok(())
