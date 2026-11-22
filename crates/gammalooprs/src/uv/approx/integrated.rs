@@ -115,7 +115,64 @@ impl IntegratedCts {
 }
 
 fn series(expr: &Atom, depth: usize) -> Result<Series<AtomField>> {
+    let expr = Integrated::regulated_for_expansion(expr, "integrated_counterterm_series")?;
     Ok(expr.series(GS.dim_epsilon, 0, depth)?)
+}
+
+/// IRH-DEPTH round 8b (C1): a scalar `d` that reached an expansion in `ε`
+/// and could not be replaced by `4 − 2ε` ([`Integrated::regulated_for_expansion`]):
+/// "dimension symbol present at truncation". Fatal: it fails the diagram on
+/// every route (the depth module's `is_alarm` lets it through every
+/// boundary that would turn an error into a decline).
+#[derive(Debug)]
+pub(crate) struct DimensionAtTruncation {
+    pub site: &'static str,
+    pub detail: String,
+}
+
+impl std::fmt::Display for DimensionAtTruncation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "dimension symbol present at truncation ({}): {}",
+            self.site, self.detail
+        )
+    }
+}
+
+impl std::error::Error for DimensionAtTruncation {}
+
+/// The first scalar occurrence of the dimension symbol `d` in `expression`
+/// (outside a Lorentz representation `mink(d, …)`, whose dimension the tensor
+/// algebra handles), as a short text; `None` when there is none.
+pub(crate) fn scalar_dimension(expression: &Atom) -> Option<String> {
+    if !expression.contains_symbol(GS.dim) {
+        return None;
+    }
+    let minkowski = Minkowski {}.to_symbolic([GS.dim]).get_symbol().unwrap();
+    let mut found = None;
+    expression.visitor(&mut |view| {
+        if found.is_some() {
+            return false;
+        }
+        match view {
+            AtomView::Fun(function) if function.get_symbol() == minkowski => false,
+            AtomView::Var(variable) if variable.get_symbol() == GS.dim => {
+                found = Some(view.to_owned().to_canonical_string());
+                false
+            }
+            _ => true,
+        }
+    });
+    // The enclosing context of the occurrence is more useful than `d` alone.
+    found.map(|_| {
+        let text = expression.to_canonical_string();
+        if text.chars().count() > 240 {
+            format!("{}…", text.chars().take(240).collect::<String>())
+        } else {
+            text
+        }
+    })
 }
 
 fn truncate(series: &Series<AtomField>, finite: bool) -> Atom {
@@ -431,6 +488,55 @@ impl Integrated<'_> {
                 **out = regulated.clone();
             }
         })
+    }
+
+    /// IRH-DEPTH round 8b (C1): the scalar dimension `d` is `4 − 2ε` BEFORE
+    /// any expansion, truncation or coefficient extraction in `ε`. Expanding
+    /// at fixed `d` and substituting afterwards does not commute with a
+    /// finite truncation: `1/(1+(d−4)/ε)` is −1 at `d = 4 − 2ε`, but at fixed
+    /// `d` its series `ε/(d−4) − ε²/(d−4)² + …` has every term of order 0
+    /// after the substitution (the review's finding 1, and the quotient-vertex
+    /// refutation on the generic route). Every site that expands in `ε` takes
+    /// its input through this function: the scalar `d` is substituted with the
+    /// convention of [`Self::dimensionally_regularized`] (a Lorentz
+    /// representation `mink(d, i)` keeps its dimension: the tensor algebra
+    /// handles it, as on the ordinary UV path before vakint). An expression
+    /// that still holds a scalar `d` afterwards is refused with the typed,
+    /// fatal [`DimensionAtTruncation`] (a debug assertion in debug builds):
+    /// the diagram fails on every route, never a value expanded at fixed `d`.
+    /// Borrowed (no copy) when no scalar `d` is present.
+    pub(crate) fn regulated_for_expansion<'a>(
+        expression: &'a Atom,
+        site: &'static str,
+    ) -> Result<std::borrow::Cow<'a, Atom>> {
+        Self::regulated_for_expansion_in(expression, GS.dim_epsilon, site)
+    }
+
+    /// [`Self::regulated_for_expansion`] for an expansion in `epsilon` (the
+    /// Vakint settings' regulator symbol): `d = 4 − 2 epsilon`.
+    pub(crate) fn regulated_for_expansion_in<'a>(
+        expression: &'a Atom,
+        epsilon: symbolica::atom::Symbol,
+        site: &'static str,
+    ) -> Result<std::borrow::Cow<'a, Atom>> {
+        if scalar_dimension(expression).is_none() {
+            return Ok(std::borrow::Cow::Borrowed(expression));
+        }
+        let regulated = if epsilon == GS.dim_epsilon {
+            Self::dimensionally_regularized(expression)
+        } else {
+            Self::dimensionally_regularized(expression)
+                .replace(Atom::var(GS.dim_epsilon))
+                .with(Atom::var(epsilon))
+        };
+        if let Some(detail) = scalar_dimension(&regulated) {
+            debug_assert!(
+                false,
+                "dimension symbol present at truncation ({site}): {detail}"
+            );
+            return Err(eyre::Report::new(DimensionAtTruncation { site, detail }));
+        }
+        Ok(std::borrow::Cow::Owned(regulated))
     }
 
     pub(crate) fn restore_lorentz_dimensions(numerator: &Atom) -> Atom {
