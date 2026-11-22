@@ -5003,16 +5003,18 @@ fn contract_to_vakint_dots_walks_a_marked_value() {
 /// source half-edge, target half-edge, line kind; source / target `None` =
 /// external), vertices 1..=`vertices`, and `insertions` (vertex, boundary
 /// half-edges).
+type CycleLine = (
+    usize,
+    Option<usize>,
+    Option<usize>,
+    Option<usize>,
+    Option<usize>,
+    LineKind,
+);
+
 fn cycle_graph(
     vertices: usize,
-    lines: &[(
-        usize,
-        Option<usize>,
-        Option<usize>,
-        Option<usize>,
-        Option<usize>,
-        LineKind,
-    )],
+    lines: &[CycleLine],
     insertions: &[(usize, Vec<usize>)],
 ) -> FactorizedNumerator {
     let end = |v: Option<usize>| v.map_or(Endpoint::External, Endpoint::Vertex);
