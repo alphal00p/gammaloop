@@ -1588,3 +1588,81 @@ fn round8_every_spelling_of_a_weight_normalises_to_its_literal() -> Result<()> {
     ensure!(wrong.is_empty(), "{wrong:#?}");
     Ok(())
 }
+
+/// IRH-DEPTH round 8a repair (review N1): a weight whose normalisation
+/// divides by zero (a dimension spelling that is exactly 0 at
+/// d = 4 − 2ε, `(d − 4 + 2ε)⁻¹`; a closed trace that does; a literal 1/0;
+/// a constant that vanishes, `(√4 − 2)⁻¹`) holds a NON-FINITE value
+/// (symbolica's ⧞ or an indeterminate). It has no ε, so an order read from
+/// ε alone is 0: it was admitted as regular, and the run multiplied ⧞ into
+/// the projected poles, which symbolica turned into a local zero (rc 0).
+/// Every such spelling, in every weight name, must be refused as
+/// `non_finite` (wherever the division sits: alone, in a sum, in a product,
+/// under a further inversion), and so must a value whose zero the
+/// normaliser cannot decide (a constant function or a non-integer power
+/// left after simplification, an inexact number): `undecidable`. A
+/// constant spelling that DOES simplify to a rational stays accepted, at
+/// the literal's value.
+#[test]
+fn round8a_a_non_finite_or_undecidable_weight_is_refused() -> Result<()> {
+    // Classes by label: `non_finite`, `undecidable` (so this test compiles
+    // and fails before the classes exist).
+    use regularity::normalise_weight;
+    crate::initialisation::test_initialise()?;
+    let parse = |text: &str| -> Result<Atom> {
+        Ok(symbolica::try_parse!(text).map_err(|error| eyre::eyre!("{text}: {error}"))?)
+    };
+    let slot = |n: usize| format!("{MINK}(4,{HEDGE}({n},1))");
+    let trace = format!("({METRIC}({},{}))^2", slot(81), slot(82));
+    let zero = format!("({DIM}-4+2*{EPS})");
+    let non_finite = [
+        "1/0".to_owned(),
+        format!("{zero}^(-1)"),
+        format!("1+{zero}^(-1)"),
+        format!("{EPS}*{zero}^(-1)"),
+        format!("({trace}-4+2*{EPS})^(-1)"),
+        format!("1+(1+{zero}^(-1))^(-1)"),
+        format!("({zero}^(-1))^2*{EPS}"),
+        "(sqrt(4)-2)^(-1)".to_owned(),
+    ];
+    let mut wrong = Vec::new();
+    for text in &non_finite {
+        for name in ["overall_factor", "numerator_prefactor", "projector"] {
+            match parse(text).map(|atom| normalise_weight(name, &atom)) {
+                Ok(Err(refused)) if refused.class.label() == "non_finite" => {
+                    eprintln!("IRH_R8A_NON_FINITE {name} {text}: {refused}");
+                }
+                other => wrong.push(format!("non-finite {name} {text}: {other:?}")),
+            }
+        }
+    }
+    let undecidable = [
+        "(sin(𝜋))^(-1)".to_owned(),
+        "zeta(3)".to_owned(),
+        "2^(1/2)".to_owned(),
+        "(8^(1/2)-2*2^(1/2))^(-1)".to_owned(),
+        "1/(log(2)-1)".to_owned(),
+        "0.5".to_owned(),
+    ];
+    for text in &undecidable {
+        for name in ["overall_factor", "numerator_prefactor", "projector"] {
+            match parse(text).map(|atom| normalise_weight(name, &atom)) {
+                Ok(Err(refused))
+                    if matches!(refused.class.label(), "undecidable" | "non_finite" | "opaque_function") =>
+                {
+                    eprintln!("IRH_R8A_UNDECIDABLE {name} {text}: {refused}");
+                }
+                other => wrong.push(format!("undecidable {name} {text}: {other:?}")),
+            }
+        }
+    }
+    // A constant spelling that simplifies to a rational: the literal.
+    for (literal, text) in [(1, "sqrt(4)-1"), (1, "𝑖*(-𝑖)"), (-1, "(sqrt(4)-3)^(-1)")] {
+        match parse(text).map(|atom| normalise_weight("overall_factor", &atom)) {
+            Ok(Ok(weight)) if weight.value() == &Atom::num(literal) => {}
+            other => wrong.push(format!("constant {text} (literal {literal}): {other:?}")),
+        }
+    }
+    ensure!(wrong.is_empty(), "{wrong:#?}");
+    Ok(())
+}
