@@ -69,6 +69,8 @@ mod master_transport;
 #[path = "five_loop/witness_cache.rs"]
 mod witness_cache;
 pub(crate) use master_transport::rustred_evaluates_loop;
+#[path = "five_loop/selection_record.rs"]
+mod selection_record;
 #[path = "five_loop/witness_screen.rs"]
 mod witness_screen;
 pub use witness_cache::RustRedWitnessCacheStatistics;
@@ -395,6 +397,19 @@ impl Vakint {
             feature = "feynkit-ingress"
         ))]
         let diagnostic_thread = weighted_diagnostic::begin_search(integral, numerator)?;
+        if selection_record::enabled() {
+            let integral = integral.to_string();
+            let numerator = numerator.to_string();
+            selection_record::write(serde_json::json!({
+                "event": "input",
+                "epsilon_symbol": settings.epsilon_symbol,
+                "n_cores": settings.n_cores,
+                "integral_digest": selection_record::digest(&integral),
+                "numerator_digest": selection_record::digest(&numerator),
+                "integral": integral,
+                "numerator": numerator,
+            }));
+        }
         let mut selection = None;
         let result = self
             .topologies
@@ -479,15 +494,18 @@ impl Vakint {
         )
         .map_err(native_failure)?;
         let prepared = &*prepared;
+        let record = selection_record::enabled().then(selection_record::next_sequence);
         let groups = if settings.verify_numerator_identification
             || settings.rustred_scalar_numerator_limits.diagnostics_enabled
         {
-            None
+            Err(witness_screen::Refusal::DisabledBySettings)
         } else {
             // The full key starts with this witness-independent scalar form.
             let scalar_form = VakintTerm::scalar_product_form(settings, numerator)?;
-            witness_screen::NumeratorGroups::new(scalar_form.as_view())
+            witness_screen::NumeratorGroups::try_new(scalar_form.as_view())
         };
+        let refusal = groups.as_ref().err().map(ToString::to_string);
+        let groups = groups.ok();
         log::debug!(target: "vakint::five_loop_match", "phase=witness_screen_groups witnesses={} threads={threads} groups={:?}", witnesses.len(), groups.as_ref().map(witness_screen::NumeratorGroups::shape));
         // Admission of a key is a pure function of the locked package; share
         // it between witnesses. Errors are never cached.
@@ -525,8 +543,65 @@ impl Vakint {
             })
         })
         .collect::<Result<Vec<_>, VakintError>>()?;
+        let screen_seconds = started.elapsed().as_secs_f64();
         let full_key = |index: usize| {
-            self.matched_input_key_with(settings, numerator, &witnesses[index], prepared, &scalar)
+            let lowering = std::time::Instant::now();
+            let key = self.matched_input_key_with(
+                settings,
+                numerator,
+                &witnesses[index],
+                prepared,
+                &scalar,
+            );
+            if let Some(sequence) = record {
+                selection_record::write(serde_json::json!({
+                    "event": "full_key",
+                    "sequence": sequence,
+                    "witness": index,
+                    "admitted": key.as_ref().ok().map(Option::is_some),
+                    "seconds": lowering.elapsed().as_secs_f64(),
+                }));
+            }
+            key
+        };
+        // The record of this selection (`VAKINT_WITNESS_LOG`); no effect on it.
+        let summarize = |selected: Option<usize>,
+                         support: Option<&Vec<IntegralKey>>,
+                         admitted: usize,
+                         tied: usize,
+                         terminal_only: bool,
+                         full_keys: usize| {
+            let Some(sequence) = record else {
+                return;
+            };
+            let count = |wanted: fn(&Status) -> bool| status.iter().filter(|s| wanted(s)).count();
+            let numerator = numerator.to_string();
+            let witness = selected.map(|index| selection_record::witness_text(&witnesses[index]));
+            selection_record::write(serde_json::json!({
+                "event": "selection",
+                "sequence": sequence,
+                "numerator_digest": selection_record::digest(&numerator),
+                "witnesses": witnesses.len(),
+                "threads": threads,
+                "groups": groups.as_ref().map(witness_screen::NumeratorGroups::shape),
+                "refusal": refusal,
+                "screen_rejected": count(|s| matches!(s, Status::Rejected)),
+                "screen_admitted": count(|s| matches!(s, Status::Admitted(_))),
+                "unscreened": count(|s| matches!(s, Status::Unknown)),
+                "full_keys": full_keys,
+                "admitted": admitted,
+                "tied": tied,
+                "terminal_only": terminal_only,
+                "selected": selected,
+                "selected_witness_digest": witness.as_deref().map(selection_record::digest),
+                "selected_witness": witness,
+                "support": support.map(|support| support
+                    .iter()
+                    .map(|key| key.powers().to_vec())
+                    .collect::<Vec<_>>()),
+                "screen_seconds": screen_seconds,
+                "seconds": started.elapsed().as_secs_f64(),
+            }));
         };
         let unknown = status
             .iter()
@@ -593,6 +668,7 @@ impl Vakint {
         };
         let Some(minimum) = heads.iter().map(|(_, head)| head).min().cloned() else {
             log::debug!(target: "vakint::five_loop_match", "phase=witness_selection admitted=0 screened={} full_keys={} elapsed_seconds={:.6}", witnesses.len() - unknown.len(), keys.len(), started.elapsed().as_secs_f64());
+            summarize(None, None, 0, 0, preferred_terminals, keys.len());
             return Ok((None, None));
         };
         let tied = heads
@@ -636,7 +712,16 @@ impl Vakint {
             best.expect("tied witnesses are nonempty").1
         };
         log::debug!(target: "vakint::five_loop_match", "phase=witness_selection admitted={} tied={} selected={selected} terminal_only={preferred_terminals} screened={} full_keys={} elapsed_seconds={:.6}", heads.len(), tied.len(), witnesses.len() - unknown.len(), keys.len(), started.elapsed().as_secs_f64());
-        Ok((Some(selected), Some(support_of(selected, &keys))))
+        let support = support_of(selected, &keys);
+        summarize(
+            Some(selected),
+            Some(&support),
+            heads.len(),
+            tied.len(),
+            preferred_terminals,
+            keys.len(),
+        );
+        Ok((Some(selected), Some(support)))
     }
 
     /// The exact lowered key support of an admitted witness, or `None` if it

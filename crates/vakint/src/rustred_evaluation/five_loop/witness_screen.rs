@@ -52,6 +52,50 @@ pub(super) struct NumeratorGroups {
 /// coefficient, and group degree when the mass is symbolic.
 type KeyWeights = BTreeMap<(usize, u32), Atom>;
 
+/// Why a numerator is outside the exactly decidable grammar (the selection
+/// then lowers every witness in full). Diagnostics only.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum Refusal {
+    /// Screening is off by the settings (identification checks, diagnostics).
+    DisabledBySettings,
+    /// A factor with loop momenta that is not a homogeneous rational
+    /// polynomial in loop scalar products.
+    LoopFactor(String),
+    /// A number that is not rational.
+    NonRationalNumber(String),
+    /// A loop-free factor outside the plain-coefficient grammar.
+    Coefficient(String),
+    /// The distinct coefficients were not proven independent over Q.
+    DependentCoefficients(usize),
+}
+
+impl std::fmt::Display for Refusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::DisabledBySettings => write!(f, "disabled by settings"),
+            Self::LoopFactor(factor) => write!(f, "loop factor outside the grammar: {factor}"),
+            Self::NonRationalNumber(number) => write!(f, "non-rational number: {number}"),
+            Self::Coefficient(factor) => {
+                write!(f, "coefficient factor outside the grammar: {factor}")
+            }
+            Self::DependentCoefficients(count) => {
+                write!(f, "{count} coefficients not proven independent")
+            }
+        }
+    }
+}
+
+/// A short excerpt of an atom for a refusal.
+fn excerpt(view: AtomView) -> String {
+    const LIMIT: usize = 160;
+    let text = view.to_string();
+    if text.chars().count() <= LIMIT {
+        text
+    } else {
+        text.chars().take(LIMIT).chain("...".chars()).collect()
+    }
+}
+
 /// Exact admission decision for one witness.
 pub(super) enum Screen {
     /// A certainly nonzero lowered key lies outside the saved entry union.
@@ -183,7 +227,13 @@ fn full_row_rank(mut rows: Vec<Vec<Atom>>) -> bool {
 impl NumeratorGroups {
     /// Group a scalar-product-form numerator, or `None` if it is outside the
     /// exactly decidable grammar described in the module documentation.
+    #[cfg(test)]
     pub(super) fn new(numerator: AtomView) -> Option<Self> {
+        Self::try_new(numerator).ok()
+    }
+
+    /// [`Self::new`], with the reason of a refusal.
+    pub(super) fn try_new(numerator: AtomView) -> Result<Self, Refusal> {
         let mut coefficients = Vec::<Atom>::new();
         let mut parts = BTreeMap::<(usize, u32), Vec<Atom>>::new();
         let terms = match numerator {
@@ -201,15 +251,17 @@ impl NumeratorGroups {
             let mut degree = 0u32;
             for factor in factors {
                 if contains_loop_momentum(factor) {
-                    degree = degree.checked_add(scalar_product_degree(factor)?)?;
+                    degree = scalar_product_degree(factor)
+                        .and_then(|factor| degree.checked_add(factor))
+                        .ok_or_else(|| Refusal::LoopFactor(excerpt(factor)))?;
                     scalar_products *= factor.to_owned();
                 } else if let AtomView::Num(_) = factor {
-                    rational(factor)?;
+                    rational(factor).ok_or_else(|| Refusal::NonRationalNumber(excerpt(factor)))?;
                     number *= factor.to_owned();
                 } else if is_plain(factor) {
                     coefficient *= factor.to_owned();
                 } else {
-                    return None;
+                    return Err(Refusal::Coefficient(excerpt(factor)));
                 }
             }
             if coefficient.is_zero() || number.is_zero() {
@@ -244,9 +296,13 @@ impl NumeratorGroups {
             symbols,
             groups,
         };
-        decomposition
-            .coefficients_are_independent()
-            .then_some(decomposition)
+        if decomposition.coefficients_are_independent() {
+            Ok(decomposition)
+        } else {
+            Err(Refusal::DependentCoefficients(
+                decomposition.coefficients.len(),
+            ))
+        }
     }
 
     /// Distinct coefficients and groups, for diagnostics.
