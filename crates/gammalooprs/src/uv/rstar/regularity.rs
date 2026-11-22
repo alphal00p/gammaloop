@@ -191,7 +191,7 @@ pub const FACTORS: [Entry; 17] = [
         factor: Factor::GraphNumeratorPrefactor,
         name: "numerator_prefactor",
         multiplied: "not by R*: the caller's root projector (beta src/integrate.rs project_physical_root_mode: tensor · σ(global_prefactor.num), and closed_root_scalar_normalization), i.e. onto h_j z_j after the outer Taylor step",
-        certified: "round 8b: its declared order k_prefactor (normalise + excess of the prefactor alone, never multiplied into another factor) when a root projector applies it; not read by the unweighted API, which does not apply it; k_prefactor > 0 declines; beta refuses a non-regular one at its public boundary",
+        certified: "round 8b + 8a (integration): its declared order k_prefactor = NormalisedWeight::declared_k of regularity::normalise_weight (the one weight normaliser, the prefactor alone, never multiplied into another factor) when a root projector applies it: 0 for a regular weight; a pole, a non-finite, undecidable or zero value is refused (the correction, in its class); not read by the unweighted API, which does not apply it; beta normalises it at entry with the same normaliser and refuses a non-regular one there",
         witness: "depth_tests::round8b::round8b_d_a_regular_prefactor_is_no_strict_alarm",
     },
     Entry {
@@ -761,6 +761,16 @@ impl NormalisedWeight {
     pub fn is_one(&self) -> bool {
         self.value.is_one()
     }
+
+    /// IRH-DEPTH 8a + 8b integration: the declared order `k` of this
+    /// normalised external factor in the topological certificate
+    /// ([`Certificate`]): its pole order `max(0, −order)`. A normalised
+    /// weight is regular by contract (a pole is refused by
+    /// [`normalise_weight`]), so this is 0; it is computed from the order,
+    /// not assumed, so the certificate and the normaliser read ONE number.
+    pub fn declared_k(&self) -> usize {
+        usize::try_from((-self.order).max(0)).unwrap_or(usize::MAX)
+    }
 }
 
 /// Why [`normalise_weight`] refused a weight.
@@ -1096,6 +1106,44 @@ fn declared_order(factor: Factor, label: String, expression: &Atom) -> std::resu
     })
 }
 
+/// IRH-DEPTH 8a + 8b integration: the declared order of a graph WEIGHT (an
+/// external factor of the closed list of [`normalise_weight`]: today the
+/// numerator prefactor where a root projector applies it) is read through
+/// the weight normaliser and nothing else: `k` is
+/// [`NormalisedWeight::declared_k`] of the one [`NormalisedWeight`] (0 for a
+/// regular weight), and every refusal of the normaliser (a pole, a
+/// non-finite or undecidable value, an open index, an unknown symbol, a
+/// zero) refuses the correction in its class. One path: the order the
+/// certificate adds is the order of the object the caller multiplies (beta
+/// stores the normalised value in `global_prefactor.num` at entry), never a
+/// second reading of the spelling by [`super::depth::excess_poles`].
+fn declared_weight(
+    factor: Factor,
+    weight: &'static str,
+    label: String,
+    expression: &Atom,
+) -> std::result::Result<Declared, Refused> {
+    let normalised = normalise_weight(weight, expression).map_err(|refused| Refused {
+        class: match refused.class {
+            WeightRefusal::Unsupported(class) => class,
+            WeightRefusal::NonFinite => Refusal::NonFinite,
+            WeightRefusal::OpenIndex => Refusal::UnresolvedTensor,
+            WeightRefusal::Undecidable => Refusal::OpaqueFunction,
+            WeightRefusal::UnknownSymbol => Refusal::OutsideList,
+            WeightRefusal::Pole | WeightRefusal::Unreadable | WeightRefusal::Zero => {
+                Refusal::PoleInFixedFactor
+            }
+        },
+        factor: entry(factor).name,
+        detail: format!("{label}: {refused}"),
+    })?;
+    Ok(Declared {
+        factor: entry(factor).name,
+        label,
+        k: normalised.declared_k(),
+    })
+}
+
 /// The vertex and edge numerators of the quotient `G/γ` one by one, as
 /// `Graph::numerator(support, hard)` multiplies them
 /// (`numerator/uninit.rs fill_in_reduced`): every edge of `support − hard`
@@ -1235,15 +1283,17 @@ pub(super) fn certify_graph_correction(
                     label: "typed".to_owned(),
                     k,
                 });
-                declared.push(declared_order(
+                declared.push(declared_weight(
                     Factor::GraphNumeratorPrefactor,
+                    "numerator_prefactor",
                     "prefactor".to_owned(),
                     &graph.global_prefactor.num,
                 )?);
             }
             RootProjection::Opaque => {
-                declared.push(declared_order(
+                declared.push(declared_weight(
                     Factor::GraphNumeratorPrefactor,
+                    "numerator_prefactor",
                     "prefactor".to_owned(),
                     &graph.global_prefactor.num,
                 )?);
