@@ -1466,6 +1466,12 @@ fn build_direct(
     if let Some(detail) = super::record_eps_pole(&record) {
         return Err(Decline::new("factor_eps_pole", detail));
     }
+    // U8 condition (i): a field carrying gammalooprs::uvind (a function head
+    // vakint's reader refuses) is the designed decline `uvind_head` before the
+    // record is written, as in `build`
+    if let Some(field) = super::record_uvind_head(&record) {
+        return Err(super::uvind_head_decline(&field));
+    }
     // the writer validates first and returns exactly validation's error (as
     // in `build`, helper VH's f88183dbed): a refusal of vakint's frozen list,
     // matched as from_text's is (a designed row declines by name, any other

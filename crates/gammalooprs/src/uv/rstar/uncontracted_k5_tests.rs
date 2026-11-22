@@ -257,7 +257,12 @@ struct RootCase {
 }
 
 fn root_case(prepared: &Prepared, input: &str) -> Result<RootCase> {
-    let fixture = record(input)?;
+    root_case_of(prepared, record(input)?)
+}
+
+/// [`root_case`] of a record given as a value (a constructed one that
+/// vakint's reader would refuse as text).
+fn root_case_of(prepared: &Prepared, fixture: FactorizedNumerator) -> Result<RootCase> {
     let diagram = with_branch(&prepared.surrogate, &fixture)?;
     let graph = diagram.to_gamma_loop_graph(None, true)?;
     let plan = RStarPlan::with_automatic_edge(&graph, diagram.model(), &settings())?;
@@ -669,6 +674,8 @@ fn k5_stress_records_and_values_equal_the_fixtures() -> Result<()> {
 fn k5_designed_codes_are_a_closed_list() {
     assert!(uncontracted::is_designed_code("surrogate_ir_hard"));
     assert!(uncontracted::is_designed_code("surrogate_split_chain"));
+    // U8 condition (i): the route-wide name of the uvind-head decline
+    assert!(uncontracted::is_designed_code("uvind_head"));
     for code in [
         "surrogate_chain",
         "surrogate_coefficient_mass",
@@ -3175,6 +3182,170 @@ fn k5_direct_record_refused_by_validation_is_the_designed_vakint_decline() -> Re
             attempt.text.is_none() && attempt.value.is_none(),
             "a refused record was written or valued"
         );
+        Ok(())
+    })
+}
+
+/// U8 condition (i): `record_uvind_head` reads every field the writer
+/// serialises and finds `gammalooprs::uvind` (GS.uvaind) as a function head
+/// at any depth and as a variable; the vendored K5 fixtures carry none.
+#[test]
+fn k5_record_uvind_head_reads_every_field() -> Result<()> {
+    test_initialise()?;
+    let uvind = symbolica::function!(GS.uvaind, 7);
+    let nested = symbolica::function!(GS.emr_mom, 3, symbolica::function!(GS.uvaind, 7, 8));
+    let clean = record(K5_DIRECT)?;
+    ensure!(
+        uncontracted::record_uvind_head(&clean).is_none(),
+        "k5-direct carries uvind"
+    );
+    ensure!(
+        uncontracted::record_uvind_head(&record(K5_SURROGATE)?).is_none(),
+        "k5-surrogate carries uvind"
+    );
+    let case = |set: &dyn Fn(&mut FactorizedNumerator), field: &str| -> Result<()> {
+        let mut r = clean.clone();
+        set(&mut r);
+        let found = uncontracted::record_uvind_head(&r);
+        ensure!(found.as_deref() == Some(field), "{field}: {found:?}");
+        Ok(())
+    };
+    case(
+        &|r| r.edges[3].factor = &r.edges[3].factor * &uvind,
+        "edge 3 factor",
+    )?;
+    case(
+        &|r| r.edges[2].mass_squared = Atom::var(GS.uvaind),
+        "edge 2 mass",
+    )?;
+    case(&|r| r.vertices[3].factor = uvind.clone(), "vertex 3 factor")?;
+    case(
+        &|r| r.insertions[0].coefficient = uvind.clone(),
+        "insertion 2 coefficient",
+    )?;
+    case(
+        &|r| r.insertions[0].factor = &r.insertions[0].factor * &nested,
+        "insertion 2 factor",
+    )?;
+    case(
+        &|r| r.prefactor.scalars = uvind.clone(),
+        "prefactor scalars",
+    )?;
+    case(
+        &|r| r.prefactor.colour = &nested + Atom::num(1),
+        "prefactor colour",
+    )?;
+    Ok(())
+}
+
+/// U8 condition (i), the direct writer: the k5-direct case (L2 17) with the
+/// factor of its plain chain vertex 3 set to `uvind(7)`. In check AND on, our
+/// attempt is the designed decline `uvind_head` (no text, no value, no vakint
+/// call), and the hook returns TODAY's value (here a sentinel standing for
+/// the contracted route's `integrate_propagator`), never an error.
+#[test]
+fn k5_direct_record_carrying_uvind_is_declined_and_takes_the_contracted_value() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let prepared = prepare(L2_17_DOT, &vakint)?;
+        let mut fixture = record(K5_DIRECT)?;
+        let vertex = fixture
+            .vertices
+            .iter_mut()
+            .find(|vertex| vertex.id == 3 && vertex.rule == "scalar_insertion_1")
+            .ok_or_else(|| eyre!("no plain chain vertex 3 in k5-direct"))?;
+        vertex.factor = symbolica::function!(GS.uvaind, 7);
+        let diagram = with_branch(&prepared.surrogate, &fixture)?;
+        let graph = diagram.to_gamma_loop_graph(None, true)?;
+        let uv = settings();
+        let today = Atom::var(symbolica::symbol!("u8_contracted_route_value"));
+        for switch in [check_surrogate(), on_surrogate()] {
+            let (value, captured) = with_switch(switch, || {
+                let ledger = DiagramLedger::open(&graph.name, "k5-uvind");
+                let out = with_capture(|| {
+                    k5::direct(
+                        Some(&prepared.provenance),
+                        &graph,
+                        diagram.model(),
+                        &vakint,
+                        &uv,
+                        2,
+                        || Ok(today.clone()),
+                    )
+                });
+                drop(ledger);
+                out
+            });
+            let attempt = captured
+                .iter()
+                .find(|attempt| attempt.kind == Kind::Surrogate)
+                .ok_or_else(|| eyre!("{:?}: no surrogate attempt", switch.mode))?;
+            ensure!(
+                attempt.outcome == "declined:uvind_head",
+                "{:?}: not the designed uvind decline: {} {:?}",
+                switch.mode,
+                attempt.outcome,
+                attempt.detail
+            );
+            ensure!(
+                attempt.detail.as_deref().is_some_and(
+                    |detail| detail.starts_with("vertex 3 factor carries gammalooprs::uvind")
+                ),
+                "{:?}: the detail does not name the field: {:?}",
+                switch.mode,
+                attempt.detail
+            );
+            ensure!(
+                attempt.text.is_none() && attempt.value.is_none(),
+                "{:?}: a declined record was written or valued",
+                switch.mode
+            );
+            let value =
+                value.map_err(|error| eyre!("{:?}: the hook failed: {error:#}", switch.mode))?;
+            ensure!(
+                value == today,
+                "{:?}: the hook did not return today's value: {value}",
+                switch.mode
+            );
+        }
+        Ok(())
+    })
+}
+
+/// U8 condition (i), the shared writer `build` for the surrogate kind: the
+/// k5-surrogate root (L5 22807 seq 62) with the factor of its plain chain
+/// vertex 9 set to `uvind(7)`: the K1-shaped surrogate root record is the
+/// designed decline `uvind_head` before any text (no vakint error).
+#[test]
+fn k5_surrogate_root_carrying_uvind_is_declined_before_the_record() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let prepared = prepare(L5_22807_DOT, &vakint)?;
+        let mut fixture = record(K5_SURROGATE)?;
+        let vertex = fixture
+            .vertices
+            .iter_mut()
+            .find(|vertex| vertex.id == 9 && vertex.rule == "scalar_insertion_1")
+            .ok_or_else(|| eyre!("no plain chain vertex 9 in k5-surrogate"))?;
+        vertex.factor = symbolica::function!(GS.uvaind, 7);
+        let case = root_case_of(&prepared, fixture)?;
+        let attempt = with_switch(check_surrogate(), || {
+            root_attempt(&case, &vakint, Some(case.provenance.clone()), false)
+        })?;
+        ensure!(attempt.text.is_none(), "a record was written");
+        match &attempt.outcome {
+            Outcome::Declined(decline) => ensure!(
+                decline.code == "uvind_head"
+                    && decline.designed
+                    && decline
+                        .detail
+                        .starts_with("vertex 9 factor carries gammalooprs::uvind"),
+                "{decline:?}"
+            ),
+            other => return Err(eyre!("not declined: {other:?}")),
+        }
         Ok(())
     })
 }

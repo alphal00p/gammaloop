@@ -997,8 +997,8 @@ fn designed_refusals_are_a_closed_list() {
     // R2-I3 removes `sigma`, `root_crown_paired`, `root_normalisation_momentum`;
     // the second rebase (gated G-D, IRH (iii)) adds `factor_eps_pole`;
     // U7c (K5) adds `surrogate_ir_hard`, `surrogate_split_chain` and
-    // `surrogate_hole_cut`
-    assert_eq!(DESIGNED_LOCAL.len(), 16, "{DESIGNED_LOCAL:?}");
+    // `surrogate_hole_cut`; U8 condition (i) adds `uvind_head`
+    assert_eq!(DESIGNED_LOCAL.len(), 17, "{DESIGNED_LOCAL:?}");
     assert_eq!(uncontracted::DESIGNED_VAKINT.len(), 9);
     for code in [
         "open_root",

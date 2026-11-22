@@ -747,6 +747,15 @@ pub(super) struct Decline {
 /// synthetic `hidden` input of the IRH gates (ε^-1 in a quotient vertex) is
 /// its witness.
 ///
+/// `uvind_head` (U8 condition (i), one name for every kind): a record field
+/// that carries the UV numerator-index function `gammalooprs::uvind`
+/// ([`record_uvind_head`]). vakint's reader refuses that function head (`a
+/// function head that is not allowed in <field>`, NOT a designed row, so a
+/// record of ours reaching it would be the error `vakint:<variant>` and, with
+/// the switch on, a failed diagram); such a record is declined before it is
+/// written and today's route takes the remainder. Graph-dependent, not a
+/// setting code. No production record has one (0 of 26,929 dumped records).
+///
 /// K3 (U7b) adds NO code: a K3 record can hit only rows already here,
 /// `insertion_mass_symbol` (a UV child's Δ with a mass symbol at a `ct:`
 /// node where independent crown legs meet, as K2),
@@ -781,7 +790,12 @@ pub(super) const DESIGNED_LOCAL: &[&str] = &[
     // U7c (K5): a record that holds a hole's anchor but not its far end, only
     // with GAMMALOOP_UNCONTRACTED_K5_HOLE_CUT=decline (or `auto` on a reader
     // without the single-hedge ins: form); the default `form` emits it
-    "surrogate_hole_cut",
+    "surrogate_hole_cut", // U8 condition (i), a route-wide name: a record carrying the function head
+    // gammalooprs::uvind, which vakint's reader refuses ("a function head that
+    // is not allowed"): declined before it is written, today's path takes it
+    // ([`record_uvind_head`]; the surrogate kind here, root / child / ir-hard
+    // in beta's U8 commit)
+    "uvind_head",
 ];
 
 /// The designed codes caused by a SETTING of the run or of the calling
@@ -2564,6 +2578,63 @@ pub(super) fn record_eps_pole(record: &FactorizedNumerator) -> Option<String> {
         .find_map(|(field, atom)| factor_eps_pole(atom).map(|why| format!("{field}: {why}")))
 }
 
+/// The first field of `record` that carries `gammalooprs::uvind` (GS.uvaind,
+/// the UV numerator-index function: as a function head or a variable, at any
+/// depth; Symbolica's structural `contains_symbol`, not a text search), as its
+/// field name; `None`: no field does. Every field the writer serialises is
+/// read: edge factors and masses, vertex factors, every insertion's
+/// coefficient and factor, the projector, the prefactor fields and a closure's
+/// masses. A record that carries it is the designed decline `uvind_head`
+/// before it is written ([`DESIGNED_LOCAL`]).
+pub(super) fn record_uvind_head(record: &FactorizedNumerator) -> Option<String> {
+    let mut fields = Vec::<(String, &Atom)>::new();
+    for edge in &record.edges {
+        fields.push((format!("edge {} factor", edge.id), &edge.factor));
+        fields.push((format!("edge {} mass", edge.id), &edge.mass_squared));
+    }
+    for vertex in &record.vertices {
+        fields.push((format!("vertex {} factor", vertex.id), &vertex.factor));
+    }
+    for insertion in &record.insertions {
+        fields.push((
+            format!("insertion {} coefficient", insertion.vertex),
+            &insertion.coefficient,
+        ));
+        fields.push((
+            format!("insertion {} factor", insertion.vertex),
+            &insertion.factor,
+        ));
+    }
+    if let Some(projector) = &record.projector {
+        fields.push(("projector".into(), &projector.tensor));
+    }
+    fields.push(("prefactor overall".into(), &record.prefactor.overall));
+    fields.push(("prefactor scalars".into(), &record.prefactor.scalars));
+    fields.push(("prefactor colour".into(), &record.prefactor.colour));
+    if let FactorizedKind::Closure(spec) = &record.kind {
+        fields.push(("closure mass".into(), &spec.mass_squared));
+        fields.push((
+            "closure auxiliary mass".into(),
+            &spec.auxiliary_mass_squared,
+        ));
+    }
+    fields
+        .into_iter()
+        .find(|(_, atom)| atom.contains_symbol(GS.uvaind))
+        .map(|(field, _)| field)
+}
+
+/// The designed decline `uvind_head` of a record whose field `field` carries
+/// `gammalooprs::uvind` ([`record_uvind_head`]).
+pub(super) fn uvind_head_decline(field: &str) -> Decline {
+    Decline::new(
+        "uvind_head",
+        format!(
+            "{field} carries gammalooprs::uvind (vakint's reader refuses that function head): today's route takes the remainder"
+        ),
+    )
+}
+
 /// How a record states its externals and its closure (U7a-DESIGN 4.1).
 enum Frame<'s> {
     /// K1: one external `p(1) = Q(x0)`; σ folds every root leg onto ±p(1);
@@ -3641,6 +3712,15 @@ fn build(
     // in a quotient vertex; no production record has one)
     if let Some(detail) = record_eps_pole(&record) {
         return Err(Decline::new("factor_eps_pole", detail));
+    }
+    // U8 condition (i): a record carrying gammalooprs::uvind (a function head
+    // vakint's reader refuses) is the designed decline `uvind_head` before it
+    // is written, never error:vakint:<variant>. The surrogate kind here (U7c);
+    // root / child / ir-hard: beta's U8 commit drops this kind guard
+    if kind == Kind::Surrogate
+        && let Some(field) = record_uvind_head(&record)
+    {
+        return Err(uvind_head_decline(&field));
     }
     // the writer validates first and returns exactly validation's error: a
     // refusal of vakint's frozen list, matched as from_text's is; `text` is
