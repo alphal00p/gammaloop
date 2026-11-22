@@ -3491,12 +3491,11 @@ fn build(
         insertions,
         record: None,
     };
-    let text = record
-        .to_text()
-        .map_err(|error| Decline::new("text", error.to_string()))?;
-    let record = FactorizedNumerator::from_text(&text).map_err(|error| Decline::vakint(&error))?;
-    declared_momenta(&record)?;
-    // last, so that every error of the record above stays loud
+    // the single-propagator shape is declined BEFORE the record is written:
+    // vakint's writer validates a marked value, and validation refuses this
+    // shape ("every line is massive: not a closure"); such a remainder is
+    // never serialised or validated, and stays the designed
+    // `one_loop_tree_cut` (vakint:all_massive stays a backstop at count 0)
     if single_propagator(&record.edges, usize::from(marked)) {
         return Err(Decline::new(
             "one_loop_tree_cut",
@@ -3510,6 +3509,15 @@ fn build(
             ),
         ));
     }
+    // the writer validates first and returns exactly validation's error: a
+    // refusal of vakint's frozen list, matched as from_text's is; `text` is
+    // kept for a writer failure on a record that validates
+    let text = record.to_text().map_err(|error| match record.validate() {
+        Err(_) => Decline::vakint(&error),
+        Ok(()) => Decline::new("text", error.to_string()),
+    })?;
+    let record = FactorizedNumerator::from_text(&text).map_err(|error| Decline::vakint(&error))?;
+    declared_momenta(&record)?;
     Ok(Some(Built {
         record,
         text,
