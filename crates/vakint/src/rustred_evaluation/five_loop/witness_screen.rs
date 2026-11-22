@@ -31,8 +31,14 @@
 //! proven over Q with every opaque atom evaluated as its own variable, which is
 //! exactly linear independence in the ring of that zero test. Other function
 //! atoms (`log`, ...) stay outside the grammar, as does any atom with a loop
-//! momentum inside. `VAKINT_WITNESS_SCREEN_OPAQUE=0` (or `off`) restores the
-//! plain-coefficient grammar (debug switch for the A/B of the selection).
+//! momentum inside. Tensor-reduced numerators come as products of sums
+//! (a sum of coefficient * scalar-product terms times a scalar product and a
+//! metric, say); in this tensor grammar such a product is distributed over the
+//! scalar products (`expand_in(dot)`, coefficients kept whole) before the
+//! grouping, which changes the form of the numerator, not its value. A
+//! numerator without opaque atoms keeps the plain grammar unchanged.
+//! `VAKINT_WITNESS_SCREEN_OPAQUE=0` (or `off`) restores the plain grammar for
+//! every numerator (debug switch for the A/B of the selection).
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -170,6 +176,19 @@ fn is_plain_or_opaque(view: AtomView) -> bool {
                 && is_plain_or_opaque(power.get_base())
         }
     }
+}
+
+/// Whether `view` contains an opaque coefficient atom (a tensor-reduced
+/// numerator).
+fn has_opaque_atom(view: AtomView) -> bool {
+    let mut found = false;
+    view.visitor(&mut |part| {
+        if is_opaque_atom(part) {
+            found = true;
+        }
+        !found
+    });
+    found
 }
 
 /// Distinct function atoms of a coefficient in the [`is_plain_or_opaque`]
@@ -339,9 +358,27 @@ impl NumeratorGroups {
         Self::try_new_with(numerator, opaque_coefficients_enabled())
     }
 
-    /// [`Self::try_new`]; `opaque` admits loop-free tensor structures as
-    /// opaque coefficient atoms (module documentation).
+    /// [`Self::try_new`]; with `opaque`, a tensor-reduced numerator (one
+    /// with an opaque atom) uses the tensor grammar of the module
+    /// documentation: opaque coefficient atoms, and products of sums
+    /// distributed over the scalar products. Every other numerator, and every
+    /// numerator without `opaque`, uses the plain grammar unchanged.
     pub(super) fn try_new_with(numerator: AtomView, opaque: bool) -> Result<Self, Refusal> {
+        let tensor = opaque && has_opaque_atom(numerator);
+        match Self::group(numerator, tensor) {
+            // A product of sums (a sum of coefficient * scalar-product terms
+            // times further factors) is distributed over the scalar products;
+            // the coefficients stay whole.
+            Err(Refusal::LoopFactor(_)) if tensor => {
+                let distributed = numerator.to_owned().expand_in(Atom::var(S.dot));
+                Self::group(distributed.as_view(), true)
+            }
+            grouped => grouped,
+        }
+    }
+
+    /// The grouping proper, in the tensor grammar when `opaque`.
+    fn group(numerator: AtomView, opaque: bool) -> Result<Self, Refusal> {
         let mut coefficients = Vec::<Atom>::new();
         let mut parts = BTreeMap::<(usize, u32), Vec<Atom>>::new();
         let terms = match numerator {
@@ -756,8 +793,8 @@ mod tests {
             ),
             ("dot(p(6),k(1))*dot(k(2),k(2))", "a mixed scalar product"),
             (
-                "g(hedge(1,1),hedge(2,1))*(dot(k(1),k(1))+dot(p(6),p(6)))",
-                "an external scalar product inside a loop factor",
+                "g(hedge(1,1),hedge(2,1))*(dot(k(1),k(1))+log(x))",
+                "a function coefficient other than p, g and dot after distribution",
             ),
             (
                 "x*g(hedge(1,1),hedge(2,1))*dot(k(1),k(1)) + x^2*g(hedge(1,1),hedge(2,1))*dot(k(2),k(2)) + x*(1+x)*g(hedge(1,1),hedge(2,1))*dot(k(3),k(3))",
@@ -788,6 +825,44 @@ mod tests {
         assert_eq!(groups.shape(), (3, 3));
     }
 
+    /// A tensor-reduced product of sums is distributed over the scalar
+    /// products; the same product without tensor atoms keeps the plain
+    /// grammar's refusal.
+    #[test]
+    fn tensor_products_of_sums_are_distributed() {
+        Vakint::initialize_vakint_symbols();
+        let tensor = vk_parse!(
+            "(gs*ε*dot(k(1),k(1)) + 3*gs*dot(k(2),k(2)) + gs*ε*dot(k(2),k(4)))*(4-2*ε)^-1*dot(k(1),k(3))*g(hedge(10,1),hedge(23,1))"
+        )
+        .unwrap();
+        let groups = NumeratorGroups::try_new_with(tensor.as_view(), true).unwrap();
+        // gs*ε*g/(4-2ε) and gs*g/(4-2ε), both of degree 2.
+        assert_eq!(groups.shape(), (2, 2));
+        let rebuilt = groups.groups.iter().fold(Atom::Zero, |sum, group| {
+            sum + &groups.coefficients[group.coefficient] * &group.part
+        });
+        assert!((rebuilt - &tensor).expand().is_zero());
+        let plain = vk_parse!(
+            "(gs*ε*dot(k(1),k(1)) + 3*gs*dot(k(2),k(2)) + gs*ε*dot(k(2),k(4)))*(4-2*ε)^-1*dot(k(1),k(3))"
+        )
+        .unwrap();
+        assert!(matches!(
+            NumeratorGroups::try_new_with(plain.as_view(), true),
+            Err(Refusal::LoopFactor(_))
+        ));
+        // Mixed degrees and an external scalar product inside one loop factor
+        // become separate homogeneous groups.
+        let mixed =
+            vk_parse!("g(hedge(1,1),hedge(2,1))*(dot(k(1),k(1))+dot(p(6),p(6)))*dot(k(2),k(2))")
+                .unwrap();
+        assert_eq!(
+            NumeratorGroups::try_new_with(mixed.as_view(), true)
+                .unwrap()
+                .shape(),
+            (2, 2)
+        );
+    }
+
     /// The grouped support of every verified witness of the ladder equals the
     /// key set of the full weighted lowering, for coefficients with tensor
     /// structures (and cancellations inside each coefficient class).
@@ -801,16 +876,24 @@ mod tests {
             +5*gs^10*dot(p(6),p(6))*g(hedge(1,1),hedge(2,1))*(dot(k(1),k(5))-dot(k(3),k(5)))*dot(k(2),k(4))*dot(k(4),k(4))*dot(k(1),k(2))
             -5*gs^10*dot(p(6),p(6))*g(hedge(1,1),hedge(2,1))*dot(k(1),k(5))*dot(k(2),k(4))*dot(k(4),k(4))*dot(k(1),k(2))
             +7/3*gs^10*g(hedge(1,1),hedge(2,1))*(4-2*ε)*dot(k(1),k(2))^2*dot(k(3),k(5))^2",
-            (3, 3),
+            Some((3, 3)),
+        );
+        // A product of sums, as tensor reduction writes it (distributed), with
+        // a cancellation that appears only after the distribution.
+        assert_grouped_support_equals_full_weighted_lowering_support(
+            "(gs^10*ε*dot(k(1),k(1))*dot(k(4),k(4)) - 3*gs^10*(5-2*ε)*dot(k(2),k(5))*dot(k(3),k(3)) + 2*gs^10*dot(k(1),k(2))^2 + gs^10*ε^2*dot(k(3),k(5))*dot(k(1),k(4)))*(4-2*ε)^-1*dot(k(1),k(3))*g(hedge(10,1),hedge(23,1))
+            + (7*dot(k(2),k(2))*dot(k(4),k(5)) + ε*dot(k(1),k(5))^2)*gs^10*dot(p(6),p(6))*p(6,hedge(10,1))*p(6,hedge(23,1))*dot(k(2),k(3))
+            - 2*gs^10*dot(k(1),k(2))^2*(4-2*ε)^-1*dot(k(1),k(3))*g(hedge(10,1),hedge(23,1))",
+            None,
         );
     }
 
     /// The ladder of [`grouped_support_equals_full_weighted_lowering_support`]
-    /// with `numerator`: grouped (opaque atoms on, expected `shape`) and full
+    /// with `numerator`: grouped (opaque atoms on, expected `shape` if given) and full
     /// supports agree on every verified witness.
     fn assert_grouped_support_equals_full_weighted_lowering_support(
         numerator: &str,
-        shape: (usize, usize),
+        shape: Option<(usize, usize)>,
     ) {
         let settings = VakintSettings::default();
         let topologies = crate::Topologies::generate_topologies().unwrap();
@@ -831,7 +914,9 @@ mod tests {
         let numerator = vk_parse!(numerator).unwrap();
         let scalar_form = VakintTerm::scalar_product_form(&settings, numerator.as_view()).unwrap();
         let groups = NumeratorGroups::try_new_with(scalar_form.as_view(), true).unwrap();
-        assert_eq!(groups.shape(), shape);
+        if let Some(shape) = shape {
+            assert_eq!(groups.shape(), shape);
+        }
         let mut compared = 0;
         topologies
             .match_topologies_to_user_input_with_selection(
