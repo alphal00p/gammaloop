@@ -634,6 +634,12 @@ pub(super) fn refused(counts: &mut DepthCounts, reason: &'static str) {
             note(counts, |counts| &mut counts.insertion_not_eps_free);
         }
         "forest_loops" => note(counts, |counts| &mut counts.declined),
+        // Repair RC-S1: an outer polynomial outside the typed root form's
+        // scope (the projection there is the uncertified callback).
+        "projector_scope" => {
+            note(counts, |counts| &mut counts.declined);
+            note(counts, |counts| &mut counts.opaque_projector);
+        }
         _ => {}
     }
     counts.reason = Some(reason);

@@ -262,7 +262,9 @@ impl RStarPlan {
         uv_settings: &UVgenerationSettings,
         factor: &Atom,
     ) -> Result<Atom> {
-        let multiply = |tensor: &Atom| -> Result<Atom> { Ok(tensor * factor) };
+        // Repair RC-S1: the callback IS the typed form (one object).
+        let typed = TypedRoot::scalar(factor);
+        let multiply = |tensor: &Atom| -> Result<Atom> { Ok(typed.apply(tensor)) };
         let mut evaluation = Evaluation::new(
             self,
             graph,
@@ -273,7 +275,7 @@ impl RStarPlan {
             None,
             ChildMass::Reference,
         )?;
-        evaluation.typed_root = Some(TypedRoot::scalar(factor));
+        evaluation.typed_root = Some(typed.clone());
         evaluation.counterterm()
     }
 
@@ -402,18 +404,23 @@ impl RStarPlan {
         root_normalization: &dyn Fn(&Atom) -> Result<Atom>,
         closed_root: &ClosedRootNormalization,
     ) -> Result<Atom> {
+        // Repair RC-S1: ONE projection object for every term and route
+        // (TypedRoot::project): the typed form on closed scalars, the
+        // callback elsewhere.
+        let typed = TypedRoot::on_closed_scalars(closed_root);
+        let projection = |tensor: &Atom| typed.project(tensor, root_normalization);
         let mut evaluation = Evaluation::new(
             self,
             graph,
             model,
             vakint,
             uv_settings,
-            Some(root_normalization),
+            Some(&projection),
             None,
             ChildMass::Zero,
         )?
         .closing_root()?;
-        evaluation.typed_root = Some(TypedRoot::of(closed_root));
+        evaluation.typed_root = Some(typed.clone());
         evaluation.counterterm_from_pole_part(bare_poles, false)
     }
 
@@ -431,18 +438,23 @@ impl RStarPlan {
         root_normalization: &dyn Fn(&Atom) -> Result<Atom>,
         closed_root: &ClosedRootNormalization,
     ) -> Result<Atom> {
+        // Repair RC-S1: ONE projection object for every term and route
+        // (TypedRoot::project): the typed form on closed scalars, the
+        // callback elsewhere.
+        let typed = TypedRoot::on_closed_scalars(closed_root);
+        let projection = |tensor: &Atom| typed.project(tensor, root_normalization);
         let mut evaluation = Evaluation::new(
             self,
             graph,
             model,
             vakint,
             uv_settings,
-            Some(root_normalization),
+            Some(&projection),
             None,
             ChildMass::Zero,
         )?
         .closing_root()?;
-        evaluation.typed_root = Some(TypedRoot::of(closed_root));
+        evaluation.typed_root = Some(typed.clone());
         evaluation.counterterm_from_pole_part(closed_bare_poles, true)
     }
 
@@ -482,19 +494,24 @@ impl RStarPlan {
         root_normalization: &dyn Fn(&Atom) -> Result<Atom>,
         closed_root: &ClosedRootNormalization,
     ) -> Result<Atom> {
+        // Repair RC-S1: ONE projection object for every term and route
+        // (TypedRoot::project): the typed form on closed scalars, the
+        // callback elsewhere.
+        let typed = TypedRoot::on_closed_scalars(closed_root);
+        let projection = |tensor: &Atom| typed.project(tensor, root_normalization);
         let mut evaluation = Evaluation::new(
             self,
             graph,
             model,
             vakint,
             uv_settings,
-            Some(root_normalization),
+            Some(&projection),
             None,
             ChildMass::Reference,
         )?
         .closing_root()?;
         evaluation.closed_root = Some(closed_root);
-        evaluation.typed_root = Some(TypedRoot::of(closed_root));
+        evaluation.typed_root = Some(typed.clone());
         evaluation.counterterm()
     }
 
@@ -695,7 +712,9 @@ impl RStarPlan {
                     closure + ((&d + 2) * Atom::var(*marker) - &markers_sum) * pairing
                 });
         let normalization = Atom::one() / (&d * (&d - 1) * (&d + 2));
-        let normalize = |tensor: &Atom| -> Result<Atom> { Ok(tensor * &normalization) };
+        // Repair RC-S1: the callback IS the typed form (one object).
+        let typed = TypedRoot::scalar(&normalization);
+        let normalize = |tensor: &Atom| -> Result<Atom> { Ok(typed.apply(tensor)) };
         // GAMMALOOP_CHILD_BOUNDARY=closed: the three channels stay ONE
         // evaluation; on the boundary path the markers are momentum-free
         // scalar spectators of each remainder's one boundary.
@@ -711,7 +730,7 @@ impl RStarPlan {
             ChildMass::Reference,
         )?;
         evaluation.root_closure = Some(closure);
-        evaluation.typed_root = Some(TypedRoot::scalar(&normalization));
+        evaluation.typed_root = Some(typed.clone());
         evaluation.channel = ("isotropic", "1/(d (d-1) (d+2))");
         evaluation.close_child(child_root.as_ref(), "isotropic");
         evaluation.closure_data = super::uncontracted::closure_data(
@@ -750,7 +769,9 @@ impl RStarPlan {
         uv_settings: &UVgenerationSettings,
         boundary: &DiracBoundary,
     ) -> Result<Atom> {
-        let normalize = |tensor: &Atom| -> Result<Atom> { Ok(tensor * &boundary.normalization) };
+        // Repair RC-S1: the callback IS the typed form (one object).
+        let typed = TypedRoot::scalar(&boundary.normalization);
+        let normalize = |tensor: &Atom| -> Result<Atom> { Ok(typed.apply(tensor)) };
         // GAMMALOOP_CHILD_BOUNDARY=dirac|closed: the closed vertex child's
         // admitted remainders take the remainder-boundary path.
         let child_root = child_closed_root(self, graph, false, &boundary.normalization)?;
@@ -765,7 +786,7 @@ impl RStarPlan {
             ChildMass::Reference,
         )?;
         evaluation.root_closure = Some(boundary.closure.clone());
-        evaluation.typed_root = Some(TypedRoot::scalar(&boundary.normalization));
+        evaluation.typed_root = Some(typed.clone());
         evaluation.channel = match boundary.kind {
             DiracKind::Vertex => ("dirac vertex", "1/(Tr[1] d)"),
             DiracKind::SelfEnergy => ("dirac self-energy", "1/Tr[1]"),
@@ -884,8 +905,9 @@ impl RStarPlan {
             external_routing: external_routing.clone(),
             factor: Atom::one(),
         };
-        let route =
-            |tensor: &Atom| -> Result<Atom> { Ok(tensor.replace_multiple(&external_routing)) };
+        // Repair RC-S1: the callback IS the typed form (1 · σ, one object).
+        let typed = TypedRoot::everywhere(&closed_root);
+        let route = |tensor: &Atom| -> Result<Atom> { Ok(typed.apply(tensor)) };
         let mut evaluation = Evaluation::new(
             self,
             graph,
@@ -898,7 +920,7 @@ impl RStarPlan {
         )?
         .closing_root()?;
         evaluation.closed_root = Some(&closed_root);
-        evaluation.typed_root = Some(TypedRoot::of(&closed_root));
+        evaluation.typed_root = Some(typed.clone());
         evaluation.rstar_terms = RStarTerms::All;
         evaluation.channel = ("surrogate closed metric", "1");
         let counterterm = evaluation.counterterm()?;
@@ -1085,28 +1107,71 @@ struct TypedRoot {
     routing: Vec<symbolica::id::Replacement>,
     /// `factor` is a closed scalar (the form may be certified).
     certifiable: bool,
+    /// Repair RC-S1: the evaluation's root projection IS this form on every
+    /// input (gammaloop's own projections: a UV child closure, the surrogate
+    /// closed root, `projected_counterterm_scalar`); otherwise (the caller's
+    /// closed metric root given as data AND as a callback) it is the
+    /// projection on closed scalars only, the callback acting on every other
+    /// input ([`Self::project`]).
+    everywhere: bool,
 }
 
 impl TypedRoot {
-    fn new(factor: Atom, routing: Vec<symbolica::id::Replacement>) -> Self {
+    fn new(factor: Atom, routing: Vec<symbolica::id::Replacement>, everywhere: bool) -> Self {
         let certifiable = super::expression::closed_dot_scalar(factor.as_view());
         Self {
             factor,
             routing,
             certifiable,
+            everywhere,
         }
     }
 
-    fn of(closed_root: &ClosedRootNormalization) -> Self {
+    /// The caller's closed metric root as data: the projection on closed
+    /// scalars (the callback acts on every other input).
+    fn on_closed_scalars(closed_root: &ClosedRootNormalization) -> Self {
         Self::new(
             closed_root.factor.clone(),
             closed_root.external_routing.clone(),
+            false,
         )
     }
 
-    /// A projection that only multiplies by `factor`.
+    /// gammaloop's own closed root (`factor · σ` on every input).
+    fn everywhere(closed_root: &ClosedRootNormalization) -> Self {
+        Self::new(
+            closed_root.factor.clone(),
+            closed_root.external_routing.clone(),
+            true,
+        )
+    }
+
+    /// A projection that only multiplies by `factor`, on every input.
     fn scalar(factor: &Atom) -> Self {
-        Self::new(factor.clone(), Vec::new())
+        Self::new(factor.clone(), Vec::new(), true)
+    }
+
+    /// Whether this form is the evaluation's projection of `expression` and
+    /// may be certified there.
+    fn covers(&self, expression: &Atom) -> bool {
+        self.certifiable
+            && (self.everywhere || super::expression::closed_dot_scalar(expression.as_view()))
+    }
+
+    /// Repair RC-S1: THE root projection of an evaluation that has a typed
+    /// form: the typed form where it covers the input, else the callback.
+    /// Every route (UV terms, the generic IR terms, the child route, the
+    /// pole-part preparation) calls this one function, so the data and the
+    /// callback are never two sources of truth for the same input: on a
+    /// closed scalar the callback is never called (it is the caller's
+    /// contract that it equals `factor · σ` there; beta's metric root is that
+    /// by construction, closed_root_scalar_normalization).
+    fn project(&self, expression: &Atom, callback: &RootProjector<'_>) -> Result<Atom> {
+        if self.everywhere || self.covers(expression) {
+            Ok(self.apply(expression))
+        } else {
+            callback(expression)
+        }
     }
 
     fn apply(&self, expression: &Atom) -> Atom {
@@ -1117,6 +1182,10 @@ impl TypedRoot {
         }
     }
 }
+
+/// Repair RC-S1: the decline reason of an outer polynomial outside the typed
+/// root form's scope ([`Evaluation::child_root_projection`]).
+const PROJECTOR_SCOPE: &str = "projector_scope";
 
 struct Evaluation<'a> {
     plan: &'a RStarPlan,
@@ -2717,6 +2786,19 @@ impl<'a> Evaluation<'a> {
             let outcome = self.ir_outer_integrated(&hard, &correction.forest, &rows)?;
             let (value, outer_stats, valuations, zero_rows) = match outcome {
                 Ok(outcome) => outcome,
+                // Repair RC-S1: the outer polynomial is outside the typed
+                // form's scope: a decline, loud and counted.
+                Err(reason) if reason == PROJECTOR_SCOPE && super::depth::guards() => {
+                    return Ok(self.decline_child(
+                        correction_index,
+                        correction,
+                        quotient_loops,
+                        bound,
+                        &declared,
+                        PROJECTOR_SCOPE,
+                        "the outer polynomial is not a closed scalar: the typed root form does not cover it (the callback would project it uncertified)",
+                    ));
+                }
                 Err(reason) => return Ok(Err(reason)),
             };
             // The cross-check: the poles each shown row's quotient factors
@@ -3108,21 +3190,29 @@ impl<'a> Evaluation<'a> {
     }
 
     /// The root projection of an outer polynomial on the child route: the
-    /// typed form when given (the certified scalar is the one multiplied),
-    /// else the callback (reached only by the planners before IRH-DEPTH:
-    /// an opaque callback declines), then regulated.
-    fn child_root_projection(&self, simplified: Atom) -> Result<Atom> {
+    /// typed form where it is the evaluation's projection of this input
+    /// ([`TypedRoot::covers`]: the certified scalar is the one multiplied,
+    /// and the one every other route multiplies there), then regulated.
+    /// `None` (repair RC-S1): the typed form does not cover the input (not a
+    /// closed scalar under the caller's metric root), so the projection
+    /// would be the uncertified callback: the child route declines
+    /// (`projector_scope`). The planners before IRH-DEPTH (tests, guards off)
+    /// apply the evaluation's projection as it is.
+    fn child_root_projection(&self, simplified: Atom) -> Result<Option<Atom>> {
         Ok(match (&self.typed_root, self.root_projector) {
-            (Some(typed), _) if typed.certifiable => {
-                Integrated::dimensionally_regularized(&typed.apply(&simplified))
-            }
-            (_, Some(projector)) => Integrated::dimensionally_regularized(
+            (Some(typed), _) if typed.covers(&simplified) => Some(
+                Integrated::dimensionally_regularized(&typed.apply(&simplified)),
+            ),
+            (_, Some(_)) if super::depth::guards() => None,
+            (_, Some(projector)) => Some(Integrated::dimensionally_regularized(
                 &projector(&simplified)
                     .wrap_err("while projecting an IR hard child outer polynomial")?,
-            ),
+            )),
             // A typed form without a callback is never constructed.
-            (Some(typed), None) => Integrated::dimensionally_regularized(&typed.apply(&simplified)),
-            (None, None) => simplified,
+            (Some(typed), None) => Some(Integrated::dimensionally_regularized(
+                &typed.apply(&simplified),
+            )),
+            (None, None) => Some(simplified),
         })
     }
 
@@ -3339,7 +3429,9 @@ impl<'a> Evaluation<'a> {
             let sum = Atom::add_many(assembled.iter());
             let simplified = RStarIntegrand::simplify_summands(sum.as_view())
                 .wrap_err("while simplifying an IR hard child outer polynomial")?;
-            let regulated = self.child_root_projection(simplified)?;
+            let Some(regulated) = self.child_root_projection(simplified)? else {
+                return Ok(Err(PROJECTOR_SCOPE.into()));
+            };
             let finished = RStarIntegrand::finish_tensor(regulated, id)?;
             // IRH-DEPTH (MATRIX-R45 review): every row's measured need is
             // also read on its complete outer coefficient, after the root
@@ -3454,7 +3546,8 @@ impl<'a> Evaluation<'a> {
                     Err(error) => return declined(error),
                 };
                 let projected = match self.child_root_projection(simplified) {
-                    Ok(projected) => projected,
+                    Ok(Some(projected)) => projected,
+                    Ok(None) => return Ok(Err(PROJECTOR_SCOPE.into())),
                     Err(error) => return declined(error),
                 };
                 self.integration_id += 1;
