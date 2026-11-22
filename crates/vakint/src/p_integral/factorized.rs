@@ -5967,6 +5967,8 @@ impl FactorizedNumerator {
 }
 
 #[cfg(test)]
+mod direct_lowering_tests;
+#[cfg(test)]
 mod insertion_records_tests;
 #[cfg(test)]
 mod insertion_tests;
