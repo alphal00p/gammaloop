@@ -3602,17 +3602,14 @@ impl FactorizedNumerator {
         {
             let e = leg.id - 100_000;
             // the FIRST leg of a pair whose second leg is id + 100000 (its own
-            // id may reach 100000 too) belongs to that pair
-            let first_leg = leg
-                .id
-                .checked_add(100_000)
-                .and_then(|p| external(p))
-                .is_some();
+            // id may reach 100000 too) belongs to that pair, so edge e may be
+            // absent; an INTERNAL edge e is refused even then (it would stand
+            // beside its leg 100000 + e unchecked)
+            let first_leg = leg.id.checked_add(100_000).and_then(&external).is_some();
             let missing = match self.edges.iter().find(|x| x.id == e) {
-                _ if first_leg => None,
-                None => Some("absent from the record"),
                 Some(x) if !x.is_external() => Some("not an external edge"),
-                Some(_) => None,
+                None if !first_leg => Some("absent from the record"),
+                _ => None,
             };
             if let Some(why) = missing {
                 return Err(refuse(format!(

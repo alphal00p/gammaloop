@@ -3323,7 +3323,10 @@ fn the_producers_readings_of_the_one_hedge_rule() {
 
 /// THE UNPARTNERED LEG (correction 30), on the real K2 child (the pair 4 /
 /// 100004): its partner 4 removed (renumbered 7) or made internal is refused;
-/// the pair itself is accepted.
+/// the pair itself is accepted. An internal partner is refused also when the
+/// leg is the first leg of another pair: 4 internal, the leg 100004 turned
+/// round (out of vertex 2, target=ext, the same flow) and a leg 200004 with
+/// source=ext and the same vector beside it (the pair 100004 / 200004).
 #[test]
 fn an_unpartnered_leg_is_refused() {
     let k2 =
@@ -3356,6 +3359,23 @@ fn an_unpartnered_leg_is_refused() {
     four.target_hedge = Some(99);
     assert_eq!(
         detail(internal.validate()),
+        "edge 100004: an external leg with an id of at least 100000 is the second leg of a paired line, but its partner 4 is not an external edge"
+    );
+    let mut first_leg = internal.clone();
+    let leg = first_leg.edges.iter_mut().find(|e| e.id == 100004).unwrap();
+    leg.source = Endpoint::Vertex(2);
+    leg.target = Endpoint::External;
+    leg.source_hedge = leg.target_hedge.take();
+    leg.momentum = leg.momentum.iter().map(|x| -x).collect();
+    let mut second = leg.clone();
+    second.id = 200004;
+    second.source = Endpoint::External;
+    second.target = Endpoint::Vertex(2);
+    second.source_hedge = None;
+    second.target_hedge = Some(98);
+    first_leg.edges.push(second);
+    assert_eq!(
+        detail(first_leg.validate()),
         "edge 100004: an external leg with an id of at least 100000 is the second leg of a paired line, but its partner 4 is not an external edge"
     );
 }
