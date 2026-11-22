@@ -25,7 +25,7 @@
 //!   silent fallback after the new values were taken).
 
 use eyre::{Result, ensure, eyre};
-use symbolica::atom::{Atom, AtomCore};
+use symbolica::atom::Atom;
 
 use super::super::{
     closed::with_ir_hard,

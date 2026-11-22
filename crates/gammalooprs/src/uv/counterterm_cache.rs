@@ -122,7 +122,7 @@ impl<'a> CountertermPrewarmPlan<'a> {
 /// replays it as a [`CachedError`]: the classes of its causes survive the
 /// cache (a fatal IRH-DEPTH alarm, `rstar::depth::DepthAlarm`, stays one on
 /// every later hit; a failed comparison,
-/// [`crate::uv::rstar::diagnostic_failure`], which no fallback may decline
+/// (`rstar::ir_dirac::diagnostic_failure`), which no fallback may decline
 /// (a decorated quotient's R* runs inside the child guard of an IR hard
 /// part), stays one too: `rstar::is_diagnostic_failure` reads through the
 /// replay), its text unchanged. A transient failure

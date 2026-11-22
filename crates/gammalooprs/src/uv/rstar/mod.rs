@@ -145,7 +145,6 @@ pub use insertions::{
 };
 pub use integrate::integrate_single_mass;
 pub use ir_dirac::{IrDiracMode, ir_dirac_mode};
-pub(crate) use ir_dirac::{diagnostic_failure, is_diagnostic_failure};
 pub use massive::{
     DistributionTerm, MassiveVacuumSubdivergences, MassiveVacuumTerm, NumeratorMonomial,
     VacuumTopology, massive_vacuum_direct, massive_vacuum_settings,
