@@ -4211,17 +4211,19 @@ impl FactorizedNumerator {
     /// an edge not in the record (read elsewhere as a constant vector, which
     /// the Taylor step does not scale) is refused here; a `Q` of another
     /// record edge is refused by the boundary rule of the index analysis.
+    /// Its OWNER is an external leg of the record (the crown leg of the
+    /// cut hole): an internal owner is refused.
     /// Its SLOTS (29.3) are checked after the analysis, on its FREE slots.
     /// Any kind (closure, direct, ports, vacuum). `Insertion` at the vertex.
     fn check_one_hedge_surrogate(&self, insertion: &Insertion, rule: &str) -> Result<()> {
         let v = insertion.vertex;
         let h = insertion.hedges[0];
         let error = |detail: String| FactorizedError::Insertion { vertex: v, detail };
-        let owner = self
+        let owning = self
             .edges
             .iter()
-            .find(|e| e.source_hedge == Some(h) || e.target_hedge == Some(h))
-            .map_or_else(|| "?".to_string(), |e| e.id.to_string());
+            .find(|e| e.source_hedge == Some(h) || e.target_hedge == Some(h));
+        let owner = owning.map_or_else(|| "?".to_string(), |e| e.id.to_string());
         let id = |a: Option<AtomView<'_>>| {
             a.and_then(|a| i64::try_from(a).ok())
                 .and_then(|n| usize::try_from(n).ok())
@@ -4248,6 +4250,16 @@ impl FactorizedNumerator {
                     "a one-hedge surrogate coefficient vertex (rule {rule}): its {what} has the momentum Q({e}) of an edge that is not in the record (only the momentum of its hedge's edge {owner} may stand there)"
                 )));
             }
+        }
+        // the hedge of a hole the record cuts is on the chain's boundary
+        // edge at chain[0], the crown leg: an EXTERNAL edge of the record
+        // (or its paired leg 100000 + e_in); an internal owner would carry a
+        // loop momentum into the open spectator slot, a shape no record has
+        if let Some(e) = owning.filter(|e| !e.is_external()) {
+            return Err(error(format!(
+                "a one-hedge surrogate coefficient vertex (rule {rule}): its hedge {h} is on the internal edge {}; the hedge of a hole the record cuts is on an external leg (the chain's boundary edge at its first vertex)",
+                e.id
+            )));
         }
         Ok(())
     }

@@ -3128,6 +3128,74 @@ fn the_spectator_takes_the_other_side_of_the_spinor_chain() {
     }
 }
 
+/// The producer's probe of this reader (its auto mode asks whether a one-hedge
+/// `ins:` is read): a one-loop direct record, two scalar lines 2, 3 between
+/// the `ins:` vertex 0 and the plain vertex 1, the leg 0 into vertex 0 (its
+/// half-edge 0 the hedge) and the leg 1 out of vertex 1; coefficient and factor 1.
+fn producer_reader_probe(dimension: Symbol) -> FactorizedNumerator {
+    let edge = |id, source, target, source_hedge, target_hedge, momentum| FactorizedEdge {
+        id,
+        source,
+        target,
+        source_hedge,
+        target_hedge,
+        particle: "c".into(),
+        line: LineKind::Scalar,
+        power: 1,
+        mass_squared: Atom::Zero,
+        momentum,
+        factor: Atom::num(1),
+    };
+    let (ext, at) = (Endpoint::External, Endpoint::Vertex);
+    FactorizedNumerator {
+        label: "u7c reader probe: single-hedge ins:".into(),
+        kind: FactorizedKind::Direct,
+        dimension,
+        loop_edges: vec![Some(2)],
+        external_edges: vec![Some(0)],
+        edges: vec![
+            edge(0, ext, at(0), None, Some(0), vec![0, 1]),
+            edge(1, at(1), ext, Some(1), None, vec![0, 1]),
+            edge(2, at(0), at(1), Some(2), Some(3), vec![1, 0]),
+            edge(3, at(0), at(1), Some(4), Some(5), vec![-1, 1]),
+        ],
+        vertices: vec![
+            FactorizedVertex {
+                id: 0,
+                rule: "ins:scalar_insertion_0".into(),
+                factor: Atom::num(1),
+            },
+            FactorizedVertex {
+                id: 1,
+                rule: "scalar_insertion_1".into(),
+                factor: Atom::num(1),
+            },
+        ],
+        ports: Vec::new(),
+        projector: None,
+        prefactor: Prefactor {
+            overall: Atom::num(1),
+            loop_sign: 1,
+            nf_power: 0,
+            scalars: Atom::num(1),
+            colour: Atom::num(1),
+        },
+        colour_branch: None,
+        insertions: vec![Insertion {
+            vertex: 0,
+            hedges: vec![0],
+            cycles: (0, 0),
+            coefficient: Atom::num(1),
+            factor: Atom::num(1),
+        }],
+        record: Some(DirectRecord {
+            original_cycles: Some((0, 0)),
+            depth: Some(1),
+            weights: Vec::new(),
+        }),
+    }
+}
+
 /// THE PRODUCER'S READINGS of correction 29. (a) The momentum rule compares
 /// with the RECORD edge owning the hedge, which can be the paired leg
 /// 100000 + e_in: l5-59943 with its leg 5 written as the pair 100005 (into
@@ -3137,10 +3205,13 @@ fn the_spectator_takes_the_other_side_of_the_spinor_chain() {
 /// case (l5-175270, contracted insertion_slash pairs in its factor) is
 /// accepted, and so is l5-59943 with a contracted metric pair on the bubble
 /// half-edge 16 multiplied into its insertion factor. (c) The rule is not limited to the
-/// closure kind: a DIRECT record (the vendored K5 direct, its carrier lines
-/// relabelled scalar so that no flow rule applies) with its insertion cut to
-/// one hedge, factor without slot: accepted; with a `Q` of an absent edge in
-/// the factor: refused by the same rule.
+/// closure kind: the producer's own probe of this reader (its auto mode: a
+/// one-loop DIRECT record, two scalar lines between an `ins:` vertex and a
+/// plain one, a leg at each, the one hedge on the leg 0) is accepted, also
+/// through text; the vendored K5 direct record (its carrier lines relabelled
+/// scalar so that no flow rule applies) with its insertion cut to one hedge
+/// is refused, its hedge 5 being on the INTERNAL edge 3, and with a `Q` of an
+/// absent edge in the factor by the momentum rule, which runs first.
 #[test]
 fn the_producers_readings_of_the_one_hedge_rule() {
     let base = FactorizedNumerator::from_text(GG_59943).unwrap();
@@ -3215,7 +3286,19 @@ fn the_producers_readings_of_the_one_hedge_rule() {
     }
     direct.validate().unwrap();
     direct.insertions[0].hedges = vec![5];
-    direct.validate().unwrap();
+    match direct.validate() {
+        Err(FactorizedError::Insertion { vertex: 2, detail }) => assert!(
+            detail.starts_with("a one-hedge surrogate coefficient vertex (rule ins:scalar_insertion_0): its hedge 5 is on the internal edge 3; the hedge of a hole the record cuts is on an external leg"),
+            "{detail}"
+        ),
+        other => panic!("(c) an internal owner: {other:?}"),
+    }
+    let probe = producer_reader_probe(base.dimension);
+    probe.validate().unwrap();
+    assert_eq!(
+        FactorizedNumerator::from_text(&probe.to_text().unwrap()).unwrap(),
+        probe
+    );
     match with_momentum(&direct, 3, 77).validate() {
         Err(FactorizedError::Insertion { vertex: 2, detail }) => assert!(
             detail.starts_with("a one-hedge surrogate coefficient vertex (rule ins:scalar_insertion_0): its factor has the momentum Q(77)"),

@@ -435,10 +435,10 @@ fn refusal_v3_direct_cycles_above_original() {
 /// Insertions on a direct record: the insertion vertex's own factor must be
 /// 1; an `ins:` vertex carries its inner boundary half-edges. Written with
 /// ONE of them while the chain's far end is in the record (the K5 scalar
-/// insertion has no index slot, so the one-hedge rule of correction 29 cannot
-/// tell it from a hole the record cuts), the record is refused by the direct
-/// kind's flow rule: the ghost line through the insertion no longer passes
-/// its span (`FlowNotConserved` at vertex 2).
+/// insertion has no index slot, so the slot rule of correction 29 cannot
+/// tell it from a hole the record cuts), the record is refused: its hedge 5 is
+/// on the internal ghost line 3, and the hedge of a hole the record cuts is on
+/// an external leg (`Insertion` at vertex 2).
 #[test]
 fn refusal_v3_direct_insertion_rules() {
     let text = k5();
@@ -464,9 +464,10 @@ fn refusal_v3_direct_insertion_rules() {
         "insertion\t2\thedges=5\t",
     );
     match FactorizedNumerator::from_text(&bad) {
-        Err(FactorizedError::FlowNotConserved {
-            vertex: 2, line, ..
-        }) => assert_eq!(line, "ghost"),
+        Err(FactorizedError::Insertion { vertex: 2, detail }) => assert_eq!(
+            detail,
+            "a one-hedge surrogate coefficient vertex (rule ins:scalar_insertion_0): its hedge 5 is on the internal edge 3; the hedge of a hole the record cuts is on an external leg (the chain's boundary edge at its first vertex)"
+        ),
         other => panic!("{other:?}"),
     }
 }

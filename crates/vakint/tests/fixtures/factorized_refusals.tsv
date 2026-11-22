@@ -135,6 +135,7 @@ refusal	Insertion	a denominator vanishes identically<> (undefined, not a pole of
 refusal	Insertion	a fractional power of ε
 refusal	Insertion	a non-integer exponent in insertion <> <>: <>
 refusal	Insertion	a number beyond <> bits in insertion <> <>: <>
+refusal	Insertion	a one-hedge surrogate coefficient vertex (rule <>): its hedge <> is on the internal edge <>; the hedge of a hole the record cuts is on an external leg (the chain's boundary edge at its first vertex)
 refusal	Insertion	a one-hedge surrogate coefficient vertex (rule <>): its <> has the momentum Q(<>) of an edge that is not in the record (only the momentum of its hedge's edge <> may stand there)
 refusal	Insertion	a one-hedge surrogate coefficient vertex (rule <>): its slots are on the half-edges <>; a one-hedge insertion carries no slot, or slots on its hedge <> and on exactly one half-edge outside the record (the spectator, a declared port)
 refusal	Insertion	a surrogate coefficient vertex (rule <>) has <> hedges, not the two inner boundary half-edges (or one, when the far end of the chain is outside the record)
