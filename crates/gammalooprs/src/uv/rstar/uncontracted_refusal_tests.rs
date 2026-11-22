@@ -1584,3 +1584,176 @@ fn a_pole_outside_the_insertions_is_declined_before_the_record() -> Result<()> {
         Ok(())
     })
 }
+// ---------------------------------------------------------------------------
+// U8 (G-2): the uvind decline on every kind (helper VH 2's design; code
+// `uvind_head`, helper `record_uvind_head`)
+// ---------------------------------------------------------------------------
+
+/// `gammalooprs::uvind` as a function head (as `restore_numerator` writes it).
+fn uvind() -> Atom {
+    function!(GS.uvaind, 1)
+}
+
+/// `record_uvind_head` names the first field carrying the head (helper VH 2's
+/// helper: the field's name), in every field the writer serialises; a record
+/// without it is `None`; the pole
+/// check does NOT take such a record first (it has no ε), so it is counted
+/// under `uvind_head`, not `factor_eps_pole`.
+#[test]
+fn uvind_record_fields_are_named() -> Result<()> {
+    let fixture =
+        FactorizedNumerator::from_text(include_str!("testdata/u7a/k2-child-ins.input.txt"))
+            .map_err(|e| eyre!("{e}"))?;
+    ensure!(
+        uncontracted::record_uvind_head(&fixture).is_none(),
+        "no_uvind_is_none: {:?}",
+        uncontracted::record_uvind_head(&fixture)
+    );
+    let u = uvind();
+    let mut cases: Vec<(String, FactorizedNumerator)> = Vec::new();
+    let mut r = fixture.clone();
+    r.insertions[0].factor = &r.insertions[0].factor * &u;
+    let ins = format!("insertion {} ", fixture.insertions[0].vertex);
+    cases.push((ins.clone() + "factor", r));
+    let mut r = fixture.clone();
+    r.insertions[0].coefficient = &r.insertions[0].coefficient * &u;
+    cases.push((ins + "coefficient", r));
+    let mut r = fixture.clone();
+    let vertex = r
+        .vertices
+        .iter_mut()
+        .find(|vertex| !vertex.rule.starts_with("ct:"))
+        .ok_or_else(|| eyre!("a model vertex"))?;
+    vertex.factor = &vertex.factor * &u;
+    cases.push(("vertex ".into(), r));
+    let mut r = fixture.clone();
+    r.edges[0].factor = &r.edges[0].factor * &u;
+    cases.push(("edge ".into(), r));
+    let mut r = fixture.clone();
+    r.prefactor.colour = &r.prefactor.colour * &u;
+    cases.push(("prefactor colour".into(), r));
+    let mut r = fixture.clone();
+    r.prefactor.scalars = &r.prefactor.scalars * &u;
+    cases.push(("prefactor scalars".into(), r));
+    for (field, record) in cases {
+        let found = uncontracted::record_uvind_head(&record);
+        ensure!(
+            found.as_deref().is_some_and(|found| found.starts_with(&field)),
+            "{field}: {found:?}"
+        );
+        ensure!(
+            uncontracted::record_eps_pole(&record).is_none(),
+            "{field}: the pole check takes the record first: {:?}",
+            uncontracted::record_eps_pole(&record)
+        );
+    }
+    Ok(())
+}
+
+/// The closed list: `uvind_head` is a designed, graph-dependent code (not a
+/// setting code), and an exception may name it.
+#[test]
+fn uvind_head_is_designed_and_excepted() -> Result<()> {
+    ensure!(DESIGNED_LOCAL.contains(&"uvind_head"));
+    ensure!(uncontracted::is_designed_code("uvind_head"));
+    ensure!(!uncontracted::is_setting_code("uvind_head"));
+    ensure!(
+        !uncontracted::DESIGNED_VAKINT
+            .iter()
+            .any(|row| format!("{row:?}").contains("uvind")),
+        "no vakint row"
+    );
+    let parsed = ledger::parse_exceptions("L3_036\tchild\tuvind_head\ta synthetic uvind record\n");
+    ensure!(parsed.is_ok(), "exceptions_accept_uvind_head: {parsed:?}");
+    Ok(())
+}
+
+/// uvind_record_declines_as_uvind_head, K2 (child) end to end on L3 36's
+/// child site: the Δ at the `ct:` node (an insertion's coefficient and
+/// factor) carrying the head is declined BEFORE the record is written
+/// (declined:uvind_head, no record text), so today's (contracted) path takes
+/// it; before U8's G-2 only the surrogate kind had this check.
+#[test]
+fn uvind_record_declines_as_uvind_head_child() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let fixture =
+            FactorizedNumerator::from_text(include_str!("testdata/u7a/k2-child-ins.input.txt"))
+                .map_err(|e| eyre!("{e}"))?;
+        let insertion = fixture
+            .insertions
+            .first()
+            .ok_or_else(|| eyre!("k2-child-ins has no insertion"))?;
+        let delta = &insertion.coefficient * &insertion.factor;
+        // the Δ, and separately one edge factor, carrying the head
+        let in_delta: InsertionHook = Rc::new(
+            move |kind: Kind, _node: usize, delta: &mut Atom, _edges: &mut [FactorizedEdge]| {
+                if kind == Kind::Child {
+                    *delta = &*delta * uvind();
+                }
+            },
+        );
+        // (an edge factor is not used: check mode's product check refuses a
+        // changed edge first, and a compensating 1/uvind on another edge is a
+        // tensor under a negative power, declined first as factor_eps_pole;
+        // the field scan itself is uvind_record_fields_are_named)
+        for (what, hook) in [("Δ", in_delta)] {
+            let attempt = with_insertion_hook(hook, || child_site_attempt(None, delta.clone()))?;
+            match &attempt.outcome {
+                Outcome::Declined(decline) => {
+                    ensure!(decline.code == "uvind_head", "{what}: {decline:?}");
+                    ensure!(decline.designed, "{what}: {decline:?}");
+                    ensure!(
+                        decline.detail.contains("carries gammalooprs::uvind"),
+                        "{what}: {decline:?}"
+                    );
+                }
+                other => {
+                    return Err(eyre!(
+                        "{what}: expected declined:uvind_head, got {other:?}"
+                    ));
+                }
+            }
+            ensure!(
+                attempt.text.is_none(),
+                "{what}: a declined record is never written"
+            );
+        }
+        // the control: the same site without the head is a value
+        let control = child_site_attempt(None, delta)?;
+        ensure!(
+            matches!(control.outcome, Outcome::Value(_)),
+            "control: {:?}",
+            control.outcome
+        );
+        Ok(())
+    })
+}
+
+/// uvind_record_declines_as_uvind_head, K1 (root) end to end on L2 22's
+/// bare root remainder: the closed-root normalisation carrying the head
+/// (it reaches the record's `prefactor scalars`) is declined before the
+/// record is written.
+#[test]
+fn uvind_record_declines_as_uvind_head_root() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let attempt = root_site_attempt(L2_22_DOT, |graph| {
+            let mut closed_root = metric_root(graph);
+            closed_root.factor = &closed_root.factor * uvind();
+            closed_root
+        })?;
+        match &attempt.outcome {
+            Outcome::Declined(decline) => {
+                ensure!(decline.code == "uvind_head", "{decline:?}");
+                ensure!(
+                    decline.detail.starts_with("prefactor scalars carries gammalooprs::uvind"),
+                    "{decline:?}"
+                );
+            }
+            other => return Err(eyre!("expected declined:uvind_head, got {other:?}")),
+        }
+        ensure!(attempt.text.is_none(), "a declined record is never written");
+        Ok(())
+    })
+}

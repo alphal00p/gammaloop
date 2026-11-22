@@ -3715,11 +3715,10 @@ fn build(
     }
     // U8 condition (i): a record carrying gammalooprs::uvind (a function head
     // vakint's reader refuses) is the designed decline `uvind_head` before it
-    // is written, never error:vakint:<variant>. The surrogate kind here (U7c);
-    // root / child / ir-hard: beta's U8 commit drops this kind guard
-    if kind == Kind::Surrogate
-        && let Some(field) = record_uvind_head(&record)
-    {
+    // is written, never error:vakint:<variant>, on EVERY kind built here
+    // (root, child, ir-hard and a surrogate's remainders; U8 G-2 dropped the
+    // surrogate-only guard)
+    if let Some(field) = record_uvind_head(&record) {
         return Err(uvind_head_decline(&field));
     }
     // the writer validates first and returns exactly validation's error: a

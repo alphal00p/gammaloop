@@ -1005,6 +1005,7 @@ fn designed_refusals_are_a_closed_list() {
         "insertion_mass_symbol",
         "one_loop_tree_cut",
         "factor_eps_pole",
+        "uvind_head",
     ] {
         assert!(DESIGNED_LOCAL.contains(&code), "{code}");
     }
