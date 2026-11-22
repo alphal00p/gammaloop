@@ -126,6 +126,38 @@
 //! of a closed list (closed traces contracted, `d = 4-2ε`), the graph
 //! prefactor and projector included; a factor that is not provably regular
 //! refuses the whole correction before the hard part is integrated.
+//!
+//! # Round 8b: the topological certificate (supersedes the planner above)
+//!
+//! The review of rounds 4-7 (r47) and TOPOLOGICAL-BOUND.md: the measured
+//! planner above is replaced by a certificate computed from the graph and
+//! the declared orders BEFORE any expression of the correction is built
+//! ([`super::regularity::certify_graph_correction`]):
+//!
+//! `B = L_q + Σ_v k_v + Σ_e k_e + k_closure + k_projector + k_prefactor`,
+//! `L_q = loops(support) − loops(hard)`, every `k ≥ 0` read on ONE factor
+//! (never a product: a positive order never offsets a pole, finding 4), the
+//! graph's stored projector not read (no route applies it).
+//!
+//! * `extra = B` on the one attempt; no retry, no zero-row valuation, no
+//!   callback probe decides the depth.
+//! * The child route DECLINES to the generic path (counted, loud: an
+//!   `IR_HARD_DEPTH_DECLINED` line, the `declined=` fields of
+//!   `IR_HARD_DEPTH_SUMMARY`) when any `k > 0` (`declared_order`), when the
+//!   root projector is an opaque callback (`opaque_projector`: only the typed
+//!   form `factor · σ(X)` is certified, and it is the form applied), and when
+//!   a row insertion `E_j` is not ε-free (`insertion_not_eps_free`). On
+//!   production every `k` is 0, so `B = L_q`, the old first depth.
+//! * The measured valuation of the rows (z_j, and the complete outer
+//!   coefficient after the root projection) stays as a cross-check: a need
+//!   above `B` is the [`DepthAlarm`], fatal at any nesting depth, through the
+//!   guard, the cache and a vanished row's valuation, with or without STRICT.
+//!   STRICT (`GAMMALOOP_IR_HARD_DEPTH_STRICT=1`, off in production) adds the
+//!   vanished rows' valuations to the cross-check.
+//! * C1: a scalar `d` is `4 − 2ε` before every expansion in `ε`
+//!   ([`crate::uv::approx::integrated::Integrated::regulated_for_expansion`]),
+//!   on every route, so `h_j` is exact through `ε^(B−1)` whatever the
+//!   spelling of its scalars.
 
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
@@ -196,10 +228,30 @@ pub(super) fn excess_poles(expression: &Atom) -> Option<usize> {
     Some(excess)
 }
 
+/// IRH-DEPTH round 8b (C4): a row insertion `E_j` is free of `ε` and of a
+/// scalar `d` outside representation dimensions (`mink(d, i)`): a leaf of the
+/// hard numerator's tensor structure, its scalars in `h_j`
+/// (`moments::hard_moments`).
+pub(super) fn eps_free(insertion: &Atom) -> bool {
+    if !insertion.contains_symbol(GS.dim_epsilon) && !insertion.contains_symbol(GS.dim) {
+        return true;
+    }
+    let representation = &spenso::network::tags::SPENSO_TAG.representation;
+    let scalars = insertion.replace_map(|view, _, out| {
+        if let AtomView::Fun(function) = view
+            && function.get_symbol().has_tag(representation)
+        {
+            **out = Atom::num(1);
+        }
+    });
+    !scalars.contains_symbol(GS.dim_epsilon) && !scalars.contains_symbol(GS.dim)
+}
+
 /// The pole bound `B` of every quotient factor of one IR correction
 /// (module doc): the quotient's loops plus the excess of its numerator (the
 /// vertex and propagator factors outside the hard part) and of the root
 /// closure. `None` when an excess is unknown.
+#[cfg(test)]
 pub(super) fn quotient_pole_bound(
     quotient_loops: usize,
     quotient_numerator: &Atom,
@@ -224,6 +276,7 @@ pub(super) fn row_bound(bound: Option<usize>, insertion: &Atom) -> Option<usize>
 /// excesses of the rows it returned (module doc): `bound` when every one is
 /// `Some(0)` (the invariant: `E_j` is free of `ε` outside representation
 /// dimensions), else `None` (a dropped row's excess could be larger).
+#[cfg(test)]
 pub(super) fn dropped_row_bound(
     bound: Option<usize>,
     excesses: impl IntoIterator<Item = Option<usize>>,
@@ -237,6 +290,7 @@ pub(super) fn dropped_row_bound(
 
 /// The bound of the whole correction: the dropped rows' and every shown
 /// row's (`None` when one is unknown).
+#[cfg(test)]
 pub(super) fn correction_bound(dropped: Option<usize>, rows: &[Option<usize>]) -> Option<usize> {
     rows.iter()
         .try_fold(dropped?, |largest, row| Some(largest.max((*row)?)))
@@ -244,6 +298,7 @@ pub(super) fn correction_bound(dropped: Option<usize>, rows: &[Option<usize>]) -
 
 /// The first row whose measured need exceeds its own bound (`needs[i]` and
 /// `bounds[i]` per row), as `(need, bound)`.
+#[cfg(test)]
 pub(super) fn exceeded_row(needs: &[usize], bounds: &[Option<usize>]) -> Option<(usize, usize)> {
     needs.iter().zip(bounds).find_map(|(need, bound)| {
         bound
@@ -433,6 +488,15 @@ pub(super) struct DepthCounts {
     /// insertion probe could not evaluate (admitted, certified by contract
     /// only: `IR_HARD_DEPTH_CALLBACK_UNPROBED`).
     pub callback_unprobed: usize,
+    /// IRH-DEPTH round 8b: corrections the child route DECLINED to the
+    /// generic path before integrating H (counted in `refused` too, with
+    /// their reason): an opaque root projector callback (R1), a declared
+    /// order `k > 0` of a factor (C2), a row insertion `E_j` that is not
+    /// ε-free (C4).
+    pub declined: usize,
+    pub opaque_projector: usize,
+    pub declared_order: usize,
+    pub insertion_not_eps_free: usize,
     /// Tests: the last refusal's reason.
     pub reason: Option<&'static str>,
 }
@@ -460,6 +524,10 @@ impl DepthCounts {
         self.taken += other.taken;
         self.nested_taken += other.nested_taken;
         self.callback_unprobed += other.callback_unprobed;
+        self.declined += other.declined;
+        self.opaque_projector += other.opaque_projector;
+        self.declared_order += other.declared_order;
+        self.insertion_not_eps_free += other.insertion_not_eps_free;
         self.reason = other.reason.or(self.reason);
     }
 }
@@ -488,6 +556,18 @@ pub(super) fn refused(counts: &mut DepthCounts, reason: &'static str) {
         "symbol_in_denominator" => note(counts, |counts| &mut counts.symbol_in_denominator),
         "outside_list" => note(counts, |counts| &mut counts.outside_list),
         "pole_in_fixed_factor" => note(counts, |counts| &mut counts.pole_in_fixed_factor),
+        "opaque_projector" => {
+            note(counts, |counts| &mut counts.declined);
+            note(counts, |counts| &mut counts.opaque_projector);
+        }
+        "declared_order" => {
+            note(counts, |counts| &mut counts.declined);
+            note(counts, |counts| &mut counts.declared_order);
+        }
+        "insertion_not_eps_free" => {
+            note(counts, |counts| &mut counts.declined);
+            note(counts, |counts| &mut counts.insertion_not_eps_free);
+        }
         _ => {}
     }
     counts.reason = Some(reason);
