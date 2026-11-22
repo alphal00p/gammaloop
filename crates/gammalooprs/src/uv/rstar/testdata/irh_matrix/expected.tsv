@@ -1,0 +1,77 @@
+# MATRIX-R45 expected native dispositions (classify.py): variant<TAB>profile|*<TAB>disposition<TAB>detail
+# Every child-route mode (child, strict = GAMMALOOP_IR_HARD_DEPTH_STRICT=1, guard = GAMMALOOP_IR_HARD_CHILD_GUARD=1)
+# is expected to give the same disposition. A profile row overrides the '*' row.
+# Profiles: pr19 (r6-nf1 env), u7bk3i (U7b, GAMMALOOP_UNCONTRACTED_NUMERATOR=check:ir-hard + strict: K3 checked),
+# u7bk3on (U7b, on:ir-hard: K3 used), u7bk3c (U7b, check:root,child,ir-hard + strict, the rv-a-L3-check profile).
+# controls
+base-hard-v0	*	RIGHT
+base-hidden	*	RIGHT
+astra-tensor-hidden	*	RIGHT
+astra-tensor-visible	*	RIGHT
+astra-dim-quotient	*	RIGHT
+astra-hard-pole-numerator_prefactor	*	BOUNDARY	numerator_prefactor
+astra-singular-weight	*	BOUNDARY	overall_factor
+# quotient_vertex_numerator, quotient_edge_numerator: the pole is read (contracted traces, d = 4-2eps), B = 2
+v1-eps	*	RIGHT
+v1-dm4	*	RIGHT
+v1-gtr	*	RIGHT
+v1-dtr	*	RIGHT
+e4-eps	*	RIGHT
+e4-dm4	*	RIGHT
+e4-gtr	*	RIGHT
+e4-dtr	*	RIGHT
+# hard_numerator (vertex v0, edge 7, and v0 with every row hidden): explicit read, the others refused
+v0-eps	*	RIGHT
+v0-dm4	*	REFUSED	symbol_in_denominator
+v0-gtr	*	REFUSED	unresolved_tensor
+v0-dtr	*	REFUSED	unresolved_tensor
+e7-eps	*	RIGHT
+e7-dm4	*	REFUSED	symbol_in_denominator
+e7-gtr	*	REFUSED	unresolved_tensor
+e7-dtr	*	REFUSED	unresolved_tensor
+v0k3j1-eps	*	RIGHT
+v0k3j1-dm4	*	REFUSED	symbol_in_denominator
+v0k3j1-gtr	*	REFUSED	unresolved_tensor
+v0k3j1-dtr	*	REFUSED	unresolved_tensor
+# numerator_prefactor (root_projector, root_normalisation): beta refuses a non-regular weight before R*
+pref-eps	*	BOUNDARY	numerator_prefactor
+pref-dm4	*	BOUNDARY	numerator_prefactor
+pref-gtr	*	BOUNDARY	numerator_prefactor
+pref-dtr	*	BOUNDARY	numerator_prefactor
+# overall_factor: beta refuses a non-regular weight; the regular neighbours are computed
+overall-eps	*	BOUNDARY	overall_factor
+overall-dm4	*	BOUNDARY	overall_factor
+overall-gtr	*	BOUNDARY	overall_factor
+overall-dtr	*	BOUNDARY	overall_factor
+overall-none	*	RIGHT
+overall-gtr3	*	RIGHT
+# projector: any projector other than 1 fails the input stage ("early color factoring requires amputated external sources")
+proj-eps	*	LOUD
+proj-dm4	*	LOUD
+proj-gtr	*	LOUD
+proj-dtr	*	LOUD
+proj-reg	*	LOUD
+# propagator_power: the DOT format holds an integer only ("invalid DOT attribute 'power'")
+power-eps	*	LOUD
+power-dm4	*	LOUD
+power-gtr	*	LOUD
+power-dtr	*	LOUD
+# u7bk3c: the U7b K2 (UV-child) CHECK fails first, on both routes, on every non-explicit quotient or hard spelling
+# (open U7b item, not IRH): "UNCONTRACTED_CHECK kind=child ... differs ... through eps^-1" for the 1/(d-4) forms and
+# "UNCONTRACTED kind=child ... outcome=error:vakint:UnsupportedTensor" for the traces
+astra-tensor-hidden	u7bk3c	LOUD
+astra-tensor-visible	u7bk3c	LOUD
+astra-dim-quotient	u7bk3c	LOUD
+v1-dm4	u7bk3c	LOUD
+v1-gtr	u7bk3c	LOUD
+v1-dtr	u7bk3c	LOUD
+e4-dm4	u7bk3c	LOUD
+e4-gtr	u7bk3c	LOUD
+e4-dtr	u7bk3c	LOUD
+v0-gtr	u7bk3c	LOUD
+v0-dtr	u7bk3c	LOUD
+e7-dm4	u7bk3c	LOUD
+e7-gtr	u7bk3c	LOUD
+e7-dtr	u7bk3c	LOUD
+v0k3j1-gtr	u7bk3c	LOUD
+v0k3j1-dtr	u7bk3c	LOUD
