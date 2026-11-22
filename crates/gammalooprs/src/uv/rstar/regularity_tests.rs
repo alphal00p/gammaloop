@@ -1337,3 +1337,82 @@ fn a_rank_ten_reduction_coefficient_pole_is_read() -> Result<()> {
     }
     Ok(())
 }
+
+/// IRH-DEPTH round 8 (r47 finding 5): a typed fatal error returned by the
+/// root projector inside the unit-insertion probe (`callback_excess`) must
+/// propagate; it is not "the probe measured nothing".
+///
+/// The carrier is the review's finding-1 input (r47/analytic, `minus-one`):
+/// hidden (v0·ε³, v1·ε⁻¹) with the hard vertex v0 and the graph numerator
+/// times `1/(1+(d−4)/ε)`. There the child correction is taken at bound 2
+/// with three groups and ZERO rows, so the guard probes the root projector
+/// callback on the unit insertion's outer orders (`callback_excess`); on
+/// the literal tensor-hidden the rows are shown and the probe is not
+/// reached (round-8 trial: probe_calls=0). The projector here is
+/// beta's (the graph prefactor) except on the probe's inputs (the
+/// renamed regulator `irh_callback_probe_epsilon`), where it forwards a
+/// typed [`depth::DepthAlarm`], as a public projector that delegates a
+/// normalisation to a nested R* evaluation would. The alarm must reach the
+/// caller (`depth::is_alarm`); the correction must not be admitted as
+/// `callback_unprobed` (nor as `Some(0)` from another order).
+#[test]
+fn a_typed_alarm_from_the_projector_in_the_unit_probe_propagates() -> Result<()> {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    let minus_one = format!("1/(1+({DIM}-4)/{EPS})");
+    let dot = modify(&hidden(), "v0", "numerator", times(&minus_one));
+    let dot = modify(&dot, "graph", "numerator", times(&minus_one));
+    let case = Case::new(&dot, None)?;
+    let probe = symbolica::symbol!("irh_callback_probe_epsilon");
+    let prefactor = case.graph.global_prefactor.num.clone();
+    let probed = Arc::new(AtomicUsize::new(0));
+    let seen = Arc::clone(&probed);
+    let projector = move |tensor: &Atom| -> Result<Atom> {
+        if tensor.contains_symbol(probe) {
+            seen.fetch_add(1, Ordering::SeqCst);
+            return Err(depth::alarm(
+                "IRH-DEPTH round 8 test: a nested evaluation's typed alarm forwarded by the projector".into(),
+            ));
+        }
+        Ok(tensor * &prefactor)
+    };
+    let (value, counts) = depth::with_depth_test(FIXED, || {
+        depth::collect(|| {
+            with_ir_hard("child", || {
+                case.plan.projected_counterterm(
+                    &case.graph,
+                    case.model(),
+                    &case.vakint,
+                    &case.settings,
+                    &projector,
+                )
+            })
+        })
+    });
+    let calls = probed.load(Ordering::SeqCst);
+    eprintln!(
+        "IRH_R8_PROBE_ALARM probe_calls={calls} counts={counts:?} result={}",
+        match &value {
+            Ok(value) => format!("Ok({})", super::laurent(&super::record(value)?, -1)?),
+            Err(error) => format!("Err(alarm={}: {error:#})", depth::is_alarm(error)),
+        }
+    );
+    ensure!(
+        calls >= 1,
+        "the unit probe never called the projector on this case (counts {counts:?}): the test does not reach callback_excess"
+    );
+    match value {
+        Err(error) if depth::is_alarm(&error) => Ok(()),
+        Err(error) => Err(eyre::eyre!(
+            "the probe's typed alarm became an untyped error: {error:#}"
+        )),
+        Ok(_) => Err(eyre::eyre!(
+            "the probe's typed alarm was lost: the projector returned a DepthAlarm on {calls} probe call(s) and the correction was admitted (callback_unprobed={}, taken={}, refused={})",
+            counts.callback_unprobed,
+            counts.taken,
+            counts.refused
+        )),
+    }
+}
