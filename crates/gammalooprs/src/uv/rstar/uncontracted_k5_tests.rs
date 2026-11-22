@@ -2862,3 +2862,96 @@ fn k5_direct_record_with_an_undeclared_momentum_is_an_error() -> Result<()> {
         Ok(())
     })
 }
+
+/// Beta's suggestion (ii), the coordinator's decision: C_H is written in the
+/// RECORD's name of the anchor's edge. When e_in is a paired crown edge of the
+/// record whose sink is the hole's anchor, the record's line there is the
+/// incoming leg `100000 + e_in` (uncontracted.rs `paired_leg_id`), and C_H must
+/// name that leg (the same rename `crown_legs_at_node` makes in a ct: Delta),
+/// or beta's guard refuses it (`insertion_momentum`). Constructed here at the
+/// two functions `finish_with` calls (no graph of our sets has the case: the
+/// dump scan finds 0 such anchors): (a) the anchor's leg of a paired crown
+/// edge e_in = 5 is 100005, of a plain e_in its own id, any other owner an
+/// error; (b) C_H in Q(e_in) becomes Q(100005), C_H in Q(e_out) becomes
+/// s Q(100005), and with a plain leg the old rewrite is unchanged.
+#[test]
+fn k5_coefficient_names_the_anchor_leg_of_a_paired_crown_edge() -> Result<()> {
+    use vakint::p_integral::factorized::{Endpoint, FactorizedEdge, LineKind};
+    test_initialise()?;
+    let edge = |id, source, target, source_hedge, target_hedge| FactorizedEdge {
+        id,
+        source,
+        target,
+        source_hedge,
+        target_hedge,
+        particle: "g".into(),
+        line: LineKind::Vector,
+        power: 1,
+        mass_squared: Atom::Zero,
+        momentum: vec![0, 1],
+        factor: Atom::num(1),
+    };
+    // anchor vertex 2, its inner half-edge 9; e_in = 5 a paired crown edge:
+    // outgoing leg 5 at vertex 7 (half-edge 8), incoming leg 100005 at 2 (9)
+    let paired = vec![
+        edge(5, Endpoint::Vertex(7), Endpoint::External, Some(8), None),
+        edge(
+            100005,
+            Endpoint::External,
+            Endpoint::Vertex(2),
+            None,
+            Some(9),
+        ),
+        edge(
+            6,
+            Endpoint::Vertex(2),
+            Endpoint::Vertex(3),
+            Some(10),
+            Some(11),
+        ),
+    ];
+    let plain = vec![
+        edge(5, Endpoint::External, Endpoint::Vertex(2), None, Some(9)),
+        edge(
+            6,
+            Endpoint::Vertex(2),
+            Endpoint::Vertex(3),
+            Some(10),
+            Some(11),
+        ),
+    ];
+    ensure!(
+        k5::anchor_leg(&paired, 9, 5).ok() == Some(100005),
+        "(a) paired"
+    );
+    ensure!(k5::anchor_leg(&plain, 9, 5).ok() == Some(5), "(a) plain");
+    match k5::anchor_leg(&plain, 10, 5) {
+        Err(decline) => ensure!(decline.code == "surrogate_chain" && !decline.designed),
+        Ok(id) => return Err(eyre!("(a) a foreign owner {id} was accepted")),
+    }
+    let q = |e: usize| {
+        symbolica::try_parse!(&format!(
+            "gammalooprs::{{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}}::Q({e},spenso::{{spenso::representation,spenso::self_dual}}::mink(4,gammalooprs::{{spenso::index}}::hedge(9,1)))"
+        ))
+        .map_err(|error| eyre!("{error}"))
+    };
+    // e_in = 5 enters the chain at the anchor (its sink), e_out = 12 leaves it
+    let inner = [(5, true), (12, false)];
+    ensure!(
+        k5::in_anchor_edge(q(5)?, inner, 100005) == q(100005)?,
+        "(b) Q(e_in)"
+    );
+    ensure!(
+        k5::in_anchor_edge(q(12)?, inner, 100005) == q(100005)?,
+        "(b) Q(e_out), s = +1"
+    );
+    ensure!(
+        k5::in_anchor_edge(q(12)?, inner, 5) == q(5)?,
+        "(b) plain leg: the old rewrite"
+    );
+    ensure!(
+        k5::in_anchor_edge(q(5)?, inner, 5) == q(5)?,
+        "(b) plain leg: Q(e_in) kept"
+    );
+    Ok(())
+}
