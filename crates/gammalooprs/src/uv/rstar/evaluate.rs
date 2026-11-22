@@ -2256,7 +2256,8 @@ impl<'a> Evaluation<'a> {
             // the bound of the vanished rows assumed it regular: it is probed
             // on the unit insertion's outer orders (callback_excess). A pole
             // there is a need above the bound (exceeded; the alarm under
-            // STRICT); a probe that measures nothing refuses (`unverified`).
+            // STRICT); a probe that measures nothing is counted
+            // (`callback_unprobed`) and admitted.
             if super::depth::guards()
                 && self.root_projector.is_some()
                 && rows.iter().all(|(h, _, _)| h.is_zero())
@@ -2292,17 +2293,22 @@ impl<'a> Evaluation<'a> {
                         ));
                     }
                     None => {
-                        return Ok(self.refuse_depth(
-                            correction_index,
-                            correction,
-                            attempts,
-                            quotient_loops,
-                            row_bound,
-                            extra,
-                            0,
-                            "unverified",
-                            &truncation,
-                        ));
+                        // The probe measured nothing (the callback does not
+                        // evaluate the unit insertion: beta's projector needs
+                        // the hard part's boundary slots). Admitted, counted
+                        // and logged: refusing would send production
+                        // corrections whose rows all vanish to today's path,
+                        // and beta's callback has no factor outside B (its
+                        // σ(prefactor) is numerator_prefactor, in B, and
+                        // beta refuses a poleful one). Certified by contract
+                        // only (regularity::FACTORS root_projector).
+                        super::depth::note(&mut self.depth, |counts| &mut counts.callback_unprobed);
+                        eprintln!(
+                            "IR_HARD_DEPTH_CALLBACK_UNPROBED graph={} corr={correction_index} attempt={attempts} groups={} vanished_groups={vanished_groups} rows={}",
+                            self.graph.name,
+                            groups.len(),
+                            rows.len(),
+                        );
                     }
                 }
             }
@@ -3426,7 +3432,7 @@ impl<'a> Evaluation<'a> {
             // an IR_HARD_CHILD* line: the census parsers count every line
             // with the IR_HARD_CHILD_DEPTH prefix as a depth retry.
             eprintln!(
-                "IR_HARD_DEPTH_SUMMARY graph={} child={} corrections={} bounded={} retried={} raised={} exceeded={} refused={} unbounded={} vanished={} unverified={} unresolved_tensor={} opaque_function={} symbol_in_denominator={} outside_list={} pole_in_fixed_factor={} taken={}",
+                "IR_HARD_DEPTH_SUMMARY graph={} child={} corrections={} bounded={} retried={} raised={} exceeded={} refused={} unbounded={} vanished={} unverified={} unresolved_tensor={} opaque_function={} symbol_in_denominator={} outside_list={} pole_in_fixed_factor={} taken={} callback_unprobed={}",
                 self.graph.name,
                 self.plan.root_boundary.is_some(),
                 self.depth.corrections,
@@ -3444,6 +3450,7 @@ impl<'a> Evaluation<'a> {
                 self.depth.outside_list,
                 self.depth.pole_in_fixed_factor,
                 self.depth.taken,
+                self.depth.callback_unprobed,
             );
         }
         let elapsed = self.started.elapsed();
