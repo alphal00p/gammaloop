@@ -1493,3 +1493,98 @@ fn a_typed_alarm_from_the_projector_in_the_unit_probe_propagates() -> Result<()>
         )),
     }
 }
+
+/// IRH-DEPTH round 8 (r47 finding 2): the weight normaliser
+/// ([`regularity::normalise_weight`]) returns the LITERAL's value for every
+/// spelling of 1, −1 and 2 (closed metric and Dirac traces with fresh
+/// slots, in a denominator and in a numerator, `d − 4 + 2ε + 1`, `ε/ε`,
+/// `1/(1 + (d − 4)/ε)`, vakint's FORM `d`, nested forms), refuses every
+/// spelling of a pole (`ε⁻¹`, `−2/(d − 4)`, `−2/(g_ab g^ab − 4)`, the
+/// Dirac trace), and refuses what it cannot decide (an open index, an
+/// unknown symbol or function) and an exact zero. The order is decided on
+/// the whole scalar: `(d² − 16)/(d − 4) = d + 4` is regular.
+#[test]
+fn round8_every_spelling_of_a_weight_normalises_to_its_literal() -> Result<()> {
+    use regularity::{WeightRefusal, normalise_weight};
+    crate::initialisation::test_initialise()?;
+    let parse = |text: &str| -> Result<Atom> {
+        Ok(symbolica::try_parse!(text).map_err(|error| eyre::eyre!("{text}: {error}"))?)
+    };
+    let slot = |n: usize| format!("{MINK}(4,{HEDGE}({n},1))");
+    let trace = format!("({METRIC}({},{}))^2", slot(81), slot(82));
+    let dirac = dirac_product();
+    let one_traced = format!("-2*{EPS}/({trace}-4)");
+    let spellings: Vec<(i64, String)> = vec![
+        (1, "1".into()),
+        (1, one_traced.clone()),
+        (1, format!("{trace}/(4-2*{EPS})")),
+        (1, format!("({dirac})/(4*{DIM})")),
+        (1, format!("({dirac})/(16-8*{EPS})")),
+        (1, format!("{DIM}-4+2*{EPS}+1")),
+        (1, format!("{EPS}/{EPS}")),
+        (1, format!("-2*{EPS}/({DIM}-4)")),
+        (1, format!("-2*{EPS}/(vakint::{{}}::d-4)")),
+        (1, format!("({one_traced})^2*({trace}/(4-2*{EPS}))")),
+        (1, format!("1/(2-({DIM}-4+2*{EPS}+1))")),
+        (-1, "-1".into()),
+        (-1, format!("1/(1+({DIM}-4)/{EPS})")),
+        (-1, format!("({DIM}-4)/(2*{EPS})")),
+        (-1, format!("-{trace}/(4-2*{EPS})")),
+        (2, "2".into()),
+        (2, format!("2*{one_traced}")),
+        (2, format!("{DIM}-4+2*{EPS}+2")),
+        (2, format!("-4*{EPS}/({trace}-4)")),
+    ];
+    let mut wrong = Vec::new();
+    for (literal, spelling) in &spellings {
+        for name in ["overall_factor", "numerator_prefactor", "projector"] {
+            match normalise_weight(name, &parse(spelling)?) {
+                Ok(weight) if weight.value() == &Atom::num(*literal) && weight.order() == 0 => {}
+                other => wrong.push(format!("{name} {spelling} (literal {literal}): {other:?}")),
+            }
+        }
+    }
+    let regular = normalise_weight("overall_factor", &parse(&format!("({DIM}^2-16)/({DIM}-4)"))?);
+    match &regular {
+        Ok(weight) if (weight.value() - parse(&format!("8-2*{EPS}"))?).expand().is_zero() => {}
+        other => wrong.push(format!("(d^2-16)/(d-4): {other:?}")),
+    }
+    let poles = [
+        format!("({EPS})^(-1)"),
+        format!("-2/({DIM}-4)"),
+        format!("-2/({trace}-4)"),
+        dirac_trace(),
+        format!("{EPS}^(-2)*(1+{EPS})"),
+    ];
+    for pole in &poles {
+        for name in ["overall_factor", "numerator_prefactor", "projector"] {
+            match normalise_weight(name, &parse(pole)?) {
+                Err(refused) if refused.class == WeightRefusal::Pole => {
+                    eprintln!("IRH_R8_WEIGHT_REFUSED {name} {refused}");
+                }
+                other => wrong.push(format!("pole {name} {pole}: {other:?}")),
+            }
+        }
+    }
+    let open = format!("{METRIC}({},{})", slot(81), slot(82));
+    let refused = [
+        (open, WeightRefusal::OpenIndex),
+        ("irh_r8_test::x".to_owned(), WeightRefusal::UnknownSymbol),
+        ("1/(irh_r8_test::x-4)".to_owned(), WeightRefusal::Unsupported(regularity::Refusal::SymbolInDenominator)),
+        ("irh_r8_test::f(2)".to_owned(), WeightRefusal::Unsupported(regularity::Refusal::OpaqueFunction)),
+        (format!("{DIM}-4+2*{EPS}"), WeightRefusal::Zero),
+        ("0".to_owned(), WeightRefusal::Zero),
+    ];
+    for (text, class) in &refused {
+        match normalise_weight("overall_factor", &parse(text)?) {
+            Err(refused) if refused.class == *class => {}
+            other => wrong.push(format!("{text}: expected {class:?}, got {other:?}")),
+        }
+    }
+    match normalise_weight("vertex_weight", &Atom::one()) {
+        Err(refused) if refused.class == WeightRefusal::Unsupported(regularity::Refusal::OutsideList) => {}
+        other => wrong.push(format!("vertex_weight: {other:?}")),
+    }
+    ensure!(wrong.is_empty(), "{wrong:#?}");
+    Ok(())
+}

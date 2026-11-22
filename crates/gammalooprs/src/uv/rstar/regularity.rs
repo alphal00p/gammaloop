@@ -652,23 +652,249 @@ pub fn certified_excess(
     Ok(super::depth::excess_poles(&normalise(factor, expression)?))
 }
 
-/// A graph weight is regular at `d = 4` (beta's public boundary): its
-/// normalised excess is zero. `Err` names the refusal or the pole order.
+/// A graph weight is regular at `d = 4` (beta's public boundary): it
+/// normalises ([`normalise_weight`]). `Err` names the refusal or the pole
+/// order. A thin wrapper: the check and the value are [`normalise_weight`]'s.
 pub fn ensure_regular_weight(name: &str, expression: &Atom) -> std::result::Result<(), String> {
-    match normalise_named(name, expression) {
-        Err(refused) => Err(refused.to_string()),
-        Ok(normalised) => match super::depth::excess_poles(&normalised) {
-            Some(0) => Ok(()),
-            Some(poles) => Err(format!(
-                "IRH-DEPTH regularity: {name} has a pole of order {poles} at d = 4 ({}); a graph weight must be regular (the counterterm's finite orders are not kept)",
-                short(expression.as_view())
-            )),
-            None => Err(format!(
-                "IRH-DEPTH regularity: the ε order of {name} cannot be read ({})",
-                short(expression.as_view())
-            )),
-        },
+    normalise_weight(name, expression)
+        .map(|_| ())
+        .map_err(|refused| refused.to_string())
+}
+
+/// IRH-DEPTH round 8 (Astra r47, finding 2): a graph weight as ONE
+/// normalised scalar, the object that is both checked and multiplied.
+///
+/// Only [`normalise_weight`] constructs one (and [`NormalisedWeight::one`],
+/// the literal unit), so a value of this type has passed the contract:
+/// * every closed metric or Dirac trace is contracted (fresh dummy indices
+///   included, Lorentz slots in `d`), wherever it sits (numerator,
+///   denominator, nested);
+/// * every spelling of the dimension in use is `4 − 2ε`: gammaloop's (and
+///   feynkit's) `dim`, a Lorentz slot `mink(n, ·)` of a contracted trace,
+///   and vakint's FORM symbols `vakint::d` (= `4 − 2 vakint::ep`) and
+///   `vakint::ep` (= `ε`);
+/// * the result is simplified (`together`) to one rational function of `ε`
+///   with constant coefficients (numbers, `π`, `e`, and the known constant
+///   functions of numbers, e.g. `zeta(3)`), whose order at `ε = 0` is then
+///   decided exactly on the whole scalar (not a sum of factor bounds:
+///   `(d² − 16)/(d − 4) = d + 4` is regular);
+/// * that order is `≥ 0` (regular).
+///
+/// REFUSED ([`WeightRefused`], named class, before any projection): a form
+/// the normaliser cannot decide (an unknown function head, a symbolic or
+/// non-integer exponent of an `ε`-dependent base, an open index or a
+/// tensor that does not contract to a scalar, any symbol other than `ε`,
+/// `π`, `e` and the dimension spellings), a pole (order `< 0`), an order
+/// that cannot be read, and a weight that normalises to exactly ZERO. A
+/// zero is refused, not returned: a weight of 0 makes the whole diagram 0,
+/// which is exactly how a lost value looks (the r47 finding-2 defect turned
+/// the unit weight into a zero result); a graph whose weights cancel is
+/// removed by the generator with a recorded reason, never by a zero weight
+/// reaching the integration.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NormalisedWeight {
+    value: Atom,
+    order: i64,
+}
+
+impl NormalisedWeight {
+    /// The literal unit (normalised by construction).
+    pub fn one() -> Self {
+        Self {
+            value: Atom::one(),
+            order: 0,
+        }
     }
+
+    /// The normalised scalar: the ONLY value a caller multiplies.
+    pub fn value(&self) -> &Atom {
+        &self.value
+    }
+
+    /// Its order at `ε = 0` (`≥ 0`).
+    pub fn order(&self) -> i64 {
+        self.order
+    }
+
+    /// Whether the value is free of `ε` (a constant).
+    pub fn is_epsilon_free(&self) -> bool {
+        !self.value.contains_symbol(GS.dim_epsilon)
+    }
+
+    /// Whether the value is exactly 1.
+    pub fn is_one(&self) -> bool {
+        self.value.is_one()
+    }
+}
+
+/// Why [`normalise_weight`] refused a weight.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum WeightRefusal {
+    /// The normaliser does not understand the form (the [`Refusal`] class:
+    /// unresolved tensor, opaque function, symbol in a denominator, outside
+    /// the list).
+    Unsupported(Refusal),
+    /// A tensor structure that is not a closed trace (an open index in what
+    /// must be a scalar) or that the algebra does not contract.
+    OpenIndex,
+    /// A symbol whose value is unknown (it could be `ε`).
+    UnknownSymbol,
+    /// A pole at `d = 4` (order `< 0`).
+    Pole,
+    /// The order at `ε = 0` cannot be read.
+    Unreadable,
+    /// The weight normalises to exactly zero.
+    Zero,
+}
+
+impl WeightRefusal {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Unsupported(class) => class.label(),
+            Self::OpenIndex => "open_index",
+            Self::UnknownSymbol => "unknown_symbol",
+            Self::Pole => "pole",
+            Self::Unreadable => "unreadable_order",
+            Self::Zero => "zero",
+        }
+    }
+}
+
+/// A refused graph weight: its name, class and the detail.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WeightRefused {
+    pub name: String,
+    pub class: WeightRefusal,
+    pub detail: String,
+}
+
+impl std::fmt::Display for WeightRefused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.class {
+            WeightRefusal::Pole => write!(
+                f,
+                "IRH-DEPTH regularity: {} has a pole of order {} at d = 4; a graph weight must be regular (the counterterm's finite orders are not kept)",
+                self.name, self.detail
+            ),
+            class => write!(
+                f,
+                "IRH-DEPTH regularity: {} refused ({}): {}",
+                self.name,
+                class.label(),
+                self.detail
+            ),
+        }
+    }
+}
+
+impl std::error::Error for WeightRefused {}
+
+/// The constant symbols a normalised weight may hold besides `ε`.
+fn weight_symbol(symbol: Symbol) -> bool {
+    symbol == GS.dim_epsilon || symbol == Symbol::PI || symbol == Symbol::E
+}
+
+/// THE weight normaliser ([`NormalisedWeight`]): `name` must be a graph
+/// weight of the closed list ([`FACTORS`]: `overall_factor`,
+/// `numerator_prefactor`, `projector`), else `outside_list`.
+pub fn normalise_weight(
+    name: &str,
+    expression: &Atom,
+) -> std::result::Result<NormalisedWeight, WeightRefused> {
+    let refuse = |class: WeightRefusal, detail: String| WeightRefused {
+        name: name.to_owned(),
+        class,
+        detail,
+    };
+    if !matches!(name, "overall_factor" | "numerator_prefactor" | "projector") {
+        return Err(refuse(
+            WeightRefusal::Unsupported(Refusal::OutsideList),
+            format!("{name} is not a graph weight"),
+        ));
+    }
+    // vakint's FORM spellings of the dimension and the regulator.
+    let vakint = &vakint::symbols::S;
+    let expression = expression
+        .replace(vakint.form_dimension)
+        .with(Atom::var(GS.dim))
+        .replace(vakint.form_epsilon)
+        .with(Atom::var(GS.dim_epsilon));
+    let unsupported = |(class, detail): (Refusal, String)| {
+        refuse(WeightRefusal::Unsupported(class), detail)
+    };
+    // Closed traces in denominators (and nested ones) contracted, d = 4-2ε.
+    let mut normalised = walk(expression.as_view(), false, false).map_err(unsupported)?;
+    if holds_structure(normalised.as_view()) {
+        // A closed trace in a numerator: the whole scalar is contracted.
+        let contracted = contract_closed(&normalised).ok_or_else(|| {
+            refuse(
+                WeightRefusal::OpenIndex,
+                format!(
+                    "a tensor structure that is not a closed trace contracting to a scalar: {}",
+                    short(normalised.as_view())
+                ),
+            )
+        })?;
+        normalised = walk(contracted.as_view(), false, false).map_err(unsupported)?;
+    }
+    let mut unknown = None;
+    normalised.visitor(&mut |view| {
+        if let AtomView::Var(variable) = view
+            && !weight_symbol(variable.get_symbol())
+        {
+            unknown = Some(variable.get_symbol());
+        }
+        unknown.is_none()
+    });
+    if let Some(symbol) = unknown {
+        return Err(refuse(
+            WeightRefusal::UnknownSymbol,
+            format!(
+                "{} in {} (a graph weight holds numbers, ε, π, e and constant functions of numbers only)",
+                symbol.get_name(),
+                short(expression.as_view())
+            ),
+        ));
+    }
+    let value = normalised.together();
+    if value.is_zero() {
+        return Err(refuse(
+            WeightRefusal::Zero,
+            format!(
+                "{} normalises to exactly 0 (a zero weight would hide a lost value; the generator removes cancelled graphs)",
+                short(expression.as_view())
+            ),
+        ));
+    }
+    let order = if value.contains_symbol(GS.dim_epsilon) {
+        use symbolica::poly::series::SeriesDepth;
+        let unreadable = || {
+            refuse(
+                WeightRefusal::Unreadable,
+                format!("the ε order of {} cannot be read", short(value.as_view())),
+            )
+        };
+        let series = value
+            .series(GS.dim_epsilon, 0, SeriesDepth::relative(1))
+            .map_err(|_| unreadable())?;
+        if series.is_zero() {
+            return Err(unreadable());
+        }
+        let exponent = series.get_trailing_exponent();
+        if !exponent.is_integer() {
+            return Err(unreadable());
+        }
+        exponent.numerator().to_i64().ok_or_else(unreadable)?
+    } else {
+        0
+    };
+    if order < 0 {
+        return Err(refuse(
+            WeightRefusal::Pole,
+            format!("{} ({})", -order, short(expression.as_view())),
+        ));
+    }
+    Ok(NormalisedWeight { value, order })
 }
 
 /// The factors of one IR correction (the run-time entries of [`FACTORS`]).
