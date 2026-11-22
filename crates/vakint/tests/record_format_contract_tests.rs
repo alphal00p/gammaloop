@@ -10,7 +10,8 @@ use std::path::PathBuf;
 
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use vakint::p_integral::factorized::{
-    ClosureValue, FactorizedKind, evaluate_factorized_closure, evaluate_factorized_ports,
+    ClosureValue, DIAGNOSTIC_SCHEMA_SUFFIX, FactorizedKind, evaluate_factorized_closure,
+    evaluate_factorized_ports,
 };
 use vakint::p_integral::{FactorizedError, FactorizedNumerator};
 use vakint::{
@@ -3470,16 +3471,29 @@ fn a_marked_three_loop_massive_tadpole_through_the_vacuum_entry() {
 /// validation only (`from_text`), on the roots
 /// `/common/build-cache/ben/consol:/common/ben/beta/results/consolidation/wh-fixtures`
 /// (LIVE: 2,633 unique v3 records on 2026-11-21, 3,126 later the same day;
-/// the total is printed, not pinned). The 22 records of `REFUSED` (one-loop
-/// remainders whose only line left is the closing massive line: a massive
-/// tadpole, the producer's designed decline vakint:all_massive, dumped
-/// before the vakint call) are, while present, refused with the Closure
-/// detail "every line is massive: not a closure"; every other record is
-/// accepted.
+/// the total is printed, not pinned). THREE CLASSES: (1) the 22 records of
+/// `REFUSED` (one-loop remainders whose only line left is the closing
+/// massive line: a massive tadpole, the producer's designed decline
+/// vakint:all_massive, dumped before the vakint call) are, while present,
+/// refused with the Closure detail "every line is massive: not a closure";
+/// (2) records refused with exactly the ONE-HEDGE surrogate rule (an
+/// `Insertion` refusal "a surrogate coefficient vertex (rule ins:…) has 1
+/// hedges, not the two inner boundary half-edges": records of a later
+/// producer version, inputs of a later format version) are counted and
+/// printed, not pinned; (3) every other record is accepted: any other
+/// refusal fails. The count per refusal rule and root is printed
+/// (`PRODUCTION RULE <root> | <rule> | <n>`: the two classes, and the
+/// weights rules, the paired-leg rule and any other rule, which must be 0).
 #[test]
 #[ignore = "external data: VAKINT_TEST_RECORD_ROOTS"]
 fn every_production_record_validates() {
     const ALL_MASSIVE: &str = "every line is massive: not a closure";
+    const ONE_HEDGE: &str = "one-hedge surrogate vertex (a later format version)";
+    let one_hedge = |e: &FactorizedError| {
+        matches!(e, FactorizedError::Insertion { detail, .. }
+            if detail.starts_with("a surrogate coefficient vertex (rule ins:")
+                && detail.ends_with(") has 1 hedges, not the two inner boundary half-edges"))
+    };
     // the 22 all-massive tadpoles of 2026-11-21 (dumps written before the
     // vakint call): each, while present, must be refused with ALL_MASSIVE;
     // no other record may be refused
@@ -3533,6 +3547,7 @@ fn every_production_record_validates() {
         .filter_map(|p| std::fs::read_to_string(p).ok())
         .collect::<std::collections::BTreeSet<_>>();
     let started = std::time::Instant::now();
+    let mut by_rule = std::collections::BTreeMap::<(String, &str), usize>::new();
     let mut seen = std::collections::BTreeSet::new();
     let (mut accepted, mut refused) = (
         0usize,
@@ -3567,9 +3582,30 @@ fn every_production_record_validates() {
                         if detail.starts_with(ALL_MASSIVE));
                 let prefix = if expected {
                     ALL_MASSIVE.to_string()
+                } else if one_hedge(&e) {
+                    ONE_HEDGE.to_string()
                 } else {
                     format!("UNEXPECTED {detail}")
                 };
+                // the count per refusal rule, per root
+                let rule = if expected {
+                    "all-massive tadpole (pinned)"
+                } else if one_hedge(&e) {
+                    "one-hedge surrogate vertex"
+                } else if detail.contains("weight ") && detail.contains("applied_by=") {
+                    "a weights rule"
+                } else if detail.contains("the two legs of a paired line") {
+                    "the paired-leg rule"
+                } else {
+                    "any other rule"
+                };
+                let root = roots
+                    .to_string_lossy()
+                    .split(':')
+                    .find(|r| p.starts_with(r))
+                    .unwrap_or("?")
+                    .to_string();
+                *by_rule.entry((root, rule)).or_insert(0usize) += 1;
                 refused
                     .entry(prefix)
                     .or_default()
@@ -3594,14 +3630,35 @@ fn every_production_record_validates() {
             paths[0]
         );
     }
+    // THE COUNT PER REFUSAL RULE, per root (every rule printed, zero too)
+    for root in roots.to_string_lossy().split(':') {
+        for rule in [
+            "all-massive tadpole (pinned)",
+            "one-hedge surrogate vertex",
+            "a weights rule",
+            "the paired-leg rule",
+            "any other rule",
+        ] {
+            eprintln!(
+                "PRODUCTION RULE {root} | {rule} | {}",
+                by_rule.get(&(root.to_string(), rule)).copied().unwrap_or(0)
+            );
+        }
+    }
+    for rule in ["a weights rule", "the paired-leg rule", "any other rule"] {
+        assert!(
+            !by_rule.keys().any(|(_, r)| *r == rule),
+            "records refused by {rule}: {by_rule:?}"
+        );
+    }
     let refused_total = refused.values().map(Vec::len).sum::<usize>();
     let unexpected = refused
         .iter()
-        .filter(|(k, _)| k.as_str() != ALL_MASSIVE)
+        .filter(|(k, _)| k.as_str() != ALL_MASSIVE && k.as_str() != ONE_HEDGE)
         .collect::<Vec<_>>();
     assert!(
         unexpected.is_empty(),
-        "a refusal other than the pinned all-massive tadpoles: {unexpected:?}"
+        "a refusal other than the pinned all-massive tadpoles and the one-hedge surrogate class: {unexpected:?}"
     );
     for p in REFUSED {
         if let Ok(text) = std::fs::read_to_string(p) {
@@ -3612,8 +3669,9 @@ fn every_production_record_validates() {
         }
     }
     eprintln!(
-        "PRODUCTION pinned refusals present {} of 22; refused {refused_total}; accepted {accepted} of {} unique",
+        "PRODUCTION pinned refusals present {} of 22; one-hedge surrogate class {} (counted, not pinned); refused {refused_total}; accepted {accepted} of {} unique",
         pinned.len(),
+        refused.get(ONE_HEDGE).map_or(0, Vec::len),
         seen.len()
     );
     assert_eq!(
@@ -7761,7 +7819,13 @@ fn a_huge_power_in_an_insertion_is_refused_at_once() {
         } else {
             v.insertions[0].factor = &v.insertions[0].factor * atom(huge);
         }
-        let text = v.to_text_unvalidated_for_diagnostics().unwrap();
+        // the record's lines (the diagnostic writer's text with the record
+        // schema: the reader's rules, not its schema refusal)
+        let text = v.to_text_unvalidated_for_diagnostics().unwrap().replacen(
+            DIAGNOSTIC_SCHEMA_SUFFIX,
+            "",
+            1,
+        );
         for way in [
             "validate",
             "from_text",
@@ -7951,12 +8015,23 @@ fn with_weight_case(
 
 use vakint::p_integral::factorized::Prefactor;
 
-/// Through text with the weight line's applied_by token replaced.
-fn x_run_text_token(entry: XEntry, (v, s, arg): XInput, token: &str) -> Result<(), String> {
+/// Through text with the applied_by token of the weight `name` replaced: the
+/// READER's verdict on that text (the lines of the diagnostic writer with
+/// the record schema: the typed value may be one the writer refuses).
+fn x_run_text_token(
+    entry: XEntry,
+    (v, s, arg): XInput,
+    name: &str,
+    token: &str,
+) -> Result<(), String> {
     let t = v
-        .to_text()
-        .map_err(|e| format!("TEXT CANNOT WRITE IT: {e}"))?;
-    let t = t.replace("applied_by=vakint", &format!("applied_by={token}"));
+        .to_text_unvalidated_for_diagnostics()
+        .map_err(|e| format!("TEXT CANNOT WRITE IT: {e}"))?
+        .replacen(DIAGNOSTIC_SCHEMA_SUFFIX, "", 1);
+    let t = t.replace(
+        &format!("weight\t{name}\tapplied_by=vakint"),
+        &format!("weight\t{name}\tapplied_by={token}"),
+    );
     let v = FactorizedNumerator::from_text(&t).map_err(|e| e.to_string())?;
     let arg2 = v.prefactor.total();
     let _ = arg;
@@ -7985,8 +8060,9 @@ const WEIGHT_FAILURES: &[&str] = &[];
 /// unknown token) x its own prefactor field (equal to the weight, neutral, a
 /// third value) x kind (closure K2 L3-036; v3 direct L2-17 through the direct
 /// and the ports entries; a marked vacuum value) x form (typed, text). The
-/// format's expectation: applied_by=vakint accepted iff the field equals the
-/// weight; applied_by=beta accepted iff the field is neutral; an unknown token
+/// format's expectation: applied_by=vakint accepted iff the weight is
+/// `scalars` and the field equals the weight (overall, colour, loop_sign and
+/// flavour are the caller's); applied_by=beta accepted iff the field is neutral; an unknown token
 /// refused; and the other rules of the record (with original_cycles the
 /// prefactor has loop_sign 1, nf_power 0, overall 1; without, loop_sign and
 /// nf_power follow the closed loops) still hold. Plus an unknown weight name
@@ -8033,9 +8109,10 @@ fn weights_table(only_known_failures: bool) -> Vec<String> {
                     let Some((input, token)) = with_weight_case(&b, name, by, field) else {
                         continue;
                     };
-                    // the format: the weight's own rule, then the record's other rules
+                    // the format: the weight's own rule (only scalars is
+                    // applied by vakint), then the record's other rules
                     let weight_ok = match (by, field) {
-                        (Some(true), WField::Equal) => true,
+                        (Some(true), WField::Equal) => name == "scalars",
                         (Some(false), WField::Neutral) => true,
                         _ => false,
                     };
@@ -8059,7 +8136,7 @@ fn weights_table(only_known_failures: bool) -> Vec<String> {
                             continue;
                         }
                         let got = if text {
-                            x_run_text_token(*entry, input.clone(), &token)
+                            x_run_text_token(*entry, input.clone(), name, &token)
                         } else {
                             x_run(*entry, false, input.clone())
                         };
@@ -8831,10 +8908,14 @@ fn a_typed_coefficient_that_is_not_a_plain_number() {
 
 /// Paired-leg variants on the producer's sample (`VAKINT_TEST_RECORD_FILE`),
 /// at Taylor degree 2: (a) the leg 100013 with the NEGATED vector of its
-/// partner; (b) the leg reoriented (source the vertex, target external) with
-/// the negated vector: the same physical line; (c) the leg renamed 100003,
-/// whose "partner" 3 is an INTERNAL edge (another momentum). Printed, and the
-/// values of the accepted ones against the sample's.
+/// partner: refused by the paired-leg rule; (b) the leg reoriented (source
+/// the vertex, target external) with the negated vector: the SAME PHYSICAL
+/// LINE written in the other orientation, refused by the rule's one
+/// orientation (e target=ext, 100000 + e source=ext), not normalised; (c)
+/// the leg renamed 100003, whose "partner" 3 is an INTERNAL edge (another
+/// momentum): no pair, not checked by the rule (any refusal is another
+/// rule's). Printed, and the values of the accepted ones against the
+/// sample's.
 #[test]
 #[ignore = "external data: VAKINT_TEST_RECORD_FILE (the producer's paired-leg sample)"]
 fn paired_leg_variants() {
@@ -8904,6 +8985,18 @@ fn paired_leg_variants() {
             Err(e) => format!("REFUSED {}", e.chars().take(200).collect::<String>()),
         };
         eprintln!("CONTRACT PAIRED2 {label}: {shown}");
+        let by_the_rule = matches!(&got, Err(e) if e.contains("the two legs of a paired line"));
+        if label.starts_with("(c)") {
+            assert!(
+                !by_the_rule,
+                "{label}: refused by the paired-leg rule: {got:?}"
+            );
+        } else {
+            assert!(
+                by_the_rule,
+                "{label}: not refused by the paired-leg rule: {got:?}"
+            );
+        }
     }
 }
 
@@ -8954,11 +9047,15 @@ fn the_paired_leg_rule_on_real_records() {
     );
 }
 
-/// THE DIAGNOSTIC WRITER: for an accepted value its text equals `to_text`'s;
-/// for a refused value the reader refuses its text. Over the rule x field
-/// inputs, the cross-field violating inputs and the named writer cases.
+/// THE DIAGNOSTIC WRITER: its text is never a record: for EVERY value (the
+/// rule x field inputs, the cross-field violating inputs and their twins,
+/// the named writer cases), accepted or refused, the reader refuses
+/// `to_text_unvalidated_for_diagnostics(v)` with the schema refusal of the
+/// `.unvalidated` schema line; with the record schema restored, an accepted
+/// value's text is `to_text`'s; a refused value's restored text is printed
+/// when the reader accepts it (the writer sorts the insertions and drops what
+/// the format cannot express, e.g. a direct record on a closure value).
 #[test]
-#[ignore = "expected: the reader refuses the diagnostic text of every refused value; on 1cda2814c two refused values write a text the reader accepts: a closure value carrying a direct record (the text cannot hold it) and typed insertions out of vertex order (written sorted)"]
 fn the_diagnostic_writer() {
     let mut cases: Vec<(String, FactorizedNumerator)> = Vec::new();
     for name in ["wh-k1-root", "wh-k2-child-ins", "wh-k5-direct"] {
@@ -9005,33 +9102,46 @@ fn the_diagnostic_writer() {
     two.insertions.reverse();
     cases.push(("two insertions out of vertex order".into(), two));
     let mut wrong = Vec::new();
-    let (mut accepted, mut refused) = (0, 0);
+    let (mut accepted, mut refused, mut restored_read) = (0, 0, 0);
     for (label, v) in &cases {
-        let diagnostic = v.to_text_unvalidated_for_diagnostics();
+        let Ok(diagnostic) = v.to_text_unvalidated_for_diagnostics() else {
+            // nothing written (a label the format cannot hold): nothing to read
+            continue;
+        };
+        let schema_refusal = matches!(
+            FactorizedNumerator::from_text(&diagnostic),
+            Err(FactorizedError::TextSyntax { line: 1, ref detail })
+                if detail.starts_with("schema pint6.factorized-numerator.v")
+                    && detail.contains(".unvalidated: the text of to_text_unvalidated_for_diagnostics")
+        );
+        if !schema_refusal {
+            wrong.push(format!(
+                "{label}: the reader does not refuse the diagnostic text with the schema refusal"
+            ));
+        }
+        let restored = diagnostic.replacen(DIAGNOSTIC_SCHEMA_SUFFIX, "", 1);
         match v.validate() {
             Ok(()) => {
                 accepted += 1;
-                let checked = v.to_text().map_err(|e| e.to_string());
-                if diagnostic.as_ref().ok() != checked.as_ref().ok() {
+                if v.to_text().ok().as_ref() != Some(&restored) {
                     wrong.push(format!(
-                        "{label}: accepted, but the diagnostic text differs from to_text"
+                        "{label}: accepted, but the diagnostic text's lines differ from to_text"
                     ));
                 }
             }
             Err(_) => {
                 refused += 1;
-                if let Ok(t) = &diagnostic
-                    && FactorizedNumerator::from_text(t).is_ok()
-                {
-                    wrong.push(format!(
-                        "{label}: refused, but the reader accepts its diagnostic text"
-                    ));
+                if FactorizedNumerator::from_text(&restored).is_ok() {
+                    restored_read += 1;
+                    eprintln!(
+                        "CONTRACT DIAG {label}: refused; its restored diagnostic text is read"
+                    );
                 }
             }
         }
     }
     eprintln!(
-        "CONTRACT DIAG {} cases: {accepted} accepted, {refused} refused; {} wrong",
+        "CONTRACT DIAG {} cases: {accepted} accepted, {refused} refused (restored text read: {restored_read}); {} wrong",
         cases.len(),
         wrong.len()
     );

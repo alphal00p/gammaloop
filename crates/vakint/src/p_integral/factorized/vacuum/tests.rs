@@ -1082,7 +1082,7 @@ fn sunrise_value() -> FactorizedNumerator {
             ),
             leg(20, 1, 2, 1, 1),
         ],
-        vec![vertex(1, atom(&v0))],
+        vec![vertex(1, atom(&v0)), vertex(2, Atom::num(1))],
         vec![atom(&hedge(10)), atom(&hedge(11))],
     );
     v.label = "2L sunrise".into();
@@ -1470,10 +1470,11 @@ fn the_bounds_reach_the_vacuum_entry_typed_and_through_text() {
             Err(e) => assert!(e.to_string().contains(text), "{what} (typed): {e}"),
             Ok(_) => panic!("{what} (typed): accepted"),
         }
-        // through the text form: refused when written, read or evaluated
-        let refused = match v.to_text() {
+        // through the vacuum mode's text form: refused when written, read or
+        // evaluated
+        let refused = match v.to_text_vacuum() {
             Err(_) => true,
-            Ok(written) => match FactorizedNumerator::from_text(&written) {
+            Ok(written) => match FactorizedNumerator::from_text_vacuum(&written) {
                 Err(_) => true,
                 Ok(read) => {
                     evaluate_factorized_vacuum(&vakint, &settings, &read, &Atom::num(1)).is_err()
@@ -1592,7 +1593,8 @@ fn every_cell_of_the_weights_table_holds_for_the_vacuum_kind() {
         if typed.is_ok() != cell.accepted {
             wrong.push(format!("typed {}: {typed:?}", cell.label));
         }
-        let text = FactorizedNumerator::from_text(&text_of_weight_cell(&base, &cell)).map(|_| ());
+        let text =
+            FactorizedNumerator::from_text_vacuum(&text_of_weight_cell(&base, &cell)).map(|_| ());
         if text.is_ok() != cell.accepted {
             wrong.push(format!("text {}: {text:?}", cell.label));
         }
@@ -1603,4 +1605,411 @@ fn every_cell_of_the_weights_table_holds_for_the_vacuum_kind() {
         }
     }
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+/// THE ADAPTED K5: the vendored L2-17 K5 direct record with its
+/// two loop momenta, ports, factors and insertion kept, every internal line
+/// given the one mass scale of the K2 control and its external momentum
+/// coefficients set to 0: a valid vacuum-mode value (the vacuum mode checks
+/// no momentum conservation at an external leg) that the general rules
+/// refuse (conservation at vertex 0).
+fn adapted_k5() -> FactorizedNumerator {
+    let k2 = FactorizedNumerator::from_text(include_str!("../fixtures/wh-k2-child-ins.record.txt"))
+        .unwrap();
+    let FactorizedKind::Closure(spec) = &k2.kind else {
+        panic!("the K2 control is a closure record")
+    };
+    let mass = spec.mass_squared.clone();
+    let mut v = FactorizedNumerator::from_text(include_str!("../fixtures/wh-k5-direct.record.txt"))
+        .unwrap();
+    let loops = v.loops();
+    for e in &mut v.edges {
+        if !e.is_external() {
+            e.momentum[loops..].fill(0);
+            e.mass_squared = mass.clone();
+        }
+    }
+    v
+}
+
+/// ONE VALIDATION PER MODE, the vacuum mode. The BUILDERS
+/// (`contract_to_vakint_vacuum`, streamed) take no settings: they accept a
+/// value <=> `to_text_vacuum` writes it (when refused: EXACTLY the builder's
+/// error) <=> `from_text_vacuum` reads the text back, the read value is
+/// written to the same text and every vacuum function gives it the same
+/// result. The INPUT FUNCTIONS (`vakint_vacuum_input`, streamed; hence the
+/// evaluation entries) add the SETTINGS RULES (master modes, the settings' ε
+/// and scale names, the fields finite with the settings' ε, the number of
+/// terms against the record's depth, the prefactor argument), which no
+/// writer can run: they accept => the writer writes; the writer writes and
+/// the settings rules hold => they accept (here: the settings' number of
+/// terms is the record's depth); a written value refused by the depth rule
+/// alone is a named case. The diagnostic text of every value is refused by
+/// both readers (its schema line). Over the
+/// unmarked and the marked sunrise, two refused marked sunrises (a reserved
+/// head, a wildcard dimension), the massive sunrise with every cell of the
+/// weights table and with two mass scales, and the ADAPTED K5
+/// (named: written byte-identical to the text `to_text` wrote before it validated,
+/// SHA-256 aadb5f5b…; refused by `to_text` and `from_text` with the general
+/// rules' error) and the adapted K5 with two mass scales (refused).
+#[test]
+fn to_text_vacuum_refuses_exactly_what_the_vacuum_entry_refuses_and_round_trips_the_rest() {
+    use super::super::insertion_records_tests::{weight_cells, with_weight_cell};
+    use sha2::{Digest, Sha256};
+    let settings = no_form_settings();
+    let one = Atom::num(1);
+    let unmarked = sunrise_value();
+    let mut marked = unmarked.clone();
+    marked.record = Some(super::super::DirectRecord {
+        original_cycles: None,
+        depth: None,
+        weights: Vec::new(),
+    });
+    let mut reserved = marked.clone();
+    reserved.edges[0].factor = &reserved.edges[0].factor * atom("vakint::topo(1)");
+    let mut wildcard = marked.clone();
+    wildcard.dimension = symbolica::symbol!("UFO::D_");
+    let mut massive = value(
+        vec![Some(1), Some(2)],
+        Vec::new(),
+        [
+            (1, 1, 2, vec![1, 0]),
+            (2, 1, 2, vec![0, 1]),
+            (3, 2, 1, vec![1, 1]),
+        ]
+        .iter()
+        .map(|(id, s, t, m)| {
+            let mut e = edge(
+                *id,
+                *s,
+                *t,
+                (2 * id, 2 * id + 1),
+                m,
+                LineKind::Scalar,
+                1,
+                Atom::num(1),
+            );
+            e.mass_squared = atom("witness::msq");
+            e
+        })
+        .collect(),
+        (1..=2).map(|i| vertex(i, Atom::num(1))).collect(),
+        Vec::new(),
+    );
+    massive.record = marked.record.clone();
+    let mut two_scales = massive.clone();
+    two_scales.edges[2].mass_squared = atom("witness::msq2");
+    let k5 = adapted_k5();
+    let mut k5_two_scales = k5.clone();
+    let internal = k5_two_scales
+        .edges
+        .iter()
+        .position(|e| !e.is_external())
+        .unwrap();
+    k5_two_scales.edges[internal].mass_squared = atom("witness::msq2");
+    let mut cases: Vec<(String, FactorizedNumerator, Option<bool>)> = vec![
+        ("the unmarked sunrise".into(), unmarked, Some(true)),
+        ("the marked sunrise".into(), marked, Some(true)),
+        (
+            "a reserved head in an edge factor".into(),
+            reserved,
+            Some(false),
+        ),
+        ("a wildcard dimension".into(), wildcard, Some(false)),
+        ("the massive sunrise".into(), massive.clone(), Some(true)),
+        (
+            "the massive sunrise, two mass scales".into(),
+            two_scales,
+            Some(false),
+        ),
+        ("THE ADAPTED K5".into(), k5.clone(), Some(true)),
+        (
+            "the adapted K5, two mass scales".into(),
+            k5_two_scales,
+            Some(false),
+        ),
+    ];
+    for cell in weight_cells() {
+        cases.push((
+            format!("the massive sunrise, weights cell {}", cell.label),
+            with_weight_cell(&massive, &cell),
+            Some(cell.accepted),
+        ));
+    }
+    let debug = |r: &std::result::Result<(), FactorizedError>| format!("{r:?}");
+    let mut wrong = Vec::new();
+    for (label, v, expected) in &cases {
+        // the settings rules hold: the number of terms is the record's depth
+        let settings = VakintSettings {
+            number_of_terms_in_epsilon_expansion: v
+                .record
+                .as_ref()
+                .and_then(|r| r.depth)
+                .map_or(settings.number_of_terms_in_epsilon_expansion, |d| d as i64),
+            ..settings.clone()
+        };
+        let settings = &settings;
+        let built = contract_to_vakint_vacuum(v);
+        let others = [
+            (
+                "contract_to_vakint_vacuum_streamed",
+                contract_to_vakint_vacuum_streamed(settings, v, 2).map(|(a, _, _)| a),
+            ),
+            (
+                "vakint_vacuum_input",
+                vakint_vacuum_input(settings, v, &one).map(|(a, _)| a),
+            ),
+            (
+                "vakint_vacuum_input_streamed",
+                vakint_vacuum_input_streamed(settings, v, &one, Streaming::Pieces(2))
+                    .map(|(a, _, _)| a),
+            ),
+        ];
+        let written = v.to_text_vacuum();
+        if let Some(e) = expected
+            && built.is_ok() != *e
+        {
+            wrong.push(format!(
+                "{label}: the builder {built:?}, expected accepted={e}"
+            ));
+        }
+        for (name, r) in &others {
+            if r.is_ok() != built.is_ok() {
+                wrong.push(format!("{label}: {name} {r:?} but the builder {built:?}"));
+            }
+        }
+        match (&built, &written) {
+            (Err(b), Err(w)) => {
+                if format!("{b:?}") != format!("{w:?}") {
+                    wrong.push(format!(
+                        "{label}: the writer's error {w:?}, the builder's {b:?}"
+                    ));
+                }
+            }
+            (Ok(_), Err(w)) => wrong.push(format!("{label}: accepted, not written: {w:?}")),
+            (Err(b), Ok(_)) => wrong.push(format!("{label}: refused ({b:?}), written")),
+            (Ok((a, _)), Ok(text)) => match FactorizedNumerator::from_text_vacuum(text) {
+                Err(e) => wrong.push(format!("{label}: written, not read: {e:?}")),
+                Ok(read) => {
+                    if read.to_text_vacuum().as_ref().ok() != Some(text) {
+                        wrong.push(format!("{label}: the read value is written otherwise"));
+                    }
+                    if contract_to_vakint_vacuum(&read)
+                        .map(|(x, _)| x)
+                        .as_ref()
+                        .ok()
+                        != Some(a)
+                    {
+                        wrong.push(format!("{label}: the read value builds another scalar"));
+                    }
+                    let again = [
+                        contract_to_vakint_vacuum_streamed(settings, &read, 2).map(|(x, _, _)| x),
+                        vakint_vacuum_input(settings, &read, &one).map(|(x, _)| x),
+                        vakint_vacuum_input_streamed(settings, &read, &one, Streaming::Pieces(2))
+                            .map(|(x, _, _)| x),
+                    ];
+                    for ((name, before), after) in others.iter().zip(again) {
+                        if before.as_ref().ok() != after.as_ref().ok() {
+                            wrong.push(format!("{label}: {name} differs on the read value"));
+                        }
+                    }
+                }
+            },
+        }
+        // the diagnostic text: never read, by either reader
+        if let Ok(diagnostic) = v.to_text_unvalidated_for_diagnostics() {
+            for (reader, r) in [
+                (
+                    "from_text",
+                    FactorizedNumerator::from_text(&diagnostic).map(|_| ()),
+                ),
+                (
+                    "from_text_vacuum",
+                    FactorizedNumerator::from_text_vacuum(&diagnostic).map(|_| ()),
+                ),
+            ] {
+                if !matches!(r, Err(FactorizedError::TextSyntax { line: 1, ref detail })
+                    if detail.contains(".unvalidated: the text of to_text_unvalidated_for_diagnostics"))
+                {
+                    wrong.push(format!("{label}: {reader} on the diagnostic text: {r:?}"));
+                }
+            }
+        }
+    }
+    // THE ADAPTED K5 by name: the bytes to_text wrote before it validated; the general
+    // writer and reader refuse it with the general rules' error
+    let text = k5.to_text_vacuum().unwrap();
+    assert_eq!(
+        format!("{:x}", Sha256::digest(text.as_bytes())),
+        "aadb5f5bde44898918a58b8a7b9e27b3ba433ff0f53752dd56e455bf41f2a5d5",
+        "{text}"
+    );
+    let general = debug(&k5.validate());
+    assert!(general.contains("MomentumNotConserved"), "{general}");
+    assert_eq!(debug(&k5.to_text().map(|_| ())), general);
+    assert!(FactorizedNumerator::from_text(&text).is_err());
+    assert_eq!(FactorizedNumerator::parse_text(&text).unwrap(), k5);
+    // THE ASYMMETRY: the input functions run the settings rules too, which no
+    // writer can: the adapted K5 (depth 2) is written, and refused by the
+    // input functions with 3 terms by exactly the depth rule
+    let three = VakintSettings {
+        number_of_terms_in_epsilon_expansion: 3,
+        ..settings.clone()
+    };
+    for r in [
+        vakint_vacuum_input(&three, &k5, &one).map(|_| ()),
+        vakint_vacuum_input_streamed(&three, &k5, &one, Streaming::Pieces(2)).map(|_| ()),
+    ] {
+        assert_eq!(
+            debug(&r),
+            debug(&Err(FactorizedError::Graph {
+                detail: "the depth 2 of the record differs from the settings' number of terms 3 (they must be equal)".into()
+            }))
+        );
+    }
+    eprintln!("VACUUM WRITER {} cases, {} wrong", cases.len(), wrong.len());
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+/// THE GENERAL CONTRACT IN THE VACUUM MODE, for a marked value: each rule the
+/// vacuum mode applies from the general contract refuses a marked vacuum
+/// value that breaks it, at the vacuum builder and in `to_text_vacuum`, with
+/// that rule's error (the same as the general rules give): a LOOP momentum
+/// not conserved at a vertex (`MomentumNotConserved`), an index three times
+/// in one factor (the per-factor index analysis, `IndexOverContracted`), a
+/// vertex factor with a slot of a half-edge at another vertex (locality,
+/// `IndexNotLocal`), a slot never contracted and not a port (contraction,
+/// `IndexUncontracted`), a fermion edge's gamma with row and column swapped
+/// (fermion orientation, `FermionOrientation`), an edge to a vertex the
+/// record does not list (structure, `Graph`). The external components are
+/// not conserved: the adapted K5 is accepted (its legs carry p(1), no
+/// internal line does).
+#[test]
+fn the_vacuum_mode_applies_the_general_contract_with_the_loop_momenta_conserved() {
+    let marked = |mut v: FactorizedNumerator| {
+        v.record = Some(super::super::DirectRecord {
+            original_cycles: None,
+            depth: None,
+            weights: Vec::new(),
+        });
+        for e in &mut v.edges {
+            if !e.is_external() {
+                e.mass_squared = atom("helper_test::muvsq");
+            }
+        }
+        v
+    };
+    // the massive sunrise: edges e = 1, 2 (1 -> 2), 3 (2 -> 1), half-edges
+    // (2e, 2e + 1); vertices 1 and 2
+    let sunrise = marked(value(
+        vec![Some(1), Some(2)],
+        Vec::new(),
+        [
+            (1, 1, 2, vec![1, 0]),
+            (2, 1, 2, vec![0, 1]),
+            (3, 2, 1, vec![1, 1]),
+        ]
+        .iter()
+        .map(|(id, s, t, m)| {
+            edge(
+                *id,
+                *s,
+                *t,
+                (2 * id, 2 * id + 1),
+                m,
+                LineKind::Scalar,
+                1,
+                Atom::num(1),
+            )
+        })
+        .collect(),
+        (1..=2).map(|i| vertex(i, Atom::num(1))).collect(),
+        Vec::new(),
+    ));
+    contract_to_vakint_vacuum(&sunrise).unwrap();
+    // the one-loop fermion trace with two open ports, marked and massive
+    let slash = |e: usize, hs: usize, ht: usize| {
+        let mu = index(e, 1);
+        atom(&format!("{}*{}", q(e, &mu), gamma(ht, hs, &mu)))
+    };
+    let trace = marked(value(
+        vec![Some(1)],
+        Vec::new(),
+        vec![
+            edge(1, 0, 1, (1, 2), &[1], LineKind::Fermion, 1, slash(1, 1, 2)),
+            edge(2, 1, 0, (3, 4), &[1], LineKind::Fermion, 1, slash(2, 3, 4)),
+        ],
+        vec![
+            vertex(0, atom(&gamma(1, 4, &hedge(10)))),
+            vertex(1, atom(&gamma(3, 2, &hedge(11)))),
+        ],
+        vec![atom(&hedge(10)), atom(&hedge(11))],
+    ));
+    // one closed fermion loop
+    let mut trace = trace;
+    trace.prefactor.loop_sign = -1;
+    trace.prefactor.nf_power = 1;
+    contract_to_vakint_vacuum(&trace).unwrap();
+    let slot = hedge;
+    let mut cases: Vec<(&str, FactorizedNumerator, fn(&FactorizedError) -> bool)> = Vec::new();
+    let mut v = sunrise.clone();
+    v.edges[2].momentum = vec![1, 0];
+    cases.push(("a loop momentum not conserved", v, |e| {
+        matches!(e, FactorizedError::MomentumNotConserved { .. })
+    }));
+    let mut v = sunrise.clone();
+    v.vertices[0].factor = atom(&format!(
+        "{}*{}*{}",
+        q(1, &slot(2)),
+        q(2, &slot(2)),
+        q(3, &slot(2))
+    ));
+    cases.push(("an index three times in one factor", v, |e| {
+        matches!(e, FactorizedError::IndexOverContracted { .. })
+    }));
+    let mut v = sunrise.clone();
+    v.vertices[0].factor = atom(&format!("{METRIC}({},{})", slot(2), slot(3)));
+    v.edges[0].factor = atom(&format!("{METRIC}({},{})", slot(2), slot(3)));
+    cases.push(("a vertex factor with a slot of another vertex", v, |e| {
+        matches!(e, FactorizedError::IndexNotLocal { .. })
+    }));
+    let mut v = sunrise.clone();
+    v.vertices[0].factor = atom(&q(1, &slot(2)));
+    cases.push(("a slot never contracted, not a port", v, |e| {
+        matches!(e, FactorizedError::IndexUncontracted { .. })
+    }));
+    let mut v = trace.clone();
+    let mu = index(1, 1);
+    v.edges[0].factor = atom(&format!("{}*{}", q(1, &mu), gamma(1, 2, &mu)));
+    cases.push((
+        "a fermion edge's gamma with row and column swapped",
+        v,
+        |e| matches!(e, FactorizedError::FermionOrientation { .. }),
+    ));
+    let mut v = sunrise.clone();
+    v.vertices.truncate(1);
+    cases.push(("an edge to a vertex the record does not list", v, |e| {
+        matches!(e, FactorizedError::Graph { detail } if detail.ends_with("vertex 2 does not exist"))
+    }));
+    for (what, v, expected) in &cases {
+        let built = contract_to_vakint_vacuum(v).map(|_| ()).unwrap_err();
+        assert!(expected(&built), "{what}: {built:?}");
+        assert_eq!(
+            format!("{:?}", v.to_text_vacuum().unwrap_err()),
+            format!("{built:?}"),
+            "{what}"
+        );
+        assert_eq!(
+            format!("{:?}", v.validate().unwrap_err()),
+            format!("{built:?}"),
+            "{what}: the general rules give the same error"
+        );
+    }
+    // the external components are not conserved in the vacuum mode
+    let k5 = adapted_k5();
+    contract_to_vakint_vacuum(&k5).unwrap();
+    assert!(matches!(
+        k5.validate(),
+        Err(FactorizedError::MomentumNotConserved { .. })
+    ));
 }

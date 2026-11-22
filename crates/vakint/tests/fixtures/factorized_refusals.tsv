@@ -40,13 +40,14 @@ refusal	Closure	the projector contains Q(<>, ..): with a Taylor step it acts aft
 refusal	Closure	the projector contains the momentum of internal edge <>
 refusal	Closure	the reference mass <> in the prefactor (it is substituted in the integrand only)
 refusal	Closure	the reference mass <> is not a symbol (it is substituted everywhere)
-refusal	Closure	the two legs of a paired line carry one momentum: edge <> carries <>, its partner <> <>
 refusal	Closure	vakint's internal Taylor parameter occurs in the record
 refusal	Closure	with original_cycles the prefactor has loop_sign=1, nf_power=0, overall 1 (the original graph's weights stay with the caller); found loop_sign=<> nf_power=<> overall <>
 refusal	Closure|Graph	a flavour symbol in the record (n_f stays with the caller): in prefactor_scalars <>
 refusal	Closure|Graph	edge <>: power <> out of range (at most 2^31 in absolute value)
+refusal	Closure|Graph	the two legs of a paired line carry one momentum, edge e with target=ext and edge 100000 + e with source=ext: edge <> (source=<>, target=<>) carries <>, its partner <> (source=<>, target=<>) <>
 refusal	Closure|Graph	weight <> applied_by=<> <>: <> is <>, not <> (<>)
 refusal	Closure|Graph	weight <> applied_by=<>: not a weight of the record format (scalars, overall, colour, loop_sign, flavour)
+refusal	Closure|Graph	weight <> applied_by=vakint <>: only scalars is applied by vakint; <> is applied by the caller (applied_by=beta, its prefactor field neutral)
 refusal	Closure|Graph	weight <> is listed twice (each weight is applied once)
 refusal	Colour	<> open colour slots; v1 closes exactly two adjoint legs
 refusal	Colour	closed-network reducer failed: <>
@@ -120,7 +121,6 @@ refusal	Graph	the depth <> of the record differs from the settings' number of te
 refusal	Graph	the evaluation methods mix master modes: <> (a marked value needs one mode for every RustRed and Forcer method)
 refusal	Graph	the label contains a TAB or a newline
 refusal	Graph	the record and its insertions carry <> fermion / <> ghost cycles, more than original_cycles fermion=<> ghost=<>
-refusal	Graph	the two legs of a paired line carry one momentum: edge <> carries <>, its partner <> <>
 refusal	Graph	vacuum: <>
 refusal	Graph	vertex <>: bad rule name
 refusal	Graph	vertex id <> occurs twice
@@ -187,6 +187,7 @@ refusal	TextSyntax	`<>` without `<>=`
 refusal	TextSyntax	bad <> <>
 refusal	TextSyntax	cannot parse <>: <>
 refusal	TextSyntax	open slots <> differ from the ports the projector leaves open <>
+refusal	TextSyntax	schema <>: the text of to_text_unvalidated_for_diagnostics, written without validation for diagnosis, is not a record and is never read (to_text writes a record)
 refusal	TextSyntax	text after `end`
 refusal	TextSyntax	the label contains a TAB or a newline
 unresolved	factorized.rs	Closure|Graph	1

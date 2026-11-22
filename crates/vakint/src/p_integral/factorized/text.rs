@@ -86,11 +86,27 @@ pub(super) fn write_record(value: &FactorizedNumerator) -> Result<String> {
     if super::is_marked(value) {
         value.validate()?;
     }
-    write_record_unvalidated(value)
+    write_record_body(value)
 }
 
-/// The writer without validation ([`FactorizedNumerator::to_text_unvalidated_for_diagnostics`]).
+/// The writer without validation
+/// ([`FactorizedNumerator::to_text_unvalidated_for_diagnostics`]): the
+/// record's lines with the schema line suffixed by
+/// [`super::DIAGNOSTIC_SCHEMA_SUFFIX`], which the reader refuses.
 pub(super) fn write_record_unvalidated(value: &FactorizedNumerator) -> Result<String> {
+    let body = write_record_body(value)?;
+    let (schema, rest) = body
+        .split_once('\n')
+        .expect("a written record has more than one line");
+    Ok(format!(
+        "{schema}{}\n{rest}",
+        super::DIAGNOSTIC_SCHEMA_SUFFIX
+    ))
+}
+
+/// The lines of a record, written without validation (the callers validate:
+/// [`write_record`], [`FactorizedNumerator::to_text_vacuum`]).
+pub(super) fn write_record_body(value: &FactorizedNumerator) -> Result<String> {
     let closure = match &value.kind {
         FactorizedKind::Closure(spec) => Some(spec),
         FactorizedKind::Direct => None,
@@ -705,6 +721,14 @@ fn read_one(reader: &mut Reader<'_>) -> Result<FactorizedNumerator> {
     }
     let found = schema.fields.join("\t");
     let v3 = found == FACTORIZED_SCHEMA_V3;
+    if found.ends_with(super::DIAGNOSTIC_SCHEMA_SUFFIX) {
+        return Err(FactorizedError::TextSyntax {
+            line: schema.number,
+            detail: format!(
+                "schema {found}: the text of to_text_unvalidated_for_diagnostics, written without validation for diagnosis, is not a record and is never read (to_text writes a record)"
+            ),
+        });
+    }
     if found != FACTORIZED_SCHEMA && !v3 {
         return Err(FactorizedError::TextSchema {
             line: schema.number,

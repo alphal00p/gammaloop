@@ -97,6 +97,11 @@ pub const FACTORIZED_SCHEMA: &str = "pint6.factorized-numerator.v1";
 /// closure are written and read in it; direct records stay v1.
 pub const FACTORIZED_SCHEMA_V3: &str = "pint6.factorized-numerator.v3";
 
+/// The suffix of the schema line of
+/// [`FactorizedNumerator::to_text_unvalidated_for_diagnostics`]: the text of
+/// that writer is not a record, and every reader refuses it.
+pub const DIAGNOSTIC_SCHEMA_SUFFIX: &str = ".unvalidated";
+
 /// The schemas a TextSchema refusal names: the base's text (only v1) for any
 /// line but the v3 name with surrounding whitespace (e.g. a trailing space);
 /// for that line both, and how they must be written.
@@ -1950,9 +1955,11 @@ pub(crate) enum WeightField {
 /// applied_by=beta|vakint <atom>`, the kinds colour, flavour, loop_sign,
 /// overall and scalars; OQ-17: a weight the caller applies ("beta") stays out
 /// of the prefactor, one vakint applies is in it): each weight name with ITS
-/// OWN prefactor field. Applied by vakint, the field equals the weight;
-/// applied by the caller, the field is neutral (1; nf_power 0). A name not in
-/// the table, and a name listed twice, are refused.
+/// OWN prefactor field. Only `scalars` may be applied by vakint, and then its
+/// field equals the weight; every weight applied by the caller leaves its
+/// field neutral (1; nf_power 0); `overall`, `colour`, `loop_sign` and
+/// `flavour` applied by vakint are refused. A name not in the table, and a
+/// name listed twice, are refused.
 pub(crate) const WEIGHT_RULES: [(&str, WeightField); 5] = [
     ("scalars", WeightField::Scalars),
     ("overall", WeightField::Overall),
@@ -3325,9 +3332,9 @@ impl FactorizedNumerator {
     /// THE WEIGHTS of a marked value, by [`WEIGHT_RULES`] (the record format's
     /// weights rule, section
     /// 3), for every kind and both weight sources (a closure's ClosureSpec,
-    /// a direct record): a weight `applied_by=vakint` must equal
-    /// prefactor_scalars (atom equality after normalisation); a weight applied
-    /// by the caller is 1 in the prefactor: `overall` -> prefactor_overall 1,
+    /// a direct record): only `scalars` may be `applied_by=vakint`, and then
+    /// equals prefactor_scalars (the atoms' canonical forms are equal; nothing
+    /// is expanded); a weight applied by the caller is 1 in the prefactor: `overall` -> prefactor_overall 1,
     /// `colour` -> prefactor_colour 1, `loop_sign` -> loop_sign 1, `flavour`
     /// -> nf_power 0 (a caller weight of another name has no counterpart).
     /// And prefactor_scalars carries no flavour symbol (`nf`, `…::nf`: n_f
@@ -3379,6 +3386,11 @@ impl FactorizedNumerator {
                     "weight {name} applied_by={applied}: not a weight of the record format (scalars, overall, colour, loop_sign, flavour)"
                 )));
             };
+            if *by_vakint && *field != WeightField::Scalars {
+                return Err(refuse(format!(
+                    "weight {name} applied_by=vakint {atom}: only scalars is applied by vakint; {name} is applied by the caller (applied_by=beta, its prefactor field neutral)"
+                )));
+            }
             // the field's value as an atom, and its neutral value
             let (label, value, neutral) = match field {
                 WeightField::Scalars => ("prefactor_scalars", p.scalars.clone(), Atom::num(1)),
@@ -3481,34 +3493,49 @@ impl FactorizedNumerator {
 
     /// PAIRED LEGS (the record format, section 3: a crown line with both ends in
     /// the scope is two legs, `e` and `100000 + e`): when a marked record has
-    /// an external edge `100000 + e` and an external edge `e`, the two carry
-    /// exactly the same momentum vector (each leg's Q is routed through the
-    /// momentum it declares: unequal ones evaluate to another value). `Closure`
-    /// for the closure kind, else `Graph`.
+    /// an external edge `100000 + e` and an external edge `e`, they are the
+    /// two ends of one line written in ONE orientation, the producer's: `e`
+    /// leaves the scope (target `ext`), `100000 + e` enters it (source
+    /// `ext`), and both carry exactly the same momentum vector (each leg's Q
+    /// is routed through the momentum it declares: unequal ones evaluate to
+    /// another value). Another orientation of the same physical line (a leg
+    /// reversed with its momentum negated) is refused, not normalised. A leg
+    /// `100000 + e` whose `e` is absent or an INTERNAL edge is no pair and is
+    /// not checked here. `Closure` for the closure kind, else `Graph`.
     pub(crate) fn check_paired_legs(&self) -> Result<()> {
         let external = |id: usize| self.edges.iter().find(|e| e.id == id && e.is_external());
+        let end = |p: &Endpoint| match p {
+            Endpoint::External => "ext".to_string(),
+            Endpoint::Vertex(v) => v.to_string(),
+        };
+        let refuse = |detail: String| {
+            if matches!(self.kind, FactorizedKind::Closure(_)) {
+                FactorizedError::Closure { detail }
+            } else {
+                FactorizedError::Graph { detail }
+            }
+        };
         for leg in self
             .edges
             .iter()
             .filter(|e| e.is_external() && e.id >= 100_000)
         {
             if let Some(partner) = external(leg.id - 100_000)
-                && partner.momentum != leg.momentum
+                && (partner.momentum != leg.momentum
+                    || partner.target != Endpoint::External
+                    || leg.source != Endpoint::External)
             {
-                let (id, a, other, b) = (leg.id, &leg.momentum, partner.id, &partner.momentum);
-                return Err(if matches!(self.kind, FactorizedKind::Closure(_)) {
-                    FactorizedError::Closure {
-                        detail: format!(
-                            "the two legs of a paired line carry one momentum: edge {id} carries {a:?}, its partner {other} {b:?}"
-                        ),
-                    }
-                } else {
-                    FactorizedError::Graph {
-                        detail: format!(
-                            "the two legs of a paired line carry one momentum: edge {id} carries {a:?}, its partner {other} {b:?}"
-                        ),
-                    }
-                });
+                return Err(refuse(format!(
+                    "the two legs of a paired line carry one momentum, edge e with target=ext and edge 100000 + e with source=ext: edge {} (source={}, target={}) carries {:?}, its partner {} (source={}, target={}) {:?}",
+                    leg.id,
+                    end(&leg.source),
+                    end(&leg.target),
+                    leg.momentum,
+                    partner.id,
+                    end(&partner.source),
+                    end(&partner.target),
+                    partner.momentum
+                )));
             }
         }
         Ok(())
@@ -4969,10 +4996,13 @@ impl FactorizedNumerator {
     }
 
     /// The text form WITHOUT validation, to keep the text of a refused value
-    /// for diagnosis: NOT evidence of validity (the reader may refuse it, and
-    /// for a value validation refuses it may not be that value's text: the
-    /// writer sorts the insertions and drops what the format cannot express);
-    /// for a valid value the same text as [`Self::to_text`].
+    /// for diagnosis: NOT a record. Its schema line is the schema followed by
+    /// [`DIAGNOSTIC_SCHEMA_SUFFIX`] (`pint6.factorized-numerator.v3.unvalidated`,
+    /// `….v1.unvalidated` for an unmarked value), which every reader refuses
+    /// (`TextSyntax`): the text is never accepted, also for a valid value
+    /// (whose other lines are [`Self::to_text`]'s); for a value validation
+    /// refuses it may not be that value's text (the writer sorts the
+    /// insertions and drops what the format cannot express).
     pub fn to_text_unvalidated_for_diagnostics(&self) -> Result<String> {
         text::write_record_unvalidated(self)
     }
@@ -4981,6 +5011,45 @@ impl FactorizedNumerator {
     pub fn from_text(input: &str) -> Result<Self> {
         let value = Self::parse_text(input)?;
         value.validate()?;
+        Ok(value)
+    }
+
+    /// THE VACUUM MODE'S text form: the value validated as the vacuum entry
+    /// validates it (`evaluate_factorized_vacuum`, `vakint_vacuum_input`,
+    /// `contract_to_vakint_vacuum` and their streamed variants), then written
+    /// as [`Self::to_text`] writes it (the same format and bytes). The mode is
+    /// the entry's, not the record's (the kinds are direct and closure): a
+    /// value the vacuum entry accepts but the general rules refuse (external
+    /// momentum coefficients removed from the internal lines) is written here,
+    /// and refused by [`Self::to_text`] and [`Self::from_text`]; it is read
+    /// back by [`Self::from_text_vacuum`]. The error of a refused value is
+    /// exactly the vacuum entry's.
+    ///
+    /// THE VACUUM RULE SET, for a marked value: the record-wide rules of
+    /// [`Self::validate`] (reserved names, bounds, weights, paired legs,
+    /// atoms, fields, insertions, original cycles); the vacuum shape rules (at
+    /// least one loop, no external momentum on an internal line, ONE mass
+    /// scale and at least one massive line, Lorentz open slots only); and the
+    /// general contract (graph structure, per-factor index analysis,
+    /// locality, contraction, fermion orientation, scalar prefactor fields
+    /// and masses) with momentum conservation of the LOOP components at
+    /// every vertex. Not applied, with the reason: conservation of the
+    /// EXTERNAL components (a vacuum value's external momenta flow through no
+    /// internal line, so at a vertex with a leg they cannot balance); the
+    /// closed-loop sign and n_f rules (replaced by the original-cycles rule).
+    /// The entries' SETTINGS rules (master modes, the settings' ε and scale
+    /// names, the number of terms against the depth) cannot be run by a
+    /// writer: the entry accepts => this writer writes, not the converse.
+    pub fn to_text_vacuum(&self) -> Result<String> {
+        vacuum::validate_vacuum(self)?;
+        text::write_record_body(self)
+    }
+
+    /// Read one record of the text form and validate it as the vacuum entry
+    /// does ([`Self::to_text_vacuum`]).
+    pub fn from_text_vacuum(input: &str) -> Result<Self> {
+        let value = Self::parse_text(input)?;
+        vacuum::validate_vacuum(&value)?;
         Ok(value)
     }
 

@@ -334,6 +334,40 @@ fn hard_as_vacuum(text: &str) -> FactorizedNumerator {
     v1.push('\n');
     init();
     let mut value = FactorizedNumerator::parse_text(&v1).unwrap_or_else(|e| panic!("{e}\n{v1}"));
+    // PAIRED LEGS in the record format's one orientation (e leaves the scope,
+    // target ext; 100000 + e enters it, source ext): the v2 sector records
+    // write the pair the other way round; both legs are at zero momentum
+    // here, so the orientation changes no denominator and no factor
+    let paired = value
+        .edges
+        .iter()
+        .filter(|e| e.is_external() && e.id >= 100_000)
+        .map(|e| e.id)
+        .filter(|id| {
+            value
+                .edges
+                .iter()
+                .any(|e| e.id == id - 100_000 && e.is_external())
+        })
+        .collect::<Vec<_>>();
+    for id in paired {
+        for e in value
+            .edges
+            .iter_mut()
+            .filter(|e| e.id == id || e.id == id - 100_000)
+        {
+            assert!(
+                e.momentum.iter().all(|c| *c == 0),
+                "{}: leg {}",
+                value.label,
+                e.id
+            );
+            if (e.source == Endpoint::External) != (e.id == id) {
+                std::mem::swap(&mut e.source, &mut e.target);
+                std::mem::swap(&mut e.source_hedge, &mut e.target_hedge);
+            }
+        }
+    }
     // open fermion lines, gamma / partial projectors: a marked value (the old
     // entries keep the base's rules for unmarked ones)
     value.record = marked(&value).record;

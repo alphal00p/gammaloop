@@ -147,7 +147,14 @@ fn a_marked_value_is_written_as_v3_and_an_unmarked_one_as_v1() {
     let written = with_insertion
         .to_text_unvalidated_for_diagnostics()
         .unwrap();
-    assert_eq!(schema(&written), format!("schema\t{FACTORIZED_SCHEMA_V3}"));
+    // the diagnostic writer's schema line is the v3 schema suffixed (never
+    // read); its other lines are the record's
+    assert_eq!(
+        schema(&written),
+        format!("schema\t{FACTORIZED_SCHEMA_V3}.unvalidated")
+    );
+    assert!(FactorizedNumerator::parse_text(&written).is_err());
+    let written = written.replacen(".unvalidated", "", 1);
     assert!(written.contains("\ninsertions\t1\n"), "{written}");
     let back = FactorizedNumerator::parse_text(&written).unwrap();
     assert_eq!(back.insertions, with_insertion.insertions);

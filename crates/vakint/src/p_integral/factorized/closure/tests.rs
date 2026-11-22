@@ -1065,8 +1065,15 @@ fn l2_root_orders_filters_are_refused() {
             "entry",
         );
         // the text form keeps the field: parse_text reads it, from_text
-        // (which validates) refuses it
+        // (which validates) refuses it (the diagnostic writer's lines with the
+        // record schema; its own schema line is refused by every reader)
         let text = value.to_text_unvalidated_for_diagnostics().unwrap();
+        assert!(FactorizedNumerator::parse_text(&text).is_err());
+        let text = text.replacen(
+            crate::p_integral::factorized::DIAGNOSTIC_SCHEMA_SUFFIX,
+            "",
+            1,
+        );
         assert!(text.contains(&format!("orders={}", orders.as_str())));
         let parsed = FactorizedNumerator::parse_text(&text).unwrap();
         refused(parsed.validate(), "parsed");

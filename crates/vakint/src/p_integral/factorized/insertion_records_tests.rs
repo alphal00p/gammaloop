@@ -1684,6 +1684,12 @@ fn the_weights_agree_with_the_prefactor_on_every_kind() {
     );
     let written = bad.to_text_unvalidated_for_diagnostics().unwrap();
     assert!(written.contains("applied_by=vakint\t2"), "{written}");
+    // never read; with the record schema, refused by the weights rule
+    assert!(matches!(
+        FactorizedNumerator::from_text(&written),
+        Err(FactorizedError::TextSyntax { line: 1, .. })
+    ));
+    let written = written.replacen(super::DIAGNOSTIC_SCHEMA_SUFFIX, "", 1);
     graph(
         FactorizedNumerator::from_text(&written).unwrap_err(),
         "from_text",
@@ -1878,7 +1884,8 @@ fn a_number_beyond_4096_bits_is_refused() {
     let base_text = direct.to_text().unwrap();
     // N = 2^(bits - 1): exactly `bits` bits
     let number = |bits: u32| Atom::num(2).pow(Atom::num(bits as i64 - 1));
-    let forms: [(&str, fn(Atom) -> Atom); 4] = [
+    type Form = fn(Atom) -> Atom;
+    let forms: [(&str, Form); 4] = [
         ("N", |n| n),
         ("-N", |n| -n),
         ("1/N", |n| Atom::num(1) / n),
@@ -1930,10 +1937,12 @@ pub(super) struct WeightCell {
 }
 
 /// EVERY CELL of the weights table ([`WEIGHT_RULES`]: each weight name with
-/// its own prefactor field), with the reviewer's witnesses: applied by vakint
-/// the field equals the weight, applied by the caller the field is neutral
-/// (1; nf_power 0); a name the format does not list and a name listed twice
-/// are refused.
+/// its own prefactor field), with the witnesses: only scalars may
+/// be applied by vakint, and its field then equals the weight (overall,
+/// colour, loop_sign and flavour applied by vakint are refused, also with
+/// their field equal); applied by the caller the field is neutral (1;
+/// nf_power 0); a name the format does not list and a name listed twice are
+/// refused.
 pub(super) fn weight_cells() -> Vec<WeightCell> {
     let keep: fn(&mut Prefactor) = |_| {};
     let scalars_two: fn(&mut Prefactor) = |p| p.scalars = Atom::num(2);
@@ -1973,10 +1982,10 @@ pub(super) fn weight_cells() -> Vec<WeightCell> {
             false,
         ),
         cell(
-            "overall by vakint 1, prefactor_overall 1",
+            "overall by vakint 1, prefactor_overall 1 (only scalars is applied by vakint)",
             vec![("overall", true, "1")],
             keep,
-            true,
+            false,
         ),
         cell(
             "overall by vakint 2, prefactor_overall 1",
@@ -1997,10 +2006,10 @@ pub(super) fn weight_cells() -> Vec<WeightCell> {
             false,
         ),
         cell(
-            "colour by vakint 1, prefactor_colour 1",
+            "colour by vakint 1, prefactor_colour 1 (only scalars is applied by vakint)",
             vec![("colour", true, "1")],
             keep,
-            true,
+            false,
         ),
         cell(
             "colour by vakint 2, prefactor_colour 1",
@@ -2021,10 +2030,10 @@ pub(super) fn weight_cells() -> Vec<WeightCell> {
             false,
         ),
         cell(
-            "loop_sign by vakint 1, loop_sign 1",
+            "loop_sign by vakint 1, loop_sign 1 (only scalars is applied by vakint)",
             vec![("loop_sign", true, "1")],
             keep,
-            true,
+            false,
         ),
         cell(
             "loop_sign by vakint -1, loop_sign 1",
@@ -2045,10 +2054,10 @@ pub(super) fn weight_cells() -> Vec<WeightCell> {
             false,
         ),
         cell(
-            "flavour by vakint 0, nf_power 0",
+            "flavour by vakint 0, nf_power 0 (only scalars is applied by vakint)",
             vec![("flavour", true, "0")],
             keep,
-            true,
+            false,
         ),
         cell(
             "flavour by vakint 1, nf_power 0",
@@ -2258,14 +2267,192 @@ fn every_cell_of_the_weights_table_holds_for_every_kind() {
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
+/// THE PROPERTY IS ASYMMETRIC: an entry (closure, direct, ports) runs the
+/// rules of validation AND THE SETTINGS RULES, which no writer can run (it
+/// has no settings): the master modes of the evaluation order
+/// (`check_master_modes`); the settings' epsilon against vakint's
+/// (`check_epsilon_setting`); the non-ASCII names against the settings'
+/// epsilon and scale (`check_entry_names`: a lookalike of ε); the record's
+/// fields defined and finite with the settings' epsilon
+/// (`check_marked_fields`); the number of terms against the record's depth
+/// (direct and ports entries); the separately supplied prefactor argument
+/// (`check_prefactor_argument`); the insertions' UNKNOWN masters against
+/// the loaded catalogue (`check_data_atoms_catalogue`). So: the entry
+/// accepts => `to_text` writes; and `to_text` writes AND the settings rules
+/// hold => the entry accepts. Cases: K2 (closure) and K5 (direct, ports),
+/// written and accepted with their settings; then written and refused by
+/// exactly one settings rule each: a mixed master-mode order, vakint's ε in
+/// a factor against the settings' ε, a lookalike ε (ϵ) in a factor, a
+/// number of terms other than K5's depth.
+#[test]
+fn the_entries_add_the_settings_rules_to_the_writer() {
+    let vakint = plain_engine();
+    let k2 = FactorizedNumerator::from_text(include_str!("fixtures/wh-k2-child-ins.record.txt"))
+        .unwrap();
+    let k5 =
+        FactorizedNumerator::from_text(include_str!("fixtures/wh-k5-direct.record.txt")).unwrap();
+    let k5_settings = VakintSettings {
+        number_of_terms_in_epsilon_expansion: k5.record.as_ref().unwrap().depth.unwrap() as i64,
+        ..site_settings()
+    };
+    type Entry = fn(&Vakint, &VakintSettings, &FactorizedNumerator) -> Result<()>;
+    let closure: Entry = |vakint, settings, v| {
+        evaluate_factorized_closure(
+            vakint,
+            settings,
+            std::slice::from_ref(v),
+            &[v.prefactor.total()],
+        )
+        .map(|_| ())
+    };
+    let direct: Entry = |vakint, settings, v| {
+        evaluate_factorized(vakint, settings, v, &v.prefactor.total()).map(|_| ())
+    };
+    let ports: Entry = |vakint, settings, v| {
+        evaluate_factorized_ports(vakint, settings, v, &v.prefactor.total()).map(|_| ())
+    };
+    let entries: [(&str, &FactorizedNumerator, VakintSettings, Entry); 3] = [
+        ("closure K2", &k2, site_settings(), closure),
+        ("direct K5", &k5, k5_settings.clone(), direct),
+        ("ports K5", &k5, k5_settings, ports),
+    ];
+    // a vertex without insertion, its factor times `extra`
+    let with_factor = |v: &FactorizedNumerator, extra: &str| {
+        let mut v = v.clone();
+        let i = v
+            .vertices
+            .iter()
+            .position(|x| v.insertions.iter().all(|n| n.vertex != x.id))
+            .unwrap();
+        v.vertices[i].factor = &v.vertices[i].factor * parsed(extra);
+        v
+    };
+    let graph_detail = |r: Result<()>| match r {
+        Err(FactorizedError::Graph { detail }) => detail,
+        other => panic!("expected Graph, got {other:?}"),
+    };
+    for (name, v, settings, entry) in &entries {
+        // written, the settings rules hold: accepted
+        v.to_text().unwrap();
+        entry(&vakint, settings, v).unwrap_or_else(|e| panic!("{name}: {e}"));
+        // a mixed master-mode order
+        let mixed = VakintSettings {
+            evaluation_order: EvaluationOrder(vec![
+                EvaluationMethod::RustRed(RustRedEvaluationOptions {
+                    master_mode: RustRedMasterMode::Symbolic,
+                }),
+                EvaluationMethod::RustRed(RustRedEvaluationOptions {
+                    master_mode: RustRedMasterMode::Retain,
+                }),
+            ]),
+            ..settings.clone()
+        };
+        assert!(
+            graph_detail(entry(&vakint, &mixed, v))
+                .starts_with("the evaluation methods mix master modes: "),
+            "{name}"
+        );
+        // vakint's ε in a factor, the settings' ε another symbol
+        let w = with_factor(v, "1+vakint::ε");
+        w.to_text().unwrap();
+        assert!(
+            graph_detail(entry(&vakint, settings, &w)).ends_with(
+                "the settings' epsilon is gammalooprs::ε, so vakint's epsilon would be a constant here (write the settings' epsilon)"
+            ),
+            "{name}"
+        );
+        // a lookalike of the settings' ε
+        let w = with_factor(v, "1+gammalooprs::ϵ");
+        w.to_text().unwrap();
+        assert!(
+            graph_detail(entry(&vakint, settings, &w))
+                .starts_with("a non-ASCII name gammalooprs::ϵ in vertex "),
+            "{name}"
+        );
+        // the number of terms against the record's depth (the entries that
+        // take the settings' number)
+        if !name.starts_with("closure") {
+            let other = VakintSettings {
+                number_of_terms_in_epsilon_expansion: settings.number_of_terms_in_epsilon_expansion
+                    + 1,
+                ..settings.clone()
+            };
+            assert!(
+                graph_detail(entry(&vakint, &other, v)).starts_with(
+                    "the depth 2 of the record differs from the settings' number of terms 3"
+                ),
+                "{name}"
+            );
+        }
+    }
+}
+
+/// ONLY SCALARS IS APPLIED BY VAKINT: overall, colour, loop_sign and flavour
+/// with applied_by=vakint are refused, also with their prefactor field equal
+/// to the weight, on the closure and the direct kind, typed and through text,
+/// with the rule's detail; scalars applied by vakint with its field equal is
+/// accepted.
+#[test]
+fn only_scalars_is_applied_by_vakint() {
+    let k2 = FactorizedNumerator::from_text(include_str!("fixtures/wh-k2-child-ins.record.txt"))
+        .unwrap();
+    let k5 =
+        FactorizedNumerator::from_text(include_str!("fixtures/wh-k5-direct.record.txt")).unwrap();
+    for base in [&k2, &k5] {
+        for (name, value) in [
+            ("overall", base.prefactor.overall.clone()),
+            ("colour", base.prefactor.colour.clone()),
+            ("loop_sign", Atom::num(base.prefactor.loop_sign)),
+            ("flavour", Atom::num(i64::from(base.prefactor.nf_power))),
+            ("scalars", base.prefactor.scalars.clone()),
+        ] {
+            let mut v = base.clone();
+            let w = vec![(name.to_string(), true, value.clone())];
+            match &mut v.kind {
+                FactorizedKind::Closure(spec) => spec.weights = w,
+                FactorizedKind::Direct => v.record.as_mut().unwrap().weights = w,
+            }
+            let typed = v.validate();
+            let text = v.to_text_unvalidated_for_diagnostics().unwrap().replacen(
+                super::DIAGNOSTIC_SCHEMA_SUFFIX,
+                "",
+                1,
+            );
+            let read = FactorizedNumerator::from_text(&text).map(|_| ());
+            for (form, r) in [("typed", typed), ("text", read)] {
+                if name == "scalars" {
+                    assert!(r.is_ok(), "{} {name} {form}: {r:?}", base.label);
+                } else {
+                    let detail = match r {
+                        Err(
+                            FactorizedError::Closure { detail } | FactorizedError::Graph { detail },
+                        ) => detail,
+                        other => panic!("{} {name} {form}: {other:?}", base.label),
+                    };
+                    assert_eq!(
+                        detail,
+                        format!(
+                            "weight {name} applied_by=vakint {value}: only scalars is applied by vakint; {name} is applied by the caller (applied_by=beta, its prefactor field neutral)"
+                        ),
+                        "{} {form}",
+                        base.label
+                    );
+                }
+            }
+        }
+    }
+}
+
 /// THE WRITER VALIDATES FIRST: over the vendored records and the violating
 /// inputs the tests build (insertions out of vertex order, which the writer
 /// would sort; another auxiliary mass, which a pre-expanded record's text does
 /// not carry; a weight against the table, a depth beyond the cap,
 /// an edge power beyond 2^31, a zero denominator in a vertex factor, a closure
-/// value with a direct record, a huge power in an insertion), to_text(v) is an
-/// error exactly when validate(v) is, and when it is not, the text reads back
-/// to v (the same record_atoms and the same fields).
+/// value with a direct record, a huge power in an insertion, overall applied
+/// by vakint), to_text(v) is an error exactly when validate(v) is, and when it
+/// is not, the text reads back to v (the same record_atoms and the same
+/// fields); the diagnostic writer's text of every one of them is refused by
+/// the reader (its schema line).
 #[test]
 fn to_text_refuses_exactly_what_validate_refuses_and_round_trips_the_rest() {
     let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -2284,8 +2471,23 @@ fn to_text_refuses_exactly_what_validate_refuses_and_round_trips_the_rest() {
     }
     assert!(bases.len() >= 5, "{} marked fixtures", bases.len());
     type Change = fn(&mut FactorizedNumerator);
-    let changes: [(&str, Change); 9] = [
+    let changes: [(&str, Change); 10] = [
         ("insertions out of vertex order", |v| v.insertions.reverse()),
+        ("overall applied by vakint, its field equal", |v| {
+            let w = vec![("overall".to_string(), true, v.prefactor.overall.clone())];
+            match &mut v.kind {
+                FactorizedKind::Closure(spec) => spec.weights = w,
+                FactorizedKind::Direct => {
+                    v.record
+                        .get_or_insert_with(|| DirectRecord {
+                            original_cycles: None,
+                            depth: None,
+                            weights: Vec::new(),
+                        })
+                        .weights = w
+                }
+            }
+        }),
         ("another auxiliary mass", |v| {
             if let FactorizedKind::Closure(spec) = &mut v.kind {
                 spec.auxiliary_mass_squared = parsed("witness::other_mass");
@@ -2352,6 +2554,19 @@ fn to_text_refuses_exactly_what_validate_refuses_and_round_trips_the_rest() {
             let mut v = base.clone();
             change(&mut v);
             let valid = v.validate().is_ok();
+            // THE DIAGNOSTIC TEXT, of every value: refused by the reader with
+            // the schema refusal of its `.unvalidated` schema line
+            if let Ok(diagnostic) = v.to_text_unvalidated_for_diagnostics() {
+                match FactorizedNumerator::from_text(&diagnostic) {
+                    Err(FactorizedError::TextSyntax { line: 1, detail })
+                        if detail.contains(
+                            ".unvalidated: the text of to_text_unvalidated_for_diagnostics",
+                        ) => {}
+                    other => wrong.push(format!(
+                        "{name} {what}: the diagnostic text is not refused by its schema: {other:?}"
+                    )),
+                }
+            }
             match v.to_text() {
                 // WRITER ERRORS = VALIDATION ERRORS
                 Err(e) if !valid => {
@@ -2422,7 +2637,11 @@ fn the_two_legs_of_a_paired_line_carry_one_momentum() {
     }
     m[j] = 1;
     assert_ne!(bad.edges[leg].momentum, k2.edges[leg].momentum);
-    let text = bad.to_text_unvalidated_for_diagnostics().unwrap();
+    let text = bad.to_text_unvalidated_for_diagnostics().unwrap().replacen(
+        super::DIAGNOSTIC_SCHEMA_SUFFIX,
+        "",
+        1,
+    );
     for (how, r) in [
         ("typed", bad.validate()),
         ("text", FactorizedNumerator::from_text(&text).map(|_| ())),

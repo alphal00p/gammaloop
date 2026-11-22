@@ -209,9 +209,19 @@ fn is_compact(rep: AtomView<'_>) -> bool {
     matches!(rep, AtomView::Fun(f) if f.get_symbol().get_name() == names::MINK && f.get_nargs() == 1)
 }
 
-/// The checks of the vacuum mode (the contract's graph checks apply where they
-/// do not assume a propagator graph).
-fn validate_vacuum(value: &FactorizedNumerator) -> Result<()> {
+/// The checks of the vacuum mode. A MARKED value: the record-wide rules it
+/// shares with [`FactorizedNumerator::validate`] (reserved names, bounds,
+/// weights, paired legs, original cycles, atoms, fields, insertions), the
+/// vacuum shape rules (at least one loop; no external momentum on an
+/// internal line; one mass scale, at least one massive line; Lorentz open
+/// slots only), then the general contract with the LOOP components of the
+/// momenta conserved (structure, loop-momentum conservation, per-factor index
+/// analysis, locality, contraction, fermion orientation, scalar prefactor and
+/// masses). Not applied: conservation of the external components (they flow
+/// through no internal line) and the closed-loop sign and n_f rules
+/// (replaced by the vacuum mode's original-cycles rule). An unmarked value:
+/// the base's rules ([`validate_vacuum_v1`]).
+pub(crate) fn validate_vacuum(value: &FactorizedNumerator) -> Result<()> {
     // a value with new features: its shape refusals are the caller's
     // mistakes (`Graph`, the same "vacuum: " text), not internal failures
     let refuse = |detail: &str| FactorizedError::Graph {
@@ -298,6 +308,19 @@ fn validate_vacuum(value: &FactorizedNumerator) -> Result<()> {
                 "open slot {port}: only Lorentz slots mink(D, index) stay open in the vacuum scope"
             )));
         }
+    }
+    // MARKED SIDE: THE GENERAL CONTRACT, with momentum conservation of the
+    // LOOP components only (`validate_contract(Some(loops))`): the graph's
+    // structure, the loop momenta conserved at every vertex, the per-factor
+    // index analysis, locality, contraction and fermion orientation, the
+    // scalar prefactor fields and masses. Not applied: conservation of the
+    // EXTERNAL components (a vacuum value carries the external momenta on its
+    // legs and in its numerator only: no internal line carries one, so they
+    // do not balance at a vertex with a leg), and the loop-sign / n_f rules of
+    // the closed loops (the vacuum mode's own: `check_vacuum_original_cycles`).
+    // An unmarked value: the base behaviour (not run).
+    if super::is_marked(value) {
+        value.validate_contract(Some(loops))?;
     }
     Ok(())
 }
