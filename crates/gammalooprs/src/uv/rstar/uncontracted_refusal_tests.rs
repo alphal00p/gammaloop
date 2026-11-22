@@ -887,42 +887,77 @@ fn closure_refusals_are_designed_only_by_a_frozen_row() {
     }
 }
 
-/// Our designed vakint rows are a SUBSET of the frozen REFUSALS list
-/// (`FROZEN_VAKINT_REFUSALS`, copied from the list "REFUSALS (variant, detail
-/// prefix)" of the document of sha256
-/// 947004186d96e5c79ba8b5bbffdee13fa7bdca58f503559f84f1122d051b3222): each
-/// row's variant and prefix are a frozen pair's (the row's prefix equal to
-/// the frozen one or narrower), except the open-spinor row, which no frozen
-/// row lists and which is designed by the variant rule (a `Closure` refusal,
-/// refused by the format); no row is `Evaluation` or `Oracle`, and those two
-/// are always errors.
+/// Our designed vakint rows are a SUBSET of vakint's refusal table
+/// (`crates/vakint/tests/fixtures/factorized_refusals.tsv`, read here; vakint's
+/// `the_refusal_table_matches_the_source` keeps it equal to the source): each
+/// row with a detail prefix lies in the literal start of a `refusal` row of
+/// its variant (the template's text before its first `<>`), and the detail written
+/// from that template is declined with the row's code; the rows matched by
+/// name (Gamma5, LeviCivita: struct variants without a free-text detail) are
+/// the only ones without a table row; no row is `Evaluation` or `Oracle`, and
+/// those two are always errors.
 #[test]
 fn designed_vakint_rows_are_a_subset_of_the_frozen_refusals() {
-    let frozen = uncontracted::FROZEN_VAKINT_REFUSALS;
-    for (variant, _) in frozen {
-        assert!(
-            *variant != "Evaluation" && *variant != "Oracle",
-            "{variant} is not a format refusal"
-        );
-    }
-    let mut by_variant_rule = Vec::new();
-    for (variant, prefix, _, code) in uncontracted::DESIGNED_VAKINT {
+    let table = include_str!("../../../../vakint/tests/fixtures/factorized_refusals.tsv");
+    let refusals: Vec<(&str, &str)> = table
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split('\t');
+            match (fields.next(), fields.next(), fields.next()) {
+                (Some("refusal"), Some(variant), Some(template)) => Some((variant, template)),
+                _ => None,
+            }
+        })
+        .collect();
+    assert!(refusals.len() > 100, "{} refusal rows", refusals.len());
+    // does `prefix` lie in the literal start of `template` (its text before
+    // the first `<>`)? A template that begins with `<>` starts no prefix.
+    let starts = |template: &str, prefix: &str| {
+        template
+            .split("<>")
+            .next()
+            .unwrap_or("")
+            .starts_with(prefix)
+    };
+    let mut by_name = Vec::new();
+    for (variant, prefix, phrase, code) in uncontracted::DESIGNED_VAKINT {
         assert!(
             *variant != "Evaluation" && *variant != "Oracle",
             "{code}: {variant} is never designed"
         );
-        let listed = frozen
-            .iter()
-            .any(|(f_variant, f_prefix)| f_variant == variant && prefix.starts_with(f_prefix));
-        if !listed {
+        if prefix.is_empty() {
             assert!(
-                frozen.iter().any(|(f_variant, _)| f_variant == variant),
-                "{code}: the variant {variant} is not in the frozen list"
+                refusals.iter().all(|(v, _)| v != variant),
+                "{code}: {variant} has table rows, match it by its detail"
             );
-            by_variant_rule.push(*code);
+            by_name.push(*code);
+            continue;
+        }
+        let rows: Vec<&str> = refusals
+            .iter()
+            .filter(|(v, template)| {
+                v == variant && starts(template, prefix) && template.contains(phrase)
+            })
+            .map(|(_, template)| *template)
+            .collect();
+        assert!(
+            !rows.is_empty(),
+            "{code}: ({variant}, {prefix:?}) is in no table row"
+        );
+        for template in rows {
+            let detail = template.replace("<>", "x");
+            let error = match *variant {
+                "Closure" => FactorizedError::Closure { detail },
+                "Ports" => FactorizedError::Ports { detail },
+                "Insertion" => FactorizedError::Insertion { vertex: 1, detail },
+                other => panic!("{code}: no detail constructor for {other}"),
+            };
+            let decline = Decline::vakint(&error);
+            assert!(decline.designed, "{code}: {template} -> {decline:?}");
+            assert_eq!(decline.code, format!("vakint:{code}"), "{template}");
         }
     }
-    assert_eq!(by_variant_rule, ["open_spinor"]);
+    assert_eq!(by_name, ["gamma5", "levi_civita"]);
     assert_eq!(uncontracted::DESIGNED_VAKINT.len(), 9);
     for (error, code) in [
         (

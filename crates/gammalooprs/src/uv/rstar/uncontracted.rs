@@ -753,23 +753,25 @@ pub(super) fn is_setting_code(code: &str) -> bool {
 /// its detail AND a phrase the detail must contain (`(variant, detail prefix,
 /// phrase, code)`, phrase `""`: none; the code is `vakint:<code>`). THE ONE
 /// TABLE of the matching: a change of vakint's refusals is an edit of this
-/// table and of [`FROZEN_VAKINT_REFUSALS`] below, nothing else.
+/// table, nothing else.
 ///
-/// Rule (U7-PLAN requirements 13 and 14): the source is the frozen list
-/// "REFUSALS (variant, detail prefix)" of vakint's W-H public surface (with
-/// its ADDENDUM), copied in
-/// [`FROZEN_VAKINT_REFUSALS`]. vakint refuses by the format every variant
-/// except `Evaluation` and `Oracle` (failed inside: hard errors). Our designed
-/// list is a SUBSET of it: a record we emit is declined (today's path takes
-/// it) only for a row whose variant is the error's, whose prefix starts the
-/// detail and is the frozen prefix or a narrower one, and whose phrase the
-/// detail contains. Every other refusal of OUR records is an error,
+/// Rule (U7-PLAN requirements 13 and 14): the source is vakint's refusal
+/// table, `crates/vakint/tests/fixtures/factorized_refusals.tsv` (one row
+/// `refusal<TAB><variant><TAB><detail template>` per refusal the factorised
+/// code constructs, placeholders `<>`; vakint's own test keeps it equal to
+/// the source both ways). vakint refuses by the format every variant except
+/// `Evaluation` and `Oracle` (failed inside: hard errors). Our designed list
+/// is a SUBSET of it: a record we emit is declined (today's path takes it)
+/// only for a row whose variant is the error's, whose prefix starts the
+/// detail and matches the start of a row's template, and whose phrase the
+/// detail contains (checked by
+/// `designed_vakint_rows_are_a_subset_of_the_frozen_refusals`). Every other refusal of OUR records is an error,
 /// `outcome=error:vakint:<Variant>` (our bug: the reader's `Text*`, the index
 /// and momentum rules, `Graph`, `ColourInFactor`, every other `Closure`,
 /// `Insertion` and `Ports` row, the entry's wrapped internal failures);
 /// `Evaluation` and `Oracle` are always errors.
 ///
-/// Rows and their frozen source:
+/// Rows and their source rows:
 /// * `Taylor degree `: Closure, "Taylor: degree > 2".
 /// * `the projector contains Q(`: Closure, "a projector with a momentum
 ///   under a Taylor step" (frozen prefix `the projector contains `; the
@@ -777,17 +779,17 @@ pub(super) fn is_setting_code(code: &str) -> bool {
 /// * `a compact slash gamma(a, b, Q(x, mink(D))) in the projector`: Ports,
 ///   R4 (14(a): Ports, not Closure).
 /// * `open slot ` with the phrase `is not a Lorentz slot`: Closure, the
-///   closure entry's open bispinor slot. No frozen row lists this prefix; it
-///   is designed by the variant rule (a Closure refusal, not `Evaluation`).
-///   The phrase is needed (helper VH round 2, R2-I4): the prefix alone also
+///   closure entry's open bispinor slot (`open slot <> is not a Lorentz
+///   slot ...`). The phrase is needed (helper VH round 2, R2-I4): the prefix alone also
 ///   starts the vacuum entry's "open slot ..: only Lorentz slots .. stay
 ///   open", which is `Evaluation`.
 /// * `contains a mass symbol `: Insertion, OQ-28.
 /// * `the factor has `: Insertion, more than 4 open slots or degree > 2.
-/// * Gamma5, LeviCivita: by name.
-/// * `every line is massive: not a closure`: Closure, the ADDENDUM (a closure
-///   record whose vacuum sector after the Taylor step is the closing line
-///   alone, a massive tadpole). A backstop (U7-PLAN 14(d)): the emitter
+/// * Gamma5, LeviCivita: by name (struct variants without a free-text
+///   detail, so the table has no row for them; refused by the format).
+/// * `every line is massive: not a closure`: Closure, a validation refusal
+///   (a closure record whose vacuum sector after series merging is the
+///   closing line alone, a massive tadpole). A backstop (U7-PLAN 14(d)): the emitter
 ///   declines that shape first ([`single_propagator`], `one_loop_tree_cut`),
 ///   so vakint should never see it; a `vakint:all_massive` decline means the
 ///   emitter's shape test missed one.
@@ -837,92 +839,6 @@ pub(super) const DESIGNED_VAKINT: &[(&str, &str, &str, &str)] = &[
         "",
         "all_massive",
     ),
-];
-
-/// The frozen vakint refusals as (variant, detail prefix), the source of
-/// [`DESIGNED_VAKINT`] (read by the test
-/// `designed_vakint_rows_are_a_subset_of_the_frozen_refusals`). Copied from
-/// the list "REFUSALS (variant, detail prefix) — part of the frozen surface
-/// from ccba5e0c8 on" and its ADDENDUM (2026-11-21 ~00:50Z), as read in the
-/// document of sha256
-/// 947004186d96e5c79ba8b5bbffdee13fa7bdca58f503559f84f1122d051b3222.
-/// Prefix `""`: matched by the variant name. Every variant here is a format
-/// refusal; `Evaluation` and `Oracle` (failed inside) are not listed.
-#[cfg(test)]
-pub(super) const FROZEN_VAKINT_REFUSALS: &[(&str, &str)] = &[
-    ("TextSchema", ""),
-    ("TextSyntax", ""),
-    ("TextSectionCount", ""),
-    ("TextLineCount", ""),
-    ("Closure", "closing edge "),
-    ("Closure", "several massive lines ("),
-    ("Closure", "the auxiliary mass is zero"),
-    ("Closure", "Taylor degree "),
-    ("Closure", "orders="),
-    ("Closure", "scaled_edges"),
-    ("Closure", "p("),
-    ("Closure", "the projector contains "),
-    ("Ports", "the projector contains "),
-    (
-        "Ports",
-        "a compact slash gamma(a, b, Q(x, mink(D))) in the projector",
-    ),
-    ("Closure", "a closure record has at least one loop"),
-    (
-        "Closure",
-        "taylor none (lambda^0 denominators): internal edge ",
-    ),
-    ("Closure", "with original_cycles the prefactor has"),
-    (
-        "Closure",
-        "with original_cycles the weights are the caller's",
-    ),
-    ("NotScalar", ""),
-    ("Closure", "the carried graph and its insertions have "),
-    ("Graph", "the record and its insertions carry "),
-    ("Closure", "orders=<name> is not supported: "),
-    ("Closure", "a flavour symbol in the record"),
-    ("Closure", "mUVexp in the record"),
-    ("Graph", "insertion at vertex "),
-    ("ColourInFactor", ""),
-    ("Insertion", "the vertex does not exist"),
-    ("Insertion", "the vertex factor must be 1"),
-    ("Insertion", "hedges must be non-empty, sorted and distinct"),
-    ("Insertion", "half-edge "),
-    ("Insertion", "no boundary half-edge sits at the vertex"),
-    ("Insertion", "a contracted vertex (rule "),
-    ("Insertion", "a surrogate coefficient vertex (rule "),
-    ("Insertion", "the vertex rule "),
-    (
-        "Insertion",
-        "insertions are not sorted by vertex, or two share a vertex",
-    ),
-    ("Insertion", "the factor has "),
-    ("Insertion", "contains a mass symbol "),
-    ("Insertion", "the symbol "),
-    (
-        "Insertion",
-        "the dependence on ε is not a Laurent polynomial",
-    ),
-    ("Insertion", "an ε power out of range"),
-    ("Closure", "the depth "),
-    ("Graph", "the depth "),
-    ("Graph", "id "),
-    ("MomentumBasis", "edge "),
-    ("IndexOverContracted", ""),
-    (
-        "Insertion",
-        "a denominator vanishes identically after D -> 4-2ε",
-    ),
-    ("Insertion", "a fractional power of ε"),
-    ("IndexNotLocal", ""),
-    ("UnsupportedTensor", ""),
-    ("Gamma5", ""),
-    ("LeviCivita", ""),
-    ("Ports", "port "),
-    ("Ports", "a port is listed twice"),
-    // ADDENDUM (2026-11-21 ~00:50Z)
-    ("Closure", "every line is massive: not a closure"),
 ];
 
 /// Whether `code` is the code of a designed refusal as an outcome names it
