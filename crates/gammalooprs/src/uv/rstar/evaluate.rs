@@ -3259,7 +3259,13 @@ impl<'a> Evaluation<'a> {
     /// [`Self::ir_outer_integrated`], projected, regulated and finished; the
     /// excess is the input's valuation minus the output's (at least 0).
     /// `None` when nothing is measured (every probe vanishes or fails); an
-    /// error that is an alarm propagates. `Some(0)` without a projector.
+    /// error that is FATAL ([`probe_fatal`]: the typed alarm, also one
+    /// forwarded by the projector from a nested evaluation or replayed by the
+    /// counterterm cache, and an exhausted resource budget) propagates from
+    /// EVERY step of the probe (the forest, the outer orders, the summand
+    /// simplification, the projector and the tensor finish) before the probe
+    /// is classified as unavailable (IRH-DEPTH round 8, r47 finding 5).
+    /// `Some(0)` without a projector.
     fn callback_excess(
         &mut self,
         hard: &RStarIntegrand,
@@ -3288,7 +3294,7 @@ impl<'a> Evaluation<'a> {
         for forest in forests {
             let mut z = match self.ir_forest(forest, &Atom::one()) {
                 Ok(z) => z,
-                Err(error) if super::depth::is_alarm(&error) => return Err(error),
+                Err(error) if probe_fatal(&error) => return Err(error),
                 Err(_) => continue,
             };
             if z.is_zero() {
@@ -3305,28 +3311,34 @@ impl<'a> Evaluation<'a> {
             ) {
                 Ok(Ok(orders)) => orders,
                 Ok(Err(_)) => continue,
-                Err(error) if super::depth::is_alarm(&error) => return Err(error),
+                Err(error) if probe_fatal(&error) => return Err(error),
                 Err(_) => continue,
             };
             for order in orders.iter().filter(|order| !order.is_zero()) {
                 let input = order
                     .replace(Atom::var(GS.dim_epsilon))
                     .with(Atom::var(renamed));
-                let Ok(simplified) = RStarIntegrand::simplify_summands(input.as_view()) else {
-                    continue;
+                let simplified = match RStarIntegrand::simplify_summands(input.as_view()) {
+                    Ok(simplified) => simplified,
+                    Err(error) if probe_fatal(&error) => return Err(error),
+                    Err(_) => continue,
                 };
                 let Some(before) = valuation(&simplified) else {
                     continue;
                 };
-                let Ok(projected) = projector(&simplified) else {
-                    continue;
+                let projected = match projector(&simplified) {
+                    Ok(projected) => projected,
+                    Err(error) if probe_fatal(&error) => return Err(error),
+                    Err(_) => continue,
                 };
                 self.integration_id += 1;
-                let Ok(finished) = RStarIntegrand::finish_tensor(
+                let finished = match RStarIntegrand::finish_tensor(
                     Integrated::dimensionally_regularized(&projected),
                     self.integration_id,
-                ) else {
-                    continue;
+                ) {
+                    Ok(finished) => finished,
+                    Err(error) if probe_fatal(&error) => return Err(error),
+                    Err(_) => continue,
                 };
                 let Some(after) = valuation(&finished) else {
                     continue;
@@ -5254,6 +5266,18 @@ impl<'a> Evaluation<'a> {
 /// The carriers scaled by the outer Taylor operation of `plan`'s root: the
 /// graph's external edges, or the full crown of a proper support root
 /// (sorted, without repetition).
+/// IRH-DEPTH round 8 (r47 finding 5): an error the unit probe
+/// ([`Evaluation::callback_excess`]) must NOT read as "this probe is
+/// unavailable": the typed fatal alarm ([`super::depth::is_alarm`]: the
+/// STRICT [`super::depth::DepthAlarm`] and the IR_DIRAC_CHECK
+/// [`super::depth::CheckFailure`], also one forwarded by the projector from
+/// a nested evaluation or replayed by the counterterm cache) and an
+/// exhausted resource budget (a guarded child attempt declines the whole
+/// correction to today's path on it, never admits it unprobed).
+fn probe_fatal(error: &eyre::Report) -> bool {
+    super::depth::is_alarm(error) || crate::uv::counterterm_cache::is_resource_limit(error)
+}
+
 fn root_edges_of(plan: &RStarPlan, graph: &Graph) -> Vec<EdgeIndex> {
     match &plan.root_boundary {
         None => {
