@@ -1410,3 +1410,7 @@ fn a_guard_budget_error_is_not_kept_by_the_cache() -> Result<()> {
 /// IRH-DEPTH round 5: the regularity witnesses ([`super::regularity`]).
 #[path = "regularity_tests.rs"]
 mod round5;
+
+/// IRH-DEPTH round 8b: C1, the topological certificate and the declines.
+#[path = "r8b_tests.rs"]
+mod round8b;
