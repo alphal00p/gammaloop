@@ -7,6 +7,7 @@
 #   recorded:<how>            written by a test on a named commit
 #   derived:<how> / written:<how>   made for these tests; the label line of the file says what it is
 #   base:<note>               present before these fixtures were vendored
+#   hole-cut-cases:<path>     the producer's published one-hedge (v1.5) cases (VAKINT_TEST_HOLE_CUT_CASES), byte for byte
 src/p_integral/factorized/fixtures/wh-k1-root.record.txt	91dd00e090dda732f625d7ff076967af05a40092373e90a65693918799f3ca35	wh-fixtures:k1-root/input.txt
 src/p_integral/factorized/fixtures/wh-k1-root.value.txt	5c07a6181fa1d68217b398804a13f6ef88fdef75a3c84e8c3bdf3a864ae9de16	wh-fixtures:k1-root/value.txt
 src/p_integral/factorized/fixtures/wh-k1-root-rc.record.txt	3704a8806435cf5bb14ebffd33273a0ff7bbfbf92b53893fc286fe3faed22307	wh-fixtures:k1-root-rc/input.txt
@@ -54,3 +55,9 @@ tests/fixtures/direct_differential/rank4-v1.txt	f57954c778eaba35dd09632544ebb0bc
 tests/fixtures/direct_differential/rank5-v1.txt	0dc83224d43b888eea00b12c31e5b933a5a0f10878aa6a32542492d9f7994b3c	written:the bubble of rank0-v1.txt with 5 external spectators, as rank6-v1.txt / rank7-v1.txt
 src/p_integral/factorized/fixtures/l1-gluon-bubble.txt	977fd204f11e1ce05e9f41193d6d8fb34e6e199f7c6d6be1b976b598004e2dcf	base:in the tree before these tests, unchanged
 src/p_integral/factorized/fixtures/l1-quark-bubble.txt	aaed68157ea2c220894955483d0f6ad58c69347208fe2c4df2e349d906d338f8	base:in the tree before these tests, unchanged
+src/p_integral/factorized/fixtures/gg-l5-143019-child-9-10.record.txt	729c25a495981621bb921d8e11fa390f8aa8ab559839bca5480ce6360fd173bf	hole-cut-cases:l5-143019-child-9-10/input.txt
+src/p_integral/factorized/fixtures/gg-l5-143019-child-9-10.value.txt	06ac6f59fcd29a1b6325a8ee38d01f7ab774ef570e9fa3d0e2093ad5c748d5dd	hole-cut-cases:l5-143019-child-9-10/value.txt
+src/p_integral/factorized/fixtures/gg-l5-175270-child-5-6-7-8.record.txt	a729c0814eaf4287fa0ee79afc4c89fb22d2461668a8f98fff4d9745f184b0ac	hole-cut-cases:l5-175270-child-5-6-7-8/input.txt
+src/p_integral/factorized/fixtures/gg-l5-175270-child-5-6-7-8.value.txt	fc55da5531041243c058297c40c01bbc413999deaf7479fa76b855dabcc35812	hole-cut-cases:l5-175270-child-5-6-7-8/value.txt
+src/p_integral/factorized/fixtures/gg-l5-59943-child-9-10.record.txt	f2f74f2a23dadc6162159d04e6c045a00c753dbb85a562c46be8a569ba37f1ba	hole-cut-cases:l5-59943-child-9-10/input.txt
+src/p_integral/factorized/fixtures/gg-l5-59943-child-9-10.value.txt	1d240a5f90c540516b2fd7d17ea03c6b4d90f3ede479d0c6ae92781746fd840a	hole-cut-cases:l5-59943-child-9-10/value.txt

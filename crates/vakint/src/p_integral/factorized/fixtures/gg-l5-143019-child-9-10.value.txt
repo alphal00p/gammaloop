@@ -1,0 +1,7 @@
+schema	wh-k5-value.v0
+label	reference value of B_self_energy_L5_143019_scalar_insertion id 1 (l5-143019-child-9-10): TODAY's contracted path for exactly this remainder (the uncontracted check's `contracted` value, finish_tensor applied)
+depth	1
+notation	spenso / gammalooprs (the R* remainder value after RStarIntegrand::finish_tensor), regulator gammalooprs::{}::ε, d = 4 - 2ε
+value	0
+valid_through	eps^-1 (depth - loops - 1; K2 child remainder; check mode: contracted == uncontracted, identical=true, first_difference=none)
+end

@@ -4966,7 +4966,8 @@ fn record_files(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
     out
 }
 
-/// The vendored producer records (this crate's fixtures): all 10 v3 records
+/// The vendored producer records (this crate's fixtures): all 13 v3 records
+/// (10 of the producer's fixture export, 3 of its published one-hedge cases)
 /// pass the namespace rule (they carry 𝑖 and 𝜋 bare).
 #[test]
 fn the_vendored_records_pass_the_namespace_rule() {
@@ -4974,7 +4975,7 @@ fn the_vendored_records_pass_the_namespace_rule() {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/p_integral/factorized/fixtures");
     let (records, i, pi) = namespace_rule_on(&record_files(&dir));
     eprintln!("NAMESPACE_RULE vendored records={records} 𝑖={i} 𝜋={pi}");
-    assert_eq!(records, 10);
+    assert_eq!(records, 13);
     assert!(i > 0 && pi > 0);
 }
 

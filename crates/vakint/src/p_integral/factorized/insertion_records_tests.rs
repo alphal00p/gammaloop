@@ -2875,3 +2875,431 @@ fn the_two_legs_of_a_paired_line_carry_one_momentum() {
         }
     }
 }
+
+// ===========================================================================
+// THE ONE-HEDGE SURROGATE COEFFICIENT VERTEX (the record format's correction
+// 29): the producer's published cases, the rules' witnesses, the readings
+// ===========================================================================
+
+const GG_59943: &str = include_str!("fixtures/gg-l5-59943-child-9-10.record.txt");
+const MOMENTUM_HEAD: &str = "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q";
+const HEDGE_SLOT: &str = "spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{spenso::index}::hedge";
+
+/// The producer's three published one-hedge cases through the closure entry
+/// against their values (today's CONTRACTED R* of the same remainder,
+/// through eps^-1): l5-59943 child {9,10} (a 2-loop GLUON hole, one Lorentz
+/// spectator port, NON-ZERO), l5-143019 child {9,10} (a GHOST hole, no slot,
+/// zero) and l5-175270 child {5,6,7,8} (a QUARK hole, a bispinor spectator
+/// closed by the Dirac projector, zero).
+#[test]
+fn the_producers_one_hedge_cases_equal_their_contracted_values() {
+    let vakint = plain_engine();
+    for (name, input, value) in [
+        (
+            "l5-59943-child-9-10",
+            GG_59943,
+            include_str!("fixtures/gg-l5-59943-child-9-10.value.txt"),
+        ),
+        (
+            "l5-143019-child-9-10",
+            include_str!("fixtures/gg-l5-143019-child-9-10.record.txt"),
+            include_str!("fixtures/gg-l5-143019-child-9-10.value.txt"),
+        ),
+        (
+            "l5-175270-child-5-6-7-8",
+            include_str!("fixtures/gg-l5-175270-child-5-6-7-8.record.txt"),
+            include_str!("fixtures/gg-l5-175270-child-5-6-7-8.value.txt"),
+        ),
+    ] {
+        let v = FactorizedNumerator::from_text(input).unwrap_or_else(|e| panic!("{name}: {e}"));
+        assert_eq!(v.insertions[0].hedges.len(), 1, "{name}");
+        compare(&vakint, input, value, name);
+    }
+}
+
+/// `v` with every `Q(from, ..)` of its insertion factors and vertex factors
+/// written `Q(to, ..)`.
+fn with_momentum(v: &FactorizedNumerator, from: usize, to: usize) -> FactorizedNumerator {
+    let mut v = v.clone();
+    let q = |e: usize| parsed(&format!("{MOMENTUM_HEAD}({e},x__)"));
+    for i in &mut v.insertions {
+        i.factor = i.factor.replace(q(from)).with(q(to));
+    }
+    for x in &mut v.vertices {
+        x.factor = x.factor.replace(q(from)).with(q(to));
+    }
+    v
+}
+
+/// `v` with the slot of half-edge `from` (copy `k`) in its insertion factor
+/// written as the slot of half-edge `to` (copy `k2`).
+fn with_slot(
+    v: &FactorizedNumerator,
+    from: (usize, usize),
+    to: (usize, usize),
+) -> FactorizedNumerator {
+    let mut v = v.clone();
+    let slot = |(h, k): (usize, usize)| parsed(&format!("{HEDGE_SLOT}({h},{k}))"));
+    v.insertions[0].factor = v.insertions[0].factor.replace(slot(from)).with(slot(to));
+    v
+}
+
+fn one_hedge_refusal(r: Result<()>, prefix: &str, what: &str) {
+    match r {
+        Err(FactorizedError::Insertion { vertex: 4, detail }) => {
+            assert!(detail.starts_with(prefix), "{what}: {detail}")
+        }
+        other => panic!("{what}: {other:?}"),
+    }
+}
+
+/// THE RULES OF A ONE-HEDGE `ins:` (correction 29), each with a witness on
+/// the producer's gluon case l5-59943 (hedge 9 on the leg 5; slots on 9 and on
+/// the spectator 14, a declared port; bubble edges 9, 10 with half-edges
+/// 16-19): (29.2) a `Q` of an edge absent from the record is refused; a `Q` of
+/// another record edge (the leg 11) is refused by the boundary rule; (29.3)
+/// slots on the hedge only (the spectator slot moved onto the hedge's second
+/// copy, its port removed), slots on two half-edges outside the record (the
+/// hedge's slot moved to the absent half-edge 15, declared too) are refused;
+/// the spectator not declared a port, and a slot on a half-edge of the record
+/// that is not the hedge (the bubble half-edge 16), are refused by the
+/// locality rule; three hedges as before.
+#[test]
+fn every_one_hedge_rule_has_its_witness() {
+    let base = FactorizedNumerator::from_text(GG_59943).unwrap();
+    base.validate().unwrap();
+    let port = |h: usize| parsed(&format!("{HEDGE_SLOT}({h},1))"));
+    // 29.2
+    one_hedge_refusal(
+        with_momentum(&base, 5, 77).validate(),
+        "a one-hedge surrogate coefficient vertex (rule ins:scalar_insertion_0): its factor has the momentum Q(77) of an edge that is not in the record (only the momentum of its hedge's edge 5 may stand there)",
+        "an absent edge's momentum",
+    );
+    match with_momentum(&base, 5, 11).validate() {
+        Err(FactorizedError::UnsupportedTensor { tensor, .. }) => {
+            assert!(
+                tensor.ends_with("(not a boundary momentum of the insertion)"),
+                "{tensor}"
+            )
+        }
+        other => panic!("another record edge's momentum: {other:?}"),
+    }
+    // 29.3: slots on the hedge only
+    let mut v = with_slot(&base, (14, 1), (9, 2));
+    v.ports.retain(|p| *p != port(14));
+    one_hedge_refusal(
+        v.validate(),
+        "a one-hedge surrogate coefficient vertex (rule ins:scalar_insertion_0): its slots are on the half-edges {9}; a one-hedge insertion carries no slot",
+        "slots on the hedge only",
+    );
+    // 29.3: slots on two half-edges outside the record
+    let mut v = with_slot(&base, (9, 1), (15, 1));
+    v.ports.retain(|p| *p != port(9));
+    v.ports.push(port(15));
+    v.ports.sort_by_key(|p| p.to_canonical_string());
+    one_hedge_refusal(
+        v.validate(),
+        "a one-hedge surrogate coefficient vertex (rule ins:scalar_insertion_0): its slots are on the half-edges {14, 15}",
+        "slots on two half-edges outside the record",
+    );
+    // the spectator not declared; a slot on a record half-edge
+    let mut v = base.clone();
+    v.ports.retain(|p| *p != port(14));
+    assert!(
+        matches!(v.validate(), Err(FactorizedError::IndexNotLocal { .. })),
+        "the spectator not declared"
+    );
+    let mut v = with_slot(&base, (14, 1), (16, 1));
+    v.ports.retain(|p| *p != port(14));
+    assert!(
+        matches!(v.validate(), Err(FactorizedError::IndexNotLocal { .. })),
+        "a slot on a bubble half-edge"
+    );
+    // three hedges
+    let mut v = base.clone();
+    v.insertions[0].hedges = vec![9, 16, 18];
+    one_hedge_refusal(
+        v.validate(),
+        "a surrogate coefficient vertex (rule ins:scalar_insertion_0) has 3 hedges, not the two inner boundary half-edges (or one, when the far end of the chain is outside the record)",
+        "three hedges",
+    );
+}
+
+/// THE PRODUCER'S READINGS of correction 29. (a) The momentum rule compares
+/// with the RECORD edge owning the hedge, which can be the paired leg
+/// 100000 + e_in: l5-59943 with its leg 5 written as the pair 100005 (into
+/// the anchor, the hedge 9) + 5 (out of it), every `Q(5)` written `Q(100005)`:
+/// accepted; the same with the insertion naming the partner `Q(5)` instead:
+/// refused by the boundary rule. (b) Only FREE slots count: the real quark
+/// case (l5-175270, contracted insertion_slash pairs in its factor) is
+/// accepted, and so is l5-59943 with a contracted metric pair on the bubble
+/// half-edge 16 multiplied into its insertion factor. (c) The rule is not limited to the
+/// closure kind: a DIRECT record (the vendored K5 direct, its carrier lines
+/// relabelled scalar so that no flow rule applies) with its insertion cut to
+/// one hedge, factor without slot: accepted; with a `Q` of an absent edge in
+/// the factor: refused by the same rule.
+#[test]
+fn the_producers_readings_of_the_one_hedge_rule() {
+    let base = FactorizedNumerator::from_text(GG_59943).unwrap();
+    // (a)
+    let mut paired = with_momentum(&base, 5, 100005);
+    let leg = paired.edges.iter_mut().find(|e| e.id == 5).unwrap();
+    leg.id = 100005;
+    let mut partner = leg.clone();
+    partner.id = 5;
+    partner.source = Endpoint::Vertex(4);
+    partner.target = Endpoint::External;
+    partner.source_hedge = Some(30);
+    partner.target_hedge = None;
+    paired.edges.push(partner);
+    paired.edges.sort_by_key(|e| e.id);
+    for x in paired.external_edges.iter_mut() {
+        if *x == Some(5) {
+            *x = Some(100005);
+        }
+    }
+    if let FactorizedKind::Closure(spec) = &mut paired.kind {
+        for e in &mut spec.taylor.as_mut().unwrap().scaled_edges {
+            if *e == 5 {
+                *e = 100005;
+            }
+        }
+        spec.taylor.as_mut().unwrap().scaled_edges.sort();
+        for soft in &mut spec.softs {
+            if soft.edge == 5 {
+                soft.edge = 100005;
+            }
+        }
+    }
+    paired.validate().unwrap();
+    match with_momentum(&paired, 100005, 5).validate() {
+        Err(FactorizedError::UnsupportedTensor { tensor, .. }) => {
+            assert!(
+                tensor.ends_with("(not a boundary momentum of the insertion)"),
+                "{tensor}"
+            )
+        }
+        other => panic!("(a) the partner's momentum: {other:?}"),
+    }
+    // (b): the real quark case carries contracted insertion_slash pairs and
+    // is accepted (its slots: the hedge and the bispinor spectator); and a
+    // contracted metric pair on the bubble half-edge 16 is no slot either
+    let quark = FactorizedNumerator::from_text(include_str!(
+        "fixtures/gg-l5-175270-child-5-6-7-8.record.txt"
+    ))
+    .unwrap();
+    assert!(
+        quark.insertions[0]
+            .factor
+            .to_canonical_string()
+            .contains("insertion_slash_0")
+    );
+    let mut v = base.clone();
+    let metric = "spenso::{symmetric,linear,real,spenso::tensor}::g";
+    let pair = parsed(&format!(
+        "{metric}({HEDGE_SLOT}(16,1)),{HEDGE_SLOT}(16,2)))*{metric}({HEDGE_SLOT}(16,2)),{HEDGE_SLOT}(16,1)))"
+    ));
+    v.insertions[0].factor = &v.insertions[0].factor * &pair;
+    v.validate().unwrap();
+    // (c)
+    let mut direct =
+        FactorizedNumerator::from_text(include_str!("fixtures/wh-k5-direct.record.txt")).unwrap();
+    assert!(matches!(direct.kind, FactorizedKind::Direct));
+    for e in &mut direct.edges {
+        if e.line == LineKind::Ghost {
+            e.line = LineKind::Scalar;
+        }
+    }
+    direct.validate().unwrap();
+    direct.insertions[0].hedges = vec![5];
+    direct.validate().unwrap();
+    match with_momentum(&direct, 3, 77).validate() {
+        Err(FactorizedError::Insertion { vertex: 2, detail }) => assert!(
+            detail.starts_with("a one-hedge surrogate coefficient vertex (rule ins:scalar_insertion_0): its factor has the momentum Q(77)"),
+            "{detail}"
+        ),
+        other => panic!("(c) an absent edge's momentum: {other:?}"),
+    }
+}
+
+/// THE UNPARTNERED LEG (correction 30), on the real K2 child (the pair 4 /
+/// 100004): its partner 4 removed (renumbered 7) or made internal is refused;
+/// the pair itself is accepted.
+#[test]
+fn an_unpartnered_leg_is_refused() {
+    let k2 =
+        FactorizedNumerator::from_text(include_str!("fixtures/wh-k2-child.record.txt")).unwrap();
+    k2.validate().unwrap();
+    let detail = |r: Result<()>| match r {
+        Err(FactorizedError::Closure { detail }) => detail,
+        other => panic!("{other:?}"),
+    };
+    let mut absent = k2.clone();
+    absent.edges.retain(|e| e.id != 4);
+    for x in absent.external_edges.iter_mut() {
+        if *x == Some(4) {
+            *x = Some(100004);
+        }
+    }
+    if let FactorizedKind::Closure(spec) = &mut absent.kind {
+        if let Some(t) = spec.taylor.as_mut() {
+            t.scaled_edges.retain(|e| *e != 4);
+        }
+        spec.softs.retain(|s| s.edge != 4);
+    }
+    assert_eq!(
+        detail(absent.validate()),
+        "edge 100004: an external leg with an id of at least 100000 is the second leg of a paired line, but its partner 4 is absent from the record"
+    );
+    let mut internal = k2.clone();
+    let four = internal.edges.iter_mut().find(|e| e.id == 4).unwrap();
+    four.target = Endpoint::Vertex(1);
+    four.target_hedge = Some(99);
+    assert_eq!(
+        detail(internal.validate()),
+        "edge 100004: an external leg with an id of at least 100000 is the second leg of a paired line, but its partner 4 is not an external edge"
+    );
+}
+
+/// THE 61 ONE-HEDGE PRODUCTION RECORDS (every unique v3 record under
+/// `VAKINT_TEST_RECORD_ROOTS` with a one-hedge `ins:` insertion), each through
+/// the closure entry (the 1-4 loop package, the site settings, the record's
+/// depth) against its reference through valid_through, exactly: the record's
+/// own `.value.txt` `contracted` line when it has one (today's CONTRACTED R*
+/// of the same remainder, the producer's check mode); else the `contracted`
+/// line of its check-mode twin in `VAKINT_TEST_GG_TEN_VALUES` (the producer's
+/// copy of the same record from the same test process: byte-identical, or
+/// identical after renaming the insertion_slash dummies). A `contracted` 0 is
+/// compared as a declared zero. The record files are walked in sorted path
+/// order and deduplicated by text, so of a byte-identical on-mode / check-mode
+/// pair the check-mode copy (with its contracted line) is the one kept; the 4
+/// quark records whose check-mode twin differs in the insertion_slash dummy
+/// names only are compared through their twin. Asserted: 61 records, 57 with
+/// their own contracted value (22 non-zero, 35 zero), 4 through the twin (all
+/// zero). Each record printed (`GG_ONE_HEDGE`).
+#[test]
+#[ignore = "external data: VAKINT_TEST_RECORD_ROOTS, VAKINT_TEST_GG_TEN_VALUES, VAKINT_TEST_P_LIBRARY_1_4"]
+fn the_sixty_one_one_hedge_records_equal_their_contracted_values() {
+    let roots =
+        wh_fixtures::required_env("VAKINT_TEST_RECORD_ROOTS", "the producer's record roots");
+    let twins =
+        wh_fixtures::required_env("VAKINT_TEST_GG_TEN_VALUES", "the check-mode twins' values");
+    let vakint = package_engine();
+    let epsilon = vk_symbol!("gammalooprs::ε");
+    let mut files = Vec::new();
+    for root in roots.to_string_lossy().split(':') {
+        let mut stack = vec![PathBuf::from(root)];
+        while let Some(d) = stack.pop() {
+            let Ok(entries) = std::fs::read_dir(&d) else {
+                continue;
+            };
+            for e in entries {
+                let p = e.unwrap().path();
+                if p.is_dir() {
+                    stack.push(p);
+                } else if p.to_string_lossy().ends_with(".record.txt") {
+                    files.push(p);
+                }
+            }
+        }
+    }
+    files.sort();
+    let mut seen = std::collections::BTreeSet::new();
+    let mut classes = std::collections::BTreeMap::<String, usize>::new();
+    for p in &files {
+        let Ok(text) = std::fs::read_to_string(p) else {
+            continue;
+        };
+        if !text.starts_with("schema\tpint6.factorized-numerator.v3") || !seen.insert(text.clone())
+        {
+            continue;
+        }
+        let Ok(value) = FactorizedNumerator::parse_text(&text) else {
+            continue;
+        };
+        let one_hedge = value.insertions.iter().any(|i| {
+            i.hedges.len() == 1
+                && value
+                    .vertex(i.vertex)
+                    .is_some_and(|x| x.rule.starts_with("ins:"))
+        });
+        if !one_hedge {
+            continue;
+        }
+        let stem = p
+            .to_string_lossy()
+            .trim_end_matches(".record.txt")
+            .to_string();
+        let own = wh_fixtures::read_fixture(std::path::Path::new(&format!("{stem}.value.txt")));
+        let contracted = |t: &str| {
+            t.lines()
+                .find_map(|l| l.strip_prefix("contracted\t"))
+                .map(str::to_string)
+        };
+        let name = p.file_name().unwrap().to_string_lossy().to_string();
+        let (source, reference, value_text) = match contracted(&own) {
+            Some(c) => ("own contracted value".to_string(), c, own.clone()),
+            None => {
+                let twin = twins.join(format!(
+                    "{}.value.txt",
+                    name.trim_end_matches(".record.txt")
+                ));
+                let t = wh_fixtures::read_fixture(&twin);
+                let relation = t
+                    .lines()
+                    .find_map(|l| l.strip_prefix("# twin_relation\t"))
+                    .unwrap_or("?")
+                    .to_string();
+                (
+                    format!("the check-mode twin's contracted value ({relation})"),
+                    contracted(&t)
+                        .unwrap_or_else(|| panic!("{name}: the twin has no contracted value")),
+                    t,
+                )
+            }
+        };
+        let got = evaluate_factorized_closure(
+            &vakint,
+            &site_settings(),
+            std::slice::from_ref(&value),
+            &[value.prefactor.total()],
+        )
+        .unwrap_or_else(|e| panic!("{name}: {e}"));
+        let order = wh_fixtures::valid_through(&value_text);
+        let zero = reference.trim() == "0";
+        let orders = if zero {
+            wh_fixtures::assert_declared_zero(&got.value, epsilon, order, &name)
+        } else {
+            crate::Vakint::initialize_vakint_symbols();
+            let expected = vk_parse!(reference.as_str()).unwrap();
+            wh_fixtures::assert_equal_through(&got.value, &expected, epsilon, order, &name)
+        };
+        let class = format!(
+            "{} {}",
+            if source.starts_with("own") {
+                "own"
+            } else {
+                "twin"
+            },
+            if zero { "zero" } else { "non-zero" }
+        );
+        *classes.entry(class).or_default() += 1;
+        eprintln!(
+            "GG_ONE_HEDGE {name} | {source} | {} | orders={orders}",
+            if zero { "zero" } else { "non-zero" }
+        );
+    }
+    eprintln!("GG_ONE_HEDGE classes {classes:?}");
+    let count = |k: &str| classes.get(k).copied().unwrap_or(0);
+    assert_eq!(classes.values().sum::<usize>(), 61, "{classes:?}");
+    assert_eq!(
+        (count("own non-zero"), count("own zero")),
+        (22, 35),
+        "{classes:?}"
+    );
+    assert_eq!(
+        (count("twin non-zero"), count("twin zero")),
+        (0, 4),
+        "{classes:?}"
+    );
+}
