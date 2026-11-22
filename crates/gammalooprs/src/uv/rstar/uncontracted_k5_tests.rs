@@ -68,6 +68,10 @@ const L2_17_DOT: &str = include_str!("testdata/u7c/l2-d017.dot");
 const L5_22807_DOT: &str = include_str!("testdata/u7c/l5-d22807.dot");
 const L5_3793_DOT: &str = include_str!("testdata/u7c/l5-d3793.dot");
 const L5_120364_DOT: &str = include_str!("testdata/u7c/l5-d120364.dot");
+/// The variable that names the directory of the v1.5 cases (no default: the
+/// cases live outside the repository; the deliverable's README names the
+/// published directory).
+const V15_DIR_VARIABLE: &str = "GAMMALOOP_U7C_V15_DIR";
 const K5_DIRECT: &str = include_str!("testdata/u7c/k5-direct.input.txt");
 const K5_DIRECT_VALUE: &str = include_str!("testdata/u7c/k5-direct.value.txt");
 const K5_SURROGATE: &str = include_str!("testdata/u7c/k5-surrogate.input.txt");
@@ -1843,25 +1847,100 @@ fn k5_cut_child_taylor_degree_is_the_local_dod() -> Result<()> {
     })
 }
 
-/// The v1.5 test cases (kept and cut holes, single-hedge `ins:` with a
-/// spectator port; one directory per case with `input.txt` / `value.txt`)
-/// under `GAMMALOOP_U7C_V15_DIR`: each record is read by vakint's reader,
+/// The directory of the v1.5 cases from the value of [`V15_DIR_VARIABLE`]:
+/// REQUIRED (there is no default directory; unset or empty is an error that
+/// says what to set).
+fn v15_dir(value: Option<String>) -> Result<std::path::PathBuf> {
+    match value.filter(|value| !value.trim().is_empty()) {
+        Some(value) => Ok(std::path::PathBuf::from(value)),
+        None => Err(eyre!(
+            "set {V15_DIR_VARIABLE} to the directory of the v1.5 cases: one sub-directory per case with input.txt and value.txt, or one per publication stamp with its cases below (the published directory: the deliverable's README)"
+        )),
+    }
+}
+
+/// The v1.5 oracle's directory is required (r4: r3's default, a host path,
+/// is dropped): unset or empty is an error naming the variable and what it
+/// must hold; a value is taken as given.
+#[test]
+fn k5_v15_oracle_requires_its_directory_variable() -> Result<()> {
+    for unset in [None, Some(String::new()), Some("  ".to_owned())] {
+        let error = v15_dir(unset.clone()).expect_err("no directory without the variable");
+        let text = error.to_string();
+        ensure!(
+            text.starts_with(&format!(
+                "set {V15_DIR_VARIABLE} to the directory of the v1.5 cases"
+            )) && text.contains("input.txt and value.txt"),
+            "{unset:?}: {text}"
+        );
+    }
+    ensure!(v15_dir(Some("cases".into()))? == std::path::PathBuf::from("cases"));
+    Ok(())
+}
+
+/// No host path in the K5 sources (r4; the r3 oracle's default directory was
+/// one): no absolute path under the host's shared trees in uncontracted_k5.rs,
+/// its tests, insertions.rs or the vendored K5 test data.
+#[test]
+fn k5_sources_hold_no_host_path() -> Result<()> {
+    let rstar = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/uv/rstar");
+    let mut files = vec![
+        rstar.join("uncontracted_k5.rs"),
+        rstar.join("uncontracted_k5_tests.rs"),
+        rstar.join("insertions.rs"),
+    ];
+    for entry in std::fs::read_dir(rstar.join("testdata/u7c"))? {
+        files.push(entry?.path());
+    }
+    // the needles are built, so that this file does not match itself
+    let needles = ["common", "shared", "home", "tmp"].map(|root| format!("{}{root}/", '/'));
+    let mut hits = Vec::new();
+    for file in &files {
+        let text = std::fs::read_to_string(file)?;
+        for (n, line) in text.lines().enumerate() {
+            if needles.iter().any(|needle| line.contains(needle.as_str())) {
+                hits.push(format!("{}:{}: {line}", file.display(), n + 1));
+            }
+        }
+    }
+    ensure!(files.len() > 3, "the K5 test data was not found");
+    ensure!(hits.is_empty(), "host paths: {hits:#?}");
+    Ok(())
+}
+
+/// The published v1.5 test cases (kept and cut holes, single-hedge `ins:`
+/// with a spectator port; one directory per case with `input.txt` /
+/// `value.txt`) under the directory named by `GAMMALOOP_U7C_V15_DIR`
+/// ([`V15_DIR_VARIABLE`], REQUIRED: unset is an error that says what to set;
+/// the directory may also hold one sub-directory per publication stamp with
+/// its cases below, as the published directory does): each record is read
+/// by vakint's reader,
 /// evaluated by its closure entry at the record's depth and finished as the
 /// hook finishes it; the value equals the case's reference (today's) value
 /// through its valid_through.
 #[test]
-#[ignore = "reads GAMMALOOP_U7C_V15_DIR"]
+#[ignore = "reads the v1.5 cases under GAMMALOOP_U7C_V15_DIR (required)"]
 fn k5_v15_cases_oracle() -> Result<()> {
     with_production_piece_limit(|| -> Result<()> {
         test_initialise()?;
-        let dir = std::path::PathBuf::from(
-            std::env::var("GAMMALOOP_U7C_V15_DIR")
-                .map_err(|_| eyre!("set GAMMALOOP_U7C_V15_DIR"))?,
-        );
+        let dir = v15_dir(std::env::var(V15_DIR_VARIABLE).ok())?;
         let vakint = Vakint::new()?;
-        let mut cases = std::fs::read_dir(&dir)?
-            .map(|entry| entry.map(|entry| entry.path()))
-            .collect::<std::io::Result<Vec<_>>>()?;
+        // the cases: `dir` itself, its sub-directories and theirs (a stamp
+        // directory, then its cases)
+        let mut cases = Vec::new();
+        let mut stack = vec![(dir.clone(), 0)];
+        while let Some((path, depth)) = stack.pop() {
+            if path.join("input.txt").is_file() {
+                cases.push(path);
+            } else if depth < 2 {
+                for entry in std::fs::read_dir(&path)? {
+                    let entry = entry?.path();
+                    if entry.is_dir() {
+                        stack.push((entry, depth + 1));
+                    }
+                }
+            }
+        }
         cases.sort();
         let mut checked = 0;
         for case in cases.iter().filter(|path| path.join("input.txt").is_file()) {
