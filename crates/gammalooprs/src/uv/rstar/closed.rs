@@ -1144,6 +1144,24 @@ mod tests {
         let error = check.expect_err("a K3 CHECK mismatch must not be declined");
         assert!(super::super::depth::is_alarm(&error), "{error:#}");
         assert!(format!("{error:#}").contains("UNCONTRACTED_CHECK: test"), "{error:#}");
+        // MATRIX-R45 review: vakint's unknown-master refusal of a K3 record
+        // fails the diagram, also inside a guarded attempt. On the G-G stack
+        // it is a diagnostic failure, which the child route's guard
+        // (ir_dirac::guarded_unless_diagnostic) returns as its error.
+        let masters = super::super::ir_dirac::guarded_unless_diagnostic::<u8>(None, None, || {
+            Err(super::super::uncontracted::unknown_masters_failure(
+                super::super::uncontracted::Kind::IrHard,
+                "test",
+                1,
+                "UnknownMasterCoefficients: test",
+            ))
+            .map_err(|error| error.wrap_err("while integrating the IR hard part"))
+        });
+        let error = masters.expect_err("an unknown-master refusal must not be declined");
+        assert!(
+            super::super::ir_dirac::is_diagnostic_failure(&error),
+            "{error:#}"
+        );
         // MATRIX-R45 review: a check-mode mismatch (IR_DIRAC_CHECK) is fatal
         // as the alarm, also wrapped; a budget error replayed by the
         // counterterm cache is still the budget class.
