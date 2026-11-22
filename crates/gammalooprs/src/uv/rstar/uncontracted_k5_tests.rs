@@ -68,6 +68,10 @@ const L2_17_DOT: &str = include_str!("testdata/u7c/l2-d017.dot");
 const L5_22807_DOT: &str = include_str!("testdata/u7c/l5-d22807.dot");
 const L5_3793_DOT: &str = include_str!("testdata/u7c/l5-d3793.dot");
 const L5_120364_DOT: &str = include_str!("testdata/u7c/l5-d120364.dot");
+/// The PUBLIC directory of the published v1.5 cases (helper VH 2's publish
+/// gate; world-readable), the default of `GAMMALOOP_U7C_V15_DIR`.
+const V15_CASES: &str =
+    "/common/build-cache/vhirschi/p_integral_helper_VH_2/wi/public/u7c-v15-cases";
 const K5_DIRECT: &str = include_str!("testdata/u7c/k5-direct.input.txt");
 const K5_DIRECT_VALUE: &str = include_str!("testdata/u7c/k5-direct.value.txt");
 const K5_SURROGATE: &str = include_str!("testdata/u7c/k5-surrogate.input.txt");
@@ -1843,25 +1847,40 @@ fn k5_cut_child_taylor_degree_is_the_local_dod() -> Result<()> {
     })
 }
 
-/// The v1.5 test cases (kept and cut holes, single-hedge `ins:` with a
-/// spectator port; one directory per case with `input.txt` / `value.txt`)
-/// under `GAMMALOOP_U7C_V15_DIR`: each record is read by vakint's reader,
+/// The published v1.5 test cases (kept and cut holes, single-hedge `ins:`
+/// with a spectator port; one directory per case with `input.txt` /
+/// `value.txt`) under `GAMMALOOP_U7C_V15_DIR`, by default the PUBLIC
+/// directory [`V15_CASES`] (world-readable; one sub-directory per publication
+/// stamp, its cases below; the deliverable's README names it): each record
+/// is read by vakint's reader,
 /// evaluated by its closure entry at the record's depth and finished as the
 /// hook finishes it; the value equals the case's reference (today's) value
 /// through its valid_through.
 #[test]
-#[ignore = "reads GAMMALOOP_U7C_V15_DIR"]
+#[ignore = "reads the published v1.5 cases (GAMMALOOP_U7C_V15_DIR, default V15_CASES)"]
 fn k5_v15_cases_oracle() -> Result<()> {
     with_production_piece_limit(|| -> Result<()> {
         test_initialise()?;
         let dir = std::path::PathBuf::from(
-            std::env::var("GAMMALOOP_U7C_V15_DIR")
-                .map_err(|_| eyre!("set GAMMALOOP_U7C_V15_DIR"))?,
+            std::env::var("GAMMALOOP_U7C_V15_DIR").unwrap_or_else(|_| V15_CASES.to_owned()),
         );
         let vakint = Vakint::new()?;
-        let mut cases = std::fs::read_dir(&dir)?
-            .map(|entry| entry.map(|entry| entry.path()))
-            .collect::<std::io::Result<Vec<_>>>()?;
+        // the cases: `dir` itself, its sub-directories and theirs (a stamp
+        // directory, then its cases)
+        let mut cases = Vec::new();
+        let mut stack = vec![(dir.clone(), 0)];
+        while let Some((path, depth)) = stack.pop() {
+            if path.join("input.txt").is_file() {
+                cases.push(path);
+            } else if depth < 2 {
+                for entry in std::fs::read_dir(&path)? {
+                    let entry = entry?.path();
+                    if entry.is_dir() {
+                        stack.push((entry, depth + 1));
+                    }
+                }
+            }
+        }
         cases.sort();
         let mut checked = 0;
         for case in cases.iter().filter(|path| path.join("input.txt").is_file()) {
