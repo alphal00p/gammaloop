@@ -7979,50 +7979,7 @@ fn x_run_text_token(entry: XEntry, (v, s, arg): XInput, token: &str) -> Result<(
 
 /// The cells of the weights table whose outcome differs from the format's
 /// expectation on 930d4e239 (kind, name, applied_by token, field, text).
-const WEIGHT_FAILURES: &[&str] = &[
-    "closure K2 L3-036 | a duplicated weight name | text",
-    "closure K2 L3-036 | a duplicated weight name | typed",
-    "closure K2 L3-036 | an unknown weight name | text",
-    "closure K2 L3-036 | an unknown weight name | typed",
-    "closure K2 L3-036 | colour | applied_by=vakint | field Equal | text",
-    "closure K2 L3-036 | colour | applied_by=vakint | field Equal | typed",
-    "closure K2 L3-036 | scalars | applied_by=beta | field Equal | text",
-    "closure K2 L3-036 | scalars | applied_by=beta | field Equal | typed",
-    "closure K2 L3-036 | scalars | applied_by=beta | field Third | text",
-    "closure K2 L3-036 | scalars | applied_by=beta | field Third | typed",
-    "direct L2-17 | a duplicated weight name | text",
-    "direct L2-17 | a duplicated weight name | typed",
-    "direct L2-17 | an unknown weight name | text",
-    "direct L2-17 | an unknown weight name | typed",
-    "direct L2-17 | colour | applied_by=vakint | field Equal | text",
-    "direct L2-17 | colour | applied_by=vakint | field Equal | typed",
-    "direct L2-17 | scalars | applied_by=beta | field Equal | text",
-    "direct L2-17 | scalars | applied_by=beta | field Equal | typed",
-    "direct L2-17 | scalars | applied_by=beta | field Third | text",
-    "direct L2-17 | scalars | applied_by=beta | field Third | typed",
-    "ports L2-17 | a duplicated weight name | text",
-    "ports L2-17 | a duplicated weight name | typed",
-    "ports L2-17 | an unknown weight name | text",
-    "ports L2-17 | an unknown weight name | typed",
-    "ports L2-17 | colour | applied_by=vakint | field Equal | text",
-    "ports L2-17 | colour | applied_by=vakint | field Equal | typed",
-    "ports L2-17 | scalars | applied_by=beta | field Equal | text",
-    "ports L2-17 | scalars | applied_by=beta | field Equal | typed",
-    "ports L2-17 | scalars | applied_by=beta | field Third | text",
-    "ports L2-17 | scalars | applied_by=beta | field Third | typed",
-    "vacuum sunrise | a duplicated weight name | text",
-    "vacuum sunrise | a duplicated weight name | typed",
-    "vacuum sunrise | an unknown weight name | text",
-    "vacuum sunrise | an unknown weight name | typed",
-    "vacuum sunrise | colour | applied_by=vakint | field Equal | text",
-    "vacuum sunrise | colour | applied_by=vakint | field Equal | typed",
-    "vacuum sunrise | overall | applied_by=vakint | field Equal | text",
-    "vacuum sunrise | overall | applied_by=vakint | field Equal | typed",
-    "vacuum sunrise | scalars | applied_by=beta | field Equal | text",
-    "vacuum sunrise | scalars | applied_by=beta | field Equal | typed",
-    "vacuum sunrise | scalars | applied_by=beta | field Third | text",
-    "vacuum sunrise | scalars | applied_by=beta | field Third | typed",
-];
+const WEIGHT_FAILURES: &[&str] = &[];
 
 /// THE WEIGHTS TABLE: every weight name x applied_by (vakint, beta, an
 /// unknown token) x its own prefactor field (equal to the weight, neutral, a
@@ -8043,7 +8000,6 @@ fn the_weights_table() {
 
 /// The cells of `WEIGHT_FAILURES` behave as the record format expects.
 #[test]
-#[ignore = "expected by the record format: a weight is checked against its own prefactor field (applied_by=vakint equal, applied_by=beta neutral), an unknown or duplicated weight name is refused"]
 fn the_weights_table_failing_cells() {
     let failures = weights_table(true);
     assert!(failures.is_empty(), "{failures:#?}");
@@ -8260,7 +8216,6 @@ fn writer_property(label: &str, v: &FactorizedNumerator) -> Option<String> {
 /// The writer property over the violating inputs of the tables (the rule x
 /// field table, the cross-field table) and the named cases.
 #[test]
-#[ignore = "expected by the record format: to_text refuses exactly what validate refuses and a written text reads back equal; on 930d4e239 the writer writes 144 of the 192 invalid values, two of them (insertions out of vertex order, a pre-expanded closure with another auxiliary mass) as a text that validates"]
 fn the_writer_agrees_with_validation() {
     let mut cases: Vec<(String, FactorizedNumerator)> = Vec::new();
     for name in ["wh-k1-root", "wh-k2-child-ins", "wh-k5-direct"] {
@@ -8449,7 +8404,6 @@ fn number_bound_table() -> Vec<String> {
 }
 
 #[test]
-#[ignore = "expected: a number of more than 4096 bits is refused; on 930d4e239 the bound counts decimal digits (1234), so 4097 to 4100 bits pass"]
 fn the_number_bound_is_4096_bits() {
     let failures = number_bound_table();
     assert!(failures.is_empty(), "{failures:#?}");
@@ -8527,6 +8481,15 @@ fn the_paired_crown_leg_cells() {
         "degree 2, the leg 100013 carries p(1), its partner 13 p(3)",
         a,
     );
+    // the paired-line rule: unequal momenta on the two legs are refused
+    match &differ {
+        Err(e) => assert!(
+            e.contains("the two legs of a paired line carry one momentum"),
+            "{e}"
+        ),
+        Ok(_) => panic!("the two legs with different momenta: accepted"),
+    }
+    assert!(equal.is_ok(), "equal momenta: {equal:?}");
     if let (Ok(x), Ok(y)) = (&equal, &differ) {
         eprintln!(
             "CONTRACT PAIRED different momenta vs equal momenta: the values are {}",

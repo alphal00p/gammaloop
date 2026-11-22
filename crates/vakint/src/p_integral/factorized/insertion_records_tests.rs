@@ -2391,3 +2391,49 @@ fn to_text_refuses_exactly_what_validate_refuses_and_round_trips_the_rest() {
     }
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
+
+/// PAIRED LEGS: the real K2 child carries a crown line as two legs (external
+/// edges e and 100000 + e) with one momentum: accepted; the leg 100000 + e
+/// given another momentum is refused by validation, typed and through the
+/// text form ("the two legs of a paired line carry one momentum").
+#[test]
+fn the_two_legs_of_a_paired_line_carry_one_momentum() {
+    let k2 =
+        FactorizedNumerator::from_text(include_str!("fixtures/wh-k2-child.record.txt")).unwrap();
+    let leg = k2
+        .edges
+        .iter()
+        .position(|e| {
+            e.is_external()
+                && e.id >= 100_000
+                && k2
+                    .edges
+                    .iter()
+                    .any(|p| p.id == e.id - 100_000 && p.is_external())
+        })
+        .expect("a paired leg");
+    let mut bad = k2.clone();
+    // another external momentum (the next independent external, else 0)
+    let loops = bad.loops();
+    let m = &mut bad.edges[leg].momentum;
+    let j = (loops..m.len()).find(|&j| m[j] == 0).unwrap_or(loops);
+    for c in m[loops..].iter_mut() {
+        *c = 0;
+    }
+    m[j] = 1;
+    assert_ne!(bad.edges[leg].momentum, k2.edges[leg].momentum);
+    let text = bad.to_text_unvalidated_for_diagnostics().unwrap();
+    for (how, r) in [
+        ("typed", bad.validate()),
+        ("text", FactorizedNumerator::from_text(&text).map(|_| ())),
+    ] {
+        match r {
+            Err(e) => assert!(
+                e.to_string()
+                    .contains("the two legs of a paired line carry one momentum"),
+                "{how}: {e}"
+            ),
+            Ok(()) => panic!("{how}: accepted"),
+        }
+    }
+}
