@@ -235,6 +235,35 @@ impl RStarPlan {
         .counterterm()
     }
 
+    /// IRH-DEPTH round 8b (release ruling R1): [`Self::projected_counterterm`]
+    /// for a root projection that only multiplies by the scalar `factor`
+    /// (no tensor action, no rerouting): given as data, it is the typed form
+    /// the child route certifies (the order of `factor` at d = 4 − 2ε is its
+    /// `k_projector`) and applies; the same projection as an opaque callback
+    /// declines the child route.
+    pub fn projected_counterterm_scalar(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        factor: &Atom,
+    ) -> Result<Atom> {
+        let multiply = |tensor: &Atom| -> Result<Atom> { Ok(tensor * factor) };
+        let mut evaluation = Evaluation::new(
+            self,
+            graph,
+            model,
+            vakint,
+            uv_settings,
+            Some(&multiply),
+            None,
+            ChildMass::Reference,
+        )?;
+        evaluation.typed_root = Some(TypedRoot::scalar(factor));
+        evaluation.counterterm()
+    }
+
     /// Local export patch: run only the ordinary-UV preparation terms of
     /// [`Self::projected_counterterm`] that carry no proper UV counterterm
     /// (the empty spinney), through the same root projector, outer Taylor
@@ -341,6 +370,69 @@ impl RStarPlan {
         .counterterm_from_pole_part(closed_bare_poles, true)
     }
 
+    /// IRH-DEPTH round 8b (release ruling R1):
+    /// [`Self::projected_counterterm_from_pole_part_closing_root`] with the
+    /// closed metric-root normalisation also given as data (`closed_root`:
+    /// the callback is `closed_root.factor · σ` on closed scalars). The data
+    /// is the root projection's TYPED form: the child route certifies its
+    /// scalar normalisation and applies it; with the callback alone it
+    /// declines. Nothing else changes (the remainder-boundary path is not
+    /// switched on by this entry point, as before).
+    #[allow(clippy::too_many_arguments)]
+    pub fn projected_counterterm_from_pole_part_closing_root_scalar(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        bare_poles: &Atom,
+        root_normalization: &dyn Fn(&Atom) -> Result<Atom>,
+        closed_root: &ClosedRootNormalization,
+    ) -> Result<Atom> {
+        let mut evaluation = Evaluation::new(
+            self,
+            graph,
+            model,
+            vakint,
+            uv_settings,
+            Some(root_normalization),
+            None,
+            ChildMass::Zero,
+        )?
+        .closing_root()?;
+        evaluation.typed_root = Some(TypedRoot::of(closed_root));
+        evaluation.counterterm_from_pole_part(bare_poles, false)
+    }
+
+    /// IRH-DEPTH round 8b: [`Self::projected_counterterm_from_closed_pole_part_closing_root`]
+    /// with the typed closed-root normalisation (see
+    /// [`Self::projected_counterterm_from_pole_part_closing_root_scalar`]).
+    #[allow(clippy::too_many_arguments)]
+    pub fn projected_counterterm_from_closed_pole_part_closing_root_scalar(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        closed_bare_poles: &Atom,
+        root_normalization: &dyn Fn(&Atom) -> Result<Atom>,
+        closed_root: &ClosedRootNormalization,
+    ) -> Result<Atom> {
+        let mut evaluation = Evaluation::new(
+            self,
+            graph,
+            model,
+            vakint,
+            uv_settings,
+            Some(root_normalization),
+            None,
+            ChildMass::Zero,
+        )?
+        .closing_root()?;
+        evaluation.typed_root = Some(TypedRoot::of(closed_root));
+        evaluation.counterterm_from_pole_part(closed_bare_poles, true)
+    }
+
     /// Local export patch: as [`Self::projected_bare_terms_only`], closing the
     /// metric root in the root scope (see [`Self::projected_counterterm_closing_root`]).
     pub fn projected_bare_terms_only_closing_root(
@@ -389,6 +481,7 @@ impl RStarPlan {
         )?
         .closing_root()?;
         evaluation.closed_root = Some(closed_root);
+        evaluation.typed_root = Some(TypedRoot::of(closed_root));
         evaluation.counterterm()
     }
 
@@ -561,6 +654,7 @@ impl RStarPlan {
             ChildMass::Reference,
         )?;
         evaluation.root_closure = Some(closure);
+        evaluation.typed_root = Some(TypedRoot::scalar(&normalization));
         evaluation.channel = ("isotropic", "1/(d (d-1) (d+2))");
         evaluation.close_child(child_root.as_ref(), "isotropic");
         let channels = evaluation.counterterm()?;
@@ -609,6 +703,7 @@ impl RStarPlan {
             ChildMass::Reference,
         )?;
         evaluation.root_closure = Some(boundary.closure.clone());
+        evaluation.typed_root = Some(TypedRoot::scalar(&boundary.normalization));
         evaluation.channel = match boundary.kind {
             DiracKind::Vertex => ("dirac vertex", "1/(Tr[1] d)"),
             DiracKind::SelfEnergy => ("dirac self-energy", "1/Tr[1]"),
@@ -733,6 +828,7 @@ impl RStarPlan {
         )?
         .closing_root()?;
         evaluation.closed_root = Some(&closed_root);
+        evaluation.typed_root = Some(TypedRoot::of(&closed_root));
         evaluation.rstar_terms = RStarTerms::All;
         evaluation.channel = ("surrogate closed metric", "1");
         let counterterm = evaluation.counterterm()?;
@@ -862,6 +958,41 @@ impl RStarPlan {
     }
 }
 
+/// IRH-DEPTH round 8b: the typed regular form of a root projection,
+/// `X ↦ factor · σ(X)`: the routing `σ` of the external momenta (none for a
+/// UV child closure) and a scalar normalisation `factor` whose order at
+/// `d = 4 − 2ε` is the certificate's `k_projector`.
+#[derive(Clone, Debug)]
+struct TypedRoot {
+    factor: Atom,
+    routing: Vec<symbolica::id::Replacement>,
+}
+
+impl TypedRoot {
+    fn of(closed_root: &ClosedRootNormalization) -> Self {
+        Self {
+            factor: closed_root.factor.clone(),
+            routing: closed_root.external_routing.clone(),
+        }
+    }
+
+    /// A projection that only multiplies by `factor`.
+    fn scalar(factor: &Atom) -> Self {
+        Self {
+            factor: factor.clone(),
+            routing: Vec::new(),
+        }
+    }
+
+    fn apply(&self, expression: &Atom) -> Atom {
+        if self.routing.is_empty() {
+            &self.factor * expression
+        } else {
+            &self.factor * expression.replace_multiple(&self.routing)
+        }
+    }
+}
+
 struct Evaluation<'a> {
     plan: &'a RStarPlan,
     graph: &'a Graph,
@@ -888,6 +1019,14 @@ struct Evaluation<'a> {
     /// The closed metric-root normalisation as data, given by the `_scalar`
     /// entry points; used only when `GAMMALOOP_REMAINDER_BOUNDARY` is set.
     closed_root: Option<&'a ClosedRootNormalization>,
+    /// IRH-DEPTH round 8b (release ruling R1): the root projection in its
+    /// typed regular form `X ↦ factor · σ(X)`, when the caller gives it as
+    /// data (the `_scalar` entry points: beta's closed metric root) or the
+    /// projection is gammaloop's own (a UV child closure's normalisation, the
+    /// surrogate closed root). The child route applies THIS form (the scalar
+    /// it certifies is the one it multiplies) and declines when a root
+    /// projector is only an opaque callback.
+    typed_root: Option<TypedRoot>,
     /// Time on the remainder-boundary path (inert when the mode is off).
     boundary_elapsed: Duration,
     /// Remainder-boundary counts of this evaluation (`BOUNDARY_SUMMARY`).
@@ -1057,6 +1196,7 @@ impl<'a> Evaluation<'a> {
                 ("none", "1")
             },
             closed_root: None,
+            typed_root: None,
             boundary_elapsed: Duration::ZERO,
             summary: Default::default(),
             started,
@@ -1881,32 +2021,31 @@ impl<'a> Evaluation<'a> {
             .and_then(|boundary| boundary.as_ref().ok())
             .cloned();
         let dirac_check = closure.is_some() && self.ir_dirac == IrDiracMode::Check;
-        // IRH-DEPTH (super::depth): the pole bound B of every quotient
-        // factor, from the quotient's loops and the factors outside the hard
-        // part, before any truncation and whatever rows the hard part shows.
-        let quotient_numerator = self
-            .graph
-            .numerator(&self.plan.support, &correction.hard)
-            .get_single_atom()?;
+        // IRH-DEPTH round 8b: THE certificate (TOPOLOGICAL-BOUND.md, the
+        // coordinator's decision): `B = L_q + Σ k`, from the graph and the
+        // declared order of every factor on the quotient side, each read on
+        // its own, before any expression of the correction is built
+        // (super::regularity::certify_graph_correction). The measured
+        // valuation of the rows is a cross-check only: a need above `B` is the
+        // typed, fatal DepthAlarm. Round 5's refusals (a factor that is not
+        // provably regular, the settings normalisations, the IR Dirac closure)
+        // still refuse the whole correction before H(γ) is integrated.
         let nested = self.plan.root_boundary.is_some();
-        // IRH-DEPTH round 5 (super::regularity): B is read on the normalised
-        // factors of the closed list; a factor that is not provably regular
-        // refuses the WHOLE correction before H(γ) is integrated. An error
-        // raised while certifying propagates (`?`); a refusal is an ordinary
-        // fallback to today's terms, never fatal, also when nested (round 4
-        // carries only the strict depth alarm as fatal).
-        // MATRIX-R45 review: also the settings normalisations (N^loops in
-        // every vacuum integral, the named loop normalisation), the IR Dirac
-        // closure of H(γ) and the root closure are certified here.
+        let opaque = matches!(
+            self.root_projection(),
+            super::regularity::RootProjection::Opaque
+        );
         let certificate = super::regularity::certify_graph_correction(
             self.graph,
+            &self.plan.support,
             &correction.hard,
-            &quotient_numerator,
+            self.root_closure.as_ref(),
+            self.root_projection(),
         )?
-        .and_then(|normalised| {
+        .and_then(|certificate| {
             #[cfg(test)]
             if super::regularity::is_round3() {
-                return Ok((normalised, self.root_closure.clone()));
+                return Ok(certificate);
             }
             super::regularity::certify_vakint_normalisations(
                 &self.uv_settings.vakint.additional_normalization,
@@ -1918,17 +2057,10 @@ impl<'a> Evaluation<'a> {
                     &boundary.normalization,
                 )?;
             }
-            let root_closure = self
-                .root_closure
-                .as_ref()
-                .map(|closure| {
-                    super::regularity::normalise(super::regularity::Factor::RootClosure, closure)
-                })
-                .transpose()?;
-            Ok((normalised, root_closure))
+            Ok(certificate)
         });
-        let (quotient_numerator, root_closure) = match certificate {
-            Ok(normalised) => normalised,
+        let certificate = match certificate {
+            Ok(certificate) => certificate,
             Err(refused) if super::depth::guards() => {
                 super::depth::note(&mut self.depth, |counts| &mut counts.corrections);
                 if nested {
@@ -1953,18 +2085,14 @@ impl<'a> Evaluation<'a> {
                     &super::depth::Truncation::default(),
                 ));
             }
-            Err(_) => (quotient_numerator, self.root_closure.clone()),
-        };
-        let bound = super::depth::planner_bound(
-            super::depth::quotient_pole_bound(
+            // Tests (the planner before IRH-DEPTH): no certificate.
+            Err(_) => super::regularity::Certificate {
                 quotient_loops,
-                &quotient_numerator,
-                root_closure.as_ref(),
-            ),
-            nested,
-        );
-        drop(quotient_numerator);
-        drop(root_closure);
+                declared: Vec::new(),
+            },
+        };
+        let declared = certificate.label();
+        let bound = super::depth::planner_bound(Some(certificate.bound()), nested);
         super::depth::note(&mut self.depth, |counts| &mut counts.corrections);
         if nested {
             super::depth::note(&mut self.depth, |counts| &mut counts.nested);
@@ -1975,27 +2103,62 @@ impl<'a> Evaluation<'a> {
                 super::depth::note(&mut self.depth, |counts| &mut counts.nested_bounded);
             }
         }
-        // The first depth reaches B: below it every attempt would be raised
-        // to B after a whole integration of H.
-        let mut extra = super::depth::start_extra(quotient_loops, bound);
+        // The declines to the generic path (the coordinator's decision 3),
+        // loud and counted, before H(γ) is integrated: an opaque root
+        // projector callback (release ruling R1: nothing certifies it, and
+        // it is never probed), a declared order above 0 (C2: the hard part
+        // and the surrogate coefficients are truncated for B = L_q only).
+        #[cfg(test)]
+        let declines = super::depth::guards() && !super::regularity::is_round3();
+        #[cfg(not(test))]
+        let declines = super::depth::guards();
+        if declines {
+            let reason = match (opaque, certificate.positive()) {
+                (true, _) => Some((
+                    "opaque_projector",
+                    "the root projector is an opaque callback (no typed regular form)".to_owned(),
+                )),
+                (_, Some(positive)) => Some((
+                    "declared_order",
+                    format!(
+                        "{} {} has declared order {}",
+                        positive.factor, positive.label, positive.k
+                    ),
+                )),
+                _ => None,
+            };
+            if let Some((reason, detail)) = reason {
+                return Ok(self.decline_child(
+                    correction_index,
+                    correction,
+                    quotient_loops,
+                    bound,
+                    &declared,
+                    reason,
+                    &detail,
+                ));
+            }
+        }
+        // Tests only (BoundOverride::Unknown): an unknown B refuses before H.
         if bound.is_none() && super::depth::guards() {
-            // Unknown B: nothing certifies the rows the moment extraction
-            // will drop, so the child route is refused before H is integrated.
             return Ok(self.refuse_depth(
                 correction_index,
                 correction,
                 0,
                 quotient_loops,
                 None,
-                extra,
+                quotient_loops,
                 0,
                 "unbounded",
                 &super::depth::Truncation::default(),
             ));
         }
-        let mut attempts = 0_usize;
-        loop {
-            attempts += 1;
+        // One attempt at `extra = B` (no retry: nothing measured decides the
+        // depth). Tests may start deeper (with_start_extra) or, for the
+        // planners before IRH-DEPTH, at L_q.
+        let extra = super::depth::start_extra(quotient_loops, bound);
+        let attempts = 1_usize;
+        {
             let started = Instant::now();
             let mut groups = BTreeMap::<usize, Atom>::new();
             // The open H(γ) per loop count and the times (IR_DIRAC_CHECK).
@@ -2187,21 +2350,9 @@ impl<'a> Evaluation<'a> {
                     )?;
                 }
             }
-            // IRH-DEPTH: the insertion excess of every returned row, and the
-            // bound of the rows the moment extraction dropped (B only while
-            // every returned insertion is free of ε: module doc).
-            let excesses = |rows: &[(Atom, Atom, usize)]| {
-                rows.iter()
-                    .map(|(_, insertion, _)| super::depth::excess_poles(insertion))
-                    .collect::<Vec<_>>()
-            };
-            #[allow(unused_mut)]
-            let mut row_excess = excesses(&rows);
-            let dropped_bound = super::depth::dropped_row_bound(bound, row_excess.iter().copied());
             #[cfg(test)]
             {
-                // The hook rewrites returned rows (tests): their insertions
-                // are read again, the dropped rows keep the bound above.
+                // The hook rewrites returned rows (tests).
                 super::depth::apply_row_hook(
                     &super::depth::HookSite {
                         hard_loops,
@@ -2212,34 +2363,23 @@ impl<'a> Evaluation<'a> {
                     },
                     &mut rows,
                 );
-                row_excess = excesses(&rows);
             }
-            // The bound of every row (B raised by its insertion's excess) and
-            // of the whole correction.
-            let row_bounds = row_excess
-                .iter()
-                .map(|excess| Some(bound? + (*excess)?))
-                .collect::<Vec<_>>();
-            let row_bound = super::depth::correction_bound(dropped_bound, &row_bounds);
-            if row_bound.is_none() && super::depth::guards() {
-                // A row's (or the dropped rows') bound is unknown: refused
-                // before the quotient factors are built.
-                let truncation = super::depth::Truncation {
-                    groups: groups.len(),
-                    vanished_groups,
-                    rows: rows.len(),
-                    zero_rows: rows.iter().filter(|(h, _, _)| h.is_zero()).count(),
-                };
-                return Ok(self.refuse_depth(
+            // C4: every row insertion E_j is free of ε (a leaf of the hard
+            // numerator's tensor structure; its scalars are h_j's); otherwise
+            // the correction declines before its quotient factors are built.
+            if declines
+                && let Some(row) = rows
+                    .iter()
+                    .position(|(_, insertion, _)| !super::depth::eps_free(insertion))
+            {
+                return Ok(self.decline_child(
                     correction_index,
                     correction,
-                    attempts,
                     quotient_loops,
-                    None,
-                    extra,
-                    0,
-                    "unbounded",
-                    &truncation,
+                    bound,
+                    &declared,
+                    "insertion_not_eps_free",
+                    &format!("row {row} of {}", rows.len()),
                 ));
             }
             let hard = self.open_remainder(&correction.preparation[representative])?;
@@ -2249,168 +2389,55 @@ impl<'a> Evaluation<'a> {
                 Ok(outcome) => outcome,
                 Err(reason) => return Ok(Err(reason)),
             };
-            // IRH-DEPTH (MATRIX-R45 review): a root projector callback is
-            // opaque; its poles are measured on the shown rows' complete
-            // coefficients (ir_outer_integrated). With no shown row (every
-            // group or row vanished at this depth) nothing measured it, and
-            // the bound of the vanished rows assumed it regular: it is probed
-            // on the unit insertion's outer orders (callback_excess). A pole
-            // there is a need above the bound (exceeded; the alarm under
-            // STRICT); a probe that measures nothing is counted
-            // (`callback_unprobed`) and admitted.
-            if super::depth::guards()
-                && self.root_projector.is_some()
-                && rows.iter().all(|(h, _, _)| h.is_zero())
-            {
-                let truncation = super::depth::Truncation {
-                    groups: groups.len(),
-                    vanished_groups,
-                    rows: rows.len(),
-                    zero_rows: zero_rows.len(),
-                };
-                match self.callback_excess(&hard, &correction.forest)? {
-                    Some(0) => {}
-                    Some(excess) => {
-                        super::depth::note(&mut self.depth, |counts| &mut counts.exceeded);
-                        let limit = row_bound.unwrap_or(quotient_loops);
-                        if super::depth::strict() {
-                            return Err(super::depth::alarm(format!(
-                                "IRH-DEPTH: the root projector callback carries {excess} pole(s) outside the quotient bound in {} corr={correction_index}: needed={} bound={limit} (GAMMALOOP_IR_HARD_DEPTH_STRICT=1)",
-                                self.graph.name,
-                                limit + excess
-                            )));
-                        }
-                        return Ok(self.refuse_depth(
-                            correction_index,
-                            correction,
-                            attempts,
-                            quotient_loops,
-                            Some(limit),
-                            extra,
-                            limit + excess,
-                            "bound_exceeded",
-                            &truncation,
-                        ));
-                    }
-                    None => {
-                        // The probe measured nothing (the callback does not
-                        // evaluate the unit insertion: beta's projector needs
-                        // the hard part's boundary slots). Admitted, counted
-                        // and logged: refusing would send production
-                        // corrections whose rows all vanish to today's path,
-                        // and beta's callback has no factor outside B (its
-                        // σ(prefactor) is numerator_prefactor, in B, and
-                        // beta refuses a poleful one). Certified by contract
-                        // only (regularity::FACTORS root_projector).
-                        super::depth::note(&mut self.depth, |counts| &mut counts.callback_unprobed);
-                        eprintln!(
-                            "IR_HARD_DEPTH_CALLBACK_UNPROBED graph={} corr={correction_index} attempt={attempts} groups={} vanished_groups={vanished_groups} rows={}",
-                            self.graph.name,
-                            groups.len(),
-                            rows.len(),
-                        );
-                    }
-                }
-            }
-            // The poles each measured row needs, vanished rows included, and
-            // the largest.
-            let needs = valuations
+            // The cross-check: the poles each shown row's quotient factors
+            // need, measured on z_j and on the complete outer coefficient
+            // after the root projection and the tensor finish (vanished rows
+            // too, under STRICT).
+            let needed = valuations
                 .iter()
                 .map(|valuation| usize::try_from(-(*valuation).min(0)).unwrap_or(0))
-                .collect::<Vec<_>>();
-            let needed = needs.iter().copied().max().unwrap_or(0);
+                .max()
+                .unwrap_or(0);
             let truncation = super::depth::Truncation {
                 groups: groups.len(),
                 vanished_groups,
                 rows: rows.len(),
                 zero_rows: zero_rows.len(),
             };
-            // A measured row above its own bound: the proof of B failed
-            // (module doc). Refused at once (no retry to a depth nothing
-            // certifies), with its own count; an error under
-            // GAMMALOOP_IR_HARD_DEPTH_STRICT=1.
+            // A measured need above B: the certificate failed. Always a typed
+            // error (the DepthAlarm: fatal through nesting, the closed-path
+            // guard, vanished rows and the counterterm cache), never a decline.
             if super::depth::guards()
-                && let Some((row_need, row_limit)) = super::depth::exceeded_row(&needs, &row_bounds)
+                && let Some(limit) = bound
+                && needed > limit
             {
                 super::depth::note(&mut self.depth, |counts| &mut counts.exceeded);
-                if super::depth::strict() {
-                    return Err(super::depth::alarm(format!(
-                        "IRH-DEPTH: a measured quotient pole exceeds the quotient bound in {} corr={correction_index}: needed={row_need} bound={row_limit} (GAMMALOOP_IR_HARD_DEPTH_STRICT=1)",
-                        self.graph.name
-                    )));
-                }
-                return Ok(self.refuse_depth(
-                    correction_index,
-                    correction,
-                    attempts,
-                    quotient_loops,
-                    Some(row_limit),
-                    extra,
-                    row_need,
-                    "bound_exceeded",
-                    &truncation,
-                ));
+                return Err(super::depth::alarm(format!(
+                    "IRH-DEPTH: a measured quotient pole exceeds the topological bound in {} corr={correction_index}: needed={needed} bound={limit} quotient_loops={quotient_loops} declared={declared}",
+                    self.graph.name
+                )));
             }
-            // IRH-DEPTH: a vanished group shows no insertion to measure, nor
-            // does a row of a nonzero group whose coefficient vanished (the
-            // moment extraction drops it); the bound stands for their
-            // quotient valuation. Below it the depth is raised to it: there
-            // such a group or row is either shown (and measured) or cannot
-            // reach a pole (its valuation is at least the bound).
-            let target = match row_bound {
-                Some(row_bound) if row_bound > extra && super::depth::raises() => {
-                    needed.max(row_bound)
-                }
-                _ => needed,
-            };
-            if target > extra {
-                // `needed=` is the measured need (its meaning before
-                // IRH-DEPTH), `target=` the depth of the next attempt.
-                eprintln!(
-                    "IR_HARD_CHILD_DEPTH graph={} corr={correction_index} attempt={attempts} extra_depth={extra} needed={needed} target={target} bound={} vanished_groups={vanished_groups}/{} zero_rows={}/{}",
-                    self.graph.name,
-                    super::depth::bound_label(row_bound),
-                    groups.len(),
-                    zero_rows.len(),
-                    rows.len(),
-                );
-                if attempts >= 3 {
-                    // The measured need, as before IRH-DEPTH (the target is
-                    // on the IR_HARD_CHILD_DEPTH line above).
-                    return Ok(Err(format!("depth:{needed}")));
-                }
-                if target > needed {
-                    super::depth::note(&mut self.depth, |counts| &mut counts.raised);
-                }
-                extra = target;
-                continue;
-            }
-            if attempts > 1 {
-                super::depth::note(&mut self.depth, |counts| &mut counts.retried);
-            }
-            // IRH-DEPTH guard (a backstop since the depth reaches the bound):
-            // the depth accepted here must reach the bound of every group and
-            // row that could hide a pole.
+            // Backstop (tests that start below B): the depth must reach B.
             if super::depth::guards()
-                && let Some(reason) = super::depth::refusal(row_bound, extra, needed, &truncation)
+                && let Some(reason) = super::depth::refusal(bound, extra, needed, &truncation)
             {
                 return Ok(self.refuse_depth(
                     correction_index,
                     correction,
                     attempts,
                     quotient_loops,
-                    row_bound,
+                    bound,
                     extra,
                     needed,
                     reason,
                     &truncation,
                 ));
             }
-            return Ok(Ok((
+            Ok(Ok((
                 value,
                 format!(
-                    " quotient_loops={quotient_loops} bound={} extra_depth={extra} attempts={attempts} terms={terms} groups={} rows={} h_bytes={h_bytes} h_s={h_seconds:.3} closures={} integrated_terms={} edge={edge_basis} forests={} outer_s={:.3}{outer_stats}",
-                    super::depth::bound_label(row_bound),
+                    " quotient_loops={quotient_loops} bound={} declared={declared} extra_depth={extra} attempts={attempts} needed={needed} terms={terms} groups={} rows={} h_bytes={h_bytes} h_s={h_seconds:.3} closures={} integrated_terms={} edge={edge_basis} forests={} outer_s={:.3}{outer_stats}",
+                    super::depth::bound_label(bound),
                     groups.len(),
                     rows.len(),
                     closures_after - closures_before,
@@ -2418,8 +2445,68 @@ impl<'a> Evaluation<'a> {
                     correction.forest.len(),
                     outer_started.elapsed().as_secs_f64(),
                 ),
-            )));
+            )))
         }
+    }
+
+    /// IRH-DEPTH round 8b: the child route DECLINES one correction to the
+    /// generic path before H(γ) is integrated (`IR_HARD_DEPTH_DECLINED`,
+    /// counted per reason, also as a refusal; the correction's
+    /// `IR_HARD_CHILD … outcome=declined:depth_refused:<reason>` line follows).
+    #[allow(clippy::too_many_arguments)]
+    fn decline_child(
+        &mut self,
+        correction_index: usize,
+        correction: &IrCorrection,
+        quotient_loops: usize,
+        bound: Option<usize>,
+        declared: &str,
+        reason: &'static str,
+        detail: &str,
+    ) -> std::result::Result<(Atom, String), String> {
+        eprintln!(
+            "IR_HARD_DEPTH_DECLINED graph={} corr={correction_index} reason={reason} quotient_loops={quotient_loops} bound={} declared={declared} detail={} edges={}",
+            self.graph.name,
+            super::depth::bound_label(bound),
+            detail.replace(char::is_whitespace, "_"),
+            self.edges(&correction.hard),
+        );
+        self.refuse_depth(
+            correction_index,
+            correction,
+            0,
+            quotient_loops,
+            bound,
+            quotient_loops,
+            0,
+            reason,
+            &super::depth::Truncation::default(),
+        )
+    }
+
+    /// IRH-DEPTH round 8b: the root projection of this evaluation as the
+    /// certificate reads it (typed, opaque or absent).
+    fn root_projection(&self) -> super::regularity::RootProjection<'_> {
+        match (&self.typed_root, self.root_projector) {
+            (Some(typed), _) => super::regularity::RootProjection::Typed(&typed.factor),
+            (None, Some(_)) => super::regularity::RootProjection::Opaque,
+            (None, None) => super::regularity::RootProjection::Absent,
+        }
+    }
+
+    /// The root projection of an outer polynomial on the child route: the
+    /// typed form when given (the certified scalar is the one multiplied),
+    /// else the callback (reached only by the planners before IRH-DEPTH:
+    /// an opaque callback declines), then regulated.
+    fn child_root_projection(&self, simplified: Atom) -> Result<Atom> {
+        Ok(match (&self.typed_root, self.root_projector) {
+            (Some(typed), _) => Integrated::dimensionally_regularized(&typed.apply(&simplified)),
+            (None, Some(projector)) => Integrated::dimensionally_regularized(
+                &projector(&simplified)
+                    .wrap_err("while projecting an IR hard child outer polynomial")?,
+            ),
+            (None, None) => simplified,
+        })
     }
 
     /// IRH-DEPTH ([`super::depth`]): refuse the child route for one
@@ -2528,7 +2615,6 @@ impl<'a> Evaluation<'a> {
         rows: &[(Atom, Atom, usize)],
     ) -> Result<std::result::Result<(Atom, String, Vec<i64>, Vec<usize>), String>> {
         use symbolica::{function, id::Replacement};
-        let projector = self.root_projector;
         let mode = self.top_mass.unwrap_or(TopMassTerms::Keep);
         let degree = usize::try_from(self.plan.taylor_order)?;
         let mass = top_mass::auxiliary_mass_squared();
@@ -2553,10 +2639,13 @@ impl<'a> Evaluation<'a> {
         for forest in forests {
             for (i, (_, insertion, loops)) in rows.iter().enumerate() {
                 let Some(power) = powers[i] else {
-                    // IRH-DEPTH: a row whose h_j vanishes at this depth adds
-                    // nothing, but its quotient factors are measured all the
-                    // same: their pole may need a deeper h_j (the retry).
-                    if super::depth::guards() {
+                    // IRH-DEPTH: a row whose h_j vanishes at depth B adds
+                    // nothing (its valuation is at least B, every quotient
+                    // pole at most B). Round 8b: its quotient factors are
+                    // measured only under STRICT, as a cross-check (a need
+                    // above B is the alarm); nothing measured decides the
+                    // depth.
+                    if super::depth::guards() && super::depth::strict() {
                         match self.ir_quotient_valuation(hard, forest, insertion, degree)? {
                             Ok(Some(pole)) => valuations[i] = valuations[i].min(pole),
                             Ok(None) => {}
@@ -2630,13 +2719,7 @@ impl<'a> Evaluation<'a> {
             let sum = Atom::add_many(assembled.iter());
             let simplified = RStarIntegrand::simplify_summands(sum.as_view())
                 .wrap_err("while simplifying an IR hard child outer polynomial")?;
-            let regulated = match projector {
-                Some(projector) => Integrated::dimensionally_regularized(
-                    &projector(&simplified)
-                        .wrap_err("while projecting an IR hard child outer polynomial")?,
-                ),
-                None => simplified,
-            };
+            let regulated = self.child_root_projection(simplified)?;
             let finished = RStarIntegrand::finish_tensor(regulated, id)?;
             // IRH-DEPTH (MATRIX-R45 review): every row's measured need is
             // also read on its complete outer coefficient, after the root
@@ -2685,92 +2768,6 @@ impl<'a> Evaluation<'a> {
             valuations,
             zero_rows,
         )))
-    }
-
-    /// IRH-DEPTH (MATRIX-R45 review): the poles the root projector callback
-    /// adds to an outer polynomial, probed on the unit insertion: for every
-    /// forest, the outer orders of `Z̃_F(G/γ; 1) · closure` with `ε` renamed
-    /// (so that the input's only `ε` is through `d`), simplified as in
-    /// [`Self::ir_outer_integrated`], projected, regulated and finished; the
-    /// excess is the input's valuation minus the output's (at least 0).
-    /// `None` when nothing is measured (every probe vanishes or fails); an
-    /// error that is an alarm propagates. `Some(0)` without a projector.
-    fn callback_excess(
-        &mut self,
-        hard: &RStarIntegrand,
-        forests: &[IrForestTerm],
-    ) -> Result<Option<usize>> {
-        use symbolica::poly::series::SeriesDepth;
-        let Some(projector) = self.root_projector else {
-            return Ok(Some(0));
-        };
-        let degree = usize::try_from(self.plan.taylor_order)?;
-        let renamed = symbol!("irh_callback_probe_epsilon");
-        let valuation = |expression: &Atom| -> Option<i64> {
-            let series = Integrated::dimensionally_regularized(expression)
-                .series(GS.dim_epsilon, 0, SeriesDepth::relative(1))
-                .ok()?;
-            if series.is_zero() {
-                return None;
-            }
-            let exponent = series.get_trailing_exponent();
-            exponent
-                .is_integer()
-                .then(|| exponent.numerator().to_i64())
-                .flatten()
-        };
-        let mut excess = None::<usize>;
-        for forest in forests {
-            let mut z = match self.ir_forest(forest, &Atom::one()) {
-                Ok(z) => z,
-                Err(error) if super::depth::is_alarm(&error) => return Err(error),
-                Err(_) => continue,
-            };
-            if z.is_zero() {
-                continue;
-            }
-            if let Some(closure) = &self.root_closure {
-                z *= closure;
-            }
-            let orders = match hard.ir_outer_orders(
-                &z,
-                &self.root_edges,
-                degree,
-                self.reference_mass_squared,
-            ) {
-                Ok(Ok(orders)) => orders,
-                Ok(Err(_)) => continue,
-                Err(error) if super::depth::is_alarm(&error) => return Err(error),
-                Err(_) => continue,
-            };
-            for order in orders.iter().filter(|order| !order.is_zero()) {
-                let input = order
-                    .replace(Atom::var(GS.dim_epsilon))
-                    .with(Atom::var(renamed));
-                let Ok(simplified) = RStarIntegrand::simplify_summands(input.as_view()) else {
-                    continue;
-                };
-                let Some(before) = valuation(&simplified) else {
-                    continue;
-                };
-                let Ok(projected) = projector(&simplified) else {
-                    continue;
-                };
-                self.integration_id += 1;
-                let Ok(finished) = RStarIntegrand::finish_tensor(
-                    Integrated::dimensionally_regularized(&projected),
-                    self.integration_id,
-                ) else {
-                    continue;
-                };
-                let Some(after) = valuation(&finished) else {
-                    continue;
-                };
-                let found = usize::try_from((before - after).max(0)).unwrap_or(0);
-                excess = Some(excess.map_or(found, |largest| largest.max(found)));
-            }
-        }
-        Ok(excess)
     }
 
     /// IRH-DEPTH ([`super::depth`]): the lowest `ε` power of the quotient
@@ -2831,13 +2828,13 @@ impl<'a> Evaluation<'a> {
         let mut measured = Vec::with_capacity(orders.len());
         for value in orders.iter().filter(|value| !value.is_zero()) {
             measured.push(value.clone());
-            if let Some(projector) = self.root_projector {
+            if self.root_projector.is_some() {
                 let simplified = match RStarIntegrand::simplify_summands(value.as_view()) {
                     Ok(simplified) => simplified,
                     Err(error) => return declined(error),
                 };
-                let projected = match projector(&simplified) {
-                    Ok(projected) => Integrated::dimensionally_regularized(&projected),
+                let projected = match self.child_root_projection(simplified) {
+                    Ok(projected) => projected,
                     Err(error) => return declined(error),
                 };
                 self.integration_id += 1;
@@ -3432,7 +3429,7 @@ impl<'a> Evaluation<'a> {
             // an IR_HARD_CHILD* line: the census parsers count every line
             // with the IR_HARD_CHILD_DEPTH prefix as a depth retry.
             eprintln!(
-                "IR_HARD_DEPTH_SUMMARY graph={} child={} corrections={} bounded={} retried={} raised={} exceeded={} refused={} unbounded={} vanished={} unverified={} unresolved_tensor={} opaque_function={} symbol_in_denominator={} outside_list={} pole_in_fixed_factor={} taken={} callback_unprobed={}",
+                "IR_HARD_DEPTH_SUMMARY graph={} child={} corrections={} bounded={} retried={} raised={} exceeded={} refused={} unbounded={} vanished={} unverified={} unresolved_tensor={} opaque_function={} symbol_in_denominator={} outside_list={} pole_in_fixed_factor={} taken={} callback_unprobed={} declined={} opaque_projector={} declared_order={} insertion_not_eps_free={}",
                 self.graph.name,
                 self.plan.root_boundary.is_some(),
                 self.depth.corrections,
@@ -3451,6 +3448,10 @@ impl<'a> Evaluation<'a> {
                 self.depth.pole_in_fixed_factor,
                 self.depth.taken,
                 self.depth.callback_unprobed,
+                self.depth.declined,
+                self.depth.opaque_projector,
+                self.depth.declared_order,
+                self.depth.insertion_not_eps_free,
             );
         }
         let elapsed = self.started.elapsed();
