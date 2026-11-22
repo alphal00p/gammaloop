@@ -450,10 +450,11 @@ pub(crate) fn validate() -> Result<()> {
 }
 
 /// The hole-cut mode of the environment (U7c, [`k5::hole_cut`]): the one
-/// resolved at the switch's initialisation (`decline` with the switch off).
+/// resolved at the switch's initialisation (the default `form` with the
+/// switch off or the kind not enabled, where it is never used).
 pub(super) fn environment_hole_cut() -> k5::HoleCut {
     match &*ENVIRONMENT {
-        Ok(_) => k5::resolved_hole_cut().unwrap_or(k5::HoleCut::Decline),
+        Ok(_) => k5::resolved_hole_cut().unwrap_or(k5::HoleCut::Form),
         Err(error) => panic!("{error}"),
     }
 }
@@ -777,8 +778,9 @@ pub(super) const DESIGNED_LOCAL: &[&str] = &[
     // two or more loops above four loops; no verified fixture): declined
     // before its record is built, today's path takes it
     "surrogate_split_chain",
-    // U7c (K5): a record that holds a hole's anchor but not its far end, on a
-    // reader without the single-hedge ins: form (GAMMALOOP_UNCONTRACTED_K5_HOLE_CUT)
+    // U7c (K5): a record that holds a hole's anchor but not its far end, only
+    // with GAMMALOOP_UNCONTRACTED_K5_HOLE_CUT=decline (or `auto` on a reader
+    // without the single-hedge ins: form); the default `form` emits it
     "surrogate_hole_cut",
 ];
 

@@ -1291,13 +1291,121 @@ fn k5_l5_multi_loop_holes_check_and_on_equal_off() -> Result<()> {
     multi_loop_holes(k5::HoleCut::Form)
 }
 
-/// The same five graphs with the DEFAULT hole-cut mode (`decline`: the
-/// single-hedge `ins:` stays out of the G-D gate): every kept and cut hole is
+/// The same five graphs with the hole-cut SETTING `decline` (the r1-r3
+/// default; r4's default is `form`, the test above): every kept and cut hole is
 /// declined by design (`surrogate_hole_cut`, today's path), counted per kind,
 /// every other record compared and equal, on == off through eps^-1.
 #[test]
 fn k5_l5_multi_loop_holes_with_the_hole_cut_declined() -> Result<()> {
     multi_loop_holes(k5::HoleCut::Decline)
+}
+
+/// The last rebase's item (5) (r4, gate G-G: the reader accepts one-hedge
+/// records): the DEFAULT hole-cut mode (unset) emits every kept and cut hole
+/// that the setting `decline` (the r1-r3 default) declines. On L5 143019 (a
+/// two-loop hole; its child {9,10} is one of vakint's G-G fixtures), check
+/// mode: (a) the default is `form`; (b) no attempt declines
+/// `surrogate_hole_cut`; (c) the records with a one-hedge `ins:` are exactly
+/// as many as the `decline` run's `surrogate_hole_cut` declines (> 0), and
+/// each compares EQUAL to today's contracted route through its order; (d)
+/// every other attempt has the same outcome in both settings.
+#[test]
+fn k5_kept_cut_holes_are_emitted_by_default_and_equal_the_contracted_route() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        ensure!(
+            k5::hole_cut() == k5::HoleCut::Form,
+            "(a) the default hole-cut mode is not form"
+        );
+        let dot = L5_MULTI_LOOP_HOLES
+            .iter()
+            .find(|(name, _)| *name == "143019")
+            .map(|(_, dot)| *dot)
+            .ok_or_else(|| eyre!("no L5 143019"))?;
+        let original = colour_factored(&load(dot)?)?;
+        let evaluator = PropagatorInsertionEvaluator::new(settings());
+        let check = || -> Result<Vec<Captured>> {
+            with_switch(check_surrogate(), || {
+                let ledger = DiagramLedger::open(original.name(), "k5-default");
+                let (value, captured) =
+                    with_capture(|| evaluator.pole_part_closing_root(&original, &vakint, true));
+                if let Some(ledger) = ledger {
+                    ledger.close(value.is_ok())?;
+                }
+                value?;
+                Ok(captured
+                    .into_iter()
+                    .filter(|attempt| attempt.kind == Kind::Surrogate)
+                    .collect())
+            })
+        };
+        let one_hedge = |attempt: &Captured| {
+            attempt
+                .text
+                .as_deref()
+                .and_then(|text| record(text).ok())
+                .is_some_and(|ours| {
+                    ours.insertions.iter().any(|insertion| {
+                        insertion.hedges.len() == 1
+                            && ours.vertices.iter().any(|vertex| {
+                                vertex.id == insertion.vertex && vertex.rule.starts_with("ins:")
+                            })
+                    })
+                })
+        };
+        let default = check()?;
+        let declined = k5::with_hole_cut(k5::HoleCut::Decline, check)?;
+        let hole_cut = "declined:surrogate_hole_cut";
+        let was_declined = declined
+            .iter()
+            .filter(|attempt| attempt.outcome == hole_cut)
+            .count();
+        ensure!(was_declined > 0, "the decline setting declined nothing");
+        ensure!(
+            default.iter().all(|attempt| attempt.outcome != hole_cut),
+            "(b) the default declined a kept and cut hole"
+        );
+        let lifted = default
+            .iter()
+            .filter(|attempt| one_hedge(attempt))
+            .collect::<Vec<_>>();
+        ensure!(
+            lifted.len() == was_declined,
+            "(c) {} one-hedge records for {was_declined} declines",
+            lifted.len()
+        );
+        for attempt in &lifted {
+            ensure!(
+                attempt.equal == Some(true),
+                "(c) id {} {}: not equal to the contracted route ({:?})",
+                attempt.id,
+                attempt.outcome,
+                attempt.first_difference
+            );
+        }
+        let others = |attempts: &[Captured], skip: &dyn Fn(&Captured) -> bool| {
+            let mut out = attempts
+                .iter()
+                .filter(|attempt| !skip(attempt))
+                .map(|attempt| (attempt.id, attempt.outcome.clone(), attempt.equal))
+                .collect::<Vec<_>>();
+            out.sort();
+            out
+        };
+        ensure!(
+            others(&default, &one_hedge)
+                == others(&declined, &|a: &Captured| a.outcome == hole_cut),
+            "(d) the other attempts differ between the two settings"
+        );
+        eprintln!(
+            "K5_DEFAULT_FORM graph={} attempts={} lifted={} (decline: {was_declined})",
+            original.name(),
+            default.len(),
+            lifted.len()
+        );
+        Ok(())
+    })
 }
 
 fn multi_loop_holes(mode: k5::HoleCut) -> Result<()> {
@@ -1727,19 +1835,21 @@ fn k5_spectator_ports_have_todays_index_structure() -> Result<()> {
     })
 }
 
-/// The hole-cut switch: `decline` is the default (unset environment), and
-/// the reader probe of this build's vakint (b6bb69835) accepts the
-/// single-hedge form (the gated reader ccba5e0c8a does not: `auto` would
-/// decline there); `surrogate_hole_cut` is in the closed list.
+/// The hole-cut switch (r4, the last rebase onto gate G-G): `form` is the
+/// default (unset environment), since the gated reader of this base accepts
+/// the one-hedge record (correction 29; r1-r3: `decline`, while the G-D
+/// reader ccba5e0c8a required two hedges); the reader probe accepts the
+/// single-hedge form; `decline` stays a setting, and `surrogate_hole_cut`
+/// stays in the closed list for it.
 #[test]
-fn k5_hole_cut_switch_defaults_to_decline() {
+fn k5_hole_cut_switch_defaults_to_form() {
     assert!(std::env::var_os(k5::HOLE_CUT_VARIABLE).is_none());
-    assert_eq!(k5::hole_cut(), k5::HoleCut::Decline);
+    assert_eq!(k5::hole_cut(), k5::HoleCut::Form);
     assert!(k5::reader_accepts_single_hedge());
     assert!(uncontracted::is_designed_code("surrogate_hole_cut"));
     assert_eq!(
-        k5::with_hole_cut(k5::HoleCut::Form, k5::hole_cut),
-        k5::HoleCut::Form
+        k5::with_hole_cut(k5::HoleCut::Decline, k5::hole_cut),
+        k5::HoleCut::Decline
     );
 }
 
@@ -2422,9 +2532,10 @@ fn k5_contracted_cut_quark_holes_are_never_emitted() -> Result<()> {
 fn k5_hole_cut_mode_is_resolved_once_at_start_up_and_not_in_the_cache_key() -> Result<()> {
     use k5::{HoleCut, parse_hole_cut, with_hole_cut};
     // start-up parsing
+    // r4: unset and empty are the default `form` (r1-r3: `decline`)
     for (value, mode) in [
-        (None, HoleCut::Decline),
-        (Some(""), HoleCut::Decline),
+        (None, HoleCut::Form),
+        (Some(""), HoleCut::Form),
         (Some("decline"), HoleCut::Decline),
         (Some(" form "), HoleCut::Form),
     ] {
@@ -2440,18 +2551,18 @@ fn k5_hole_cut_mode_is_resolved_once_at_start_up_and_not_in_the_cache_key() -> R
     uncontracted::validate()?;
     let before = k5::hole_cut();
     if k5::resolved_hole_cut().is_none() {
-        ensure!(k5::resolve_hole_cut(None, false) == Ok(HoleCut::Decline));
+        ensure!(k5::resolve_hole_cut(None, false) == Ok(HoleCut::Form));
     }
-    let second = k5::resolve_hole_cut(Some("form"), true).expect_err("a second resolution");
+    let second = k5::resolve_hole_cut(Some("decline"), true).expect_err("a second resolution");
     ensure!(second.contains("second resolution"), "{second}");
-    ensure!(k5::resolved_hole_cut() == Some(HoleCut::Decline));
+    ensure!(k5::resolved_hole_cut() == Some(HoleCut::Form));
     // SAFETY: nextest runs every test in its own process; the variable is
     // removed again below
-    unsafe { std::env::set_var(k5::HOLE_CUT_VARIABLE, "form") };
+    unsafe { std::env::set_var(k5::HOLE_CUT_VARIABLE, "decline") };
     let after = k5::hole_cut();
     unsafe { std::env::remove_var(k5::HOLE_CUT_VARIABLE) };
     ensure!(
-        before == HoleCut::Decline && after == before,
+        before == HoleCut::Form && after == before,
         "{before:?} -> {after:?}"
     );
     // structure of the production sources

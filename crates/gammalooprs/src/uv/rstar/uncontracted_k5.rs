@@ -259,13 +259,15 @@ fn missing_context(graph: &str) -> eyre::Report {
 // ---------------------------------------------------------------------------
 
 /// The switch of a kept and cut hole (a record that holds a hole's anchor
-/// but not its far end): `form` writes the single-hedge `ins:` with the far
-/// end's slot as a spectator port (WH-RECORD-FORMAT v1.5 proposal (a), beta's
-/// ruling of 21 Nov; for the vakint step after G-D), `decline` (unset, the
-/// DEFAULT: the v1.5 rules stay out of the G-D gate) declines such a record
-/// by design (`surrogate_hole_cut`, today's path), `auto` probes the reader
-/// once: `form` when vakint's reader accepts a single-hedge `ins:`, else
-/// `decline` (the gated reader ccba5e0c8a requires exactly two hedges).
+/// but not its far end): `form` (unset, the DEFAULT since the last rebase
+/// onto gate G-G, whose reader accepts the one-hedge record: WH-RECORD-FORMAT
+/// correction 29, vakint 68b4f2cf3..5bcc295e6) writes the single-hedge `ins:`
+/// with the far end's slot as a spectator port (v1.5 proposal (a), beta's
+/// ruling of 21 Nov); `decline` declines such a record by design
+/// (`surrogate_hole_cut`, today's path: the r1-r3 default, kept as a setting
+/// for a reader without the one-hedge rule); `auto` probes the reader once:
+/// `form` when vakint's reader accepts a single-hedge `ins:`, else `decline`
+/// (the G-D reader ccba5e0c8a required exactly two hedges).
 pub(crate) const HOLE_CUT_VARIABLE: &str = "GAMMALOOP_UNCONTRACTED_K5_HOLE_CUT";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -283,15 +285,15 @@ pub(crate) fn parse_hole_cut(
     probe: bool,
 ) -> std::result::Result<HoleCut, String> {
     match value.map(str::trim) {
-        None | Some("" | "decline") => Ok(HoleCut::Decline),
+        None | Some("" | "form") => Ok(HoleCut::Form),
         Some("auto") => Ok(if probe && reader_accepts_single_hedge() {
             HoleCut::Form
         } else {
             HoleCut::Decline
         }),
-        Some("form") => Ok(HoleCut::Form),
+        Some("decline") => Ok(HoleCut::Decline),
         Some(other) => Err(format!(
-            "{HOLE_CUT_VARIABLE} must be decline (the default), form or auto, not `{other}`"
+            "{HOLE_CUT_VARIABLE} must be form (the default), decline or auto, not `{other}`"
         )),
     }
 }
@@ -925,14 +927,15 @@ fn finish_with(
         hedges.dedup();
         // a KEPT and CUT hole (the anchor in the record, the far end's inner
         // half-edge not): the single-hedge ins: with the far-end slot as a
-        // spectator port (WH-RECORD-FORMAT v1.5 proposal (a)), or, on a reader
-        // that refuses that form, the designed decline `surrogate_hole_cut`
-        // ([`hole_cut`])
+        // spectator port (WH-RECORD-FORMAT v1.5 proposal (a), correction 29 of
+        // the G-G reader: the hedge is the anchor's crown leg, the momenta its
+        // edge's, the slots on it and the one spectator), or, with the setting
+        // `decline`, the designed decline `surrogate_hole_cut` ([`hole_cut`])
         if !record_hedges.contains(&chain.inner[1]) && hole_cut() == HoleCut::Decline {
             return Err(Decline::new(
                 "surrogate_hole_cut",
                 format!(
-                    "the record holds the anchor {start} of a {}-loop hole but not its far end (inner half-edge {}): the single-hedge ins: form is off ({})",
+                    "the record holds the anchor {start} of a {}-loop hole but not its far end (inner half-edge {}): the single-hedge ins: form is off ({}=decline)",
                     chain.vertices.len() - 1,
                     chain.inner[1],
                     HOLE_CUT_VARIABLE
