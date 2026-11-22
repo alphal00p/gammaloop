@@ -734,6 +734,26 @@ impl PropagatorInsertionEvaluator {
                 .is_empty(),
             "insertion group weights must be scalars"
         );
+        // MATRIX-R45: a closed trace (a scalar with summed dummy indices,
+        // e.g. g_ab g^ab = d or tr(γ_a γ^a) = 4d) in a denominator hides a
+        // pole from the substitution of d below. A weight that holds a tensor
+        // structure is normalised by the IRH-DEPTH certificate first (closed
+        // traces contracted, d = 4−2ε; an unresolved one is refused). Weights
+        // without a tensor structure (all production weights: colour, nf and
+        // the overall factor) keep the plain substitution.
+        let normalised;
+        let weight = if super::regularity::has_tensor_structure(weight) {
+            normalised = super::regularity::normalise(
+                super::regularity::Factor::InsertionCoefficient,
+                weight,
+            )
+            .map_err(|refused| {
+                eyre!("insertion group weights must be provably regular in epsilon: {refused}")
+            })?;
+            &normalised
+        } else {
+            weight
+        };
         let epsilon_weight = weight
             .replace(Atom::var(GS.dim))
             .with(Atom::num(4) - Atom::num(2) * Atom::var(GS.dim_epsilon));
@@ -1517,6 +1537,48 @@ mod tests {
             ),
         ] {
             assert!(PropagatorInsertionEvaluator::validate_weight(&weight).is_err());
+        }
+        Ok(())
+    }
+
+    /// MATRIX-R45, entry insertion_coefficient: an insertion group weight
+    /// carrying ε⁻¹ is rejected in every spelling (explicit, `1/(d−4)`, a
+    /// closed metric trace and a closed Dirac trace with fresh slots, which
+    /// equal `d` and `4d`); their regular neighbours are admitted.
+    #[test]
+    fn matrix_r45_insertion_weights_reject_every_spelling_of_a_pole() -> Result<()> {
+        test_initialise()?;
+        let eps = "gammalooprs::{}::ε";
+        let dim = "gammalooprs::{}::dim";
+        let hedge = "gammalooprs::{spenso::index}::hedge";
+        let mink = |n: usize| format!("spenso::{{spenso::representation,spenso::self_dual}}::mink(4,{hedge}({n},1))");
+        let bis = |n: usize| format!("spenso::{{spenso::representation,spenso::self_dual}}::bis(4,{hedge}({n},1))");
+        let metric = format!("(spenso::{{symmetric,linear,real,spenso::tensor}}::g({},{}))^2", mink(81), mink(82));
+        let gamma = "spenso::{linear,spenso::tensor}::gamma";
+        let dirac = format!(
+            "{gamma}({},{},{})*{gamma}({},{},{})",
+            bis(83),
+            bis(84),
+            mink(85),
+            bis(84),
+            bis(83),
+            mink(85)
+        );
+        let parse = |text: &str| -> Result<Atom> {
+            symbolica::try_parse!(text).map_err(|error| eyre!("{error}"))
+        };
+        for (label, pole, regular) in [
+            ("eps", format!("({eps})^(-1)"), format!("1+{eps}")),
+            ("dm4", format!("(-2)/({dim}-4)"), format!("(-2)/({dim}-3)")),
+            ("gtr", format!("(-2)/({metric}-4)"), format!("(-2)/({metric}-3)")),
+            ("dtr", format!("(-8)/({dirac}-16)"), format!("(-8)/({dirac}-12)")),
+        ] {
+            let pole = parse(&pole)?;
+            let outcome = PropagatorInsertionEvaluator::validate_weight(&pole);
+            eprintln!("IRH_R45_WEIGHT {label} {:?}", outcome.as_ref().map_err(|e| format!("{e:#}")));
+            assert!(outcome.is_err(), "{label}: a pole in an insertion weight is accepted");
+            PropagatorInsertionEvaluator::validate_weight(&parse(&regular)?)
+                .map_err(|error| eyre!("{label} regular neighbour: {error:#}"))?;
         }
         Ok(())
     }
