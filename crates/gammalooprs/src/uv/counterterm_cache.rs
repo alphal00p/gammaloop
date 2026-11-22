@@ -176,6 +176,41 @@ impl std::fmt::Display for CachedError {
 
 impl std::error::Error for CachedError {}
 
+/// The single-flight rounds a lookup that only WAITED on another lookup's
+/// transient failure may retry before it is refused.
+const WAIT_ROUNDS: usize = 3;
+
+/// IRH-DEPTH round 8 (r47, the three-waiter retry limit): a lookup that
+/// waited [`WAIT_ROUNDS`] times on an entry another lookup failed with a
+/// transient error (an exhausted resource budget), without ever running its
+/// own computation, is REFUSED with this typed error (logged
+/// `DELTA_CACHE_RETRIES_EXHAUSTED`). Before round 8 it returned the other
+/// lookup's error as its own. The value: never a success; the cause (the
+/// other lookup's transient error) is in the chain, so a guarded child
+/// attempt declines the whole correction to today's path (closed::guarded,
+/// a resource-limit decline) and any other caller fails the diagram.
+#[derive(Debug)]
+pub(crate) struct RetriesExhausted {
+    rounds: usize,
+    cause: CachedError,
+}
+
+impl std::fmt::Display for RetriesExhausted {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "complete UV counterterm cache: refused after {} single-flight rounds that each ended on another lookup's transient failure, without computing this lookup's own entry",
+            self.rounds
+        )
+    }
+}
+
+impl std::error::Error for RetriesExhausted {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.cause)
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct Key {
     graph: CountertermKey,
@@ -676,8 +711,20 @@ impl CountertermCache {
                     entries.remove(&key);
                 }
                 drop(entries);
-                if computed || compute.is_none() || rounds >= 3 {
+                if computed || compute.is_none() {
                     return Err(error.replay());
+                }
+                if rounds >= WAIT_ROUNDS {
+                    eprintln!(
+                        "DELTA_CACHE_RETRIES_EXHAUSTED rounds={rounds} loops={} support={} refused=true cause={}",
+                        graph.n_loops(support),
+                        support.string_label(),
+                        format!("{error}").chars().take(200).collect::<String>()
+                    );
+                    return Err(eyre::Report::new(RetriesExhausted {
+                        rounds,
+                        cause: error.clone(),
+                    }));
                 }
                 continue;
             }
