@@ -806,4 +806,143 @@ mod tests {
         assert_eq!(groups.mass_mode(&vk_parse!("0").unwrap()), None);
         assert_eq!(groups.mass_mode(&vk_parse!("2^(1/2)").unwrap()), None);
     }
+
+    /// Recorded selection inputs: the `event: "input"` lines of a
+    /// `VAKINT_WITNESS_LOG` (integral and numerator as the selector saw them,
+    /// e.g. from the six-loop computations 640, 642, 213 and 216), read from
+    /// the file `VAKINT_WS_RECORDED_INPUTS`; only the input ordinals listed in
+    /// `VAKINT_WS_RECORDED_LINES` (comma separated) when that is set.
+    fn recorded_inputs() -> Vec<(usize, serde_json::Value)> {
+        let path = std::env::var_os("VAKINT_WS_RECORDED_INPUTS")
+            .expect("VAKINT_WS_RECORDED_INPUTS names a witness-selection record");
+        let wanted = std::env::var("VAKINT_WS_RECORDED_LINES").ok().map(|lines| {
+            lines
+                .split(',')
+                .map(|line| line.trim().parse::<usize>().unwrap())
+                .collect::<BTreeSet<_>>()
+        });
+        std::fs::read_to_string(path)
+            .unwrap()
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+            .filter(|record| record["event"] == "input")
+            .enumerate()
+            .filter(|(ordinal, _)| {
+                wanted
+                    .as_ref()
+                    .is_none_or(|wanted| wanted.contains(ordinal))
+            })
+            .collect()
+    }
+
+    /// The official five-loop saved application with the recorded regulator
+    /// symbol and `VAKINT_WS_THREADS` frontend threads (default 1).
+    fn recorded_engine(epsilon: &str) -> (Vakint, VakintSettings) {
+        let directory = super::super::super::test_data::external_path_through(5).join("5L/ibps");
+        let threads = std::env::var("VAKINT_WS_THREADS")
+            .ok()
+            .map_or(1, |threads| threads.parse().unwrap());
+        let mut settings = VakintSettings {
+            epsilon_symbol: epsilon.into(),
+            n_cores: threads,
+            ..Default::default()
+        };
+        let engine = super::super::super::test_data::external_engine()
+            .with_rustred_application(&mut settings, &directory)
+            .unwrap();
+        (engine, settings)
+    }
+
+    fn recorded_atom(record: &serde_json::Value, field: &str) -> Atom {
+        symbolica::try_parse!(record[field].as_str().unwrap()).unwrap()
+    }
+
+    /// Beta's property on real inputs: on every recorded input the screened
+    /// selection is the first minimal full key over all verified witnesses
+    /// (terminal-only witnesses first), with the same exact support.
+    #[test]
+    #[ignore = "needs VAKINT_WS_RECORDED_INPUTS and the official five-loop package (minutes per input)"]
+    fn screened_selection_matches_first_minimal_full_key_on_recorded_inputs() {
+        Vakint::initialize_vakint_symbols();
+        let inputs = recorded_inputs();
+        assert!(!inputs.is_empty(), "no recorded input selected");
+        let epsilon = inputs[0].1["epsilon_symbol"].as_str().unwrap().to_owned();
+        let (engine, settings) = recorded_engine(&epsilon);
+        for (ordinal, record) in &inputs {
+            assert_eq!(record["epsilon_symbol"].as_str(), Some(epsilon.as_str()));
+            let integral = recorded_atom(record, "integral");
+            let numerator = recorded_atom(record, "numerator");
+            let scalar_form =
+                VakintTerm::scalar_product_form(&settings, numerator.as_view()).unwrap();
+            let grouping = NumeratorGroups::try_new(scalar_form.as_view());
+            let started = std::time::Instant::now();
+            assert!(
+                screened_selection_matches_reference(
+                    &engine,
+                    &settings,
+                    integral.as_view(),
+                    numerator.as_view(),
+                    None,
+                ),
+                "input {ordinal}: no witness selection ran"
+            );
+            println!(
+                "{}",
+                serde_json::json!({
+                    "input": ordinal,
+                    "numerator_digest": record["numerator_digest"],
+                    "groups": grouping.as_ref().ok().map(NumeratorGroups::shape),
+                    "refusal": grouping.as_ref().err().map(ToString::to_string),
+                    "equal_to_reference": true,
+                    "seconds": started.elapsed().as_secs_f64(),
+                })
+            );
+        }
+    }
+
+    /// The production selection call on recorded inputs, timed (one JSON
+    /// line per input; with `VAKINT_WITNESS_LOG` also the selection record).
+    #[test]
+    #[ignore = "timing driver: needs VAKINT_WS_RECORDED_INPUTS and the official five-loop package"]
+    fn witness_selection_timing_on_recorded_inputs() {
+        Vakint::initialize_vakint_symbols();
+        let inputs = recorded_inputs();
+        assert!(!inputs.is_empty(), "no recorded input selected");
+        let epsilon = inputs[0].1["epsilon_symbol"].as_str().unwrap().to_owned();
+        let (engine, settings) = recorded_engine(&epsilon);
+        for (ordinal, record) in &inputs {
+            let integral = recorded_atom(record, "integral");
+            let numerator = recorded_atom(record, "numerator");
+            let started = std::time::Instant::now();
+            let selected = engine
+                .match_rustred_input_selected(&settings, integral.as_view(), numerator.as_view())
+                .unwrap();
+            let seconds = started.elapsed().as_secs_f64();
+            let (witness, support) = match &selected {
+                Some((witness, support)) => (
+                    Some(super::super::selection_record::witness_text(witness)),
+                    support.clone().flatten().map(|support| {
+                        support
+                            .iter()
+                            .map(|key| key.powers().to_vec())
+                            .collect::<Vec<_>>()
+                    }),
+                ),
+                None => (None, None),
+            };
+            println!(
+                "{}",
+                serde_json::json!({
+                    "input": ordinal,
+                    "numerator_digest": record["numerator_digest"],
+                    "threads": settings.n_cores,
+                    "seconds": seconds,
+                    "selected_witness_digest": witness.as_deref().map(super::super::selection_record::digest),
+                    "selected_witness": witness,
+                    "support": support,
+                })
+            );
+        }
+    }
 }
