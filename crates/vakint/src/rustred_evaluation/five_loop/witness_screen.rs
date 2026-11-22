@@ -35,8 +35,13 @@
 //! (a sum of coefficient * scalar-product terms times a scalar product and a
 //! metric, say); in this tensor grammar such a product is distributed over the
 //! scalar products (`expand_in(dot)`, coefficients kept whole) before the
-//! grouping, which changes the form of the numerator, not its value. A
-//! numerator without opaque atoms keeps the plain grammar unchanged.
+//! grouping, which changes the form of the numerator, not its value. Its
+//! coefficients are typically dependent over Q (for instance `1`, `1/(4-2ε)`
+//! and `ε/(4-2ε)`), so the tensor grammar folds each coefficient whose exact
+//! values depend on earlier ones onto that basis, after verifying the relation
+//! symbolically ([`NumeratorGroups::fold_onto_basis`]); the basis is then
+//! proven independent as before. A numerator without opaque atoms keeps the
+//! plain grammar unchanged.
 //! `VAKINT_WITNESS_SCREEN_OPAQUE=0` (or `off`) restores the plain grammar for
 //! every numerator (debug switch for the A/B of the selection).
 
@@ -446,12 +451,17 @@ impl NumeratorGroups {
             opaque: opaque_atoms,
             groups,
         };
+        let count = decomposition.coefficients.len();
+        if opaque {
+            // Tensor grammar: dependent coefficients are folded onto a basis.
+            return decomposition
+                .fold_onto_basis()
+                .ok_or(Refusal::DependentCoefficients(count));
+        }
         if decomposition.coefficients_are_independent() {
             Ok(decomposition)
         } else {
-            Err(Refusal::DependentCoefficients(
-                decomposition.coefficients.len(),
-            ))
+            Err(Refusal::DependentCoefficients(count))
         }
     }
 
@@ -468,10 +478,147 @@ impl NumeratorGroups {
     /// Prove linear independence of the distinct coefficients over Q with a
     /// nonsingular matrix of exact values at deterministic rational points.
     fn coefficients_are_independent(&self) -> bool {
-        let count = self.coefficients.len();
-        if count <= 1 {
+        if self.coefficients.len() <= 1 {
             return true;
         }
+        self.evaluation_rows().is_some_and(full_row_rank)
+    }
+
+    /// Tensor grammar: an exact basis of the coefficients' span over Q, with
+    /// every other coefficient folded onto it. Rows of exact values at
+    /// deterministic rational points (opaque atoms as further variables) are
+    /// reduced in order; a row that reduces to zero gives a candidate relation
+    /// `c_i = sum_b lambda_b * c_b` over the earlier independent rows, which is
+    /// accepted only if `c_i - sum_b lambda_b * c_b` vanishes identically
+    /// (`together`, the canonical rational form with function atoms as
+    /// variables: the ring of the full key's zero test). The parts of `c_i`
+    /// are then added with weights `lambda_b` to the parts of the basis.
+    /// The basis rows are independent, so the remaining coefficients are
+    /// proven independent as before. `None` (full lowering) at a pole or when
+    /// a candidate relation does not hold.
+    fn fold_onto_basis(self) -> Option<Self> {
+        let count = self.coefficients.len();
+        if count <= 1 {
+            return Some(self);
+        }
+        let rows = self.evaluation_rows()?;
+        // Echelon rows with their pivot column and their combination of
+        // original rows (only basis rows occur in a combination).
+        let mut echelon = Vec::<(Vec<Atom>, usize, BTreeMap<usize, Atom>)>::new();
+        let mut basis = Vec::<usize>::new();
+        let mut relations = Vec::<(usize, BTreeMap<usize, Atom>)>::new();
+        for (index, row) in rows.into_iter().enumerate() {
+            let mut reduced = row;
+            let mut combination = BTreeMap::from([(index, Atom::num(1))]);
+            for (echelon_row, pivot, echelon_combination) in &echelon {
+                if reduced[*pivot].is_zero() {
+                    continue;
+                }
+                let factor = &reduced[*pivot] / &echelon_row[*pivot];
+                for (entry, value) in reduced.iter_mut().zip(echelon_row) {
+                    *entry = &*entry - &factor * value;
+                }
+                for (original, weight) in echelon_combination {
+                    let total = combination.entry(*original).or_insert(Atom::Zero);
+                    *total = &*total - &factor * weight;
+                }
+            }
+            match reduced.iter().position(|value| !value.is_zero()) {
+                Some(pivot) => {
+                    basis.push(index);
+                    echelon.push((reduced, pivot, combination));
+                }
+                None => relations.push((index, combination)),
+            }
+        }
+        if relations.is_empty() {
+            return Some(self);
+        }
+        // Verify every candidate relation exactly.
+        for (_, combination) in &relations {
+            let relation = Atom::add_many(
+                combination
+                    .iter()
+                    .map(|(original, weight)| weight * &self.coefficients[*original])
+                    .collect::<Vec<_>>(),
+            );
+            if !relation.together().is_zero() {
+                return None;
+            }
+        }
+        let position = basis
+            .iter()
+            .enumerate()
+            .map(|(position, original)| (*original, position))
+            .collect::<BTreeMap<_, _>>();
+        let lambdas = relations
+            .into_iter()
+            .map(|(dependent, combination)| {
+                let lambda = combination
+                    .into_iter()
+                    .filter(|(original, _)| *original != dependent)
+                    .map(|(original, weight)| (position[&original], -weight))
+                    .collect::<Vec<_>>();
+                (dependent, lambda)
+            })
+            .collect::<BTreeMap<_, _>>();
+        let mut parts = BTreeMap::<(usize, u32), Vec<Atom>>::new();
+        for group in self.groups {
+            match lambdas.get(&group.coefficient) {
+                None => parts
+                    .entry((position[&group.coefficient], group.degree))
+                    .or_default()
+                    .push(group.part),
+                Some(lambda) => {
+                    for (target, weight) in lambda {
+                        parts
+                            .entry((*target, group.degree))
+                            .or_default()
+                            .push(weight * &group.part);
+                    }
+                }
+            }
+        }
+        // Parts that cancel on folding leave no group; a basis coefficient
+        // without a group is dropped (renumbering keeps the group order).
+        let parts = parts
+            .into_iter()
+            .map(|(slot, terms)| (slot, Atom::add_many(terms).expand()))
+            .filter(|(_, part)| !part.is_zero())
+            .collect::<Vec<_>>();
+        let used = parts
+            .iter()
+            .map(|((coefficient, _), _)| *coefficient)
+            .collect::<BTreeSet<_>>();
+        let renumbered = used
+            .iter()
+            .enumerate()
+            .map(|(new, old)| (*old, new))
+            .collect::<BTreeMap<_, _>>();
+        let groups = parts
+            .into_iter()
+            .map(|((coefficient, degree), part)| Group {
+                coefficient: renumbered[&coefficient],
+                degree,
+                part,
+            })
+            .collect();
+        let coefficients = used
+            .iter()
+            .map(|position| self.coefficients[basis[*position]].clone())
+            .collect();
+        Some(Self {
+            coefficients,
+            symbols: self.symbols,
+            opaque: self.opaque,
+            groups,
+        })
+    }
+
+    /// Exact values of every coefficient at `count + 2` deterministic rational
+    /// points, or `None` at a pole.
+    fn evaluation_rows(&self) -> Option<Vec<Vec<Atom>>> {
+        let count = self.coefficients.len();
         let symbols = self.symbols.iter().copied().collect::<Vec<_>>();
         // Two extra points tolerate an unlucky singular square sample.
         let points = (0..count + 2)
@@ -512,14 +659,11 @@ impl NumeratorGroups {
         for coefficient in &self.coefficients {
             let mut row = Vec::with_capacity(points.len());
             for (point, values) in points.iter().zip(&opaque_values) {
-                let Some(value) = evaluate(coefficient, point, &self.opaque, values) else {
-                    return false;
-                };
-                row.push(value);
+                row.push(evaluate(coefficient, point, &self.opaque, values)?);
             }
             rows.push(row);
         }
-        full_row_rank(rows)
+        Some(rows)
     }
 
     /// Decide the admission of `witness` from the exact key support of the
@@ -796,10 +940,6 @@ mod tests {
                 "g(hedge(1,1),hedge(2,1))*(dot(k(1),k(1))+log(x))",
                 "a function coefficient other than p, g and dot after distribution",
             ),
-            (
-                "x*g(hedge(1,1),hedge(2,1))*dot(k(1),k(1)) + x^2*g(hedge(1,1),hedge(2,1))*dot(k(2),k(2)) + x*(1+x)*g(hedge(1,1),hedge(2,1))*dot(k(3),k(3))",
-                "dependent coefficients",
-            ),
         ] {
             let numerator = vk_parse!(refused).unwrap();
             assert!(
@@ -823,6 +963,43 @@ mod tests {
         .unwrap();
         let groups = NumeratorGroups::try_new_with(accepted.as_view(), true).unwrap();
         assert_eq!(groups.shape(), (3, 3));
+    }
+
+    /// Tensor grammar: dependent coefficients are folded onto an exactly
+    /// verified basis (the plain grammar still refuses them, see
+    /// `refuses_inhomogeneous_function_and_dependent_coefficients`).
+    #[test]
+    fn tensor_dependent_coefficients_fold_onto_a_basis() {
+        Vakint::initialize_vakint_symbols();
+        for (numerator, shape) in [
+            // x*(1+x) = x + x^2.
+            (
+                "x*g(hedge(1,1),hedge(2,1))*dot(k(1),k(1)) + x^2*g(hedge(1,1),hedge(2,1))*dot(k(2),k(2)) + x*(1+x)*g(hedge(1,1),hedge(2,1))*dot(k(3),k(3))",
+                (2, 2),
+            ),
+            // 1 = 4/(4-2ε) - 2ε/(4-2ε): the pattern of a tensor-reduced term.
+            (
+                "g(hedge(1,1),hedge(2,1))*dot(k(1),k(1)) + (4-2*ε)^-1*g(hedge(1,1),hedge(2,1))*dot(k(2),k(2)) + ε*(4-2*ε)^-1*g(hedge(1,1),hedge(2,1))*dot(k(3),k(3)) + ε^2*(4-2*ε)^-1*g(hedge(1,1),hedge(2,1))*dot(k(3),k(4))",
+                (3, 3),
+            ),
+            // A relation with cancellations (the value is p*p*dot(k(2),k(2))):
+            // in Symbolica's term order x*p*p and (1+2x)*p*p form the basis and
+            // p*p = (1+2x)*p*p - 2*x*p*p is folded onto both (dot(k(1),k(1))
+            // cancels on each).
+            (
+                "p(6,hedge(1,1))*p(6,hedge(2,1))*(dot(k(1),k(1))+dot(k(2),k(2))) + 2*x*p(6,hedge(1,1))*p(6,hedge(2,1))*dot(k(1),k(1)) - (1+2*x)*p(6,hedge(1,1))*p(6,hedge(2,1))*dot(k(1),k(1))",
+                (2, 2),
+            ),
+        ] {
+            let numerator = vk_parse!(numerator).unwrap();
+            let groups = NumeratorGroups::try_new_with(numerator.as_view(), true).unwrap();
+            assert_eq!(groups.shape(), shape, "{numerator}");
+            assert!(groups.coefficients_are_independent());
+            let rebuilt = groups.groups.iter().fold(Atom::Zero, |sum, group| {
+                sum + &groups.coefficients[group.coefficient] * &group.part
+            });
+            assert!((rebuilt - &numerator).together().is_zero(), "{numerator}");
+        }
     }
 
     /// A tensor-reduced product of sums is distributed over the scalar
