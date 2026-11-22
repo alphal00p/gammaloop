@@ -1398,6 +1398,10 @@ fn build_direct(
         .to_text()
         .map_err(|error| Decline::new("text", error.to_string()))?;
     let record = FactorizedNumerator::from_text(&text).map_err(|error| Decline::vakint(&error))?;
+    // beta's guard (pick 8), as for every K1 / K2 record: a direct record has
+    // no Taylor step, where vakint reads an undeclared Q(x) as a constant
+    // vector, so `undeclared_momentum` is a real check here
+    super::declared_momenta(&record)?;
     Ok(BuiltDirect {
         record,
         text,
