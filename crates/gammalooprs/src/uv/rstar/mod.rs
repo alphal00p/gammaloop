@@ -84,6 +84,8 @@ mod uncontracted_refusal_tests;
 mod uncontracted_review_tests;
 #[cfg(test)]
 mod uncontracted_tests;
+#[cfg(test)]
+mod uncontracted_u8_tests;
 mod uv;
 
 pub use crate::uv::counterterm_cache::{
@@ -200,6 +202,17 @@ pub fn validate_uncontracted_settings(
     if uncontracted::switch().mode == uncontracted::Mode::Off {
         return Ok(());
     }
+    // U8: a DEFAULT switch (the variable unset) is turned off by these
+    // settings, with a notice, instead of refusing the run (a setting the
+    // caller wrote wins over a default); the caller reads the identity
+    // again ([`uncontracted_demote_default`])
+    if let Err(refusal) = uncontracted::settings_refusal(&settings.vakint)
+        && uncontracted::switch().is_default()
+    {
+        uncontracted::demote_default(&format!("c7_settings:{}", refusal.code))
+            .map_err(|error| eyre::eyre!("{error}"))?;
+        return Ok(());
+    }
     uncontracted::settings_refusal(&settings.vakint).map_err(|refusal| {
         eyre::eyre!(
             "{}={} is refused with these settings: {} ({}); the beta's production settings are normalization MSbar, evaluation methods rustred and forcer",
@@ -209,6 +222,33 @@ pub fn validate_uncontracted_settings(
             refusal.code
         )
     })
+}
+
+/// U8: what an UNSET `GAMMALOOP_UNCONTRACTED_NUMERATOR` means in this build:
+/// `true` is mode on with the default kinds root, child, ir-hard and
+/// surrogate (source `default`), `false` is off. A caller's help text and
+/// its gate read this, never a copy of it.
+pub const UNCONTRACTED_UNSET_IS_ON: bool = uncontracted::UNSET_IS_ON;
+
+/// U8: turn a DEFAULT `GAMMALOOP_UNCONTRACTED_NUMERATOR` (the variable
+/// unset) off for this run because of a setting the caller wrote (the
+/// beta's `--grouping skeletons`), with the notice `UNCONTRACTED_SWITCH
+/// mode=off source=default reason=<reason>`: `Ok(true)`. A written value
+/// (`off`, `on`, `check`, a kind list) is left alone, `Ok(false)`: the caller
+/// keeps its refusal for an explicit on / check. A malformed value is the
+/// start-up error of [`validate_uncontracted`]. Call it at start-up, before
+/// [`validate_uncontracted`] when possible; a caller that read
+/// [`uncontracted_identity`] before must read it again.
+pub fn uncontracted_demote_default(reason: &str) -> eyre::Result<bool> {
+    uncontracted::demote_default(reason).map_err(|error| eyre::eyre!("{error}"))
+}
+
+/// U8: how the switch's kinds were chosen: `default` (the variable unset),
+/// `bare` (`on` / `check` without a list) or `listed` (`:<kinds>`); `None`
+/// off.
+pub fn uncontracted_source() -> eyre::Result<Option<&'static str>> {
+    uncontracted::validate()?;
+    Ok(uncontracted::source().map(uncontracted::Source::as_str))
 }
 
 /// Whether a diagram ledger opens ([`DiagramLedger::open`] is `Some`): the

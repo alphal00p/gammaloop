@@ -1073,22 +1073,28 @@ fn k5_tally_with_surrogate_listed() -> Result<()> {
     })
 }
 
+/// U8: `surrogate` is a default kind (a bare `on` / `check` and the unset
+/// switch enable it); a list still selects it or not.
 #[test]
-fn k5_surrogate_must_be_listed() {
+fn k5_surrogate_is_a_default_kind() {
     for value in ["on", "check", "1"] {
         let switch = Switch::parse(Some(value)).unwrap();
-        assert!(!switch.enabled(Kind::Surrogate), "{value}");
+        assert!(switch.enabled(Kind::Surrogate), "{value}");
         assert!(
             switch.enabled(Kind::Root) && switch.enabled(Kind::Child),
             "{value}"
         );
+    }
+    for value in ["on:root,child,ir-hard", "check:a"] {
+        let switch = Switch::parse(Some(value)).unwrap();
+        assert!(!switch.enabled(Kind::Surrogate), "{value}");
     }
     for value in ["on:surrogate", "check:root,child,surrogate", "check:e"] {
         let switch = Switch::parse(Some(value)).unwrap();
         assert!(switch.enabled(Kind::Surrogate), "{value}");
         assert!(switch.inert_kinds().is_empty(), "{value}");
     }
-    assert!(Kind::Surrogate.implemented() && !Kind::Surrogate.in_default());
+    assert!(Kind::Surrogate.implemented() && Kind::Surrogate.in_default());
 }
 
 /// With `surrogate` enabled, a child looked up OUTSIDE the surrogate's R*
@@ -2783,11 +2789,20 @@ fn k5_hole_cut_mode_is_in_the_resume_identity() -> Result<()> {
             && form.as_deref() == Some("check:surrogate:strict:hole_cut=form"),
         "{decline:?} {form:?}"
     );
-    let default = Switch::parse(Some("check")).map_err(|error| eyre!(error))?;
+    // U8: a bare `check` enables surrogate too, so its identity carries the
+    // mode; a list without surrogate does not
+    let bare = Switch::parse(Some("check")).map_err(|error| eyre!(error))?;
+    ensure!(
+        identity(bare, HoleCut::Form).as_deref()
+            == Some("check:root,child,ir-hard,surrogate:strict:hole_cut=form"),
+        "the bare identity: {:?}",
+        identity(bare, HoleCut::Form)
+    );
+    let default = Switch::parse(Some("check:root,child,ir-hard")).map_err(|error| eyre!(error))?;
     ensure!(
         identity(default, HoleCut::Decline).as_deref() == Some("check:root,child,ir-hard:strict")
             && identity(default, HoleCut::Form) == identity(default, HoleCut::Decline),
-        "the default identity changed"
+        "the identity without surrogate changed"
     );
     // a resumed run under the other mode recomputes, under the same mode it
     // reuses the evidence
@@ -2910,7 +2925,7 @@ fn k5_stray_open_slots_are_errors_not_ports() -> Result<()> {
 #[test]
 fn k5_hole_cut_variable_is_ignored_without_the_kind() -> Result<()> {
     let before = k5::resolved_hole_cut();
-    for value in ["off", "check:root,child,ir-hard", "on", "check"] {
+    for value in ["off", "check:root,child,ir-hard", "on:root,child,ir-hard", "check:a,b"] {
         let switch = Switch::parse(Some(value)).map_err(|error| eyre!(error))?;
         let read = std::cell::Cell::new(false);
         let mode = k5::start_up_hole_cut(switch, || {

@@ -299,6 +299,16 @@ fn ir_quotient_name(route: super::top_mass::IrQuotient) -> &'static str {
 /// read, as before the switch existed. `pint6` is whether
 /// `PINT6_CLOSURE_DUMP` is set, `routes` the routes in force; the values
 /// are the environment's.
+///
+/// U8: under a DEFAULT switch (the variable unset, [`Switch::is_default`])
+/// none of these settings refuses the run: a setting the user wrote wins
+/// over a default. A kind whose route is off (`child` with
+/// `GAMMALOOP_UV_CHILDREN=massive`, `ir-hard` off the IR hard child route,
+/// `ir-hard` with `GAMMALOOP_IR_DIRAC_CLOSURE=off`) is DROPPED
+/// ([`Initialised::dropped`]); a setting that would refuse every kind
+/// (`GAMMALOOP_IR_QUOTIENT` other than `rstar`, `PINT6_CLOSURE_DUMP`) turns
+/// the switch OFF ([`Initialised::demoted`]). Both are printed as notices.
+/// Every written value (`on`, `check`, a list) keeps the refusals exactly.
 pub(crate) fn initialise(
     switch: Switch,
     strict: Option<&str>,
@@ -306,11 +316,13 @@ pub(crate) fn initialise(
     routes: impl FnOnce() -> Routes,
     pint6: impl FnOnce() -> bool,
     exceptions: Option<&str>,
-) -> std::result::Result<Exceptions, String> {
+) -> std::result::Result<Initialised, String> {
     parse_timing(timing)?;
     if switch.mode == Mode::Off {
-        return Ok(Exceptions::default());
+        return Ok(Initialised::off(None));
     }
+    let mut switch = switch;
+    let mut dropped = Vec::new();
     parse_strict(strict)?;
     if switch.enabled_kinds().is_empty() {
         return Err(format!(
@@ -338,7 +350,10 @@ pub(crate) fn initialise(
             "GAMMALOOP_IR_HARD (not child or child-check)",
         ),
     ] {
-        if switch.enabled(kind) && !active {
+        if switch.enabled(kind) && !active && switch.is_default() {
+            switch = switch.without(kind);
+            dropped.push((kind, "route_off"));
+        } else if switch.enabled(kind) && !active {
             return Err(format!(
                 "{}={}:{} enables `{}`, whose route is off ({variable}): the kind would expect no record and its check would compare nothing; enable the route or drop the kind from the list",
                 uncontracted::VARIABLE,
@@ -373,6 +388,12 @@ pub(crate) fn initialise(
     // (`uncontracted::nonlocal_form`).
     match &routes.ir_quotient {
         Ok(super::top_mass::IrQuotient::Rstar) => {}
+        Ok(route) if switch.is_default() => {
+            return Ok(Initialised::off(Some(format!(
+                "ir_quotient:{}",
+                ir_quotient_name(*route)
+            ))));
+        }
         Ok(route) => {
             return Err(format!(
                 "{}={}:{} with GAMMALOOP_IR_QUOTIENT={} is refused: the massive quotient route's Z̃_F carries non-local log(m_uv_vacuum) pieces that cancel only in the complete sum, and Z̃ enters the Δ of every UV child with an IR correction, which the records of every kind carry as insertions (C7 settings exception E2); unset GAMMALOOP_IR_QUOTIENT or set it to rstar (production)",
@@ -399,6 +420,10 @@ pub(crate) fn initialise(
     // kind-wide nor the class rule sees. Refused with `ir-hard` enabled.
     if switch.enabled(Kind::IrHard) {
         match &routes.ir_dirac {
+            Ok(super::ir_dirac::IrDiracMode::Off) if switch.is_default() => {
+                switch = switch.without(Kind::IrHard);
+                dropped.push((Kind::IrHard, "ir_dirac_off"));
+            }
             Ok(super::ir_dirac::IrDiracMode::Off) => {
                 return Err(format!(
                     "{}={}:{} with GAMMALOOP_IR_DIRAC_CLOSURE=off is refused: the hard part's open quark line stays open, so every quark-line K3 record would decline vakint:open_spinor because of the setting while the gluon-line records compare; unset GAMMALOOP_IR_DIRAC_CLOSURE or set it to on (production) or check, or drop ir-hard from the list",
@@ -418,7 +443,11 @@ pub(crate) fn initialise(
             }
         }
     }
-    if pint6() {
+    let pint6 = pint6();
+    if pint6 && switch.is_default() {
+        return Ok(Initialised::off(Some("pint6_dump".to_owned())));
+    }
+    if pint6 {
         // mode on too since the pre-review of the U7a delta (finding 7): a
         // setting-wide decline would make it fall back entirely
         return Err(format!(
@@ -432,13 +461,63 @@ pub(crate) fn initialise(
             }
         ));
     }
-    match exceptions.map(str::trim).filter(|path| !path.is_empty()) {
+    let exceptions = match exceptions.map(str::trim).filter(|path| !path.is_empty()) {
         Some(path) => {
             let text = std::fs::read_to_string(path)
                 .map_err(|error| format!("{EXCEPTIONS_VARIABLE}={path}: {error}"))?;
-            parse_exceptions(&text)
+            parse_exceptions(&text)?
         }
-        None => Ok(Exceptions::default()),
+        None => Exceptions::default(),
+    };
+    Ok(Initialised {
+        switch,
+        exceptions,
+        dropped,
+        demoted: None,
+    })
+}
+
+/// What the switch's initialisation gives ([`initialise`]).
+#[derive(Clone, Debug)]
+pub(crate) struct Initialised {
+    /// The switch in force: the one given, or (U8, a default switch only)
+    /// with dropped kinds or off.
+    pub switch: Switch,
+    /// The exception list (empty unless on or check reads one).
+    pub exceptions: Exceptions,
+    /// U8: the default kinds dropped by a setting, with the reason
+    /// (`route_off`, `ir_dirac_off`).
+    pub dropped: Vec<(Kind, &'static str)>,
+    /// U8: why a default switch was turned off (`ir_quotient:<route>`,
+    /// `pint6_dump`).
+    pub demoted: Option<String>,
+}
+
+impl Initialised {
+    fn off(demoted: Option<String>) -> Self {
+        Self {
+            switch: Switch::OFF,
+            exceptions: Exceptions::default(),
+            dropped: Vec::new(),
+            demoted,
+        }
+    }
+}
+
+/// U8: the text of the notice for a default kind dropped by a setting.
+pub(crate) fn dropped_text(kind: Kind, reason: &str) -> String {
+    match (kind, reason) {
+        (Kind::Child, "route_off") => {
+            "the default kind child is off: GAMMALOOP_UV_CHILDREN=massive turns its route off"
+                .to_owned()
+        }
+        (Kind::IrHard, "route_off") => {
+            "the default kind ir-hard is off: GAMMALOOP_IR_HARD (not child or child-check) turns its route off".to_owned()
+        }
+        (Kind::IrHard, "ir_dirac_off") => {
+            "the default kind ir-hard is off: GAMMALOOP_IR_DIRAC_CLOSURE=off leaves the hard part's quark line open".to_owned()
+        }
+        (kind, reason) => format!("the default kind {} is off ({reason})", kind.as_str()),
     }
 }
 
@@ -2000,6 +2079,10 @@ pub fn resumed(graph: &str, diagram: &str, evidence: Option<&Value>) -> Resumed 
 // The run: per-kind totals and the run-level coverage rule
 // ---------------------------------------------------------------------------
 
+/// The kinds whose joint enabling turns on the per-diagram rule "a nonzero
+/// counterterm with no record of any kind fails" ([`RunTally::add`]).
+const DIAGRAM_RULE_KINDS: [Kind; 3] = [Kind::Root, Kind::Child, Kind::IrHard];
+
 /// The totals of one enabled kind over a run.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct KindTotals {
@@ -2111,13 +2194,14 @@ impl RunTally {
                 }
             }
         }
-        // the diagram rule holds for every list with all the DEFAULT kinds
-        // (those a plain `check` / `on` enables), whatever else is listed: a
-        // kind built only when listed (U7c: `surrogate`) must not switch it
-        // off for the default lists (U7c delta pre-review N1)
-        let every_kind = Kind::ALL
+        // the diagram rule holds for every list with root, child and
+        // ir-hard (the U7b kinds), whatever else is listed: a kind built only
+        // for insertion surrogates (U7c: `surrogate`) must not switch it off
+        // for these lists (U7c delta pre-review N1). U8 adds `surrogate` to
+        // the default kinds but not to this rule's trigger, so no list that
+        // had the rule loses it
+        let every_kind = DIAGRAM_RULE_KINDS
             .into_iter()
-            .filter(|kind| kind.in_default())
             .all(|kind| self.kinds.contains(&kind));
         if every_kind && nonzero && evidence_any == 0 && !excepted {
             self.failures.push(format!(

@@ -16,11 +16,23 @@
 //! goes through the same `RStarIntegrand::finish_tensor` as today's value,
 //! under the same integration id.
 //!
-//! * Off (unset, `""`, `0`, `off`; the default): no record is built,
-//!   nothing is allocated and nothing is printed; the hook calls today's body
-//!   unchanged. Only the switch is read (a thread-local and a `LazyLock`), at
-//!   the hook, the quotient scope, the Δ-cache key, the closed children's
-//!   [`closure_data`] and the root's summary.
+//! * Unset (U8): [`UNSET_IS_ON`] decides; `true` is mode on with the default
+//!   kinds [`DEFAULT_KINDS`] (root, child, ir-hard, surrogate; source
+//!   `default`), `false` is off. A setting that is incompatible with a
+//!   default kind DROPS that kind (`GAMMALOOP_IR_HARD` off the child route,
+//!   `GAMMALOOP_UV_CHILDREN=massive`, `GAMMALOOP_IR_DIRAC_CLOSURE=off`), and
+//!   one that would refuse every kind turns the default OFF
+//!   (`GAMMALOOP_IR_QUOTIENT` other than `rstar`, `PINT6_CLOSURE_DUMP`, the
+//!   C7 settings, the beta's `--grouping skeletons` via [`demote_default`]),
+//!   each with a notice on `UNCONTRACTED_SWITCH`: a setting the user wrote
+//!   wins over a default. A written value (`on`, `check`, a list) keeps
+//!   every refusal below. A default run and an explicit
+//!   `on:root,child,ir-hard,surrogate` run have one identity.
+//! * Off (`""`, `0`, `off`, and unset without [`UNSET_IS_ON`]): no record is
+//!   built, nothing is allocated and nothing is printed; the hook calls
+//!   today's body unchanged. Only the switch is read (a thread-local and a
+//!   `LazyLock`), at the hook, the quotient scope, the Δ-cache key, the
+//!   closed children's [`closure_data`] and the root's summary.
 //! * On: the record's value replaces today's for that remainder. A DESIGNED
 //!   refusal (the closed lists [`DESIGNED_LOCAL`] and [`DESIGNED_VAKINT`])
 //!   falls back to today's path for that record only, with one
@@ -229,15 +241,87 @@ impl Kind {
         )
     }
 
-    /// Whether `on` / `check` without a kind list enables this kind: the
-    /// implemented kinds except `surrogate` (U7c), which must be listed
-    /// (U8 decides the defaults).
+    /// Whether the switch unset (with [`UNSET_IS_ON`]) and `on` / `check`
+    /// without a kind list enable this kind: [`DEFAULT_KINDS`] (U8: root,
+    /// child, ir-hard and surrogate).
     pub(crate) fn in_default(self) -> bool {
-        self.implemented() && self != Self::Surrogate
+        DEFAULT_KINDS.contains(&self)
     }
 
-    fn bit(self) -> u8 {
+    const fn bit(self) -> u8 {
         1 << (self as u8)
+    }
+}
+
+/// U8: the kinds the switch enables when it is unset (with [`UNSET_IS_ON`])
+/// or set to `on` / `check` without a kind list, in canonical order. ONE
+/// list: an unset switch and a bare `on` select the same kinds, so a default
+/// run and an explicit `on:root,child,ir-hard,surrogate` run have one
+/// identity and resume each other.
+pub(crate) const DEFAULT_KINDS: [Kind; 4] =
+    [Kind::Root, Kind::Child, Kind::IrHard, Kind::Surrogate];
+
+/// U8: what an UNSET `GAMMALOOP_UNCONTRACTED_NUMERATOR` means: `true` is
+/// mode on with [`DEFAULT_KINDS`] ([`Switch::DEFAULT_ON`], source
+/// `default`), `false` is off. An EMPTY value is off either way, as are `0`
+/// and `off`.
+pub(crate) const UNSET_IS_ON: bool = false;
+
+/// The test variable of [`unset_is_on`].
+#[cfg(test)]
+pub(crate) const TEST_DEFAULT_VARIABLE: &str = "GAMMALOOP_UNCONTRACTED_TEST_DEFAULT";
+
+/// What an unset switch means in this process: [`UNSET_IS_ON`]. In this
+/// crate's OWN TEST BUILD the unset switch stays off unless
+/// `GAMMALOOP_UNCONTRACTED_TEST_DEFAULT=1` (the own-process U8 tests set it):
+/// the in-tree suites that do not name the switch (the IR-hard, depth, cache
+/// and boundary suites, on synthetic inputs) keep testing the contracted
+/// route they were written for, and every uncontracted test sets its switch
+/// explicitly (`with_switch`). Production builds (the beta's) read
+/// [`UNSET_IS_ON`] alone.
+pub(crate) fn unset_is_on() -> bool {
+    #[cfg(test)]
+    if std::env::var_os(TEST_DEFAULT_VARIABLE).is_none_or(|value| value != "1") {
+        return false;
+    }
+    UNSET_IS_ON
+}
+
+/// The bits of [`DEFAULT_KINDS`].
+const fn default_bits() -> u8 {
+    let mut bits = 0;
+    let mut n = 0;
+    while n < DEFAULT_KINDS.len() {
+        bits |= DEFAULT_KINDS[n].bit();
+        n += 1;
+    }
+    bits
+}
+
+/// How the switch's kinds were chosen (U8).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Source {
+    /// The variable unset (with [`UNSET_IS_ON`]): [`DEFAULT_KINDS`]. A
+    /// setting that is incompatible with a kind drops that kind, or turns
+    /// the switch off, with a notice
+    /// ([`super::uncontracted_ledger::initialise`], [`demote_default`]):
+    /// never a refusal. No kind binds the run-level rule.
+    Default,
+    /// `on` / `check` (or `1`) without a list: [`DEFAULT_KINDS`]. A written
+    /// value: the start-up refusals apply. No kind binds the run-level rule.
+    Bare,
+    /// `on:<kinds>` / `check:<kinds>`: every listed kind binds the
+    /// run-level rule (a listed kind with no record fails the run).
+    Listed,
+}
+
+impl Source {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::Bare => "bare",
+            Self::Listed => "listed",
+        }
     }
 }
 
@@ -247,24 +331,98 @@ pub(crate) struct Switch {
     pub(crate) mode: Mode,
     /// The listed kinds (bits of [`Kind::bit`]); 0 when off.
     listed: u8,
+    /// U8: the kinds named in a `:<kinds>` list (bits of [`Kind::bit`]):
+    /// the kinds the run-level "no record taken" rule binds. 0 for the unset
+    /// switch, for a bare `on` / `check` and when off.
+    explicit: u8,
+    /// U8: how the kinds were chosen (meaningful when not off; every off
+    /// switch is [`Switch::OFF`]).
+    source: Source,
 }
 
 impl Switch {
     pub(crate) const OFF: Switch = Switch {
         mode: Mode::Off,
         listed: 0,
+        explicit: 0,
+        source: Source::Listed,
     };
 
-    /// A switch with `mode` and the listed `kinds` (tests).
+    /// U8: the switch of an unset variable with [`UNSET_IS_ON`]: mode on,
+    /// [`DEFAULT_KINDS`], no explicit kind, source `default`.
+    pub(crate) const DEFAULT_ON: Switch = Switch {
+        mode: Mode::On,
+        listed: default_bits(),
+        explicit: 0,
+        source: Source::Default,
+    };
+
+    /// A switch with `mode` and the listed `kinds` (tests): as
+    /// `<mode>:<kinds>`, so every listed kind is explicit.
     #[cfg(test)]
     pub(crate) fn new(mode: Mode, kinds: &[Kind]) -> Self {
         if mode == Mode::Off {
             return Self::OFF;
         }
+        let listed = kinds.iter().fold(0, |bits, kind| bits | kind.bit());
         Self {
             mode,
-            listed: kinds.iter().fold(0, |bits, kind| bits | kind.bit()),
+            listed,
+            explicit: listed,
+            source: Source::Listed,
         }
+    }
+
+    /// How the kinds were chosen (U8).
+    pub(crate) fn source(self) -> Source {
+        self.source
+    }
+
+    /// Whether this is the unset switch's default (not off, source
+    /// `default`): the only switch whose incompatible settings drop a kind
+    /// or turn it off with a notice instead of refusing the run (U8).
+    pub(crate) fn is_default(self) -> bool {
+        self.mode != Mode::Off && self.source == Source::Default
+    }
+
+    /// Whether `kind` was named in a `:<kinds>` list (U8: the run-level
+    /// rule binds it).
+    pub(crate) fn explicit(self, kind: Kind) -> bool {
+        self.explicit & kind.bit() != 0
+    }
+
+    /// The enabled kinds named in a `:<kinds>` list, in canonical order.
+    pub(crate) fn explicit_kinds(self) -> Vec<Kind> {
+        self.enabled_kinds()
+            .into_iter()
+            .filter(|kind| self.explicit(*kind))
+            .collect()
+    }
+
+    /// This switch without `kind` (U8: a default kind whose route a setting
+    /// turned off).
+    pub(crate) fn without(self, kind: Kind) -> Self {
+        Self {
+            listed: self.listed & !kind.bit(),
+            explicit: self.explicit & !kind.bit(),
+            ..self
+        }
+    }
+
+    /// U8: the fields appended to the `UNCONTRACTED_SWITCH` line after the
+    /// existing ones (log parsers read `mode=` and `kinds=`):
+    /// ` source=<default|bare|listed> binding=<explicit kinds or none>`.
+    pub(crate) fn source_fields(self) -> String {
+        let binding = self.explicit_kinds();
+        format!(
+            " source={} binding={}",
+            self.source.as_str(),
+            if binding.is_empty() {
+                "none".to_owned()
+            } else {
+                join_kinds(&binding)
+            }
+        )
     }
 
     /// The switch of a value of the variable (`None`: unset).
@@ -275,7 +433,11 @@ impl Switch {
             )
         };
         let Some(value) = value.map(str::trim) else {
-            return Ok(Self::OFF);
+            return Ok(if unset_is_on() {
+                Self::DEFAULT_ON
+            } else {
+                Self::OFF
+            });
         };
         let (head, kinds) = match value.split_once(':') {
             Some((head, kinds)) => (head.trim(), Some(kinds)),
@@ -287,11 +449,8 @@ impl Switch {
             "check" => Mode::Check,
             _ => return Err(bad(value)),
         };
-        let listed = match kinds {
-            None => Kind::ALL
-                .into_iter()
-                .filter(|kind| kind.in_default())
-                .fold(0, |bits, kind| bits | kind.bit()),
+        let (listed, explicit, source) = match kinds {
+            None => (default_bits(), 0, Source::Bare),
             Some(list) => {
                 let mut bits = 0;
                 for entry in list.split(',') {
@@ -300,10 +459,15 @@ impl Switch {
                     };
                     bits |= kind.bit();
                 }
-                bits
+                (bits, bits, Source::Listed)
             }
         };
-        Ok(Self { mode, listed })
+        Ok(Self {
+            mode,
+            listed,
+            explicit,
+            source,
+        })
     }
 
     /// Whether a record of `kind` is built under this switch.
@@ -361,7 +525,7 @@ impl Switch {
     }
 }
 
-fn join_kinds(kinds: &[Kind]) -> String {
+pub(crate) fn join_kinds(kinds: &[Kind]) -> String {
     kinds
         .iter()
         .map(|kind| kind.as_str())
@@ -388,9 +552,21 @@ static ENVIRONMENT: LazyLock<std::result::Result<Environment, String>> = LazyLoc
             Err(format!("{name}={value:?} is not unicode"))
         }
     };
-    let switch = Switch::parse(read(VARIABLE)?.as_deref())?;
-    let exceptions = super::uncontracted_ledger::initialise(
+    ENVIRONMENT_READ.store(true, Ordering::SeqCst);
+    let parsed = Switch::parse(read(VARIABLE)?.as_deref())?;
+    // U8: a default switch demoted before this read (the beta's
+    // `--grouping skeletons`, [`demote_default`]) is off from the start
+    let early = DEMOTED
+        .get()
+        .filter(|_| parsed.is_default())
+        .map(String::as_str);
+    let super::uncontracted_ledger::Initialised {
         switch,
+        exceptions,
+        dropped,
+        demoted,
+    } = super::uncontracted_ledger::initialise(
+        if early.is_some() { Switch::OFF } else { parsed },
         read(STRICT_VARIABLE)?.as_deref(),
         read(super::uncontracted_ledger::TIMING_VARIABLE)?.as_deref(),
         || super::uncontracted_ledger::Routes {
@@ -412,7 +588,7 @@ static ENVIRONMENT: LazyLock<std::result::Result<Environment, String>> = LazyLoc
     let hole_cut = k5::start_up_hole_cut(switch, || read(k5::HOLE_CUT_VARIABLE))?;
     if switch.mode != Mode::Off {
         eprintln!(
-            "{} strict=1 exceptions={}{}",
+            "{} strict=1 exceptions={}{}{}{}",
             switch.line(),
             match &exceptions.digest {
                 Some(digest) => format!("{}:{digest}", exceptions.entries.len()),
@@ -420,8 +596,29 @@ static ENVIRONMENT: LazyLock<std::result::Result<Environment, String>> = LazyLoc
             },
             // a witness build only (feature `uncontracted-witness`)
             super::uncontracted_ledger::witness()
-                .map_or_else(String::new, |witness| format!(" witness={witness}"))
+                .map_or_else(String::new, |witness| format!(" witness={witness}")),
+            // U8: appended after the existing fields
+            switch.source_fields(),
+            if dropped.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    " dropped={}",
+                    dropped
+                        .iter()
+                        .map(|(kind, reason)| format!("{}:{reason}", kind.as_str()))
+                        .collect::<Vec<_>>()
+                        .join(",")
+                )
+            }
         );
+        for (kind, reason) in &dropped {
+            eprintln!(
+                "UNCONTRACTED_SWITCH_NOTICE source=default dropped={}:{reason}: {}",
+                kind.as_str(),
+                super::uncontracted_ledger::dropped_text(*kind, reason)
+            );
+        }
         if let Some(hole_cut) = hole_cut {
             eprintln!(
                 "UNCONTRACTED_K5_HOLE_CUT mode={} reader_single_hedge={}",
@@ -430,14 +627,69 @@ static ENVIRONMENT: LazyLock<std::result::Result<Environment, String>> = LazyLoc
             );
         }
     }
+    if let Some(reason) = early.or(demoted.as_deref()) {
+        eprintln!("{}", demoted_line(reason));
+    }
     Ok(Environment { switch, exceptions })
 });
 
+/// U8: the reason a default switch was turned off ([`demote_default`]; the
+/// first reason wins).
+static DEMOTED: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// U8: whether [`ENVIRONMENT`] has been read (a demotion after it prints its
+/// own notice).
+static ENVIRONMENT_READ: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// The notice of a default switch turned off.
+fn demoted_line(reason: &str) -> String {
+    format!("UNCONTRACTED_SWITCH mode=off source=default reason={reason}")
+}
+
+/// U8: turn a DEFAULT switch (the variable unset, [`Source::Default`]) off
+/// for the run, with the notice `UNCONTRACTED_SWITCH mode=off
+/// source=default reason=<reason>`: `Ok(true)`. A written value (off, a
+/// bare `on` / `check`, a list) is left alone: `Ok(false)`, and the caller
+/// keeps its refusal for an explicit switch. A malformed value is the
+/// start-up error [`validate`] gives. Call it at start-up, before the first
+/// diagram; a caller that read the identity before must read it again.
+pub(crate) fn demote_default(reason: &str) -> std::result::Result<bool, String> {
+    let value = match std::env::var(VARIABLE) {
+        Ok(value) => Some(value),
+        Err(std::env::VarError::NotPresent) => None,
+        Err(std::env::VarError::NotUnicode(value)) => {
+            return Err(format!("{VARIABLE}={value:?} is not unicode"));
+        }
+    };
+    if !Switch::parse(value.as_deref())?.is_default() {
+        return Ok(false);
+    }
+    if DEMOTED.set(reason.to_owned()).is_ok() && ENVIRONMENT_READ.load(Ordering::SeqCst) {
+        // read before: the notice now, unless the initialisation had
+        // already turned it off (its own notice)
+        if matches!(&*ENVIRONMENT, Ok(environment) if environment.switch.mode != Mode::Off) {
+            eprintln!("{}", demoted_line(reason));
+        }
+    }
+    Ok(true)
+}
+
 fn environment() -> Switch {
     match &*ENVIRONMENT {
+        // U8: a default switch demoted after the read
+        Ok(environment) if environment.switch.is_default() && DEMOTED.get().is_some() => {
+            Switch::OFF
+        }
         Ok(environment) => environment.switch,
         Err(error) => panic!("{error}"),
     }
+}
+
+/// U8: the source of the switch in force (`None` off).
+pub(crate) fn source() -> Option<Source> {
+    let switch = switch();
+    (switch.mode != Mode::Off).then(|| switch.source())
 }
 
 /// The switch's initialisation: `Err` for a value the run refuses (call at

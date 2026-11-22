@@ -1,0 +1,433 @@
+//! U8 (results/consolidation/U8-DESIGN.md of the beta project): the switch's
+//! source and the default kinds, the drop / demotion of a DEFAULT switch by
+//! an incompatible setting (a setting the user wrote wins over a default;
+//! every written value keeps its refusals), and one identity for a default
+//! run and the explicit list of the default kinds.
+//!
+//! The tests marked "own process" set process environment variables: run
+//! them under cargo nextest (one process per test), as the existing
+//! start-up refusal tests.
+
+use eyre::{Result, ensure, eyre};
+
+use super::{
+    top_mass::IrQuotient,
+    uncontracted::{
+        self, DEFAULT_KINDS, Kind, Mode, Source, Switch, TEST_DEFAULT_VARIABLE, UNSET_IS_ON,
+        unset_is_on,
+        k5::{HoleCut, with_hole_cut},
+        with_switch,
+    },
+    uncontracted_ledger::{self as ledger, Exceptions, Routes},
+};
+
+fn parse(value: Option<&str>) -> Switch {
+    Switch::parse(value).unwrap_or_else(|error| panic!("{value:?}: {error}"))
+}
+
+fn init(switch: Switch, routes: Routes, pint6: bool) -> Result<ledger::Initialised, String> {
+    ledger::initialise(switch, None, None, || routes, || pint6, None)
+}
+
+fn routes(uv_children_rstar: bool, ir_hard_child: bool) -> Routes {
+    Routes {
+        uv_children_rstar,
+        ir_hard_child,
+        ..Routes::PRODUCTION
+    }
+}
+
+/// The default kinds are root, child, ir-hard and surrogate (one list for
+/// the unset switch and a bare `on` / `check`).
+#[test]
+fn default_kinds_are_root_child_ir_hard_surrogate() {
+    assert_eq!(
+        DEFAULT_KINDS,
+        [Kind::Root, Kind::Child, Kind::IrHard, Kind::Surrogate]
+    );
+    for kind in Kind::ALL {
+        assert_eq!(kind.in_default(), DEFAULT_KINDS.contains(&kind), "{kind:?}");
+    }
+    assert_eq!(Switch::DEFAULT_ON.enabled_kinds(), DEFAULT_KINDS.to_vec());
+    assert_eq!(parse(Some("on")).enabled_kinds(), DEFAULT_KINDS.to_vec());
+    assert_eq!(parse(Some("check")).enabled_kinds(), DEFAULT_KINDS.to_vec());
+    assert!(Switch::DEFAULT_ON.inert_kinds().is_empty());
+}
+
+/// Only a `:<kinds>` list makes kinds explicit (ruling D1); the unset
+/// switch is the default source, a bare value the bare one.
+#[test]
+fn switch_source_explicit_bits() {
+    let default = Switch::DEFAULT_ON;
+    assert_eq!(default.mode, Mode::On);
+    assert_eq!(default.source(), Source::Default);
+    assert!(default.is_default() && default.explicit_kinds().is_empty());
+    for bare in ["on", "1", "check", " on "] {
+        let switch = parse(Some(bare));
+        assert_eq!(switch.source(), Source::Bare, "{bare}");
+        assert!(!switch.is_default(), "{bare}");
+        assert!(switch.explicit_kinds().is_empty(), "{bare}");
+    }
+    let listed = parse(Some("on:root,child"));
+    assert_eq!(listed.source(), Source::Listed);
+    assert_eq!(listed.explicit_kinds(), vec![Kind::Root, Kind::Child]);
+    assert!(listed.explicit(Kind::Root) && !listed.explicit(Kind::IrHard));
+    assert_eq!(parse(Some("check:c")).explicit_kinds(), vec![Kind::IrHard]);
+    // an inert listed kind is never binding (it is not enabled)
+    assert_eq!(
+        parse(Some("on:root,quotient")).explicit_kinds(),
+        vec![Kind::Root]
+    );
+    let all = parse(Some("on:root,child,ir-hard,surrogate"));
+    assert_eq!(all.enabled_kinds(), default.enabled_kinds());
+    assert_eq!(all.explicit_kinds(), DEFAULT_KINDS.to_vec());
+    assert_ne!(all, default, "the source differs");
+    // the fields appended to UNCONTRACTED_SWITCH
+    assert_eq!(default.source_fields(), " source=default binding=none");
+    assert_eq!(
+        parse(Some("on")).source_fields(),
+        " source=bare binding=none"
+    );
+    assert_eq!(listed.source_fields(), " source=listed binding=root,child");
+}
+
+/// The unset switch follows [`UNSET_IS_ON`]; an EMPTY value is off (ruling
+/// D4), as are `0` and `off`, with or without blanks.
+#[test]
+fn unset_follows_the_default_and_empty_is_off() {
+    // the test build keeps the unset switch off unless the own-process tests
+    // ask for the production meaning (`unset_is_on`)
+    assert_eq!(
+        parse(None),
+        if unset_is_on() {
+            Switch::DEFAULT_ON
+        } else {
+            Switch::OFF
+        }
+    );
+    assert!(!unset_is_on() || UNSET_IS_ON);
+    for off in ["", " ", "0", "off", " off "] {
+        assert_eq!(parse(Some(off)), Switch::OFF, "{off:?}");
+    }
+    // a malformed value is refused as before
+    for bad in ["of", "on:", "default", "off:root"] {
+        assert!(Switch::parse(Some(bad)).is_err(), "{bad}");
+    }
+}
+
+/// Ruling D2: a default run and an explicit
+/// `on:root,child,ir-hard,surrogate` run have ONE stored identity (they
+/// resume each other), and a bare `on` the same.
+#[test]
+fn default_identity_equals_the_explicit_default_list() {
+    let identity = |switch: Switch| {
+        with_hole_cut(HoleCut::Form, || {
+            ledger::identity_of(switch, &Exceptions::default())
+        })
+    };
+    let default = identity(Switch::DEFAULT_ON);
+    assert_eq!(
+        default.as_deref(),
+        Some("on:root,child,ir-hard,surrogate:strict:hole_cut=form")
+    );
+    assert_eq!(identity(parse(Some("on:root,child,ir-hard,surrogate"))), default);
+    assert_eq!(identity(parse(Some("on:e,a,c,b"))), default);
+    assert_eq!(identity(parse(Some("on"))), default);
+    // a default with a dropped kind is the explicit list without it
+    assert_eq!(
+        identity(Switch::DEFAULT_ON.without(Kind::IrHard)),
+        identity(parse(Some("on:root,child,surrogate")))
+    );
+    assert_eq!(identity(Switch::OFF), None);
+}
+
+/// A default kind whose route a setting turns off is DROPPED with a notice
+/// (`GAMMALOOP_IR_HARD=off`, `GAMMALOOP_UV_CHILDREN=massive`); a written
+/// value that enables the kind is refused exactly as before.
+#[test]
+fn default_kind_route_off_is_dropped() -> Result<()> {
+    let initialised = init(Switch::DEFAULT_ON, routes(true, false), false).map_err(|e| eyre!(e))?;
+    ensure!(
+        initialised.switch.enabled_kinds() == vec![Kind::Root, Kind::Child, Kind::Surrogate]
+            && initialised.switch.is_default()
+            && initialised.dropped == vec![(Kind::IrHard, "route_off")]
+            && initialised.demoted.is_none(),
+        "{initialised:?}"
+    );
+    let initialised = init(Switch::DEFAULT_ON, routes(false, true), false).map_err(|e| eyre!(e))?;
+    ensure!(
+        initialised.switch.enabled_kinds() == vec![Kind::Root, Kind::IrHard, Kind::Surrogate]
+            && initialised.dropped == vec![(Kind::Child, "route_off")],
+        "{initialised:?}"
+    );
+    let initialised =
+        init(Switch::DEFAULT_ON, routes(false, false), false).map_err(|e| eyre!(e))?;
+    ensure!(
+        initialised.switch.enabled_kinds() == vec![Kind::Root, Kind::Surrogate]
+            && initialised.dropped
+                == vec![(Kind::Child, "route_off"), (Kind::IrHard, "route_off")],
+        "{initialised:?}"
+    );
+    ensure!(
+        ledger::dropped_text(Kind::IrHard, "route_off").contains("GAMMALOOP_IR_HARD"),
+        "notice"
+    );
+    // the production routes drop nothing
+    let initialised = init(Switch::DEFAULT_ON, Routes::PRODUCTION, false).map_err(|e| eyre!(e))?;
+    ensure!(
+        initialised.switch == Switch::DEFAULT_ON && initialised.dropped.is_empty(),
+        "{initialised:?}"
+    );
+    // written values keep their refusals (bare and listed)
+    for value in ["on", "check", "on:ir-hard", "on:root,child,ir-hard,surrogate"] {
+        let error = init(parse(Some(value)), routes(true, false), false).unwrap_err();
+        ensure!(error.contains("GAMMALOOP_IR_HARD"), "{value}: {error}");
+    }
+    for value in ["on", "check:child"] {
+        let error = init(parse(Some(value)), routes(false, true), false).unwrap_err();
+        ensure!(
+            error.contains("GAMMALOOP_UV_CHILDREN=massive"),
+            "{value}: {error}"
+        );
+    }
+    // a written list without the kind is not affected
+    ensure!(
+        init(parse(Some("on:root,child,surrogate")), routes(true, false), false)
+            .is_ok_and(|initialised| initialised.dropped.is_empty()),
+        "on:root,child,surrogate"
+    );
+    Ok(())
+}
+
+/// `GAMMALOOP_IR_DIRAC_CLOSURE=off` drops ir-hard from a default switch; a
+/// written value with ir-hard is refused.
+#[test]
+fn default_ir_dirac_off_drops_ir_hard() -> Result<()> {
+    let off = Routes {
+        ir_dirac: Ok(super::ir_dirac::IrDiracMode::Off),
+        ..Routes::PRODUCTION
+    };
+    let initialised = init(Switch::DEFAULT_ON, off.clone(), false).map_err(|e| eyre!(e))?;
+    ensure!(
+        initialised.switch.enabled_kinds() == vec![Kind::Root, Kind::Child, Kind::Surrogate]
+            && initialised.dropped == vec![(Kind::IrHard, "ir_dirac_off")],
+        "{initialised:?}"
+    );
+    for value in ["on", "check:ir-hard"] {
+        let error = init(parse(Some(value)), off.clone(), false).unwrap_err();
+        ensure!(
+            error.contains("GAMMALOOP_IR_DIRAC_CLOSURE=off"),
+            "{value}: {error}"
+        );
+    }
+    Ok(())
+}
+
+/// A quotient route other than `rstar` and `PINT6_CLOSURE_DUMP` would refuse
+/// every kind: a default switch is turned OFF with a notice; written values
+/// are refused as before.
+#[test]
+fn default_demoted_by_ir_quotient_and_pint6() -> Result<()> {
+    for (route, name) in [
+        (IrQuotient::Massive, "massive"),
+        (IrQuotient::Off, "off"),
+        (IrQuotient::Check, "check"),
+        (IrQuotient::Auto, "auto"),
+    ] {
+        let quotient = Routes {
+            ir_quotient: Ok(route),
+            ..Routes::PRODUCTION
+        };
+        let initialised = init(Switch::DEFAULT_ON, quotient.clone(), false).map_err(|e| eyre!(e))?;
+        ensure!(
+            initialised.switch == Switch::OFF
+                && initialised.demoted.as_deref() == Some(&format!("ir_quotient:{name}")[..]),
+            "{name}: {initialised:?}"
+        );
+        for value in ["on", "on:root"] {
+            let error = init(parse(Some(value)), quotient.clone(), false).unwrap_err();
+            ensure!(
+                error.contains(&format!("GAMMALOOP_IR_QUOTIENT={name} is refused")),
+                "{value}: {error}"
+            );
+        }
+    }
+    // a malformed quotient value stays an error (it is refused by its own
+    // reader too)
+    let malformed = Routes {
+        ir_quotient: Err("GAMMALOOP_IR_QUOTIENT must be one of ...".into()),
+        ..Routes::PRODUCTION
+    };
+    ensure!(init(Switch::DEFAULT_ON, malformed, false).is_err(), "malformed");
+    let initialised = init(Switch::DEFAULT_ON, Routes::PRODUCTION, true).map_err(|e| eyre!(e))?;
+    ensure!(
+        initialised.switch == Switch::OFF
+            && initialised.demoted.as_deref() == Some("pint6_dump"),
+        "{initialised:?}"
+    );
+    for value in ["on", "check:root"] {
+        let error = init(parse(Some(value)), Routes::PRODUCTION, true).unwrap_err();
+        ensure!(error.contains("PINT6_CLOSURE_DUMP"), "{value}: {error}");
+    }
+    // the other start-up refusals stay refusals for a default too: they are
+    // the switch's own variables (STRICT=0, a bad exception list)
+    ensure!(
+        ledger::initialise(
+            Switch::DEFAULT_ON,
+            Some("0"),
+            None,
+            || Routes::PRODUCTION,
+            || false,
+            None
+        )
+        .is_err(),
+        "STRICT=0"
+    );
+    ensure!(
+        ledger::initialise(
+            Switch::DEFAULT_ON,
+            None,
+            None,
+            || Routes::PRODUCTION,
+            || false,
+            Some("/nonexistent")
+        )
+        .is_err(),
+        "exceptions"
+    );
+    Ok(())
+}
+
+/// The per-diagram "nonzero counterterm with no record" rule keeps its
+/// trigger (root, child and ir-hard enabled): the default has it, and the
+/// U7b list `root,child,ir-hard` keeps it although surrogate joined the
+/// default kinds.
+#[test]
+fn the_diagram_rule_keeps_its_trigger() {
+    let failures = |switch: Switch| {
+        with_switch(switch, || {
+            with_hole_cut(HoleCut::Form, || {
+                let evidence = serde_json::json!({
+                    "schema": ledger::EVIDENCE_SCHEMA,
+                    "identity": ledger::current_identity(),
+                    "kinds": {},
+                });
+                let mut tally = ledger::RunTally::new().expect("on");
+                tally.add("g/000001", Some(&evidence), true);
+                tally.failures()
+            })
+        })
+    };
+    let rule = |failures: &[String]| {
+        failures
+            .iter()
+            .any(|failure| failure.contains("the counterterm is nonzero"))
+    };
+    for switch in [
+        Switch::DEFAULT_ON,
+        parse(Some("check:root,child,ir-hard")),
+        parse(Some("on:root,child,ir-hard,surrogate")),
+        parse(Some("on")),
+    ] {
+        let failures = failures(switch);
+        assert!(rule(&failures), "{switch:?}: {failures:?}");
+    }
+    // a partial list: the kind-level rule covers it
+    let failures = failures(parse(Some("on:root,child")));
+    assert!(!rule(&failures), "{failures:?}");
+}
+
+/// Own process: the environment's switch with the variable unset and
+/// `GAMMALOOP_IR_HARD=off` (the six-loop setting): with the default on,
+/// root, child and surrogate and no refusal; with it off, off.
+#[test]
+fn unset_switch_with_ir_hard_off_in_the_environment() -> Result<()> {
+    ensure!(
+        std::env::var_os("NEXTEST").is_some(),
+        "this test sets process environment variables: run it under cargo nextest (one process per test)"
+    );
+    unsafe {
+        std::env::remove_var(uncontracted::VARIABLE);
+        std::env::set_var("GAMMALOOP_IR_HARD", "off");
+        // the production meaning of an unset switch (`unset_is_on`)
+        std::env::set_var(TEST_DEFAULT_VARIABLE, "1");
+    }
+    super::validate_uncontracted()?;
+    let switch = uncontracted::switch();
+    if UNSET_IS_ON {
+        ensure!(
+            switch.enabled_kinds() == vec![Kind::Root, Kind::Child, Kind::Surrogate]
+                && switch.is_default(),
+            "{switch:?}"
+        );
+        ensure!(
+            super::uncontracted_source()?.as_deref() == Some("default"),
+            "source"
+        );
+    } else {
+        ensure!(switch == Switch::OFF, "{switch:?}");
+    }
+    Ok(())
+}
+
+/// Own process: an explicit list with `GAMMALOOP_IR_HARD=off` is still
+/// refused at start-up.
+#[test]
+fn explicit_ir_hard_with_ir_hard_off_is_refused() -> Result<()> {
+    ensure!(
+        std::env::var_os("NEXTEST").is_some(),
+        "this test sets process environment variables: run it under cargo nextest (one process per test)"
+    );
+    unsafe {
+        std::env::set_var(uncontracted::VARIABLE, "on:ir-hard");
+        std::env::set_var("GAMMALOOP_IR_HARD", "off");
+    }
+    let error = super::validate_uncontracted().expect_err("refused");
+    ensure!(format!("{error}").contains("GAMMALOOP_IR_HARD"), "{error}");
+    Ok(())
+}
+
+/// Own process: `uncontracted_demote_default` turns a default switch off
+/// (the beta's `--grouping skeletons`) and leaves a written value alone.
+#[test]
+fn demote_default_turns_only_a_default_off() -> Result<()> {
+    ensure!(
+        std::env::var_os("NEXTEST").is_some(),
+        "this test sets process environment variables: run it under cargo nextest (one process per test)"
+    );
+    unsafe {
+        std::env::remove_var(uncontracted::VARIABLE);
+        std::env::set_var(TEST_DEFAULT_VARIABLE, "1");
+    }
+    let demoted = super::uncontracted_demote_default("grouping_skeletons")?;
+    ensure!(demoted == UNSET_IS_ON, "unset: {demoted}");
+    super::validate_uncontracted()?;
+    ensure!(uncontracted::switch() == Switch::OFF, "off after demotion");
+    ensure!(super::uncontracted_identity()?.is_none(), "identity");
+    Ok(())
+}
+
+/// Own process: a written value is never demoted.
+#[test]
+fn demote_default_leaves_a_written_value() -> Result<()> {
+    ensure!(
+        std::env::var_os("NEXTEST").is_some(),
+        "this test sets process environment variables: run it under cargo nextest (one process per test)"
+    );
+    unsafe { std::env::set_var(uncontracted::VARIABLE, "on:root") };
+    ensure!(
+        !super::uncontracted_demote_default("grouping_skeletons")?,
+        "a written value was demoted"
+    );
+    super::validate_uncontracted()?;
+    ensure!(
+        uncontracted::switch().enabled_kinds() == vec![Kind::Root],
+        "on:root"
+    );
+    unsafe { std::env::set_var(uncontracted::VARIABLE, "bogus") };
+    ensure!(
+        super::uncontracted_demote_default("grouping_skeletons").is_err(),
+        "a malformed value is the start-up error"
+    );
+    Ok(())
+}

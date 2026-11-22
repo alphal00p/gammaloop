@@ -238,7 +238,7 @@ fn init(
     timing: Option<&str>,
     pint6: impl FnOnce() -> bool,
     exceptions: Option<&str>,
-) -> std::result::Result<Exceptions, String> {
+) -> std::result::Result<ledger::Initialised, String> {
     ledger::initialise(
         switch,
         strict,
