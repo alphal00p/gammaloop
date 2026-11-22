@@ -1720,11 +1720,13 @@ impl<'a> Evaluation<'a> {
             agreement.structure,
             agreement.coefficients,
         );
-        ensure!(
-            agreement.equal(),
-            "IR_DIRAC_CHECK: the Dirac-closed IR hard part of {} corr={correction_index} term={term} ({path}) differs from the open one: {agreement:?}",
-            self.graph.name
-        );
+        if !agreement.equal() {
+            // Fatal also inside a guarded child attempt (super::depth::is_alarm).
+            return Err(super::depth::check_failure(format!(
+                "IR_DIRAC_CHECK: the Dirac-closed IR hard part of {} corr={correction_index} term={term} ({path}) differs from the open one: {agreement:?}",
+                self.graph.name
+            )));
+        }
         Ok(())
     }
 
@@ -1885,6 +1887,10 @@ impl<'a> Evaluation<'a> {
         } else {
             (value, String::new())
         };
+        super::depth::note(&mut self.depth, |counts| &mut counts.taken);
+        if self.plan.root_boundary.is_some() {
+            super::depth::note(&mut self.depth, |counts| &mut counts.nested_taken);
+        }
         eprintln!(
             "IR_HARD_CHILD graph={} corr={correction_index} hard_loops={} omega={} outcome=child{stats}{check} seconds={seconds:.3}{reduction} edges={}",
             self.graph.name,
@@ -1960,11 +1966,39 @@ impl<'a> Evaluation<'a> {
         // raised while certifying propagates (`?`); a refusal is an ordinary
         // fallback to today's terms, never fatal, also when nested (round 4
         // carries only the strict depth alarm as fatal).
-        let quotient_numerator = match super::regularity::certify_graph_correction(
+        // MATRIX-R45 review: also the settings normalisations (N^loops in
+        // every vacuum integral, the named loop normalisation), the IR Dirac
+        // closure of H(γ) and the root closure are certified here.
+        let certificate = super::regularity::certify_graph_correction(
             self.graph,
             &correction.hard,
             &quotient_numerator,
-        )? {
+        )?
+        .and_then(|normalised| {
+            #[cfg(test)]
+            if super::regularity::is_round3() {
+                return Ok((normalised, self.root_closure.clone()));
+            }
+            super::regularity::certify_vakint_normalisations(
+                &self.uv_settings.vakint.additional_normalization,
+                &self.uv_settings.vakint.normalization,
+            )?;
+            if let Some(boundary) = &closure {
+                super::regularity::certify_dirac_closure(
+                    &boundary.closure,
+                    &boundary.normalization,
+                )?;
+            }
+            let root_closure = self
+                .root_closure
+                .as_ref()
+                .map(|closure| {
+                    super::regularity::normalise(super::regularity::Factor::RootClosure, closure)
+                })
+                .transpose()?;
+            Ok((normalised, root_closure))
+        });
+        let (quotient_numerator, root_closure) = match certificate {
             Ok(normalised) => normalised,
             Err(refused) if super::depth::guards() => {
                 super::depth::note(&mut self.depth, |counts| &mut counts.corrections);
@@ -1990,17 +2024,18 @@ impl<'a> Evaluation<'a> {
                     &super::depth::Truncation::default(),
                 ));
             }
-            Err(_) => quotient_numerator,
+            Err(_) => (quotient_numerator, self.root_closure.clone()),
         };
         let bound = super::depth::planner_bound(
             super::depth::quotient_pole_bound(
                 quotient_loops,
                 &quotient_numerator,
-                self.root_closure.as_ref(),
+                root_closure.as_ref(),
             ),
             nested,
         );
         drop(quotient_numerator);
+        drop(root_closure);
         super::depth::note(&mut self.depth, |counts| &mut counts.corrections);
         if nested {
             super::depth::note(&mut self.depth, |counts| &mut counts.nested);
@@ -2290,6 +2325,63 @@ impl<'a> Evaluation<'a> {
                 Ok(outcome) => outcome,
                 Err(reason) => return Ok(Err(reason)),
             };
+            // IRH-DEPTH (MATRIX-R45 review): a root projector callback is
+            // opaque; its poles are measured on the shown rows' complete
+            // coefficients (ir_outer_integrated). With no shown row (every
+            // group or row vanished at this depth) nothing measured it, and
+            // the bound of the vanished rows assumed it regular: it is probed
+            // on the unit insertion's outer orders (callback_excess). A pole
+            // there is a need above the bound (exceeded; the alarm under
+            // STRICT); a probe that measures nothing refuses (`unverified`).
+            if super::depth::guards()
+                && self.root_projector.is_some()
+                && rows.iter().all(|(h, _, _)| h.is_zero())
+            {
+                let truncation = super::depth::Truncation {
+                    groups: groups.len(),
+                    vanished_groups,
+                    rows: rows.len(),
+                    zero_rows: zero_rows.len(),
+                };
+                match self.callback_excess(&hard, &correction.forest)? {
+                    Some(0) => {}
+                    Some(excess) => {
+                        super::depth::note(&mut self.depth, |counts| &mut counts.exceeded);
+                        let limit = row_bound.unwrap_or(quotient_loops);
+                        if super::depth::strict() {
+                            return Err(super::depth::alarm(format!(
+                                "IRH-DEPTH: the root projector callback carries {excess} pole(s) outside the quotient bound in {} corr={correction_index}: needed={} bound={limit} (GAMMALOOP_IR_HARD_DEPTH_STRICT=1)",
+                                self.graph.name,
+                                limit + excess
+                            )));
+                        }
+                        return Ok(self.refuse_depth(
+                            correction_index,
+                            correction,
+                            attempts,
+                            quotient_loops,
+                            Some(limit),
+                            extra,
+                            limit + excess,
+                            "bound_exceeded",
+                            &truncation,
+                        ));
+                    }
+                    None => {
+                        return Ok(self.refuse_depth(
+                            correction_index,
+                            correction,
+                            attempts,
+                            quotient_loops,
+                            row_bound,
+                            extra,
+                            0,
+                            "unverified",
+                            &truncation,
+                        ));
+                    }
+                }
+            }
             // The poles each measured row needs, vanished rows included, and
             // the largest.
             let needs = valuations
@@ -2754,6 +2846,24 @@ impl<'a> Evaluation<'a> {
                 None => simplified,
             };
             let finished = RStarIntegrand::finish_tensor(regulated, id)?;
+            // IRH-DEPTH (MATRIX-R45 review): every row's measured need is
+            // also read on its complete outer coefficient, after the root
+            // projector callback, the regulation and the tensor finish, so a
+            // pole the callback (or a closed-root normalisation, or a tensor
+            // reduction coefficient) multiplies in is measured against the
+            // row's bound like the quotient factors' own.
+            if super::depth::guards() {
+                match placeholder_valuations(&finished, placeholder, rows.len()) {
+                    Ok(measured) => {
+                        for (row, pole) in measured.into_iter().enumerate() {
+                            if let Some(pole) = pole {
+                                valuations[row] = valuations[row].min(pole);
+                            }
+                        }
+                    }
+                    Err(reason) => return Ok(Err(reason)),
+                }
+            }
             let replacements = rows
                 .iter()
                 .enumerate()
@@ -2783,6 +2893,92 @@ impl<'a> Evaluation<'a> {
             valuations,
             zero_rows,
         )))
+    }
+
+    /// IRH-DEPTH (MATRIX-R45 review): the poles the root projector callback
+    /// adds to an outer polynomial, probed on the unit insertion: for every
+    /// forest, the outer orders of `Z̃_F(G/γ; 1) · closure` with `ε` renamed
+    /// (so that the input's only `ε` is through `d`), simplified as in
+    /// [`Self::ir_outer_integrated`], projected, regulated and finished; the
+    /// excess is the input's valuation minus the output's (at least 0).
+    /// `None` when nothing is measured (every probe vanishes or fails); an
+    /// error that is an alarm propagates. `Some(0)` without a projector.
+    fn callback_excess(
+        &mut self,
+        hard: &RStarIntegrand,
+        forests: &[IrForestTerm],
+    ) -> Result<Option<usize>> {
+        use symbolica::poly::series::SeriesDepth;
+        let Some(projector) = self.root_projector else {
+            return Ok(Some(0));
+        };
+        let degree = usize::try_from(self.plan.taylor_order)?;
+        let renamed = symbol!("irh_callback_probe_epsilon");
+        let valuation = |expression: &Atom| -> Option<i64> {
+            let series = Integrated::dimensionally_regularized(expression)
+                .series(GS.dim_epsilon, 0, SeriesDepth::relative(1))
+                .ok()?;
+            if series.is_zero() {
+                return None;
+            }
+            let exponent = series.get_trailing_exponent();
+            exponent
+                .is_integer()
+                .then(|| exponent.numerator().to_i64())
+                .flatten()
+        };
+        let mut excess = None::<usize>;
+        for forest in forests {
+            let mut z = match self.ir_forest(forest, &Atom::one()) {
+                Ok(z) => z,
+                Err(error) if super::depth::is_alarm(&error) => return Err(error),
+                Err(_) => continue,
+            };
+            if z.is_zero() {
+                continue;
+            }
+            if let Some(closure) = &self.root_closure {
+                z *= closure;
+            }
+            let orders = match hard.ir_outer_orders(
+                &z,
+                &self.root_edges,
+                degree,
+                self.reference_mass_squared,
+            ) {
+                Ok(Ok(orders)) => orders,
+                Ok(Err(_)) => continue,
+                Err(error) if super::depth::is_alarm(&error) => return Err(error),
+                Err(_) => continue,
+            };
+            for order in orders.iter().filter(|order| !order.is_zero()) {
+                let input = order
+                    .replace(Atom::var(GS.dim_epsilon))
+                    .with(Atom::var(renamed));
+                let Ok(simplified) = RStarIntegrand::simplify_summands(input.as_view()) else {
+                    continue;
+                };
+                let Some(before) = valuation(&simplified) else {
+                    continue;
+                };
+                let Ok(projected) = projector(&simplified) else {
+                    continue;
+                };
+                self.integration_id += 1;
+                let Ok(finished) = RStarIntegrand::finish_tensor(
+                    Integrated::dimensionally_regularized(&projected),
+                    self.integration_id,
+                ) else {
+                    continue;
+                };
+                let Some(after) = valuation(&finished) else {
+                    continue;
+                };
+                let found = usize::try_from((before - after).max(0)).unwrap_or(0);
+                excess = Some(excess.map_or(found, |largest| largest.max(found)));
+            }
+        }
+        Ok(excess)
     }
 
     /// IRH-DEPTH ([`super::depth`]): the lowest `ε` power of the quotient
@@ -2837,7 +3033,29 @@ impl<'a> Evaluation<'a> {
                 Err(error) => return declined(error),
             };
         let mut valuation = None::<i64>;
+        // MATRIX-R45 review: with a root projector the row's outer orders are
+        // also measured after the callback and the tensor finish (as a shown
+        // row's in ir_outer_integrated).
+        let mut measured = Vec::with_capacity(orders.len());
         for value in orders.iter().filter(|value| !value.is_zero()) {
+            measured.push(value.clone());
+            if let Some(projector) = self.root_projector {
+                let simplified = match RStarIntegrand::simplify_summands(value.as_view()) {
+                    Ok(simplified) => simplified,
+                    Err(error) => return declined(error),
+                };
+                let projected = match projector(&simplified) {
+                    Ok(projected) => Integrated::dimensionally_regularized(&projected),
+                    Err(error) => return declined(error),
+                };
+                self.integration_id += 1;
+                match RStarIntegrand::finish_tensor(projected, self.integration_id) {
+                    Ok(finished) => measured.push(finished),
+                    Err(error) => return declined(error),
+                }
+            }
+        }
+        for value in measured.iter().filter(|value| !value.is_zero()) {
             let series = match Integrated::dimensionally_regularized(value).series(
                 GS.dim_epsilon,
                 0,
@@ -3428,7 +3646,7 @@ impl<'a> Evaluation<'a> {
             // an IR_HARD_CHILD* line: the census parsers count every line
             // with the IR_HARD_CHILD_DEPTH prefix as a depth retry.
             eprintln!(
-                "IR_HARD_DEPTH_SUMMARY graph={} child={} corrections={} bounded={} retried={} raised={} exceeded={} refused={} unbounded={} vanished={} unverified={} unresolved_tensor={} opaque_function={} symbol_in_denominator={} outside_list={}",
+                "IR_HARD_DEPTH_SUMMARY graph={} child={} corrections={} bounded={} retried={} raised={} exceeded={} refused={} unbounded={} vanished={} unverified={} unresolved_tensor={} opaque_function={} symbol_in_denominator={} outside_list={} pole_in_fixed_factor={} taken={}",
                 self.graph.name,
                 self.plan.root_boundary.is_some(),
                 self.depth.corrections,
@@ -3444,6 +3662,8 @@ impl<'a> Evaluation<'a> {
                 self.depth.opaque_function,
                 self.depth.symbol_in_denominator,
                 self.depth.outside_list,
+                self.depth.pole_in_fixed_factor,
+                self.depth.taken,
             );
         }
         let elapsed = self.started.elapsed();
@@ -4632,6 +4852,49 @@ fn root_edges_of(plan: &RStarPlan, graph: &Graph) -> Vec<EdgeIndex> {
             .into_iter()
             .collect(),
     }
+}
+
+/// IRH-DEPTH (MATRIX-R45 review): the lowest `ε` power of the coefficient
+/// of every row placeholder `placeholder(i)` in the finished outer value of
+/// [`Evaluation::ir_outer_integrated`] (`None` when it vanishes); a term
+/// without exactly one placeholder is not a row's and is ignored.
+/// `Err(reason)` declines the correction (an order that cannot be read).
+fn placeholder_valuations(
+    finished: &Atom,
+    placeholder: Symbol,
+    rows: usize,
+) -> std::result::Result<Vec<Option<i64>>, String> {
+    use symbolica::{function, poly::series::SeriesDepth};
+    let mut valuations = vec![None::<i64>; rows];
+    if rows == 0 || finished.is_zero() {
+        return Ok(valuations);
+    }
+    let placeholders = (0..rows)
+        .map(|row| function!(placeholder, Atom::num(row as i64)))
+        .collect::<Vec<_>>();
+    for (monomial, coefficient) in finished.coefficient_list::<u8>(&placeholders) {
+        let Some(row) = placeholders.iter().position(|probe| *probe == monomial) else {
+            continue;
+        };
+        let regulated = Integrated::dimensionally_regularized(&coefficient);
+        if regulated.is_zero() {
+            continue;
+        }
+        let series = regulated
+            .series(GS.dim_epsilon, 0, SeriesDepth::relative(1))
+            .map_err(|_| "outer_coefficient_order".to_owned())?;
+        if series.is_zero() {
+            continue;
+        }
+        let exponent = series.get_trailing_exponent();
+        let pole = exponent
+            .is_integer()
+            .then(|| exponent.numerator().to_i64())
+            .flatten()
+            .ok_or_else(|| "quotient_epsilon_power".to_owned())?;
+        valuations[row] = Some(valuations[row].map_or(pole, |lowest| lowest.min(pole)));
+    }
+    Ok(valuations)
 }
 
 /// `GAMMALOOP_CHILD_BOUNDARY`: the closed-child normalisation of a closed UV

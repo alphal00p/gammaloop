@@ -347,14 +347,36 @@ pub(super) fn alarm(message: String) -> eyre::Report {
     eyre::Report::new(DepthAlarm(message))
 }
 
-/// Whether `error` carries a [`DepthAlarm`] anywhere in its chain, also one
-/// replayed by the counterterm cache. U7b: also a failure of the
-/// uncontracted switch that fails the diagram by design
-/// ([`super::uncontracted::Failure`]: a K3 CHECK mismatch, an undesigned
-/// refusal), which stays fatal through the same boundaries.
+/// A check-mode mismatch that must fail the diagram (MATRIX-R45 review,
+/// nested-and-cache finding 2): `IR_DIRAC_CHECK` (the Dirac-closed IR hard
+/// part differs from the open one). Fatal through the same boundaries as
+/// the [`DepthAlarm`] ([`is_alarm`]): a guarded child attempt never
+/// declines it to today's terms.
+#[derive(Debug)]
+pub(super) struct CheckFailure(String);
+
+impl std::fmt::Display for CheckFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for CheckFailure {}
+
+/// The [`CheckFailure`] with `message`.
+pub(super) fn check_failure(message: String) -> eyre::Report {
+    eyre::Report::new(CheckFailure(message))
+}
+
+/// Whether `error` carries a fatal error anywhere in its chain, also one
+/// replayed by the counterterm cache: the [`DepthAlarm`], a
+/// [`CheckFailure`], or (U7b) a failure of the uncontracted switch that
+/// fails the diagram by design ([`super::uncontracted::Failure`]: a K3 CHECK
+/// mismatch, an undesigned refusal, vakint's unknown masters).
 pub(super) fn is_alarm(error: &eyre::Report) -> bool {
     error.chain().any(|cause| {
         cause.is::<DepthAlarm>()
+            || cause.is::<CheckFailure>()
             || cause.is::<super::uncontracted::Failure>()
             || cause
                 .downcast_ref::<crate::uv::counterterm_cache::CachedError>()
@@ -397,6 +419,16 @@ pub(super) struct DepthCounts {
     pub opaque_function: usize,
     pub symbol_in_denominator: usize,
     pub outside_list: usize,
+    /// A fixed factor that must be regular has a pole (MATRIX-R45 review:
+    /// the settings normalisations, the IR Dirac closure normalisation).
+    pub pole_in_fixed_factor: usize,
+    /// Corrections whose child route itself gave the value
+    /// (`outcome=child`), and those of them in a nested evaluation: a
+    /// correction counted above can still decline to today's terms later
+    /// (`moments:`, `dirac_`, `zero_row:`, `depth:`), so a test that calls a
+    /// cell RIGHT needs these (MATRIX-R45 review).
+    pub taken: usize,
+    pub nested_taken: usize,
     /// Tests: the last refusal's reason.
     pub reason: Option<&'static str>,
 }
@@ -420,6 +452,9 @@ impl DepthCounts {
         self.opaque_function += other.opaque_function;
         self.symbol_in_denominator += other.symbol_in_denominator;
         self.outside_list += other.outside_list;
+        self.pole_in_fixed_factor += other.pole_in_fixed_factor;
+        self.taken += other.taken;
+        self.nested_taken += other.nested_taken;
         self.reason = other.reason.or(self.reason);
     }
 }
@@ -447,6 +482,7 @@ pub(super) fn refused(counts: &mut DepthCounts, reason: &'static str) {
         "opaque_function" => note(counts, |counts| &mut counts.opaque_function),
         "symbol_in_denominator" => note(counts, |counts| &mut counts.symbol_in_denominator),
         "outside_list" => note(counts, |counts| &mut counts.outside_list),
+        "pole_in_fixed_factor" => note(counts, |counts| &mut counts.pole_in_fixed_factor),
         _ => {}
     }
     counts.reason = Some(reason);
