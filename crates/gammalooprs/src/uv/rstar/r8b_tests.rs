@@ -29,7 +29,7 @@ use super::{Case, EPS, FIXED, L3_006, k, q, same};
 use crate::{
     graph::Graph,
     utils::GS,
-    uv::{UltravioletGraph as _, approx::integrated::Integrated},
+    uv::approx::integrated::Integrated,
 };
 use linnet::half_edge::subgraph::SuBitGraph;
 
@@ -520,5 +520,37 @@ fn round8b_f_a_callback_alarm_is_never_swallowed() -> Result<()> {
             Err(error) => ensure!(depth::is_alarm(&error), "{route}: {error:#}"),
         }
     }
+    Ok(())
+}
+
+/// C1 by construction: the input of every ε expansion
+/// (`Integrated::regulated_for_expansion`) has no scalar d (the cross form
+/// becomes −1 exactly), a Lorentz `mink(d, i)` keeps its dimension, and an
+/// expression without a scalar d is not copied.
+#[test]
+fn round8b_c1_the_expansion_input_is_dimension_free() -> Result<()> {
+    crate::initialisation::test_initialise()?;
+    use spenso::structure::representation::{Minkowski, RepName};
+    let d = Atom::var(GS.dim);
+    let epsilon = Atom::var(GS.dim_epsilon);
+    let cross = Atom::one() / (Atom::one() + (&d - Atom::num(4)) / &epsilon);
+    let regulated = Integrated::regulated_for_expansion(&cross, "test")?;
+    ensure!(
+        (&*regulated + Atom::one()).expand().together().is_zero(),
+        "{regulated}"
+    );
+    ensure!(crate::uv::approx::integrated::scalar_dimension(&regulated).is_none());
+    let mink = Minkowski {}.new_rep(GS.dim);
+    let slot = mink.to_symbolic([Atom::num(1)]);
+    let vector = symbolica::function!(GS.emr_mom, 1, &slot);
+    let tensor = &vector / (&d - Atom::num(1));
+    let regulated = Integrated::regulated_for_expansion(&tensor, "test")?;
+    ensure!(regulated.contains_symbol(GS.dim), "the Lorentz dimension is kept: {regulated}");
+    ensure!(crate::uv::approx::integrated::scalar_dimension(&regulated).is_none(), "{regulated}");
+    let free = &vector * &epsilon;
+    ensure!(matches!(
+        Integrated::regulated_for_expansion(&free, "test")?,
+        std::borrow::Cow::Borrowed(_)
+    ));
     Ok(())
 }

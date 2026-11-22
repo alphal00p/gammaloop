@@ -215,7 +215,15 @@ impl RStarPlan {
             })
             .collect();
         Ok(MassiveVacuumSubdivergences {
-            poles: total.series(epsilon, 0, -1)?.to_atom().expand(),
+            // IRH-DEPTH round 8b (C1): d = 4 − 2ε before the pole projection.
+            poles: crate::uv::approx::integrated::Integrated::regulated_for_expansion_in(
+                &total,
+                epsilon,
+                "massive_vacuum_poles",
+            )?
+            .series(epsilon, 0, -1)?
+            .to_atom()
+            .expand(),
             terms,
             children_ms,
             children,
@@ -386,9 +394,14 @@ pub(super) fn integrate_massive_vacuum(
     let minkowski = Minkowski::selfless_symbol();
     let dimension = Atom::num(4) - Atom::num(2) * Atom::var(GS.dim_epsilon);
     for term in &mut input.0 {
-        term.numerator = term
-            .numerator
-            .replace(function!(minkowski, GS.dim, W_.x___))
+        // IRH-DEPTH round 8b (C1): a scalar d is 4 − 2ε before the backend
+        // expands in ε.
+        term.numerator = crate::uv::approx::integrated::Integrated::regulated_for_expansion(
+            &term.numerator,
+            "massive_vacuum_input",
+        )?
+        .into_owned()
+        .replace(function!(minkowski, GS.dim, W_.x___))
             .with(function!(minkowski, &dimension, W_.x___));
     }
     input.tensor_reduce(vakint, settings)?;

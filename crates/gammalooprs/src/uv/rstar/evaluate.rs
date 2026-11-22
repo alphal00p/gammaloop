@@ -4066,6 +4066,9 @@ impl<'a> Evaluation<'a> {
     }
 
     fn poles(&self, expression: &Atom) -> Result<Atom> {
+        // IRH-DEPTH round 8b (C1): d = 4 − 2ε before the pole projection.
+        let expression =
+            Integrated::regulated_for_expansion_in(expression, self.epsilon, "rstar_pole_projection")?;
         Ok(expression.series(self.epsilon, 0, -1)?.to_atom().expand())
     }
 
@@ -4382,7 +4385,16 @@ impl<'a> Evaluation<'a> {
                 }
                 // The c-operation product is coefficientwise in epsilon.
                 // Retain the complete tensor polynomial inside the next UV
-                // call: its metric contractions can depend on the dimension.
+                // call: its metric contractions can depend on the dimension
+                // (a Lorentz `mink(d, i)` keeps it). IRH-DEPTH round 8b (C1):
+                // a SCALAR d is 4 − 2ε before the coefficients are read (at
+                // fixed d a quotient factor −1 spelled 1/(1+(d−4)/ε) gave
+                // 117/256 against 117/64 on the generic route too).
+                let counterterm = Integrated::regulated_for_expansion_in(
+                    &counterterm,
+                    self.epsilon,
+                    "ir_forest_c_operation",
+                )?;
                 for (power, tensor_polynomial) in counterterm.series(self.epsilon, 0, -1)?.terms() {
                     if !tensor_polynomial.is_zero() {
                         next.push((
