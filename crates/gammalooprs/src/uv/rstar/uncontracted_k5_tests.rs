@@ -2942,6 +2942,70 @@ fn k5_direct_record_with_an_undeclared_momentum_is_an_error() -> Result<()> {
     })
 }
 
+/// The last rebase's item (3) (r4): `build_direct`, the second writer, runs
+/// the pole check of every other record (`record_eps_pole`, as `build` does
+/// since beta's 38c71f377d) BEFORE `to_text`. The k5-direct case (L2 17) with
+/// the factor of its plain chain vertex 3 (`scalar_insertion_1`, factor 1)
+/// changed to `1 + ε^-1`: a pole outside the insertions, which the gated
+/// reader refuses as `NotScalar` (not a designed row: an error). Our attempt
+/// is the DESIGNED decline `factor_eps_pole` (in the closed list), decided
+/// before the record is written: no text, no value, the detail names the
+/// field. Unchanged, the same case compares equal
+/// (k5_direct_record_and_value_equal_the_fixture).
+#[test]
+fn k5_direct_record_with_an_eps_pole_outside_the_insertions_is_declined() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let prepared = prepare(L2_17_DOT, &vakint)?;
+        let mut fixture = record(K5_DIRECT)?;
+        let eps = Atom::var(GS.dim_epsilon);
+        let vertex = fixture
+            .vertices
+            .iter_mut()
+            .find(|vertex| vertex.id == 3 && vertex.rule == "scalar_insertion_1")
+            .ok_or_else(|| eyre!("no plain chain vertex 3 in k5-direct"))?;
+        vertex.factor = Atom::num(1) + eps.pow(Atom::num(-1));
+        let diagram = with_branch(&prepared.surrogate, &fixture)?;
+        let graph = diagram.to_gamma_loop_graph(None, true)?;
+        let (_, captured, _) = direct_run(
+            &graph,
+            &diagram,
+            Some(&prepared.provenance),
+            &vakint,
+            check_surrogate(),
+            true,
+        );
+        let attempt = captured
+            .iter()
+            .find(|attempt| attempt.kind == Kind::Surrogate)
+            .ok_or_else(|| eyre!("no surrogate attempt: {captured:?}"))?;
+        ensure!(
+            attempt.outcome == "declined:factor_eps_pole",
+            "not the designed pole decline: {} {:?}",
+            attempt.outcome,
+            attempt.detail
+        );
+        ensure!(
+            uncontracted::is_designed_code("factor_eps_pole"),
+            "factor_eps_pole is not in the closed list"
+        );
+        ensure!(
+            attempt
+                .detail
+                .as_deref()
+                .is_some_and(|detail| detail.starts_with("vertex 3 factor: a pole of order 1")),
+            "the detail does not name the field: {:?}",
+            attempt.detail
+        );
+        ensure!(
+            attempt.text.is_none() && attempt.value.is_none(),
+            "a declined record was written or valued"
+        );
+        Ok(())
+    })
+}
+
 /// Beta's suggestion (ii), the coordinator's decision: C_H is written in the
 /// RECORD's name of the anchor's edge. When e_in is a paired crown edge of the
 /// record whose sink is the hole's anchor, the record's line there is the

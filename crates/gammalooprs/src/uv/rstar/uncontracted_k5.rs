@@ -1454,6 +1454,15 @@ fn build_direct(
             weights: Vec::new(),
         }),
     };
+    // the pole check of every other record (`build`, beta's 38c71f377d): a
+    // field outside the insertions that is not provably regular at ε = 0 is
+    // outside the gated grammar, the designed decline `factor_eps_pole`
+    // BEFORE the record is written (vakint's NotScalar "a pole in ε outside
+    // an insertion" stays an error for any record of ours that reaches it);
+    // the insertion coefficient's own ε rules are `finish_with`'s
+    if let Some(detail) = super::record_eps_pole(&record) {
+        return Err(Decline::new("factor_eps_pole", detail));
+    }
     let text = record
         .to_text()
         .map_err(|error| Decline::new("text", error.to_string()))?;
