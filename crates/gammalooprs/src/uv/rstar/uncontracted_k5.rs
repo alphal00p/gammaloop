@@ -1463,9 +1463,15 @@ fn build_direct(
     if let Some(detail) = super::record_eps_pole(&record) {
         return Err(Decline::new("factor_eps_pole", detail));
     }
-    let text = record
-        .to_text()
-        .map_err(|error| Decline::new("text", error.to_string()))?;
+    // the writer validates first and returns exactly validation's error (as
+    // in `build`, helper VH's f88183dbed): a refusal of vakint's frozen list,
+    // matched as from_text's is (a designed row declines by name, any other
+    // refusal is the error vakint:<variant>); `text` is kept for a writer
+    // failure on a record that validates
+    let text = record.to_text().map_err(|error| match record.validate() {
+        Err(_) => Decline::vakint(&error),
+        Ok(()) => Decline::new("text", error.to_string()),
+    })?;
     let record = FactorizedNumerator::from_text(&text).map_err(|error| Decline::vakint(&error))?;
     // beta's guard (pick 8), as for every K1 / K2 record: a direct record has
     // no Taylor step, where vakint reads an undeclared Q(x) as a constant

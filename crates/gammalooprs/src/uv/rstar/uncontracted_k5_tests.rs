@@ -3006,6 +3006,68 @@ fn k5_direct_record_with_an_eps_pole_outside_the_insertions_is_declined() -> Res
     })
 }
 
+/// The last rebase's item (4) (r4): `build_direct` routes a `to_text`
+/// refusal through `Decline::vakint` when validation refuses the record (as
+/// `build` does since helper VH's f88183dbed): the gated writer validates a
+/// marked value first and returns exactly validation's error, so a mapping
+/// to `text` would show every validation refusal of a direct record as the
+/// error `text`. The k5-direct case (L2 17) with its insertion factor squared
+/// (degree 4 in the boundary momentum Q(3), above the reader's
+/// INSERTION_MAX_DEGREE 2): validation refuses it with "the factor has ...",
+/// a DESIGNED row of vakint's frozen list, so our attempt is the designed
+/// decline `vakint:insertion_slots` (not `error:text`), before any text.
+#[test]
+fn k5_direct_record_refused_by_validation_is_the_designed_vakint_decline() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let vakint = Vakint::new()?;
+        let prepared = prepare(L2_17_DOT, &vakint)?;
+        let mut fixture = record(K5_DIRECT)?;
+        let insertion = fixture
+            .insertions
+            .first_mut()
+            .ok_or_else(|| eyre!("no insertion in k5-direct"))?;
+        insertion.factor = &insertion.factor * &insertion.factor;
+        let diagram = with_branch(&prepared.surrogate, &fixture)?;
+        let graph = diagram.to_gamma_loop_graph(None, true)?;
+        let (_, captured, _) = direct_run(
+            &graph,
+            &diagram,
+            Some(&prepared.provenance),
+            &vakint,
+            check_surrogate(),
+            true,
+        );
+        let attempt = captured
+            .iter()
+            .find(|attempt| attempt.kind == Kind::Surrogate)
+            .ok_or_else(|| eyre!("no surrogate attempt: {captured:?}"))?;
+        ensure!(
+            attempt.outcome == "declined:vakint:insertion_slots",
+            "not the designed vakint decline: {} {:?}",
+            attempt.outcome,
+            attempt.detail
+        );
+        ensure!(
+            uncontracted::is_designed_code("vakint:insertion_slots"),
+            "vakint:insertion_slots is not a designed row"
+        );
+        ensure!(
+            attempt
+                .detail
+                .as_deref()
+                .is_some_and(|detail| detail.contains("the factor has degree 4")),
+            "not validation's refusal: {:?}",
+            attempt.detail
+        );
+        ensure!(
+            attempt.text.is_none() && attempt.value.is_none(),
+            "a refused record was written or valued"
+        );
+        Ok(())
+    })
+}
+
 /// Beta's suggestion (ii), the coordinator's decision: C_H is written in the
 /// RECORD's name of the anchor's edge. When e_in is a paired crown edge of the
 /// record whose sink is the hole's anchor, the record's line there is the
