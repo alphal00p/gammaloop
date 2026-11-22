@@ -232,8 +232,14 @@ fn round8_k3_b_a_declined_correction_writes_no_record() -> Result<()> {
         for strict in [false, true] {
             let cell = format!("k3j1 K3 {mode:?} strict={strict}");
             let run = typed_run(&case, "child", mode, strict, None)?;
-            let value = run.value.as_ref().map_err(|error| eyre!("{cell}: {error:#}"))?;
-            ensure!(same(value, &today)?, "{cell}: differs from the generic value");
+            let value = run
+                .value
+                .as_ref()
+                .map_err(|error| eyre!("{cell}: {error:#}"))?;
+            ensure!(
+                same(value, &today)?,
+                "{cell}: differs from the generic value"
+            );
             ensure!(
                 run.counts.taken == 0
                     && run.counts.declined >= 1
@@ -263,8 +269,14 @@ fn round8_k3_c_a_late_decline_on_the_ledger_rule() -> Result<()> {
         for strict in [false, true] {
             let cell = format!("L3_006 K3 {mode:?} strict={strict}");
             let taken = typed_run(&case, "child", mode, strict, None)?;
-            let value = taken.value.as_ref().map_err(|error| eyre!("{cell}: {error:#}"))?;
-            ensure!(same(value, &today)?, "{cell}: taken: differs from the generic value");
+            let value = taken
+                .value
+                .as_ref()
+                .map_err(|error| eyre!("{cell}: {error:#}"))?;
+            ensure!(
+                same(value, &today)?,
+                "{cell}: taken: differs from the generic value"
+            );
             ensure!(
                 taken.counts.taken >= 1 && !taken.k3.is_empty(),
                 "{cell}: taken: {:?}, {} K3 record(s)",
@@ -286,19 +298,23 @@ fn round8_k3_c_a_late_decline_on_the_ledger_rule() -> Result<()> {
             );
             match mode {
                 Mode::Check => {
-                    let value = late.value.as_ref().map_err(|error| eyre!("{cell}: {error:#}"))?;
-                    ensure!(same(value, &today)?, "{cell}: declined: differs from the generic value");
+                    let value = late
+                        .value
+                        .as_ref()
+                        .map_err(|error| eyre!("{cell}: {error:#}"))?;
+                    ensure!(
+                        same(value, &today)?,
+                        "{cell}: declined: differs from the generic value"
+                    );
                     ensure!(
                         !late.k3.is_empty(),
                         "{cell}: the compared K3 records are not reported"
                     );
                 }
                 _ => {
-                    let error = late
-                        .value
-                        .as_ref()
-                        .err()
-                        .ok_or_else(|| eyre!("{cell}: a late decline after taken K3 values fell back silently"))?;
+                    let error = late.value.as_ref().err().ok_or_else(|| {
+                        eyre!("{cell}: a late decline after taken K3 values fell back silently")
+                    })?;
                     let text = format!("{error:#}");
                     ensure!(
                         text.contains("ir_hard_route") && text.contains("insertion_not_eps_free"),

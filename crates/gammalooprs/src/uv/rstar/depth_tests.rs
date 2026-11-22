@@ -721,7 +721,10 @@ fn row_point(
         &[(-1, q(-117, 64))],
         true,
     );
-    ensure!(missed.is_err(), "{label}: the legacy planner must miss the pole");
+    ensure!(
+        missed.is_err(),
+        "{label}: the legacy planner must miss the pole"
+    );
     Ok(())
 }
 
@@ -919,7 +922,10 @@ fn a_measured_pole_above_the_bound_is_an_alarm() -> Result<()> {
         };
         ensure!(depth::is_alarm(&error), "strict={strict}: {error:#}");
         let text = format!("{error:#}");
-        ensure!(text.contains("IRH-DEPTH") && text.contains("bound=0"), "{text}");
+        ensure!(
+            text.contains("IRH-DEPTH") && text.contains("bound=0"),
+            "{text}"
+        );
     }
     Ok(())
 }
@@ -1105,10 +1111,18 @@ fn a_vanished_row_of_a_nonzero_group_keeps_its_quotient_pole() -> Result<()> {
     // decides the depth now).
     let today = case.today()?;
     let (_, target) = group.first().ok_or_else(|| eyre!("no row"))?;
-    for (label, start, test) in [("fixed", 0, FIXED), ("deep", 3, FIXED), ("no raise", 0, NO_RAISE)] {
+    for (label, start, test) in [
+        ("fixed", 0, FIXED),
+        ("deep", 3, FIXED),
+        ("no raise", 0, NO_RAISE),
+    ] {
         let child = hooked(target, true, start, test)?;
         ensure_same(label, &child.value, &today)?;
-        ensure!(child.root.insertion_not_eps_free >= 1, "{label}: {:?}", child.root);
+        ensure!(
+            child.root.insertion_not_eps_free >= 1,
+            "{label}: {:?}",
+            child.root
+        );
         ensure_declined(label, &child.root, "insertion_not_eps_free")?;
     }
     Ok(())

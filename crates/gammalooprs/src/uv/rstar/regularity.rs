@@ -364,9 +364,7 @@ fn holds_structure(view: AtomView<'_>) -> bool {
 /// is a slot.
 fn slot(view: AtomView<'_>) -> bool {
     match view {
-        AtomView::Fun(function) => {
-            structural(function.get_symbol()) && function.iter().all(slot)
-        }
+        AtomView::Fun(function) => structural(function.get_symbol()) && function.iter().all(slot),
         view => polynomial(view),
     }
 }
@@ -446,7 +444,10 @@ fn lorentz_in_d(expression: &Atom) -> Atom {
             && function.get_symbol() == minkowski
             && function.get_nargs() >= 1
         {
-            let mut arguments = function.iter().map(|argument| argument.to_owned()).collect::<Vec<_>>();
+            let mut arguments = function
+                .iter()
+                .map(|argument| argument.to_owned())
+                .collect::<Vec<_>>();
             arguments[0] = Atom::var(GS.dim);
             **out = symbolica::atom::FunctionBuilder::new(minkowski)
                 .add_args(&arguments)
@@ -529,10 +530,7 @@ fn walk_inner(view: AtomView<'_>, denominator: bool, hard: bool, finite: bool) -
             {
                 Ok(view.to_owned())
             } else {
-                Err((
-                    Refusal::SymbolInDenominator,
-                    symbol.get_name().to_owned(),
-                ))
+                Err((Refusal::SymbolInDenominator, symbol.get_name().to_owned()))
             }
         }
         AtomView::Fun(function) => {
@@ -864,7 +862,10 @@ fn decidable(value: &Atom) -> std::result::Result<(), (WeightRefusal, String)> {
             AtomView::Num(number) => match number.get_coeff_view() {
                 CoefficientView::Natural(..) | CoefficientView::Large(..) => {}
                 CoefficientView::Infinity(_) | CoefficientView::Indeterminate => {
-                    refusal = Some((WeightRefusal::NonFinite, format!("the number {}", short(view))));
+                    refusal = Some((
+                        WeightRefusal::NonFinite,
+                        format!("the number {}", short(view)),
+                    ));
                 }
                 _ => {
                     refusal = Some((
@@ -874,7 +875,10 @@ fn decidable(value: &Atom) -> std::result::Result<(), (WeightRefusal, String)> {
                 }
             },
             AtomView::Fun(_) => {
-                refusal = Some((WeightRefusal::Undecidable, format!("the function {}", short(view))));
+                refusal = Some((
+                    WeightRefusal::Undecidable,
+                    format!("the function {}", short(view)),
+                ));
             }
             AtomView::Pow(power) => {
                 let (_, exponent) = power.get_base_exp();
@@ -979,7 +983,11 @@ pub fn normalise_weight(
     decidable(&value).map_err(|(class, detail)| {
         refuse(
             class,
-            format!("{detail} in {} (normalised {})", short(expression.as_view()), short(value.as_view())),
+            format!(
+                "{detail} in {} (normalised {})",
+                short(expression.as_view()),
+                short(value.as_view())
+            ),
         )
     })?;
     if value.is_zero() {
@@ -1062,7 +1070,12 @@ pub(super) struct Certificate {
 impl Certificate {
     /// `B`.
     pub fn bound(&self) -> usize {
-        self.quotient_loops + self.declared.iter().map(|declared| declared.k).sum::<usize>()
+        self.quotient_loops
+            + self
+                .declared
+                .iter()
+                .map(|declared| declared.k)
+                .sum::<usize>()
     }
 
     /// The first factor with a declared order above 0 (the child route then
@@ -1097,11 +1110,20 @@ impl Certificate {
 /// ONE factor is read at a time: no product of factors. A factor without `ε`
 /// (every model Feynman rule: no ε, no d in 80,681 L5 DOTs) has `k = 0` by
 /// type. `Err` with `PoleInFixedFactor` when the order cannot be read.
-fn declared_order(factor: Factor, label: String, expression: &Atom) -> std::result::Result<Declared, Refused> {
-    let k = super::depth::factor_pole_order(&normalise(factor, expression)?).ok_or_else(|| Refused {
-        class: Refusal::PoleInFixedFactor,
-        factor: entry(factor).name,
-        detail: format!("{label}: the ε order cannot be read ({})", short(expression.as_view())),
+fn declared_order(
+    factor: Factor,
+    label: String,
+    expression: &Atom,
+) -> std::result::Result<Declared, Refused> {
+    let k = super::depth::factor_pole_order(&normalise(factor, expression)?).ok_or_else(|| {
+        Refused {
+            class: Refusal::PoleInFixedFactor,
+            factor: entry(factor).name,
+            detail: format!(
+                "{label}: the ε order cannot be read ({})",
+                short(expression.as_view())
+            ),
+        }
     })?;
     Ok(Declared {
         factor: entry(factor).name,
@@ -1265,7 +1287,11 @@ pub(super) fn certify_graph_correction(
             declared.push(declared_order(factor, label, &expression)?);
         }
         if let Some(closure) = root_closure {
-            declared.push(declared_order(Factor::RootClosure, "root".to_owned(), closure)?);
+            declared.push(declared_order(
+                Factor::RootClosure,
+                "root".to_owned(),
+                closure,
+            )?);
         }
         match projection {
             RootProjection::Absent => {}
@@ -1403,17 +1429,18 @@ pub(super) fn as_round3<T>(f: impl FnOnce() -> T) -> T {
 mod tests {
     use super::*;
     use crate::initialisation::test_initialise;
-    use spenso::{
-        network::library::symbolic::ETS,
-        structure::representation::RepName,
-    };
+    use spenso::{network::library::symbolic::ETS, structure::representation::RepName};
     use symbolica::parse;
 
     fn eps() -> Atom {
         Atom::var(GS.dim_epsilon)
     }
 
-    fn metric(a: usize, b: usize, dimension: impl Into<spenso::structure::dimension::Dimension>) -> Atom {
+    fn metric(
+        a: usize,
+        b: usize,
+        dimension: impl Into<spenso::structure::dimension::Dimension>,
+    ) -> Atom {
         let mink = Minkowski {}.new_rep(dimension);
         ETS.metric(
             mink.to_symbolic([crate::numerator::aind::Aind::Hedge(a as u16, 1).into()]),
@@ -1422,7 +1449,8 @@ mod tests {
     }
 
     fn excess(expression: &Atom) -> std::result::Result<Option<usize>, Refusal> {
-        certified_excess(Factor::QuotientVertexNumerator, expression).map_err(|refused| refused.class)
+        certified_excess(Factor::QuotientVertexNumerator, expression)
+            .map_err(|refused| refused.class)
     }
 
     #[test]
@@ -1463,20 +1491,35 @@ mod tests {
             assert_eq!(excess(&(&x * &trace)), Ok(Some(0)));
         }
         assert_eq!(excess(&(&x / eps())), Ok(Some(1)));
-        assert_eq!(excess(&(&x * Atom::num(-2) / (&d - Atom::num(4)))), Ok(Some(1)));
+        assert_eq!(
+            excess(&(&x * Atom::num(-2) / (&d - Atom::num(4)))),
+            Ok(Some(1))
+        );
         // An open index in a denominator, a symbol, an opaque function.
         let open = metric(81, 82, GS.dim);
-        assert_eq!(excess(&(&x / (&open - Atom::num(4)))), Err(Refusal::UnresolvedTensor));
-        assert_eq!(excess(&(&x / (parse!("y") - Atom::num(4)))), Err(Refusal::SymbolInDenominator));
+        assert_eq!(
+            excess(&(&x / (&open - Atom::num(4)))),
+            Err(Refusal::UnresolvedTensor)
+        );
+        assert_eq!(
+            excess(&(&x / (parse!("y") - Atom::num(4)))),
+            Err(Refusal::SymbolInDenominator)
+        );
         let opaque = symbolica::function!(symbolica::symbol!("irh_regularity_f"), parse!("y"));
         assert_eq!(excess(&(&x * opaque)), Err(Refusal::OpaqueFunction));
-        assert_eq!(excess(&(&x * eps().pow(parse!("y")))), Err(Refusal::OpaqueFunction));
+        assert_eq!(
+            excess(&(&x * eps().pow(parse!("y")))),
+            Err(Refusal::OpaqueFunction)
+        );
         assert_eq!(
             excess(&(&x * eps().pow(Atom::num(1) / Atom::num(2)))),
             Err(Refusal::OpaqueFunction)
         );
         // Constants and numerator symbols are admitted.
-        assert_eq!(excess(&(&x * parse!("zeta(3)") / (&d - Atom::num(1)))), Ok(Some(0)));
+        assert_eq!(
+            excess(&(&x * parse!("zeta(3)") / (&d - Atom::num(1)))),
+            Ok(Some(0))
+        );
         // The hard part is truncated before d = 4-2ε: a d-denominator that
         // vanishes at d = 4, or a trace in a denominator, is refused there; a
         // regular one (1/(d-1)) and a d or a trace in a numerator are not.
@@ -1484,8 +1527,14 @@ mod tests {
             certified_excess(Factor::HardNumerator, expression).map_err(|refused| refused.class)
         };
         let trace = metric(81, 82, GS.dim).pow(2);
-        assert_eq!(hard(&(&x / (&d - Atom::num(4)))), Err(Refusal::SymbolInDenominator));
-        assert_eq!(hard(&(&x / (&trace - Atom::num(4)))), Err(Refusal::UnresolvedTensor));
+        assert_eq!(
+            hard(&(&x / (&d - Atom::num(4)))),
+            Err(Refusal::SymbolInDenominator)
+        );
+        assert_eq!(
+            hard(&(&x / (&trace - Atom::num(4)))),
+            Err(Refusal::UnresolvedTensor)
+        );
         assert_eq!(hard(&(&x / (&d - Atom::num(1)))), Ok(Some(0)));
         assert_eq!(hard(&(&x * (&d - Atom::num(4)) * &trace)), Ok(Some(0)));
         assert_eq!(hard(&(&x / eps())), Ok(Some(1)));

@@ -114,7 +114,12 @@ fn modify(dot: &str, term: &str, field: &str, transform: impl Fn(&str) -> String
             if line.starts_with(&format!("  {term} ")) && count == 0 {
                 let (body, end) = field_span(line, field).expect("the field");
                 count += 1;
-                format!("{}{}{}", &line[..body], transform(&line[body..end]), &line[end..])
+                format!(
+                    "{}{}{}",
+                    &line[..body],
+                    transform(&line[body..end]),
+                    &line[end..]
+                )
             } else {
                 line.to_owned()
             }
@@ -152,7 +157,12 @@ fn quotient_v1() -> String {
 /// The review's tensor-hidden: hidden with v1's ε⁻¹ spelled as the trace.
 fn tensor_hidden() -> String {
     let t = format!("*({})", tensor());
-    let dot = modify(&hidden(), "v1", "numerator", retail(&format!("*({EPS})^(-1)"), &t));
+    let dot = modify(
+        &hidden(),
+        "v1",
+        "numerator",
+        retail(&format!("*({EPS})^(-1)"), &t),
+    );
     modify(
         &dot,
         "graph",
@@ -164,14 +174,29 @@ fn tensor_hidden() -> String {
 /// The review's visible neighbour: quotient-v1 with the trace spelling.
 fn tensor_visible() -> String {
     let t = format!("*({})", tensor());
-    let dot = modify(&quotient_v1(), "v1", "numerator", retail(&format!("*({EPS})^(-1)"), &t));
-    modify(&dot, "graph", "numerator", retail(&format!("*({EPS})^(-1)"), &t))
+    let dot = modify(
+        &quotient_v1(),
+        "v1",
+        "numerator",
+        retail(&format!("*({EPS})^(-1)"), &t),
+    );
+    modify(
+        &dot,
+        "graph",
+        "numerator",
+        retail(&format!("*({EPS})^(-1)"), &t),
+    )
 }
 
 /// The review's dim-quotient: hidden with v1's ε⁻¹ spelled −2/(d−4).
 fn dim_quotient() -> String {
     let d = format!("*(-2)/({DIM}-4)");
-    let dot = modify(&hidden(), "v1", "numerator", retail(&format!("*({EPS})^(-1)"), &d));
+    let dot = modify(
+        &hidden(),
+        "v1",
+        "numerator",
+        retail(&format!("*({EPS})^(-1)"), &d),
+    );
     modify(
         &dot,
         "graph",
@@ -188,8 +213,18 @@ fn hard_pole(field: &str) -> String {
 #[test]
 fn the_witnesses_are_the_reviewed_inputs() {
     for (name, fixture, hash, length) in [
-        ("tensor-hidden", tensor_hidden(), 0x968d_72f7_fd27_8a4c_u64, 47874),
-        ("tensor-visible", tensor_visible(), 0x2bf5_cd73_73d1_a349, 47820),
+        (
+            "tensor-hidden",
+            tensor_hidden(),
+            0x968d_72f7_fd27_8a4c_u64,
+            47874,
+        ),
+        (
+            "tensor-visible",
+            tensor_visible(),
+            0x2bf5_cd73_73d1_a349,
+            47820,
+        ),
         ("dim-quotient", dim_quotient(), 0xf653_c052_3a4a_6190, 47394),
         (
             "hard-pole-numerator_prefactor",
@@ -353,7 +388,10 @@ fn the_numerator_prefactor_pole_is_read() -> Result<()> {
     // round 8b: refused bound_exceeded through the vanished-row valuation).
     let (round3, counts3) = regularity::as_round3(|| projected(&case, "child", FIXED))?;
     ensure!(counts3.refused == 0, "{counts3:?}");
-    ensure!(!super::same(&round3, &today)?, "round 3 must miss the prefactor's pole");
+    ensure!(
+        !super::same(&round3, &today)?,
+        "round 3 must miss the prefactor's pole"
+    );
     Ok(())
 }
 
@@ -372,7 +410,9 @@ fn cell(label: &str, dot: &str) -> Result<Option<(Atom, DepthCounts)>> {
             return Ok(None);
         }
         (Err(today), Ok(_)) => {
-            eyre::bail!("{label}: today's path fails ({today:#}) but the child route returns a value")
+            eyre::bail!(
+                "{label}: today's path fails ({today:#}) but the child route returns a value"
+            )
         }
         (Ok(_), Err(child)) => return Err(child),
     };
@@ -519,7 +559,14 @@ fn a_numerator_prefactor_pole_is_read_in_every_spelling() -> Result<()> {
     matrix_over(
         "prefactor",
         &SPELLINGS[..3],
-        |spelling| modify(&hard_v0(), "graph", "numerator_prefactor", times(&spelling.text())),
+        |spelling| {
+            modify(
+                &hard_v0(),
+                "graph",
+                "numerator_prefactor",
+                times(&spelling.text()),
+            )
+        },
         Some(q(-117, 64)),
     )
     .map(|_| ())
@@ -552,7 +599,10 @@ fn a_projector_pole_is_read() -> Result<()> {
     for (expression, excess) in [
         (Atom::one(), 0),
         (Atom::one() / &epsilon, 1),
-        (Atom::num(-2) / (Atom::var(crate::utils::GS.dim) - Atom::num(4)), 1),
+        (
+            Atom::num(-2) / (Atom::var(crate::utils::GS.dim) - Atom::num(4)),
+            1,
+        ),
     ] {
         assert_eq!(
             regularity::certified_excess(Factor::GraphProjector, &expression),
@@ -676,7 +726,9 @@ fn the_fixed_normalisations_are_regular() -> Result<()> {
     );
     let expected = Atom::num(4) - Atom::num(2) * Atom::var(GS.dim_epsilon);
     ensure!(
-        trace.as_ref().is_some_and(|trace| (trace - &expected).expand().is_zero()),
+        trace
+            .as_ref()
+            .is_some_and(|trace| (trace - &expected).expand().is_zero()),
         "g_ab g^ab = {trace:?}"
     );
     Ok(())
@@ -780,7 +832,10 @@ mod k3 {
                 } else {
                     ensure_raised(&cell, &counts)?;
                 }
-                ensure!(k3 == 0, "{cell}: a declined correction wrote {k3} K3 record(s)");
+                ensure!(
+                    k3 == 0,
+                    "{cell}: a declined correction wrote {k3} K3 record(s)"
+                );
             }
         }
         Ok(())
@@ -808,12 +863,18 @@ mod k3 {
                 let (child, counts, k3) = child_k3(&case, mode)?;
                 eprintln!("IRH_R6_K3 {cell} k3_attempts={k3} counts={counts:?}");
                 ensure_same(&cell, &child, &today)?;
-                ensure!(counts.exceeded == 0 && counts.reason == reason, "{cell}: {counts:?}");
+                ensure!(
+                    counts.exceeded == 0 && counts.reason == reason,
+                    "{cell}: {counts:?}"
+                );
                 if reason.is_some() {
                     ensure!(counts.refused >= 1, "{cell}: {counts:?}");
                 }
                 // Round 8 (U7b): refused or declined before H(γ): no record.
-                ensure!(k3 == 0, "{cell}: a declined correction wrote {k3} K3 record(s)");
+                ensure!(
+                    k3 == 0,
+                    "{cell}: a declined correction wrote {k3} K3 record(s)"
+                );
             }
         }
         Ok(())
@@ -885,7 +946,9 @@ fn classify(
             return Ok(Loud);
         }
         (Err(today), Ok((child, _))) => {
-            eyre::bail!("{label}: today's path fails ({today:#}) but the child route returns {child}")
+            eyre::bail!(
+                "{label}: today's path fails ({today:#}) but the child route returns {child}"
+            )
         }
         (Ok(_), Err(child)) => eyre::bail!("{label}: the child route alone fails: {child:#}"),
         (Ok(today), Ok((child, counts))) => (today, child, counts),
@@ -922,7 +985,11 @@ fn classify(
 /// One attribute of the root (projected as beta): every spelling under every
 /// mode, against `expected` (one disposition per spelling, the same under
 /// every mode).
-fn r45_root(label: &str, fixture: impl Fn(Spelling) -> String, expected: [Disposition; 4]) -> Result<()> {
+fn r45_root(
+    label: &str,
+    fixture: impl Fn(Spelling) -> String,
+    expected: [Disposition; 4],
+) -> Result<()> {
     let mut wrong = Vec::new();
     for (spelling, expected) in SPELLINGS.into_iter().zip(expected) {
         let case = Case::new(&fixture(spelling), None)?;
@@ -1063,7 +1130,12 @@ fn matrix_r45_nested_decorated_quotient() -> Result<()> {
         let case = Case::new(&dot, Some(9))?;
         let today = case.today();
         if matches!(spelling, Spelling::Epsilon) {
-            pinned("c2-m9 r45", today.as_ref().map_err(|e| eyre::eyre!("{e:#}"))?, &[(-2, q(-117, 64))], false)?;
+            pinned(
+                "c2-m9 r45",
+                today.as_ref().map_err(|e| eyre::eyre!("{e:#}"))?,
+                &[(-2, q(-117, 64))],
+                false,
+            )?;
         }
         // v1 lies in the hard part of some correction of the nested
         // evaluations: a 1/(d−4) or a trace there is refused (hard_numerator).
@@ -1084,7 +1156,9 @@ fn matrix_r45_nested_decorated_quotient() -> Result<()> {
                 Ok(found) if found == expected => {
                     let counts = counted.unwrap_or_default();
                     if counts.declared_order == 0 || counts.declined == 0 {
-                        wrong.push(format!("{cell}: no declared-order decline counted: {counts:?}"));
+                        wrong.push(format!(
+                            "{cell}: no declared-order decline counted: {counts:?}"
+                        ));
                     }
                 }
                 Ok(found) => wrong.push(format!("{cell}: {found:?}, expected {expected:?}")),
@@ -1107,7 +1181,8 @@ fn matrix_r45_every_listed_factor_reads_every_spelling() -> Result<()> {
     let mut wrong = Vec::new();
     for entry in regularity::FACTORS {
         for spelling in SPELLINGS {
-            let pole = symbolica::try_parse!(&spelling.text()).map_err(|error| eyre::eyre!("{error}"))?;
+            let pole =
+                symbolica::try_parse!(&spelling.text()).map_err(|error| eyre::eyre!("{error}"))?;
             let outcome = regularity::certified_excess(entry.factor, &(&x * &pole));
             eprintln!("IRH_R45_UNIT {} {spelling:?} {outcome:?}", entry.name);
             match outcome {
@@ -1118,7 +1193,8 @@ fn matrix_r45_every_listed_factor_reads_every_spelling() -> Result<()> {
         }
     }
     for spelling in SPELLINGS {
-        let pole = symbolica::try_parse!(&spelling.text()).map_err(|error| eyre::eyre!("{error}"))?;
+        let pole =
+            symbolica::try_parse!(&spelling.text()).map_err(|error| eyre::eyre!("{error}"))?;
         for name in ["overall_factor", "numerator_prefactor", "projector"] {
             if regularity::ensure_regular_weight(name, &pole).is_ok() {
                 wrong.push(format!("weight {name} {spelling:?} accepted"));
@@ -1130,7 +1206,9 @@ fn matrix_r45_every_listed_factor_reads_every_spelling() -> Result<()> {
     let contracted = regularity::contract_closed(&dirac);
     let expected = Atom::num(16) - Atom::num(8) * Atom::var(crate::utils::GS.dim_epsilon);
     ensure!(
-        contracted.as_ref().is_some_and(|trace| (trace - &expected).expand().is_zero()),
+        contracted
+            .as_ref()
+            .is_some_and(|trace| (trace - &expected).expand().is_zero()),
         "tr(γ_a γ^a) = {contracted:?}"
     );
     ensure!(wrong.is_empty(), "{wrong:#?}");
@@ -1153,7 +1231,8 @@ fn matrix_r45_a_poleful_root_projector_callback_is_measured() -> Result<()> {
     let case = Case::new(&hard_v0(), None)?;
     let mut unexpected = Vec::new();
     for spelling in SPELLINGS {
-        let pole = symbolica::try_parse!(&spelling.text()).map_err(|error| eyre::eyre!("{error}"))?;
+        let pole =
+            symbolica::try_parse!(&spelling.text()).map_err(|error| eyre::eyre!("{error}"))?;
         let run = |route: &'static str, test: DepthTest| -> Result<(Atom, DepthCounts)> {
             let pole = pole.clone();
             let projector = move |tensor: &Atom| -> Result<Atom> { Ok(tensor * &pole) };
@@ -1235,7 +1314,12 @@ fn overall_variants() -> Vec<(String, String)> {
         ("gtr3", tensor().replace("-4)", "-3)")),
     ]
     .into_iter()
-    .map(|(name, factor)| (format!("overall-{name}"), format!("({production})*({factor})")))
+    .map(|(name, factor)| {
+        (
+            format!("overall-{name}"),
+            format!("({production})*({factor})"),
+        )
+    })
     .collect::<Vec<_>>();
     variants.push(("overall-none".into(), production.into()));
     variants
@@ -1324,7 +1408,9 @@ fn a_poleful_additional_normalisation_is_refused() -> Result<()> {
         let case = match case_with_normalisation(&normalisation, None) {
             Ok(case) => case,
             Err(error) if expected != Right => {
-                eprintln!("IRH_R45 additional_normalisation {normalisation} LOUD at the UV children: {error:#}");
+                eprintln!(
+                    "IRH_R45 additional_normalisation {normalisation} LOUD at the UV children: {error:#}"
+                );
                 continue;
             }
             Err(error) => return Err(error),
@@ -1342,10 +1428,17 @@ fn a_poleful_additional_normalisation_is_refused() -> Result<()> {
     }
     // The named schemes are admitted, a custom one is refused.
     for named in regularity::NAMED_NORMALISATIONS {
-        ensure!(regularity::certify_vakint_normalisations("1", named).is_ok(), "{named}");
+        ensure!(
+            regularity::certify_vakint_normalisations("1", named).is_ok(),
+            "{named}"
+        );
     }
-    let custom = regularity::certify_vakint_normalisations("1", "irh_r45_custom").map_err(|r| r.class);
-    ensure!(custom == Err(regularity::Refusal::OutsideList), "{custom:?}");
+    let custom =
+        regularity::certify_vakint_normalisations("1", "irh_r45_custom").map_err(|r| r.class);
+    ensure!(
+        custom == Err(regularity::Refusal::OutsideList),
+        "{custom:?}"
+    );
     for spelling in SPELLINGS {
         ensure!(
             regularity::certify_vakint_normalisations(&spelling.text(), "MSbar").is_err(),
@@ -1368,7 +1461,11 @@ fn a_poleful_dirac_closure_normalisation_is_refused() -> Result<()> {
     let parse = |text: &str| symbolica::try_parse!(text).map_err(|error| eyre::eyre!("{error}"));
     let bis = |dim: &str, n: usize| format!("{BIS}({dim},{HEDGE}({n},1))");
     let mink = format!("{MINK}(4,{HEDGE}(85,1))");
-    let closure = parse(&format!("{GAMMA}({},{},{mink})", bis("4", 83), bis("4", 84)))?;
+    let closure = parse(&format!(
+        "{GAMMA}({},{},{mink})",
+        bis("4", 83),
+        bis("4", 84)
+    ))?;
     for regular in ["1/4".to_owned(), format!("1/(4*{DIM})")] {
         let normalization = parse(&regular)?;
         ensure!(
@@ -1381,13 +1478,27 @@ fn a_poleful_dirac_closure_normalisation_is_refused() -> Result<()> {
         let refused = regularity::certify_dirac_closure(&closure, &normalization);
         ensure!(refused.is_err(), "{spelling:?} admitted");
     }
-    let refused = regularity::certify_dirac_closure(&closure, &parse(&format!("(1/4)*({})", Spelling::Epsilon.text()))?)
-        .map_err(|r| r.class);
-    ensure!(refused == Err(regularity::Refusal::PoleInFixedFactor), "{refused:?}");
+    let refused = regularity::certify_dirac_closure(
+        &closure,
+        &parse(&format!("(1/4)*({})", Spelling::Epsilon.text()))?,
+    )
+    .map_err(|r| r.class);
+    ensure!(
+        refused == Err(regularity::Refusal::PoleInFixedFactor),
+        "{refused:?}"
+    );
     for dim in [format!("(-2)/({DIM}-4)"), format!("({EPS})^(-1)")] {
-        let poleful = parse(&format!("{GAMMA}({},{},{mink})", bis(&dim, 83), bis(&dim, 84)))?;
-        let refused = regularity::certify_dirac_closure(&poleful, &parse("1/4")?).map_err(|r| r.class);
-        ensure!(refused == Err(regularity::Refusal::UnresolvedTensor), "bis({dim}): {refused:?}");
+        let poleful = parse(&format!(
+            "{GAMMA}({},{},{mink})",
+            bis(&dim, 83),
+            bis(&dim, 84)
+        ))?;
+        let refused =
+            regularity::certify_dirac_closure(&poleful, &parse("1/4")?).map_err(|r| r.class);
+        ensure!(
+            refused == Err(regularity::Refusal::UnresolvedTensor),
+            "bis({dim}): {refused:?}"
+        );
     }
     Ok(())
 }
@@ -1406,9 +1517,20 @@ fn a_tensor_argument_must_be_a_slot() -> Result<()> {
     let mink = |dim: &str, n: usize| format!("{MINK}({dim},{HEDGE}({n},1))");
     let bis = |dim: &str, n: usize| format!("{BIS}({dim},{HEDGE}({n},1))");
     let refused = [
-        format!("irh_r45_probe::{{spenso::tensor}}::T({},{})", mink("4", 86), tensor()),
-        format!("irh_r45_probe::{{spenso::tensor}}::T({},({EPS})^(-1))", mink("4", 86)),
-        format!("({METRIC}({},{}))^2", mink(&format!("(-2)/({DIM}-4)"), 81), mink(&format!("(-2)/({DIM}-4)"), 82)),
+        format!(
+            "irh_r45_probe::{{spenso::tensor}}::T({},{})",
+            mink("4", 86),
+            tensor()
+        ),
+        format!(
+            "irh_r45_probe::{{spenso::tensor}}::T({},({EPS})^(-1))",
+            mink("4", 86)
+        ),
+        format!(
+            "({METRIC}({},{}))^2",
+            mink(&format!("(-2)/({DIM}-4)"), 81),
+            mink(&format!("(-2)/({DIM}-4)"), 82)
+        ),
         format!(
             "{GAMMA}({},{},{})*{GAMMA}({},{},{})",
             bis(&format!("(-2)/({DIM}-4)"), 83),
@@ -1442,8 +1564,17 @@ fn a_tensor_argument_must_be_a_slot() -> Result<()> {
     let admitted = [
         format!("({METRIC}({},{}))^2", mink("4", 81), mink("4", 82)),
         format!("({METRIC}({},{}))^2", mink(DIM, 81), mink(DIM, 82)),
-        format!("({METRIC}({},{}))^2", mink(&format!("4-2*{EPS}"), 81), mink(&format!("4-2*{EPS}"), 82)),
-        format!("{GAMMA}({},{},{})", bis("4", 83), bis("4", 84), mink(DIM, 85)),
+        format!(
+            "({METRIC}({},{}))^2",
+            mink(&format!("4-2*{EPS}"), 81),
+            mink(&format!("4-2*{EPS}"), 82)
+        ),
+        format!(
+            "{GAMMA}({},{},{})",
+            bis("4", 83),
+            bis("4", 84),
+            mink(DIM, 85)
+        ),
     ];
     for text in &admitted {
         let atom = parse(text)?;
@@ -1471,7 +1602,10 @@ fn a_rank_ten_reduction_coefficient_pole_is_read() -> Result<()> {
     };
     ensure!(valuation(&(Atom::num(-2) / (&d - Atom::num(4))))? == Some(-1));
     ensure!(valuation(&(Atom::one() / (&d - Atom::num(1))))? == Some(0));
-    ensure!(valuation(&(Atom::var(GS.dim_epsilon).pow(Atom::num(-1)) / (&d - Atom::num(4))))? == Some(-2));
+    ensure!(
+        valuation(&(Atom::var(GS.dim_epsilon).pow(Atom::num(-1)) / (&d - Atom::num(4))))?
+            == Some(-2)
+    );
     ensure!(valuation(&Atom::Zero)?.is_none());
     for (rank, pole) in [(8_usize, 0_i64), (10, -1)] {
         let table = feynkit_tensor::OrthogonalWeingarten::for_rank(rank, d.clone())
@@ -1485,7 +1619,10 @@ fn a_rank_ten_reduction_coefficient_pole_is_read() -> Result<()> {
                 lowest = lowest.min(order);
             }
         }
-        ensure!(lowest == pole, "rank {rank}: lowest order {lowest}, expected {pole}");
+        ensure!(
+            lowest == pole,
+            "rank {rank}: lowest order {lowest}, expected {pole}"
+        );
     }
     Ok(())
 }
@@ -1560,7 +1697,10 @@ fn a_typed_alarm_from_the_projector_in_the_unit_probe_propagates() -> Result<()>
             Err(error) => format!("Err(alarm={}: {error:#})", depth::is_alarm(error)),
         }
     );
-    ensure!(calls == 0, "the projector was probed {calls} time(s): the unit probe is back");
+    ensure!(
+        calls == 0,
+        "the projector was probed {calls} time(s): the unit probe is back"
+    );
     match value {
         Err(error) => ensure!(
             depth::is_alarm(&error),
@@ -1636,9 +1776,15 @@ fn round8_every_spelling_of_a_weight_normalises_to_its_literal() -> Result<()> {
             }
         }
     }
-    let regular = normalise_weight("overall_factor", &parse(&format!("({DIM}^2-16)/({DIM}-4)"))?);
+    let regular = normalise_weight(
+        "overall_factor",
+        &parse(&format!("({DIM}^2-16)/({DIM}-4)"))?,
+    );
     match &regular {
-        Ok(weight) if (weight.value() - parse(&format!("8-2*{EPS}"))?).expand().is_zero() => {}
+        Ok(weight)
+            if (weight.value() - parse(&format!("8-2*{EPS}"))?)
+                .expand()
+                .is_zero() => {}
         other => wrong.push(format!("(d^2-16)/(d-4): {other:?}")),
     }
     let poles = [
@@ -1662,8 +1808,14 @@ fn round8_every_spelling_of_a_weight_normalises_to_its_literal() -> Result<()> {
     let refused = [
         (open, WeightRefusal::OpenIndex),
         ("irh_r8_test::x".to_owned(), WeightRefusal::UnknownSymbol),
-        ("1/(irh_r8_test::x-4)".to_owned(), WeightRefusal::Unsupported(regularity::Refusal::SymbolInDenominator)),
-        ("irh_r8_test::f(2)".to_owned(), WeightRefusal::Unsupported(regularity::Refusal::OpaqueFunction)),
+        (
+            "1/(irh_r8_test::x-4)".to_owned(),
+            WeightRefusal::Unsupported(regularity::Refusal::SymbolInDenominator),
+        ),
+        (
+            "irh_r8_test::f(2)".to_owned(),
+            WeightRefusal::Unsupported(regularity::Refusal::OpaqueFunction),
+        ),
         (format!("{DIM}-4+2*{EPS}"), WeightRefusal::Zero),
         ("0".to_owned(), WeightRefusal::Zero),
     ];
@@ -1674,7 +1826,8 @@ fn round8_every_spelling_of_a_weight_normalises_to_its_literal() -> Result<()> {
         }
     }
     match normalise_weight("vertex_weight", &Atom::one()) {
-        Err(refused) if refused.class == WeightRefusal::Unsupported(regularity::Refusal::OutsideList) => {}
+        Err(refused)
+            if refused.class == WeightRefusal::Unsupported(regularity::Refusal::OutsideList) => {}
         other => wrong.push(format!("vertex_weight: {other:?}")),
     }
     ensure!(wrong.is_empty(), "{wrong:#?}");
@@ -1740,7 +1893,10 @@ fn round8a_a_non_finite_or_undecidable_weight_is_refused() -> Result<()> {
         for name in ["overall_factor", "numerator_prefactor", "projector"] {
             match parse(text).map(|atom| normalise_weight(name, &atom)) {
                 Ok(Err(refused))
-                    if matches!(refused.class.label(), "undecidable" | "non_finite" | "opaque_function") =>
+                    if matches!(
+                        refused.class.label(),
+                        "undecidable" | "non_finite" | "opaque_function"
+                    ) =>
                 {
                     eprintln!("IRH_R8A_UNDECIDABLE {name} {text}: {refused}");
                 }

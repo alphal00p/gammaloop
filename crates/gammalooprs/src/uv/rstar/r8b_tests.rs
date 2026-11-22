@@ -26,11 +26,7 @@ use super::super::{
     expression::RStarIntegrand,
 };
 use super::{Case, EPS, FIXED, L3_006, k, q, same};
-use crate::{
-    graph::Graph,
-    utils::GS,
-    uv::approx::integrated::Integrated,
-};
+use crate::{graph::Graph, utils::GS, uv::approx::integrated::Integrated};
 use linnet::half_edge::subgraph::SuBitGraph;
 
 const DIM: &str = "gammalooprs::{}::dim";
@@ -158,10 +154,8 @@ fn opaque(
 /// is passed as [`ClosedRootNormalization`]
 /// (`projected_counterterm_closing_root_scalar`).
 fn typed_root(graph: &Graph) -> Result<ClosedRootNormalization> {
-    let (external, external_routing) = RStarIntegrand::physical_external_routing(
-        graph,
-        &graph.external_filter::<SuBitGraph>(),
-    )?;
+    let (external, external_routing) =
+        RStarIntegrand::physical_external_routing(graph, &graph.external_filter::<SuBitGraph>())?;
     Ok(ClosedRootNormalization {
         external,
         factor: graph
@@ -187,18 +181,18 @@ fn typed(case: &Case, route: &'static str, strict: bool) -> Result<(Atom, DepthC
     // the whole maps may differ in spelling only (compared algebraically).
     let ((value, counts), _) = crate::uv::approx::streamed::with_algebraic_check(|| {
         depth::with_depth_test(test, || {
-        depth::collect(|| {
-            with_ir_hard(route, || {
-                case.plan.projected_counterterm_closing_root_scalar(
-                    &case.graph,
-                    case.model(),
-                    &case.vakint,
-                    &case.settings,
-                    &callback,
-                    &closed_root,
-                )
+            depth::collect(|| {
+                with_ir_hard(route, || {
+                    case.plan.projected_counterterm_closing_root_scalar(
+                        &case.graph,
+                        case.model(),
+                        &case.vakint,
+                        &case.settings,
+                        &callback,
+                        &closed_root,
+                    )
+                })
             })
-        })
         })
     });
     eprintln!("IRH_R8B_TYPED route={route} strict={strict} counts={counts:?}");
@@ -227,7 +221,10 @@ fn label_poles(value: &Atom) -> String {
                 .to_atom()
                 .expand())
         })
-        .map_or_else(|error| format!("unreadable ({error})"), |poles| poles.to_string())
+        .map_or_else(
+            |error| format!("unreadable ({error})"),
+            |poles| poles.to_string(),
+        )
 }
 
 /// The spelling matrix of one position (`term` of `base`): for every
@@ -245,7 +242,12 @@ fn unweighted_matrix(label: &str, base: &str, term: &str, taken: bool) -> Result
     let mut failures = Vec::new();
     for (name, factor) in spellings() {
         let case = Case::new(&spelled(base, term, &factor), None)?;
-        for (route, strict) in [("off", false), ("closed", false), ("child", false), ("child", true)] {
+        for (route, strict) in [
+            ("off", false),
+            ("closed", false),
+            ("child", false),
+            ("child", true),
+        ] {
             let cell = format!("{label} {name} {route} strict={strict}");
             let value = match unweighted(&case, route, strict) {
                 Ok((value, counts)) => {
@@ -358,7 +360,12 @@ fn round8b_c_typed_root_spellings_equal_the_literal() -> Result<()> {
         let mut reference = None::<Atom>;
         for (name, factor) in spellings() {
             let case = Case::new(&spelled(L3_006, term, &factor), None)?;
-            for (route, strict) in [("off", false), ("closed", false), ("child", false), ("child", true)] {
+            for (route, strict) in [
+                ("off", false),
+                ("closed", false),
+                ("child", false),
+                ("child", true),
+            ] {
                 let cell = format!("typed {term} {name} {route} strict={strict}");
                 let value = match typed(&case, route, strict) {
                     Ok((value, counts)) => {
@@ -368,7 +375,8 @@ fn round8b_c_typed_root_spellings_equal_the_literal() -> Result<()> {
                             && !(counts.taken >= 1 && counts.declined == 0 && counts.exceeded == 0)
                             && !(hard_form && counts.reason == Some("symbol_in_denominator"))
                         {
-                            failures.push(format!("{cell}: the typed root must be taken: {counts:?}"));
+                            failures
+                                .push(format!("{cell}: the typed root must be taken: {counts:?}"));
                         }
                         value
                     }
@@ -404,11 +412,13 @@ fn round8b_d_the_stored_projector_moves_nothing() -> Result<()> {
     let today = case.today()?;
     ensure!(same(&unit, &today)?, "k3j1 with projector 1");
     let prefactor = case.graph.global_prefactor.num.clone();
-    let weighted =
-        move |tensor: &Atom| -> Result<Atom> { Ok(tensor * &prefactor) };
+    let weighted = move |tensor: &Atom| -> Result<Atom> { Ok(tensor * &prefactor) };
     let (weighted_unit, weighted_counts) = opaque(&case, "child", false, &weighted)?;
     let (weighted_today, _) = opaque(&case, "closed", false, &weighted)?;
-    ensure!(same(&weighted_unit, &weighted_today)?, "k3j1 weighted with projector 1");
+    ensure!(
+        same(&weighted_unit, &weighted_today)?,
+        "k3j1 weighted with projector 1"
+    );
     let epsilon = Atom::var(GS.dim_epsilon);
     let mut failures = Vec::new();
     for (name, projector) in [
@@ -473,7 +483,10 @@ fn round8b_d_a_regular_prefactor_is_no_strict_alarm() -> Result<()> {
             same_scalar(&typed_child, &typed_today)?,
             "typed strict={strict}: the child differs from today's"
         );
-        ensure!(typed_counts.exceeded == 0, "typed strict={strict}: {typed_counts:?}");
+        ensure!(
+            typed_counts.exceeded == 0,
+            "typed strict={strict}: {typed_counts:?}"
+        );
     }
     Ok(())
 }
@@ -509,7 +522,10 @@ fn round8b_e_an_opaque_callback_declines_without_a_probe() -> Result<()> {
             "{label}: an opaque callback must decline (counted, opaque_projector): {counts:?}"
         );
         let probes = probed.load(std::sync::atomic::Ordering::Relaxed);
-        ensure!(probes == 0, "{label}: the callback was probed {probes} time(s)");
+        ensure!(
+            probes == 0,
+            "{label}: the callback was probed {probes} time(s)"
+        );
     }
     Ok(())
 }
@@ -523,7 +539,9 @@ fn round8b_f_a_callback_alarm_is_never_swallowed() -> Result<()> {
     let case = Case::new(&k(3, 1), None)?;
     // A callback that always raises the alarm: fatal on every route.
     let always = |_: &Atom| -> Result<Atom> {
-        Err(depth::alarm("IRH-DEPTH: an alarm raised by the root projector".to_owned()))
+        Err(depth::alarm(
+            "IRH-DEPTH: an alarm raised by the root projector".to_owned(),
+        ))
     };
     for route in ["closed", "child", "off"] {
         match opaque(&case, route, false, &always) {
@@ -556,8 +574,14 @@ fn round8b_c1_the_expansion_input_is_dimension_free() -> Result<()> {
     let vector = symbolica::function!(GS.emr_mom, 1, &slot);
     let tensor = &vector / (&d - Atom::num(1));
     let regulated = Integrated::regulated_for_expansion(&tensor, "test")?;
-    ensure!(regulated.contains_symbol(GS.dim), "the Lorentz dimension is kept: {regulated}");
-    ensure!(crate::uv::approx::integrated::scalar_dimension(&regulated).is_none(), "{regulated}");
+    ensure!(
+        regulated.contains_symbol(GS.dim),
+        "the Lorentz dimension is kept: {regulated}"
+    );
+    ensure!(
+        crate::uv::approx::integrated::scalar_dimension(&regulated).is_none(),
+        "{regulated}"
+    );
     let free = &vector * &epsilon;
     ensure!(matches!(
         Integrated::regulated_for_expansion(&free, "test")?,
@@ -636,7 +660,9 @@ fn typed_pair(
         })
     });
     let calls = closed_calls.load(std::sync::atomic::Ordering::Relaxed);
-    eprintln!("IRH_R8B_REPAIR_TYPED route={route} strict={strict} closed_callback_calls={calls} counts={counts:?}");
+    eprintln!(
+        "IRH_R8B_REPAIR_TYPED route={route} strict={strict} closed_callback_calls={calls} counts={counts:?}"
+    );
     Ok((value?, counts, calls))
 }
 
@@ -661,7 +687,11 @@ fn repair_c1_5_a_regular_product_on_the_quotient_side_has_k_zero() -> Result<()>
     let mut failures = Vec::new();
     for (name, factor, literal) in [
         ("half", format!("2*{EPS}/(4-{DIM})"), Atom::one()),
-        ("dsq", format!("({DIM}^2-16)/({EPS}*({DIM}+4))"), Atom::num(-2)),
+        (
+            "dsq",
+            format!("({DIM}^2-16)/({EPS}*({DIM}+4))"),
+            Atom::num(-2),
+        ),
     ] {
         for term in ["v1", "v1 ->"] {
             let case = Case::new(&spelled(L3_006, term, &factor), None)?;
@@ -669,7 +699,10 @@ fn repair_c1_5_a_regular_product_on_the_quotient_side_has_k_zero() -> Result<()>
                 let cell = format!("{name} {term} {route} strict={strict}");
                 match unweighted(&case, route, strict) {
                     Ok((value, counts)) => {
-                        eprintln!("IRH_R8B_REPAIR_CELL {cell} poles={} counts={counts:?}", label_poles(&value));
+                        eprintln!(
+                            "IRH_R8B_REPAIR_CELL {cell} poles={} counts={counts:?}",
+                            label_poles(&value)
+                        );
                         if route == "child"
                             && !(counts.taken >= 1 && counts.declined == 0 && counts.refused == 0)
                         {
@@ -710,7 +743,10 @@ fn repair_rc_b1_a_traced_typed_factor_is_never_taken() -> Result<()> {
             counts.taken == 0 && counts.declined >= 1 && counts.reason == Some("opaque_projector"),
             "strict={strict}: a traced typed factor must decline: {counts:?}"
         );
-        ensure!(same_scalar(&child, &off)?, "strict={strict}: the child differs from off");
+        ensure!(
+            same_scalar(&child, &off)?,
+            "strict={strict}: the child differs from off"
+        );
     }
     Ok(())
 }
@@ -727,7 +763,13 @@ fn repair_rc_b1_a_traced_prefactor_in_the_typed_data_declines() -> Result<()> {
     let literal_dot = times(L3_006, "graph", "numerator_prefactor", "-1");
     let literal_case = Case::new(&literal_dot, None)?;
     let literal_data = typed_root(&literal_case.graph)?;
-    let (literal, _, _) = typed_pair(&literal_case, "off", false, &literal_data, &literal_data.factor)?;
+    let (literal, _, _) = typed_pair(
+        &literal_case,
+        "off",
+        false,
+        &literal_data,
+        &literal_data.factor,
+    )?;
     drop(literal_case);
     let spelling = format!("1/(1+(({})-4)/{EPS})", metric_trace());
     let dot = times(L3_006, "graph", "numerator_prefactor", &spelling);
@@ -744,10 +786,16 @@ fn repair_rc_b1_a_traced_prefactor_in_the_typed_data_declines() -> Result<()> {
         match typed_pair(&case, route, strict, &data, &callback_factor) {
             Ok((value, counts, _)) => {
                 if !same_scalar(&value, &literal)? {
-                    failures.push(format!("{route} strict={strict}: differs from the literal −1"));
+                    failures.push(format!(
+                        "{route} strict={strict}: differs from the literal −1"
+                    ));
                 }
-                if route == "child" && (counts.taken > 0 || counts.reason != Some("opaque_projector")) {
-                    failures.push(format!("{route} strict={strict}: raw traced data taken: {counts:?}"));
+                if route == "child"
+                    && (counts.taken > 0 || counts.reason != Some("opaque_projector"))
+                {
+                    failures.push(format!(
+                        "{route} strict={strict}: raw traced data taken: {counts:?}"
+                    ));
                 }
             }
             Err(error) => failures.push(format!("{route} strict={strict}: error {error:#}")),
@@ -772,12 +820,27 @@ fn repair_rc_s1_one_projection_object() -> Result<()> {
     let (consistent, _, _) = typed_pair(&case, "off", false, &data, &data.factor)?;
     for strict in [false, true] {
         let (child, counts, calls) = typed_pair(&case, "child", strict, &data, &twice)?;
-        ensure!(counts.taken >= 1 && counts.declined == 0, "strict={strict}: {counts:?}");
-        ensure!(same_scalar(&child, &off)?, "strict={strict}: the child differs from off");
-        ensure!(calls == 0, "strict={strict}: the callback was called on {calls} closed scalar(s)");
+        ensure!(
+            counts.taken >= 1 && counts.declined == 0,
+            "strict={strict}: {counts:?}"
+        );
+        ensure!(
+            same_scalar(&child, &off)?,
+            "strict={strict}: the child differs from off"
+        );
+        ensure!(
+            calls == 0,
+            "strict={strict}: the callback was called on {calls} closed scalar(s)"
+        );
     }
-    ensure!(off_calls == 0, "off: the callback was called on {off_calls} closed scalar(s)");
-    ensure!(same_scalar(&off, &consistent)?, "off: the closed scalars took the callback");
+    ensure!(
+        off_calls == 0,
+        "off: the callback was called on {off_calls} closed scalar(s)"
+    );
+    ensure!(
+        same_scalar(&off, &consistent)?,
+        "off: the closed scalars took the callback"
+    );
     Ok(())
 }
 
@@ -790,7 +853,9 @@ fn repair_rc_s1_one_projection_object() -> Result<()> {
 fn attack_trace() -> String {
     let g = "spenso::{symmetric,linear,real,spenso::tensor}::g";
     let m = |h: u32| {
-        format!("spenso::{{spenso::representation,spenso::self_dual}}::mink(4,gammalooprs::{{spenso::index}}::hedge({h},1))")
+        format!(
+            "spenso::{{spenso::representation,spenso::self_dual}}::mink(4,gammalooprs::{{spenso::index}}::hedge({h},1))"
+        )
     };
     format!("({g}({},{}))^2", m(81), m(82))
 }
@@ -844,8 +909,13 @@ fn irh_attack_typed_root_with_a_traced_prefactor_declines() -> Result<()> {
         let child = typed(&case, "child", false);
         eprintln!(
             "IRH_ATTACK_CELL typed prefactor {name} off={:?} child={:?}",
-            off.as_ref().map(|(v, _)| v.to_string()).map_err(|e| format!("{e:#}")),
-            child.as_ref().map(|(v, c)| (v.to_string(), format!("{c:?}"))).map_err(|e| format!("{e:#}")),
+            off.as_ref()
+                .map(|(v, _)| v.to_string())
+                .map_err(|e| format!("{e:#}")),
+            child
+                .as_ref()
+                .map(|(v, c)| (v.to_string(), format!("{c:?}")))
+                .map_err(|e| format!("{e:#}")),
         );
         match (off, child) {
             (Ok((off, _)), Ok((child, counts))) => {
@@ -855,14 +925,21 @@ fn irh_attack_typed_root_with_a_traced_prefactor_declines() -> Result<()> {
                     }
                     literal_plus_one = Some(off.clone());
                 } else {
-                    if !(counts.taken == 0 && counts.declined >= 1 && counts.reason == Some("opaque_projector")) {
-                        failures.push(format!("{name}: a traced typed factor must decline: {counts:?}"));
+                    if !(counts.taken == 0
+                        && counts.declined >= 1
+                        && counts.reason == Some("opaque_projector"))
+                    {
+                        failures.push(format!(
+                            "{name}: a traced typed factor must decline: {counts:?}"
+                        ));
                     }
                     if *name == "trace-cross"
                         && let Some(reference) = &literal_plus_one
                         && !same_scalar(&off, reference)?
                     {
-                        failures.push(format!("{name}: off is not the T = 4 reading (the +1 literal's value)"));
+                        failures.push(format!(
+                            "{name}: off is not the T = 4 reading (the +1 literal's value)"
+                        ));
                     }
                 }
                 if !same_scalar(&child, &off)? {
@@ -902,14 +979,19 @@ fn irh_attack_typed_scalar_api_with_a_traced_factor_declines() -> Result<()> {
         let (off, _) = attack_scalar(&case, "off", &factor)?;
         let (child, counts) = attack_scalar(&case, "child", &factor)?;
         eprintln!("IRH_ATTACK_CELL scalar api {name} off={off} child={child} counts={counts:?}");
-        if !(counts.taken == 0 && counts.declined >= 1 && counts.reason == Some("opaque_projector")) {
-            failures.push(format!("{name}: a traced typed factor must decline: {counts:?}"));
+        if !(counts.taken == 0 && counts.declined >= 1 && counts.reason == Some("opaque_projector"))
+        {
+            failures.push(format!(
+                "{name}: a traced typed factor must decline: {counts:?}"
+            ));
         }
         if !same(&child, &off)? {
             failures.push(format!("{name}: the child differs from off"));
         }
         if !same(&off, &plus_one)? {
-            failures.push(format!("{name}: off is not the T = 4 reading (the +1 value)"));
+            failures.push(format!(
+                "{name}: off is not the T = 4 reading (the +1 value)"
+            ));
         }
     }
     ensure!(failures.is_empty(), "{failures:#?}");
@@ -928,17 +1010,28 @@ fn irh_attack_a_vanishing_denominator_is_zero_today_listed_limit() -> Result<()>
     let epsilon = Atom::var(GS.dim_epsilon);
     let zz = (&d - Atom::num(4) + Atom::num(2) * &epsilon)
         / (Atom::num(2) * &d - Atom::num(8) + Atom::num(4) * &epsilon);
-    let regulated = Integrated::regulated_for_expansion(&zz, "irh_attack")
-        .map_err(|error| eyre!("regulated_for_expansion refused (the listed limit changed): {error:#}"))?;
-    eprintln!("IRH_ATTACK_CELL regulated_for_expansion accepted as {}", &*regulated);
-    ensure!(regulated.expand().is_zero(), "regulated_for_expansion: {} (expected 0 today)", &*regulated);
+    let regulated = Integrated::regulated_for_expansion(&zz, "irh_attack").map_err(|error| {
+        eyre!("regulated_for_expansion refused (the listed limit changed): {error:#}")
+    })?;
+    eprintln!(
+        "IRH_ATTACK_CELL regulated_for_expansion accepted as {}",
+        &*regulated
+    );
+    ensure!(
+        regulated.expand().is_zero(),
+        "regulated_for_expansion: {} (expected 0 today)",
+        &*regulated
+    );
     let normalised = super::super::regularity::normalise(
         super::super::regularity::Factor::QuotientVertexNumerator,
         &zz,
     )
     .map_err(|refused| eyre!("normalise refused (the listed limit changed): {refused}"))?;
     eprintln!("IRH_ATTACK_CELL normalise accepted as {normalised}");
-    ensure!(normalised.expand().is_zero(), "normalise: {normalised} (expected 0 today)");
+    ensure!(
+        normalised.expand().is_zero(),
+        "normalise: {normalised} (expected 0 today)"
+    );
     Ok(())
 }
 
@@ -947,16 +1040,23 @@ fn irh_attack_a_vanishing_denominator_is_zero_today_listed_limit() -> Result<()>
 /// counterterm). LISTED constructed-input limit (BATCH2-ON-STACK.md "Listed limits"; helper VH 2's PRODUCIBLE.md);
 /// not fixed in this batch.
 #[test]
-fn irh_attack_a_vanishing_denominator_on_a_quotient_vertex_is_zero_today_listed_limit() -> Result<()> {
+fn irh_attack_a_vanishing_denominator_on_a_quotient_vertex_is_zero_today_listed_limit() -> Result<()>
+{
     let zz = format!("({DIM}-4+2*{EPS})/(2*{DIM}-8+4*{EPS})");
     let literal = Case::new(&spelled(L3_006, "v1", "1/2"), None)?;
     let (reference, _) = unweighted(&literal, "off", false)?;
-    ensure!(!reference.is_zero(), "the literal 1/2's counterterm is zero");
+    ensure!(
+        !reference.is_zero(),
+        "the literal 1/2's counterterm is zero"
+    );
     let case = Case::new(&spelled(L3_006, "v1", &zz), None)?;
     for route in ["off", "closed", "child"] {
         let (value, counts) = unweighted(&case, route, false)?;
         eprintln!("IRH_ATTACK_CELL zz v1 {route} value={value} counts={counts:?}");
-        ensure!(value.is_zero(), "{route}: {value} (expected 0 today: the listed limit changed)");
+        ensure!(
+            value.is_zero(),
+            "{route}: {value} (expected 0 today: the listed limit changed)"
+        );
     }
     Ok(())
 }

@@ -1138,12 +1138,17 @@ mod tests {
         // U7b: a failure of the uncontracted switch that fails the diagram by
         // design (a K3 CHECK mismatch) is not declined either, same text.
         let check = guarded::<u8>(None, None, || {
-            Err(super::super::uncontracted::failure("UNCONTRACTED_CHECK: test".into()))
-                .map_err(|error| error.wrap_err("while applying R* to a quotient"))
+            Err(super::super::uncontracted::failure(
+                "UNCONTRACTED_CHECK: test".into(),
+            ))
+            .map_err(|error| error.wrap_err("while applying R* to a quotient"))
         });
         let error = check.expect_err("a K3 CHECK mismatch must not be declined");
         assert!(super::super::depth::is_alarm(&error), "{error:#}");
-        assert!(format!("{error:#}").contains("UNCONTRACTED_CHECK: test"), "{error:#}");
+        assert!(
+            format!("{error:#}").contains("UNCONTRACTED_CHECK: test"),
+            "{error:#}"
+        );
         // MATRIX-R45 review: vakint's unknown-master refusal of a K3 record
         // fails the diagram, also inside a guarded attempt. On the G-G stack
         // it is a diagnostic failure, which the child route's guard
@@ -1166,8 +1171,10 @@ mod tests {
         // as the alarm, also wrapped; a budget error replayed by the
         // counterterm cache is still the budget class.
         let check = guarded::<u8>(None, None, || {
-            Err(super::super::depth::check_failure("IR_DIRAC_CHECK: test".into()))
-                .map_err(|error| error.wrap_err("while integrating the IR hard part"))
+            Err(super::super::depth::check_failure(
+                "IR_DIRAC_CHECK: test".into(),
+            ))
+            .map_err(|error| error.wrap_err("while integrating the IR hard part"))
         });
         let error = check.expect_err("a check mismatch must not be declined");
         assert!(super::super::depth::is_alarm(&error), "{error:#}");

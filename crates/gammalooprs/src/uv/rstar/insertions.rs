@@ -867,9 +867,9 @@ impl PropagatorInsertionEvaluator {
             "insertion_coefficient_truncation",
         )?
         .series(GS.dim_epsilon, 0, parent_loops as i64 - 1)?
-            .to_atom()
-            .expand()
-            .together();
+        .to_atom()
+        .expand()
+        .together();
         ensure!(
             coefficient
                 .series(GS.dim_epsilon, 0, -1)?
@@ -1450,9 +1450,7 @@ mod tests {
             let (poles, counterterm) = run(scalar)?;
             let difference = |a: &Atom, b: &Atom| -> Result<bool> {
                 let difference = super::super::tests::canonical_tensor(
-                    &crate::uv::approx::integrated::Integrated::dimensionally_regularized(
-                        &(a - b),
-                    ),
+                    &crate::uv::approx::integrated::Integrated::dimensionally_regularized(&(a - b)),
                 )?;
                 Ok(difference
                     .series(GS.dim_epsilon, 0, -1)?
@@ -1462,7 +1460,9 @@ mod tests {
                     .is_zero())
             };
             if !difference(&poles, &literal_poles)? {
-                failures.push(format!("{name}: bare poles {poles} against {literal_poles}"));
+                failures.push(format!(
+                    "{name}: bare poles {poles} against {literal_poles}"
+                ));
             }
             if !difference(&counterterm, &literal_counterterm)? {
                 failures.push(format!(
@@ -1623,9 +1623,17 @@ mod tests {
         let eps = "gammalooprs::{}::ε";
         let dim = "gammalooprs::{}::dim";
         let hedge = "gammalooprs::{spenso::index}::hedge";
-        let mink = |n: usize| format!("spenso::{{spenso::representation,spenso::self_dual}}::mink(4,{hedge}({n},1))");
-        let bis = |n: usize| format!("spenso::{{spenso::representation,spenso::self_dual}}::bis(4,{hedge}({n},1))");
-        let metric = format!("(spenso::{{symmetric,linear,real,spenso::tensor}}::g({},{}))^2", mink(81), mink(82));
+        let mink = |n: usize| {
+            format!("spenso::{{spenso::representation,spenso::self_dual}}::mink(4,{hedge}({n},1))")
+        };
+        let bis = |n: usize| {
+            format!("spenso::{{spenso::representation,spenso::self_dual}}::bis(4,{hedge}({n},1))")
+        };
+        let metric = format!(
+            "(spenso::{{symmetric,linear,real,spenso::tensor}}::g({},{}))^2",
+            mink(81),
+            mink(82)
+        );
         let gamma = "spenso::{linear,spenso::tensor}::gamma";
         let dirac = format!(
             "{gamma}({},{},{})*{gamma}({},{},{})",
@@ -1642,13 +1650,27 @@ mod tests {
         for (label, pole, regular) in [
             ("eps", format!("({eps})^(-1)"), format!("1+{eps}")),
             ("dm4", format!("(-2)/({dim}-4)"), format!("(-2)/({dim}-3)")),
-            ("gtr", format!("(-2)/({metric}-4)"), format!("(-2)/({metric}-3)")),
-            ("dtr", format!("(-8)/({dirac}-16)"), format!("(-8)/({dirac}-12)")),
+            (
+                "gtr",
+                format!("(-2)/({metric}-4)"),
+                format!("(-2)/({metric}-3)"),
+            ),
+            (
+                "dtr",
+                format!("(-8)/({dirac}-16)"),
+                format!("(-8)/({dirac}-12)"),
+            ),
         ] {
             let pole = parse(&pole)?;
             let outcome = PropagatorInsertionEvaluator::validate_weight(&pole);
-            eprintln!("IRH_R45_WEIGHT {label} {:?}", outcome.as_ref().map_err(|e| format!("{e:#}")));
-            assert!(outcome.is_err(), "{label}: a pole in an insertion weight is accepted");
+            eprintln!(
+                "IRH_R45_WEIGHT {label} {:?}",
+                outcome.as_ref().map_err(|e| format!("{e:#}"))
+            );
+            assert!(
+                outcome.is_err(),
+                "{label}: a pole in an insertion weight is accepted"
+            );
             PropagatorInsertionEvaluator::validate_weight(&parse(&regular)?)
                 .map_err(|error| eyre!("{label} regular neighbour: {error:#}"))?;
         }

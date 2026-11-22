@@ -402,7 +402,7 @@ pub(super) fn integrate_massive_vacuum(
         )?
         .into_owned()
         .replace(function!(minkowski, GS.dim, W_.x___))
-            .with(function!(minkowski, &dimension, W_.x___));
+        .with(function!(minkowski, &dimension, W_.x___));
     }
     input.tensor_reduce(vakint, settings)?;
     input.evaluate_integral(vakint, settings)?;

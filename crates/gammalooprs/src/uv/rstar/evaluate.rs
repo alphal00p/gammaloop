@@ -4204,8 +4204,11 @@ impl<'a> Evaluation<'a> {
 
     fn poles(&self, expression: &Atom) -> Result<Atom> {
         // IRH-DEPTH round 8b (C1): d = 4 − 2ε before the pole projection.
-        let expression =
-            Integrated::regulated_for_expansion_in(expression, self.epsilon, "rstar_pole_projection")?;
+        let expression = Integrated::regulated_for_expansion_in(
+            expression,
+            self.epsilon,
+            "rstar_pole_projection",
+        )?;
         Ok(expression.series(self.epsilon, 0, -1)?.to_atom().expand())
     }
 

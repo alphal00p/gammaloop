@@ -16,7 +16,6 @@ mod closed;
 #[cfg(test)]
 mod closed_skip_tests;
 mod depth;
-pub mod regularity;
 #[cfg(test)]
 mod depth_tests;
 mod edge_experiment;
@@ -44,6 +43,7 @@ pub mod pint6_dump;
 mod plan;
 #[cfg(test)]
 mod pole_tests;
+pub mod regularity;
 mod routing;
 mod routing_num;
 

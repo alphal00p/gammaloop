@@ -145,17 +145,19 @@ pub fn integrate_single_mass(
         .0
         .iter()
         .map(|source| {
-            Ok(match Integrated::regulated_for_expansion_in(
-                &source.numerator,
-                regulator,
-                "single_mass_input",
-            )? {
-                std::borrow::Cow::Borrowed(_) => None,
-                std::borrow::Cow::Owned(numerator) => Some(vakint::VakintTerm {
-                    numerator,
-                    ..source.clone()
-                }),
-            })
+            Ok(
+                match Integrated::regulated_for_expansion_in(
+                    &source.numerator,
+                    regulator,
+                    "single_mass_input",
+                )? {
+                    std::borrow::Cow::Borrowed(_) => None,
+                    std::borrow::Cow::Owned(numerator) => Some(vakint::VakintTerm {
+                        numerator,
+                        ..source.clone()
+                    }),
+                },
+            )
         })
         .collect::<Result<Vec<_>>>()?;
     for (index, original) in input.0.iter().enumerate() {
@@ -1005,8 +1007,7 @@ pub(super) fn insertion_coefficient_valuation(
     let Some(written) = order(coefficient)? else {
         return Ok(None);
     };
-    if epsilon != crate::utils::GS.dim_epsilon
-        || !coefficient.contains_symbol(crate::utils::GS.dim)
+    if epsilon != crate::utils::GS.dim_epsilon || !coefficient.contains_symbol(crate::utils::GS.dim)
     {
         return Ok(Some(written));
     }
