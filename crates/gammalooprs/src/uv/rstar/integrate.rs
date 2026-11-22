@@ -793,22 +793,10 @@ impl VacuumCut {
             .map_err(|error| eyre!(error))?
             .get_symbol()
             .ok_or_else(|| eyre!("Vakint epsilon must be a symbol"))?;
-        let series = coefficient
-            .series(epsilon, 0, SeriesDepth::relative(1))
-            .wrap_err("could not determine the Laurent order of an R* insertion coefficient")?;
-        if series.is_zero() {
+        let Some(valuation) = insertion_coefficient_valuation(coefficient, epsilon)? else {
             timing.closure_preparation += preparation_started.elapsed();
             return Ok(Atom::Zero);
-        }
-        let exponent = series.get_trailing_exponent();
-        ensure!(
-            exponent.is_integer(),
-            "an R* insertion coefficient needs integer epsilon powers"
-        );
-        let valuation = exponent
-            .numerator()
-            .to_i64()
-            .ok_or_else(|| eyre!("the R* insertion's epsilon power is too large"))?;
+        };
         // A pole in the already integrated insertion promotes higher orders of
         // the remaining loop integral. Keep tensor spectators outside Vakint,
         // but supply precisely the extra depth their Laurent coefficient needs.
@@ -942,6 +930,52 @@ impl VacuumCut {
             loops: heads.len(),
         })
     }
+}
+
+/// The Laurent order of an R* insertion coefficient (a vacuum tensor
+/// reduction coefficient times the integrated insertion), `None` when it
+/// vanishes. IRH-DEPTH (regularity review of MATRIX-R45, finding 2): the
+/// coefficient is a rational function of a symbolic `d`, and an
+/// intermediate reduction coefficient can have a `1/(d-4)` (every rank-ten
+/// orthogonal Weingarten coefficient has one), which a series in `ε` with
+/// `d` symbolic does not see; the closure integral would then be requested
+/// one order short. The order is therefore the lower of the order as
+/// written and the order after `d = 4-2ε` (never above today's).
+pub(super) fn insertion_coefficient_valuation(
+    coefficient: &Atom,
+    epsilon: symbolica::atom::Symbol,
+) -> Result<Option<i64>> {
+    let order = |expression: &Atom| -> Result<Option<i64>> {
+        let series = expression
+            .series(epsilon, 0, SeriesDepth::relative(1))
+            .wrap_err("could not determine the Laurent order of an R* insertion coefficient")?;
+        if series.is_zero() {
+            return Ok(None);
+        }
+        let exponent = series.get_trailing_exponent();
+        ensure!(
+            exponent.is_integer(),
+            "an R* insertion coefficient needs integer epsilon powers"
+        );
+        Ok(Some(exponent.numerator().to_i64().ok_or_else(|| {
+            eyre!("the R* insertion's epsilon power is too large")
+        })?))
+    };
+    let Some(written) = order(coefficient)? else {
+        return Ok(None);
+    };
+    if epsilon != crate::utils::GS.dim_epsilon
+        || !coefficient.contains_symbol(crate::utils::GS.dim)
+    {
+        return Ok(Some(written));
+    }
+    let regulated = Integrated::dimensionally_regularized(coefficient);
+    // A series that cannot be taken after the substitution (an ε inside a
+    // function argument) keeps today's order.
+    Ok(Some(match order(&regulated) {
+        Ok(Some(regulated)) => written.min(regulated),
+        Ok(None) | Err(_) => written,
+    }))
 }
 
 #[cfg(test)]

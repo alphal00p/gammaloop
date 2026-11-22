@@ -209,7 +209,7 @@ pub(super) fn guarded<T>(
     release: Option<fn()>,
     work: impl FnOnce() -> Result<std::result::Result<T, String>>,
 ) -> Result<std::result::Result<T, String>> {
-    use symbolica::utils::resources::{ResourceBudget, ResourceLimitError, ResourceLimits};
+    use symbolica::utils::resources::{ResourceBudget, ResourceLimits};
     let budget = ResourceBudget::new(ResourceLimits {
         max_process_rss_bytes: limit,
         ..ResourceLimits::default()
@@ -220,9 +220,9 @@ pub(super) fn guarded<T>(
         Ok(Ok(outcome)) => return Ok(outcome),
         Ok(Err(error)) if super::depth::is_alarm(&error) => return Err(error),
         Ok(Err(error)) => {
-            let limit_error = error
-                .chain()
-                .any(|cause| cause.downcast_ref::<ResourceLimitError>().is_some());
+            // Also a budget error replayed by the counterterm cache
+            // (MATRIX-R45 review): its class is in the cached cause.
+            let limit_error = crate::uv::counterterm_cache::is_resource_limit(&error);
             (format!("{error:#}"), false, limit_error)
         }
         Err(payload) => {
@@ -1144,6 +1144,23 @@ mod tests {
         let error = check.expect_err("a K3 CHECK mismatch must not be declined");
         assert!(super::super::depth::is_alarm(&error), "{error:#}");
         assert!(format!("{error:#}").contains("UNCONTRACTED_CHECK: test"), "{error:#}");
+        // MATRIX-R45 review: a check-mode mismatch (IR_DIRAC_CHECK) is fatal
+        // as the alarm, also wrapped; a budget error replayed by the
+        // counterterm cache is still the budget class.
+        let check = guarded::<u8>(None, None, || {
+            Err(super::super::depth::check_failure("IR_DIRAC_CHECK: test".into()))
+                .map_err(|error| error.wrap_err("while integrating the IR hard part"))
+        });
+        let error = check.expect_err("a check mismatch must not be declined");
+        assert!(super::super::depth::is_alarm(&error), "{error:#}");
+        let replayed: std::result::Result<u8, String> = guarded(None, None, || {
+            let source = eyre::Report::new(ResourceLimitError::MonitorUnavailable {
+                resource: "process RSS",
+                message: "test".into(),
+            });
+            Err(crate::uv::counterterm_cache::replay_for_tests(source))
+        })?;
+        assert_eq!(replayed, Err("budget".to_owned()));
         Ok(())
     }
 }
