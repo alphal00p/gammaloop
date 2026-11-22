@@ -1043,17 +1043,23 @@ fn matrix_r45_nested_decorated_quotient() -> Result<()> {
         // Round 8b: where v1 is on the quotient side (the root's correction
         // and some nested ones) its k = 1 declines; where it is in the hard
         // part the hard-numerator refusal stays; the last reason counted is
-        // either (before: RIGHT, SID, UT).
-        let expected: &[Disposition] = match spelling {
-            Spelling::Epsilon => &[DO],
-            Spelling::DimensionMinusFour => &[DO, SID],
-            Spelling::Trace | Spelling::DiracTrace => &[DO, UT],
-        };
+        // either (before: RIGHT, SID, UT). Repair RC-S3: the order of the
+        // corrections is fixed, so ONE disposition is pinned per cell (the
+        // last reason counted is declared_order in every spelling and mode:
+        // repair/logs/ctbase2.log), and a declared-order decline must be
+        // counted.
+        let expected: Disposition = DO;
         for (mode, test) in MODES {
             let cell = format!("nested-v1 {spelling:?} {mode}");
             let child = case.child(run(test)).map(|run| (run.value, run.root));
+            let counted = child.as_ref().ok().map(|(_, counts)| counts.clone());
             match classify(&cell, &today, child, true) {
-                Ok(found) if expected.contains(&found) => {}
+                Ok(found) if found == expected => {
+                    let counts = counted.unwrap_or_default();
+                    if counts.declared_order == 0 || counts.declined == 0 {
+                        wrong.push(format!("{cell}: no declared-order decline counted: {counts:?}"));
+                    }
+                }
                 Ok(found) => wrong.push(format!("{cell}: {found:?}, expected {expected:?}")),
                 Err(error) => wrong.push(format!("{error:#}")),
             }

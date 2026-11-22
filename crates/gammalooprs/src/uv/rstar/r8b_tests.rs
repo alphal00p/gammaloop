@@ -514,36 +514,13 @@ fn round8b_e_an_opaque_callback_declines_without_a_probe() -> Result<()> {
     Ok(())
 }
 
-/// (f) Finding 5: a callback that forwards a typed alarm (here only on the
-/// probe's input, as a callback delegating to a nested R* evaluation could)
-/// was skipped by the probe and the correction admitted. Every alarm a
-/// callback raises must be fatal; without a probe none is raised here, and
-/// the child route declines the opaque callback.
+/// (f) Finding 5: every alarm a root projector callback raises is fatal on
+/// every route, never swallowed into a decline or a value. (Repair RC-S3:
+/// the half with a callback forwarding an alarm only on the old probe's
+/// input could not fail once the probe was removed, and is dropped.)
 #[test]
 fn round8b_f_a_callback_alarm_is_never_swallowed() -> Result<()> {
     let case = Case::new(&k(3, 1), None)?;
-    let forwarding = |tensor: &Atom| -> Result<Atom> {
-        if tensor.contains_symbol(probe_symbol()) {
-            return Err(depth::alarm(
-                "IRH-DEPTH: a nested alarm forwarded by the root projector".to_owned(),
-            ));
-        }
-        Ok(tensor.clone())
-    };
-    let (today, _) = opaque(&case, "closed", false, &forwarding)?;
-    match opaque(&case, "child", false, &forwarding) {
-        Ok((child, counts)) => {
-            ensure!(same(&child, &today)?, "the value");
-            ensure!(
-                counts.callback_unprobed == 0 && counts.taken == 0,
-                "the alarm was swallowed and the correction admitted: {counts:?}"
-            );
-        }
-        Err(error) => ensure!(
-            depth::is_alarm(&error),
-            "an error that lost the alarm class: {error:#}"
-        ),
-    }
     // A callback that always raises the alarm: fatal on every route.
     let always = |_: &Atom| -> Result<Atom> {
         Err(depth::alarm("IRH-DEPTH: an alarm raised by the root projector".to_owned()))
@@ -586,5 +563,220 @@ fn round8b_c1_the_expansion_input_is_dimension_free() -> Result<()> {
         Integrated::regulated_for_expansion(&free, "test")?,
         std::borrow::Cow::Borrowed(_)
     ));
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Round 8b repair (review of 81a8ceab3b: C1-5, RC-B1, RC-S1, RC-S3).
+// ---------------------------------------------------------------------------
+
+const MINK: &str = "spenso::{spenso::representation,spenso::self_dual}::mink";
+const HEDGE: &str = "gammalooprs::{spenso::index}::hedge";
+const METRIC: &str = "spenso::{symmetric,linear,real,spenso::tensor}::g";
+const BIS: &str = "spenso::{spenso::representation,spenso::self_dual}::bis";
+const GAMMA: &str = "spenso::{linear,spenso::tensor}::gamma";
+
+/// The review's closed Dirac trace −8/(tr(γ_a γ^a) − 16), 1/ε at d = 4 − 2ε.
+fn dirac_trace_pole() -> String {
+    let bis = |n: usize| format!("{BIS}(4,{HEDGE}({n},1))");
+    let mink = format!("{MINK}(4,{HEDGE}(85,1))");
+    format!(
+        "(-8)/({GAMMA}({},{},{mink})*{GAMMA}({},{},{mink})-16)",
+        bis(83),
+        bis(84),
+        bis(84),
+        bis(83)
+    )
+}
+
+/// The closed metric trace T = g_ab g^ab (T − 4 = −2ε at d = 4 − 2ε).
+fn metric_trace() -> String {
+    let slot = |n: usize| format!("{MINK}(4,{HEDGE}({n},1))");
+    format!("({METRIC}({},{}))^2", slot(81), slot(82))
+}
+
+/// One run of the typed closed root with the declared data `data` and a
+/// SEPARATE callback `X ↦ callback_factor · σ(X)`; also returns how many
+/// times the callback was called on a closed scalar (`closed_dot_scalar`).
+fn typed_pair(
+    case: &Case,
+    route: &'static str,
+    strict: bool,
+    data: &ClosedRootNormalization,
+    callback_factor: &Atom,
+) -> Result<(Atom, DepthCounts, usize)> {
+    let factor = callback_factor.clone();
+    let routing = data.external_routing.clone();
+    let closed_calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let seen = closed_calls.clone();
+    let callback = move |tensor: &Atom| -> Result<Atom> {
+        if super::super::closed_dot_scalar(tensor.as_view()) {
+            seen.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        Ok(&factor * tensor.replace_multiple(&routing))
+    };
+    let test = DepthTest {
+        strict: Some(strict),
+        ..FIXED
+    };
+    let ((value, counts), _) = crate::uv::approx::streamed::with_algebraic_check(|| {
+        depth::with_depth_test(test, || {
+            depth::collect(|| {
+                with_ir_hard(route, || {
+                    case.plan.projected_counterterm_closing_root_scalar(
+                        &case.graph,
+                        case.model(),
+                        &case.vakint,
+                        &case.settings,
+                        &callback,
+                        data,
+                    )
+                })
+            })
+        })
+    });
+    let calls = closed_calls.load(std::sync::atomic::Ordering::Relaxed);
+    eprintln!("IRH_R8B_REPAIR_TYPED route={route} strict={strict} closed_callback_calls={calls} counts={counts:?}");
+    Ok((value?, counts, calls))
+}
+
+/// `typed_root` with the declared factor multiplied by `extra`.
+fn typed_root_times(graph: &Graph, extra: &Atom) -> Result<ClosedRootNormalization> {
+    let mut root = typed_root(graph)?;
+    root.factor = &root.factor * extra;
+    Ok(root)
+}
+
+/// Repair C1-5: `k` of a factor is the ε order of THE FACTOR (its Laurent
+/// valuation at d = 4 − 2ε), not the sum of its multiplicative pieces' pole
+/// orders: a regular factor spelled as a product (2ε/(4−d) = 1,
+/// (d²−16)/(ε(d+4)) = −2) on a quotient vertex or edge has k = 0, so the
+/// child route TAKES it (no decline) and gives the literal's value on every
+/// route. On 81a8ceab3b each was `declared_order` (k = 1).
+#[test]
+fn repair_c1_5_a_regular_product_on_the_quotient_side_has_k_zero() -> Result<()> {
+    let base_case = Case::new(L3_006, None)?;
+    let (base_value, _) = unweighted(&base_case, "off", false)?;
+    drop(base_case);
+    let mut failures = Vec::new();
+    for (name, factor, literal) in [
+        ("half", format!("2*{EPS}/(4-{DIM})"), Atom::one()),
+        ("dsq", format!("({DIM}^2-16)/({EPS}*({DIM}+4))"), Atom::num(-2)),
+    ] {
+        for term in ["v1", "v1 ->"] {
+            let case = Case::new(&spelled(L3_006, term, &factor), None)?;
+            for (route, strict) in [("off", false), ("child", false), ("child", true)] {
+                let cell = format!("{name} {term} {route} strict={strict}");
+                match unweighted(&case, route, strict) {
+                    Ok((value, counts)) => {
+                        eprintln!("IRH_R8B_REPAIR_CELL {cell} poles={} counts={counts:?}", label_poles(&value));
+                        if route == "child"
+                            && !(counts.taken >= 1 && counts.declined == 0 && counts.refused == 0)
+                        {
+                            failures.push(format!("{cell}: not taken: {counts:?}"));
+                        }
+                        if !same(&value, &(&literal * &base_value))? {
+                            failures.push(format!(
+                                "{cell}: {} against the literal's {}",
+                                label_poles(&value),
+                                label_poles(&(&literal * &base_value))
+                            ));
+                        }
+                    }
+                    Err(error) => failures.push(format!("{cell}: error {error:#}")),
+                }
+            }
+        }
+    }
+    ensure!(failures.is_empty(), "{failures:#?}");
+    Ok(())
+}
+
+/// Repair RC-B1: a typed root normalisation that holds a tensor structure
+/// (here a closed Dirac trace equal to 1/ε, whose value depends on the
+/// dimension the trace is taken in) is not a typed regular form: the child
+/// route never certifies or multiplies it; it declines (`opaque_projector`)
+/// and equals the generic route. On 81a8ceab3b `excess_poles` read k = 0 and
+/// the child took it (taken=1).
+#[test]
+fn repair_rc_b1_a_traced_typed_factor_is_never_taken() -> Result<()> {
+    let case = Case::new(L3_006, None)?;
+    let spelled = symbolica::try_parse!(&dirac_trace_pole()).map_err(|error| eyre!("{error}"))?;
+    let data = typed_root_times(&case.graph, &spelled)?;
+    let (off, _, _) = typed_pair(&case, "off", false, &data, &data.factor)?;
+    for strict in [false, true] {
+        let (child, counts, _) = typed_pair(&case, "child", strict, &data, &data.factor)?;
+        ensure!(
+            counts.taken == 0 && counts.declined >= 1 && counts.reason == Some("opaque_projector"),
+            "strict={strict}: a traced typed factor must decline: {counts:?}"
+        );
+        ensure!(same_scalar(&child, &off)?, "strict={strict}: the child differs from off");
+    }
+    Ok(())
+}
+
+/// Repair RC-B1 (the independent gate's cell, helper VH 2): the graph
+/// numerator prefactor spelled with a closed metric trace,
+/// 1/(1+(T−4)/ε) = −1, and the typed data built from the RAW prefactor (as
+/// beta builds it), while the callback multiplies the contracted prefactor.
+/// The checker and the multiplier must be one object: the child route
+/// declines the raw traced data and every route gives the literal −1's
+/// value. On 81a8ceab3b the child applied the raw data.
+#[test]
+fn repair_rc_b1_a_traced_prefactor_in_the_typed_data_declines() -> Result<()> {
+    let literal_dot = times(L3_006, "graph", "numerator_prefactor", "-1");
+    let literal_case = Case::new(&literal_dot, None)?;
+    let literal_data = typed_root(&literal_case.graph)?;
+    let (literal, _, _) = typed_pair(&literal_case, "off", false, &literal_data, &literal_data.factor)?;
+    drop(literal_case);
+    let spelling = format!("1/(1+(({})-4)/{EPS})", metric_trace());
+    let dot = times(L3_006, "graph", "numerator_prefactor", &spelling);
+    let case = Case::new(&dot, None)?;
+    let data = typed_root(&case.graph)?;
+    let contracted = super::super::regularity::normalise(
+        super::super::regularity::Factor::GraphNumeratorPrefactor,
+        &case.graph.global_prefactor.num,
+    )
+    .map_err(|refused| eyre!("{refused}"))?;
+    let callback_factor = contracted.replace_multiple(&data.external_routing);
+    let mut failures = Vec::new();
+    for (route, strict) in [("off", false), ("child", false), ("child", true)] {
+        match typed_pair(&case, route, strict, &data, &callback_factor) {
+            Ok((value, counts, _)) => {
+                if !same_scalar(&value, &literal)? {
+                    failures.push(format!("{route} strict={strict}: differs from the literal −1"));
+                }
+                if route == "child" && (counts.taken > 0 || counts.reason != Some("opaque_projector")) {
+                    failures.push(format!("{route} strict={strict}: raw traced data taken: {counts:?}"));
+                }
+            }
+            Err(error) => failures.push(format!("{route} strict={strict}: error {error:#}")),
+        }
+    }
+    ensure!(failures.is_empty(), "{failures:#?}");
+    Ok(())
+}
+
+/// Repair RC-S1: the typed data and the callback must not be two sources of
+/// truth. On a closed scalar the evaluation's ONE projection is the typed
+/// form `c · σ(X)` (the callback is never called there), on every route, so
+/// the child route's certified and multiplied scalar is the generic route's:
+/// with data c and an inconsistent callback 2c, child equals off. On
+/// 81a8ceab3b: child_equals_off=false, taken=1, declined=0.
+#[test]
+fn repair_rc_s1_one_projection_object() -> Result<()> {
+    let case = Case::new(L3_006, None)?;
+    let data = typed_root(&case.graph)?;
+    let twice = &data.factor * Atom::num(2);
+    let (off, _, off_calls) = typed_pair(&case, "off", false, &data, &twice)?;
+    let (consistent, _, _) = typed_pair(&case, "off", false, &data, &data.factor)?;
+    for strict in [false, true] {
+        let (child, counts, calls) = typed_pair(&case, "child", strict, &data, &twice)?;
+        ensure!(counts.taken >= 1 && counts.declined == 0, "strict={strict}: {counts:?}");
+        ensure!(same_scalar(&child, &off)?, "strict={strict}: the child differs from off");
+        ensure!(calls == 0, "strict={strict}: the callback was called on {calls} closed scalar(s)");
+    }
+    ensure!(off_calls == 0, "off: the callback was called on {off_calls} closed scalar(s)");
+    ensure!(same_scalar(&off, &consistent)?, "off: the closed scalars took the callback");
     Ok(())
 }
