@@ -37,14 +37,16 @@ fn routes(uv_children_rstar: bool, ir_hard_child: bool) -> Routes {
     }
 }
 
-/// The default kinds are root, child, ir-hard and surrogate (one list for
-/// the unset switch and a bare `on` / `check`).
+/// The default kinds are root, child and ir-hard (one list for the unset
+/// switch and a bare `on` / `check`); surrogate must be listed (ruling
+/// 18:28Z).
 #[test]
-fn default_kinds_are_root_child_ir_hard_surrogate() {
+fn default_kinds_are_root_child_ir_hard() {
     assert_eq!(
         DEFAULT_KINDS,
-        [Kind::Root, Kind::Child, Kind::IrHard, Kind::Surrogate]
+        [Kind::Root, Kind::Child, Kind::IrHard]
     );
+    assert!(!Kind::Surrogate.in_default() && Kind::Surrogate.implemented());
     for kind in Kind::ALL {
         assert_eq!(kind.in_default(), DEFAULT_KINDS.contains(&kind), "{kind:?}");
     }
@@ -78,7 +80,7 @@ fn switch_source_explicit_bits() {
         parse(Some("on:root,quotient")).explicit_kinds(),
         vec![Kind::Root]
     );
-    let all = parse(Some("on:root,child,ir-hard,surrogate"));
+    let all = parse(Some("on:root,child,ir-hard"));
     assert_eq!(all.enabled_kinds(), default.enabled_kinds());
     assert_eq!(all.explicit_kinds(), DEFAULT_KINDS.to_vec());
     assert_ne!(all, default, "the source differs");
@@ -116,7 +118,7 @@ fn unset_follows_the_default_and_empty_is_off() {
 }
 
 /// Ruling D2: a default run and an explicit
-/// `on:root,child,ir-hard,surrogate` run have ONE stored identity (they
+/// `on:root,child,ir-hard` run have ONE stored identity (they
 /// resume each other), and a bare `on` the same.
 #[test]
 fn default_identity_equals_the_explicit_default_list() {
@@ -128,15 +130,20 @@ fn default_identity_equals_the_explicit_default_list() {
     let default = identity(Switch::DEFAULT_ON);
     assert_eq!(
         default.as_deref(),
+        Some("on:root,child,ir-hard:strict")
+    );
+    assert_eq!(identity(parse(Some("on:root,child,ir-hard"))), default);
+    assert_eq!(identity(parse(Some("on:a,c,b"))), default);
+    // a list with surrogate is another identity (the hole-cut segment)
+    assert_eq!(
+        identity(parse(Some("on:root,child,ir-hard,surrogate"))).as_deref(),
         Some("on:root,child,ir-hard,surrogate:strict:hole_cut=form")
     );
-    assert_eq!(identity(parse(Some("on:root,child,ir-hard,surrogate"))), default);
-    assert_eq!(identity(parse(Some("on:e,a,c,b"))), default);
     assert_eq!(identity(parse(Some("on"))), default);
     // a default with a dropped kind is the explicit list without it
     assert_eq!(
         identity(Switch::DEFAULT_ON.without(Kind::IrHard)),
-        identity(parse(Some("on:root,child,surrogate")))
+        identity(parse(Some("on:root,child")))
     );
     assert_eq!(identity(Switch::OFF), None);
 }
@@ -148,7 +155,7 @@ fn default_identity_equals_the_explicit_default_list() {
 fn default_kind_route_off_is_dropped() -> Result<()> {
     let initialised = init(Switch::DEFAULT_ON, routes(true, false), false).map_err(|e| eyre!(e))?;
     ensure!(
-        initialised.switch.enabled_kinds() == vec![Kind::Root, Kind::Child, Kind::Surrogate]
+        initialised.switch.enabled_kinds() == vec![Kind::Root, Kind::Child]
             && initialised.switch.is_default()
             && initialised.dropped == vec![(Kind::IrHard, "route_off")]
             && initialised.demoted.is_none(),
@@ -156,14 +163,14 @@ fn default_kind_route_off_is_dropped() -> Result<()> {
     );
     let initialised = init(Switch::DEFAULT_ON, routes(false, true), false).map_err(|e| eyre!(e))?;
     ensure!(
-        initialised.switch.enabled_kinds() == vec![Kind::Root, Kind::IrHard, Kind::Surrogate]
+        initialised.switch.enabled_kinds() == vec![Kind::Root, Kind::IrHard]
             && initialised.dropped == vec![(Kind::Child, "route_off")],
         "{initialised:?}"
     );
     let initialised =
         init(Switch::DEFAULT_ON, routes(false, false), false).map_err(|e| eyre!(e))?;
     ensure!(
-        initialised.switch.enabled_kinds() == vec![Kind::Root, Kind::Surrogate]
+        initialised.switch.enabled_kinds() == vec![Kind::Root]
             && initialised.dropped
                 == vec![(Kind::Child, "route_off"), (Kind::IrHard, "route_off")],
         "{initialised:?}"
@@ -209,7 +216,7 @@ fn default_ir_dirac_off_drops_ir_hard() -> Result<()> {
     };
     let initialised = init(Switch::DEFAULT_ON, off.clone(), false).map_err(|e| eyre!(e))?;
     ensure!(
-        initialised.switch.enabled_kinds() == vec![Kind::Root, Kind::Child, Kind::Surrogate]
+        initialised.switch.enabled_kinds() == vec![Kind::Root, Kind::Child]
             && initialised.dropped == vec![(Kind::IrHard, "ir_dirac_off")],
         "{initialised:?}"
     );
@@ -300,8 +307,8 @@ fn default_demoted_by_ir_quotient_and_pint6() -> Result<()> {
 
 /// The per-diagram "nonzero counterterm with no record" rule keeps its
 /// trigger (root, child and ir-hard enabled): the default has it, and the
-/// U7b list `root,child,ir-hard` keeps it although surrogate joined the
-/// default kinds.
+/// U7b list `root,child,ir-hard` (the default kinds) and lists with
+/// surrogate keep it.
 #[test]
 fn the_diagram_rule_keeps_its_trigger() {
     let failures = |switch: Switch| {
@@ -339,7 +346,7 @@ fn the_diagram_rule_keeps_its_trigger() {
 
 /// Own process: the environment's switch with the variable unset and
 /// `GAMMALOOP_IR_HARD=off` (the six-loop setting): with the default on,
-/// root, child and surrogate and no refusal; with it off, off.
+/// root and child and no refusal; with it off, off.
 #[test]
 fn unset_switch_with_ir_hard_off_in_the_environment() -> Result<()> {
     ensure!(
@@ -356,7 +363,7 @@ fn unset_switch_with_ir_hard_off_in_the_environment() -> Result<()> {
     let switch = uncontracted::switch();
     if UNSET_IS_ON {
         ensure!(
-            switch.enabled_kinds() == vec![Kind::Root, Kind::Child, Kind::Surrogate]
+            switch.enabled_kinds() == vec![Kind::Root, Kind::Child]
                 && switch.is_default(),
             "{switch:?}"
         );
@@ -463,9 +470,9 @@ const U7B: [Kind; 3] = [Kind::Root, Kind::Child, Kind::IrHard];
 #[test]
 fn run_tally_default_kind_without_record_is_a_notice() -> Result<()> {
     for switch in [Switch::DEFAULT_ON, parse(Some("on")), parse(Some("check"))] {
-        let (failures, notices, no_record) = tally_of(switch, &U7B)?;
+        let (failures, notices, no_record) = tally_of(switch, &[Kind::Root, Kind::Child])?;
         ensure!(failures.is_empty(), "{switch:?}: {failures:#?}");
-        ensure!(no_record == vec!["surrogate"], "{switch:?}: {no_record:?}");
+        ensure!(no_record == vec!["ir-hard"], "{switch:?}: {no_record:?}");
         let verb = if switch.mode == Mode::Check {
             "compared"
         } else {
@@ -474,7 +481,7 @@ fn run_tally_default_kind_without_record_is_a_notice() -> Result<()> {
         ensure!(
             notices
                 == vec![format!(
-                    "kind surrogate: no record {verb} over the run (0 expected, 0 declined); default kind, not binding"
+                    "kind ir-hard: no record {verb} over the run (0 expected, 0 declined); default kind, not binding"
                 )],
             "{switch:?}: {notices:#?}"
         );
@@ -482,7 +489,7 @@ fn run_tally_default_kind_without_record_is_a_notice() -> Result<()> {
     // the measured L1 case: root records only
     let (failures, _, no_record) = tally_of(Switch::DEFAULT_ON, &[Kind::Root])?;
     ensure!(
-        failures.is_empty() && no_record == vec!["child", "ir-hard", "surrogate"],
+        failures.is_empty() && no_record == vec!["child", "ir-hard"],
         "{failures:#?} {no_record:?}"
     );
     Ok(())
@@ -530,17 +537,17 @@ fn run_tally_mixed() -> Result<()> {
 /// A run-level exception covers a default kind too: no notice.
 #[test]
 fn run_tally_exception_covers_a_default_kind() -> Result<()> {
-    let exceptions = ledger::parse_exceptions("*\tsurrogate\tnone_compared\tno insertion in this set\n")
+    let exceptions = ledger::parse_exceptions("*\tir-hard\tnone_compared\tno IR correction in this set\n")
         .map_err(|error| eyre!(error))?;
     let (failures, notices, no_record) = ledger::with_exceptions(exceptions.clone(), || {
-        tally_of(Switch::DEFAULT_ON, &U7B)
+        tally_of(Switch::DEFAULT_ON, &[Kind::Root, Kind::Child])
     })?;
     ensure!(
         failures.is_empty() && notices.is_empty() && no_record.is_empty(),
         "{failures:#?} {notices:#?}"
     );
     let (failures, ..) = ledger::with_exceptions(exceptions, || {
-        tally_of(parse(Some("on:root,child,ir-hard,surrogate")), &U7B)
+        tally_of(parse(Some("on:root,child,ir-hard")), &[Kind::Root, Kind::Child])
     })?;
     ensure!(failures.is_empty(), "{failures:#?}");
     Ok(())

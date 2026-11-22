@@ -17,7 +17,8 @@
 //! under the same integration id.
 //!
 //! * Unset (U8): [`UNSET_IS_ON`] decides; `true` is mode on with the default
-//!   kinds [`DEFAULT_KINDS`] (root, child, ir-hard, surrogate; source
+//!   kinds [`DEFAULT_KINDS`] (root, child, ir-hard; `surrogate` must be
+//!   listed; source
 //!   `default`), `false` is off. A setting that is incompatible with a
 //!   default kind DROPS that kind (`GAMMALOOP_IR_HARD` off the child route,
 //!   `GAMMALOOP_UV_CHILDREN=massive`, `GAMMALOOP_IR_DIRAC_CLOSURE=off`), and
@@ -27,7 +28,7 @@
 //!   each with a notice on `UNCONTRACTED_SWITCH`: a setting the user wrote
 //!   wins over a default. A written value (`on`, `check`, a list) keeps
 //!   every refusal below. A default run and an explicit
-//!   `on:root,child,ir-hard,surrogate` run have one identity.
+//!   `on:root,child,ir-hard` run have one identity.
 //! * The run-level rule "an enabled kind with no record over the run fails
 //!   the run" binds only the kinds named in a `:<kinds>` list; a default
 //!   or bare `on` / `check` kind without a record is a notice
@@ -247,7 +248,7 @@ impl Kind {
 
     /// Whether the switch unset (with [`UNSET_IS_ON`]) and `on` / `check`
     /// without a kind list enable this kind: [`DEFAULT_KINDS`] (U8: root,
-    /// child, ir-hard and surrogate).
+    /// child and ir-hard; `surrogate` must be listed).
     pub(crate) fn in_default(self) -> bool {
         DEFAULT_KINDS.contains(&self)
     }
@@ -260,10 +261,12 @@ impl Kind {
 /// U8: the kinds the switch enables when it is unset (with [`UNSET_IS_ON`])
 /// or set to `on` / `check` without a kind list, in canonical order. ONE
 /// list: an unset switch and a bare `on` select the same kinds, so a default
-/// run and an explicit `on:root,child,ir-hard,surrogate` run have one
-/// identity and resume each other.
-pub(crate) const DEFAULT_KINDS: [Kind; 4] =
-    [Kind::Root, Kind::Child, Kind::IrHard, Kind::Surrogate];
+/// run and an explicit `on:root,child,ir-hard` run have one identity and
+/// resume each other. The K5 surrogate kind is NOT a default kind (it must be
+/// listed): its whole four-loop cost is vakint's lowering of the whole-graph
+/// direct record (helper VH 2's measurement, L4-nf3 1.54 x OFF for surrogate
+/// alone); it joins the default once that lowering is cheaper.
+pub(crate) const DEFAULT_KINDS: [Kind; 3] = [Kind::Root, Kind::Child, Kind::IrHard];
 
 /// U8: what an UNSET `GAMMALOOP_UNCONTRACTED_NUMERATOR` means: `true` is
 /// mode on with [`DEFAULT_KINDS`] ([`Switch::DEFAULT_ON`], source

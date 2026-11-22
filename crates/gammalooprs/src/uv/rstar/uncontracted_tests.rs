@@ -743,21 +743,21 @@ fn switch_parses_every_form() {
     for off in [None, Some(""), Some("0"), Some("off"), Some(" off ")] {
         assert_eq!(Switch::parse(off), Ok(Switch::OFF), "{off:?}");
     }
-    // without a list: the default kinds (U8: K1, K2, K3 and K5)
+    // without a list: the default kinds (U8: K1, K2, K3; K5 must be listed)
     let on = Switch::parse(Some("on")).unwrap();
     assert_eq!(on.mode, Mode::On);
     assert!(on.enabled(Kind::Root) && on.enabled(Kind::Child) && on.enabled(Kind::IrHard));
-    assert!(on.enabled(Kind::Surrogate) && !on.enabled(Kind::Quotient));
+    assert!(!on.enabled(Kind::Surrogate) && !on.enabled(Kind::Quotient));
     assert_eq!(on.enabled_kinds(), uncontracted::DEFAULT_KINDS.to_vec());
     assert_eq!(Switch::parse(Some("1")), Ok(on));
     let check = Switch::parse(Some("check")).unwrap();
     assert_eq!(check.mode, Mode::Check);
     assert_eq!(
         check.enabled_kinds(),
-        vec![Kind::Root, Kind::Child, Kind::IrHard, Kind::Surrogate]
+        vec![Kind::Root, Kind::Child, Kind::IrHard]
     );
     // a list enables the same kinds, but binds them (U8): not equal
-    let listed = Switch::parse(Some("check:a,b,c,e")).unwrap();
+    let listed = Switch::parse(Some("check:a,b,c")).unwrap();
     assert_eq!(listed.enabled_kinds(), check.enabled_kinds(), "letter aliases");
     assert_ne!(listed, check);
     assert_eq!(listed.explicit_kinds(), check.enabled_kinds());
@@ -788,7 +788,7 @@ fn switch_parses_every_form() {
     );
     assert_eq!(
         on.line(),
-        "UNCONTRACTED_SWITCH mode=on kinds=root,child,ir-hard,surrogate inert=none"
+        "UNCONTRACTED_SWITCH mode=on kinds=root,child,ir-hard inert=none"
     );
     for bad in [
         "yes",
