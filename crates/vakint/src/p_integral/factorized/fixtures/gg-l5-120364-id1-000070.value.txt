@@ -1,0 +1,14 @@
+schema	u7a-value.v0
+kind	surrogate
+graph	B_self_energy_L5_120364_scalar_insertion
+id	1
+depth	1
+outcome	uncontracted
+valid_through	eps^-1
+value	-3/64*UFO::{}::gs2_i*UFO::{}::gs_i^3*UFO::{}::gs_minus*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{}::uv_dirac_closure_nu))*gammalooprs::{}::ε^(-1)*𝜋^(-2)
+contracted	-3/64*UFO::{}::gs2_i*UFO::{}::gs_i^3*UFO::{}::gs_minus*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{}::uv_dirac_closure_nu))*gammalooprs::{}::ε^(-1)*𝜋^(-2)
+uncontracted	-3/64*UFO::{}::gs2_i*UFO::{}::gs_i^3*UFO::{}::gs_minus*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{}::uv_dirac_closure_nu))*gammalooprs::{}::ε^(-1)*𝜋^(-2)
+identical	true
+equal	true
+first_difference	none
+end

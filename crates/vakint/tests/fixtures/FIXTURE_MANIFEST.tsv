@@ -8,6 +8,7 @@
 #   derived:<how> / written:<how>   made for these tests; the label line of the file says what it is
 #   base:<note>               present before these fixtures were vendored
 #   hole-cut-cases:<path>     the producer's published one-hedge (v1.5) cases (VAKINT_TEST_HOLE_CUT_CASES), byte for byte
+#   record-roots:<path>       a production record of the producer's first record root (the first directory of VAKINT_TEST_RECORD_ROOTS), byte for byte
 src/p_integral/factorized/fixtures/wh-k1-root.record.txt	91dd00e090dda732f625d7ff076967af05a40092373e90a65693918799f3ca35	wh-fixtures:k1-root/input.txt
 src/p_integral/factorized/fixtures/wh-k1-root.value.txt	5c07a6181fa1d68217b398804a13f6ef88fdef75a3c84e8c3bdf3a864ae9de16	wh-fixtures:k1-root/value.txt
 src/p_integral/factorized/fixtures/wh-k1-root-rc.record.txt	3704a8806435cf5bb14ebffd33273a0ff7bbfbf92b53893fc286fe3faed22307	wh-fixtures:k1-root-rc/input.txt
@@ -61,3 +62,5 @@ src/p_integral/factorized/fixtures/gg-l5-175270-child-5-6-7-8.record.txt	a729c08
 src/p_integral/factorized/fixtures/gg-l5-175270-child-5-6-7-8.value.txt	fc55da5531041243c058297c40c01bbc413999deaf7479fa76b855dabcc35812	hole-cut-cases:l5-175270-child-5-6-7-8/value.txt
 src/p_integral/factorized/fixtures/gg-l5-59943-child-9-10.record.txt	f2f74f2a23dadc6162159d04e6c045a00c753dbb85a562c46be8a569ba37f1ba	hole-cut-cases:l5-59943-child-9-10/input.txt
 src/p_integral/factorized/fixtures/gg-l5-59943-child-9-10.value.txt	1d240a5f90c540516b2fd7d17ea03c6b4d90f3ede479d0c6ae92781746fd840a	hole-cut-cases:l5-59943-child-9-10/value.txt
+src/p_integral/factorized/fixtures/gg-l5-120364-id1-000070.record.txt	647dcba073b652e444addec04971c9f2ebdbd0652514236d8340f1f5debd4a8a	record-roots:pick8/review/dump/surrogate/B_self_energy_L5_120364_scalar_insertion-id1-4143076-000070.record.txt
+src/p_integral/factorized/fixtures/gg-l5-120364-id1-000070.value.txt	611676a7c4ab8db08e48b40aa791ac4ded6da95e7461e9363872deb5d5a06e78	record-roots:pick8/review/dump/surrogate/B_self_energy_L5_120364_scalar_insertion-id1-4143076-000070.value.txt

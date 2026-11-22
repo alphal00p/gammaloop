@@ -1,0 +1,47 @@
+schema	pint6.factorized-numerator.v3
+label	u7a kind=surrogate graph=B_self_energy_L5_120364_scalar_insertion scope=surrogate:8,9 term=bare remaining=8,9 contracted=none marked_edge=8 closure=closed path=root/child{8,9} id=1
+kind	closure	externals=independent
+dimension	gammalooprs::{}::dim
+momenta	loops=1	externals=3
+loop	1	edge=8
+external	1	edge=4
+external	2	edge=10
+external	3	edge=11
+edges	5
+edge	4	source=4	target=ext	hedges=6,-	particle=q	line=fermion	power=1	momentum=0,1,0,0	0
+edge_factor	4	1
+edge	8	source=4	target=5	hedges=14,15	particle=q	line=scalar	power=1	momentum=1,0,0,0	gammalooprs::{scalar}::rstar_reference_mass_squared
+edge_factor	8	1
+edge	9	source=4	target=5	hedges=16,17	particle=q	line=scalar	power=1	momentum=-1,-1,0,0	0
+edge_factor	9	1
+edge	10	source=5	target=ext	hedges=18,-	particle=q	line=scalar	power=1	momentum=0,0,1,0	0
+edge_factor	10	1
+edge	11	source=5	target=ext	hedges=20,-	particle=q	line=scalar	power=1	momentum=0,0,0,1	0
+edge_factor	11	1
+vertices	2
+vertex	4	rule=ins:scalar_insertion_0	1
+vertex	5	rule=scalar_insertion_1	1
+ports	2
+port	spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1))
+port	spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1))
+projector	p2_power=0	spenso::{linear,spenso::tensor}::gamma(spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1)),spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{}::uv_dirac_closure_nu))
+open	1
+open_slot	spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{}::uv_dirac_closure_nu)
+prefactor	loop_sign=1	nf_power=0
+prefactor_overall	1
+prefactor_scalars	1/4
+prefactor_colour	1
+colour_branch	none
+closure	edge=8	power=1	gammalooprs::{scalar}::rstar_reference_mass_squared
+taylor	degree=1	compensate_mass=1	scaled_edges=4,10,11	orders=all	gammalooprs::{scalar}::rstar_mass_squared
+softs	3
+soft	1	edge=4	role=root
+soft	2	edge=10	role=root
+soft	3	edge=11	role=root
+original_cycles	fermion=1	ghost=0
+depth	1
+insertions	1
+insertion	4	hedges=6	cycles=0,0	1
+insertion_factor	4	(-19𝑖/16)*UFO::{}::gs2_i*UFO::{}::gs_i^3*UFO::{}::gs_minus*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{}::insertion_slash_10))*gammalooprs::{}::ε^2*spenso::{linear,spenso::tensor}::gamma(spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1)),spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{}::insertion_slash_10))+(-409𝑖/32)*UFO::{}::gs2_i*UFO::{}::gs_i^3*UFO::{}::gs_minus*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{}::insertion_slash_11))*gammalooprs::{}::ε^3*spenso::{linear,spenso::tensor}::gamma(spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1)),spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{}::insertion_slash_11))+(-5067𝑖/64)*UFO::{}::gs2_i*UFO::{}::gs_i^3*UFO::{}::gs_minus*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{}::insertion_slash_13))*gammalooprs::{}::ε^4*spenso::{linear,spenso::tensor}::gamma(spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1)),spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{}::insertion_slash_13))+(-𝑖/8)*UFO::{}::gs2_i*UFO::{}::gs_i^3*UFO::{}::gs_minus*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{}::insertion_slash_8))*gammalooprs::{}::ε*spenso::{linear,spenso::tensor}::gamma(spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1)),spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{}::insertion_slash_8))+(11𝑖/4)*UFO::{}::gs2_i*UFO::{}::gs_i^3*UFO::{}::gs_minus*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{}::insertion_slash_14))*gammalooprs::{}::ε^4*spenso::{linear,spenso::tensor}::gamma(spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1)),spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{}::insertion_slash_14))*symbolica::{}::zeta(3)+(13𝑖/40)*UFO::{}::gs2_i*UFO::{}::gs_i^3*UFO::{}::gs_minus*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{}::insertion_slash_15))*gammalooprs::{}::ε^4*spenso::{linear,spenso::tensor}::gamma(spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1)),spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{}::insertion_slash_15))*𝜋^4+(39𝑖/2)*UFO::{}::gs2_i*UFO::{}::gs_i^3*UFO::{}::gs_minus*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{}::insertion_slash_12))*gammalooprs::{}::ε^3*spenso::{linear,spenso::tensor}::gamma(spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1)),spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{}::insertion_slash_12))*symbolica::{}::zeta(3)+(3𝑖/4)*UFO::{}::gs2_i*UFO::{}::gs_i^3*UFO::{}::gs_minus*gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{}::insertion_slash_9))*spenso::{linear,spenso::tensor}::gamma(spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(6,1)),spenso::{spenso::representation,spenso::self_dual}::bis(4,gammalooprs::{spenso::index}::hedge(11,1)),spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim,gammalooprs::{}::insertion_slash_9))
+lines	46
+end

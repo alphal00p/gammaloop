@@ -74,7 +74,7 @@ fn read_in_crate(path: &str) -> Option<Vec<u8>> {
 #[test]
 fn the_vendored_fixtures_match_their_manifest() {
     let rows = manifest();
-    assert_eq!(rows.len(), 53, "manifest rows");
+    assert_eq!(rows.len(), 55, "manifest rows");
     let listed = rows.iter().map(|r| r.path.clone()).collect::<BTreeSet<_>>();
     assert_eq!(listed.len(), rows.len(), "a path is listed twice");
     let bad = mismatches(&rows, &read_in_crate);
@@ -132,7 +132,8 @@ fn the_manifest_check_reports_a_changed_file() {
 /// Explicit (`--run-ignored only`): every row copied from a producer's
 /// directory equals its original there byte for byte. Needs
 /// VAKINT_TEST_WH_FIXTURES, VAKINT_TEST_L3_HARD_DUMP,
-/// VAKINT_TEST_REVIEW_PROBE and VAKINT_TEST_HOLE_CUT_CASES.
+/// VAKINT_TEST_REVIEW_PROBE, VAKINT_TEST_HOLE_CUT_CASES and
+/// VAKINT_TEST_RECORD_ROOTS (its first root).
 #[test]
 #[ignore = "reads the producers' directories"]
 fn the_vendored_fixtures_equal_their_originals() {
@@ -141,10 +142,18 @@ fn the_vendored_fixtures_equal_their_originals() {
         ("l3-hard-dump:", "VAKINT_TEST_L3_HARD_DUMP", 5),
         ("review-probe:", "VAKINT_TEST_REVIEW_PROBE", 3),
         ("hole-cut-cases:", "VAKINT_TEST_HOLE_CUT_CASES", 6),
+        ("record-roots:", "VAKINT_TEST_RECORD_ROOTS", 2),
     ];
     let rows = manifest();
     for (prefix, variable, expected) in roots {
         let root = wh_fixtures::required_env(variable, "the directory of the originals");
+        // VAKINT_TEST_RECORD_ROOTS lists several roots: its first one
+        let root = root
+            .to_string_lossy()
+            .split(':')
+            .next()
+            .unwrap_or("")
+            .to_string();
         let copied = rows
             .iter()
             .filter_map(|r| {

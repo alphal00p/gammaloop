@@ -1798,8 +1798,8 @@ fn masses_are_plain_symbols() {
 }
 
 /// Every producer v3 record (all 75 under the wh-fixtures root, runs/
-/// excluded) and every vendored one (13: 10 of the fixture export, 3 of the
-/// published one-hedge cases) is ACCEPTED by validation (from_text
+/// excluded) and every vendored one (14: 10 of the fixture export, 3 of the
+/// published one-hedge cases, 1 one-hedge production record) is ACCEPTED by validation (from_text
 /// validates): the grammar rules refuse no real record.
 #[test]
 #[ignore = "external data: VAKINT_TEST_WH_FIXTURES"]
@@ -1849,7 +1849,7 @@ fn every_real_record_validates() {
         "refused real records:\n{}",
         refused.join("\n")
     );
-    wh_fixtures::assert_compared("REAL_RECORDS_VALIDATE", accepted, Some(88));
+    wh_fixtures::assert_compared("REAL_RECORDS_VALIDATE", accepted, Some(89));
 }
 
 // ===========================================================================

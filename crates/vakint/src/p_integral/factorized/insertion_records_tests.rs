@@ -2890,7 +2890,12 @@ const HEDGE_SLOT: &str = "spenso::{spenso::representation,spenso::self_dual}::mi
 /// through eps^-1): l5-59943 child {9,10} (a 2-loop GLUON hole, one Lorentz
 /// spectator port, NON-ZERO), l5-143019 child {9,10} (a GHOST hole, no slot,
 /// zero) and l5-175270 child {5,6,7,8} (a QUARK hole, a bispinor spectator
-/// closed by the Dirac projector, zero).
+/// closed by the Dirac projector, zero); and the one production record of the
+/// 61 with a NON-ZERO quark value, B_self_energy_L5_120364 id1 000070 (one
+/// loop, depth 1; its `value` line is its `contracted` line, `identical
+/// true`). The data has no non-zero ghost one-hedge record (its 7 are zero).
+/// Each value is stated through eps^-1: the non-zero ones compare the
+/// coefficient of eps^-1 exactly, the zero ones require an exact zero.
 #[test]
 fn the_producers_one_hedge_cases_equal_their_contracted_values() {
     let vakint = plain_engine();
@@ -2910,9 +2915,17 @@ fn the_producers_one_hedge_cases_equal_their_contracted_values() {
             include_str!("fixtures/gg-l5-175270-child-5-6-7-8.record.txt"),
             include_str!("fixtures/gg-l5-175270-child-5-6-7-8.value.txt"),
         ),
+        (
+            "l5-120364-id1-000070",
+            include_str!("fixtures/gg-l5-120364-id1-000070.record.txt"),
+            include_str!("fixtures/gg-l5-120364-id1-000070.value.txt"),
+        ),
     ] {
         let v = FactorizedNumerator::from_text(input).unwrap_or_else(|e| panic!("{name}: {e}"));
         assert_eq!(v.insertions[0].hedges.len(), 1, "{name}");
+        if let Some(contracted) = value.lines().find_map(|l| l.strip_prefix("contracted\t")) {
+            assert_eq!(contracted, wh_fixtures::value_line(value), "{name}");
+        }
         compare(&vakint, input, value, name);
     }
 }
