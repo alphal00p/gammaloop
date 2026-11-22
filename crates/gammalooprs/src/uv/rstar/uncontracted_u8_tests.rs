@@ -552,3 +552,102 @@ fn run_tally_exception_covers_a_default_kind() -> Result<()> {
     ensure!(failures.is_empty(), "{failures:#?}");
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// G-6: the all-declined coverage rules bind only the kinds named in a list
+// (ruling 18:11Z, in the sense of D1)
+// ---------------------------------------------------------------------------
+
+/// One diagram under `switch` whose one root record declined by design
+/// (`code`, frame K1): the ledger's result (Err: the diagram failed) and its
+/// lines.
+fn one_declined_root(switch: Switch, code: &str) -> (Result<Option<serde_json::Value>>, Vec<String>) {
+    with_switch(switch, || {
+        with_hole_cut(HoleCut::Form, || {
+            let _ = ledger::take_lines();
+            let opened = ledger::DiagramLedger::open("u8-g6", "000001").expect("a ledger");
+            ledger::record_shaped(Kind::Root, "K1", Some(code), switch.mode);
+            let closed = opened.close(true);
+            (closed, ledger::take_lines())
+        })
+    })
+}
+
+/// A default / bare kind whose every record is a designed decline (the
+/// one-record uvind_head case of helper VH 2's L1, on a root record): the
+/// diagram passes, outcome `declined`, the notice; an explicit list fails it
+/// `uncovered` as before; an exception naming the code makes it `excepted`.
+#[test]
+fn all_declined_binds_listed_kinds_only() -> Result<()> {
+    for switch in [Switch::DEFAULT_ON, parse(Some("on")), parse(Some("check"))] {
+        let (closed, lines) = one_declined_root(switch, "uvind_head");
+        let evidence = closed.map_err(|error| eyre!("{switch:?}: {error}"))?.ok_or_else(|| eyre!("no evidence"))?;
+        ensure!(
+            evidence["outcome"] == "ok" && evidence["kinds"]["root"]["outcome"] == "declined",
+            "{switch:?}: {evidence}"
+        );
+        ensure!(
+            lines.iter().any(|line| line.starts_with("UNCONTRACTED_NOTICE ")
+                && line.contains("kind root: all 1 records declined by design (uvind_head:1); contracted value used")),
+            "{switch:?}: {lines:#?}"
+        );
+        // the run tally: covered (no diagram-rule failure)
+        let failures = with_switch(switch, || {
+            with_hole_cut(HoleCut::Form, || {
+                let mut tally = ledger::RunTally::new().expect("on");
+                tally.add("u8-g6/000001", Some(&evidence), true);
+                tally.failures()
+            })
+        });
+        ensure!(
+            !failures.iter().any(|failure| failure.contains("the counterterm is nonzero")),
+            "{switch:?}: {failures:#?}"
+        );
+    }
+    for value in ["on:root,child,ir-hard", "check:root"] {
+        let (closed, _) = one_declined_root(parse(Some(value)), "uvind_head");
+        let error = closed.expect_err(value).to_string();
+        ensure!(
+            error.contains("outcome=uncovered") && error.contains("all 1 records declined"),
+            "{value}: {error}"
+        );
+    }
+    let exceptions = ledger::parse_exceptions("u8-g6\troot\tuvind_head\ta constructed uvind record\n")
+        .map_err(|error| eyre!(error))?;
+    let (closed, _) = ledger::with_exceptions(exceptions, || {
+        one_declined_root(parse(Some("on:root,child,ir-hard")), "uvind_head")
+    });
+    let evidence = closed?.ok_or_else(|| eyre!("no evidence"))?;
+    ensure!(evidence["kinds"]["root"]["outcome"] == "excepted", "{evidence}");
+    Ok(())
+}
+
+/// The setting-wide class rule: a default kind's records of one class all
+/// declined with a setting's code are a notice, not a failure (diagram and
+/// run); a listed kind fails as before.
+#[test]
+fn setting_wide_classes_bind_listed_kinds_only() -> Result<()> {
+    let code = uncontracted::SETTING_CODES[0];
+    let (closed, lines) = one_declined_root(Switch::DEFAULT_ON, code);
+    let evidence = closed?.ok_or_else(|| eyre!("no evidence"))?;
+    ensure!(evidence["outcome"] == "ok", "{evidence}");
+    ensure!(lines.iter().any(|line| line.starts_with("UNCONTRACTED_NOTICE ")), "{lines:#?}");
+    let (failures, notices) = with_switch(Switch::DEFAULT_ON, || {
+        with_hole_cut(HoleCut::Form, || {
+            let mut tally = ledger::RunTally::new().expect("on");
+            tally.add("u8-g6/000001", Some(&evidence), true);
+            (tally.failures(), tally.notices())
+        })
+    });
+    ensure!(
+        !failures.iter().any(|failure| failure.contains("-shaped records over the run declined")),
+        "{failures:#?}"
+    );
+    ensure!(
+        notices.iter().any(|notice| notice.contains("K1-shaped records over the run declined with a setting's code")),
+        "{notices:#?}"
+    );
+    let (closed, _) = one_declined_root(parse(Some("on:root")), code);
+    ensure!(closed.is_err(), "a listed kind passed");
+    Ok(())
+}

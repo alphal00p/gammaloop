@@ -1523,6 +1523,10 @@ struct Verdict {
     outcome: &'static str,
     excepted: BTreeMap<String, usize>,
     failure: Option<String>,
+    /// U8 (ruling 18:11Z): a kind enabled without being listed whose records
+    /// all declined by design: outcome `declined`, the contracted value
+    /// used, this notice, no failure.
+    notice: Option<String>,
 }
 
 fn list(map: &BTreeMap<String, usize>) -> String {
@@ -1547,6 +1551,12 @@ fn evidence_of(counts: &Counts, mode: Mode) -> usize {
     counts.class(class) + counts.class(&format!("hit:{class}"))
 }
 
+/// `binding`: the kind was named in a `:<kinds>` list (U8, ruling 18:11Z,
+/// in the sense of D1): only then do the two all-declined coverage rules
+/// below FAIL the diagram; for a kind enabled by the default or a bare `on`
+/// / `check`, a diagram whose every record of the kind is a DESIGNED decline
+/// gets the outcome `declined` (the contracted value is used) and a notice.
+/// An error outcome fails the diagram in every case.
 fn verdict(
     counts: &Counts,
     mode: Mode,
@@ -1554,11 +1564,13 @@ fn verdict(
     graph: &str,
     kind: Kind,
     exceptions: &Exceptions,
+    binding: bool,
 ) -> Verdict {
     let mut verdict = Verdict {
         outcome: "ok",
         excepted: BTreeMap::new(),
         failure: None,
+        notice: None,
     };
     let errors = counts.with_prefix("error:");
     let hits = counts.with_prefix("hit:");
@@ -1635,6 +1647,14 @@ fn verdict(
         if !codes.is_empty() && codes.keys().all(|code| exceptions.names(graph, kind, code)) {
             verdict.outcome = "excepted";
             verdict.excepted = codes;
+        } else if !binding && !codes.is_empty() {
+            verdict.outcome = "declined";
+            verdict.notice = Some(format!(
+                "kind {}: all {} records declined by design ({}); contracted value used",
+                kind.as_str(),
+                counts.expected,
+                list(&codes)
+            ));
         } else {
             verdict.outcome = "uncovered";
             verdict.failure = Some(format!(
@@ -1652,6 +1672,15 @@ fn verdict(
     for (shape, records, codes) in setting_wide_classes(counts, mode) {
         if !matches!(verdict.outcome, "ok" | "excepted") {
             break;
+        }
+        if !binding && !codes.keys().all(|code| exceptions.names(graph, kind, code)) {
+            // U8: not listed: a notice, the contracted value of the class
+            verdict.notice = Some(format!(
+                "kind {}: all {records} {shape}-shaped records declined by design with a setting's code ({}); contracted value used",
+                kind.as_str(),
+                list(&codes)
+            ));
+            continue;
         }
         // a setting-caused decline of every record of one record class
         // fails, although records of another class of the kind compared
@@ -1847,7 +1876,15 @@ fn finish(frame: Frame, ok: bool) -> Result<Option<Value>> {
     let mut per_kind = serde_json::Map::new();
     for kind in &kinds {
         let counts = frame.counts.get(kind).cloned().unwrap_or_default();
-        let verdict = verdict(&counts, switch.mode, ok, &graph, *kind, &exceptions);
+        let verdict = verdict(
+            &counts,
+            switch.mode,
+            ok,
+            &graph,
+            *kind,
+            &exceptions,
+            switch.explicit(*kind),
+        );
         print(disposition_line(
             &graph,
             &diagram,
@@ -1856,6 +1893,12 @@ fn finish(frame: Frame, ok: bool) -> Result<Option<Value>> {
             &counts,
             &verdict,
         ));
+        if let Some(notice) = &verdict.notice {
+            print(format!(
+                "UNCONTRACTED_NOTICE graph={graph} diagram={diagram} mode={} {notice}",
+                switch.mode.as_str()
+            ));
+        }
         if let Some(failure) = &verdict.failure {
             failures.push(format!("kind={}: {failure}", kind.as_str()));
         } else if verdict.outcome == "error" {
@@ -2024,8 +2067,16 @@ pub fn resumed(graph: &str, diagram: &str, evidence: Option<&Value>) -> Resumed 
                 let Ok(counts) = serde_json::from_value::<Counts>(saved.clone()) else {
                     return Some(format!("counts:{}", kind.as_str()));
                 };
-                let verdict = verdict(&counts, switch.mode, true, graph, *kind, &exceptions);
-                (!matches!(verdict.outcome, "ok" | "excepted")
+                let verdict = verdict(
+                    &counts,
+                    switch.mode,
+                    true,
+                    graph,
+                    *kind,
+                    &exceptions,
+                    switch.explicit(*kind),
+                );
+                (!matches!(verdict.outcome, "ok" | "excepted" | "declined")
                     || saved["outcome"] != verdict.outcome)
                     .then(|| format!("verdict:{}:{}", kind.as_str(), verdict.outcome))
             })
@@ -2041,11 +2092,14 @@ pub fn resumed(graph: &str, diagram: &str, evidence: Option<&Value>) -> Resumed 
                 let verdict = Verdict {
                     outcome: if saved["outcome"] == "excepted" {
                         "excepted"
+                    } else if saved["outcome"] == "declined" {
+                        "declined"
                     } else {
                         "ok"
                     },
                     excepted: serde_json::from_value(saved["excepted"].clone()).unwrap_or_default(),
                     failure: None,
+                    notice: None,
                 };
                 print(format!(
                     "{} {source}",
@@ -2171,7 +2225,9 @@ impl RunTally {
         let mut excepted = false;
         for kind in &self.kinds {
             let saved = &evidence["kinds"][kind.as_str()];
-            excepted |= saved["outcome"] == "excepted";
+            // U8: a kind that is not listed whose records all declined by
+            // design (`declined`) counts as covered, like an excepted one
+            excepted |= saved["outcome"] == "excepted" || saved["outcome"] == "declined";
             let counts = serde_json::from_value::<Counts>(saved.clone()).unwrap_or_default();
             let totals = self.totals.entry(*kind).or_default();
             totals.expected += counts.expected;
@@ -2283,9 +2339,12 @@ impl RunTally {
             .collect()
     }
 
-    /// U8: one notice per [`Self::default_no_record`] kind.
+    /// U8: one notice per [`Self::default_no_record`] kind, and one per
+    /// record class of a kind that is not listed whose records over the run
+    /// all declined with a setting's code (ruling 18:11Z).
     pub fn notices(&self) -> Vec<String> {
-        self.without_record()
+        let mut notices = self
+            .without_record()
             .into_iter()
             .filter(|(kind, _)| !self.explicit.contains(kind))
             .map(|(kind, totals)| {
@@ -2297,7 +2356,17 @@ impl RunTally {
                     totals.declined
                 )
             })
-            .collect()
+            .collect::<Vec<_>>();
+        for ((kind, shape), (records, evidence, setting)) in &self.shapes {
+            if *evidence == 0 && !setting.is_empty() && !self.explicit.contains(kind) {
+                notices.push(format!(
+                    "kind {}: all {records} {shape}-shaped records over the run declined with a setting's code ({}); default kind, not binding",
+                    kind.as_str(),
+                    list(setting)
+                ));
+            }
+        }
+        notices
     }
 
     /// The run-level failures (empty: the run passes these rules).
@@ -2317,7 +2386,9 @@ impl RunTally {
             }
         }
         for ((kind, shape), (records, evidence, setting)) in &self.shapes {
-            if *evidence == 0 && !setting.is_empty() {
+            // U8 (ruling 18:11Z): a kind that is not listed gives a notice
+            // ([`Self::notices`]) instead
+            if *evidence == 0 && !setting.is_empty() && self.explicit.contains(kind) {
                 failures.push(format!(
                     "kind {}: all {records} {shape}-shaped records over the run declined, none {}, with a setting's code ({}): a setting-caused decline of a whole record class",
                     kind.as_str(),
