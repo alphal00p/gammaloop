@@ -1866,13 +1866,14 @@ fn a_huge_power_in_an_insertion_is_refused_before_any_computation() {
     }
 }
 
-/// A marked value's numbers have at most 4096 bits, EXACTLY (the bit length
-/// of |numerator| and of the denominator, real and imaginary parts): on the
-/// real direct L3-185, a vertex factor times N with |N| of 4095 and 4096 bits
-/// is accepted, of 4097 refused ("a number beyond 4096 bits"); the same for
-/// 1/N, for -N, and for N 𝑖 (the imaginary part); typed and through text.
+/// A marked value's numbers have at most MAX_NUMBER_BITS = 65,536 bits,
+/// EXACTLY (the bit length of |numerator| and of the denominator, real and
+/// imaginary parts): on the real direct L3-185, a vertex factor times N with
+/// |N| of 65,535 and 65,536 bits is accepted, of 65,537 refused ("a number
+/// beyond 65536 bits"); the same for 1/N, for -N, and for N 𝑖 (the imaginary
+/// part); typed and through text.
 #[test]
-fn a_number_beyond_4096_bits_is_refused() {
+fn a_number_beyond_65536_bits_is_refused() {
     let direct =
         FactorizedNumerator::from_text(include_str!("fixtures/l3-185-insertions.txt")).unwrap();
     let plain = direct
@@ -1892,12 +1893,13 @@ fn a_number_beyond_4096_bits_is_refused() {
         ("N i", |n| n * Atom::i()),
     ];
     let mut wrong = Vec::new();
-    for bits in [4095u32, 4096, 4097] {
+    let bound = MAX_NUMBER_BITS as u32;
+    for bits in [bound - 1, bound, bound + 1] {
         for (form, make) in &forms {
             let factor = make(number(bits));
             let mut v = direct.clone();
             v.vertices[plain].factor = &v.vertices[plain].factor * &factor;
-            let accepted = bits <= 4096;
+            let accepted = bits <= bound;
             let typed = v.validate();
             // the text: the vendored text with the factor multiplied in
             let prefix = format!("vertex\t{id}\t");
@@ -1918,7 +1920,9 @@ fn a_number_beyond_4096_bits_is_refused() {
             for (how, r) in [("typed", typed), ("text", read)] {
                 match (&r, accepted) {
                     (Ok(()), true) => {}
-                    (Err(e), false) if e.to_string().contains("a number beyond 4096 bits") => {}
+                    (Err(e), false)
+                        if e.to_string()
+                            .contains(&format!("a number beyond {bound} bits")) => {}
                     _ => wrong.push(format!("{bits} bits {form} {how}: {r:?}")),
                 }
             }

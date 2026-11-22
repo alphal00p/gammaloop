@@ -8425,14 +8425,14 @@ fn the_writer_agrees_with_validation_on_every_real_record() {
     assert!(failures.is_empty(), "{} cases", failures.len());
 }
 
-/// THE NUMBER BOUND: an integer of 4,095, 4,096, 4,097, 4,100 and 4,101
+/// THE NUMBER BOUND: an integer of 65,535, 65,536, 65,537, 65,540 and 65,541
 /// bits as a numerator and as a denominator, both signs, real and imaginary,
-/// in a vertex factor of the K1 root, typed and through text: at most 4,096
+/// in a vertex factor of the K1 root, typed and through text: at most 65,536
 /// bits accepted, more refused. The outcome of each printed; the cells that
 /// differ are returned.
 fn number_bound_table() -> Vec<String> {
     let mut out = Vec::new();
-    for bits in [4095u32, 4096, 4097, 4100, 4101] {
+    for bits in [65535u32, 65536, 65537, 65540, 65541] {
         for (shape, f) in [
             ("numerator", "{n}"),
             ("denominator", "1/{n}"),
@@ -8459,7 +8459,7 @@ fn number_bound_table() -> Vec<String> {
                 } else {
                     v.validate().map_err(|e| e.to_string())
                 };
-                let expected_accept = bits <= 4096;
+                let expected_accept = bits <= 65536;
                 let ok = got.is_ok() == expected_accept;
                 eprintln!(
                     "CONTRACT NUMBER | {bits} bits | {shape} | {} | expected {} | got {}{}",
@@ -8485,7 +8485,7 @@ fn number_bound_table() -> Vec<String> {
 }
 
 #[test]
-fn the_number_bound_is_4096_bits() {
+fn the_number_bound_is_65536_bits() {
     let failures = number_bound_table();
     assert!(failures.is_empty(), "{failures:#?}");
 }

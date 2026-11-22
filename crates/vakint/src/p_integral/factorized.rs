@@ -1971,10 +1971,15 @@ pub(crate) const WEIGHT_RULES: [(&str, WeightField); 5] = [
 ];
 
 /// The largest numerator or denominator a marked value's numbers may have,
-/// in bits: far above the real records (whose largest number has 35 bits);
-/// it keeps a number that a text's literal power made huge at parse time
-/// (2^1000000000 is a 10^9-bit integer once parsed) out of the evaluation.
-pub const MAX_NUMBER_BITS: usize = 4096;
+/// in bits (input validation only: the insertion fields and the record's
+/// other caller fields): a sanity guard, far above the real records (whose
+/// largest number has 35 bits) and above the producer's upper estimate for
+/// six-loop insertion coefficients (about 7,910 bits at 12 orders on the 1-5
+/// library; no six-loop record exists yet: six loops is the goal, so the
+/// bound must not sit at that size); it keeps a number that a text's
+/// literal power made huge at parse time (2^1000000000 is a 10^9-bit integer
+/// once parsed) out of the evaluation.
+pub const MAX_NUMBER_BITS: usize = 65536;
 
 /// The first number of `view` whose numerator or denominator has more than
 /// [`MAX_NUMBER_BITS`] bits, described by its decimal size.
@@ -3209,7 +3214,8 @@ impl FactorizedNumerator {
         }
         // the contract / closure rules; their insertion rules compute (zero
         // tests, together / expand, series) only after the cheap bounds they
-        // depend on (exponents of at most 64, numbers of at most 4096 bits:
+        // depend on (exponents of at most 64, numbers of at most
+        // MAX_NUMBER_BITS bits:
         // insertion_epsilon_rules); the remaining atom rules after them
         if let FactorizedKind::Closure(spec) = &self.kind {
             self.validate_closure(spec)?;
