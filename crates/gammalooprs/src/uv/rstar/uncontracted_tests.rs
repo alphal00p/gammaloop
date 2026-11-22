@@ -740,7 +740,19 @@ const ROOT_CHILD: [Kind; 2] = [Kind::Root, Kind::Child];
 
 #[test]
 fn switch_parses_every_form() {
-    for off in [None, Some(""), Some("0"), Some("off"), Some(" off ")] {
+    // U8 flip: unset is on with the default kinds (in this crate's test build
+    // only with GAMMALOOP_UNCONTRACTED_TEST_DEFAULT=1, `unset_is_on`); empty, 0
+    // and off stay off
+    assert!(uncontracted::UNSET_IS_ON);
+    assert_eq!(
+        Switch::parse(None),
+        Ok(if uncontracted::unset_is_on() {
+            Switch::DEFAULT_ON
+        } else {
+            Switch::OFF
+        })
+    );
+    for off in [Some(""), Some("0"), Some("off"), Some(" off ")] {
         assert_eq!(Switch::parse(off), Ok(Switch::OFF), "{off:?}");
     }
     // without a list: the default kinds (U8: K1, K2, K3 and K5)

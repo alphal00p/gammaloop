@@ -269,7 +269,7 @@ pub(crate) const DEFAULT_KINDS: [Kind; 4] =
 /// mode on with [`DEFAULT_KINDS`] ([`Switch::DEFAULT_ON`], source
 /// `default`), `false` is off. An EMPTY value is off either way, as are `0`
 /// and `off`.
-pub(crate) const UNSET_IS_ON: bool = false;
+pub(crate) const UNSET_IS_ON: bool = true;
 
 /// The test variable of [`unset_is_on`].
 #[cfg(test)]
