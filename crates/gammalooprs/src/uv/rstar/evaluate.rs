@@ -2116,7 +2116,7 @@ impl<'a> Evaluation<'a> {
         let guard =
             super::depth::child_guard(super::ir_dirac::test_child_guard().unwrap_or(*GUARD));
         #[cfg(not(test))]
-        let guard = *GUARD;
+        let guard = super::depth::child_guard(*GUARD);
         // GAMMALOOP_UNCONTRACTED_NUMERATOR on / check: the correction's K3
         // records in a section of the diagram ledger, reclassified when the
         // correction declines (`None` off; dropped on an error: unchanged)
