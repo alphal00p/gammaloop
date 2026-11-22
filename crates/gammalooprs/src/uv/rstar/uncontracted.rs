@@ -694,6 +694,18 @@ pub(super) struct Decline {
 /// remainder is a record, although today's route names each of them
 /// `one_loop_tree_cut` (it integrates them whole).
 ///
+/// `factor_eps_pole` (second rebase onto the gated G-D, IRH (iii)): a field
+/// outside the insertions that is not provably regular at ε = 0
+/// ([`factor_eps_pole`], [`record_eps_pole`]), of any kind. The gated
+/// grammar lets only insertion coefficients carry poles; such a record is
+/// correct but not stateable, so it is declined before it is written (vakint's
+/// `NotScalar` "a pole in ε outside an insertion" is NOT a designed row: our
+/// record reaching it stays an error). Graph-dependent, not a setting code.
+/// No production record has such a field (census of 15,129 dumped records:
+/// no ε, negative powers only of d, d-1, d+2 in `prefactor_scalars`); the
+/// synthetic `hidden` input of the IRH gates (ε^-1 in a quotient vertex) is
+/// its witness.
+///
 /// K3 (U7b) adds NO code: a K3 record can hit only rows already here,
 /// `insertion_mass_symbol` (a UV child's Δ with a mass symbol at a `ct:`
 /// node where independent crown legs meet, as K2),
@@ -716,6 +728,7 @@ pub(super) const DESIGNED_LOCAL: &[&str] = &[
     "insertions_share_a_vertex",
     "no_closing_line",
     "one_loop_tree_cut",
+    "factor_eps_pole",
 ];
 
 /// The designed codes caused by a SETTING of the run or of the calling
@@ -2378,6 +2391,96 @@ fn nonlocal_form(delta: &Atom) -> Option<String> {
     found
 }
 
+/// Why a record field OUTSIDE the insertions (an edge factor or mass, a
+/// vertex factor, the projector, a prefactor field) is not provably regular
+/// at ε = 0 once `d = 4-2ε` (`None`: it is). The gated grammar lets only
+/// insertion coefficients carry poles (their order raises the depth; vakint
+/// refuses any other with `NotScalar` "a pole in ε outside an insertion",
+/// its refusal table row 160), so such a record is the designed decline
+/// `factor_eps_pole` BEFORE it is written: today's route, which reads such a
+/// factor's order into its own bound, takes the remainder.
+///
+/// Conservative and exact on what it accepts: the representations
+/// (`mink(d, i)`) are dropped first (an index's dimension is not a factor);
+/// a tensor (any function) under a negative power is refused (its
+/// contraction can vanish at d = 4: Astra's tensor-hidden witness, d hidden
+/// in a trace); a field then without `ε` and without `d` is regular (every
+/// production field but the projector normalisations, census of 15,129
+/// records); the rest must have the pole excess 0 of [`super::depth::excess_poles`] (every
+/// product factor of order >= 0 at ε = 0; an ε inside a function argument or
+/// a non-integer order is refused as not provable). `1/(d-1)`, `1/d`,
+/// `1/(d+2)` pass; `ε^-1`, `1/(d-4)`, `Γ(ε)` do not.
+pub(super) fn factor_eps_pole(atom: &Atom) -> Option<String> {
+    let representation = &SPENSO_TAG.representation;
+    let field = atom.replace_map(|view, _, out| {
+        if let AtomView::Fun(function) = view
+            && function.get_symbol().has_tag(representation)
+        {
+            **out = Atom::num(1);
+        }
+    });
+    let mut tensor = None;
+    field.as_view().visitor(&mut |part| {
+        if tensor.is_some() {
+            return false;
+        }
+        if let AtomView::Pow(power) = part {
+            let (base, exponent) = power.get_base_exp();
+            let positive = i64::try_from(exponent).is_ok_and(|n| n > 0);
+            let mut function = false;
+            base.visitor(&mut |inner| {
+                function |= matches!(inner, AtomView::Fun(_));
+                !function
+            });
+            if !positive && function {
+                tensor = Some(part.to_owned().to_string());
+            }
+        }
+        tensor.is_none()
+    });
+    if let Some(tensor) = tensor {
+        return Some(format!(
+            "a tensor under a negative power (not provably regular at ε = 0): {}",
+            tensor.chars().take(200).collect::<String>()
+        ));
+    }
+    if !field.contains_symbol(GS.dim_epsilon) && !field.contains_symbol(GS.dim) {
+        return None;
+    }
+    match super::depth::excess_poles(&field) {
+        Some(0) => None,
+        Some(order) => Some(format!(
+            "a pole of order {order} in ε at d = 4-2ε (only insertion coefficients may carry poles)"
+        )),
+        None => Some(
+            "an order in ε that is not provably >= 0 (an ε inside a function argument or a non-integer order)"
+                .into(),
+        ),
+    }
+}
+
+/// The first field of `record` outside its insertions that is not provably
+/// regular at ε = 0 ([`factor_eps_pole`]), as `<field>: <why>`.
+pub(super) fn record_eps_pole(record: &FactorizedNumerator) -> Option<String> {
+    let mut fields = Vec::<(String, &Atom)>::new();
+    for edge in &record.edges {
+        fields.push((format!("edge {} factor", edge.id), &edge.factor));
+        fields.push((format!("edge {} mass", edge.id), &edge.mass_squared));
+    }
+    for vertex in &record.vertices {
+        fields.push((format!("vertex {} factor", vertex.id), &vertex.factor));
+    }
+    if let Some(projector) = &record.projector {
+        fields.push(("projector".into(), &projector.tensor));
+    }
+    fields.push(("prefactor overall".into(), &record.prefactor.overall));
+    fields.push(("prefactor scalars".into(), &record.prefactor.scalars));
+    fields.push(("prefactor colour".into(), &record.prefactor.colour));
+    fields
+        .into_iter()
+        .find_map(|(field, atom)| factor_eps_pole(atom).map(|why| format!("{field}: {why}")))
+}
+
 /// How a record states its externals and its closure (U7a-DESIGN 4.1).
 enum Frame<'s> {
     /// K1: one external `p(1) = Q(x0)`; σ folds every root leg onto ±p(1);
@@ -3424,6 +3527,14 @@ fn build(
                 usize::from(marked)
             ),
         ));
+    }
+    // a pole in ε (or a field not provably regular at ε = 0) outside the
+    // insertions is outside the gated grammar: declined before the record is
+    // written, so vakint's NotScalar ("a pole in ε outside an insertion")
+    // never sees one of our records (the synthetic IRH `hidden` input: ε^-1
+    // in a quotient vertex; no production record has one)
+    if let Some(detail) = record_eps_pole(&record) {
+        return Err(Decline::new("factor_eps_pole", detail));
     }
     // the writer validates first and returns exactly validation's error: a
     // refusal of vakint's frozen list, matched as from_text's is; `text` is

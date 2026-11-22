@@ -1434,3 +1434,153 @@ fn crown_legs_at_node_renames_only_an_incoming_leg() {
         delta
     );
 }
+
+/// IRH (iii) on the gated G-D: a field outside the insertions that is not
+/// provably regular at ε = 0 is the designed decline `factor_eps_pole`
+/// before the record is written. The pure test, every spelling: the
+/// production fields (a vertex polynomial in tensors with `mink(d, ..)`, the
+/// projector normalisations 1/(d-1), 1/d, 1/(d+2), a positive power of ε)
+/// pass; ε^-1, a pole hidden in a sum, 1/(d-4), -2/(d-4), a tensor under a
+/// negative power (Astra's tensor-hidden spelling) and Γ(ε) (an ε inside a
+/// function argument) are refused.
+#[test]
+fn factor_eps_pole_reads_every_spelling() {
+    let _ = test_initialise();
+    let eps = Atom::var(GS.dim_epsilon);
+    let d = Atom::var(GS.dim);
+    let mu = Minkowski {}.new_rep(GS.dim).to_symbolic([Atom::var(symbol!("mu"))]);
+    let nu = Minkowski {}.new_rep(GS.dim).to_symbolic([Atom::var(symbol!("nu"))]);
+    let g = function!(symbol!("g_test"), mu.clone(), nu.clone());
+    let q = function!(GS.emr_mom, 5, mu.clone());
+    let vertex = (&q * Atom::var(symbol!("gs"))) + &g;
+    let scalars = (&d - Atom::num(1)).pow(Atom::num(-1))
+        * d.clone().pow(Atom::num(-1))
+        * (&d + Atom::num(2)).pow(Atom::num(-1));
+    for regular in [
+        Atom::num(1),
+        vertex.clone(),
+        scalars.clone(),
+        &scalars * &g,
+        &vertex * eps.clone().pow(Atom::num(2)),
+        &vertex * (Atom::num(1) + &eps),
+    ] {
+        assert_eq!(uncontracted::factor_eps_pole(&regular), None, "{regular}");
+    }
+    let pole = |atom: Atom, why: &str| {
+        let found = uncontracted::factor_eps_pole(&atom);
+        assert!(
+            found.as_deref().is_some_and(|found| found.starts_with(why)),
+            "{atom}: {found:?}"
+        );
+    };
+    pole(&vertex * eps.clone().pow(Atom::num(-1)), "a pole of order 1");
+    pole(&vertex + eps.clone().pow(Atom::num(-1)), "a pole of order 1");
+    pole(&vertex * eps.clone().pow(Atom::num(-3)), "a pole of order 3");
+    pole((&d - Atom::num(4)).pow(Atom::num(-1)), "a pole of order 1");
+    pole(
+        Atom::num(-2) * (&d - Atom::num(4)).pow(Atom::num(-1)) * &vertex,
+        "a pole of order 1",
+    );
+    pole(
+        Atom::num(-2) * (&g * &g - Atom::num(4)).pow(Atom::num(-1)),
+        "a tensor under a negative power",
+    );
+    pole(
+        function!(symbol!("Gamma"), eps.clone()) * &vertex,
+        "an order in ε that is not provably",
+    );
+}
+
+/// IRH (iii) end to end on a real K2 site (L3 36, child {5,6,7,8}, {7,8}
+/// contracted): (1) the record as built has no such field; (2) the same
+/// record with ε^-1 in a VERTEX factor (the `hidden` witness's shape) is
+/// refused by vakint's gated validation with `NotScalar` "a pole in ε
+/// outside an insertion", which is NOT designed (Decline::vakint gives an
+/// error), and our pre-write check names it; (3) the builder declines such a
+/// record BEFORE it is written: with ε^-1 on one edge factor and ε on another
+/// (the product check of check mode still holds) the attempt is the
+/// designed `declined:factor_eps_pole`, no record text, not an error.
+#[test]
+fn a_pole_outside_the_insertions_is_declined_before_the_record() -> Result<()> {
+    with_production_piece_limit(|| -> Result<()> {
+        test_initialise()?;
+        let fixture =
+            FactorizedNumerator::from_text(include_str!("testdata/u7a/k2-child-ins.input.txt"))
+                .map_err(|e| eyre!("{e}"))?;
+        let insertion = fixture
+            .insertions
+            .first()
+            .ok_or_else(|| eyre!("k2-child-ins has no insertion"))?;
+        let delta = &insertion.coefficient * &insertion.factor;
+        let eps = Atom::var(GS.dim_epsilon);
+        // (1) the record as built
+        let full = child_site_attempt(None, delta.clone())?;
+        ensure!(
+            matches!(full.outcome, Outcome::Value(_)),
+            "unmodified: outcome {:?}",
+            full.outcome
+        );
+        let text = full
+            .text
+            .clone()
+            .ok_or_else(|| eyre!("a built record has its text"))?;
+        let record = FactorizedNumerator::from_text(&text).map_err(|e| eyre!("{e}"))?;
+        ensure!(
+            uncontracted::record_eps_pole(&record).is_none(),
+            "the built record: {:?}",
+            uncontracted::record_eps_pole(&record)
+        );
+        // (2) ε^-1 in a vertex factor: vakint refuses it, not designed
+        let mut hidden = record.clone();
+        let vertex = hidden
+            .vertices
+            .iter_mut()
+            .find(|vertex| !vertex.rule.starts_with("ct:"))
+            .ok_or_else(|| eyre!("the record has a model vertex"))?;
+        let id = vertex.id;
+        vertex.factor = &vertex.factor * eps.clone().pow(Atom::num(-1));
+        let ours = uncontracted::record_eps_pole(&hidden);
+        ensure!(
+            ours.as_deref()
+                .is_some_and(|ours| ours.starts_with(&format!("vertex {id} factor: a pole of order 1"))),
+            "ours: {ours:?}"
+        );
+        let refusal = hidden
+            .validate()
+            .err()
+            .ok_or_else(|| eyre!("vakint accepted a pole in a vertex factor"))?;
+        ensure!(
+            matches!(&refusal, FactorizedError::NotScalar { detail, .. }
+                if detail.starts_with("a pole in ε outside an insertion")),
+            "vakint: {refusal:?}"
+        );
+        let decline = Decline::vakint(&refusal);
+        ensure!(!decline.designed, "NotScalar must stay an error: {decline:?}");
+        // (3) the builder declines it before writing
+        let hook: InsertionHook = Rc::new(
+            move |kind: Kind, _node: usize, _delta: &mut Atom, edges: &mut [FactorizedEdge]| {
+                if kind != Kind::Child || edges.len() < 2 {
+                    return;
+                }
+                let eps = Atom::var(GS.dim_epsilon);
+                edges[0].factor = &edges[0].factor * eps.clone().pow(Atom::num(-1));
+                edges[1].factor = &edges[1].factor * eps;
+            },
+        );
+        let attempt = with_insertion_hook(hook, || child_site_attempt(None, delta.clone()))?;
+        match &attempt.outcome {
+            Outcome::Declined(decline) => {
+                ensure!(decline.code == "factor_eps_pole", "{decline:?}");
+                ensure!(
+                    decline.detail.contains("factor: a pole of order 1"),
+                    "{decline:?}"
+                );
+            }
+            other => return Err(eyre!("expected declined:factor_eps_pole, got {other:?}")),
+        }
+        ensure!(attempt.text.is_none(), "a declined record is never written");
+        ensure!(DESIGNED_LOCAL.contains(&"factor_eps_pole"));
+        ensure!(!uncontracted::is_setting_code("factor_eps_pole"));
+        Ok(())
+    })
+}
