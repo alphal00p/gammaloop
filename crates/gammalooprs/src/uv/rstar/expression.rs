@@ -2636,6 +2636,10 @@ impl RStarIntegrand {
         }
         numerator *=
             symbolica::parse!(&uv_settings.vakint.additional_normalization).pow(self.region.loops);
+        // IRH-DEPTH round 8b (C1): the backend expands in ε; a scalar d is
+        // 4 − 2ε first.
+        let numerator = Integrated::regulated_for_expansion(&numerator, "physical_integral_input")?
+            .into_owned();
         let input = numerator * function!(S.topo, propagators);
         debug_tags!(#uv, #integrated, #rstar, #trace;
             stage = "rstar_physical_remainder",

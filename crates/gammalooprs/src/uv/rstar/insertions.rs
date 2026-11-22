@@ -856,8 +856,15 @@ impl PropagatorInsertionEvaluator {
         let bubble_integral = bubble_integral
             .replace(function!(GS.emr_mom, 0, W_.x___))
             .with(function!(GS.emr_mom, external.0, W_.x___));
-        let coefficient = (integral / bubble_integral.pow(loops))
-            .series(GS.dim_epsilon, 0, parent_loops as i64 - 1)?
+        // IRH-DEPTH round 8b (C1): d = 4 − 2ε before the truncation at
+        // ε^(N−1) (the closed form factors carry 1/(d−1), an insertion vertex
+        // may carry any scalar d): the coefficient is a pure ε polynomial.
+        let ratio = integral / bubble_integral.pow(loops);
+        let coefficient = crate::uv::approx::integrated::Integrated::regulated_for_expansion(
+            &ratio,
+            "insertion_coefficient_truncation",
+        )?
+        .series(GS.dim_epsilon, 0, parent_loops as i64 - 1)?
             .to_atom()
             .expand()
             .together();

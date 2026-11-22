@@ -133,7 +133,33 @@ pub fn integrate_single_mass(
     let mut census_tensor = (0_usize, 0_usize);
     let mut census_closure = (0_usize, 0_usize, 0_usize);
     let mut census_topologies = BTreeSet::new();
-    for source in &input.0 {
+    // IRH-DEPTH round 8b (C1): every numerator reaches the backend, which
+    // expands it in ε (the direct lowering, the closures and the split
+    // coefficients), with its scalar d already 4 − 2ε: an expansion at fixed
+    // d does not commute with the truncation (`1/(1+(d−4)/ε)` is −1).
+    let regulator = vakint_parse!(&settings.epsilon_symbol)
+        .map_err(|error| eyre!(error))?
+        .get_symbol()
+        .ok_or_else(|| eyre!("Vakint epsilon must be a symbol"))?;
+    let regulated = input
+        .0
+        .iter()
+        .map(|source| {
+            Ok(match Integrated::regulated_for_expansion_in(
+                &source.numerator,
+                regulator,
+                "single_mass_input",
+            )? {
+                std::borrow::Cow::Borrowed(_) => None,
+                std::borrow::Cow::Owned(numerator) => Some(vakint::VakintTerm {
+                    numerator,
+                    ..source.clone()
+                }),
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    for (index, original) in input.0.iter().enumerate() {
+        let source = regulated[index].as_ref().unwrap_or(original);
         if source.numerator.is_zero() {
             timing.zero_terms += 1;
             continue;
@@ -737,6 +763,21 @@ impl VacuumCut {
         timing: &mut SingleMassTiming,
     ) -> Result<Atom> {
         let preparation_started = Instant::now();
+        // IRH-DEPTH round 8b (C1): the coefficient (a vacuum tensor reduction
+        // coefficient, rational in d, times the integrated insertion and the
+        // scalar numerator factors, a hard vertex's among them) is taken at
+        // d = 4 − 2ε before its Laurent order is read and before the product
+        // is truncated: at fixed d a factor −1 spelled 1/(1+(d−4)/ε) is
+        // ε/(d−4) − …, and no truncation of that series is its value.
+        let regulator = vakint_parse!(&settings.epsilon_symbol)
+            .map_err(|error| eyre!(error))?
+            .get_symbol()
+            .ok_or_else(|| eyre!("Vakint epsilon must be a symbol"))?;
+        let coefficient = &*Integrated::regulated_for_expansion_in(
+            coefficient,
+            regulator,
+            "single_mass_truncation",
+        )?;
         let retained = settings
             .evaluation_order
             .0
