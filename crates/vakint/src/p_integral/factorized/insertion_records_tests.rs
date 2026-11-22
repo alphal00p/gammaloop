@@ -3303,3 +3303,91 @@ fn the_sixty_one_one_hedge_records_equal_their_contracted_values() {
         "{classes:?}"
     );
 }
+
+/// THE CONTRACTED CUT GLUON HOLES (legal in v1.4, not one-hedge records): the
+/// unique v3 records under `VAKINT_TEST_RECORD_ROOTS` with a `ct:` insertion
+/// whose factor has a slot on a half-edge that is not in the record, declared
+/// as a port (the cut hole's far slot): all 11 accepted by validation.
+#[test]
+#[ignore = "external data: VAKINT_TEST_RECORD_ROOTS"]
+fn the_contracted_cut_holes_with_a_spectator_port_stay_accepted() {
+    let roots =
+        wh_fixtures::required_env("VAKINT_TEST_RECORD_ROOTS", "the producer's record roots");
+    let mut files = Vec::new();
+    for root in roots.to_string_lossy().split(':') {
+        let mut stack = vec![PathBuf::from(root)];
+        while let Some(d) = stack.pop() {
+            let Ok(entries) = std::fs::read_dir(&d) else {
+                continue;
+            };
+            for e in entries {
+                let p = e.unwrap().path();
+                if p.is_dir() {
+                    stack.push(p);
+                } else if p.to_string_lossy().ends_with(".record.txt")
+                    || p.file_name().is_some_and(|n| n == "input.txt")
+                {
+                    files.push(p);
+                }
+            }
+        }
+    }
+    let hedge_head = "gammalooprs::hedge";
+    let mut seen = std::collections::BTreeSet::new();
+    let mut found = Vec::new();
+    for p in &files {
+        let Ok(text) = std::fs::read_to_string(p) else {
+            continue;
+        };
+        if !text.starts_with("schema\tpint6.factorized-numerator.v3") || !seen.insert(text.clone())
+        {
+            continue;
+        }
+        let Ok(value) = FactorizedNumerator::parse_text(&text) else {
+            continue;
+        };
+        let present = value.hedges();
+        let ports = value
+            .ports
+            .iter()
+            .map(|p| p.to_canonical_string())
+            .collect::<Vec<_>>();
+        let spectator = value.insertions.iter().any(|i| {
+            if !value
+                .vertex(i.vertex)
+                .is_some_and(|x| x.rule.starts_with("ct:"))
+            {
+                return false;
+            }
+            let mut absent = std::collections::BTreeSet::new();
+            i.factor.as_view().visitor(&mut |part| {
+                if let AtomView::Fun(f) = part
+                    && f.get_symbol().get_name() == hedge_head
+                    && let Some(h) = f
+                        .iter()
+                        .next()
+                        .and_then(|a| i64::try_from(a).ok())
+                        .and_then(|h| usize::try_from(h).ok())
+                    && !present.contains(&h)
+                {
+                    absent.insert(h);
+                }
+                true
+            });
+            !absent.is_empty()
+                && absent
+                    .iter()
+                    .all(|h| ports.iter().any(|p| p.contains(&format!("hedge({h},"))))
+        });
+        if spectator {
+            FactorizedNumerator::from_text(&text)
+                .unwrap_or_else(|e| panic!("{}: {e}", p.display()));
+            found.push(p.display().to_string());
+        }
+    }
+    eprintln!(
+        "GG_CT_SPECTATOR {} records accepted: {found:#?}",
+        found.len()
+    );
+    assert_eq!(found.len(), 11);
+}
