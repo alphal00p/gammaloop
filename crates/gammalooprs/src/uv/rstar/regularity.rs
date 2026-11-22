@@ -1042,8 +1042,9 @@ pub(super) enum RootProjection<'a> {
     /// No root projector: the value is the unprojected counterterm.
     Absent,
     /// The typed regular form `X ↦ factor · σ(X)` (a fixed routing `σ` of the
-    /// external momenta and a declared scalar normalisation); its `k` is the
-    /// pole order of `factor` at `d = 4 − 2ε`.
+    /// external momenta and a declared scalar normalisation that is a closed
+    /// scalar, repair RC-B1); its `k` is the pole order of `factor` at
+    /// `d = 4 − 2ε`.
     Typed(&'a Atom),
     /// An opaque callback: nothing certifies it; the child route declines.
     Opaque,
@@ -1272,8 +1273,14 @@ pub(super) fn certify_graph_correction(
                 // The declared normalisation (beta: transverse · σ(prefactor)
                 // / (i q²) / (d − 1); a UV child closure's 1/(d (d−1) (d+2)),
                 // 1/(Tr[1] d), 1/Tr[1]): its scalar order at d = 4 − 2ε; an
-                // external invariant in a denominator is ε-free.
-                let k = super::depth::excess_poles(factor).ok_or_else(|| Refused {
+                // external invariant in a denominator is ε-free. Repair
+                // RC-B1: only a CLOSED SCALAR factor reaches this branch
+                // (evaluate.rs TypedRoot: a factor with a trace or any other
+                // tensor structure is opaque), so no pole can hide in a
+                // structure this order does not read, and the factor read is
+                // the factor multiplied.
+                debug_assert!(super::expression::closed_dot_scalar(factor.as_view()));
+                let k = super::depth::factor_pole_order(factor).ok_or_else(|| Refused {
                     class: Refusal::PoleInFixedFactor,
                     factor: entry(Factor::RootProjector).name,
                     detail: format!(

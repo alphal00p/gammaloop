@@ -1069,26 +1069,44 @@ struct IrHardTerm<'a> {
 /// `X ↦ factor · σ(X)`: the routing `σ` of the external momenta (none for a
 /// UV child closure) and a scalar normalisation `factor` whose order at
 /// `d = 4 − 2ε` is the certificate's `k_projector`.
+///
+/// Repair RC-B1: the form is certifiable only when `factor` is a closed
+/// scalar ([`super::expression::closed_dot_scalar`]: no tensor, trace,
+/// gamma, metric or colour structure, external invariants only as dots):
+/// then the scalar the certificate reads is exactly the one multiplied, with
+/// one meaning on every route (a trace in the factor has a value that
+/// depends on the dimension it is contracted in, and the multiplier and the
+/// reader would see different objects). A factor that is not a closed
+/// scalar is NOT a typed form: the child route declines it
+/// (`opaque_projector`), exactly as an opaque callback.
 #[derive(Clone, Debug)]
 struct TypedRoot {
     factor: Atom,
     routing: Vec<symbolica::id::Replacement>,
+    /// `factor` is a closed scalar (the form may be certified).
+    certifiable: bool,
 }
 
 impl TypedRoot {
-    fn of(closed_root: &ClosedRootNormalization) -> Self {
+    fn new(factor: Atom, routing: Vec<symbolica::id::Replacement>) -> Self {
+        let certifiable = super::expression::closed_dot_scalar(factor.as_view());
         Self {
-            factor: closed_root.factor.clone(),
-            routing: closed_root.external_routing.clone(),
+            factor,
+            routing,
+            certifiable,
         }
+    }
+
+    fn of(closed_root: &ClosedRootNormalization) -> Self {
+        Self::new(
+            closed_root.factor.clone(),
+            closed_root.external_routing.clone(),
+        )
     }
 
     /// A projection that only multiplies by `factor`.
     fn scalar(factor: &Atom) -> Self {
-        Self {
-            factor: factor.clone(),
-            routing: Vec::new(),
-        }
+        Self::new(factor.clone(), Vec::new())
     }
 
     fn apply(&self, expression: &Atom) -> Atom {
@@ -3079,8 +3097,12 @@ impl<'a> Evaluation<'a> {
     /// certificate reads it (typed, opaque or absent).
     fn root_projection(&self) -> super::regularity::RootProjection<'_> {
         match (&self.typed_root, self.root_projector) {
-            (Some(typed), _) => super::regularity::RootProjection::Typed(&typed.factor),
-            (None, Some(_)) => super::regularity::RootProjection::Opaque,
+            (Some(typed), _) if typed.certifiable => {
+                super::regularity::RootProjection::Typed(&typed.factor)
+            }
+            // Repair RC-B1: a typed factor that is not a closed scalar is not
+            // a certifiable form; with a projector it is opaque.
+            (Some(_), _) | (None, Some(_)) => super::regularity::RootProjection::Opaque,
             (None, None) => super::regularity::RootProjection::Absent,
         }
     }
@@ -3091,11 +3113,15 @@ impl<'a> Evaluation<'a> {
     /// an opaque callback declines), then regulated.
     fn child_root_projection(&self, simplified: Atom) -> Result<Atom> {
         Ok(match (&self.typed_root, self.root_projector) {
-            (Some(typed), _) => Integrated::dimensionally_regularized(&typed.apply(&simplified)),
-            (None, Some(projector)) => Integrated::dimensionally_regularized(
+            (Some(typed), _) if typed.certifiable => {
+                Integrated::dimensionally_regularized(&typed.apply(&simplified))
+            }
+            (_, Some(projector)) => Integrated::dimensionally_regularized(
                 &projector(&simplified)
                     .wrap_err("while projecting an IR hard child outer polynomial")?,
             ),
+            // A typed form without a callback is never constructed.
+            (Some(typed), None) => Integrated::dimensionally_regularized(&typed.apply(&simplified)),
             (None, None) => simplified,
         })
     }
