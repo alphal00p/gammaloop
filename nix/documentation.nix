@@ -148,12 +148,15 @@ let
     python.playwright
     (notebookMarimo python)
   ]);
-  nativeNotebookPython = docsPkgs.python313.withPackages (python: [
+  nativeNotebookPackages = python: [
     (notebookMarimo python)
     python.numpy
     python.matplotlib
     python.anywidget
-  ]);
+  ];
+  nativeNotebookPython = docsPkgs.python313.withPackages nativeNotebookPackages;
+  notebookPerformancePython = docsPkgs.python313.withPackages (python:
+    nativeNotebookPackages python ++ [ python.playwright python.typst ]);
 
   notebookSources = lib.fileset.toSource {
     root = workspaceRoot;
@@ -1013,6 +1016,7 @@ in
     alphal00pDocsCellsTest
     alphal00pDocsNotebookProfile
     alphal00pDocsNativeNotebooks
+    notebookPerformancePython
     notebookUfoWheel
     alphal00pDocsPublication
     alphal00pDocsPages

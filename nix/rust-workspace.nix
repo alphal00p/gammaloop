@@ -3546,7 +3546,7 @@
     }) [1 2 3 4]);
 in {
   inherit (documentation) docsTypst docsFontPath linnetPython alphal00pDocsCargoArtifacts
-    alphal00pDocsPages alphal00pDocsSnapshotFixture alphal00pDocsNotebooks alphal00pDocsCells alphal00pDocsCellsTest alphal00pDocsNotebookProfile alphal00pDocsPublication notebookUfoWheel alphal00pDocsNativeNotebooks;
+    alphal00pDocsPages alphal00pDocsSnapshotFixture alphal00pDocsNotebooks alphal00pDocsCells alphal00pDocsCellsTest alphal00pDocsNotebookProfile alphal00pDocsPublication notebookUfoWheel alphal00pDocsNativeNotebooks notebookPerformancePython;
   inherit
     ciCargoProfile
     workspaceDependencySrc

@@ -377,6 +377,7 @@
           "notebook-wasm-deps" = notebookWasm.notebookWasmDeps;
           "notebook-wasm-wheel" = notebookWasm.notebookWasmWheel;
           "notebook-ufo-wheel" = workspace.notebookUfoWheel;
+          "notebook-performance-dependencies" = workspace.notebookPerformancePython;
           "test-native-notebook-examples" = workspace.alphal00pDocsNativeNotebooks;
           "test-notebook-examples" = import ./nix/notebook-tests.nix {
             inherit pkgs;

@@ -1,9 +1,31 @@
 import unittest
 
-from performance_changes import requires_measurement
+from performance_changes import NOTEBOOK_INPUTS, requires_measurement
 
 
 class PerformanceChangesTests(unittest.TestCase):
+    def test_notebook_gate_selects_examples_runtime_and_measurement_tools(self):
+        for path in (
+            "examples/notebooks/feynkit/08_numerical_cff_ltd_marimo.py",
+            "crates/linnet-py/examples/rendering_api.py",
+            "docs/api/python/spynso3.pyi",
+            "examples/notebooks/symbolica-host/src/lib.rs",
+            "crates/spenso/src/network.rs",
+            "crates/linnest/src/svg/interactive.js",
+            "crates/feynkit-model/data/sm.json.zlib",
+            "vendor/clarabel/src/solver/mod.rs",
+            ".github/scripts/notebook_cell_gate.py",
+            "scripts/measure-notebook-cells.py",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(requires_measurement([path], NOTEBOOK_INPUTS))
+        self.assertFalse(
+            requires_measurement(["examples/notebooks/spenso_api_tour.py"])
+        )
+        self.assertFalse(
+            requires_measurement(["docs/architecture/ci.typ"], NOTEBOOK_INPUTS)
+        )
+
     def test_documentation_and_test_only_changes_skip_measurements(self):
         self.assertFalse(
             requires_measurement(

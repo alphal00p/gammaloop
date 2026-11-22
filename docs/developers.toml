@@ -1900,7 +1900,10 @@ end_anchor = "docsFontPath ="
 # Reviewed 2026-11-16: local-import graph analysis calls the locked Nix-built
 # Ruff directly, preserving the graph flags and local-module bundling. The cache
 # note records this runtime-closure repair; native science and browser pins stay fixed.
-digest = "9035e764e3985f94dba0b5dc5e2f8448619f35e8"
+# Reviewed 2026-11-22: the cell timing job adds Playwright and Typst to its own
+# environment. The native notebook tests and publication exporter retain their
+# existing package sets.
+digest = "26f2d50861c584387712e787ef7e75917731f91a"
 
 [[section.note.scope]]
 # Documentation-impact attestation 2026-08-26: the CI repair completes the
