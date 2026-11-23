@@ -179,6 +179,7 @@ pub fn validate_top_level_switches() -> Result<()> {
     rstar_terms()?;
     top_mass_terms()?;
     super::plan::validate_massive_routes()?;
+    super::insertions::insertion_identity()?;
     Ok(())
 }
 
@@ -196,10 +197,16 @@ pub fn top_level_switches_line() -> String {
     );
     // GAMMALOOP_MASSIVE_ROUTES: shown only when not `allow` (the default
     // line is unchanged).
-    match super::plan::validate_massive_routes() {
+    let line = match super::plan::validate_massive_routes() {
         Ok(super::plan::MassiveRoutes::Allow) => line,
         Ok(routes) => format!("{line} massive_routes={}", routes.as_str()),
         Err(error) => format!("{line} massive_routes=error({error})"),
+    };
+    // GAMMALOOP_INSERTION_IDENTITY: shown only when not `off`.
+    match super::insertions::insertion_identity() {
+        Ok(super::insertions::InsertionIdentity::Off) => line,
+        Ok(identity) => format!("{line} insertion_identity={}", identity.as_str()),
+        Err(error) => format!("{line} insertion_identity=error({error})"),
     }
 }
 
@@ -209,10 +216,13 @@ pub fn top_level_switches_provenance() -> serde_json::Value {
     let terms = rstar_terms().unwrap_or(RStarTerms::All);
     let mass = top_mass_terms().unwrap_or(TopMassTerms::Keep);
     let routes = super::plan::validate_massive_routes().unwrap_or_default();
+    let identity = super::insertions::insertion_identity()
+        .unwrap_or(super::insertions::InsertionIdentity::Off);
     if terms == RStarTerms::All
         && mass == TopMassTerms::Keep
         && !split_enabled()
         && routes == super::plan::MassiveRoutes::Allow
+        && identity == super::insertions::InsertionIdentity::Off
     {
         return serde_json::Value::Null;
     }
@@ -224,6 +234,10 @@ pub fn top_level_switches_provenance() -> serde_json::Value {
     // GAMMALOOP_MASSIVE_ROUTES, absent at `allow` (records unchanged).
     if routes != super::plan::MassiveRoutes::Allow {
         value["massive_routes"] = serde_json::Value::from(routes.as_str());
+    }
+    // GAMMALOOP_INSERTION_IDENTITY, absent at `off` (records unchanged).
+    if identity != super::insertions::InsertionIdentity::Off {
+        value["insertion_identity"] = serde_json::Value::from(identity.as_str());
     }
     value
 }
