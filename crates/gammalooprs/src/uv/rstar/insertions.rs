@@ -225,6 +225,33 @@ fn insertion_identity_values_parse() {
     }
 }
 
+/// `GAMMALOOP_INSERTION_IDENTITY_LOG=1` (or `on`; default off; trial lane
+/// insertion-identity): the piece log, stderr only, no value changes.
+/// gammaloop prints `INSERTION_COEFF` per extracted hole (k = N: the attached
+/// normalised coefficient; for a one-loop hole also k = 0: `−poles` of its
+/// bare integral, i.e. `Δ(σ)`, with `−poles(c̃₁·B)` checked against it);
+/// beta prints `SURROGATE_DELTA` (n1) and `TODAY_DELTA` (today's path).
+pub fn insertion_identity_log() -> bool {
+    static LOG: LazyLock<bool> = LazyLock::new(|| {
+        insertion_identity_log_value(std::env::var("GAMMALOOP_INSERTION_IDENTITY_LOG").ok().as_deref())
+    });
+    *LOG
+}
+
+fn insertion_identity_log_value(value: Option<&str>) -> bool {
+    matches!(value.map(str::trim), Some("1" | "on"))
+}
+
+#[cfg(test)]
+#[test]
+fn insertion_identity_log_values() {
+    assert!(insertion_identity_log_value(Some("1")));
+    assert!(insertion_identity_log_value(Some(" on ")));
+    for off in [None, Some(""), Some("0"), Some("off"), Some("yes")] {
+        assert!(!insertion_identity_log_value(off));
+    }
+}
+
 /// [`PropagatorInsertionEvaluator::identity_counterterm`]'s result: the
 /// tagged projected counterterm of the surrogate, in the original's frame.
 pub struct IdentityCounterterm {
@@ -549,6 +576,19 @@ impl PropagatorInsertionEvaluator {
             let coefficient =
                 self.normalized_insertion(&excised.diagram, vakint, loops, diagram.name())?;
             let vanishes = coefficient.is_zero();
+            if insertion_identity_log() {
+                eprintln!(
+                    "INSERTION_COEFF graph={} hole={} support={:?} boundary={:?},{:?} N={} k={} series={}",
+                    diagram.name(),
+                    holes.len(),
+                    insertion.support,
+                    insertion.boundary[0].edge,
+                    insertion.boundary[1].edge,
+                    insertion.loops,
+                    insertion.loops,
+                    coefficient.to_canonical_string()
+                );
+            }
             // Slashes are opened after the freshening, with process-unique
             // symbol indices: freshened `dummy(N)` indices are not Spenso indices.
             let mut coefficient = open_slashes(&freshen_insertion_indices(
@@ -1039,6 +1079,7 @@ impl PropagatorInsertionEvaluator {
         // IRH-DEPTH round 8b (C1): d = 4 − 2ε before the truncation at
         // ε^(N−1) (the closed form factors carry 1/(d−1), an insertion vertex
         // may carry any scalar d): the coefficient is a pure ε polynomial.
+        let logged_integral = (insertion_identity_log() && loops == 1).then(|| integral.clone());
         let ratio = integral / bubble_integral.pow(loops);
         let coefficient = crate::uv::approx::integrated::Integrated::regulated_for_expansion(
             &ratio,
@@ -1048,6 +1089,26 @@ impl PropagatorInsertionEvaluator {
         .to_atom()
         .expand()
         .together();
+        if let Some(integral) = &logged_integral {
+            // k = 0 of a one-loop hole: Δ(σ) = −poles(bare σ), and the
+            // identity's e₀ = 0 needs −poles(c̃₁·B) to equal it.
+            let minus_poles = |value: &Atom| -> Result<Atom> {
+                Ok(-crate::uv::approx::integrated::Integrated::regulated_for_expansion(
+                    value,
+                    "insertion_identity_log",
+                )?
+                .series(GS.dim_epsilon, 0, -1)?
+                .to_atom()
+                .expand())
+            };
+            let delta = minus_poles(integral)?;
+            let check = minus_poles(&(&coefficient * &bubble_integral))?;
+            eprintln!(
+                "INSERTION_COEFF graph={parent} hole=next N=1 k=0 closed={closed} equal={} series={}",
+                (&delta - &check).expand().is_zero(),
+                delta.to_canonical_string()
+            );
+        }
         ensure!(
             coefficient
                 .series(GS.dim_epsilon, 0, -1)?

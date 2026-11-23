@@ -146,6 +146,7 @@ pub use insertion_identity::{InsertionSkeletonIdentity, InsertionSkeletonKey};
 pub use insertions::{
     GroupedInsertionPoleResult, IdentityCounterterm, InsertionIdentity, InsertionPoleResult,
     PreparedInsertion, PreparedInsertionHole, PropagatorInsertionEvaluator, insertion_identity,
+    insertion_identity_log,
     surrogate_closed_root,
 };
 pub use integrate::integrate_single_mass;
