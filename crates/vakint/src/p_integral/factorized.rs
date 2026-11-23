@@ -4696,46 +4696,19 @@ impl FactorizedNumerator {
     /// the integral); one that hands the insertions to vakint inside the
     /// integrand (the direct and vacuum entries) needs nothing.
     pub fn insertion_pole_order(&self, epsilon: Symbol) -> Result<u64> {
-        use symbolica::poly::series::SeriesDepth;
-        let in_epsilon = Atom::num(4) - Atom::num(2) * Atom::var(epsilon);
         let mut order = 0u64;
         for insertion in &self.insertions {
-            let product = (&insertion.coefficient * &insertion.factor)
-                .replace(Atom::var(self.dimension))
-                .with(in_epsilon.clone())
-                .expand();
-            if product.is_zero() {
-                continue;
-            }
-            let failure = |detail: String| FactorizedError::Insertion {
-                vertex: insertion.vertex,
-                detail,
-            };
-            // a failing series expansion is internal (`Evaluation`), not a
-            // refusal of the record
-            let series = product
-                .series(epsilon, Atom::Zero.as_view(), SeriesDepth::relative(1))
-                .map_err(|e| FactorizedError::Evaluation {
-                    detail: format!(
-                        "insertion at vertex {}: the Laurent series in ε failed: {e}",
-                        insertion.vertex
-                    ),
-                })?;
-            if series.is_zero() {
-                continue;
-            }
-            let exponent = series.get_trailing_exponent();
-            if !exponent.is_integer() {
-                return Err(failure("a fractional power of ε".into()));
-            }
-            let v = exponent
-                .numerator()
-                .to_i64()
-                .ok_or_else(|| failure("an ε power out of range".into()))?;
-            if v < 0 {
-                order = order.checked_add(v.unsigned_abs()).ok_or_else(|| {
-                    failure("an ε power out of range: the insertions' pole order overflows".into())
-                })?;
+            let product = &insertion.coefficient * &insertion.factor;
+            let pole = pole_memo::pole(&product, self.dimension, epsilon)
+                .map_err(|e| e.at(insertion.vertex))?;
+            if pole > 0 {
+                order = order
+                    .checked_add(pole)
+                    .ok_or_else(|| FactorizedError::Insertion {
+                        vertex: insertion.vertex,
+                        detail: "an ε power out of range: the insertions' pole order overflows"
+                            .into(),
+                    })?;
             }
         }
         Ok(order)
@@ -5974,3 +5947,182 @@ mod insertion_records_tests;
 mod insertion_tests;
 #[cfg(test)]
 mod tests;
+
+/// THE POLE OF ONE INSERTION PRODUCT `coefficient × factor`
+/// ([`FactorizedNumerator::insertion_pole_order`] sums them): `max(0, −v)`,
+/// `v` the trailing power of `epsilon` of the product with the dimension
+/// `D -> 4 − 2 ε` and expanded (`Atom::series`, relative depth 1). A pure
+/// function of the product atom, the dimension symbol and `epsilon` (the
+/// substitution `4 − 2 ε` and the depth are fixed here), so it is computed
+/// once per process and key (R* records repeat the same child counterterm
+/// across remainders and colour rows); a failure is not kept (each call
+/// computes it again and returns it, with the caller's vertex).
+/// `VAKINT_SERIES_COMPARE=1` recomputes every hit and prints one
+/// `VAKINT_SERIES_COMPARE what=pole_order` line per insertion (hit / miss,
+/// equal), for the value check; no line otherwise.
+pub(crate) mod pole_memo {
+    use std::collections::HashMap;
+    use std::sync::{LazyLock, Mutex};
+
+    use symbolica::atom::{Atom, AtomCore, Symbol};
+
+    use super::FactorizedError;
+
+    /// At most this many products are kept ...
+    pub(crate) const MAX_ENTRIES: usize = 1 << 14;
+    /// ... and at most this many bytes of product atoms: at either bound the
+    /// memo stops growing (it keeps serving what it holds; a new product is
+    /// computed on every call, exactly as without the memo).
+    pub(crate) const MAX_BYTES: usize = 256 << 20;
+
+    #[derive(Clone, PartialEq, Eq, Hash)]
+    pub(crate) struct Key {
+        product: Atom,
+        dimension: Symbol,
+        epsilon: Symbol,
+    }
+
+    /// A failure of one product, mapped to the record's error at the
+    /// insertion's vertex by the caller (the same variant and detail as
+    /// before the memo).
+    #[derive(Debug)]
+    pub(crate) enum Failure {
+        Series(String),
+        Fractional,
+        OutOfRange,
+    }
+
+    impl Failure {
+        pub(crate) fn at(self, vertex: usize) -> FactorizedError {
+            match self {
+                Self::Series(e) => FactorizedError::Evaluation {
+                    detail: format!(
+                        "insertion at vertex {vertex}: the Laurent series in ε failed: {e}"
+                    ),
+                },
+                Self::Fractional => FactorizedError::Insertion {
+                    vertex,
+                    detail: "a fractional power of ε".into(),
+                },
+                Self::OutOfRange => FactorizedError::Insertion {
+                    vertex,
+                    detail: "an ε power out of range".into(),
+                },
+            }
+        }
+    }
+
+    #[derive(Default)]
+    pub(crate) struct Memo {
+        map: HashMap<Key, u64>,
+        bytes: usize,
+    }
+
+    impl Memo {
+        pub(crate) fn get(&self, key: &Key) -> Option<u64> {
+            self.map.get(key).copied()
+        }
+
+        /// Keep `pole` for `key` unless a bound would be passed.
+        pub(crate) fn keep(&mut self, key: Key, pole: u64, max_entries: usize, max_bytes: usize) {
+            let size = key.product.as_view().get_data().len();
+            if self.map.len() < max_entries
+                && self.bytes.saturating_add(size) <= max_bytes
+                && !self.map.contains_key(&key)
+            {
+                self.bytes += size;
+                self.map.insert(key, pole);
+            }
+        }
+
+        #[cfg(test)]
+        pub(crate) fn len(&self) -> usize {
+            self.map.len()
+        }
+    }
+
+    static MEMO: LazyLock<Mutex<Memo>> = LazyLock::new(Default::default);
+
+    fn compare_enabled() -> bool {
+        static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        *ENABLED.get_or_init(|| std::env::var("VAKINT_SERIES_COMPARE").is_ok_and(|v| v == "1"))
+    }
+
+    pub(crate) fn key(product: &Atom, dimension: Symbol, epsilon: Symbol) -> Key {
+        Key {
+            product: product.clone(),
+            dimension,
+            epsilon,
+        }
+    }
+
+    /// The pole of `product` through the process memo.
+    pub(crate) fn pole(product: &Atom, dimension: Symbol, epsilon: Symbol) -> Result<u64, Failure> {
+        let key = key(product, dimension, epsilon);
+        let known = MEMO
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&key);
+        if let Some(pole) = known {
+            if compare_enabled() {
+                let fresh = compute(product, dimension, epsilon);
+                let equal = matches!(fresh, Ok(p) if p == pole);
+                eprintln!(
+                    "VAKINT_SERIES_COMPARE what=pole_order path=hit equal={equal} memo={pole} fresh={fresh:?}"
+                );
+            }
+            return Ok(pole);
+        }
+        // computed outside the lock: a concurrent first call of the same key
+        // computes it as well, to the same pole
+        let pole = compute(product, dimension, epsilon)?;
+        if compare_enabled() {
+            eprintln!(
+                "VAKINT_SERIES_COMPARE what=pole_order path=miss equal=true memo=- fresh={pole}"
+            );
+        }
+        MEMO.lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .keep(key, pole, MAX_ENTRIES, MAX_BYTES);
+        Ok(pole)
+    }
+
+    /// The pole of `product`, computed (no memo): the body of
+    /// `insertion_pole_order` for one insertion before the memo.
+    pub(crate) fn compute(
+        product: &Atom,
+        dimension: Symbol,
+        epsilon: Symbol,
+    ) -> Result<u64, Failure> {
+        use symbolica::poly::series::SeriesDepth;
+        let in_epsilon = Atom::num(4) - Atom::num(2) * Atom::var(epsilon);
+        let product = product
+            .replace(Atom::var(dimension))
+            .with(in_epsilon)
+            .expand();
+        if product.is_zero() {
+            return Ok(0);
+        }
+        // a failing series expansion is internal (`Evaluation`), not a
+        // refusal of the record
+        let series = product
+            .series(epsilon, Atom::Zero.as_view(), SeriesDepth::relative(1))
+            .map_err(|e| Failure::Series(e.to_string()))?;
+        if series.is_zero() {
+            return Ok(0);
+        }
+        let exponent = series.get_trailing_exponent();
+        if !exponent.is_integer() {
+            return Err(Failure::Fractional);
+        }
+        let v = exponent.numerator().to_i64().ok_or(Failure::OutOfRange)?;
+        Ok(if v < 0 { v.unsigned_abs() } else { 0 })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn memo_len() -> usize {
+        MEMO.lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .len()
+    }
+}

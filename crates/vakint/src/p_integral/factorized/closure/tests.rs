@@ -5447,3 +5447,81 @@ fn a_validated_record_is_validated_once_and_evaluates_as_the_raw_entry() {
         refusal
     );
 }
+
+/// A symbol of these tests' own namespace.
+fn test_symbol(name: &str) -> Symbol {
+    symbolica::symbol!(format!("rec_lean_test::{name}"))
+}
+
+/// ROOT-SPEED S1: the pole of an insertion product through the process memo
+/// is the computed one, on a first call and on a repeated one; the key holds
+/// what the computation reads: the same product with another dimension
+/// symbol (`(D-4) ε^-2`: pole 1 when D -> 4-2ε, else 2) or another ε (pole 2
+/// in its own ε, 0 in another) is another key with its own pole; a failure
+/// (a fractional power) is not kept and is the same error, at the caller's
+/// vertex, on every call; at the memo's bound nothing more is kept and the
+/// kept entries are still served.
+#[test]
+fn the_pole_memo_returns_the_computed_pole_keyed_by_everything_it_reads() {
+    use super::super::pole_memo::{self, Memo};
+    let (d, other_d, e, other_e) = (
+        test_symbol("D"),
+        test_symbol("D2"),
+        test_symbol("e"),
+        test_symbol("e2"),
+    );
+    let product = atom("(rec_lean_test::D-4)*rec_lean_test::e^-2*rec_lean_test::a");
+    for (dimension, epsilon, expected) in [
+        (d, e, 1),
+        (other_d, e, 2),
+        (d, other_e, 0),
+        (d, e, 1),
+        (other_d, e, 2),
+    ] {
+        let fresh = pole_memo::compute(&product, dimension, epsilon).unwrap();
+        assert_eq!(fresh, expected);
+        assert_eq!(
+            pole_memo::pole(&product, dimension, epsilon).unwrap(),
+            expected
+        );
+    }
+    let fractional = atom("rec_lean_test::e^(1/2)*rec_lean_test::e^-1");
+    let before = pole_memo::memo_len();
+    for _ in 0..2 {
+        let error = pole_memo::pole(&fractional, d, e).unwrap_err().at(7);
+        assert_eq!(
+            error,
+            FactorizedError::Insertion {
+                vertex: 7,
+                detail: "a fractional power of ε".into()
+            }
+        );
+    }
+    assert_eq!(pole_memo::memo_len(), before, "a failure was kept");
+    let mut memo = Memo::default();
+    let (a, b) = (
+        pole_memo::key(&atom("rec_lean_test::a"), d, e),
+        pole_memo::key(&atom("rec_lean_test::b"), d, e),
+    );
+    memo.keep(a.clone(), 3, 1, usize::MAX);
+    memo.keep(b.clone(), 4, 1, usize::MAX);
+    assert_eq!((memo.get(&a), memo.get(&b), memo.len()), (Some(3), None, 1));
+    let mut small = Memo::default();
+    small.keep(a.clone(), 3, usize::MAX, 0);
+    assert_eq!((small.get(&a), small.len()), (None, 0));
+    // the records' pole orders through the memo, twice, against the
+    // computation without it
+    let epsilon = symbolica::symbol!(rstar_site_settings().epsilon_symbol.as_str());
+    let value = two_poled_root();
+    let direct: u64 = value
+        .insertions
+        .iter()
+        .map(|i| {
+            pole_memo::compute(&(&i.coefficient * &i.factor), value.dimension, epsilon).unwrap()
+        })
+        .sum();
+    assert_eq!(direct, 2);
+    for _ in 0..2 {
+        assert_eq!(value.insertion_pole_order(epsilon).unwrap(), direct);
+    }
+}
