@@ -1095,27 +1095,33 @@ impl CountertermIdentity {
             return Ok((true, true));
         }
         let restored = self.restore_delta(stored)?;
-        let (restored, fresh) = match self
-            .graph_transport
-            .as_ref()
-            .and_then(|transport| transport.conservation.as_ref())
-        {
-            Some(legs) if legs.len() >= 2 => {
-                delta_key::add(&delta_key::C.nf_conservation_used, 1);
-                (conserve(&restored, legs), conserve(fresh, legs))
-            }
-            _ => {
-                delta_key::add(&delta_key::C.nf_conservation_skipped, 1);
-                (restored, fresh.clone())
-            }
-        };
-        let legacy = CountertermIdentity::new(graph, support, model)?;
-        let difference = (legacy.canonicalize_integrand(&restored)?
-            - legacy.canonicalize_integrand(&fresh)?)
-        .expand();
+        if (&restored - fresh).expand().is_zero() {
+            return Ok((false, true));
+        }
+        // In this occurrence the boundary momenta are linear combinations of
+        // the parent's loop-momentum basis: two writers' representatives of
+        // one value agree after that substitution (momentum conservation in
+        // the parent, also through a dummy edge at S).
+        let (restored, fresh) = (lmb_momenta(graph, &restored), lmb_momenta(graph, fresh));
+        let mut difference = (&restored - &fresh).expand();
+        delta_key::add(&delta_key::C.nf_conservation_used, 1);
         if difference.is_zero() {
             return Ok((false, true));
         }
+        if let Some(legs) = self
+            .graph_transport
+            .as_ref()
+            .and_then(|transport| transport.conservation.as_ref())
+            .filter(|legs| legs.len() >= 2)
+        {
+            difference = conserve(&difference, legs);
+            if difference.is_zero() {
+                return Ok((false, true));
+            }
+        } else {
+            delta_key::add(&delta_key::C.nf_conservation_skipped, 1);
+        }
+        let _ = (support, model);
         let cooking = Self::cooking();
         let tensor = SymbolicTensor::infer_indexed(cooking.try_cook(difference.as_view())?)?
             .undo_trace()?
@@ -1134,6 +1140,31 @@ impl CountertermIdentity {
         let canonical = cooking.uncook(canonical.expression().as_view()).expand();
         Ok((false, canonical.together().is_zero()))
     }
+}
+
+/// Every edge momentum `Q(e, ..)` as its signature in `graph`'s loop-momentum
+/// basis: a combination of the basis edges' `Q(l, ..)` and external `Q(x, ..)`.
+fn lmb_momenta(graph: &Graph, value: &Atom) -> Atom {
+    let basis = &graph.loop_momentum_basis;
+    value
+        .replace_map(|term, _, out| {
+            if let AtomView::Fun(fun) = term
+                && fun.get_symbol() == GS.emr_mom
+            {
+                let mut args = fun.iter();
+                if let Some(edge) = args
+                    .next()
+                    .and_then(|arg| usize::try_from(arg).ok())
+                    .map(linnet::half_edge::involution::EdgeIndex::from)
+                    && basis.edge_signatures.get(edge).is_some()
+                {
+                    let rest = args.map(|arg| arg.to_owned()).collect::<Vec<_>>();
+                    **out = basis.loop_atom::<Atom>(edge, GS.emr_mom, &rest, true)
+                        + basis.ext_atom::<Atom>(edge, GS.emr_mom, &rest, true);
+                }
+            }
+        })
+        .expand()
 }
 
 /// `Q(e_last) -> -s_last Σ_{j≠last} s_j Q(e_j)` (momentum conservation of the
@@ -1264,7 +1295,7 @@ mod tests {
     use super::*;
     use crate::{
         finalized_runtime_dot,
-        graph::{Autogen, parse::IntoFinalizedRuntimeGraph},
+        graph::{Autogen, FeynmanGraph, parse::IntoFinalizedRuntimeGraph},
         initialisation::test_initialise,
         utils::load_generic_model,
     };
