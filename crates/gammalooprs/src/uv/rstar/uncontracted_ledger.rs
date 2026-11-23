@@ -1193,7 +1193,8 @@ pub(super) fn through_cache(
             compute()
         });
     }
-    let (value, lookup) = cache.counterterm_noted(graph, support, model, settings_key, || {
+    let kind = crate::uv::counterterm_cache::KeyKind::RstarChildDelta;
+    let (value, lookup) = cache.counterterm_noted(graph, support, model, settings_key, kind, || {
         let _path = ChildPath::enter(graph, support);
         let fill = FillFrame::push();
         let value = compute();

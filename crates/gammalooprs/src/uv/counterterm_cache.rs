@@ -728,6 +728,7 @@ impl CountertermCache {
         support: &SuBitGraph,
         model: &Model,
         settings_key: String,
+        kind: KeyKind,
         compute: impl FnOnce() -> Result<(Atom, CacheNote)>,
     ) -> Result<(Atom, CacheLookup)> {
         self.lookup_noted(
@@ -735,7 +736,7 @@ impl CountertermCache {
             support,
             model,
             settings_key,
-            KeyKind::Standard,
+            kind,
             || compute().map(|(value, note)| (value, Some(note))),
             true,
         )
@@ -763,7 +764,9 @@ impl CountertermCache {
     }
 
     /// The identity and key of a lookup: the graph certificate for an R*
-    /// child Δ under `GAMMALOOP_DELTA_KEY=graph` (unless it falls back), the
+    /// child Δ under `GAMMALOOP_DELTA_KEY=graph` (unless it falls back; also
+    /// a noted lookup of the uncontracted ledger: the fill's note is about the
+    /// child's computation, which the certificate identifies), the
     /// legacy one otherwise. The bool: the graph certificate is used.
     fn identity_and_key(
         graph: &Graph,
@@ -771,9 +774,8 @@ impl CountertermCache {
         model: &Model,
         settings_key: String,
         kind: KeyKind,
-        noted: bool,
     ) -> Result<(CountertermIdentity, Key, bool)> {
-        if kind == KeyKind::RstarChildDelta && !noted && delta_key::mode() == DeltaKeyMode::Graph {
+        if kind == KeyKind::RstarChildDelta && delta_key::mode() == DeltaKeyMode::Graph {
             if crate::uv::rstar::ir_hard_fixed_mass_scope() {
                 delta_key::add(&delta_key::C.scoped_flag_lookup, 1);
                 debug_assert!(false, "an R* child Δ lookup inside the IR-hard fixed-mass scope");
@@ -838,7 +840,7 @@ impl CountertermCache {
         let mut timing = self.timings.start();
         let identity_stage = StageSpan::new("gamma.delta.identity");
         let (mut identity, key, graph_key) =
-            Self::identity_and_key(graph, support, model, settings_key, kind, noted)?;
+            Self::identity_and_key(graph, support, model, settings_key, kind)?;
         let noted_key = noted.then(|| key.clone());
         timing.lap(CacheTimingPhase::Key);
         drop(identity_stage);
