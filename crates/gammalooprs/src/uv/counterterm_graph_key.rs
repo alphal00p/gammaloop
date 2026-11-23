@@ -1526,8 +1526,10 @@ mod tests {
         Ok(())
     }
 
-    /// A closed quark loop and its reversal: one graph certificate (the
-    /// legacy ones differ), no transport, opposite loop orientation bits.
+    /// A closed quark loop (a triangle, its vertices told apart by weights) and
+    /// its reversal, which is no relabelling: one graph certificate (the
+    /// legacy ones differ), no transport, opposite loop orientation bits, and
+    /// the sign of the three reversed propagators.
     #[test]
     fn graph_key_identifies_reversed_closed_quark_loop() -> Result<()> {
         test_initialise()?;
@@ -1537,9 +1539,11 @@ mod tests {
                 graph [projector=1]; node [num=1]; edge [particle="g" num=1];
                 ext [style=invis];
                 ext -> A [id=0 sink="{ufo_order:2}"];
-                B -> ext [id=1 source="{ufo_order:2}"];
-                A -> B [id=2 particle="d" lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:1}"];
-                B -> A [id=3 particle="d" source="{ufo_order:0}" sink="{ufo_order:1}"];
+                ext -> B [id=1 sink="{ufo_order:2}"];
+                C -> ext [id=2 source="{ufo_order:2}"];
+                A -> B [id=3 particle="d" lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:1}"];
+                B -> C [id=4 particle="d" source="{ufo_order:0}" sink="{ufo_order:1}"];
+                C -> A [id=5 particle="d" source="{ufo_order:0}" sink="{ufo_order:1}"];
             }, "sm"
         )?;
         let reversed: Graph = finalized_runtime_dot!(
@@ -1547,19 +1551,24 @@ mod tests {
                 graph [projector=1]; node [num=1]; edge [particle="g" num=1];
                 ext [style=invis];
                 ext -> A [id=0 sink="{ufo_order:2}"];
-                B -> ext [id=1 source="{ufo_order:2}"];
-                B -> A [id=2 particle="d" lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:1}"];
-                A -> B [id=3 particle="d" source="{ufo_order:0}" sink="{ufo_order:1}"];
+                ext -> B [id=1 sink="{ufo_order:2}"];
+                C -> ext [id=2 source="{ufo_order:2}"];
+                B -> A [id=3 particle="d" lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:1}"];
+                C -> B [id=4 particle="d" source="{ufo_order:0}" sink="{ufo_order:1}"];
+                A -> C [id=5 particle="d" source="{ufo_order:0}" sink="{ufo_order:1}"];
             }, "sm"
         )?;
         let weights = |graph: &Graph| {
             let ends = ends(graph);
-            BTreeMap::from([(usize::from(vertex_of(graph, ends[&0].1.unwrap())), 2)])
+            BTreeMap::from([
+                (usize::from(vertex_of(graph, ends[&0].1.unwrap())), 2),
+                (usize::from(vertex_of(graph, ends[&1].1.unwrap())), 3),
+            ])
         };
         let (mut a, mut b) = (forward, reversed);
         let (wa, wb) = (weights(&a), weights(&b));
-        dress(&mut a, &[2, 3], &wa);
-        dress(&mut b, &[2, 3], &wb);
+        dress(&mut a, &[3, 4, 5], &wa);
+        dress(&mut b, &[3, 4, 5], &wb);
         let (ga, gb) = (graph_identity(&a, &model)?, graph_identity(&b, &model)?);
         assert_eq!(ga.key, gb.key, "a reversed closed quark loop has the same certificate");
         assert_ne!(
@@ -1573,12 +1582,17 @@ mod tests {
         assert_eq!(ta.features.closed.len(), 1);
         assert_ne!(ta.features.closed, tb.features.closed);
         assert!(ta.crossed_open.is_empty() && tb.crossed_open.is_empty());
-        // Two propagators change sign: σ_a σ_b = +1; a scalar value is unchanged.
-        assert_eq!(ta.sigma * tb.sigma, 1);
-        let ends_a = ends(&a);
-        let (p0, p1) = (hedge(ends_a[&0].1.unwrap()), hedge(ends_a[&1].0.unwrap()));
-        let value = function!(ETS.metric, slot(mink(), p0), slot(mink(), p1));
-        assert_eq!(gb.restore_delta(&ga.canonicalize_delta(&value)?)?, value);
+        // Three propagators change sign: σ_a σ_b = -1 (Furry's sign).
+        assert_eq!(ta.sigma * tb.sigma, -1);
+        let ea = ends(&a);
+        let (p0, p1, p2) = (
+            hedge(ea[&0].1.unwrap()),
+            hedge(ea[&1].1.unwrap()),
+            hedge(ea[&2].0.unwrap()),
+        );
+        let value = function!(ETS.metric, slot(mink(), p0), slot(mink(), p1))
+            * function!(GS.emr_mom, 2, slot(mink(), p2));
+        assert_eq!(gb.restore_delta(&ga.canonicalize_delta(&value)?)?, -value);
         Ok(())
     }
 
