@@ -109,6 +109,41 @@ pub(crate) struct CountertermKey {
     graph: IncidenceGraph<NodeColor, Link>,
 }
 
+impl CountertermKey {
+    /// GAMMALOOP_DELTA_STORE (delta-store lane, step 2): the model
+    /// fingerprint and the canonical graph as bytes that do not depend on
+    /// the process (node colours in canonical order, then the edges); `None`
+    /// for a certificate with a registry-dependent colour (an Atom or
+    /// Symbol payload: every legacy certificate), which is never persisted.
+    pub(crate) fn portable_bytes(&self) -> Option<([u8; 32], Vec<u8>)> {
+        fn put_str(out: &mut Vec<u8>, text: &str) {
+            out.extend_from_slice(&(text.len() as u32).to_le_bytes());
+            out.extend_from_slice(text.as_bytes());
+        }
+        let mut out = Vec::new();
+        let nodes = self.graph.nodes();
+        out.extend_from_slice(&(nodes.len() as u32).to_le_bytes());
+        for node in nodes {
+            match &node.data {
+                NodeColor::Edge { .. }
+                | NodeColor::Slot(_)
+                | NodeColor::Leaf(_)
+                | NodeColor::Function(_) => return None,
+                color => put_str(&mut out, &format!("{color:?}")),
+            }
+        }
+        let edges = self.graph.edges();
+        out.extend_from_slice(&(edges.len() as u32).to_le_bytes());
+        for edge in edges {
+            out.extend_from_slice(&(edge.vertices.0 as u32).to_le_bytes());
+            out.extend_from_slice(&(edge.vertices.1 as u32).to_le_bytes());
+            out.push(edge.directed as u8);
+            put_str(&mut out, &format!("{:?}", edge.data));
+        }
+        Some((*self.model.as_bytes(), out))
+    }
+}
+
 #[cfg(test)]
 impl CountertermKey {
     pub(crate) fn incidence_nodes(&self) -> usize {
