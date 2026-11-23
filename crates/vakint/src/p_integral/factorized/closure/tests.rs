@@ -5453,6 +5453,93 @@ fn test_symbol(name: &str) -> Symbol {
     symbolica::symbol!(format!("rec_lean_test::{name}"))
 }
 
+/// ROOT-SPEED S2: the polynomial truncation equals the series path
+/// `series(ε, 0, target).to_atom().expand()` ATOM FOR ATOM on Laurent
+/// polynomials in ε with ε-free coefficients (unexpanded products, poles, a
+/// function and a negative power of a sum in the coefficients), at every
+/// target below, inside and above the powers present; it declines (`None`)
+/// every product with ε elsewhere (a log, a denominator, a fractional or
+/// symbolic power, a function argument), where the caller keeps the series.
+#[test]
+fn the_polynomial_truncation_is_the_series_on_laurent_polynomials_and_declines_the_rest() {
+    let e = "rec_lean_test::e";
+    let epsilon = test_symbol("e");
+    let polynomials = [
+        format!(
+            "3/2*{e}^-2*rec_lean_test::a+{e}^-1*(rec_lean_test::a+rec_lean_test::b)*log(rec_lean_test::m)+7+{e}*rec_lean_test::c+{e}^2*rec_lean_test::d"
+        ),
+        format!(
+            "({e}^-1*rec_lean_test::a+2*rec_lean_test::b)*({e}^-1*rec_lean_test::c+log(rec_lean_test::m)*{e}+5)*({e}+1/3)"
+        ),
+        format!(
+            "{e}^-3*rec_lean_test::x*(rec_lean_test::y+rec_lean_test::z)^-1+{e}^-1*rec_lean_test::f(rec_lean_test::x,rec_lean_test::y)^2+rec_lean_test::f(rec_lean_test::x,rec_lean_test::x)^-1*{e}^2"
+        ),
+        format!("{e}^3*rec_lean_test::a"),
+        "rec_lean_test::a+rec_lean_test::b".to_string(),
+    ];
+    for text in &polynomials {
+        let value = atom(text);
+        for target in -4..=3 {
+            let fast = super::laurent_truncation(&value.expand(), epsilon, target)
+                .unwrap_or_else(|| panic!("{text}: declined"));
+            let series = value
+                .series(
+                    epsilon,
+                    Atom::Zero.as_view(),
+                    symbolica::domains::rational::Rational::from(target),
+                )
+                .unwrap()
+                .to_atom()
+                .expand();
+            assert_eq!(fast, series, "{text} at ε^{target}");
+        }
+    }
+    for text in [
+        format!("{e}^-1*log({e})"),
+        format!("rec_lean_test::a*(1-{e})^-1"),
+        format!("{e}^(1/2)*rec_lean_test::a+{e}^-1"),
+        format!("{e}^rec_lean_test::n*rec_lean_test::a"),
+        format!("rec_lean_test::f({e})*{e}^-2"),
+        format!("(4-2*{e})^-1*{e}^-1"),
+        format!("2^{e}*{e}^-1"),
+    ] {
+        let value = atom(&text);
+        assert_eq!(
+            super::laurent_truncation(&value.expand(), epsilon, 0),
+            None,
+            "{text}"
+        );
+    }
+}
+
+/// ROOT-SPEED S2 on a record: two poled insertions (pole order 2)
+/// evaluate to the SAME atoms (the value, vakint's value, the record's
+/// values) with the polynomial truncation as with the series it replaces
+/// (`FORCE_SERIES`); the vendored insertion records:
+/// `records_with_insertions_evaluate_alike_through_the_polynomial_truncation`.
+#[test]
+fn a_poled_record_evaluates_alike_through_the_polynomial_truncation() {
+    let vakint = Vakint::new().unwrap();
+    let value = two_poled_root();
+    let run = |force: bool| {
+        super::FORCE_SERIES.with(|c| c.set(force));
+        let got = evaluate_factorized_closure(
+            &vakint,
+            &rstar_site_settings(),
+            std::slice::from_ref(&value),
+            &[value.prefactor.total()],
+        );
+        super::FORCE_SERIES.with(|c| c.set(false));
+        got.unwrap()
+    };
+    let (fast, series) = (run(false), run(true));
+    assert_eq!(fast.value, series.value);
+    assert_eq!(fast.vakint_value, series.vakint_value);
+    for (a, b) in fast.records.iter().zip(&series.records) {
+        assert_eq!((&a.value, &a.vakint_value), (&b.value, &b.vakint_value));
+    }
+}
+
 /// ROOT-SPEED S1: the pole of an insertion product through the process memo
 /// is the computed one, on a first call and on a repeated one; the key holds
 /// what the computation reads: the same product with another dimension

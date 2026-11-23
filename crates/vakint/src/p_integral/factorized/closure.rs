@@ -1790,6 +1790,53 @@ pub(super) fn evaluate_validated(
                     value.loops()
                 ))
             })?;
+        let series = || {
+            vakint_value
+                .series(
+                    epsilon_symbol,
+                    Atom::Zero.as_view(),
+                    symbolica::domains::rational::Rational::from(target),
+                )
+                .map(|series| series.to_atom().expand())
+        };
+        // the polynomial path when the expanded product is a Laurent
+        // polynomial in ε with ε-free coefficients (`laurent_truncation`),
+        // else the series
+        let fast = if polynomial_truncation_allowed() {
+            laurent_truncation(&vakint_value.expand(), epsilon_symbol, target)
+        } else {
+            None
+        };
+        let truncated = match fast {
+            Some(fast) => {
+                if series_compare_enabled() {
+                    let slow = series();
+                    let equal = matches!(&slow, Ok(slow) if *slow == fast);
+                    eprintln!(
+                        "VAKINT_SERIES_COMPARE what=truncation path=fast equal={equal} label={:?}",
+                        value.label
+                    );
+                    if !equal {
+                        eprintln!(
+                            "VAKINT_SERIES_COMPARE_UNEQUAL label={:?}\n--- fast\n{fast}\n--- series\n{}",
+                            value.label,
+                            slow.as_ref()
+                                .map_or_else(|e| e.to_string(), |a| a.to_string())
+                        );
+                    }
+                }
+                Ok(fast)
+            }
+            None => {
+                if series_compare_enabled() {
+                    eprintln!(
+                        "VAKINT_SERIES_COMPARE what=truncation path=fallback equal=true label={:?}",
+                        value.label
+                    );
+                }
+                series()
+            }
+        };
         injected(
             "truncation of the insertion product",
             || symbolica::poly::series::SeriesError::NonPositiveRelativeDepth {
@@ -1797,15 +1844,9 @@ pub(super) fn evaluate_validated(
                     symbolica::domains::rational::Rational::from(0),
                 ),
             },
-            vakint_value.series(
-                epsilon_symbol,
-                Atom::Zero.as_view(),
-                symbolica::domains::rational::Rational::from(target),
-            ),
+            truncated,
         )
         .map_err(|e| internal("truncation of the insertion product", e))?
-        .to_atom()
-        .expand()
     } else {
         vakint_value.expand()
     };
@@ -1837,6 +1878,85 @@ pub(super) fn evaluate_validated(
         lowered_entries: counts.1,
         distinct_monomials: counts.2,
     })
+}
+
+/// THE POLYNOMIAL PATH of the truncation of the insertion product:
+/// `expanded` (the product, expanded) truncated at `ε^target` inclusive, the
+/// value `expanded.series(ε, 0, target).to_atom().expand()` has, when EVERY
+/// term of `expanded` is `c · ε^k` with an integer `k` and `c` free of `ε`
+/// (`laurent_power`): for such a Laurent polynomial the series is exact and
+/// keeps exactly the terms with `k <= target` (an ABSOLUTE, inclusive bound;
+/// no lower bound; the remainder dropped). `None` for anything else (`ε` in a
+/// function, a denominator, a fractional or symbolic power): the caller takes
+/// the series.
+pub(super) fn laurent_truncation(expanded: &Atom, epsilon: Symbol, target: i64) -> Option<Atom> {
+    let terms: Vec<AtomView<'_>> = match expanded.as_view() {
+        AtomView::Add(add) => add.iter().collect(),
+        term => vec![term],
+    };
+    let mut kept = Vec::with_capacity(terms.len());
+    for term in terms {
+        if laurent_power(term, epsilon)? <= target {
+            kept.push(term);
+        }
+    }
+    Some(Atom::add_many(kept).expand())
+}
+
+/// The power `k` of a term `c · ε^k` (an integer `k`, `c` free of `ε`), or
+/// `None` when the term is not of that form.
+pub(super) fn laurent_power(term: AtomView<'_>, epsilon: Symbol) -> Option<i64> {
+    let factor_power = |factor: AtomView<'_>| -> Option<i64> {
+        match factor {
+            AtomView::Var(v) if v.get_symbol() == epsilon => Some(1),
+            AtomView::Pow(pow) => {
+                let (base, exponent) = pow.get_base_exp();
+                match base {
+                    AtomView::Var(v) if v.get_symbol() == epsilon => match exponent {
+                        AtomView::Num(_) => i64::try_from(exponent).ok(),
+                        _ => None,
+                    },
+                    _ if factor.contains_symbol(epsilon) => None,
+                    _ => Some(0),
+                }
+            }
+            _ if factor.contains_symbol(epsilon) => None,
+            _ => Some(0),
+        }
+    };
+    match term {
+        AtomView::Mul(mul) => mul
+            .iter()
+            .try_fold(0i64, |k, factor| k.checked_add(factor_power(factor)?)),
+        term => factor_power(term),
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Tests: the truncation takes the series even for a Laurent polynomial
+    /// (the computation before the polynomial path).
+    pub(super) static FORCE_SERIES: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+fn polynomial_truncation_allowed() -> bool {
+    #[cfg(test)]
+    {
+        !FORCE_SERIES.with(std::cell::Cell::get)
+    }
+    #[cfg(not(test))]
+    {
+        true
+    }
+}
+
+/// `VAKINT_SERIES_COMPARE=1`: the value check of the polynomial truncation
+/// (and of the pole-order memo): both computations on every occurrence, one
+/// `VAKINT_SERIES_COMPARE` line each (fast / fallback, equal); no line
+/// otherwise.
+fn series_compare_enabled() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| std::env::var("VAKINT_SERIES_COMPARE").is_ok_and(|v| v == "1"))
 }
 
 #[cfg(test)]

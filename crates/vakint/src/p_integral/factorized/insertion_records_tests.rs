@@ -138,6 +138,60 @@ fn compare_set(
     eprintln!("INSERTION_RECORD_SET {what} total={total} compared={compared}");
 }
 
+/// ROOT-SPEED S2 on the vendored records with insertions (k2-child-ins,
+/// k4-quotient, k5-surrogate): the SAME atoms (the value, vakint's value,
+/// every record value) with the polynomial truncation as with the series it
+/// replaces (`FORCE_SERIES`); at least two of them have a pole.
+#[test]
+fn records_with_insertions_evaluate_alike_through_the_polynomial_truncation() {
+    let vakint = plain_engine();
+    let mut poled = 0;
+    for (what, input) in [
+        (
+            "k2-child-ins",
+            include_str!("fixtures/wh-k2-child-ins.record.txt"),
+        ),
+        (
+            "k4-quotient",
+            include_str!("fixtures/wh-k4-quotient.record.txt"),
+        ),
+        (
+            "k5-surrogate",
+            include_str!("fixtures/wh-k5-surrogate.record.txt"),
+        ),
+    ] {
+        let value = FactorizedNumerator::from_text(input).unwrap_or_else(|e| panic!("{what}: {e}"));
+        poled += usize::from(
+            value
+                .insertion_pole_order(vk_symbol!("gammalooprs::ε"))
+                .unwrap()
+                > 0,
+        );
+        let run = |force: bool| {
+            super::closure::FORCE_SERIES.with(|c| c.set(force));
+            let got = evaluate_factorized_closure(
+                &vakint,
+                &site_settings(),
+                std::slice::from_ref(&value),
+                &[value.prefactor.total()],
+            );
+            super::closure::FORCE_SERIES.with(|c| c.set(false));
+            got.unwrap_or_else(|e| panic!("{what}: {e}"))
+        };
+        let (fast, series) = (run(false), run(true));
+        assert_eq!(fast.value, series.value, "{what}");
+        assert_eq!(fast.vakint_value, series.vakint_value, "{what}");
+        for (a, b) in fast.records.iter().zip(&series.records) {
+            assert_eq!(
+                (&a.value, &a.vakint_value),
+                (&b.value, &b.vakint_value),
+                "{what}"
+            );
+        }
+    }
+    assert!(poled >= 2, "{poled} records with a pole");
+}
+
 #[test]
 fn the_beta_k2_child_with_an_insertion_equals_its_contracted_value() {
     compare(
