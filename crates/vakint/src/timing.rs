@@ -41,6 +41,14 @@
 //! threads it includes the others' memory). Off: no system call, one relaxed
 //! atomic load per transition.
 //!
+//! LIVE VIEW (opt-in, for a monitor on another thread): [`publish_live`]
+//! attaches a shared [`LiveStages`] to the calling thread; at every transition
+//! of a guard on that thread the counters accumulated since the attachment and
+//! the stage now active are copied into its atomics, which any thread can
+//! [`LiveStages::read`]. It observes only: values, outputs and the thread-local
+//! counters never depend on it. While no thread of the process is attached a
+//! transition costs one more relaxed atomic load.
+//!
 //! The counters only advance on the thread that holds the guards: callers read
 //! a [`Snapshot`] before and after a unit on the same thread. Callers measure
 //! wall time, so work a reduction hands to helper threads is included in the
@@ -304,6 +312,7 @@ impl Guard {
                         .set(state.reduce_depth.get().saturating_add(1));
                 }
                 state.mode.set(kind);
+                live::transition(state);
                 Some(previous)
             })
             .ok()
@@ -330,6 +339,7 @@ impl Drop for Guard {
                     .set(state.reduce_depth.get().saturating_sub(1));
             }
             state.mode.set(previous);
+            live::transition(state);
         });
     }
 }
@@ -352,6 +362,7 @@ impl StepGuard {
                 }
                 state.flush(Instant::now());
                 state.step.set(step);
+                live::transition(state);
                 Some(previous)
             })
             .ok()
@@ -371,6 +382,7 @@ impl Drop for StepGuard {
         let _ = STATE.try_with(|state| {
             state.flush(Instant::now());
             state.step.set(previous);
+            live::transition(state);
         });
     }
 }
@@ -652,6 +664,214 @@ pub fn finalize_seconds() -> f64 {
     Snapshot::now().finalize_seconds()
 }
 
+impl State {
+    /// The counters as of the last transition (the running interval and the
+    /// resource counters excluded).
+    fn counters(&self) -> Snapshot {
+        Snapshot {
+            reduce_ns: self.reduce_ns.get(),
+            lower_ns: self.lower_ns.get(),
+            calls: self.calls.get(),
+            step_ns: self.step_ns.get(),
+            cpu: None,
+            stage_rss: None,
+        }
+    }
+}
+
+pub use live::{LivePublication, LiveReading, LiveStages, publish_live};
+
+/// The live view of the module documentation.
+mod live {
+    use super::{STATE, Snapshot, Stage, State};
+    use std::cell::RefCell;
+    use std::marker::PhantomData;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU8, AtomicU64, AtomicUsize, Ordering};
+    use std::time::Instant;
+
+    /// Threads attached in the process; 0 keeps every transition at one load.
+    static ATTACHED: AtomicUsize = AtomicUsize::new(0);
+
+    struct Slot {
+        stages: Arc<LiveStages>,
+        /// The thread's counters at the attachment.
+        base: Snapshot,
+    }
+
+    thread_local! {
+        static SLOT: RefCell<Option<Slot>> = const { RefCell::new(None) };
+    }
+
+    /// The live counters of one thread, shared with its readers. Every field
+    /// is a relaxed atomic written at a transition; a reader can see the
+    /// fields of two neighbouring transitions, which a display tolerates.
+    #[derive(Debug)]
+    pub struct LiveStages {
+        origin: Instant,
+        /// 0 outside every scope, else 1 + the index in [`Stage::ALL`].
+        stage: AtomicU8,
+        /// Exclusive wall nanoseconds per stage ([`Stage::ALL`] order) since
+        /// the attachment, at the last transition.
+        stage_ns: [AtomicU64; 4],
+        reduce_calls: AtomicU64,
+        /// Nanoseconds from `origin` to the last transition.
+        at_ns: AtomicU64,
+        transitions: AtomicU64,
+    }
+
+    impl Default for LiveStages {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
+    /// What [`LiveStages::read`] returns.
+    #[derive(Clone, Copy, Debug, Default, PartialEq)]
+    pub struct LiveReading {
+        /// The stage active on the attached thread; `None` outside every
+        /// scope (not inside vakint) or before the first publication.
+        pub stage: Option<Stage>,
+        /// Exclusive wall seconds per stage ([`Stage::ALL`] order) since the
+        /// attachment, the running interval of the active stage included.
+        pub stage_seconds: [f64; 4],
+        /// Seconds since the last transition (time in the active stage).
+        pub in_stage_seconds: f64,
+        /// Reduction scopes entered from outside any reduction scope.
+        pub reduce_calls: u64,
+        /// Transitions published so far (0: nothing published yet).
+        pub transitions: u64,
+    }
+
+    impl LiveStages {
+        pub fn new() -> Self {
+            Self {
+                origin: Instant::now(),
+                stage: AtomicU8::new(0),
+                stage_ns: Default::default(),
+                reduce_calls: AtomicU64::new(0),
+                at_ns: AtomicU64::new(0),
+                transitions: AtomicU64::new(0),
+            }
+        }
+
+        /// The latest publication, from any thread.
+        pub fn read(&self) -> LiveReading {
+            let transitions = self.transitions.load(Ordering::Relaxed);
+            let stage = match self.stage.load(Ordering::Relaxed) {
+                0 => None,
+                code => Stage::ALL.get(usize::from(code) - 1).copied(),
+            };
+            let now_ns = self.origin.elapsed().as_nanos() as u64;
+            let running = if transitions == 0 {
+                0
+            } else {
+                now_ns.saturating_sub(self.at_ns.load(Ordering::Relaxed))
+            };
+            let mut stage_seconds: [f64; 4] = std::array::from_fn(|index| {
+                self.stage_ns[index].load(Ordering::Relaxed) as f64 * 1e-9
+            });
+            if let Some(stage) = stage {
+                stage_seconds[stage.index()] += running as f64 * 1e-9;
+            }
+            LiveReading {
+                stage,
+                stage_seconds,
+                in_stage_seconds: running as f64 * 1e-9,
+                reduce_calls: self.reduce_calls.load(Ordering::Relaxed),
+                transitions,
+            }
+        }
+
+        fn publish(&self, state: &State, base: &Snapshot) {
+            let delta = state.counters().since(base);
+            for stage in Stage::ALL {
+                self.stage_ns[stage.index()].store(delta.stage(stage).wall_ns, Ordering::Relaxed);
+            }
+            self.reduce_calls
+                .store(delta.reduce_calls, Ordering::Relaxed);
+            let at = state
+                .since
+                .get()
+                .map(|at| at.saturating_duration_since(self.origin).as_nanos() as u64)
+                .unwrap_or_default();
+            self.at_ns.store(at, Ordering::Relaxed);
+            let code = Stage::of(state.mode.get(), state.step.get())
+                .map_or(0, |stage| stage.index() as u8 + 1);
+            self.stage.store(code, Ordering::Relaxed);
+            self.transitions.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    /// Attach `stages` to the calling thread until the returned guard drops
+    /// (it restores an earlier attachment). Publishes once at once, so a
+    /// reader sees the stage active at the attachment.
+    pub fn publish_live(stages: Arc<LiveStages>) -> LivePublication {
+        // Fold the running interval (what any transition does): the base and
+        // the first publication then share one instant.
+        let base = STATE
+            .try_with(|state| {
+                state.flush(Instant::now());
+                state.counters()
+            })
+            .unwrap_or_default();
+        let replaced = SLOT
+            .try_with(|slot| {
+                let mut slot = slot.try_borrow_mut().ok()?;
+                Some(slot.replace(Slot { stages, base }))
+            })
+            .ok()
+            .flatten();
+        let attached = replaced.is_some();
+        if attached {
+            ATTACHED.fetch_add(1, Ordering::Relaxed);
+            let _ = STATE.try_with(transition);
+        }
+        LivePublication {
+            previous: replaced.flatten(),
+            attached,
+            _not_send: PhantomData,
+        }
+    }
+
+    /// The attachment of [`publish_live`]. Not `Send`: dropped on its thread.
+    #[must_use = "the thread publishes until the guard drops"]
+    pub struct LivePublication {
+        previous: Option<Slot>,
+        attached: bool,
+        _not_send: PhantomData<*const ()>,
+    }
+
+    impl Drop for LivePublication {
+        fn drop(&mut self) {
+            if !self.attached {
+                return;
+            }
+            let previous = self.previous.take();
+            let _ = SLOT.try_with(|slot| {
+                if let Ok(mut slot) = slot.try_borrow_mut() {
+                    *slot = previous;
+                }
+            });
+            ATTACHED.fetch_sub(1, Ordering::Relaxed);
+        }
+    }
+
+    /// Called at every transition, after the new kind / sub-step is set.
+    pub(super) fn transition(state: &State) {
+        if ATTACHED.load(Ordering::Relaxed) == 0 {
+            return;
+        }
+        let _ = SLOT.try_with(|slot| {
+            if let Ok(slot) = slot.try_borrow()
+                && let Some(slot) = slot.as_ref()
+            {
+                slot.stages.publish(state, &slot.base);
+            }
+        });
+    }
+}
+
 /// Whether the factorised entries print one `VAKINT_RECORD` line per record
 /// on stderr (`VAKINT_RECORD_LOG=1`, read once; off by default: no output).
 pub fn record_log_enabled() -> bool {
@@ -873,5 +1093,124 @@ mod tests {
         })
         .join()
         .unwrap();
+    }
+
+    /// The live view: another thread reads the attached thread's stage and
+    /// its exclusive stage times since the attachment; the thread-local
+    /// counters are the same with and without it; after the guard drops the
+    /// thread stops publishing.
+    #[test]
+    fn the_live_view_follows_the_attached_thread_from_another_thread() {
+        use std::sync::{Arc, mpsc};
+        let stages = Arc::new(LiveStages::new());
+        assert_eq!(stages.read(), LiveReading::default());
+        let (step, at_step) = mpsc::channel::<()>();
+        let (reached, reach) = mpsc::channel::<&'static str>();
+        let shared = Arc::clone(&stages);
+        let worker = std::thread::spawn(move || {
+            // counters before the attachment are not reported
+            {
+                let _reduce = reduce();
+                spin(20);
+            }
+            let start = Snapshot::now();
+            let publication = publish_live(shared);
+            reached.send("attached").unwrap();
+            at_step.recv().unwrap();
+            {
+                let _lower = lower();
+                spin(30);
+                reached.send("lowering").unwrap();
+                at_step.recv().unwrap();
+                {
+                    let _reduce = reduce();
+                    let _finalize = finalize();
+                    spin(20);
+                    reached.send("finalisation").unwrap();
+                    at_step.recv().unwrap();
+                }
+            }
+            let delta = start.elapsed();
+            drop(publication);
+            {
+                // not published after the guard dropped
+                let _contract = contract();
+                spin(5);
+            }
+            reached.send("detached").unwrap();
+            delta
+        });
+        assert_eq!(reach.recv().unwrap(), "attached");
+        let attached = stages.read();
+        assert_eq!(attached.stage, None);
+        assert_eq!(attached.reduce_calls, 0);
+        assert_eq!(attached.stage_seconds, [0.0; 4]);
+        assert!(attached.transitions >= 1);
+        step.send(()).unwrap();
+        assert_eq!(reach.recv().unwrap(), "lowering");
+        let lowering = stages.read();
+        assert_eq!(lowering.stage, Some(Stage::Lowering));
+        // the running interval is included while the stage is active
+        assert!(lowering.stage_seconds[1] >= 0.025, "{lowering:?}");
+        assert!(lowering.in_stage_seconds >= 0.025, "{lowering:?}");
+        step.send(()).unwrap();
+        assert_eq!(reach.recv().unwrap(), "finalisation");
+        let finalisation = stages.read();
+        assert_eq!(finalisation.stage, Some(Stage::Finalization));
+        assert_eq!(finalisation.reduce_calls, 1);
+        assert!(finalisation.stage_seconds[1] >= 0.025, "{finalisation:?}");
+        assert!(finalisation.stage_seconds[3] >= 0.015, "{finalisation:?}");
+        step.send(()).unwrap();
+        assert_eq!(reach.recv().unwrap(), "detached");
+        let delta = worker.join().unwrap();
+        let last = stages.read();
+        // the last publication: outside every scope, before the detachment
+        assert_eq!(last.stage, None);
+        assert_eq!(last.reduce_calls, delta.reduce_calls);
+        for stage in Stage::ALL {
+            let reported = last.stage_seconds[stage.index()];
+            let counted = delta.stage(stage).wall_ns as f64 * 1e-9;
+            assert!(
+                (reported - counted).abs() < 0.002,
+                "{stage:?}: {last:?} {delta:?}"
+            );
+        }
+        assert_eq!(
+            last.stage_seconds[0], 0.0,
+            "the contraction after the detachment"
+        );
+        let transitions = last.transitions;
+        assert_eq!(stages.read().transitions, transitions);
+    }
+
+    /// Nested attachments restore the outer one; an unattached thread never
+    /// publishes into a view.
+    #[test]
+    fn nested_live_attachments_restore_the_outer_one() {
+        use std::sync::Arc;
+        let outer = Arc::new(LiveStages::new());
+        let inner = Arc::new(LiveStages::new());
+        std::thread::spawn({
+            let (outer, inner) = (Arc::clone(&outer), Arc::clone(&inner));
+            move || {
+                let _outer = publish_live(outer);
+                {
+                    let _inner = publish_live(inner);
+                    let _lower = lower();
+                }
+                let _reduce = reduce();
+            }
+        })
+        .join()
+        .unwrap();
+        assert_eq!(inner.read().reduce_calls, 0);
+        assert_eq!(outer.read().reduce_calls, 1);
+        let idle = Arc::new(LiveStages::new());
+        std::thread::spawn(|| {
+            let _reduce = reduce();
+        })
+        .join()
+        .unwrap();
+        assert_eq!(idle.read(), LiveReading::default());
     }
 }
