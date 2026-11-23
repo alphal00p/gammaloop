@@ -1050,6 +1050,38 @@ pub(crate) struct FillNote {
     pub path: String,
 }
 
+/// GAMMALOOP_DELTA_STORE (delta-store lane): a fill's note as JSON, so a
+/// store hit in another process stands for the fill's records as a memory
+/// hit does.
+pub(crate) fn note_to_json(note: &(dyn Any + Send + Sync)) -> Option<String> {
+    let note = note.downcast_ref::<FillNote>()?;
+    let counts = note
+        .counts
+        .iter()
+        .map(|(kind, counts)| (kind.as_str(), counts))
+        .collect::<BTreeMap<_, _>>();
+    serde_json::to_string(&json!({
+        "counts": counts, "graph": note.graph, "diagram": note.diagram, "path": note.path,
+    }))
+    .ok()
+}
+
+/// The note of [`note_to_json`] back (`None`: unreadable, a miss).
+pub(crate) fn note_from_json(text: &str) -> Option<Arc<dyn Any + Send + Sync>> {
+    let value: Value = serde_json::from_str(text).ok()?;
+    let mut counts = BTreeMap::new();
+    for (name, kind_counts) in value["counts"].as_object()? {
+        let kind = Kind::ALL.into_iter().find(|kind| kind.as_str() == name)?;
+        counts.insert(kind, serde_json::from_value::<Counts>(kind_counts.clone()).ok()?);
+    }
+    Some(Arc::new(FillNote {
+        counts,
+        graph: value["graph"].as_str()?.to_owned(),
+        diagram: value["diagram"].as_str()?.to_owned(),
+        path: value["path"].as_str()?.to_owned(),
+    }))
+}
+
 /// A Δ-cache fill in progress (with the switch on or check).
 struct FillFrame {
     id: usize,

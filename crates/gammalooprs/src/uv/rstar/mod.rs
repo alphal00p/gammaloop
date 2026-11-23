@@ -171,6 +171,8 @@ pub use top_mass::{
     top_level_switches_provenance, top_mass_terms, validate_top_level_switches,
 };
 pub use uncontracted_ledger::{DiagramLedger, Resumed, RunTally, resumed as uncontracted_resumed};
+// delta-store lane (step 2): the fill notes of the persistent Δ store
+pub(crate) use uncontracted_ledger::{note_from_json, note_to_json};
 pub use uv::MassiveUvEvaluator;
 
 /// `GAMMALOOP_UNCONTRACTED_NUMERATOR`'s initialisation (call at start-up for
