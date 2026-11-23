@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "https://inspirehep.net",
-  "updated": "2026-11-16",
+  "updated": "2026-11-23",
   "api_url": "https://inspirehep.net/api/literature?sort=mostrecent&q=%28a+V.Hirschi.1+or+a+M.Fraaije.1+or+a+L.Huber.1+or+a+B.Ruijl.1+or+a+Kaapo.Seppanen.1+or+a+Zeno.Capatti.1%29",
   "authors": [
     {
@@ -210,7 +210,7 @@
         "zeno-capatti"
       ],
       "arxiv": "2609.03002",
-      "citations": 0,
+      "citations": 1,
       "types": [
         "conference paper"
       ],
@@ -356,7 +356,7 @@
       "venue": "JHEP 01 (2026) 113",
       "doi": "10.1007/JHEP01(2026)113",
       "arxiv": "2507.07014",
-      "citations": 30,
+      "citations": 32,
       "types": [
         "article"
       ],
@@ -618,7 +618,7 @@
       "venue": "Phys.Lett.B 849 (2024) 138468",
       "doi": "10.1016/j.physletb.2024.138468",
       "arxiv": "2310.05744",
-      "citations": 61,
+      "citations": 62,
       "types": [
         "article"
       ],
@@ -642,7 +642,7 @@
       "venue": "Phys.Rev.Lett. 131 (2023) 181902",
       "doi": "10.1103/PhysRevLett.131.181902",
       "arxiv": "2307.08734",
-      "citations": 88,
+      "citations": 89,
       "types": [
         "article"
       ],
@@ -681,7 +681,7 @@
       "venue": "Eur.Phys.J.C 83 (2023) 631",
       "doi": "10.1140/epjc/s10052-023-11780-9",
       "arxiv": "2304.09883",
-      "citations": 168,
+      "citations": 171,
       "types": [
         "article"
       ],
@@ -745,7 +745,7 @@
       "venue": "Phys.Rev.D 107 (2023) L051902",
       "doi": "10.1103/PhysRevD.107.L051902",
       "arxiv": "2211.09653",
-      "citations": 32,
+      "citations": 33,
       "types": [
         "article"
       ],
@@ -1134,7 +1134,7 @@
       "venue": "SciPost Phys. 16 (2024) 130",
       "doi": "10.21468/SciPostPhys.16.5.130",
       "arxiv": "2203.11110",
-      "citations": 224,
+      "citations": 225,
       "types": [
         "article"
       ],
@@ -1184,7 +1184,7 @@
       "venue": "Phys.Lett.B 825 (2022) 136853",
       "doi": "10.1016/j.physletb.2021.136853",
       "arxiv": "2111.15561",
-      "citations": 94,
+      "citations": 95,
       "types": [
         "article"
       ],
@@ -1231,7 +1231,7 @@
       "venue": "Phys.Rev.D 103 (2021) 054037",
       "doi": "10.1103/PhysRevD.103.054037",
       "arxiv": "2010.09451",
-      "citations": 45,
+      "citations": 47,
       "types": [
         "article"
       ],
@@ -1282,7 +1282,7 @@
         "zeno-capatti"
       ],
       "arxiv": "2009.05509",
-      "citations": 70,
+      "citations": 71,
       "types": [
         "article"
       ],
@@ -1349,7 +1349,7 @@
       "venue": "JHEP 08 (2020) 017",
       "doi": "10.1007/JHEP08(2020)017",
       "arxiv": "2004.04752",
-      "citations": 69,
+      "citations": 71,
       "types": [
         "article"
       ],
@@ -1427,7 +1427,7 @@
       "venue": "JHEP 12 (2019) 008",
       "doi": "10.1007/JHEP12(2019)008",
       "arxiv": "1907.04898",
-      "citations": 67,
+      "citations": 68,
       "types": [
         "article"
       ],
@@ -1512,7 +1512,7 @@
       "venue": "Phys.Rev.Lett. 123 (2019) 151602",
       "doi": "10.1103/PhysRevLett.123.151602",
       "arxiv": "1906.06138",
-      "citations": 128,
+      "citations": 129,
       "types": [
         "article"
       ],
@@ -2176,7 +2176,7 @@
       "venue": "CERN Yellow Rep.Monogr. 7 (2019) 221",
       "doi": "10.23731/CYRM-2019-007.221",
       "arxiv": "1902.00134",
-      "citations": 1053,
+      "citations": 1058,
       "types": [
         "book chapter"
       ],
@@ -2339,7 +2339,7 @@
       "venue": "Phys.Lett.B 782 (2018) 627",
       "doi": "10.1016/j.physletb.2018.06.017",
       "arxiv": "1805.09638",
-      "citations": 170,
+      "citations": 171,
       "types": [
         "article"
       ],
@@ -2365,7 +2365,7 @@
       "venue": "JHEP 11 (2021) 085",
       "doi": "10.1007/JHEP11(2021)085",
       "arxiv": "1804.10017",
-      "citations": 584,
+      "citations": 587,
       "types": [
         "article"
       ],
@@ -2649,7 +2649,7 @@
       "venue": "JHEP 10 (2017) 041",
       "doi": "10.1007/JHEP10(2017)041",
       "arxiv": "1707.08315",
-      "citations": 301,
+      "citations": 302,
       "types": [
         "article"
       ],
@@ -2670,7 +2670,7 @@
         "ben-ruijl"
       ],
       "arxiv": "1707.06453",
-      "citations": 454,
+      "citations": 456,
       "types": [
         "article"
       ],
@@ -2718,7 +2718,7 @@
       "venue": "Comput.Phys.Commun. 253 (2020) 107198",
       "doi": "10.1016/j.cpc.2020.107198",
       "arxiv": "1704.06650",
-      "citations": 163,
+      "citations": 164,
       "types": [
         "article"
       ],
@@ -2764,7 +2764,7 @@
       "venue": "JHEP 05 (2017) 037",
       "doi": "10.1007/JHEP05(2017)037",
       "arxiv": "1703.03776",
-      "citations": 80,
+      "citations": 81,
       "types": [
         "article"
       ],
@@ -2789,7 +2789,7 @@
       "venue": "JHEP 02 (2017) 090",
       "doi": "10.1007/JHEP02(2017)090",
       "arxiv": "1701.01404",
-      "citations": 513,
+      "citations": 514,
       "types": [
         "article"
       ],
@@ -3211,7 +3211,7 @@
       "venue": "CERN Yellow Rep.Monogr. 2 (2017) 1",
       "doi": "10.23731/CYRM-2017-002",
       "arxiv": "1610.07922",
-      "citations": 2958,
+      "citations": 2965,
       "types": [
         "book"
       ],
@@ -3236,7 +3236,7 @@
       "venue": "Nucl.Phys.B 915 (2017) 13946",
       "doi": "10.1016/j.nuclphysb.2016.12.012",
       "arxiv": "1610.07477",
-      "citations": 163,
+      "citations": 164,
       "types": [
         "article"
       ],
@@ -3693,7 +3693,7 @@
       "venue": "JHEP 10 (2015) 146",
       "doi": "10.1007/JHEP10(2015)146",
       "arxiv": "1507.00020",
-      "citations": 218,
+      "citations": 219,
       "types": [
         "article"
       ],
@@ -3741,7 +3741,7 @@
       "venue": "JHEP 06 (2015) 184",
       "doi": "10.1007/JHEP06(2015)184",
       "arxiv": "1504.03446",
-      "citations": 433,
+      "citations": 436,
       "types": [
         "article"
       ],
@@ -3814,7 +3814,7 @@
       "venue": "JHEP 02 (2015) 132",
       "doi": "10.1007/JHEP02(2015)132",
       "arxiv": "1409.5301",
-      "citations": 184,
+      "citations": 185,
       "types": [
         "article"
       ],
@@ -3839,7 +3839,7 @@
       "venue": "JHEP 09 (2014) 065",
       "doi": "10.1007/JHEP09(2014)065",
       "arxiv": "1407.0823",
-      "citations": 207,
+      "citations": 211,
       "types": [
         "article"
       ],
@@ -3891,7 +3891,7 @@
       "venue": "JHEP 07 (2014) 079",
       "doi": "10.1007/JHEP07(2014)079",
       "arxiv": "1405.0301",
-      "citations": 11006,
+      "citations": 11032,
       "types": [
         "article"
       ],
@@ -4303,7 +4303,7 @@
       "venue": "JHEP 05 (2011) 044",
       "doi": "10.1007/JHEP05(2011)044",
       "arxiv": "1103.0621",
-      "citations": 556,
+      "citations": 557,
       "types": [
         "article"
       ],
