@@ -64,7 +64,7 @@ pub(crate) fn is_transport_unsupported(error: &eyre::Report) -> bool {
 
 /// The symmetry data of one occurrence against the canonical frame; a hit
 /// compares its own with the filler's (design §3.4).
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub(crate) struct OccurrenceFeatures {
     pub(crate) sigma: i64,
     pub(crate) open: Vec<bool>,

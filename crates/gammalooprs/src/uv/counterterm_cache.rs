@@ -30,6 +30,7 @@ use crate::{
             graph_key::{self, OccurrenceFeatures},
         },
         delta_key::{self, DeltaKeyMode, DeltaVerify},
+        delta_store::{self, StoreGet, StoreMode},
         hedge_poset::ForestNode,
         literal_zero_if_vanishing,
     },
@@ -248,6 +249,25 @@ enum Key {
     },
 }
 
+/// GAMMALOOP_DELTA_STORE: the store key of one graph-key lookup.
+struct StoreKey {
+    key_sha: [u8; 32],
+    graph_sha: [u8; 32],
+    model_fp: [u8; 32],
+    context: Arc<delta_store::Context>,
+    loops: usize,
+    key_bytes: Option<Arc<[u8]>>,
+}
+
+/// An accepted store row, ready for this occurrence.
+struct StoreHit {
+    value: Atom,
+    note: Option<CacheNote>,
+    features: Option<OccurrenceFeatures>,
+    writer_build: String,
+    dep_builds: Vec<String>,
+}
+
 /// What a lookup is: the graph certificate applies to R* child Δs only.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum KeyKind {
@@ -430,6 +450,8 @@ pub struct CountertermCache {
     fills: Mutex<HashMap<Key, Arc<OccurrenceFeatures>>>,
     /// Verify or dump: the legacy digests seen, for `hit_legacy_would_miss`.
     legacy_seen: Mutex<HashSet<u64>>,
+    /// `GAMMALOOP_DELTA_STORE`: the store keys each entry's value depends on.
+    store_deps: Mutex<HashMap<Key, Arc<delta_store::Deps>>>,
 }
 
 /// At most `permits` concurrent computations of counterterms with at least
@@ -886,6 +908,14 @@ impl CountertermCache {
         let mut rounds = 0_usize;
         // The filler's own value when the open-line transport cannot store it.
         let mut unsupported_value: Option<Atom> = None;
+        // GAMMALOOP_DELTA_STORE (graph key, not in a private cold cache): the
+        // store; `from_store`: the filler took the value from it.
+        let store = if graph_key && !in_cold {
+            delta_store::installed()
+        } else {
+            None
+        };
+        let mut from_store = false;
         let (entry, existing, filled) = loop {
             rounds += 1;
             let (entry, existing) = {
@@ -916,21 +946,90 @@ impl CountertermCache {
             let mut computed = false;
             let result = timing.resolve(&entry, |timing| {
                 computed = true;
+                // GAMMALOOP_DELTA_STORE: the single filler reads the store
+                // first; the fill's nested lookups add their store keys.
+                let store_key = store.and_then(|_| self.store_key(&identity, &key, graph, support));
+                if let (Some((mode, backing)), Some(store_key)) = (store, &store_key) {
+                    match self.store_read(
+                        mode, backing, store_key, &identity, graph, support, model, noted,
+                        &mut compute,
+                    ) {
+                        Ok(Some(hit)) => {
+                            if let (Some(key), Some(note)) = (&noted_key, hit.note) {
+                                self.notes
+                                    .lock()
+                                    .expect("counterterm cache notes poisoned")
+                                    .insert(key.clone(), note);
+                            }
+                            if let Some(features) = hit.features {
+                                self.fills
+                                    .lock()
+                                    .expect("counterterm cache poisoned")
+                                    .insert(key.clone(), Arc::new(features));
+                            }
+                            let mut deps = delta_store::Deps::default();
+                            deps.keys.insert(store_key.key_sha);
+                            deps.builds.insert(hit.writer_build);
+                            deps.builds.extend(hit.dep_builds);
+                            self.store_deps
+                                .lock()
+                                .expect("counterterm cache poisoned")
+                                .insert(key.clone(), Arc::new(deps));
+                            from_store = true;
+                            self.stores.fetch_add(1, Ordering::Relaxed);
+                            timing.lap(CacheTimingPhase::Store);
+                            return Ok(hit.value);
+                        }
+                        Ok(None) => {}
+                        Err(error) => return Err(CachedError(Arc::new(error))),
+                    }
+                }
+                let collector = store.map(|_| delta_store::Collector::push());
                 self.misses.fetch_add(1, Ordering::Relaxed);
                 let fill_timer = loops.map(delta_key::FillTimer::start);
+                let fill_started = Instant::now();
                 let result = compute.take().expect("one computation per lookup")();
+                let compute_s = fill_started.elapsed().as_secs_f64();
                 drop(fill_timer);
+                let deps = collector.map(delta_store::Collector::finish);
                 timing.lap(CacheTimingPhase::Initializer);
                 let _stage = StageSpan::new("gamma.delta.cache_store");
                 let result = result
                     .and_then(|(value, note)| {
+                        let note_json = store_key
+                            .as_ref()
+                            .and(note.as_ref())
+                            .and_then(|note| crate::uv::rstar::note_to_json(note.as_ref()));
                         if let (Some(key), Some(note)) = (&noted_key, note) {
                             self.notes
                                 .lock()
                                 .expect("counterterm cache notes poisoned")
                                 .insert(key.clone(), note);
                         }
+                        if let Some(deps) = &deps {
+                            self.store_deps
+                                .lock()
+                                .expect("counterterm cache poisoned")
+                                .insert(key.clone(), Arc::new(deps.clone()));
+                        }
                         let canonical = identity.canonicalize_delta(&value);
+                        if let (Some((_, backing)), Some(store_key), Ok(canonical)) =
+                            (store, &store_key, &canonical)
+                        {
+                            self.store_write(
+                                backing,
+                                store_key,
+                                &identity,
+                                graph,
+                                support,
+                                model,
+                                canonical,
+                                &value,
+                                note_json.filter(|_| noted),
+                                compute_s,
+                                deps.as_ref(),
+                            )?;
+                        }
                         if graph_key {
                             match &canonical {
                                 Err(error) if graph_key::is_transport_unsupported(error) => {
@@ -990,15 +1089,27 @@ impl CountertermCache {
             }
             break (entry, existing, computed);
         };
+        // A store hit is a hit for the ledger and the counters.
+        let store_hit = filled && from_store;
+        if store.is_some()
+            && let Some(deps) = self
+                .store_deps
+                .lock()
+                .expect("counterterm cache poisoned")
+                .get(&key)
+                .cloned()
+        {
+            delta_store::add_to_enclosing(&deps);
+        }
         if let Some(loops) = loops {
-            delta_key::count_loop(loops, !filled);
+            delta_key::count_loop(loops, !filled || store_hit);
             let (lookups, hits) = if graph_key {
                 (&delta_key::C.graph_lookups, &delta_key::C.graph_hits)
             } else {
                 (&delta_key::C.legacy_lookups, &delta_key::C.legacy_hits)
             };
             delta_key::add(lookups, 1);
-            if !filled {
+            if !filled || store_hit {
                 delta_key::add(hits, 1);
             } else if graph_key {
                 delta_key::add(&delta_key::C.graph_misses, 1);
@@ -1128,7 +1239,9 @@ impl CountertermCache {
                     .graph_transport()
                     .map(|transport| transport.features.summary())
                     .unwrap_or_default(),
-                if filled {
+                if store_hit {
+                    "store"
+                } else if filled {
                     "miss"
                 } else if existing {
                     "mem"
@@ -1150,7 +1263,7 @@ impl CountertermCache {
             other => other,
         };
         timing.lap(CacheTimingPhase::Restore);
-        let lookup = if filled {
+        let lookup = if filled && !store_hit {
             CacheLookup::Filled
         } else {
             CacheLookup::Hit(noted_key.and_then(|key| {
@@ -1162,6 +1275,342 @@ impl CountertermCache {
             }))
         };
         result.map(|value| (value, lookup))
+    }
+
+    /// GAMMALOOP_DELTA_STORE: the store key of a graph-key lookup (`None`:
+    /// below the store's minimum loop count, a certificate that is not
+    /// portable, or no context: never persisted, counted).
+    fn store_key(
+        &self,
+        identity: &CountertermIdentity,
+        key: &Key,
+        graph: &Graph,
+        support: &SuBitGraph,
+    ) -> Option<StoreKey> {
+        let Key::Graph { graph: certificate, settings } = key else {
+            return None;
+        };
+        let loops = graph.n_loops(support);
+        if loops < delta_store::min_loops() {
+            delta_store::add(&delta_store::S.store_below_min_loops, 1);
+            return None;
+        }
+        let started = Instant::now();
+        let Some((model_fp, graph_bytes)) = certificate.portable_bytes() else {
+            delta_store::add(&delta_store::S.store_not_portable, 1);
+            return None;
+        };
+        let context = match delta_store::context(settings) {
+            Ok(context) => context,
+            Err(error) => {
+                if delta_store::S.store_context_error.fetch_add(1, Ordering::Relaxed) == 0 {
+                    eprintln!("DELTA_STORE_CONTEXT_ERROR {error:#}");
+                }
+                return None;
+            }
+        };
+        let (key_sha, graph_sha, key_bytes) =
+            delta_store::key_sha(&model_fp, &context.sha, &graph_bytes);
+        delta_store::add(&delta_store::S.key_ns, started.elapsed().as_nanos() as u64);
+        let _ = identity;
+        Some(StoreKey {
+            key_sha,
+            graph_sha,
+            model_fp,
+            context,
+            loops,
+            key_bytes: delta_store::store_keys().then(|| Arc::from(key_bytes)),
+        })
+    }
+
+    /// The filler's store read (design §4.5, §5.1): the transported-ready
+    /// canonical value of an accepted row, or `None` (a miss). In mode
+    /// `verify`, and for the salted audit sample, the hit is recomputed in a
+    /// private cold cache and compared; a disagreement is an error.
+    #[allow(clippy::too_many_arguments)]
+    fn store_read<F>(
+        &self,
+        mode: StoreMode,
+        backing: &dyn delta_store::DeltaBackingStore,
+        store_key: &StoreKey,
+        identity: &CountertermIdentity,
+        graph: &Graph,
+        support: &SuBitGraph,
+        model: &Model,
+        noted: bool,
+        compute: &mut Option<F>,
+    ) -> Result<Option<StoreHit>>
+    where
+        F: FnOnce() -> Result<(Atom, Option<CacheNote>)>,
+    {
+        use delta_store::S;
+        delta_store::add(&S.store_lookups, 1);
+        let started = Instant::now();
+        let got = backing.get(&store_key.key_sha);
+        delta_store::add(&S.read_ns, started.elapsed().as_nanos() as u64);
+        let row = match got {
+            StoreGet::Hit(row) => row,
+            StoreGet::Miss => {
+                delta_store::add(&S.store_misses, 1);
+                delta_store::count_loops(store_key.loops, false, false);
+                return Ok(None);
+            }
+            StoreGet::Error(reason) => {
+                if S.read_error.fetch_add(1, Ordering::Relaxed) < 5 {
+                    eprintln!("DELTA_STORE_READ_ERROR {reason}");
+                }
+                if mode == StoreMode::Verify {
+                    return Err(eyre!("DELTA_STORE_READ_ERROR (mode verify) {reason}"));
+                }
+                delta_store::add(&S.store_misses, 1);
+                delta_store::count_loops(store_key.loops, false, false);
+                return Ok(None);
+            }
+        };
+        let miss = |counter: &AtomicU64| {
+            delta_store::add(counter, 1);
+            delta_store::add(&S.store_misses, 1);
+            delta_store::count_loops(store_key.loops, false, false);
+            Ok(None)
+        };
+        let started = Instant::now();
+        let value = match delta_store::import(&row) {
+            Ok(value) => value,
+            Err("value_format") => return miss(&S.reject_value_format),
+            Err("blob_sha") => return miss(&S.reject_blob_sha),
+            Err("value_sha") => return miss(&S.reject_value_sha),
+            Err(_) => return miss(&S.reject_import),
+        };
+        delta_store::add(&S.import_ns, started.elapsed().as_nanos() as u64);
+        let note = match (&row.note, noted) {
+            (_, false) => None,
+            (Some(text), true) => match crate::uv::rstar::note_from_json(text) {
+                Some(note) => Some(note),
+                None => return miss(&S.reject_note),
+            },
+            (None, true) => return miss(&S.reject_note),
+        };
+        // the value must restore to this occurrence (open-line transport)
+        if identity.restore_delta(&value).is_err() {
+            return miss(&S.reject_restore);
+        }
+        let audited = mode == StoreMode::Verify
+            || (delta_store::audit_every() > 0
+                && delta_key::sampled(
+                    u64::from_le_bytes(store_key.key_sha[..8].try_into().expect("8 bytes")),
+                    delta_store::audit_every(),
+                ));
+        if audited && let Some(compute) = compute.take() {
+            let started = Instant::now();
+            let cold = Arc::new(CountertermCache::default());
+            let previous = COLD_CACHE.with(|slot| slot.replace(Some(cold)));
+            let fresh = compute();
+            COLD_CACHE.with(|slot| slot.replace(previous));
+            let (fresh, _) =
+                fresh.map_err(|error| error.wrap_err("DELTA_STORE_VERIFY: the fresh computation failed"))?;
+            let agree = identity.verify_agree(graph, support, model, &value, &fresh)?;
+            delta_store::add(&S.verify_ns, started.elapsed().as_nanos() as u64);
+            if mode == StoreMode::Verify {
+                delta_store::add(&S.verify_checked, 1);
+            } else {
+                delta_store::add(&S.audit_checked, 1);
+            }
+            match agree {
+                (true, true) => delta_store::add(&S.verify_identical, 1),
+                (false, true) => delta_store::add(&S.verify_equal_nf, 1),
+                (_, false) => {
+                    delta_store::add(&S.verify_mismatch, 1);
+                    delta_store::add(&S.disputes, 1);
+                    let canonical = identity.canonicalize_delta(&fresh)?;
+                    let record = self.store_record(
+                        store_key, identity, graph, support, &canonical, None, 0.0, None,
+                    );
+                    let message = format!(
+                        "DELTA_STORE_VERIFY_MISMATCH key_sha={} graph_sha={} graph={} support={} loops={} writer_build={} writer_run_id={}\nstored(transported): {}\nfresh: {}",
+                        delta_store::hex(&store_key.key_sha),
+                        delta_store::hex(&store_key.graph_sha),
+                        graph.name,
+                        support.string_label(),
+                        store_key.loops,
+                        row.writer_build,
+                        row.writer_run_id,
+                        identity
+                            .restore_delta(&value)
+                            .map(|value| value.to_string())
+                            .unwrap_or_else(|error| format!("{error:#}")),
+                        fresh
+                    );
+                    eprintln!("{message}");
+                    if let Ok(record) = record {
+                        backing.event(delta_store::StoreEvent::Dispute {
+                            kind: "verify",
+                            key_sha: store_key.key_sha,
+                            tier: row.tier,
+                            stored_value_sha: row.value_sha,
+                            record: Box::new(record),
+                            quarantine: true,
+                        });
+                    }
+                    return Err(eyre!(message));
+                }
+            }
+        }
+        delta_store::add(&S.store_hits, 1);
+        delta_store::count_loops(store_key.loops, true, false);
+        delta_store::record_hit(&store_key.key_sha, &row, audited);
+        let features = serde_json::from_str::<OccurrenceFeatures>(&row.writer_transport).ok();
+        Ok(Some(StoreHit {
+            value,
+            note,
+            features,
+            writer_build: row.writer_build,
+            dep_builds: row.dep_builds,
+        }))
+    }
+
+    /// The record of a canonical value for the store.
+    #[allow(clippy::too_many_arguments)]
+    fn store_record(
+        &self,
+        store_key: &StoreKey,
+        identity: &CountertermIdentity,
+        graph: &Graph,
+        support: &SuBitGraph,
+        canonical: &Atom,
+        note: Option<String>,
+        compute_s: f64,
+        deps: Option<&delta_store::Deps>,
+    ) -> std::result::Result<delta_store::DeltaRecord, &'static str> {
+        let started = Instant::now();
+        let exported = delta_store::export(canonical)?;
+        delta_store::add(&delta_store::S.export_ns, started.elapsed().as_nanos() as u64);
+        Ok(delta_store::DeltaRecord {
+            key_sha: store_key.key_sha,
+            context_sha: store_key.context.sha,
+            context_json: store_key.context.json.clone(),
+            graph_sha: store_key.graph_sha,
+            model_fp: store_key.model_fp,
+            child_loops: store_key.loops,
+            is_zero: canonical.is_zero(),
+            value_format: delta_store::value_format().to_owned(),
+            blob_sha: exported.blob_sha,
+            value_sha: exported.value_sha,
+            value_export: exported.export,
+            note,
+            writer_transport: identity
+                .graph_transport()
+                .and_then(|transport| serde_json::to_string(&transport.features).ok())
+                .unwrap_or_default(),
+            writer_graph: graph.name.to_string(),
+            writer_support: support.string_label(),
+            compute_s,
+            deps: deps.map(|deps| deps.keys.iter().copied().collect()).unwrap_or_default(),
+            dep_builds: deps
+                .map(|deps| deps.builds.iter().cloned().collect())
+                .unwrap_or_default(),
+            key_bytes: store_key.key_bytes.clone(),
+            text: delta_store::store_text().then_some(exported.text),
+        })
+    }
+
+    /// The filler's store write (design §5.1-5.2): one synchronous insert.
+    /// A row another writer stored first is compared with this value in
+    /// this occurrence; a disagreement is a dispute and an error.
+    #[allow(clippy::too_many_arguments)]
+    fn store_write(
+        &self,
+        backing: &dyn delta_store::DeltaBackingStore,
+        store_key: &StoreKey,
+        identity: &CountertermIdentity,
+        graph: &Graph,
+        support: &SuBitGraph,
+        model: &Model,
+        canonical: &Atom,
+        value: &Atom,
+        note: Option<String>,
+        compute_s: f64,
+        deps: Option<&delta_store::Deps>,
+    ) -> Result<()> {
+        use delta_store::S;
+        if !backing.writable() {
+            delta_store::add(&S.not_stored_ro, 1);
+            return Ok(());
+        }
+        let record = match self.store_record(
+            store_key, identity, graph, support, canonical, note, compute_s, deps,
+        ) {
+            Ok(record) => record,
+            Err("unknown") => {
+                delta_store::add(&S.not_stored_unknown, 1);
+                return Ok(());
+            }
+            Err(_) => {
+                delta_store::add(&S.not_stored_export, 1);
+                return Ok(());
+            }
+        };
+        match backing.put(&record) {
+            delta_store::PutResult::Inserted => {
+                delta_store::add(&S.stored, 1);
+                delta_store::count_loops(store_key.loops, false, true);
+                Ok(())
+            }
+            delta_store::PutResult::NotWritten(reason) => {
+                if S.not_written.fetch_add(1, Ordering::Relaxed) < 5 {
+                    eprintln!("DELTA_STORE_NOT_WRITTEN {reason}");
+                }
+                Ok(())
+            }
+            delta_store::PutResult::Existing(row) => {
+                if row.value_sha == record.value_sha {
+                    delta_store::add(&S.existing_identical, 1);
+                    backing.event(delta_store::StoreEvent::Confirm {
+                        key_sha: store_key.key_sha,
+                        tier: row.tier,
+                        identical: true,
+                    });
+                    return Ok(());
+                }
+                let Ok(stored) = delta_store::import(&row) else {
+                    // an unreadable row is never served (a miss for readers)
+                    delta_store::add(&S.reject_import, 1);
+                    return Ok(());
+                };
+                match identity.verify_agree(graph, support, model, &stored, value)? {
+                    (_, true) => {
+                        delta_store::add(&S.existing_agree, 1);
+                        backing.event(delta_store::StoreEvent::Confirm {
+                            key_sha: store_key.key_sha,
+                            tier: row.tier,
+                            identical: false,
+                        });
+                        Ok(())
+                    }
+                    (_, false) => {
+                        delta_store::add(&S.disputes, 1);
+                        let message = format!(
+                            "DELTA_STORE_DISPUTE key_sha={} graph={} support={} loops={} stored_build={} stored_run_id={}",
+                            delta_store::hex(&store_key.key_sha),
+                            graph.name,
+                            support.string_label(),
+                            store_key.loops,
+                            row.writer_build,
+                            row.writer_run_id
+                        );
+                        eprintln!("{message}");
+                        backing.event(delta_store::StoreEvent::Dispute {
+                            kind: "conflict",
+                            key_sha: store_key.key_sha,
+                            tier: row.tier,
+                            stored_value_sha: row.value_sha,
+                            record: Box::new(record),
+                            quarantine: true,
+                        });
+                        Err(eyre!(message))
+                    }
+                }
+            }
+        }
     }
 
     fn compute(
