@@ -302,12 +302,12 @@ fn ir_quotient_name(route: super::top_mass::IrQuotient) -> &'static str {
 ///
 /// U8: under a DEFAULT switch (the variable unset, [`Switch::is_default`])
 /// none of these settings refuses the run: a setting the user wrote wins
-/// over a default. A kind whose route is off (`child` with
-/// `GAMMALOOP_UV_CHILDREN=massive`, `ir-hard` off the IR hard child route,
-/// `ir-hard` with `GAMMALOOP_IR_DIRAC_CLOSURE=off`) is DROPPED
-/// ([`Initialised::dropped`]); a setting that would refuse every kind
-/// (`GAMMALOOP_IR_QUOTIENT` other than `rstar`, `PINT6_CLOSURE_DUMP`) turns
-/// the switch OFF ([`Initialised::demoted`]). Both are printed as notices.
+/// over a default. A kind whose route is off (`ir-hard` off the IR hard
+/// child route, `ir-hard` with `GAMMALOOP_IR_DIRAC_CLOSURE=off`) is DROPPED
+/// ([`Initialised::dropped`]); a setting that would refuse or fail every
+/// kind (`GAMMALOOP_IR_QUOTIENT` other than `rstar`,
+/// `GAMMALOOP_UV_CHILDREN=massive`, `PINT6_CLOSURE_DUMP`) turns the switch
+/// OFF ([`Initialised::demoted`]). Both are printed as notices.
 /// Every written value (`on`, `check`, a list) keeps the refusals exactly.
 pub(crate) fn initialise(
     switch: Switch,
@@ -338,6 +338,18 @@ pub(crate) fn initialise(
         ));
     }
     let routes = routes();
+    // massive UV children under a DEFAULT switch: OFF as a whole (beta's
+    // ruling of 2026-11-23: a default must never fail a configuration that
+    // succeeds with the switch off). The massive children's Δ reach the
+    // records of the other kinds as insertions (measured on the gate sets
+    // L2 / L3 with the default on: root `insertion_nonlocal` and vakint
+    // `UnsupportedTensor`, ir-hard `UnsupportedTensor`), so dropping child
+    // alone would fail diagrams that succeed off. A written value keeps
+    // today's behaviour: an enabled child is refused below, the other kinds
+    // run and their errors fail the diagram.
+    if switch.is_default() && !routes.uv_children_rstar {
+        return Ok(Initialised::off(Some("uv_children:massive".to_owned())));
+    }
     for (kind, active, variable) in [
         (
             Kind::Child,
@@ -489,7 +501,7 @@ pub(crate) struct Initialised {
     /// (`route_off`, `ir_dirac_off`).
     pub dropped: Vec<(Kind, &'static str)>,
     /// U8: why a default switch was turned off (`ir_quotient:<route>`,
-    /// `pint6_dump`).
+    /// `uv_children:massive`, `pint6_dump`).
     pub demoted: Option<String>,
 }
 

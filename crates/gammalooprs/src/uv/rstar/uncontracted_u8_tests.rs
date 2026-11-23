@@ -149,8 +149,9 @@ fn default_identity_equals_the_explicit_default_list() {
 }
 
 /// A default kind whose route a setting turns off is DROPPED with a notice
-/// (`GAMMALOOP_IR_HARD=off`, `GAMMALOOP_UV_CHILDREN=massive`); a written
-/// value that enables the kind is refused exactly as before.
+/// (`GAMMALOOP_IR_HARD=off`; `GAMMALOOP_UV_CHILDREN=massive` turns the
+/// default off instead); a written value that enables the kind is refused
+/// exactly as before.
 #[test]
 fn default_kind_route_off_is_dropped() -> Result<()> {
     let initialised = init(Switch::DEFAULT_ON, routes(true, false), false).map_err(|e| eyre!(e))?;
@@ -161,20 +162,19 @@ fn default_kind_route_off_is_dropped() -> Result<()> {
             && initialised.demoted.is_none(),
         "{initialised:?}"
     );
-    let initialised = init(Switch::DEFAULT_ON, routes(false, true), false).map_err(|e| eyre!(e))?;
-    ensure!(
-        initialised.switch.enabled_kinds() == vec![Kind::Root, Kind::IrHard]
-            && initialised.dropped == vec![(Kind::Child, "route_off")],
-        "{initialised:?}"
-    );
-    let initialised =
-        init(Switch::DEFAULT_ON, routes(false, false), false).map_err(|e| eyre!(e))?;
-    ensure!(
-        initialised.switch.enabled_kinds() == vec![Kind::Root]
-            && initialised.dropped
-                == vec![(Kind::Child, "route_off"), (Kind::IrHard, "route_off")],
-        "{initialised:?}"
-    );
+    // GAMMALOOP_UV_CHILDREN=massive (with or without the IR hard route) turns
+    // a default OFF as a whole (beta's ruling 2026-11-23): see
+    // `default_demoted_by_massive_children`
+    for ir_hard_child in [true, false] {
+        let initialised =
+            init(Switch::DEFAULT_ON, routes(false, ir_hard_child), false).map_err(|e| eyre!(e))?;
+        ensure!(
+            initialised.switch == Switch::OFF
+                && initialised.demoted.as_deref() == Some("uv_children:massive")
+                && initialised.dropped.is_empty(),
+            "{initialised:?}"
+        );
+    }
     ensure!(
         ledger::dropped_text(Kind::IrHard, "route_off").contains("GAMMALOOP_IR_HARD"),
         "notice"
@@ -203,6 +203,38 @@ fn default_kind_route_off_is_dropped() -> Result<()> {
             .is_ok_and(|initialised| initialised.dropped.is_empty()),
         "on:root,child,surrogate"
     );
+    Ok(())
+}
+
+/// `GAMMALOOP_UV_CHILDREN=massive` turns a DEFAULT switch OFF as a whole
+/// (beta's ruling 2026-11-23: a default must never fail a configuration that
+/// succeeds with the switch off; the massive children's Δ make the other
+/// kinds' records error), with the reason `uv_children:massive`; a WRITTEN
+/// value keeps today's behaviour: one that enables child is refused at
+/// start-up, one without child (e.g. `on:root`) runs.
+#[test]
+fn default_demoted_by_massive_children() -> Result<()> {
+    let massive = routes(false, true);
+    let initialised = init(Switch::DEFAULT_ON, massive.clone(), false).map_err(|e| eyre!(e))?;
+    ensure!(
+        initialised.switch == Switch::OFF
+            && initialised.demoted.as_deref() == Some("uv_children:massive"),
+        "{initialised:?}"
+    );
+    for value in ["on", "check", "on:child", "on:root,child,ir-hard"] {
+        let error = init(parse(Some(value)), massive.clone(), false).unwrap_err();
+        ensure!(
+            error.contains("GAMMALOOP_UV_CHILDREN=massive"),
+            "{value}: {error}"
+        );
+    }
+    for value in ["on:root", "check:root,ir-hard"] {
+        let initialised = init(parse(Some(value)), massive.clone(), false).map_err(|e| eyre!(e))?;
+        ensure!(
+            initialised.switch == parse(Some(value)) && initialised.demoted.is_none(),
+            "{value}: {initialised:?}"
+        );
+    }
     Ok(())
 }
 

@@ -225,9 +225,10 @@ pub fn validate_uncontracted_settings(
 }
 
 /// U8: what an UNSET `GAMMALOOP_UNCONTRACTED_NUMERATOR` means in this build:
-/// `true` is mode on with the default kinds root, child, ir-hard and
-/// surrogate (source `default`), `false` is off. A caller's help text and
-/// its gate read this, never a copy of it.
+/// `true` is ON for the default kinds root, child, ir-hard (source
+/// `default`), `false` is off. A bare `on` and a bare `check` select the same
+/// kinds. Surrogate requires an explicit list naming it. A caller's help text
+/// and its gate read this, never a copy of it.
 pub const UNCONTRACTED_UNSET_IS_ON: bool = uncontracted::UNSET_IS_ON;
 
 /// U8: turn a DEFAULT `GAMMALOOP_UNCONTRACTED_NUMERATOR` (the variable

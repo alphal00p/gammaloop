@@ -16,15 +16,15 @@
 //! goes through the same `RStarIntegrand::finish_tensor` as today's value,
 //! under the same integration id.
 //!
-//! * Unset (U8): [`UNSET_IS_ON`] decides; `true` is mode on with the default
-//!   kinds [`DEFAULT_KINDS`] (root, child, ir-hard; `surrogate` must be
-//!   listed; source
-//!   `default`), `false` is off. A setting that is incompatible with a
+//! * Unset (U8): [`UNSET_IS_ON`] decides; `true` is ON for the default kinds
+//!   [`DEFAULT_KINDS`] (root, child, ir-hard; source `default`), `false` is
+//!   off. A bare `on` and a bare `check` select the same kinds. Surrogate
+//!   requires an explicit list naming it. A setting that is incompatible with a
 //!   default kind DROPS that kind (`GAMMALOOP_IR_HARD` off the child route,
-//!   `GAMMALOOP_UV_CHILDREN=massive`, `GAMMALOOP_IR_DIRAC_CLOSURE=off`), and
-//!   one that would refuse every kind turns the default OFF
-//!   (`GAMMALOOP_IR_QUOTIENT` other than `rstar`, `PINT6_CLOSURE_DUMP`, the
-//!   C7 settings, the beta's `--grouping skeletons` via [`demote_default`]),
+//!   `GAMMALOOP_IR_DIRAC_CLOSURE=off`), and one that would refuse or fail
+//!   every kind turns the default OFF (`GAMMALOOP_IR_QUOTIENT` other than
+//!   `rstar`, `GAMMALOOP_UV_CHILDREN=massive`, `PINT6_CLOSURE_DUMP`, the C7
+//!   settings, the beta's `--grouping skeletons` via [`demote_default`]),
 //!   each with a notice on `UNCONTRACTED_SWITCH`: a setting the user wrote
 //!   wins over a default. A written value (`on`, `check`, a list) keeps
 //!   every refusal below. A default run and an explicit
@@ -247,8 +247,8 @@ impl Kind {
     }
 
     /// Whether the switch unset (with [`UNSET_IS_ON`]) and `on` / `check`
-    /// without a kind list enable this kind: [`DEFAULT_KINDS`] (U8: root,
-    /// child and ir-hard; `surrogate` must be listed).
+    /// without a kind list enable this kind: [`DEFAULT_KINDS`] (root, child
+    /// and ir-hard; surrogate requires an explicit list naming it).
     pub(crate) fn in_default(self) -> bool {
         DEFAULT_KINDS.contains(&self)
     }
