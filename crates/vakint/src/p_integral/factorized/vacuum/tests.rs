@@ -2206,3 +2206,78 @@ fn the_vacuum_value_does_not_depend_on_its_provenance_fields() {
         assert!((&got - &reference).expand().is_zero(), "{what}");
     }
 }
+
+/// A two-loop value with two open ports and an external leg (the sunrise of
+/// [`two_loop_sunrise_open_indices`], factors unit): the mapping's lookup table.
+fn two_loop_ports() -> FactorizedNumerator {
+    let line = |id, s, t, h, momentum: &[i64]| {
+        edge(id, s, t, h, momentum, LineKind::Scalar, 1, Atom::num(1))
+    };
+    value(
+        vec![Some(1), Some(2)],
+        vec![Some(20)],
+        vec![
+            line(1, 1, 2, (1, 2), &[1, 0, 0]),
+            line(2, 1, 2, (3, 4), &[0, 1, 0]),
+            line(3, 2, 1, (5, 6), &[1, 1, 0]),
+            leg(20, 1, 2, 1, 1),
+        ],
+        vec![vertex(1, Atom::num(1))],
+        vec![atom(&hedge(10)), atom(&hedge(11))],
+    )
+}
+
+/// S3: [`map_to_vakint_vacuum`] with each distinct image computed once
+/// ([`MemoImages`]) gives the atom the former per-occurrence computation
+/// ([`FormerImages`]) gives, on an input where a memo key that dropped a
+/// component would differ: dots of the pairs (1,2), (1,1), (2,3), (20,3), each
+/// more than once; edge 3 at BOTH open ports; a metric between the ports.
+#[test]
+fn memoised_images_are_the_former_images() {
+    let v = two_loop_ports();
+    let compact = format!("{MINK}({DIM})");
+    let dot = |a, b| format!("spenso::dot({},{})", q(a, &compact), q(b, &compact));
+    let metric = format!("{METRIC}({},{})", hedge(10), hedge(11));
+    let contracted = atom(&format!(
+        "{d12}*{d11}^2 + 3*{d23}*{q3a}*{q3b} + {d203}*{d12}*{q1b} - 5*{d11}*{d23}*{q3a}^2 + {metric}*{d203}",
+        d12 = dot(1, 2),
+        d11 = dot(1, 1),
+        d23 = dot(2, 3),
+        d203 = dot(20, 3),
+        q3a = q(3, &hedge(10)),
+        q3b = q(3, &hedge(11)),
+        q1b = q(1, &hedge(11)),
+    ));
+    let former = map_new_features(&v, &contracted, &FormerImages { value: &v }).unwrap();
+    let memo = map_new_features(&v, &contracted, &MemoImages::new(&v)).unwrap();
+    assert_eq!(memo, former);
+    // the images themselves (the table the memo must not merge): one dot
+    // per pair, edge 3 at port 9001 and at port 9002
+    assert_eq!(
+        former,
+        atom(
+            "dot(k(1),k(2))*dot(k(1),k(1))^2 + 3*dot(k(2),k(1)+k(2))*(k(1,9001)+k(2,9001))*(k(1,9002)+k(2,9002)) \
+             + dot(p(1),k(1)+k(2))*dot(k(1),k(2))*k(1,9002) - 5*dot(k(1),k(1))*dot(k(2),k(1)+k(2))*(k(1,9001)+k(2,9001))^2 \
+             + g(9001,9002)*dot(p(1),k(1)+k(2))"
+        )
+    );
+}
+
+/// S3: an unknown edge fails with the former message under both providers.
+#[test]
+fn memoised_images_fail_as_the_former_images() {
+    let v = two_loop_ports();
+    let compact = format!("{MINK}({DIM})");
+    let contracted = atom(&format!(
+        "spenso::dot({},{})",
+        q(1, &compact),
+        q(7, &compact)
+    ));
+    let former = map_new_features(&v, &contracted, &FormerImages { value: &v }).unwrap_err();
+    let memo = map_new_features(&v, &contracted, &MemoImages::new(&v)).unwrap_err();
+    assert_eq!(memo.to_string(), former.to_string());
+    assert!(
+        former.to_string().contains("a dot of unknown edges 1, 7"),
+        "{former}"
+    );
+}

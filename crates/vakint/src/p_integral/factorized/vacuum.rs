@@ -379,6 +379,144 @@ pub(super) fn map_to_vakint_vacuum(value: &FactorizedNumerator, contracted: &Ato
     if !value.has_new_features() {
         return map_to_vakint_vacuum_v1(value, contracted);
     }
+    match map_images_mode() {
+        MapImages::Former => map_new_features(value, contracted, &FormerImages { value }),
+        MapImages::Memo => map_new_features(value, contracted, &MemoImages::new(value)),
+        MapImages::Compare => {
+            // both computations on the same input; the FORMER result is returned
+            let former = map_new_features(value, contracted, &FormerImages { value });
+            let memo = map_new_features(value, contracted, &MemoImages::new(value));
+            let equal = match (&former, &memo) {
+                (Ok(a), Ok(b)) => a == b,
+                (Err(a), Err(b)) => a.to_string() == b.to_string(),
+                _ => false,
+            };
+            let counts = MAP_COMPARE.record(equal);
+            eprintln!(
+                "VAKINT_MAP_COMPARE equal={} fast={} fallback=0 unequal={}",
+                u8::from(equal),
+                counts.0,
+                counts.1
+            );
+            former
+        }
+    }
+}
+
+/// How [`map_to_vakint_vacuum`] obtains the images of its callback
+/// (`VAKINT_MAP_IMAGES`: `former` = computed at every occurrence, as before;
+/// unset or `memo` = each distinct image computed once per call and cloned;
+/// `compare` = both on every call, the former returned, one
+/// `VAKINT_MAP_COMPARE` line per call on stderr). Read once per process.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MapImages {
+    Former,
+    Memo,
+    Compare,
+}
+
+fn map_images_mode() -> MapImages {
+    static MODE: std::sync::OnceLock<MapImages> = std::sync::OnceLock::new();
+    *MODE.get_or_init(|| match std::env::var("VAKINT_MAP_IMAGES").as_deref() {
+        Ok("former") => MapImages::Former,
+        Ok("compare") => MapImages::Compare,
+        _ => MapImages::Memo,
+    })
+}
+
+/// The COMPARE mode's running counts (equal, unequal) over the process.
+struct CompareCounts(std::sync::atomic::AtomicU64, std::sync::atomic::AtomicU64);
+
+impl CompareCounts {
+    fn record(&self, equal: bool) -> (u64, u64) {
+        use std::sync::atomic::Ordering::Relaxed;
+        if equal {
+            self.0.fetch_add(1, Relaxed);
+        } else {
+            self.1.fetch_add(1, Relaxed);
+        }
+        (self.0.load(Relaxed), self.1.load(Relaxed))
+    }
+}
+
+static MAP_COMPARE: CompareCounts = CompareCounts(
+    std::sync::atomic::AtomicU64::new(0),
+    std::sync::atomic::AtomicU64::new(0),
+);
+
+/// The two images [`map_to_vakint_vacuum`]'s callback writes: the vakint dot
+/// of two edge momenta (`dot(Σ.., Σ..)`) and an edge momentum carrying an open
+/// port's raw index; `None` for an id that is neither an edge nor a constant
+/// external vector (the callback's failure).
+trait VacuumImages {
+    fn dot(&self, a: i64, b: i64) -> Option<Atom>;
+    fn ported(&self, edge: i64, index: i64) -> Option<Atom>;
+}
+
+/// The images computed at every occurrence (the former computation).
+struct FormerImages<'a> {
+    value: &'a FactorizedNumerator,
+}
+
+impl VacuumImages for FormerImages<'_> {
+    fn dot(&self, a: i64, b: i64) -> Option<Atom> {
+        match (momentum(self.value, a, None), momentum(self.value, b, None)) {
+            (Some(x), Some(y)) => Some(S.dot.call((&x, &y))),
+            _ => None,
+        }
+    }
+    fn ported(&self, edge: i64, index: i64) -> Option<Atom> {
+        momentum(self.value, edge, Some(index))
+    }
+}
+
+/// The same images, each distinct key computed once by [`FormerImages`] and
+/// cloned at its later occurrences (a pure function of the value and the
+/// key: the clone is the atom the former computation builds).
+struct MemoImages<'a> {
+    former: FormerImages<'a>,
+    dots: std::cell::RefCell<std::collections::HashMap<(i64, i64), Option<Atom>>>,
+    ported: std::cell::RefCell<std::collections::HashMap<(i64, i64), Option<Atom>>>,
+}
+
+impl<'a> MemoImages<'a> {
+    fn new(value: &'a FactorizedNumerator) -> Self {
+        MemoImages {
+            former: FormerImages { value },
+            dots: Default::default(),
+            ported: Default::default(),
+        }
+    }
+}
+
+impl VacuumImages for MemoImages<'_> {
+    fn dot(&self, a: i64, b: i64) -> Option<Atom> {
+        if let Some(image) = self.dots.borrow().get(&(a, b)) {
+            return image.clone();
+        }
+        let image = self.former.dot(a, b);
+        self.dots.borrow_mut().insert((a, b), image.clone());
+        image
+    }
+    fn ported(&self, edge: i64, index: i64) -> Option<Atom> {
+        if let Some(image) = self.ported.borrow().get(&(edge, index)) {
+            return image.clone();
+        }
+        let image = self.former.ported(edge, index);
+        self.ported
+            .borrow_mut()
+            .insert((edge, index), image.clone());
+        image
+    }
+}
+
+/// [`map_to_vakint_vacuum`] of a value with new features, its images from
+/// `images` (the one traversal both providers share).
+fn map_new_features(
+    value: &FactorizedNumerator,
+    contracted: &Atom,
+    images: &impl VacuumImages,
+) -> Result<Atom> {
     // the open slots: the ports when there is no projector (raw index PORT + i
     // by position, as always), what a projector leaves open otherwise
     let open = value.open_slots()?;
@@ -402,9 +540,9 @@ pub(super) fn map_to_vakint_vacuum(value: &FactorizedNumerator, contracted: &Ato
                 && is_compact(ra)
                 && is_compact(rb)
             {
-                match (momentum(value, a, None), momentum(value, b, None)) {
-                    (Some(x), Some(y)) => **out = S.dot.call((&x, &y)),
-                    _ => failure.set(Some(format!("a dot of unknown edges {a}, {b}"))),
+                match images.dot(a, b) {
+                    Some(image) => **out = image,
+                    None => failure.set(Some(format!("a dot of unknown edges {a}, {b}"))),
                 }
                 return;
             }
@@ -421,7 +559,7 @@ pub(super) fn map_to_vakint_vacuum(value: &FactorizedNumerator, contracted: &Ato
         if let Some((edge, slot)) = momentum_parts(part)
             && let Some(index) = port_index(slot)
         {
-            match momentum(value, edge, Some(index)) {
+            match images.ported(edge, index) {
                 Some(vector) => **out = vector,
                 None => failure.set(Some(format!("unknown edge {edge}"))),
             }
