@@ -144,8 +144,9 @@ pub use boundary::{
 pub use expression::{ClosedSkipMode, closed_dot_scalar, closed_skip_mode, set_memory_release};
 pub use insertion_identity::{InsertionSkeletonIdentity, InsertionSkeletonKey};
 pub use insertions::{
-    GroupedInsertionPoleResult, InsertionPoleResult, PreparedInsertion, PreparedInsertionHole,
-    PropagatorInsertionEvaluator, surrogate_closed_root,
+    GroupedInsertionPoleResult, IdentityCounterterm, InsertionIdentity, InsertionPoleResult,
+    PreparedInsertion, PreparedInsertionHole, PropagatorInsertionEvaluator, insertion_identity,
+    surrogate_closed_root,
 };
 pub use integrate::integrate_single_mass;
 pub use ir_dirac::{IrDiracMode, ir_dirac_mode};

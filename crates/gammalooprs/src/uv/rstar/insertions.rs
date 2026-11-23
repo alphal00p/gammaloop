@@ -21,7 +21,8 @@ use vakint::Vakint;
 
 use crate::{
     feyngen::feynkit::FeynmanDiagramGammaLoopExt,
-    graph::FeynmanGraph,
+    graph::{FeynmanGraph, Graph},
+    model::Model,
     numerator::aind::Aind,
     utils::{GS, W_},
     uv::{
@@ -162,6 +163,78 @@ pub fn surrogate_closed_root() -> bool {
     *MODE
 }
 
+/// `GAMMALOOP_INSERTION_IDENTITY=off|n1` (default off; trial lane
+/// insertion-identity). `n1`: a caller whose extracted insertions are all
+/// one-loop ([`PreparedInsertion::all_one_loop`]) takes the counterterm of the
+/// original graph as the R* counterterm of the scalar-bubble surrogate
+/// ([`PropagatorInsertionEvaluator::identity_counterterm`]), without the
+/// original's forest: for a one-loop insertion `R(σ) = c̃₁B + Δ(σ)` with
+/// `Δ(σ) = −K(c̃₁B)`, so the necklace identity's `e₀` vanishes and
+/// `Δ(G) = Δ(surrogate)`. Off (unset, empty, `0`, `off`): today's path.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InsertionIdentity {
+    Off,
+    N1,
+}
+
+impl InsertionIdentity {
+    /// The mode of a `GAMMALOOP_INSERTION_IDENTITY` value (`None`: unset).
+    pub fn parse(value: Option<&str>) -> Result<Self> {
+        match value.map(str::trim) {
+            None | Some("" | "0" | "off") => Ok(Self::Off),
+            Some("n1") => Ok(Self::N1),
+            Some(other) => Err(eyre!(
+                "GAMMALOOP_INSERTION_IDENTITY must be off or n1, not `{other}`"
+            )),
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::N1 => "n1",
+        }
+    }
+}
+
+/// `GAMMALOOP_INSERTION_IDENTITY`, read once; a bad value is an error at
+/// every use.
+pub fn insertion_identity() -> Result<InsertionIdentity> {
+    static MODE: LazyLock<std::result::Result<InsertionIdentity, String>> = LazyLock::new(|| {
+        match std::env::var("GAMMALOOP_INSERTION_IDENTITY") {
+            Ok(value) => InsertionIdentity::parse(Some(&value)),
+            Err(std::env::VarError::NotPresent) => InsertionIdentity::parse(None),
+            Err(std::env::VarError::NotUnicode(value)) => Err(eyre!(
+                "GAMMALOOP_INSERTION_IDENTITY={value:?} is not unicode"
+            )),
+        }
+        .map_err(|error| format!("{error:#}"))
+    });
+    MODE.clone().map_err(|error| eyre!(error))
+}
+
+#[cfg(test)]
+#[test]
+fn insertion_identity_values_parse() {
+    for off in [None, Some(""), Some("0"), Some("off"), Some(" off ")] {
+        assert_eq!(InsertionIdentity::parse(off).unwrap(), InsertionIdentity::Off);
+    }
+    assert_eq!(InsertionIdentity::parse(Some("n1")).unwrap(), InsertionIdentity::N1);
+    for bad in ["1", "on", "n2", "N1"] {
+        assert!(InsertionIdentity::parse(Some(bad)).is_err());
+    }
+}
+
+/// [`PropagatorInsertionEvaluator::identity_counterterm`]'s result: the
+/// tagged projected counterterm of the surrogate, in the original's frame.
+pub struct IdentityCounterterm {
+    pub tagged: Atom,
+    /// The surrogate plan's marked edge (`None`: zero numerator, no plan).
+    pub surrogate_marked_edge: Option<usize>,
+    pub holes: usize,
+    pub surrogate_loops: usize,
+}
+
 /// `GAMMALOOP_INSERTION_CLOSURE=off|on|check` (default on: production since r6,
 /// results/ins4-family, check runs insclose-a..f): how each excised
 /// self-energy insertion is integrated in [`PropagatorInsertionEvaluator::prepare`].
@@ -281,6 +354,13 @@ impl PreparedInsertion {
 
     pub fn loop_count(&self) -> usize {
         self.surrogate.loop_count()
+    }
+
+    /// Every extracted hole has one loop (`GAMMALOOP_INSERTION_IDENTITY=n1`).
+    /// Holes are extracted larger first, so then every proper insertion that
+    /// was not extracted is one-loop too.
+    pub fn all_one_loop(&self) -> bool {
+        self.holes.iter().all(|hole| hole.loops == 1)
     }
 
     /// The complete local numerator, excluding global factors and projectors.
@@ -552,6 +632,67 @@ impl PropagatorInsertionEvaluator {
             extraction_elapsed: extraction_started.elapsed(),
             k5,
         }))
+    }
+
+    /// [`Self::pole_part_closing_root`] of an already prepared identity
+    /// (the same call after [`Self::prepare`]).
+    pub fn pole_part_of_prepared_closing_root(
+        &self,
+        prepared: &PreparedInsertion,
+        vakint: &Vakint,
+        close_root: bool,
+    ) -> Result<InsertionPoleResult> {
+        self.pole_part_of_prepared_with(prepared, vakint, close_root && surrogate_closed_root())
+    }
+
+    /// `GAMMALOOP_INSERTION_IDENTITY=n1`: the counterterm of the original
+    /// graph as the R* counterterm of the prepared surrogate (exact when
+    /// [`PreparedInsertion::all_one_loop`]; the caller checks). `root`
+    /// receives the surrogate graph, its model and its automatic-edge plan
+    /// (with this evaluator's counterterm cache) and returns the projected
+    /// counterterm of that root, exactly as for an insertion-free graph; it
+    /// runs inside the surrogate's scopes (the K5 surrogate context and the
+    /// dressed scope) as the surrogate's bare poles do above four loops, at
+    /// every loop count. A vanishing numerator gives zero without R*. The
+    /// result is restored to the original's external frame.
+    pub fn identity_counterterm(
+        &self,
+        prepared: &PreparedInsertion,
+        closing: bool,
+        root: impl FnOnce(&Graph, &Model, &RStarPlan) -> Result<Atom>,
+    ) -> Result<IdentityCounterterm> {
+        self.check_preparation(prepared)?;
+        let surrogate = &prepared.surrogate;
+        let holes = prepared.holes.len();
+        let surrogate_loops = prepared.loop_count();
+        if prepared.complete_numerator().is_zero() {
+            return Ok(IdentityCounterterm {
+                tagged: Atom::Zero,
+                surrogate_marked_edge: None,
+                holes,
+                surrogate_loops,
+            });
+        }
+        let graph = surrogate.to_gamma_loop_graph(None, true)?;
+        let mut plan = RStarPlan::with_automatic_edge(&graph, surrogate.model(), &self.settings)?;
+        if let Some(cache) = &self.counterterm_cache {
+            plan = plan.with_counterterm_cache(cache.clone());
+        }
+        let closed = closing && plan.closes_root(&graph);
+        let tagged = super::uncontracted::k5::scoped(
+            prepared.k5.as_ref(),
+            &graph.name,
+            closed,
+            &self.settings,
+            || super::expression::in_dressed_scope(|| root(&graph, surrogate.model(), &plan)),
+        )
+        .wrap_err("while evaluating the scalar-bubble surrogate's counterterm (insertion identity n1)")?;
+        Ok(IdentityCounterterm {
+            tagged: prepared.restore_atom(&tagged)?,
+            surrogate_marked_edge: Some(usize::from(plan.marked_edge)),
+            holes,
+            surrogate_loops,
+        })
     }
 
     /// Integrate one prepared identity, retaining local ownership above four
