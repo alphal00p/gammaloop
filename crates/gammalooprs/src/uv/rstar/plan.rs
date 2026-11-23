@@ -122,6 +122,112 @@ fn explicit_value(name: &str) -> Option<String> {
     }
 }
 
+/// `GAMMALOOP_MASSIVE_ROUTES`: whether an R* evaluation may use the
+/// all-massive method (the massive R operation: mUV on every line, Taylor
+/// expanded to massive vacuum tadpoles).
+///
+/// - `Allow` (unset or `allow`): today's routes, bit for bit.
+/// - `POnly` (`p-only`): a proper UV child that contains the marked line and
+///   has a degree of at least two, asked with the reference mass, is computed
+///   by R* on its massless support (route `rstar_mark`, the R* key that the
+///   zero-mass consumers use). Its only reference-mass consumer is the overall
+///   (0-loop remainder) term of the IR correction whose hard part is the child,
+///   where the compensated root Taylor multiplies each `(M^2)^a` part, `a >= 1`,
+///   by `(1-1)^a = 0`; the physical preparation sets `M = 0` itself
+///   (mark-child-route DESIGN.md §3). Every other selection of the all-massive
+///   method is a hard error that names the graph, the child and the rule.
+/// - `Check`: today's values are used; each such child is also computed by
+///   R* and compared with its massive value at `M = 0` (`MARK_CHILD_CHECK`),
+///   an error when they differ; the other selections log
+///   `MASSIVE_GUARD would_refuse`.
+///
+/// Any other value fails closed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum MassiveRoutes {
+    #[default]
+    Allow,
+    POnly,
+    Check,
+}
+
+impl MassiveRoutes {
+    /// The process-wide value of `GAMMALOOP_MASSIVE_ROUTES`.
+    pub fn from_environment() -> Self {
+        *MASSIVE_ROUTES
+    }
+
+    pub fn parse(value: &str) -> Result<Self> {
+        match value.trim() {
+            "" | "allow" => Ok(Self::Allow),
+            "p-only" => Ok(Self::POnly),
+            "check" => Ok(Self::Check),
+            other => Err(eyre!(
+                "GAMMALOOP_MASSIVE_ROUTES must be `allow`, `p-only` or `check`, not `{other}`"
+            )),
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Allow => "allow",
+            Self::POnly => "p-only",
+            Self::Check => "check",
+        }
+    }
+
+    /// A selection of the all-massive method by `rule` (at `at`, a source
+    /// location): `Ok` under `allow`; under `check` one `MASSIVE_GUARD
+    /// would_refuse` line; under `p-only` a `MASSIVE_GUARD refused` line and an
+    /// error with the same text.
+    pub fn guard(self, rule: &str, at: &str, context: impl FnOnce() -> String) -> Result<()> {
+        match self {
+            Self::Allow => Ok(()),
+            Self::Check => {
+                eprintln!("MASSIVE_GUARD would_refuse rule={rule} at={at} {}", context());
+                Ok(())
+            }
+            Self::POnly => {
+                let text = format!("rule={rule} at={at} {}", context());
+                eprintln!("MASSIVE_GUARD refused {text}");
+                Err(eyre!(
+                    "MASSIVE_GUARD refused (GAMMALOOP_MASSIVE_ROUTES=p-only): an all-massive computation was selected: {text}"
+                ))
+            }
+        }
+    }
+
+    /// A catch-all guard on an entry of the massive R operation itself: an
+    /// error under `p-only` only (under `check` the designed massive routes
+    /// still pass here, and are reported at their selection).
+    pub fn catch_all(self, rule: &str, at: &str, context: impl FnOnce() -> String) -> Result<()> {
+        match self {
+            Self::POnly => self.guard(rule, at, context),
+            _ => Ok(()),
+        }
+    }
+}
+
+/// `GAMMALOOP_MASSIVE_ROUTES`, read once; an invalid value fails closed.
+static MASSIVE_ROUTES: LazyLock<MassiveRoutes> =
+    LazyLock::new(|| match explicit_value("GAMMALOOP_MASSIVE_ROUTES") {
+        None => MassiveRoutes::Allow,
+        Some(value) => MassiveRoutes::parse(&value).unwrap_or_else(|error| panic!("{error:#}")),
+    });
+
+/// The process-wide guard ([`MassiveRoutes::guard`]) for callers outside a
+/// plan (e.g. the beta's `--method massive`).
+pub fn massive_routes_guard(rule: &str, at: &str, context: impl FnOnce() -> String) -> Result<()> {
+    MassiveRoutes::from_environment().guard(rule, at, context)
+}
+
+/// `GAMMALOOP_MASSIVE_ROUTES` parses (call at start-up for an early error).
+pub fn validate_massive_routes() -> Result<MassiveRoutes> {
+    match explicit_value("GAMMALOOP_MASSIVE_ROUTES") {
+        None => Ok(MassiveRoutes::Allow),
+        Some(value) => MassiveRoutes::parse(&value),
+    }
+}
+
 /// How an R*-route proper UV child with a closed tensor structure is
 /// contracted. `Off` (explicit `off`) contracts the open child tensor; unset
 /// `GAMMALOOP_UV_CHILD_CLOSURE` is [`UvChildClosure::DEFAULT`], the isotropic
@@ -783,6 +889,8 @@ pub struct RStarPlan {
     /// Route of the proper UV children, `GAMMALOOP_UV_CHILDREN` by default.
     pub(super) uv_children: UvChildrenRoute,
     pub(super) uv_child_closure: UvChildClosure,
+    /// `GAMMALOOP_MASSIVE_ROUTES` by default.
+    pub(super) massive_routes: MassiveRoutes,
     /// `Some(crown)` when the root is a proper support of the graph (a UV
     /// child evaluated by R*): its boundary carriers are the full crown of
     /// `support` rather than the graph's external edges.
@@ -812,6 +920,25 @@ impl RStarPlan {
 
     pub fn uv_children(&self) -> UvChildrenRoute {
         self.uv_children
+    }
+
+    /// Select whether this plan may use the all-massive method (the default
+    /// is the process-wide `GAMMALOOP_MASSIVE_ROUTES`).
+    pub fn with_massive_routes(mut self, routes: MassiveRoutes) -> Self {
+        self.massive_routes = routes;
+        self
+    }
+
+    /// Whether a mark-containing child of degree >= 2 asked with the
+    /// reference mass goes through R* (`p-only`). The one exception, kept
+    /// massive (an error under `p-only`, never a silent massive route): a
+    /// top-level root under `GAMMALOOP_RSTAR_TOP_MASS_TERMS=drop|drop-odd` with
+    /// a degree of at least three, where the `(M^2)^a` part of the 0-loop IR
+    /// term is not compensated (DESIGN.md §3 step 4).
+    fn mark_child_drop_exception(&self) -> Result<bool> {
+        Ok(self.root_boundary.is_none()
+            && self.taylor_order >= 3
+            && !matches!(super::top_mass::top_mass_terms()?, super::TopMassTerms::Keep))
     }
 
     /// An R* plan whose root is the proper support `support` of `graph`, with
@@ -1003,6 +1130,7 @@ impl RStarPlan {
             counterterm_cache: None,
             uv_children: UvChildrenRoute::from_environment(),
             uv_child_closure: UvChildClosure::from_environment(),
+            massive_routes: MassiveRoutes::from_environment(),
             root_boundary: None,
         })
     }
@@ -1162,23 +1290,72 @@ impl RStarPlan {
         let (family, family_settings) = self.uv_family(graph, reference_mass, settings);
         let requests = self.uv_family_requests(family, model, family_settings);
         let mut children = BTreeMap::new();
+        // GAMMALOOP_MASSIVE_ROUTES (allow: the routes below are today's,
+        // bit for bit; p-only / check: see `MassiveRoutes`).
+        let routes = self.massive_routes;
+        let (mut changed, mut guard_hits, mut checked, mut equal) = (0usize, 0usize, 0usize, 0usize);
         for (call, request) in self.counterterms.iter().zip(requests) {
             let support = &call.argument.support;
             let started = Instant::now();
             let counted = vakint::timing::Snapshot::now();
-            let route = if !self.uv_children.uses_rstar(call.argument.loops) {
-                "massive"
-            } else if child_mass == ChildMass::Reference
+            let context = || {
+                format!(
+                    "graph={} child_edges={} loops={} degree={} parent_loops={} child_mass={child_mass:?}",
+                    graph.name,
+                    join_edge_ids(&uv_child_edge_ids(graph, support)),
+                    call.argument.loops,
+                    call.taylor_order,
+                    graph.n_loops(&self.support),
+                )
+            };
+            let mut guard = |rule: &str, at: &str, why: &str| -> Result<()> {
+                guard_hits += usize::from(routes == MassiveRoutes::Check);
+                routes.guard(rule, at, || format!("{} why={why}", context()))
+            };
+            let mark_child = child_mass == ChildMass::Reference
                 && support.includes(&marked)
-                && call.taylor_order >= 2
-            {
-                "massive_reference_mass"
+                && call.taylor_order >= 2;
+            let mut check_mark_child = false;
+            let route = if !self.uv_children.uses_rstar(call.argument.loops) {
+                guard(
+                    "massive",
+                    concat!(file!(), ":", line!()),
+                    &format!("below the GAMMALOOP_UV_CHILDREN={} loop threshold", self.uv_children),
+                )?;
+                "massive"
+            } else if mark_child {
+                if routes != MassiveRoutes::Allow && !Self::admits_support_root(graph, support) {
+                    guard(
+                        "massive_structure",
+                        concat!(file!(), ":", line!()),
+                        "a mark-containing child that is not a connected 1PI support with loops",
+                    )?;
+                    "massive_reference_mass"
+                } else if routes != MassiveRoutes::Allow && self.mark_child_drop_exception()? {
+                    guard(
+                        "massive_reference_mass",
+                        concat!(file!(), ":", line!()),
+                        "top-level root of degree >= 3 under GAMMALOOP_RSTAR_TOP_MASS_TERMS=drop|drop-odd",
+                    )?;
+                    "massive_reference_mass"
+                } else if routes == MassiveRoutes::POnly {
+                    changed += 1;
+                    "rstar_mark"
+                } else {
+                    check_mark_child = routes == MassiveRoutes::Check;
+                    "massive_reference_mass"
+                }
             } else if !Self::admits_support_root(graph, support) {
+                guard(
+                    "massive_structure",
+                    concat!(file!(), ":", line!()),
+                    "the child is not a connected 1PI support with loops",
+                )?;
                 "massive_structure"
             } else {
                 "rstar"
             };
-            let polynomial = if route == "rstar" {
+            let polynomial = if route == "rstar" || route == "rstar_mark" {
                 Self::rstar_child_counterterm(
                     &cache,
                     graph,
@@ -1195,6 +1372,47 @@ impl RStarPlan {
                     .replace(GS.m_uv_expansion)
                     .with(GS.m_uv_vacuum)
             };
+            if check_mark_child {
+                // GAMMALOOP_MASSIVE_ROUTES=check: the value p-only would use
+                // (R* on the massless support) against today's at M = 0.
+                let check_started = Instant::now();
+                let rstar = Self::rstar_child_counterterm(
+                    &cache,
+                    graph,
+                    support,
+                    model,
+                    vakint,
+                    settings,
+                    self.uv_children,
+                    self.uv_child_closure,
+                )?;
+                let at_zero = polynomial
+                    .replace(*super::REFERENCE_MASS_SQUARED)
+                    .with(Atom::Zero)
+                    .expand();
+                let (identical, same) =
+                    Self::dirac_closure_agrees(graph, support, model, &rstar, &at_zero)?;
+                checked += 1;
+                equal += usize::from(same);
+                let verdict = if identical {
+                    "identical"
+                } else if same {
+                    "equal"
+                } else {
+                    "different"
+                };
+                eprintln!(
+                    "MARK_CHILD_CHECK {} verdict={verdict} massive_has_mass={} rstar_s={:.3}",
+                    context(),
+                    polynomial.contains_symbol(*super::REFERENCE_MASS_SQUARED),
+                    check_started.elapsed().as_secs_f64()
+                );
+                ensure!(
+                    same,
+                    "MARK_CHILD_CHECK: the R* value of the mark-containing child differs from its massive value at zero reference mass: {}\nrstar: {rstar}\nmassive at M=0: {at_zero}",
+                    context()
+                );
+            }
             tracing::info!(
                 uv = true,
                 rstar = true,
@@ -1222,6 +1440,15 @@ impl RStarPlan {
                 );
             }
             children.insert(support.clone(), polynomial);
+        }
+        if routes != MassiveRoutes::Allow {
+            eprintln!(
+                "MASSIVE_ROUTES graph={} mode={} parent_loops={} child_mass={child_mass:?} children={} changed={changed} guard_hits={guard_hits} checked={checked} equal={equal}",
+                graph.name,
+                routes.as_str(),
+                graph.n_loops(&self.support),
+                self.counterterms.len(),
+            );
         }
         Ok(children)
     }
@@ -1510,6 +1737,16 @@ impl RStarPlan {
         vakint: &Vakint,
         settings: &UVgenerationSettings,
     ) -> Result<BTreeMap<SuBitGraph, Atom>> {
+        if !self.counterterms.is_empty() {
+            self.massive_routes.guard("massive_plan", concat!(file!(), ":", line!()), || {
+                format!(
+                    "graph={} children={} parent_loops={} why=GAMMALOOP_UV_CHILDREN=massive (whole-plan massive children)",
+                    graph.name,
+                    self.counterterms.len(),
+                    graph.n_loops(&self.support)
+                )
+            })?;
+        }
         let (family, settings) = self.uv_family(graph, reference_mass, settings);
         if let Some(cache) = &self.counterterm_cache {
             return self

@@ -54,7 +54,7 @@ use crate::{
 };
 
 use super::{
-    ChildMass, CountertermCache, RStarPlan, UvChildClosure, UvChildrenRoute,
+    ChildMass, CountertermCache, MassiveRoutes, RStarPlan, UvChildClosure, UvChildrenRoute,
     tests::canonical_tensor,
 };
 
@@ -516,6 +516,104 @@ fn mass_dependent_children_keep_the_massive_route_only_when_needed_body() -> Res
         fallbacks >= 2,
         "only {fallbacks} mass-dependent children exercised"
     );
+    Ok(())
+}
+
+/// `GAMMALOOP_MASSIVE_ROUTES=p-only` (mark-child-route): a marked line inside
+/// a quadratically divergent child (L2/6, L2/7, the forced marks of
+/// `mass_dependent_children_keep_the_massive_route_only_when_needed`). The
+/// child asked with the reference mass is given its massless R* value, and
+/// the root counterterm (whose IR correction with that child as hard part
+/// consumes it in its 0-loop term) and the pole part (the physical
+/// preparation) equal the all-massive ones. The guard refuses a massive
+/// route under p-only and names it.
+#[test]
+fn p_only_mark_children_go_through_rstar_and_keep_the_root() -> Result<()> {
+    with_production_piece_limit(p_only_mark_children_go_through_rstar_and_keep_the_root_body)
+}
+
+fn p_only_mark_children_go_through_rstar_and_keep_the_root_body() -> Result<()> {
+    test_initialise()?;
+    assert_eq!(MassiveRoutes::parse("")?, MassiveRoutes::Allow);
+    assert_eq!(MassiveRoutes::parse("allow")?, MassiveRoutes::Allow);
+    assert_eq!(MassiveRoutes::parse("p-only")?, MassiveRoutes::POnly);
+    assert_eq!(MassiveRoutes::parse("check")?, MassiveRoutes::Check);
+    assert!(MassiveRoutes::parse("massive").is_err());
+    let refused = MassiveRoutes::POnly
+        .guard("massive_structure", "here", || "graph=g child_edges=1,2".into())
+        .unwrap_err();
+    ensure!(
+        format!("{refused}").contains("rule=massive_structure at=here graph=g child_edges=1,2"),
+        "{refused}"
+    );
+    MassiveRoutes::Check.guard("massive", "here", String::new)?;
+    let vakint = Vakint::new()?;
+    let settings = settings();
+    let mass = Atom::var(*super::REFERENCE_MASS_SQUARED).sqrt();
+    let mut exercised = 0;
+    for (name, dot) in [
+        ("L2/6", include_str!("testdata/l2-d6.dot")),
+        ("L2/7", include_str!("testdata/l2-d7.dot")),
+    ] {
+        let diagram = colour_factored(&load(dot)?)?;
+        let graph = diagram.to_gamma_loop_graph(None, true)?;
+        let model = diagram.model();
+        let automatic = RStarPlan::with_automatic_edge(&graph, model, &settings)?;
+        let quadratic = automatic
+            .counterterms
+            .iter()
+            .filter(|call| call.taylor_order >= 2)
+            .max_by_key(|call| call.argument.loops)
+            .ok_or_else(|| eyre!("{name}: no quadratic child"))?
+            .clone();
+        let marked = graph
+            .iter_edges_of(&quadratic.argument.support)
+            .find_map(|(pair, edge, _)| pair.is_paired().then_some(edge))
+            .unwrap();
+        let massive_plan = RStarPlan::new(&graph, model, marked, &settings)?
+            .with_uv_children(UvChildrenRoute::Massive)
+            .with_massive_routes(MassiveRoutes::Allow);
+        let p_only = RStarPlan::new(&graph, model, marked, &settings)?
+            .with_uv_children(RSTAR)
+            .with_massive_routes(MassiveRoutes::POnly);
+        // The plan has an IR correction whose hard part is the marked child.
+        ensure!(
+            p_only
+                .ir
+                .iter()
+                .any(|correction| correction.hard == quadratic.argument.support),
+            "{name}: no IR correction with the marked child as hard part"
+        );
+        let children = p_only.evaluate_uv_children(&graph, model, &mass, &vakint, &settings)?;
+        let massless = p_only.evaluate_uv_children_for(
+            &graph,
+            model,
+            &mass,
+            &vakint,
+            &settings,
+            ChildMass::Zero,
+        )?;
+        let massive =
+            massive_plan.evaluate_uv_children(&graph, model, &mass, &vakint, &settings)?;
+        let support = &quadratic.argument.support;
+        ensure!(
+            massive[support].contains_symbol(*super::REFERENCE_MASS_SQUARED)
+                && !children[support].contains_symbol(*super::REFERENCE_MASS_SQUARED),
+            "{name}: p-only must give the marked child its massless value: {}",
+            children[support]
+        );
+        assert_same_delta(&graph, name, &children[support], &massless[support])?;
+        let expected = massive_plan.counterterm(&graph, model, &vakint, &settings)?;
+        let actual = p_only.counterterm(&graph, model, &vakint, &settings)?;
+        ensure!(!expected.expand().is_zero(), "{name}: zero root counterterm");
+        assert_same_delta(&graph, &format!("{name} p-only root"), &actual, &expected)?;
+        let expected = massive_plan.pole_part(&graph, model, &vakint, &settings)?;
+        let actual = p_only.pole_part(&graph, model, &vakint, &settings)?;
+        assert_same_delta(&graph, &format!("{name} p-only pole part"), &actual, &expected)?;
+        exercised += 1;
+        eprintln!("P_ONLY_MARK_CHILD {name} marked={}", usize::from(marked));
+    }
+    ensure!(exercised == 2);
     Ok(())
 }
 

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use eyre::{Result, WrapErr, ensure, eyre};
 use linnet::half_edge::{
     involution::EdgeIndex,
-    subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubSetOps},
+    subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps},
 };
 use symbolica::atom::{Atom, AtomCore};
 use vakint::Vakint;
@@ -100,6 +100,20 @@ impl<'a> MassiveUvEvaluator<'a> {
         if call.argument.loops == 0 || insertions.iter().any(AtomCore::is_zero) {
             return Ok(Atom::Zero);
         }
+        // GAMMALOOP_MASSIVE_ROUTES=p-only: the massive R operation on a
+        // (decorated) argument is refused.
+        super::MassiveRoutes::from_environment().catch_all(
+            "massive_uv_evaluator",
+            concat!(file!(), ":", line!()),
+            || {
+                format!(
+                    "graph={} support={} loops={} why=the massive R operation was asked for a (decorated) counterterm",
+                    self.graph.name,
+                    call.argument.remaining.string_label(),
+                    call.argument.loops
+                )
+            },
+        )?;
 
         let graph = self.decorated_graph(&call.argument, insertions)?;
         let support = &call.argument.remaining;

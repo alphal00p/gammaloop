@@ -4367,6 +4367,20 @@ impl<'a> Evaluation<'a> {
         // `off`).
         let mode = top_mass::ir_quotient()?;
         let massive = |this: &Self| -> Result<Atom> {
+            // GAMMALOOP_MASSIVE_ROUTES: a quotient by the massive R operation
+            // (IR_QUOTIENT=massive|off|check|auto at <= 4 loops, or a decline).
+            this.plan.massive_routes.guard(
+                "ir_quotient_massive",
+                concat!(file!(), ":", line!()),
+                || {
+                    format!(
+                        "graph={} support={} loops={} why=GAMMALOOP_IR_QUOTIENT={mode:?} (massive quotient or an R* decline)",
+                        this.graph.name,
+                        this.edges(&call.argument.remaining),
+                        call.argument.loops
+                    )
+                },
+            )?;
             this.uv
                 .counterterm(call, std::slice::from_ref(insertion))
                 .wrap_err_with(|| {

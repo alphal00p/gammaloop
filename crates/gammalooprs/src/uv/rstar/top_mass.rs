@@ -178,6 +178,7 @@ pub fn split_enabled() -> bool {
 pub fn validate_top_level_switches() -> Result<()> {
     rstar_terms()?;
     top_mass_terms()?;
+    super::plan::validate_massive_routes()?;
     Ok(())
 }
 
@@ -187,12 +188,19 @@ pub fn top_level_switches_line() -> String {
         Ok(value) => value.to_owned(),
         Err(error) => format!("error({error})"),
     };
-    format!(
+    let line = format!(
         "rstar_terms={} rstar_top_mass_terms={} top_mass_split={}",
         show(TERMS.clone().map(RStarTerms::as_str)),
         show(MASS_TERMS.clone().map(TopMassTerms::as_str)),
         u8::from(split_enabled())
-    )
+    );
+    // GAMMALOOP_MASSIVE_ROUTES: shown only when not `allow` (the default
+    // line is unchanged).
+    match super::plan::validate_massive_routes() {
+        Ok(super::plan::MassiveRoutes::Allow) => line,
+        Ok(routes) => format!("{line} massive_routes={}", routes.as_str()),
+        Err(error) => format!("{line} massive_routes=error({error})"),
+    }
 }
 
 /// The switches as a provenance value (`null` when both are at their default
@@ -200,14 +208,24 @@ pub fn top_level_switches_line() -> String {
 pub fn top_level_switches_provenance() -> serde_json::Value {
     let terms = rstar_terms().unwrap_or(RStarTerms::All);
     let mass = top_mass_terms().unwrap_or(TopMassTerms::Keep);
-    if terms == RStarTerms::All && mass == TopMassTerms::Keep && !split_enabled() {
+    let routes = super::plan::validate_massive_routes().unwrap_or_default();
+    if terms == RStarTerms::All
+        && mass == TopMassTerms::Keep
+        && !split_enabled()
+        && routes == super::plan::MassiveRoutes::Allow
+    {
         return serde_json::Value::Null;
     }
-    serde_json::json!({
+    let mut value = serde_json::json!({
         "rstar_terms": terms.as_str(),
         "top_mass_terms": mass.as_str(),
         "split": split_enabled(),
-    })
+    });
+    // GAMMALOOP_MASSIVE_ROUTES, absent at `allow` (records unchanged).
+    if routes != super::plan::MassiveRoutes::Allow {
+        value["massive_routes"] = serde_json::Value::from(routes.as_str());
+    }
+    value
 }
 
 /// The auxiliary mass squared of the R* outer Taylor operation

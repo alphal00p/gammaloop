@@ -625,6 +625,24 @@ impl CountertermCache {
         vakint: &Vakint,
         settings: &UVgenerationSettings,
     ) -> Result<Atom> {
+        // GAMMALOOP_MASSIVE_ROUTES=p-only: every massive R request (family
+        // graph with a reference mass, decorated quotient, prewarm) passes here.
+        crate::uv::rstar::MassiveRoutes::from_environment().catch_all(
+            "massive_counterterm_cache",
+            concat!(file!(), ":", line!()),
+            || {
+                format!(
+                    "graph={} child_edges={} loops={} why=a massive R request reached the counterterm cache",
+                    graph.name,
+                    graph
+                        .iter_edges_of(support)
+                        .map(|(_, edge, _)| usize::from(edge).to_string())
+                        .collect::<Vec<_>>()
+                        .join(","),
+                    graph.n_loops(support)
+                )
+            },
+        )?;
         self.lookup(
             graph,
             support,
