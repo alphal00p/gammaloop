@@ -93,6 +93,12 @@ pub use crate::uv::counterterm_cache::{
     CountertermRequest,
 };
 
+/// Whether this thread is inside the IR-hard fixed-mass scope
+/// (`GAMMALOOP_DELTA_KEY=graph` keeps the legacy key there).
+pub(crate) fn ir_hard_fixed_mass_scope() -> bool {
+    expression::ir_hard_fixed_mass()
+}
+
 pub(super) static REFERENCE_MASS_SQUARED: std::sync::LazyLock<symbolica::atom::Symbol> =
     std::sync::LazyLock::new(|| symbolica::symbol!("rstar_reference_mass_squared"; Scalar));
 

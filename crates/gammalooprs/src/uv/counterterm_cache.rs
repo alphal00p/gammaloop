@@ -25,7 +25,11 @@ use crate::{
             integrated::Integrated,
             local_4d::{self, Full4dCts},
         },
-        counterterm_identity::{CountertermIdentity, CountertermKey},
+        counterterm_identity::{
+            CountertermIdentity, CountertermKey,
+            graph_key::{self, OccurrenceFeatures},
+        },
+        delta_key::{self, DeltaKeyMode, DeltaVerify},
         hedge_poset::ForestNode,
         literal_zero_if_vanishing,
     },
@@ -230,10 +234,32 @@ impl std::error::Error for RetriesExhausted {
     }
 }
 
+/// A cache key: today's certificate (`Legacy`), or the routing-free graph
+/// certificate of an R* child Δ (`Graph`, `GAMMALOOP_DELTA_KEY=graph`).
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct Key {
-    graph: CountertermKey,
-    settings: String,
+enum Key {
+    Legacy {
+        graph: CountertermKey,
+        settings: String,
+    },
+    Graph {
+        graph: CountertermKey,
+        settings: String,
+    },
+}
+
+/// What a lookup is: the graph certificate applies to R* child Δs only.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum KeyKind {
+    Standard,
+    RstarChildDelta,
+}
+
+thread_local! {
+    /// Sampled verify (`GAMMALOOP_DELTA_VERIFY=N`): the private cold cache
+    /// every lookup of this thread goes to while a fresh value is computed.
+    static COLD_CACHE: std::cell::RefCell<Option<Arc<CountertermCache>>> =
+        const { std::cell::RefCell::new(None) };
 }
 
 /// Optional elapsed-time diagnostics. Initializer time includes recursive child
@@ -399,6 +425,11 @@ pub struct CountertermCache {
     waits: AtomicU64,
     timings: CacheTimings,
     compute_limit: Option<ComputeLimit>,
+    /// `GAMMALOOP_DELTA_KEY=graph`: the symmetry features of the occurrence
+    /// that filled each graph-key entry.
+    fills: Mutex<HashMap<Key, Arc<OccurrenceFeatures>>>,
+    /// Verify or dump: the legacy digests seen, for `hit_legacy_would_miss`.
+    legacy_seen: Mutex<HashSet<u64>>,
 }
 
 /// At most `permits` concurrent computations of counterterms with at least
@@ -528,7 +559,7 @@ impl CountertermCache {
         while let Some(request) = pending.pop() {
             let identity =
                 CountertermIdentity::new(&request.graph, &request.support, request.model)?;
-            let key = Key {
+            let key = Key::Legacy {
                 graph: identity.key,
                 settings: serde_json::to_string(&*request.settings)?,
             };
@@ -648,6 +679,7 @@ impl CountertermCache {
             support,
             model,
             serde_json::to_string(settings)?,
+            KeyKind::Standard,
             || self.compute(graph, support, model, vakint, settings),
         )
     }
@@ -667,7 +699,21 @@ impl CountertermCache {
         settings_key: String,
         compute: impl FnOnce() -> Result<Atom>,
     ) -> Result<Atom> {
-        self.lookup(graph, support, model, settings_key, compute)
+        self.lookup(graph, support, model, settings_key, KeyKind::Standard, compute)
+    }
+
+    /// [`Self::counterterm_with`] for a lookup of `kind`: an R* child Δ
+    /// takes the graph certificate under `GAMMALOOP_DELTA_KEY=graph`.
+    pub(crate) fn counterterm_with_kind(
+        &self,
+        graph: &Graph,
+        support: &SuBitGraph,
+        model: &Model,
+        settings_key: String,
+        kind: KeyKind,
+        compute: impl FnOnce() -> Result<Atom>,
+    ) -> Result<Atom> {
+        self.lookup(graph, support, model, settings_key, kind, compute)
     }
 
     /// [`Self::counterterm_with`] whose fill leaves a note with its entry
@@ -689,6 +735,7 @@ impl CountertermCache {
             support,
             model,
             settings_key,
+            KeyKind::Standard,
             || compute().map(|(value, note)| (value, Some(note))),
             true,
         )
@@ -700,6 +747,7 @@ impl CountertermCache {
         support: &SuBitGraph,
         model: &Model,
         settings_key: String,
+        kind: KeyKind,
         compute: impl FnOnce() -> Result<Atom>,
     ) -> Result<Atom> {
         self.lookup_noted(
@@ -707,34 +755,126 @@ impl CountertermCache {
             support,
             model,
             settings_key,
+            kind,
             || compute().map(|value| (value, None)),
             false,
         )
         .map(|(value, _)| value)
     }
 
+    /// The identity and key of a lookup: the graph certificate for an R*
+    /// child Δ under `GAMMALOOP_DELTA_KEY=graph` (unless it falls back), the
+    /// legacy one otherwise. The bool: the graph certificate is used.
+    fn identity_and_key(
+        graph: &Graph,
+        support: &SuBitGraph,
+        model: &Model,
+        settings_key: String,
+        kind: KeyKind,
+        noted: bool,
+    ) -> Result<(CountertermIdentity, Key, bool)> {
+        if kind == KeyKind::RstarChildDelta && !noted && delta_key::mode() == DeltaKeyMode::Graph {
+            if crate::uv::rstar::ir_hard_fixed_mass_scope() {
+                delta_key::add(&delta_key::C.scoped_flag_lookup, 1);
+                debug_assert!(false, "an R* child Δ lookup inside the IR-hard fixed-mass scope");
+            } else {
+                match CountertermIdentity::for_graph_key(graph, support, model) {
+                    Ok(Ok(identity)) => {
+                        let key = Key::Graph {
+                            graph: identity.key.clone(),
+                            settings: settings_key,
+                        };
+                        return Ok((identity, key, true));
+                    }
+                    Ok(Err(graph_key::Fallback::NonIncident)) => {
+                        delta_key::add(&delta_key::C.key_fallback_nonincident, 1)
+                    }
+                    Ok(Err(graph_key::Fallback::Coefficient)) => {
+                        delta_key::add(&delta_key::C.key_fallback_coef, 1)
+                    }
+                    Err(error) => {
+                        if delta_key::C.key_fallback_error.fetch_add(1, Ordering::Relaxed) < 5 {
+                            eprintln!(
+                                "DELTA_KEY_FALLBACK_ERROR graph={} support={} error={error:#}",
+                                graph.name,
+                                support.string_label()
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        let identity = CountertermIdentity::new(graph, support, model)?;
+        let key = Key::Legacy {
+            graph: identity.key.clone(),
+            settings: settings_key,
+        };
+        Ok((identity, key, false))
+    }
+
     /// The lookup; `noted`: the fill's note is stored with its entry and a
-    /// hit returns it (no note is kept or read otherwise).
+    /// hit returns it (no note is kept or read otherwise). `kind`: an R*
+    /// child Δ takes the graph certificate under `GAMMALOOP_DELTA_KEY=graph`.
+    #[allow(clippy::too_many_arguments)]
     fn lookup_noted(
         &self,
         graph: &Graph,
         support: &SuBitGraph,
         model: &Model,
         settings_key: String,
+        kind: KeyKind,
         compute: impl FnOnce() -> Result<(Atom, Option<CacheNote>)>,
         noted: bool,
     ) -> Result<(Atom, CacheLookup)> {
+        // Sampled verify: a fresh value is computed in a private cold cache.
+        if let Some(cold) = COLD_CACHE.with(|cold| cold.borrow().clone())
+            && !std::ptr::eq(Arc::as_ptr(&cold), self)
+        {
+            return cold.lookup_noted(graph, support, model, settings_key, kind, compute, noted);
+        }
         let _stage = StageSpan::new("gamma.delta.lookup");
+        let stats = delta_key::stats_enabled();
+        let key_started = stats.then(Instant::now);
         let mut timing = self.timings.start();
         let identity_stage = StageSpan::new("gamma.delta.identity");
-        let identity = CountertermIdentity::new(graph, support, model)?;
-        let key = Key {
-            graph: identity.key.clone(),
-            settings: settings_key,
-        };
+        let (mut identity, key, graph_key) =
+            Self::identity_and_key(graph, support, model, settings_key, kind, noted)?;
         let noted_key = noted.then(|| key.clone());
         timing.lap(CacheTimingPhase::Key);
         drop(identity_stage);
+        let loops = stats.then(|| graph.n_loops(support));
+        let verify_mode = if graph_key {
+            delta_key::verify()
+        } else {
+            DeltaVerify::Off
+        };
+        let in_cold = COLD_CACHE.with(|cold| cold.borrow().is_some());
+        let key_digest = (graph_key && (delta_key::dump() || verify_mode != DeltaVerify::Off))
+            .then(|| identity.key_digest());
+        // Verify or dump: the legacy certificate beside the graph one.
+        let legacy_new = if graph_key && (delta_key::dump() || verify_mode != DeltaVerify::Off) {
+            use std::hash::{Hash, Hasher};
+            let legacy = CountertermIdentity::new(graph, support, model)?;
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            legacy.key.hash(&mut hasher);
+            if let Key::Graph { settings, .. } = &key {
+                settings.hash(&mut hasher);
+            }
+            let digest = hasher.finish();
+            identity.set_legacy_digest(digest);
+            Some(
+                self.legacy_seen
+                    .lock()
+                    .expect("counterterm cache poisoned")
+                    .insert(digest),
+            )
+        } else {
+            None
+        };
+        if let Some(started) = key_started {
+            delta_key::add(&delta_key::C.key_ns, started.elapsed().as_nanos() as u64);
+            delta_key::add(&delta_key::C.lookups, 1);
+        }
         // A transient error (an exhausted resource budget, e.g. the scoped
         // budget of a guarded child attempt) is never kept: the entry is
         // removed, the computing lookup returns the error unstored, and a
@@ -742,6 +882,8 @@ impl CountertermCache {
         // budget (MATRIX-R45 review, nested-and-cache finding 1).
         let mut compute = Some(compute);
         let mut rounds = 0_usize;
+        // The filler's own value when the open-line transport cannot store it.
+        let mut unsupported_value: Option<Atom> = None;
         let (entry, existing, filled) = loop {
             rounds += 1;
             let (entry, existing) = {
@@ -773,7 +915,9 @@ impl CountertermCache {
             let result = timing.resolve(&entry, |timing| {
                 computed = true;
                 self.misses.fetch_add(1, Ordering::Relaxed);
+                let fill_timer = loops.map(delta_key::FillTimer::start);
                 let result = compute.take().expect("one computation per lookup")();
+                drop(fill_timer);
                 timing.lap(CacheTimingPhase::Initializer);
                 let _stage = StageSpan::new("gamma.delta.cache_store");
                 let result = result
@@ -784,7 +928,27 @@ impl CountertermCache {
                                 .expect("counterterm cache notes poisoned")
                                 .insert(key.clone(), note);
                         }
-                        identity.canonicalize_delta(&value)
+                        let canonical = identity.canonicalize_delta(&value);
+                        if graph_key {
+                            match &canonical {
+                                Err(error) if graph_key::is_transport_unsupported(error) => {
+                                    unsupported_value = Some(value);
+                                }
+                                Ok(_) => {
+                                    if let Some(transport) = identity.graph_transport() {
+                                        self.fills
+                                            .lock()
+                                            .expect("counterterm cache poisoned")
+                                            .insert(
+                                                key.clone(),
+                                                Arc::new(transport.features.clone()),
+                                            );
+                                    }
+                                }
+                                Err(_) => {}
+                            }
+                        }
+                        canonical
                     })
                     .inspect(|_| {
                         self.stores.fetch_add(1, Ordering::Relaxed);
@@ -824,7 +988,39 @@ impl CountertermCache {
             }
             break (entry, existing, computed);
         };
+        if let Some(loops) = loops {
+            delta_key::count_loop(loops, !filled);
+            let (lookups, hits) = if graph_key {
+                (&delta_key::C.graph_lookups, &delta_key::C.graph_hits)
+            } else {
+                (&delta_key::C.legacy_lookups, &delta_key::C.legacy_hits)
+            };
+            delta_key::add(lookups, 1);
+            if !filled {
+                delta_key::add(hits, 1);
+            } else if graph_key {
+                delta_key::add(&delta_key::C.graph_misses, 1);
+            } else {
+                delta_key::add(&delta_key::C.legacy_misses, 1);
+            }
+        }
+        if !filled && legacy_new == Some(true) {
+            delta_key::add(&delta_key::C.hit_legacy_would_miss, 1);
+        }
         let result = entry.get().expect("resolved above");
+        // GAMMALOOP_DELTA_KEY=graph: an entry whose open-line transport the
+        // value does not support serves no one; every lookup computes.
+        if graph_key
+            && let Err(error) = result
+            && graph_key::is_transport_unsupported(error.cause())
+        {
+            delta_key::add(&delta_key::C.transport_unsupported, 1);
+            if let Some(value) = unsupported_value.take() {
+                return Ok((value, CacheLookup::Filled));
+            }
+            let (value, _) = compute.take().expect("a hit keeps its computation")()?;
+            return Ok((value, CacheLookup::Filled));
+        }
         let canonical = result.as_ref().map_err(CachedError::replay)?;
         debug_tags!(#uv, #integrated, #cache;
             stage = "uv_counterterm_cache_lookup",
@@ -833,9 +1029,124 @@ impl CountertermCache {
             support = %support.string_label(),
             "Complete UV counterterm cache lookup"
         );
+        // GAMMALOOP_DELTA_KEY=graph: the features of a hit, and its verification.
+        if graph_key && !filled {
+            let verified = match verify_mode {
+                DeltaVerify::On => !in_cold,
+                DeltaVerify::Sample(n) => {
+                    !in_cold && delta_key::sampled(identity.key_digest(), n)
+                }
+                DeltaVerify::Off => false,
+            };
+            if verified {
+                let started = Instant::now();
+                let fresh = match verify_mode {
+                    DeltaVerify::Sample(_) => {
+                        let cold = Arc::new(CountertermCache::default());
+                        let previous = COLD_CACHE.with(|slot| slot.replace(Some(cold)));
+                        let fresh = compute.take().expect("a hit keeps its computation")();
+                        COLD_CACHE.with(|slot| slot.replace(previous));
+                        fresh
+                    }
+                    _ => compute.take().expect("a hit keeps its computation")(),
+                };
+                let fresh = match fresh {
+                    Ok((value, _)) => value,
+                    Err(error) => {
+                        delta_key::add(&delta_key::C.verify_errors, 1);
+                        return Err(error.wrap_err("DELTA_VERIFY: the fresh computation failed"));
+                    }
+                };
+                match identity.verify_agree(graph, support, model, canonical, &fresh) {
+                    Ok((identical, true)) => {
+                        delta_key::add(&delta_key::C.verify_checked, 1);
+                        delta_key::add(
+                            if identical {
+                                &delta_key::C.verify_identical
+                            } else {
+                                &delta_key::C.verify_equal_nf
+                            },
+                            1,
+                        );
+                    }
+                    Ok((_, false)) => {
+                        delta_key::add(&delta_key::C.verify_mismatch, 1);
+                        let fill = self
+                            .fills
+                            .lock()
+                            .expect("counterterm cache poisoned")
+                            .get(&key)
+                            .cloned();
+                        let message = format!(
+                            "DELTA_VERIFY_MISMATCH key={:016x} graph={} support={} loops={} hit=[{}] fill=[{}]\nstored(transported): {}\nfresh: {}",
+                            identity.key_digest(),
+                            graph.name,
+                            support.string_label(),
+                            graph.n_loops(support),
+                            identity
+                                .graph_transport()
+                                .map(|transport| transport.features.summary())
+                                .unwrap_or_default(),
+                            fill.map(|fill| fill.summary()).unwrap_or_default(),
+                            identity
+                                .restore_delta(canonical)
+                                .map(|value| value.to_string())
+                                .unwrap_or_else(|error| format!("{error:#}")),
+                            fresh
+                        );
+                        eprintln!("{message}");
+                        return Err(eyre!(message));
+                    }
+                    Err(error) => {
+                        delta_key::add(&delta_key::C.verify_errors, 1);
+                        return Err(error.wrap_err("DELTA_VERIFY: the comparison failed"));
+                    }
+                }
+                delta_key::add(&delta_key::C.verify_ns, started.elapsed().as_nanos() as u64);
+            }
+            if let Some(transport) = identity.graph_transport() {
+                let fill = self
+                    .fills
+                    .lock()
+                    .expect("counterterm cache poisoned")
+                    .get(&key)
+                    .cloned();
+                if let Some(fill) = fill {
+                    delta_key::count_features(&transport.features.shown(&fill), verified);
+                }
+            }
+        }
+        if let (true, Some(digest)) = (delta_key::dump(), key_digest) {
+            eprintln!(
+                "DELTA_KEY key={digest:016x} graph={} support={} loops={} {} hit={}",
+                graph.name,
+                support.string_label(),
+                graph.n_loops(support),
+                identity
+                    .graph_transport()
+                    .map(|transport| transport.features.summary())
+                    .unwrap_or_default(),
+                if filled {
+                    "miss"
+                } else if existing {
+                    "mem"
+                } else {
+                    "wait"
+                }
+            );
+        }
         timing.restart();
         let _stage = StageSpan::new("gamma.delta.restore_boundary");
-        let result = identity.restore_delta(canonical);
+        let result = match identity.restore_delta(canonical) {
+            Err(error) if graph_key && graph_key::is_transport_unsupported(&error) => {
+                delta_key::add(&delta_key::C.transport_unsupported, 1);
+                match compute.take() {
+                    Some(compute) => compute().map(|(value, _)| value),
+                    None => Err(error),
+                }
+            }
+            other => other,
+        };
         timing.lap(CacheTimingPhase::Restore);
         let lookup = if filled {
             CacheLookup::Filled

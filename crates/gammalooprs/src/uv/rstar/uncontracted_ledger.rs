@@ -1184,10 +1184,11 @@ pub(super) fn through_cache(
     compute: impl FnOnce() -> Result<Atom>,
 ) -> Result<Atom> {
     if uncontracted::switch().mode == Mode::Off {
+        let kind = crate::uv::counterterm_cache::KeyKind::RstarChildDelta;
         if !timing_enabled() {
-            return cache.counterterm_with(graph, support, model, settings_key, compute);
+            return cache.counterterm_with_kind(graph, support, model, settings_key, kind, compute);
         }
-        return cache.counterterm_with(graph, support, model, settings_key, || {
+        return cache.counterterm_with_kind(graph, support, model, settings_key, kind, || {
             let _path = ChildPath::enter(graph, support);
             compute()
         });
