@@ -71,6 +71,24 @@ enum NodeColor {
     Momentum,
     GlobalPrefactor,
     GlobalProjector,
+    // GAMMALOOP_DELTA_KEY=graph (appended: the derived order of the variants
+    // above, and so every legacy certificate, is unchanged). Portable colours
+    // carry strings, never registry ids.
+    EdgeP {
+        particle: Option<usize>,
+        mass: String,
+        power: isize,
+        dod: i32,
+        boundary: bool,
+        orientation: i8,
+    },
+    SlotP(String),
+    LeafP(String),
+    FunctionP(String),
+    HedgeMomentum,
+    Rule,
+    SignClass,
+    Term(String),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -105,6 +123,9 @@ pub(crate) struct CountertermIdentity {
     momenta: BTreeMap<usize, (usize, i64)>,
     coordinates: BTreeMap<(Symbol, usize), usize>,
     reservations: Vec<Atom>,
+    /// `GAMMALOOP_DELTA_KEY=graph`: the sign and line transport of this
+    /// occurrence (`None` for every legacy certificate).
+    graph_transport: Option<graph_key::GraphTransport>,
 }
 
 impl CountertermIdentity {
@@ -451,6 +472,7 @@ impl CountertermIdentity {
             momenta,
             coordinates,
             reservations,
+            graph_transport: None,
         })
     }
 
@@ -461,7 +483,11 @@ impl CountertermIdentity {
     }
 
     pub(crate) fn canonicalize_delta(&self, value: &Atom) -> Result<Atom> {
-        self.canonicalize_expression(value, *DELTA_MOMENTUM)
+        let canonical = self.canonicalize_expression(value, *DELTA_MOMENTUM)?;
+        match &self.graph_transport {
+            None => Ok(canonical),
+            Some(transport) => transport.to_canonical(canonical),
+        }
     }
 
     /// Transport a complete integrand into canonical edge labels while
@@ -521,6 +547,16 @@ impl CountertermIdentity {
     }
 
     pub(crate) fn restore_delta(&self, value: &Atom) -> Result<Atom> {
+        match &self.graph_transport {
+            None => self.restore_canonical(value),
+            Some(transport) => {
+                let value = transport.from_canonical(value)?;
+                Ok(self.restore_canonical(&value)? * transport.sigma)
+            }
+        }
+    }
+
+    fn restore_canonical(&self, value: &Atom) -> Result<Atom> {
         let private_marker = *DELTA_PRIVATE;
         let port_marker = *DELTA_PORT;
         let momentum_marker = *DELTA_MOMENTUM;
@@ -615,6 +651,9 @@ impl CountertermIdentity {
 /// far below this bound, so the two ranges can never alias. The labels never
 /// leave the identity builder: cached values are transported through ports.
 const CANONICAL_OWNER_OFFSET: u16 = 1 << 14;
+
+#[path = "counterterm_graph_key.rs"]
+pub(crate) mod graph_key;
 
 struct IdentityBuilder {
     graph: IncidenceGraph<NodeColor, Link>,
