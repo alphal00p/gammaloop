@@ -1456,9 +1456,14 @@ impl CountertermCache {
             }
         }
         delta_store::add(&S.store_hits, 1);
+        delta_store::add(&S.hit_compute_s_saved_ms, (row.compute_s * 1e3) as u64);
         delta_store::count_loops(store_key.loops, true, false);
         delta_store::record_hit(&store_key.key_sha, &row, audited);
         let features = serde_json::from_str::<OccurrenceFeatures>(&row.writer_transport).ok();
+        // the symmetry features this hit shows against the writer's occurrence
+        if let (Some(writer), Some(transport)) = (&features, identity.graph_transport()) {
+            delta_key::count_features(&transport.features.shown(writer), audited);
+        }
         Ok(Some(StoreHit {
             value,
             note,

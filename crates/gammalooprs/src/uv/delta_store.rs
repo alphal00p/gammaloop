@@ -80,6 +80,8 @@ pub struct StoredRow {
     pub writer_build: String,
     pub writer_run_id: String,
     pub dep_builds: Vec<String>,
+    /// the writer's fill seconds (inclusive of its nested fills)
+    pub compute_s: f64,
 }
 
 pub enum StoreGet {
@@ -581,7 +583,7 @@ pub fn hits_tsv() -> String {
     text
 }
 
-/// Per child loop order: store hits and their recorded compute seconds.
+/// Per child loop order: store hits, store misses, values stored.
 static BY_LOOPS: LazyLock<Mutex<BTreeMap<usize, (u64, u64, u64)>>> =
     LazyLock::new(|| Mutex::new(BTreeMap::new()));
 
@@ -590,11 +592,10 @@ pub(crate) fn count_loops(loops: usize, hit: bool, stored: bool) {
     let entry = by.entry(loops).or_default();
     if hit {
         entry.0 += 1;
+    } else if stored {
+        entry.2 += 1;
     } else {
         entry.1 += 1;
-    }
-    if stored {
-        entry.2 += 1;
     }
 }
 
