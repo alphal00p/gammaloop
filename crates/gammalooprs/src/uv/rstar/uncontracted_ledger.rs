@@ -2179,7 +2179,12 @@ struct KindTotals {
 ///   diagram whose counterterm is nonzero with no compared / taken record in
 ///   any kind and no excepted kind fails the run (with a partial kind list a
 ///   diagram legitimately has no record of the listed kinds: the kind-level
-///   rule covers it);
+///   rule covers it); under a DEFAULT switch (the variable unset) it is a
+///   notice instead ([`RunTally::notices`]): no record was taken, so the
+///   diagram's value is the contracted route's, as with the switch off, and
+///   an unset switch never fails what off computes (beta's ruling of
+///   2026-11-23); every WRITTEN value (a bare `on` / `check`, a list) keeps
+///   the failure;
 /// * a record class (frame shape) of an enabled kind whose records over the
 ///   run (outside excepted diagram-kinds) all declined, with nothing
 ///   compared / taken and at least one setting's code
@@ -2199,6 +2204,10 @@ pub struct RunTally {
     shapes: BTreeMap<(Kind, String), (usize, usize, BTreeMap<String, usize>)>,
     diagrams: usize,
     failures: Vec<String>,
+    /// The switch is the DEFAULT (unset): the diagram rule gives a notice.
+    default: bool,
+    /// The diagram rule's notices under a default switch, one per diagram.
+    diagram_notices: Vec<String>,
 }
 
 impl RunTally {
@@ -2213,6 +2222,8 @@ impl RunTally {
             shapes: BTreeMap::new(),
             diagrams: 0,
             failures: Vec::new(),
+            default: switch.is_default(),
+            diagram_notices: Vec::new(),
         })
     }
 
@@ -2280,10 +2291,19 @@ impl RunTally {
             .into_iter()
             .all(|kind| self.kinds.contains(&kind));
         if every_kind && nonzero && evidence_any == 0 && !excepted {
-            self.failures.push(format!(
-                "{label}: the counterterm is nonzero, and no record of any kind was {}",
-                self.verb()
-            ));
+            if self.default {
+                // no record of any kind was taken: the value is the
+                // contracted route's, as with the switch off
+                self.diagram_notices.push(format!(
+                    "{label}: the counterterm is nonzero, and no record of any kind was {}; default kind, not binding: the contracted value is used",
+                    self.verb()
+                ));
+            } else {
+                self.failures.push(format!(
+                    "{label}: the counterterm is nonzero, and no record of any kind was {}",
+                    self.verb()
+                ));
+            }
         }
     }
 
@@ -2351,9 +2371,10 @@ impl RunTally {
             .collect()
     }
 
-    /// U8: one notice per [`Self::default_no_record`] kind, and one per
-    /// record class of a kind that is not listed whose records over the run
-    /// all declined with a setting's code (ruling 18:11Z).
+    /// U8: one notice per [`Self::default_no_record`] kind, one per record
+    /// class of a kind that is not listed whose records over the run all
+    /// declined with a setting's code (ruling 18:11Z), and, under a DEFAULT
+    /// switch, one per diagram that meets the diagram rule ([`Self::add`]).
     pub fn notices(&self) -> Vec<String> {
         let mut notices = self
             .without_record()
@@ -2378,6 +2399,7 @@ impl RunTally {
                 ));
             }
         }
+        notices.extend(self.diagram_notices.iter().cloned());
         notices
     }
 

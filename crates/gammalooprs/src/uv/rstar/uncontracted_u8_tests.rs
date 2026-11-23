@@ -338,9 +338,10 @@ fn default_demoted_by_ir_quotient_and_pint6() -> Result<()> {
 }
 
 /// The per-diagram "nonzero counterterm with no record" rule keeps its
-/// trigger (root, child and ir-hard enabled): the default has it, and the
-/// U7b list `root,child,ir-hard` (the default kinds) and lists with
-/// surrogate keep it.
+/// trigger (root, child and ir-hard enabled): the U7b list
+/// `root,child,ir-hard` (the default kinds), lists with surrogate and the
+/// bare `on` / `check` keep it as a failure; the DEFAULT switch has it as a
+/// notice.
 #[test]
 fn the_diagram_rule_keeps_its_trigger() {
     let failures = |switch: Switch| {
@@ -363,17 +364,106 @@ fn the_diagram_rule_keeps_its_trigger() {
             .any(|failure| failure.contains("the counterterm is nonzero"))
     };
     for switch in [
-        Switch::DEFAULT_ON,
         parse(Some("check:root,child,ir-hard")),
         parse(Some("on:root,child,ir-hard,surrogate")),
         parse(Some("on")),
+        parse(Some("check")),
     ] {
         let failures = failures(switch);
         assert!(rule(&failures), "{switch:?}: {failures:?}");
     }
+    // under the DEFAULT switch the rule is a notice (`the_diagram_rule_is_a_notice_under_the_default`)
+    assert!(!rule(&failures(Switch::DEFAULT_ON)));
     // a partial list: the kind-level rule covers it
     let failures = failures(parse(Some("on:root,child")));
     assert!(!rule(&failures), "{failures:?}");
+}
+
+/// Beta's ruling of 2026-11-23 (U8 N): under a DEFAULT switch (the variable
+/// unset) the run-level diagram rule is a NOTICE, never a failure: a
+/// constructed diagram that meets the rule (nonzero counterterm, no record of
+/// any kind taken, none all-declined or excepted) leaves the run's failures
+/// empty and gives one notice naming the diagram, the rule and "default kind,
+/// not binding"; the same evidence under a WRITTEN value (bare `on`, bare
+/// `check`, a list of the same kinds) fails as before, byte for byte; a zero
+/// counterterm meets no rule.
+#[test]
+fn the_diagram_rule_is_a_notice_under_the_default() {
+    let tally_of = |switch: Switch, nonzero: bool| {
+        with_switch(switch, || {
+            with_hole_cut(HoleCut::Form, || {
+                // every enabled kind expected its records, none was taken or
+                // declined (the hooks missed them): no evidence, no excepted kind
+                let mut kinds = serde_json::Map::new();
+                for kind in switch.enabled_kinds() {
+                    kinds.insert(
+                        kind.as_str().to_owned(),
+                        serde_json::json!({"expected": 1, "attempted": 0, "outcome": "ok"}),
+                    );
+                }
+                let evidence = serde_json::json!({
+                    "schema": ledger::EVIDENCE_SCHEMA,
+                    "identity": ledger::current_identity(),
+                    "kinds": kinds,
+                });
+                let mut tally = ledger::RunTally::new().expect("on");
+                tally.add("g/000007", Some(&evidence), nonzero);
+                (tally.failures(), tally.notices())
+            })
+        })
+    };
+    let rule = "g/000007: the counterterm is nonzero, and no record of any kind was";
+    let (failures, notices) = tally_of(Switch::DEFAULT_ON, true);
+    assert!(
+        !failures.iter().any(|failure| failure.starts_with(rule)),
+        "{failures:#?}"
+    );
+    assert_eq!(
+        notices
+            .iter()
+            .filter(|notice| notice.starts_with(rule))
+            .cloned()
+            .collect::<Vec<_>>(),
+        vec![
+            "g/000007: the counterterm is nonzero, and no record of any kind was taken; default kind, not binding: the contracted value is used"
+                .to_owned()
+        ],
+        "{notices:#?}"
+    );
+    for (value, verb) in [
+        ("on", "taken"),
+        ("check", "compared"),
+        ("on:root,child,ir-hard", "taken"),
+        ("check:root,child,ir-hard", "compared"),
+    ] {
+        let switch = parse(Some(value));
+        assert_eq!(
+            switch.enabled_kinds(),
+            Switch::DEFAULT_ON.enabled_kinds(),
+            "{value}"
+        );
+        let (failures, notices) = tally_of(switch, true);
+        assert!(
+            failures.contains(&format!(
+                "g/000007: the counterterm is nonzero, and no record of any kind was {verb}"
+            )),
+            "{value}: {failures:#?}"
+        );
+        assert!(
+            !notices.iter().any(|notice| notice.starts_with(rule)),
+            "{value}: {notices:#?}"
+        );
+    }
+    for switch in [Switch::DEFAULT_ON, parse(Some("on"))] {
+        let (failures, notices) = tally_of(switch, false);
+        assert!(
+            !failures
+                .iter()
+                .chain(&notices)
+                .any(|line| line.starts_with(rule)),
+            "zero counterterm: {failures:#?} {notices:#?}"
+        );
+    }
 }
 
 /// Own process: the environment's switch with the variable unset and
