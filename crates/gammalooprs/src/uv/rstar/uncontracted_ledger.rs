@@ -1072,7 +1072,10 @@ pub(crate) fn note_from_json(text: &str) -> Option<Arc<dyn Any + Send + Sync>> {
     let mut counts = BTreeMap::new();
     for (name, kind_counts) in value["counts"].as_object()? {
         let kind = Kind::ALL.into_iter().find(|kind| kind.as_str() == name)?;
-        counts.insert(kind, serde_json::from_value::<Counts>(kind_counts.clone()).ok()?);
+        counts.insert(
+            kind,
+            serde_json::from_value::<Counts>(kind_counts.clone()).ok()?,
+        );
     }
     Some(Arc::new(FillNote {
         counts,
@@ -1226,13 +1229,14 @@ pub(super) fn through_cache(
         });
     }
     let kind = crate::uv::counterterm_cache::KeyKind::RstarChildDelta;
-    let (value, lookup) = cache.counterterm_noted(graph, support, model, settings_key, kind, || {
-        let _path = ChildPath::enter(graph, support);
-        let fill = FillFrame::push();
-        let value = compute();
-        let note = fill.finish();
-        value.map(|value| (value, Arc::new(note) as Arc<dyn Any + Send + Sync>))
-    })?;
+    let (value, lookup) =
+        cache.counterterm_noted(graph, support, model, settings_key, kind, || {
+            let _path = ChildPath::enter(graph, support);
+            let fill = FillFrame::push();
+            let value = compute();
+            let note = fill.finish();
+            value.map(|value| (value, Arc::new(note) as Arc<dyn Any + Send + Sync>))
+        })?;
     if let CacheLookup::Hit(note) = &lookup {
         hit(
             note.as_deref()

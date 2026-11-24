@@ -63,7 +63,17 @@
         "rustred" "rustred-app" "rustred-order"
       ]) packages
       then
-        drv.overrideAttrs (_: {
+        drv.overrideAttrs (old: {
+          # Crane vendors each crate separately. RustRed shares this source file
+          # with its proof crate by path, so keep a copy with the vendored core.
+          postPatch = (old.postPatch or "") + lib.optionalString (lib.any (p: p.name == "rustred") packages) ''
+            bounds=crates/rustred-core/src/node/bounds.rs
+            shared=../../../rustred-proof/src/bounds_rule.rs
+            if grep -Fq "$shared" "$bounds"; then
+              cp crates/rustred-proof/src/bounds_rule.rs crates/rustred-core/src/node/bounds_rule.rs
+              substituteInPlace "$bounds" --replace-fail "$shared" bounds_rule.rs
+            fi
+          '';
           # Fetch the exact Cargo.lock revision even if upstream branches move;
           # the archive has the same contents as the Git checkout.
           src = builtins.fetchTree {
