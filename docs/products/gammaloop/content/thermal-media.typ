@@ -135,18 +135,34 @@ lines and expands the hard part in their momenta. Hosts are `IR` subgraphs, so t
 `renormalization_prescription.massless_power_divergent = IR`; every other `IR` subgraph
 receives a plain UV counterterm. On this route a divergent static soft set without a supported
 host is an error that names this setting, so with the default `MUV` prescription such graphs
-are rejected at finite temperature, with and without integrated counterterms. The integrated
-add-back of a zero-mode subtraction is not generated yet: with the default
-`generate_integrated = true`, generating a graph that has a zero-mode host stops with an error
-saying so, and `generate_integrated = false` generates the local subtraction alone. The
-subtraction works with and without vacuum subtraction. A UV counterterm applied to a
+are rejected at finite temperature, with and without integrated counterterms. With the default
+`generate_integrated = true`, every UV counterterm with the mass `runtime.general.m_uv` gets its
+integrated counterpart, which converts it to 4D MS-bar, also where a zero-mode subtraction acts
+on it, so that results do not depend on `m_uv`. The zero-mode subtractions themselves and the
+static UV counterterms described next stay local: their integrated add-back is not generated yet.
+The integrated counterparts are spread over the loop momenta of their subgraphs with the width
+`runtime.general.renormalization_localization_scale`, which should be of the order of the
+temperature. An integrated counterterm is localized on the rest of the graph. Where the
+counterterm's numerator raises that rest's loop-energy degree above its propagators', as for a
+gluon polarization loop and a second polarization loop joined by two gluons, a part polynomial
+in the loop energy is left over. It has no thermal part, and vacuum subtraction removes it
+exactly, so such graphs need `global.generation.medium.vacuum_subtraction = true` with
+integrated counterterms; without it generation stops with an error that names the counterterm
+and asks for vacuum subtraction. With vacuum subtraction such graphs generate like the others.
+Where the left-over part multiplies propagators of that rest, vacuum subtraction does not remove
+it, and generation stops with an error either way.
+`generate_integrated = false` generates the local subtraction alone. The subtraction works with
+and without vacuum subtraction. A UV counterterm applied to a
 zero-mode subtraction whose subgraph holds static soft lines of that subtraction is, on that
 term, a UV counterterm of the static theory: it regulates those lines with the mass
-`runtime.general.m_ir`. That setting has the default of `runtime.general.m_uv` (1000) but does
-not follow it, so set both when changing `m_uv`. The choice is made per term: the same
+`runtime.general.m_ir`. That setting is a parameter of the static theory's scheme, independent
+of `runtime.general.m_uv`: it has its own default, 1000, and does not follow `m_uv`, so set it
+explicitly. The choice is made per term: the same
 counterterm keeps `m_uv` on the terms without such a zero-mode subtraction, and so do the
-host's own counterterm and all other counterterms. Without the integrated add-back, results
-depend on `runtime.general.m_uv` and `runtime.general.m_ir`. Near a soft static mode the
+host's own counterterm and all other counterterms. Since the add-back of the zero-mode
+subtractions and static counterterms is deferred, results can depend on
+`runtime.general.m_ir`, and with `generate_integrated = false` also on `runtime.general.m_uv`.
+Near a soft static mode the
 remainder's rounding error cannot be
 estimated by rotations, so in graphs with a zero-mode
 subtraction evaluation starts at higher precision when the softest static line is soft

@@ -251,7 +251,11 @@ pub struct GeneralSettings {
     /// host's own counterterm and all other counterterms. Must be finite and positive.
     #[serde(skip_serializing_if = "is_float::<1000>")]
     pub m_ir: f64,
-    /// Localization scale applied to ultraviolet counterterms, in the model's energy units.
+    /// Localization scale applied to ultraviolet counterterms, in the model's energy units: the
+    /// width of the normalized kernel that spreads each integrated counterterm over the loop
+    /// momenta of its subgraph. Integrated results do not depend on it. At finite temperature,
+    /// keep it of the order of the temperature: much larger values make the localized
+    /// counterterms negligible against the local ones at thermal momenta.
     #[serde(skip_serializing_if = "is_float::<1000>")]
     pub renormalization_localization_scale: f64,
     /// Renormalization scale used by running parameters and scale-dependent terms.

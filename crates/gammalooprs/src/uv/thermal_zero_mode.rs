@@ -299,6 +299,21 @@ impl ThermalZeroModeRegion {
     pub(crate) fn coordinate_loop_edges(&self) -> &[EdgeIndex] {
         &self.coordinate_loop_edges
     }
+
+    /// The first frequency class of which the integrated lines `contracted`
+    /// hold some edges but not all, if any. A wholly contracted class leaves
+    /// the zero mode no class energy, so the zero-mode operation vanishes
+    /// exactly there; a partly contracted one would leave its Laurent
+    /// projection incomplete.
+    pub(crate) fn partly_contracted_class(
+        &self,
+        contracted: &BTreeSet<EdgeIndex>,
+    ) -> Option<&ZeroModeClassSpec> {
+        self.classes.iter().find(|class| {
+            let held = class.edges().intersection(contracted).count();
+            held != 0 && held != class.edges().len()
+        })
+    }
 }
 
 impl Display for ThermalZeroModeRegion {
@@ -394,6 +409,35 @@ pub(crate) enum ZeroModeHostError {
         .host.iter().join(",")
     )]
     CollectiveUnionScope { host: BTreeSet<EdgeIndex> },
+    /// A bug: an integrated prefix reaches the zero-mode operation of a host
+    /// either inside the host, which leaves its soft set alone, or in a
+    /// replay that keeps the host's plain U alone.
+    #[error(
+        "internal error: the integrated prefix {{{}}} contracts part of the frequency class {} \
+         of the zero-mode host {{{}}}",
+        .prefix.iter().join(","),
+        .class,
+        .host.iter().join(",")
+    )]
+    PartlyContractedClass {
+        host: BTreeSet<EdgeIndex>,
+        class: ZeroModeClassSpec,
+        prefix: BTreeSet<EdgeIndex>,
+    },
+    /// A bug: the integrated prefixes that the replay of a factorized join
+    /// sends through a union host are joins of its components' prefixes, so
+    /// they lie inside the host, apart from its soft set. A union host has no
+    /// U of its own to replay on a prefix in its soft set.
+    #[error(
+        "internal error: the integrated prefix {{{}}} lies in the soft set of the union \
+         zero-mode host {{{}}}",
+        .prefix.iter().join(","),
+        .host.iter().join(",")
+    )]
+    PrefixInUnionSoftSet {
+        host: BTreeSet<EdgeIndex>,
+        prefix: BTreeSet<EdgeIndex>,
+    },
     /// A bug: the frequency classes of a soft set always span its loops.
     #[error(
         "internal error: the frequency classes of the soft set {{{}}} span {rank} of its \

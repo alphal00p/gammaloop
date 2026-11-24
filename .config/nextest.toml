@@ -151,7 +151,14 @@ test-group = "integration"
 # tadpole ring and the quark bubble under a minute each. The
 # `thermal_quark_ring_default_stability_levels*` tests, which check the quark
 # ring's default stability levels against arb at widely separated scales, took
-# about 1 and 2-3 min.
+# about 1 and 2-3 min. The `*_integrated_zero_mode_subtraction*` tests repeat the
+# ring cases with integrated counterterms. Their generation dominates, mostly in the
+# numerator algebra of the zero-temperature lane: run in parallel at load 70-180, the
+# tadpole ring took 10 and 23 min, the quark ring 24 and 59 min and the ghost ring 33
+# and 60 min (with and without vacuum subtraction); the mixed ring, with vacuum subtraction
+# only, took 104 min to generate and 136 min in all (`ci_slow` override below). Without
+# vacuum subtraction it must stop at the localization of the join's add-back, which
+# `thermal_gluon_quark_ring_integrated_generation_requires_vacuum_subtraction` checks in 5 min.
 filter = "binary(=thermal_soft_ct)"
 test-group = "soft-ct-serial"
 slow-timeout = { period = "10m", terminate-after = 12, on-timeout = "fail" }
@@ -364,6 +371,12 @@ test(=aa_aa::aa_aa_integrated_graph_histogram_bins) or
 [[profile.ci_slow.overrides]]
 filter = "package(=gammaloop-integration-tests) and binary(=uv) and test(=slow::paper_figure_b1_massless_bubble_uses_a_complete_soft_wood)"
 slow-timeout = { period = "60m", terminate-after = 3, on-timeout = "fail" }
+
+# The gluon ring with integrated counterterms took 104 min to generate and 136 min in all
+# (load 170-190), beyond the profile's two hours.
+[[profile.ci_slow.overrides]]
+filter = "package(=gammaloop-integration-tests) and binary(=thermal_soft_ct) and test(=thermal_gluon_quark_ring_integrated_zero_mode_subtraction)"
+slow-timeout = { period = "60m", terminate-after = 4, on-timeout = "fail" }
 
 [profile.ci_slow.junit]
 path = "junit.xml"

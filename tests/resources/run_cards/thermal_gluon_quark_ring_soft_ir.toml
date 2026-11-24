@@ -19,6 +19,33 @@ commands = [
 ]
 
 [[command_blocks]]
+# Integrated counterterms: every UV counterterm with m_uv adds back its finite conversion
+# to MS-bar, also inside the zero-mode terms. The zero-mode operations and the static
+# theory's counterterms (m_ir, set explicitly below) stay local. The add-backs are
+# localized at the thermal scale, where the IR and UV profiles see them: the default
+# localization scale 1000 suppresses them by about 1e-9 at momenta of order T and puts
+# the UV profiles' range 1e3 .. 1e6 across the scale of the localization kernel.
+# The join's add-back C_A C_B sits on the bare gluon loop, whose three-gluon vertices
+# raise the numerator's energy degree above its propagators': its localization omits the
+# polynomial energy contact, which vacuum subtraction removes.
+name = "generate_integrated"
+commands = [
+  "set global kv global.generation.uv.generate_integrated=true",
+  "set default-runtime kv general.renormalization_localization_scale=1.0",
+  "run generate",
+]
+
+[[command_blocks]]
+# Expected to fail: without vacuum subtraction no 3D integrand represents the polynomial
+# energy contact of the join's add-back, so generation stops at its localization with an
+# error that names the join and its cograph and asks for vacuum subtraction.
+name = "generate_integrated_novacsub"
+commands = [
+  "set global kv global.generation.medium.vacuum_subtraction=false",
+  "run generate_integrated",
+]
+
+[[command_blocks]]
 # Expected to fail: under MUV no zero-mode host subtracts the static soft set {e0,e1} of
 # the q-gluons, so the scheme validation stops generation with the hostless error, which
 # names renormalization_prescription.massless_power_divergent = IR.

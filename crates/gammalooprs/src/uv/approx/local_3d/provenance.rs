@@ -148,30 +148,30 @@ impl Local3DLoopRescaling {
                 Local3DMaterialization::FactorizedSoft,
             )
         };
-        let (conceptual_branches, materialization) =
-            match current.thermal_zero_mode().map(ThermalZeroModeRegion::kind) {
-                // A connected zero-mode host subtracts its zero mode and the UV of
-                // its hard part: S0 + U - U S0.
-                Some(ZeroModeHostKind::Connected) if !rescaled_subgraph.is_empty() => {
-                    soft_and_hard()
-                }
-                // A union host applies S0 alone; the U of each factor precedes it
-                // in the forest. So does a connected host on its own integrated
-                // add-back, which holds its U: the self-suffix.
-                Some(ZeroModeHostKind::Connected | ZeroModeHostKind::Union) => (
-                    vec![signed(Local3DConceptualBranch::S, 1)],
-                    Local3DMaterialization::FactorizedSoft,
-                ),
-                None if current.renormalization_scheme() == ApproximationType::IR
-                    && current.dod() > 0 =>
-                {
-                    soft_and_hard()
-                }
-                None => (
-                    vec![signed(Local3DConceptualBranch::U, 1)],
-                    Local3DMaterialization::DirectU,
-                ),
-            };
+        let (conceptual_branches, materialization) = match current
+            .thermal_zero_mode()
+            .map(ThermalZeroModeRegion::kind)
+        {
+            // A connected zero-mode host subtracts its zero mode and the UV of
+            // its hard part: S0 + U - U S0.
+            Some(ZeroModeHostKind::Connected) if !rescaled_subgraph.is_empty() => soft_and_hard(),
+            // A union host applies S0 alone; the U of each factor precedes it
+            // in the forest. So does a connected host on its own integrated
+            // add-back, which holds its U: the self-suffix.
+            Some(ZeroModeHostKind::Connected | ZeroModeHostKind::Union) => (
+                vec![signed(Local3DConceptualBranch::S, 1)],
+                Local3DMaterialization::FactorizedSoft,
+            ),
+            None if current.renormalization_scheme() == ApproximationType::IR
+                && current.dod() > 0 =>
+            {
+                soft_and_hard()
+            }
+            None => (
+                vec![signed(Local3DConceptualBranch::U, 1)],
+                Local3DMaterialization::DirectU,
+            ),
+        };
 
         Local3DProjectionStep {
             topo_order: current.topo_order(),

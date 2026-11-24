@@ -475,11 +475,39 @@ fn soft_hard_laurent_projection_matches_external_jets_and_keeps_mass() -> Result
 
 #[test]
 fn integrated_mass_vertex_keeps_its_soft_weight_and_scalar_logs() -> Result<()> {
-    test_initialise()?;
     // Diagnostic effective-vertex fixture: the integrated tadpole supplies
     // the same mass/log structure as the finite massive-fermion self-energy.
-    // Its enclosing scalar bubble isolates m/(k^2-m^2)^2, whose degree-one
-    // soft completion is the complete physical-mass zero-external-momentum jet.
+    assert_integrated_vertex_keeps_its_soft_jet(|physical_mass| {
+        physical_mass
+            * (Atom::one() + Atom::num(2) * function!(Symbol::LOG, GS.mu_r_sq)
+                - Atom::num(4) * function!(Symbol::LOG, physical_mass.clone()))
+    })
+}
+
+/// The integrated counterterms of the zero-temperature lane hold the vacuum
+/// mass also as the expansion mass `mUVexp` of their U, beside the terminal
+/// `mUV`. The soft chart expands at fixed masses, so it co-scales that mass
+/// like the vertex's physical masses: the soft jet of a vertex with an
+/// `mUVexp` term next to a physical-mass term keeps both at zero external
+/// momentum, and holds the logarithm of the physical mass fixed.
+#[test]
+fn integrated_expansion_mass_vertex_keeps_its_soft_weight() -> Result<()> {
+    assert_integrated_vertex_keeps_its_soft_jet(|physical_mass| {
+        (Atom::num(3) * Atom::var(GS.m_uv_expansion) - Atom::num(2) * physical_mass)
+            * (Atom::one() - Atom::num(4) * function!(Symbol::LOG, physical_mass.clone()))
+    })
+}
+
+/// The degree-one soft operation of a scalar bubble on the add-back of the
+/// integrated massive tadpole inside it, whose finite counterterm
+/// `coefficient(m)` has dimension one, is the zero-external-momentum jet of
+/// that add-back at fixed masses: the bubble isolates `m/(k^2-m^2)^2`, whose
+/// degree-one soft completion is the complete jet. Scalar logarithms stay
+/// literal.
+fn assert_integrated_vertex_keeps_its_soft_jet(
+    coefficient: impl FnOnce(&Atom) -> Atom,
+) -> Result<()> {
+    test_initialise()?;
     let mut graph: Graph = dot!(
         digraph integrated_mass_vertex {
             edge [particle="H" num=1];
@@ -507,9 +535,7 @@ fn integrated_mass_vertex_keeps_its_soft_weight_and_scalar_logs() -> Result<()> 
         .2
         .data
         .mass_atom();
-    let coefficient = &physical_mass
-        * (Atom::one() + Atom::num(2) * function!(Symbol::LOG, GS.mu_r_sq)
-            - Atom::num(4) * function!(Symbol::LOG, physical_mass.clone()));
+    let coefficient = coefficient(&physical_mass);
     let settings = UVgenerationSettings {
         add_marker: false,
         ..Default::default()

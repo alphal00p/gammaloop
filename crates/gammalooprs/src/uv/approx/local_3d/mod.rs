@@ -4,6 +4,7 @@ use color_eyre::Result;
 use eyre::eyre;
 #[cfg(test)]
 use symbolica::atom::Atom;
+use three_dimensional_reps::UnlocalizedEnergyContacts;
 
 use crate::{
     cff::{expression::OrientationID, surface::LinearEnergyExpr},
@@ -15,6 +16,8 @@ use crate::{
 };
 
 mod integrated_localizer;
+#[cfg(test)]
+pub(crate) use integrated_localizer::IntegratedLocalizationError;
 mod provenance;
 pub(in crate::uv) use provenance::paths_with_step;
 #[cfg(test)]
@@ -62,6 +65,9 @@ pub(crate) struct Localizer<'a> {
     pub(super) cutset: &'a CutSet,
     pub(super) orientation: OrientationProjection<'a>,
     pub(super) source_selector_hosting: SourceSelectorHosting,
+    /// Whether generation may omit an unlocalized energy contact; only the
+    /// localization of a vacuum-subtracted integrated add-back permits it.
+    pub(super) unlocalized_energy_contacts: UnlocalizedEnergyContacts,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

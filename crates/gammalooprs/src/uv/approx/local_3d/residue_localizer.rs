@@ -12,6 +12,7 @@ use linnet::half_edge::{
 use symbolica::atom::Atom;
 use three_dimensional_reps::{
     CffGenerationContext, Generate3DExpressionOptions, GeneratedThreeDExpression,
+    UnlocalizedEnergyContacts,
 };
 
 use crate::{
@@ -36,6 +37,7 @@ impl<'a> Localizer<'a> {
             cutset,
             orientation,
             source_selector_hosting: SourceSelectorHosting::PhysicalPrefix,
+            unlocalized_energy_contacts: UnlocalizedEnergyContacts::Reject,
         }
     }
 
@@ -45,6 +47,16 @@ impl<'a> Localizer<'a> {
     /// discard a source-local residue map.
     pub(in crate::uv::approx) fn with_independent_source_sum(mut self) -> Self {
         self.source_selector_hosting = SourceSelectorHosting::IndependentSum;
+        self
+    }
+
+    /// Generate the CFF with `contacts` as the treatment of an unlocalized
+    /// energy contact.
+    pub(super) fn with_unlocalized_energy_contacts(
+        mut self,
+        contacts: UnlocalizedEnergyContacts,
+    ) -> Self {
+        self.unlocalized_energy_contacts = contacts;
         self
     }
 
@@ -59,6 +71,7 @@ impl<'a> Localizer<'a> {
             .subtract(&graph.initial_state_cut);
         let mut options = self.orientation.cff_options()?.clone();
         options.cff_generation_context = generation_context;
+        options.unlocalized_energy_contacts = self.unlocalized_energy_contacts;
         Ok((contract_subgraph, options))
     }
 

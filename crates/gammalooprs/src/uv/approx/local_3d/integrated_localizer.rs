@@ -1,7 +1,12 @@
+use std::collections::BTreeSet;
+
 use color_eyre::Result;
+use itertools::Itertools;
+use linnet::half_edge::involution::EdgeIndex;
 use linnet::half_edge::subgraph::{SubSetLike, SubSetOps};
 use symbolica::atom::Atom;
-use three_dimensional_reps::CffGenerationContext;
+use thiserror::Error;
+use three_dimensional_reps::{CffGenerationContext, GenerationError, UnlocalizedEnergyContacts};
 
 use crate::{
     debug_tags,
@@ -12,6 +17,31 @@ use crate::{
 
 use super::{FrozenActiveCt, Localizer, OrientationIntegrands};
 
+/// A failure to localize an integrated counterterm on its cograph.
+#[derive(Debug, Error)]
+pub(crate) enum IntegratedLocalizationError {
+    /// The counterterm's numerator raises the cograph's loop-energy degree
+    /// above its propagators', so contracting the last of them leaves a
+    /// polynomial energy contact and no denominator. It has no residue and a
+    /// strict 3D integrand cannot represent it; vacuum subtraction removes it
+    /// exactly. A contact beside surviving denominators, which vacuum
+    /// subtraction keeps, is not this error.
+    #[error(
+        "the integrated counterterm of {{{}}} cannot be localized on its cograph {{{}}} \
+         without vacuum subtraction: the cograph's numerator exceeds the loop-energy degree \
+         of its propagators, which leaves a polynomial energy contact of power {power} that \
+         only vacuum subtraction removes; set `global.generation.medium.vacuum_subtraction = \
+         true`",
+        .node.iter().join(","),
+        .cograph.iter().join(",")
+    )]
+    EnergyContactRequiresVacuumSubtraction {
+        node: BTreeSet<EdgeIndex>,
+        cograph: BTreeSet<EdgeIndex>,
+        power: usize,
+    },
+}
+
 impl Localizer<'_> {
     pub(crate) fn localize<S: ForestNodeLike>(
         &self,
@@ -19,12 +49,7 @@ impl Localizer<'_> {
         graph: &mut Graph,
         integrated_node: &S,
     ) -> Result<FrozenActiveCt> {
-        // A vacuum-subtracted thermal weight `W - V(W)` vanishes on a cograph
-        // without loops, the one left by an operation that covers every
-        // loop, so that its add-back vanishes with its local U.
-        let loopless_cograph =
-            graph.n_loops(integrated_node.subgraph()) == graph.n_loops(&graph.full_filter());
-        if expr.is_zero() || (self.orientation.vacuum_subtraction && loopless_cograph) {
+        if expr.is_zero() {
             let indices = self.cutset.residue_selector.generate_allowed_keys();
             return Ok(FrozenActiveCt {
                 active: OrientationIntegrands::from_ids_and_indices(
@@ -69,15 +94,51 @@ impl Localizer<'_> {
         let analysis_numerator = expr * &outside_numerator;
 
         let localizing_integrand = GS.localizing_integrand(integrated_node.lmb());
+        // The finite counterterm can raise the cograph's loop-energy degree
+        // above its propagators', as the three-gluon vertices of a gluon loop
+        // between two integrated bubbles do. Contracting the last of them then
+        // leaves a quotient polynomial in that energy, which has no residue:
+        // beside no denominator its weight is the bare medium unit, which the
+        // vacuum subtraction of the localized weight maps to zero, so
+        // generation may omit it there. Without vacuum subtraction no 3D
+        // integrand represents it; beside surviving denominators vacuum
+        // subtraction keeps it, so the generator's error stays.
+        let vacuum_subtraction = self.orientation.vacuum_subtraction;
+        let contacts = if vacuum_subtraction {
+            UnlocalizedEnergyContacts::OmitUnderVacuumSubtraction
+        } else {
+            UnlocalizedEnergyContacts::Reject
+        };
         // Integration replaces the contracted spinney by an independent
         // coefficient. Its cograph residue maps need not extend to a complete
         // production map, but each still belongs to the finite addback once.
-        let mut active = self.with_independent_source_sum().projected_cff(
-            graph,
-            to_contract,
-            [&analysis_numerator],
-            CffGenerationContext::Standalone,
-        )?;
+        let mut active = self
+            .with_independent_source_sum()
+            .with_unlocalized_energy_contacts(contacts)
+            .projected_cff(
+                graph,
+                to_contract,
+                [&analysis_numerator],
+                CffGenerationContext::Standalone,
+            )
+            .map_err(|error| {
+                let removable_contact_power = match error.downcast_ref::<GenerationError>() {
+                    Some(GenerationError::UnlocalizedEnergyContact {
+                        power, remainder, ..
+                    }) if remainder.is_removed_by_vacuum_subtraction() => Some(*power),
+                    _ => None,
+                };
+                match removable_contact_power {
+                    Some(power) if !vacuum_subtraction => error.wrap_err(
+                        IntegratedLocalizationError::EnergyContactRequiresVacuumSubtraction {
+                            node: graph.paired_edges(to_contract).into_iter().collect(),
+                            cograph: graph.paired_edges(&reduced).into_iter().collect(),
+                            power,
+                        },
+                    ),
+                    _ => error,
+                }
+            })?;
         for branch in &mut active.0 {
             // A source map owns the finite coefficient for every cut order;
             // attaching it must not repeat the same numerator substitution.

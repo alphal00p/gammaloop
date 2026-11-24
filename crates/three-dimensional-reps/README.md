@@ -73,3 +73,13 @@ LTD residue terms must be summed together for their H-surface cancellation.
 Physical-pole localization uses the same factorized affine maps. When
 localization creates a raised pole, its Laurent coefficients request polynomial
 bounds lazily; ordinary simple-pole generation remains independent of them.
+
+A CFF numerator whose loop-energy degree exceeds that of the last denominator
+carrying the energy leaves a quotient polynomial in it, which no residue
+localizes: generation reports `GenerationError::UnlocalizedEnergyContact`. A
+caller that vacuum-subtracts the completed medium weights may set
+`Generate3DExpressionOptions::unlocalized_energy_contacts` to
+`OmitUnderVacuumSubtraction`; a quotient whose term keeps no denominator has the
+bare medium unit as its weight, which the subtraction maps to zero, so it is
+omitted. Quotients beside surviving denominators are still reported. The error
+records which of the two a quotient is (`EnergyContactRemainder`).

@@ -39,7 +39,7 @@ use symbolica::domains::rational::Rational;
 use three_dimensional_reps::{
     CffEnergyFactorOwnership, CffGenerationContext, EnergyEdgeIndexMap,
     Generate3DExpressionOptions, GeneratedThreeDExpression, NumeratorSamplingScaleMode,
-    ParsedGraph, RepresentationMode, ThreeDGraphSource,
+    ParsedGraph, RepresentationMode, ThreeDGraphSource, UnlocalizedEnergyContacts,
     tree::{NodeId, Tree},
 };
 
@@ -1288,6 +1288,7 @@ impl Graph {
             medium_mode: Default::default(),
             representation: RepresentationMode::Cff,
             cff_generation_context: CffGenerationContext::Standalone,
+            unlocalized_energy_contacts: UnlocalizedEnergyContacts::Reject,
             energy_degree_bounds: Some(energy_degree_bounds),
             numerator_sampling_scale,
             preserve_internal_edges_as_four_d_denominators: Vec::new(),
@@ -1300,6 +1301,7 @@ impl Graph {
             medium_mode: Default::default(),
             representation: RepresentationMode::Cff,
             cff_generation_context: CffGenerationContext::Standalone,
+            unlocalized_energy_contacts: UnlocalizedEnergyContacts::Reject,
             energy_degree_bounds: Some(Vec::new()),
             numerator_sampling_scale: NumeratorSamplingScaleMode::None,
             preserve_internal_edges_as_four_d_denominators: Vec::new(),

@@ -1,4 +1,8 @@
-use std::{collections::BTreeMap, iter, ops::Neg};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    iter,
+    ops::Neg,
+};
 
 use color_eyre::Result;
 use eyre::{WrapErr, eyre};
@@ -23,7 +27,7 @@ use crate::{
             },
         },
         marker::{UvMarker, UvOperation},
-        thermal_zero_mode::ZeroModeHostKind,
+        thermal_zero_mode::{ZeroModeHostError, ZeroModeHostKind},
         uv_graph::UVE,
     },
 };
@@ -504,24 +508,39 @@ impl<'a> Direct3dApproximation<'a> {
                     let mut coefficient = coefficient
                         .replace(GS.m_uv_vacuum)
                         .with(function!(GS.m_uv_vacuum, component.subgraph().symbol()));
-                    let mut masses = Vec::new();
+                    // The vertex's other masses carry its mass scope: its physical
+                    // masses and the expansion mass `mUVexp`, which the mass
+                    // rearrangement of the integrated U leaves in its numerators
+                    // beside the terminal `mUV` of its propagators. Ordinary charts
+                    // hold them fixed, as the zero-temperature lane does; soft and
+                    // zero-mode charts, which expand at fixed masses, co-scale them
+                    // once they contain the component.
+                    let mut masses = vec![Atom::var(GS.m_uv_expansion)];
                     for (pair, _, edge) in self.graph.iter_edges_of(component.subgraph()) {
                         let mass = edge.data.mass_atom();
                         if pair.is_paired() && !mass.is_zero() && !masses.contains(&mass) {
-                            // The soft jet holds scalar mass logarithms fixed.
-                            // Only algebraic mass factors carry the effective
-                            // vertex's engineering weight in the hard-dual chart.
-                            coefficient = coefficient
-                                .replace(mass.clone())
-                                .max_level(0)
-                                .with(&mass * &mass_scope);
                             masses.push(mass);
                         }
                     }
+                    for mass in &masses {
+                        // The soft jet holds scalar mass logarithms fixed.
+                        // Only algebraic mass factors carry the effective
+                        // vertex's engineering weight in the hard-dual chart.
+                        coefficient = coefficient
+                            .replace(mass.clone())
+                            .max_level(0)
+                            .with(mass * &mass_scope);
+                    }
                     product * coefficient
                 });
-        let (active, frozen_integrands) =
-            self.localize_integrated(&finite_counterterm, integrated_node)?;
+        let (active, frozen_integrands) = self
+            .localize_integrated(&finite_counterterm, integrated_node)
+            .wrap_err_with(|| {
+                format!(
+                    "while localizing the integrated counterterm of {} on its cograph",
+                    integrated_node.subgraph().string_label()
+                )
+            })?;
         let contracted = self.graph.empty_subgraph();
         let self_suffix = match integrated_node.thermal_zero_mode() {
             Some(region)
@@ -529,8 +548,14 @@ impl<'a> Direct3dApproximation<'a> {
                     && !finite_counterterm.is_zero() =>
             {
                 let ctx = UVCtx::new(self.graph, self.settings);
-                let (canonical_lmb, chart) =
-                    coordinate_lmb(&ctx, integrated_node, integrated_node, None, &[], &contracted)?;
+                let (canonical_lmb, chart) = coordinate_lmb(
+                    &ctx,
+                    integrated_node,
+                    integrated_node,
+                    None,
+                    &[],
+                    &contracted,
+                )?;
                 let self_suffix = -apply_taylor(
                     &ctx,
                     self.localizer.orientation,
@@ -580,6 +605,14 @@ impl<'a> Direct3dApproximation<'a> {
     /// The sectors of the integrated prefix `finite_counterterms` of
     /// `integrated_node` ([`Self::localize_prefix`]) after the local
     /// operation of `current` given `given`, with its subtraction minus.
+    ///
+    /// # Errors
+    ///
+    /// The localization or the operation fails. A zero-mode host acting on a
+    /// prefix that contracts part of one of its frequency classes is an
+    /// internal error: the prefix of a sequential chain lies inside the host,
+    /// and the replay of a factorized join keeps only the plain U of a
+    /// connected host whose soft set the prefix meets.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn run_integrated<S: ForestNodeLike, I: ForestNodeLike, M: ForestNodeLike>(
         &mut self,
@@ -590,6 +623,25 @@ impl<'a> Direct3dApproximation<'a> {
         marker_current: &M,
         marker_given: &M,
     ) -> Result<Direct3dCts> {
+        if let Some(region) = current.thermal_zero_mode() {
+            let prefix = self
+                .graph
+                .paired_edges(integrated_node.subgraph())
+                .into_iter()
+                .collect::<BTreeSet<_>>();
+            if let Some(class) = region.partly_contracted_class(&prefix) {
+                return Err(ZeroModeHostError::PartlyContractedClass {
+                    host: self
+                        .graph
+                        .paired_edges(current.subgraph())
+                        .into_iter()
+                        .collect(),
+                    class: class.clone(),
+                    prefix,
+                }
+                .into());
+            }
+        }
         let prefix = self.localize_prefix(finite_counterterms, integrated_node)?;
         let ctx = UVCtx::new(self.graph, self.settings);
         let active_subgraph = current.reduced_subgraph(given);

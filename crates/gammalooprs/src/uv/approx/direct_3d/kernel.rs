@@ -612,11 +612,8 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
             // When that annihilates the input, as for the whole-graph U on a
             // chain without a frozen soft branch, skip the numerator and
             // Taylor work.
-            let soft_branches = SoftBranches::new(
-                ctx.graph,
-                current.subgraph(),
-                Local3DDeformation::Ordinary,
-            );
+            let soft_branches =
+                SoftBranches::new(ctx.graph, current.subgraph(), Local3DDeformation::Ordinary);
             let projected = integrands.fallible_map(|_, atom| {
                 Direct3dApproximation::project_unfrozen_occupations(
                     ctx,
@@ -878,8 +875,8 @@ fn ensure_zero_mode_chart<S: ForestNodeLike>(
         BTreeSet::new()
     } else {
         let canonical_lmb = graph.canonical_component_lmb(current.subgraph())?;
-        let internal = InternalSubGraph::try_new(contracted.clone(), graph.as_ref())
-            .ok_or_else(|| {
+        let internal =
+            InternalSubGraph::try_new(contracted.clone(), graph.as_ref()).ok_or_else(|| {
                 eyre!(
                     "internal error: the integrated part of the zero-mode host {host} is not an \
                      internal subgraph"
@@ -925,8 +922,10 @@ fn ensure_zero_mode_chart<S: ForestNodeLike>(
 ///
 /// The propagators stay apart while the host's own charts act on the
 /// coefficient. They do not depend on the Taylor parameter, and multiplied
-/// in only afterwards they remain top-level factors of every summand, which
-/// an enclosing projection reads off without expanding a frozen branch again.
+/// in only afterwards they remain factors of every summand, which an
+/// enclosing projection reads off without expanding a frozen branch again:
+/// top-level ones, until a later operation's Taylor coefficients carry them
+/// in each term of a sum, through which the projection still reads them.
 struct ZeroModeTerm {
     frozen: DirectResidueBranches,
     propagators: Atom,
@@ -1397,9 +1396,10 @@ impl Direct3dApproximation<'_> {
         // the algebraic vacuum masses of a contained integrated vertex, whose
         // homogeneity turns that into the soft expansion, but holds their
         // logarithms fixed, as the prefix localizer does for physical masses
-        // (`Direct3dApproximation::run_integrated`): those are logarithms
+        // (`Direct3dApproximation::localize_prefix`): those are logarithms
         // of the vacuum mass over the MS-bar scale, which the soft expansion
-        // leaves alone.
+        // leaves alone. The vertex's expansion mass and physical masses carry
+        // its mass scope, which the soft charts co-scaled above.
         let zero_mode_chart = matches!(deformation, Local3DDeformation::ZeroMode { .. });
         let mut invalid_mass_owner = None;
         atomarg = atomarg.replace_map(|view, _, output| {

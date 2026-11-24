@@ -24,9 +24,12 @@
 //!
 //! A summand that a class has already projected, `c OSE(rep)^-a` with `c`
 //! free of class energies, is its own coefficient of order `a` and is not
-//! expanded again. Projections are therefore idempotent, and a frozen
-//! projected branch never enters the hard-vacuum sector, whose order such a
-//! summand only has if an earlier hard-vacuum projection gave it. A summand
+//! expanded again. Its propagators need not be top-level factors: a later
+//! operation's Taylor coefficients may carry them in each term of a sum,
+//! through which the order is read without an expansion. Projections are
+//! therefore idempotent, and a frozen projected branch never enters the
+//! hard-vacuum sector, whose order such a summand only has if an earlier
+//! hard-vacuum projection gave it. A summand
 //! without any class energy has no zero-mode pole, for instance once an
 //! ordinary operation has rewritten every class energy of the family into
 //! routed, massive ones.
@@ -46,7 +49,7 @@ use std::slice;
 use color_eyre::Result;
 use eyre::Report;
 use linnet::half_edge::involution::EdgeIndex;
-use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
+use symbolica::atom::{Atom, AtomCore, AtomOrView, AtomView, Symbol};
 use symbolica::function;
 use symbolica::id::Replacement;
 use thiserror::Error;
@@ -232,29 +235,78 @@ impl<'c> ProjectedOrders<'c> {
     /// The order `a` of a summand `c OSE(rep)^-a` whose `c` names no class
     /// energy, also not through the numerator families it calls at their
     /// arguments, or `None` when it still needs its Laurent expansion. A
-    /// summand without any class energy has order zero.
+    /// summand without any class energy has order zero. The class
+    /// propagators need not be top-level factors of the summand
+    /// ([`Self::propagator_degree`]).
     fn order(&mut self, summand: AtomView<'_>) -> Option<i64> {
-        let factors = match summand {
-            AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
-            _ => vec![summand],
-        };
-        let representative = self.representative.as_view();
-        let mut order = 0;
-        for factor in factors {
-            let power = match factor {
-                AtomView::Pow(power) if power.get_base() == representative => {
-                    i64::try_from(power.get_exp()).ok()
-                }
-                _ if factor == representative => Some(1),
-                _ => None,
-            };
-            match power {
-                Some(power) => order -= power,
-                None if self.class.names_energy(factor) => return None,
-                None => {}
-            }
+        let degree = self.propagator_degree(summand)?;
+        (!self.calls_dependent_family(summand)).then_some(-degree)
+    }
+
+    /// The degree `d` of `view` as `c OSE(rep)^d` with `c` free of class
+    /// energies, or `None` when `view` depends on a class energy in any
+    /// other way. A product adds the degrees of its factors and an integer
+    /// power multiplies that of its base; a sum has a degree when all its
+    /// terms share it.
+    ///
+    /// The restored class propagators are top-level factors of every
+    /// summand only until a later operation collects its Taylor
+    /// coefficients: the static U of a sibling loop on a completed branch
+    /// can gather two summands of one coefficient into a sum that each
+    /// carry the propagators, as a factor of that coefficient's numerator
+    /// family. The degree is read through that structure without expanding
+    /// it, so such a summand is still the projected `c OSE(rep)^d`.
+    fn propagator_degree(&self, view: AtomView<'_>) -> Option<i64> {
+        if view == self.representative.as_view() {
+            return Some(1);
         }
-        (!self.calls_dependent_family(summand)).then_some(order)
+        if !self.class.names_energy(view) {
+            return Some(0);
+        }
+        match view {
+            AtomView::Mul(product) => product.iter().try_fold(0, |degree, factor| {
+                Some(degree + self.propagator_degree(factor)?)
+            }),
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                Some(i64::try_from(exponent).ok()? * self.propagator_degree(base)?)
+            }
+            AtomView::Add(sum) => {
+                let mut degrees = sum.iter().map(|term| self.propagator_degree(term));
+                let first = degrees.next()??;
+                degrees.all(|degree| degree == Some(first)).then_some(first)
+            }
+            _ => None,
+        }
+    }
+
+    /// The coefficient `c` of a summand `c OSE(rep)^d` that has a
+    /// [`Self::propagator_degree`]: the summand with its class propagators
+    /// removed wherever that degree found them.
+    ///
+    /// # Panics
+    ///
+    /// `view` has no propagator degree.
+    fn coefficient<'a>(&self, view: AtomView<'a>) -> AtomOrView<'a> {
+        if view == self.representative.as_view() {
+            return Atom::num(1).into();
+        }
+        if !self.class.names_energy(view) {
+            return view.into();
+        }
+        match view {
+            AtomView::Mul(product) => {
+                Atom::mul_many(product.iter().map(|factor| self.coefficient(factor))).into()
+            }
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                self.coefficient(base).pow(exponent).into()
+            }
+            AtomView::Add(sum) => {
+                Atom::add_many(sum.iter().map(|term| self.coefficient(term))).into()
+            }
+            _ => unreachable!("a summand with a propagator degree has no other class energy"),
+        }
     }
 
     /// Whether `view` calls a numerator family whose body names a class
@@ -329,10 +381,10 @@ impl<'a> RootSummands<'a> {
     }
 
     /// The projected summands of `order` with their class propagators
-    /// `stripped` off: their coefficient `[x^-order]`.
-    fn projected_root(&self, order: i64, stripped: &Atom) -> Atom {
+    /// stripped off: their coefficient `[x^-order]`.
+    fn projected_root(&self, order: i64, orders: &ProjectedOrders<'_>) -> Atom {
         self.projected.get(&order).map_or(Atom::Zero, |summands| {
-            Atom::add_many(summands.iter().map(|summand| summand.to_owned() * stripped))
+            Atom::add_many(summands.iter().map(|summand| orders.coefficient(*summand)))
         })
     }
 }
@@ -583,10 +635,9 @@ impl ZeroModeClass {
             }
             // Strip the class propagators; they are restored once every
             // class is projected.
-            let stripped = orders.representative.pow(Atom::num(exponent));
             projected.insert(
                 *order,
-                SplitRow::family(&rows, |split| split.projected_root(exponent, &stripped))?,
+                SplitRow::family(&rows, |split| split.projected_root(exponent, &orders))?,
             );
         }
         Ok(ProjectedSplit { projected, pending })

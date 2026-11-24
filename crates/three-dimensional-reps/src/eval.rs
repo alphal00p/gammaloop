@@ -3860,14 +3860,17 @@ mod tests {
 
 #[cfg(test)]
 mod thermal_reference_tests {
+    use std::f64::consts::PI;
+
     use super::*;
+    use crate::graph_io::{
+        ParsedGraphExternalEdge, ParsedGraphInitialStateCutEdge, ParsedGraphInternalEdge,
+        test_graphs,
+    };
+    use crate::surface::LinearSurfaceKind;
     use crate::{
         Generate3DExpressionOptions, MediumMode, MomentumSignature, NumeratorSamplingScaleMode,
-        generate_3d_expression,
-        graph_io::{
-            ParsedGraphExternalEdge, ParsedGraphInitialStateCutEdge, ParsedGraphInternalEdge,
-        },
-        surface::LinearSurfaceKind,
+        UnlocalizedEnergyContacts, generate_3d_expression,
     };
 
     impl crate::ThermalWeight {
@@ -5487,6 +5490,267 @@ mod thermal_reference_tests {
                 assert!(
                     difference < tolerance,
                     "{name}, point {point}: {result:e} != {reference:e} (difference {difference:e} is larger than relative tolerance {tolerance:e})",
+                );
+            }
+        }
+    }
+
+    /// The even part of the polynomial `sum_k coefficients[k] q0^k` at the
+    /// Euclidean energy `q0 = i omega`. Its odd part is imaginary and cancels
+    /// between `omega` and `-omega` in every symmetric sum below.
+    fn even_part_at_imaginary_energy(coefficients: &[f64], omega: f64) -> f64 {
+        coefficients
+            .iter()
+            .enumerate()
+            .step_by(2)
+            .map(|(power, coefficient)| {
+                let sign = if power % 4 == 0 { 1.0 } else { -1.0 };
+                sign * coefficient * omega.powi(power as i32)
+            })
+            .sum()
+    }
+
+    /// `T sum_n f(omega_n) - int domega/(2 pi) f(omega)` at `beta = 1`, with
+    /// both regulated by `exp(-(omega/cutoff)^2)`. The vacuum integral is a
+    /// trapezoidal sum with a step far below `2 pi T`, which is exponentially
+    /// accurate for this smooth, rapidly decaying integrand. By Poisson
+    /// summation the difference samples the Fourier transform of the regulated
+    /// `f` at nonzero multiples of `1/T`: a polynomial part of `f` gives
+    /// nothing once the cutoff is large, and the regulator changes the
+    /// rational part only at relative order `cutoff^-2`, which the
+    /// extrapolation from two cutoffs removes.
+    fn regulated_matsubara_minus_vacuum(f: impl Fn(f64) -> f64) -> f64 {
+        let difference = |cutoff: f64| {
+            let regulated = |omega: f64| f(omega) * (-(omega / cutoff).powi(2)).exp();
+            let reach = 7.0 * cutoff;
+            let frequencies = (reach / (2.0 * PI)).ceil() as i64;
+            let matsubara = (-frequencies..=frequencies)
+                .map(|n| regulated(2.0 * PI * n as f64))
+                .sum::<f64>();
+            let step = 0.05;
+            let points = (reach / step).ceil() as i64;
+            let vacuum = (-points..=points)
+                .map(|j| regulated(step * j as f64))
+                .sum::<f64>()
+                * step
+                / (2.0 * PI);
+            matsubara - vacuum
+        };
+        let cutoff = 60.0;
+        (4.0 * difference(2.0 * cutoff) - difference(cutoff)) / 3.0
+    }
+
+    /// `(-1)^n`, the sign of `n` propagators `1 / (q0^2 - E^2)` at
+    /// `q0 = i omega`.
+    fn euclidean_sign(propagators: usize) -> f64 {
+        if propagators.is_multiple_of(2) {
+            1.0
+        } else {
+            -1.0
+        }
+    }
+
+    /// A one-loop vacuum source of the omission oracle: a numerator whose
+    /// loop-energy degree exceeds that of the denominators, its coefficients
+    /// `coefficients[k]` of `q0^k`, and the masses of its lines, either all
+    /// distinct or two equal ones that form one double pole.
+    struct ContactSource {
+        parsed: ParsedGraph,
+        bounds: Vec<(usize, usize)>,
+        numerator: &'static str,
+        coefficients: Vec<f64>,
+        masses: Vec<f64>,
+    }
+
+    impl ContactSource {
+        /// The vacuum-subtracted Matsubara sum at `beta = 1` of
+        /// `N(q0) / prod_e (q0^2 - E_e^2)` at the line energies `energies`,
+        /// from the partial fractions in `u = omega^2` at `q0 = i omega`:
+        /// `(-1)^n N_even / prod_e (u + E_e^2)`, the polynomial quotient
+        /// giving nothing. A simple pole `1/(u + E^2)` gives
+        /// `J_1 - J_1^vac`, a double pole `1/(u + E^2)^2` gives
+        /// `J_2 - J_2^vac`, with `J_r = T sum_n (omega_n^2 + E^2)^-r` and its
+        /// vacuum value. On shell, `N_even(u = -E^2)` is the even part of
+        /// `N(E)`, and its `u`-derivative is `-sum_k (k/2) c_k E^(k-2)`.
+        fn residue_part(&self, energies: &[f64]) -> f64 {
+            let even_terms = || self.coefficients.iter().enumerate().step_by(2);
+            let on_shell = |e: f64| {
+                even_terms()
+                    .map(|(power, coefficient)| coefficient * e.powi(power as i32))
+                    .sum::<f64>()
+            };
+            let slope = |e: f64| {
+                -even_terms()
+                    .skip(1)
+                    .map(|(power, coefficient)| {
+                        (power / 2) as f64 * coefficient * e.powi(power as i32 - 2)
+                    })
+                    .sum::<f64>()
+            };
+            let coth = |e: f64| 1.0 / (e / 2.0).tanh();
+            // J_1 and J_2 minus their vacuum values 1/(2E) and 1/(4E^3).
+            let dj1 = |e: f64| (coth(e) - 1.0) / (2.0 * e);
+            let dj2 = |e: f64| {
+                (coth(e) - 1.0) / (4.0 * e.powi(3)) + (coth(e) * coth(e) - 1.0) / (8.0 * e * e)
+            };
+            let sign = euclidean_sign(energies.len());
+            match energies {
+                [first, second] if first == second => {
+                    sign * (slope(*first) * dj1(*first) + on_shell(*first) * dj2(*first))
+                }
+                _ => {
+                    sign * energies
+                        .iter()
+                        .enumerate()
+                        .map(|(pole, e)| {
+                            let others = energies
+                                .iter()
+                                .enumerate()
+                                .filter(|(other, _)| *other != pole)
+                                .map(|(_, other)| other * other - e * e)
+                                .product::<f64>();
+                            on_shell(*e) / others * dj1(*e)
+                        })
+                        .sum::<f64>()
+                }
+            }
+        }
+
+        /// The even part of the integrand at `q0 = i omega`, the whole
+        /// integrand in the symmetric sums of
+        /// [`regulated_matsubara_minus_vacuum`].
+        fn euclidean_integrand(&self, energies: &[f64], omega: f64) -> f64 {
+            euclidean_sign(energies.len())
+                * even_part_at_imaginary_energy(&self.coefficients, omega)
+                / energies
+                    .iter()
+                    .map(|e| omega * omega + e * e)
+                    .product::<f64>()
+        }
+    }
+
+    /// A one-loop source whose numerator exceeds its denominators'
+    /// loop-energy degree, generated with unlocalized energy contacts omitted
+    /// under vacuum-subtracted weights, keeps exactly the residue part: its
+    /// vacuum-subtracted value `sum (W - V(W)) value` is the Matsubara sum
+    /// minus the vacuum integral of the whole integrand, polynomial quotient
+    /// included. Two independent references:
+    /// - analytic: the partial fractions in the Euclidean energy
+    ///   ([`ContactSource::residue_part`]), the polynomial quotient giving
+    ///   nothing;
+    /// - numeric: the regulated Matsubara sum minus the regulated vacuum
+    ///   integral of the whole integrand
+    ///   ([`regulated_matsubara_minus_vacuum`]).
+    ///
+    /// The sources reach both places that omit a quotient, for both numerator
+    /// sampling modes:
+    /// - a massive tadpole, whose occurrence interpolation contracts its line
+    ///   with a quotient of power two (`sample_occurrences`);
+    /// - a massless bubble of one double pole like the gluon loop between two
+    ///   contracted bubbles, with numerator degrees four and one, whose
+    ///   nested occurrence interpolation leaves a quotient of power one there
+    ///   too;
+    /// - a triangle of three distinct masses with numerator degrees four, two
+    ///   and two, whose interpolations leave a black-box line of total degree
+    ///   four as the last denominator, so that its residue samples are kept
+    ///   and its contact part, of power two, is omitted (`recursive_terms`).
+    #[test]
+    fn omitted_energy_contacts_leave_the_vacuum_subtracted_matsubara_sum() {
+        let loop_momentum = [0.3, -0.4, 1.2];
+        let sources = [
+            ContactSource {
+                parsed: test_graphs::vacuum_tadpole_graph(),
+                bounds: vec![(0, 4)],
+                numerator: "edges[0][0]**4+0.3*edges[0][0]**3-0.2*edges[0][0]**2+0.7",
+                coefficients: vec![0.7, 0.0, -0.2, 0.3, 1.0],
+                masses: vec![0.8],
+            },
+            ContactSource {
+                parsed: test_graphs::vacuum_bubble_graph(),
+                bounds: vec![(0, 4), (1, 1)],
+                numerator: "edges[0][0]**4*(edges[1][0]+0.7)",
+                coefficients: vec![0.0, 0.0, 0.0, 0.0, 0.7, 1.0],
+                masses: vec![0.0, 0.0],
+            },
+            ContactSource {
+                parsed: test_graphs::vacuum_triangle_graph(),
+                bounds: vec![(0, 4), (1, 2), (2, 2)],
+                numerator: "edges[0][0]**4*edges[1][0]**2*edges[2][0]**2+0.2*edges[0][0]**3+1.0",
+                coefficients: vec![1.0, 0.0, 0.0, 0.2, 0.0, 0.0, 0.0, 0.0, 1.0],
+                masses: vec![0.5, 0.9, 1.4],
+            },
+        ];
+        for source in &sources {
+            let ContactSource {
+                parsed,
+                bounds,
+                numerator,
+                masses,
+                ..
+            } = source;
+            let spatial_squared = loop_momentum.iter().map(|x| x * x).sum::<f64>();
+            let energies = masses
+                .iter()
+                .map(|mass| (spatial_squared + mass * mass).sqrt())
+                .collect::<Vec<_>>();
+            let analytic = source.residue_part(&energies);
+            let regulated = regulated_matsubara_minus_vacuum(|omega| {
+                source.euclidean_integrand(&energies, omega)
+            });
+            assert!(
+                (regulated - analytic).abs() <= 1.0e-6 * analytic.abs(),
+                "{bounds:?}: regulated Matsubara sum minus vacuum integral {regulated:.12e} != \
+                 residue part {analytic:.12e}"
+            );
+            for sampling_mode in [
+                NumeratorSamplingScaleMode::None,
+                NumeratorSamplingScaleMode::All,
+            ] {
+                let generated = generate_3d_expression(
+                    parsed,
+                    &Generate3DExpressionOptions {
+                        medium_mode: MediumMode::ThermodynamicEquilibrium,
+                        unlocalized_energy_contacts:
+                            UnlocalizedEnergyContacts::OmitUnderVacuumSubtraction,
+                        energy_degree_bounds: Some(bounds.clone()),
+                        numerator_sampling_scale: sampling_mode,
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+                let expression = &generated.expression;
+                let input = EvaluationInput {
+                    external_momenta: Vec::new(),
+                    loop_spatial_momenta: vec![loop_momentum],
+                    masses: masses.clone(),
+                    uniform_scale: Some(1.3),
+                };
+                let numerator_expr = NumeratorExpr::parse(numerator).unwrap();
+                let coth = |edge: usize| 1.0 / (energies[edge] / 2.0).tanh();
+                let mut branch = expression.clone();
+                let mut actual = 0.0;
+                for orientation in &expression.orientations {
+                    for variant in &orientation.variants {
+                        branch.orientations = vec![orientation.clone()].into();
+                        branch.orientations[OrientationID(0)].variants = vec![variant.clone()];
+                        let value = ExpressionEvaluator::new(parsed, &branch, &input)
+                            .evaluate(&numerator_expr)
+                            .unwrap()
+                            .value;
+                        let thermal = variant.thermal_weight.evaluate(|edge, sign, order| {
+                            bose_distribution_derivative(coth(edge), sign, order)
+                        });
+                        let vacuum = variant.thermal_weight.evaluate(|_, sign, order| {
+                            bose_distribution_derivative(1.0, sign, order)
+                        });
+                        actual += (thermal - vacuum) * value;
+                    }
+                }
+                actual *= generated.source_conversion();
+                assert!(
+                    (actual - analytic).abs() <= 1.0e-10 * analytic.abs(),
+                    "{bounds:?}, {sampling_mode:?}: vacuum-subtracted value {actual:.17e} != \
+                     residue part {analytic:.17e}"
                 );
             }
         }

@@ -24,6 +24,20 @@
 //! the static theory's UV counterterms at `general.m_ir` apart from the run
 //! cards' `general.m_uv`.
 //!
+//! The `*_integrated_zero_mode_subtraction*` tests repeat every gate and probe
+//! of a ring generation with integrated counterterms (`run generate_integrated`
+//! and `run generate_integrated_novacsub`): every counterterm with `m_uv` adds
+//! back its finite conversion to MS-bar, also inside the zero-mode terms, as
+//! integrated prefixes followed by the local operations of their forest words.
+//! The localized add-backs are part of the remainder, so it must stay locally
+//! integrable with the same readings. The run cards localize them at the
+//! thermal scale, where the profiles and probes see them at order one. On the
+//! gluon ring the factorized join's add-back leaves a polynomial energy contact
+//! on the bare gluon loop, which only vacuum subtraction removes: without it
+//! generation must stop with the error that asks for vacuum subtraction. With
+//! it the join localizes and the gluon ring runs every gate and probe like the
+//! other rings.
+//!
 //! The `*_default_stability_levels` tests check the production stability
 //! levels of the quark ring against arb at widely separated scales and next to
 //! soft quarks, on both sides of the escalation thresholds, where a rotation
@@ -42,7 +56,7 @@ use color_eyre::Result;
 use gammaloop_integration_tests as integration_tests;
 use gammaloop_integration_tests::thermal_rings;
 use gammaloop_integration_tests::thermal_rings::{
-    Evaluation, GHOST_RING, MIN_R_SQUARED, MIXED_RING, Probe, QUARK_RING, RingPoint,
+    Counterterms, Evaluation, GHOST_RING, MIN_R_SQUARED, MIXED_RING, Probe, QUARK_RING, RingPoint,
     SCALING_TOLERANCE, SeparatedScalesRay, TADPOLE_RING, ThermalRing, UvScan, VacuumSubtraction,
 };
 use gammaloop_integration_tests::{CLIState, SERIAL_TEST_LOCK};
@@ -289,6 +303,27 @@ struct ProbeRow {
     probe: Probe,
     approach: Approach,
     precision: PrecisionCheck,
+}
+
+/// The power of its loop momentum with which the normalized kernel
+/// `rls / (pi^2 (|k|^2 + rls^2)^2)` that localizes an integrated add-back on
+/// its cograph decays: integrable over the three spatial components.
+const LOCALIZATION_KERNEL_TAIL: f64 = -4.0;
+
+impl ProbeRow {
+    /// What the arb remainder does along this probe on a generation with
+    /// `counterterms`. The add-backs of the second loop and of the join carry
+    /// the localization kernel of the second loop's momentum, so along (i),
+    /// `k -> ∞`, the remainder with integrated counterterms decays no faster
+    /// than that kernel.
+    fn approach(&self, counterterms: Counterterms) -> Approach {
+        match (counterterms, self.probe, self.approach) {
+            (Counterterms::Integrated, Probe::HardSecondLoop, Exponent(exponent)) => {
+                Exponent(exponent.max(LOCALIZATION_KERNEL_TAIL))
+            }
+            (_, _, approach) => approach,
+        }
+    }
 }
 
 /// One ring generation of the slow lane and everything it is checked against.
@@ -836,6 +871,70 @@ fn thermal_gluon_quark_ring_zero_mode_subtraction() -> Result<()> {
 }
 
 #[test]
+fn thermal_quark_ring_integrated_zero_mode_subtraction() -> Result<()> {
+    assert_integrated_zero_mode_subtraction(&QUARK)
+}
+
+#[test]
+fn thermal_quark_ring_integrated_zero_mode_subtraction_without_vacuum_subtraction() -> Result<()> {
+    assert_integrated_zero_mode_subtraction(&QUARK_WITHOUT_VACUUM_SUBTRACTION)
+}
+
+#[test]
+fn thermal_ghost_quark_ring_integrated_zero_mode_subtraction() -> Result<()> {
+    assert_integrated_zero_mode_subtraction(&GHOST)
+}
+
+#[test]
+fn thermal_ghost_quark_ring_integrated_zero_mode_subtraction_without_vacuum_subtraction()
+-> Result<()> {
+    assert_integrated_zero_mode_subtraction(&GHOST_WITHOUT_VACUUM_SUBTRACTION)
+}
+
+#[test]
+fn thermal_tadpole_quark_ring_integrated_zero_mode_subtraction() -> Result<()> {
+    assert_integrated_zero_mode_subtraction(&TADPOLE)
+}
+
+#[test]
+fn thermal_tadpole_quark_ring_integrated_zero_mode_subtraction_without_vacuum_subtraction()
+-> Result<()> {
+    assert_integrated_zero_mode_subtraction(&TADPOLE_WITHOUT_VACUUM_SUBTRACTION)
+}
+
+#[test]
+fn thermal_gluon_quark_ring_integrated_zero_mode_subtraction() -> Result<()> {
+    assert_integrated_zero_mode_subtraction(&MIXED)
+}
+
+/// Without vacuum subtraction the gluon ring's generation with integrated counterterms
+/// stops at the localization of the factorized join's add-back `C_A C_B`: on the bare gluon
+/// loop the three-gluon vertices leave a polynomial energy contact, which no 3D integrand
+/// represents. The error names the join and its cograph and asks for vacuum subtraction.
+#[test]
+fn thermal_gluon_quark_ring_integrated_generation_requires_vacuum_subtraction() -> Result<()> {
+    let _serial = SERIAL_TEST_LOCK.lock();
+    let (mut cli, state_path) = MIXED_RING.fresh_cli(&format!(
+        "{}_{}_integrated_generation",
+        MIXED_RING.name,
+        VacuumSubtraction::Off.state_suffix()
+    ))?;
+    let error = cli
+        .run_command("run generate_integrated_novacsub")
+        .expect_err("the join's add-back needs vacuum subtraction");
+    let message = format!("{error:?}");
+    assert!(
+        message.contains("the integrated counterterm of {e2,e3,e4,e5}")
+            && message.contains("on its cograph {e0,e1} without vacuum subtraction")
+            && message.contains("`global.generation.medium.vacuum_subtraction = true`"),
+        "the gluon ring without vacuum subtraction must report the energy contact of the join: \
+         {message}"
+    );
+    integration_tests::clean_test(state_path);
+    Ok(())
+}
+
+#[test]
 fn thermal_quark_ring_zero_mode_subtraction_with_static_theory_mass() -> Result<()> {
     assert_gates_with_static_theory_mass(&QUARK)
 }
@@ -924,12 +1023,13 @@ impl RingCase {
     }
 }
 
-/// Generate the zero-mode subtraction of `ring` in a fresh state named after
-/// `purpose`, and check its settings and structure. Returns the state and its
-/// path.
+/// Generate the zero-mode subtraction of `ring` with `counterterms` in a fresh
+/// state named after `purpose`, and check its settings and structure. Returns
+/// the state and its path.
 fn generate_subtraction(
     ring: &ThermalRing,
     vacuum_subtraction: VacuumSubtraction,
+    counterterms: Counterterms,
     purpose: &str,
 ) -> Result<(CLIState, PathBuf)> {
     let (mut cli, state_path) = ring.fresh_cli(&format!(
@@ -937,10 +1037,13 @@ fn generate_subtraction(
         ring.name,
         vacuum_subtraction.state_suffix()
     ))?;
-    integration_tests::run_commands(&mut cli, vacuum_subtraction.subtraction_commands())?;
+    integration_tests::run_commands(
+        &mut cli,
+        vacuum_subtraction.subtraction_commands(counterterms),
+    )?;
     let generation = &cli.cli_settings.global.generation;
     assert!(generation.uv.subtract_uv);
-    assert!(!generation.uv.generate_integrated);
+    assert_eq!(generation.uv.generate_integrated, counterterms.integrated());
     assert_eq!(
         generation
             .uv
@@ -953,12 +1056,32 @@ fn generate_subtraction(
         vacuum_subtraction.enabled()
     );
     thermal_rings::assert_run_card_static_theory_mass(&cli, ring.name)?;
+    if counterterms.integrated() {
+        // At the default scale the add-backs would be negligible at momenta
+        // of order T, and the UV profiles would cross the kernel's scale.
+        let general = &thermal_rings::runtime_settings(&cli, ring.name)?.general;
+        assert_eq!(
+            general.renormalization_localization_scale * general.inverse_temperature,
+            1.0,
+            "the run card of {} localizes the integrated add-backs at the thermal scale",
+            ring.name
+        );
+    }
     thermal_rings::assert_ring_structure(&cli, ring)?;
     Ok((cli, state_path))
 }
 
 fn assert_zero_mode_subtraction(case: &RingCase) -> Result<()> {
-    assert_zero_mode_subtraction_with(case, StaticTheoryMass::RunCard)
+    assert_zero_mode_subtraction_with(case, Counterterms::Local, StaticTheoryMass::RunCard)
+}
+
+/// Every gate and probe of `case` on its generation with integrated
+/// counterterms: the localized add-backs and their prefix sectors must leave
+/// the remainder integrable with the readings of the local generation, but
+/// along (i), where it decays like the localization kernel
+/// ([`ProbeRow::approach`]).
+fn assert_integrated_zero_mode_subtraction(case: &RingCase) -> Result<()> {
+    assert_zero_mode_subtraction_with(case, Counterterms::Integrated, StaticTheoryMass::RunCard)
 }
 
 /// The IR and UV gates of `case`, without its approach probes, with
@@ -971,25 +1094,31 @@ fn assert_gates_with_static_theory_mass(case: &RingCase) -> Result<()> {
             probes: &[],
             ..*case
         },
+        Counterterms::Local,
         StaticTheoryMass::Apart(STATIC_THEORY_MASS),
     )
 }
 
 fn assert_zero_mode_subtraction_with(
     case: &RingCase,
+    counterterms: Counterterms,
     static_theory_mass: StaticTheoryMass,
 ) -> Result<()> {
     let _serial = SERIAL_TEST_LOCK.lock();
     let started = Instant::now();
     let ring = case.ring;
     let name = ring.name;
+    let purpose = match counterterms {
+        Counterterms::Local => static_theory_mass.purpose().to_owned(),
+        Counterterms::Integrated => format!("integrated_{}", static_theory_mass.purpose()),
+    };
 
-    let control = run_control(case)?;
+    let control = run_control(case, &purpose)?;
     let control_time = started.elapsed();
 
     let generation_started = Instant::now();
     let (mut cli, state_path) =
-        generate_subtraction(ring, case.vacuum_subtraction, static_theory_mass.purpose())?;
+        generate_subtraction(ring, case.vacuum_subtraction, counterterms, &purpose)?;
     if let StaticTheoryMass::Apart(m_ir) = static_theory_mass {
         thermal_rings::set_static_theory_mass(&mut cli, name, m_ir)?;
     }
@@ -1001,7 +1130,7 @@ fn assert_zero_mode_subtraction_with(
         }
         let mu_b = chemical_potential.value();
         let context = format!(
-            "{name} {} at muB={mu_b}{}",
+            "{name} {}, {counterterms} at muB={mu_b}{}",
             case.vacuum_subtraction,
             static_theory_mass.context_suffix()
         );
@@ -1030,7 +1159,7 @@ fn assert_zero_mode_subtraction_with(
         let probes_started = Instant::now();
         for row in case.probes_at(chemical_potential) {
             let control_probe = control.probe(chemical_potential, row.probe);
-            assert_probe(&mut cli, &context, name, row, control_probe)?;
+            assert_probe(&mut cli, &context, name, row, counterterms, control_probe)?;
         }
         println!(
             "{context}: profiles {:.1} s, probes {:.1} s",
@@ -1041,7 +1170,8 @@ fn assert_zero_mode_subtraction_with(
     integration_tests::clean_test(state_path);
 
     println!(
-        "{name} {}: total {:.1} s; control {:.1} s; subtraction generation {:.1} s",
+        "{name} {}, {counterterms}: total {:.1} s; control {:.1} s; subtraction generation \
+         {:.1} s",
         case.vacuum_subtraction,
         started.elapsed().as_secs_f64(),
         control_time.as_secs_f64(),
@@ -1050,13 +1180,14 @@ fn assert_zero_mode_subtraction_with(
     Ok(())
 }
 
-/// Generate the bare control of `case` and evaluate every limit and every
-/// probe point that the subtraction is compared with.
-fn run_control(case: &RingCase) -> Result<Control> {
+/// Generate the bare control of `case` in a state named after the purpose of
+/// the subtraction it controls, and evaluate every limit and every probe point
+/// that the subtraction is compared with.
+fn run_control(case: &RingCase, purpose: &str) -> Result<Control> {
     let ring = case.ring;
     let name = ring.name;
     let (mut cli, state_path) = ring.fresh_cli(&format!(
-        "{name}_{}_control",
+        "{name}_{}_{purpose}_control",
         case.vacuum_subtraction.state_suffix()
     ))?;
     integration_tests::run_commands(&mut cli, case.vacuum_subtraction.bare_commands())?;
@@ -1177,6 +1308,44 @@ fn assert_limit(
     );
 }
 
+/// The local exponent of the arb remainder `arb` along `probe`, read off its
+/// two points closest to the locus or limit, for a remainder expected to scale
+/// with the power `expected`. With integrated counterterms a remainder that
+/// grows towards a locus at finite momenta is read off the successive
+/// differences of its three points instead: the localized add-backs add a part
+/// that stays regular there, constant in the approach, which the differences
+/// cancel and which would otherwise bias the reading. The probe's parameters
+/// are evenly spaced in their logarithm, so the differences scale like the
+/// remainder. Towards infinite momentum, along (i), the add-backs vanish with
+/// the rest.
+fn local_exponent(
+    probe: Probe,
+    counterterms: Counterterms,
+    expected: f64,
+    arb: &[Complex<f64>],
+) -> f64 {
+    let &[first_parameter, outer_parameter, inner_parameter] = probe
+        .parameters()
+        .last_chunk()
+        .expect("every probe has three parameters");
+    let &[first, outer, inner] = arb
+        .last_chunk()
+        .expect("every probe parameter has one arb value");
+    let scale =
+        (probe.momentum_scale(inner_parameter) / probe.momentum_scale(outer_parameter)).ln();
+    if counterterms.integrated() && expected < 0.0 && scale < 0.0 {
+        let step = (outer_parameter / first_parameter).ln();
+        assert!(
+            (step - (inner_parameter / outer_parameter).ln()).abs() <= 1e-9 * step.abs(),
+            "the parameters of {} are evenly spaced in their logarithm",
+            probe.label()
+        );
+        ((inner - outer).norm() / (outer - first).norm()).ln() / scale
+    } else {
+        (inner.norm() / outer.norm()).ln() / scale
+    }
+}
+
 fn probe_points(probe: Probe) -> Vec<RingPoint> {
     probe
         .parameters()
@@ -1205,11 +1374,11 @@ fn assert_probe(
     context: &str,
     name: &str,
     row: &ProbeRow,
+    counterterms: Counterterms,
     control: Option<&ControlProbe>,
 ) -> Result<()> {
     let probe = row.probe;
     let label = probe.label();
-    let parameters = probe.parameters();
     let points = probe_points(probe);
     let arb = thermal_rings::evaluate_ring_points(cli, name, Evaluation::Arb, &points)?;
     assert!(
@@ -1219,13 +1388,10 @@ fn assert_probe(
     );
 
     // The shape is read from the two points closest to the locus or limit.
-    let &[outer_parameter, inner_parameter] = parameters
-        .last_chunk()
-        .expect("every probe has at least two parameters");
     let &[outer, inner] = arb
         .last_chunk()
         .expect("every probe parameter has one arb value");
-    match row.approach {
+    match row.approach(counterterms) {
         Bounded => {
             let change = (inner - outer).norm() / inner.norm().max(outer.norm());
             println!("{context}: {label}: arb {arb:?}, inner change {change:.2e}");
@@ -1235,9 +1401,7 @@ fn assert_probe(
             );
         }
         Exponent(expected) => {
-            let exponent = (inner.norm() / outer.norm()).ln()
-                / (probe.momentum_scale(inner_parameter) / probe.momentum_scale(outer_parameter))
-                    .ln();
+            let exponent = local_exponent(probe, counterterms, expected, &arb);
             println!("{context}: {label}: arb {arb:?}, local exponent {exponent:+.4}");
             assert!(
                 (exponent - expected).abs() <= EXPONENT_TOLERANCE,
@@ -1299,6 +1463,7 @@ fn assert_default_stability_levels(ladder: &ProductionLadder) -> Result<()> {
     let (mut cli, state_path) = generate_subtraction(
         ladder.ring,
         ladder.vacuum_subtraction,
+        Counterterms::Local,
         "default_stability_levels",
     )?;
     let tolerance = production_tolerance(&cli, name)?;

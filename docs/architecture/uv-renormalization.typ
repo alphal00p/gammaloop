@@ -370,8 +370,8 @@ components decide. Hosts therefore need
 The pass runs iff `subtract_uv` and
 `UVgenerationSettings::freezes_thermal_soft_branches` hold: finite temperature,
 `hedge_poset` and a 3D final integrand. It depends neither on vacuum subtraction nor
-on `generate_integrated`; with integrated counterterms, generation stops where the
-integrated lane reaches a host
+on `generate_integrated`; with integrated counterterms, the U's that carry the vacuum
+mass get their integrated counterparts inside zero-mode terms as well
 (#link(<zero-mode-integrated-add-back>)[Integrated add-back]).
 `Graph::restrict_full_observable_spinney` then keeps
 the full-observable spinney under vacuum subtraction as a plain `MUV` U when a host
@@ -406,10 +406,23 @@ complete the forest.
 
 === The zero-mode operation
 <the-zero-mode-operation>
-`apply_taylor` returns an all-zero input unchanged, as for an integrated prefix
-covering one component of a union host. A nonzero input must expand the whole host
-support in its stored canonical chart, with no soft line in the rescaled support;
-violations are internal errors. For each tuple, `ZeroModeTerm::expand` then:
+The operation acts on its active support: the host less the part that an integrated
+prefix of the sector contracted, possibly all of it
+(#link(<zero-mode-integrated-add-back>)[Integrated add-back]). `apply_taylor` checks
+every sector, a vanishing one included, before returning it (`ensure_zero_mode_chart`):
+the support is expanded in the host's stored canonical chart contracted by the
+integrated part (`Graph::shrunken_sub_lmb`), which is empty once the whole host is
+contracted, and no soft line lies in it; violations are internal errors. The host keeps
+its region, owner, degree and order tag on a contracted support: `SoftBranches`, the
+branch scope of its own U and the order tag are built on the operation's subgraph, the
+vacuum projection of occupations and their compensation on the active support. A prefix
+inside the host leaves its soft set, and every frequency class, untouched. A class that
+a prefix contracts wholly would leave the zero mode no class energy, so the projection
+gives zero there exactly; a partly contracted class would make it incomplete. The
+replay produces neither (see the union replay below), and `run_integrated` checks that
+as an internal assertion (`ZeroModeHostError::PartlyContractedClass`). A connected host
+on an empty support acts on its own add-back, which already holds its U, and applies
+$S^0$ alone. For each tuple, `ZeroModeTerm::expand` then:
 
 + projects the tuple's sector. In the completed thermal CFF, the energies of all
   edges of class $c$ are set to one auxiliary energy $x_c$ in residue roots,
@@ -424,11 +437,34 @@ violations are internal errors. For each tuple, `ZeroModeTerm::expand` then:
   projected mode is written as the tag $T_("zm")(r_c)$. A summand of the form
   $f dot.op "OSE"(r_c)^(-a)$, with $f$ free of class energies, is read off
   unchanged, so the projection is idempotent; a frozen branch that would reach a `HardVacuum`
-  projection unprojected is an internal error (`ZeroModeError::FrozenHardVacuum`);
+  projection unprojected is an internal error (`ZeroModeError::FrozenHardVacuum`). The
+  class propagators need not be top-level factors of the summand: a later operation's
+  Taylor coefficients can gather two such summands into a sum that each carry them, as
+  the static $U_B$ does on the self-suffix of $A$ on the gluon ring, in front of one
+  numerator family of that coefficient. The projection reads the summand's degree in
+  $"OSE"(r_c)$ through products, integer powers and sums whose terms share it, and
+  strips the propagators where it found them, without an expansion
+  (`ProjectedOrders::propagator_degree`). A sum whose terms carry different powers is
+  not of that form and still needs its expansion;
 + Taylor-expands the coefficient, with the class propagators held apart, in the
   chart `Local3DDeformation::ZeroMode { endpoint }` with
-  $"endpoint" = J - "dod"(gamma)$: the soft chart of the whole host support at fixed
-  physical temperature and chemical potentials, through relative order $J$. It
+  $"endpoint" = J - "dod"(gamma)$: the soft chart of the active support at fixed
+  physical temperature and chemical potentials, through relative order $J$, with the
+  degree of the whole host, since an integrated vertex carries the dimension of its
+  subgraph. It scales the algebraic vacuum masses `mUV(S_<X>)` of a contained
+  integrated vertex like the loop momenta, which its homogeneity turns into the soft
+  expansion, but holds their logarithms of $M^2 \/ mu^2$ fixed, as the prefix
+  localizer holds physical-mass logarithms (pinned by
+  `zero_mode_chart_holds_prefix_logarithms`). The vertex holds $M$ under two
+  symbols: the terminal mass `mUV` of the integrated propagators, which the prefix
+  localizer tags with the owner, and the expansion mass `mUVexp`, which the mass
+  rearrangement of the integrated U leaves in its numerators. Vakint's $C_B$ of the
+  tadpole ring, for instance, is
+  $-(3 \/ 8) M^2$ only once the two are identified: its $M^2 log(M^2 \/ mu^2)$ terms
+  come with `mUV` and with `mUVexp` and cancel between them. The localizer gives
+  `mUVexp`, like the vertex's physical masses, the component's mass scope, which this
+  chart co-scales, as the soft chart does, while an ordinary chart holds it fixed, as
+  the zero-temperature lane does. It
   compensates every occupation of the support with one representative per
   statistics and chemical potential across all components of a union host, so the
   Landau pairs of the CFF variants cancel within each coefficient; the chart's series
@@ -444,7 +480,8 @@ violations are internal errors. For each tuple, `ZeroModeTerm::expand` then:
   lines at zero energy;
 + freezes the branch (`freeze_soft_branch`) and multiplies the class propagators
   back in as top-level factors, which an enclosing projection reads off without
-  expanding the branch again.
+  expanding the branch again, also once a later series has carried them into the
+  terms of a sum (first step above).
 
 === Zero-mode tags and minimal depth
 <zero-mode-tags-and-minimal-depth>
@@ -516,8 +553,8 @@ $S^0_(h, 3)$ included, and $U_B$ and the two-loop $U_D$ on the rows of $S^0_A$. 
 masses such a U introduces there, on the lines of $X$ that no inner U has made
 massive, are the static-theory mass $m_"IR"$: the terminal symbol `mIR` and the
 expansion symbol `mIRexp`, the roles of `mUV` and `mUVexp` (`OrdinaryEnergyMasses`),
-bound to the runtime setting `general.m_ir`. It is a setting of its own, with the
-default of `general.m_uv` (1000) and independent of it. The choice is made per forest
+bound to the runtime setting `general.m_ir`. It is a setting of its own, independent
+of `general.m_uv`, with the same default (1000). The choice is made per forest
 term, not per U: the same $U_G$ keeps $M$ on $U_G F$ and $U_G U_A F$, and $U_B$ on
 $U_B F$ and $U_B U_A F$. Every other mass is $M$:
 
@@ -582,55 +619,241 @@ pins the row rule, the outermost branch deciding, and the error.
 
 === Integrated add-back
 <zero-mode-integrated-add-back>
-The integrated add-back of the zero-mode subtraction is not generated yet. With
-`generate_integrated = true` the route freezes soft branches as without it: scheme
-validation and the host policy, including its hostless check, run unchanged. The
-integrated lane (`Forests::integrate`) then refuses the first node that ends on a
-zero-mode host, the point where an integrated prefix would reach a zero-mode
-operation, with an error that its integrated counterterms are not yet supported and
-that names the host. With the mass rule above, every U that carries $M$ on a
-zero-mode term (a U acting before every `S0` of its term, or a host's own U) is a
-$T$-independent 4D vacuum counterterm, whose integrated counterpart is the finite
-conversion from $M$ to 4D MS-bar; the `S0` operations and the static-theory U's stay
-local, and their add-back is deferred.
-The local remainder $R$ needs no add-back to be integrable, but $integral R$ depends
-on the vacuum mass $M$ (`mUV`) and the static-theory mass $m_"IR"$ (`mIR`) until the
-add-back is supplied. On the rings, with $Pi_X$ the integrand
-of bubble $X$ at static external $q$ after its Matsubara sum, $Pi_X^((i))$ its
-order-$i$ Taylor term in $q$, $Pi_X^v$ its vacuum part, $N_0(k, q)$ the numerator
-of the second bubble's vertices at zero energies, and $S^0_(h, 3)$ the vacuum-soft
-tuple of $S^0_h$:
+With `generate_integrated = true` the route freezes soft branches as without it:
+scheme validation and the host policy, including its hostless check, run unchanged.
+Every U that carries the vacuum mass $M$ then gets its integrated counterpart in every
+forest term where it appears, also inside zero-mode terms; the `S0` operations and the
+static-theory U's ($m_"IR"$) stay local, and their add-back is deferred. Each add-back
+is a finite scheme conversion attached to its counterterm, from $M$ to 4D MS-bar;
+dimensional regularization only enters vakint's computation of it. With the mass rule
+above, a U carries $M$ on a zero-mode term iff it acts before every `S0` of the term or
+is a host's own U, and each such U is a $T$-independent 4D vacuum counterterm: it
+projects the occupations of its support to vacuum and holds no static line.
+
+Write $iota_X$ for the add-back of $U_X$, its finite counterterm $C_X$ localized on the
+cograph $G \/ X$ with the normalized kernel, and $hat(U)_X = U_X - iota_X$. Every U
+with $M$ in a forest word becomes $hat(U)_X$. An operation $O$ acting after $U_X$
+contains $X$ or is disjoint from it, so $O(iota_X G)$ is $iota_X$ of $O$ acting on the
+contracted graph: the same wood node and region on the support less $X$, in the
+canonical chart contracted by $X$, with $M(X)$ co-scaled iff $X$ lies in the support
+(`U_X G` is a polynomial in the external momenta of $X$, energies included, times a
+vacuum function of its loops). For the own U, $iota_gamma S^0_gamma =
+S^(0,c)_gamma iota_gamma$, the zero mode of the contracted host on the add-back. Every
+$iota$ therefore moves to the front of its word, and the generated integrand is the
+replay "integrated prefix, then local suffix" of every chain, with one new sector, the
+self-suffix:
+$ hat(H)_gamma = S^0_gamma + hat(U)_gamma - hat(U)_gamma S^0_gamma
+  = H_gamma - (1 - S^(0,c)_gamma) iota_gamma. $
+
+The code:
+
+- The zero-temperature lane (`Forests::compute_4d_for_node`) integrates a connected
+  host as its plain `MUV` U (`Spinney::to_plain_u`) and gives zero, without an
+  integration, to a union host and every node above one
+  (`Forests::has_zero_temperature_counterpart`), so the chains through a host are the
+  plain chains, e.g. $C_(A;G) = -[integral U_G (-U_A F + C_A)]$ and
+  $C_([A,B]) = C_A C_B$. Under vacuum subtraction a node covering every loop gets zero
+  as well, without the three-loop integration: its add-back would sit on a loopless
+  cograph, whose weight $W - V(W)$ vanishes like its local U. The localizer gives such
+  a cograph the zero rows by itself, without a rule of its own
+  (`vacuum_subtracted_loopless_cograph_localizes_to_zero`).
+- The prefix localizer `Direct3dApproximation::localize_prefix` multiplies the finite
+  counterterms of the prefix's components, each with its vacuum mass tagged by its
+  owner (`mUV(S_<X>)`) and its expansion mass `mUVexp` and physical masses in its mass
+  scope, and localizes them.
+  For a single-component chain ending on a connected host $gamma$ it returns the second
+  sector $-S^(0,c)_gamma$ of that add-back: $S^0_gamma$ alone on the empty support,
+  endpoint $J - "dod"(gamma)$, owner `S_<gamma>`. It is the one source of the
+  self-suffix: `run_integrated` replays both sectors through the next local operation,
+  and `FinalIntegrandBuilder::build_direct` adds both as the node's own add-back. A
+  prefix of several components needs no self-suffix: the U of a component in the soft
+  set of $gamma$ acts after $S^0_gamma$ as a static U, which has no add-back.
+- In the replay of a factorized join, a factor replayed after a prefix that meets the
+  soft set of a connected host applies the host's plain U alone
+  (`Forests::replayed_plain_u`): the U of the prefix acts on the rows of $S^0_gamma$
+  as a static U, so the image of $H_gamma$ on $iota_X$ is $U_gamma iota_X$. On the
+  gluon and ghost rings $B$ holds the whole class ${e_4}$ of $Sigma(A)$, so
+  $S^0_A iota_B = 0$ exactly as well. A union host whose soft set meets an
+  integrated prefix is an error.
+- The zero-mode operation acts on contracted supports
+  (#link(<the-zero-mode-operation>)[The zero-mode operation]).
+
+The sectors this adds on the rings, besides the ordinary chains of $A$, $B$, $[A, B]$,
+the two-loop spinneys and, without vacuum subtraction, $G$:
+
+- every ring: $(integral A; S^0_h|_B)$, $(integral B; S^0_h|_A)$ and
+  $(integral A integral B; S^0_h|_emptyset)$, the latter with the vacuum-soft tuple
+  under vacuum subtraction, and the static-theory $U_G$ on each of them. The add-back of
+  $A$ carries the constant $M^2 g^(mu nu)$ part of $C_A$ times the static gluons, a
+  linear static infrared divergence that only $(integral A; S^0_h|_B)$ cancels; on the
+  tadpole ring $C_B prop M^2$ exactly, and $(integral B; S^0_h|_A)$ makes its add-back
+  integrable;
+- the gluon and ghost rings: the self-suffix of $A$ on its own add-back and on every
+  replay of it, $(integral A; S^(0,c)_A, U_B)$ with the static-theory $U_B$,
+  $(integral A; S^(0,c)_A, S^0_h|_B)$, $(integral A; S^(0,c)_A, U_B, S^0_h|_B)$, and $U_A$
+  alone on the replay of $B$.
+
+`hedge_poset.rs` pins the zero-temperature lane
+(`zero_mode_hosts_integrate_their_plain_u`, on the ring topologies) and, with that
+lane seeded by symbols, every integrated sector of every node of the physical rings
+against the table of the forest words (`*_ring_integrated_sectors_follow_the_forest_words`
+with vacuum subtraction, `*_ring_integrated_sectors_without_vacuum_subtraction` without
+it; the gluon ring, whose forest is the ghost ring's, is left out for time), together
+with a local partner for each, the same word with the U in place of its add-back, and
+the masses: `mIR` only where a U follows a zero-mode operation, no `mUVexp` after a
+zero-mode operation alone besides the seeded vertex's own, which such a sector keeps.
+The seeds hold $M$ as `mUV` and as `mUVexp`, like vakint's counterterms.
+`zero_mode_tests.rs` pins the contracted chart, the contracted static mode of a union
+host on a vertex with constant (under both mass symbols), $q$-linear, quadratic and
+energy terms, the self-suffix, the annihilated class and the held logarithms. It also
+compares each image with the add-back it subtracts rather than with the projection
+machinery: $(1 - S^0_h) iota_X$ vanishes like $q^2$ against $iota_X$ as $q -> 0$, on
+the ring topologies for $A$, $B$ and the join of the quark ring and for $B$ of the
+tadpole ring (`integrated_add_backs_cancel_their_static_mode`), and on the production
+path, with vakint's counterterms, the physical numerators, the add-back as
+`FinalIntegrandBuilder::build_direct` assembles it and the images as `run_integrated`
+replays them: $B$ of the tadpole ring with and without vacuum subtraction, and $A$,
+$B$ and the join of the quark ring, of the ghost ring and, with vacuum subtraction, of
+the gluon ring, where the add-back of $A$ holds its self-suffix
+(`*_ring_production_*add_back*_cancel*_static_mode`). On the gluon ring the join's
+add-back omits its polynomial energy contact
+(#link(<zero-mode-limitations>)[Limitations]); `gluon_ring_join_add_back_needs_vacuum_subtraction`
+pins that its localization keeps a nonzero residue part with vacuum subtraction and stops
+without it with the error that names the join and its cograph.
+`join_add_backs_are_the_matsubara_sums_of_the_gluon_loop` checks the value of the join's
+add-back on the production path, which the image pins cannot see: on the quark, ghost
+and gluon rings it is the vacuum-subtracted Matsubara sum of its 4D integrand over the
+gluon loop's energy, taken by the residues of the double pole, which the CFF does not
+build, times $-(2 pi)^(-3)$ (the loop's spatial measure and the $i$ of its one energy
+integration against the $i^3$ of the ring), to $10^(-10)$ at every point and medium of
+the pins.
+`gluon_ring_static_u_on_the_self_suffix_cancels_its_static_mode` replays the
+self-suffix of $A$ through the static $U_B$ of the join and the union host's zero mode,
+$(integral A; S^(0,c)_A, U_B, S^0_h|_B)$, with vakint's $C_A$: the static $U_B$
+carries the $q$-class propagators into sums there, which the hard-vacuum sector reads
+off as projected, and the image is minus the whole add-back at every point, since the
+sector is the static mode itself, polynomial in $q$ within the host's depth.
+`projected_summands_keep_their_order_through_sums` pins that reading on the ring
+topology: the complete sector reads the coefficient of such a sum off, the hard-vacuum
+sector takes nothing from it when it is frozen, and a frozen sum of two orders is still
+refused. These
+image pins cannot see an error of a prefix's own sectors, which the image repeats, so
+`ghost_ring_production_self_suffix_is_the_static_vertex` checks the self-suffix of $A$
+on the production path against references the zero-mode chart does not build: it is
+minus the exact static mode of the plain add-back to $O(q^2)$, and at every point
+$T^2 C_A (0) N_0(k, q) \/ (q^4 k^2 (k - q)^2)$ times one constant, the same for both
+media and with and without vacuum subtraction. At zero temperature the soft chart
+co-scales the vertex's `mUVexp` as well
+(`integrated_expansion_mass_vertex_keeps_its_soft_weight`).
+
+A first version tagged only `mUV` in the prefix localizer. The zero-mode charts then
+held the vertex's `mUVexp` fixed, counted its terms two orders softer and dropped them
+at their endpoint, so each image kept a different multiple of the static mode of its
+add-back ($-1.72$ instead of $-1$ for the tadpole at $M = 1$, $mu = 2$), and the
+remainder grew like the bare ring's $|q|^(-4)$. The symbolic pins had missed it: their
+seeds held `mUV` alone, and they compared the images with the projection machinery.
+
+Every $M$-carrying U has its add-back, so $integral R$ plus the add-backs does not
+depend on $M$: for an ordinary U, $partial_M U_X G$ is integrable over the loops of
+$X$, so $integral_X partial_M hat(U)_X G$ is the $M$ derivative of the MS-bar pole
+of $integral_X U_X G$, which vanishes; for the own U the same holds after
+$iota_gamma S^0_gamma = S^(0,c)_gamma iota_gamma$; a union's add-back is the product
+of its components', and every subset of integrated components is replayed. The result
+is $R_"4D, MS-bar"$ less the deferred add-back $D$ of the `S0` operations and the
+static-theory U's, with every $M$-carrying U inside it hatted. It depends on
+$m_"IR"$ through the static-theory U's and on $mu$ through vakint's logarithms, and
+the predictions are the derivatives $partial_M = 0$ everywhere and $partial_(m_"IR")
+= 0$ on the quark and tadpole rings, whose $D$ vanishes; on the gluon and ghost rings
+$R_"4D, MS-bar"$ and $D$ each keep a static $1 \/ epsilon_"IR"$ pole that only their
+difference cancels. On the rings, with $Pi_X$ the integrand of bubble $X$ at static
+external $q$ after its Matsubara sum, $Pi_X^((i))$ its order-$i$ Taylor term in $q$,
+$Pi_X^v$ its vacuum part, $N_0(k, q)$ the numerator of the second bubble's vertices
+at zero energies, and $S^0_(h, 3)$ the vacuum-soft tuple of $S^0_h$, $D$ holds:
 
 - Scaleless, with zero integral: $S^0_h$ and its $U_A$, $U_B$ variants
   ($integral q^(j - 4)$ and $integral |q|^(-3)$); $S^0_A$, whose UV and IR poles
   cancel (the two-loop logarithm of the static theory); $S^0_h S^0_A$,
   $U_A S^0_A$ and $U_B S^0_A$; and the odd whole-graph images $U_G S^0_h$ at
   $j = 1$, $U_G S^0_h S^0_A$ and $U_G S^0_h U_B S^0_A$.
-- Nonzero and mass-dependent:
-  - on the gluon and ghost rings,
-    $ U_G (1 - U_A)(1 - U_B) S^0_A = & T^2 [integral_p (1 - U_A) Pi_A^((0))]
-      integral_q integral_k \{ frac(N_0(k, q), (q^2 + m_"IR"^2)^2 (k^2 + m_"IR"^2)
-      ((k - q)^2 + m_"IR"^2)) \
-      & - frac(N_0(k, 0), (q^2 + m_"IR"^2)^2 (k^2 + m_"IR"^2)^2) - (q"-linear") \}, $
-    where the $U_A$ in the bracket keeps $M$ and the $U_B$ behind the second and the
-    $q$-linear terms takes $m_"IR"$, with a $1 \/ epsilon$ pole and logarithms of
-    $m_"IR"$, the matching pole of the static theory;
-  - under vacuum subtraction, $U_G S^0_(h, 3) U_A U_B$, independent of $T$, with
-    the $1 \/ epsilon$ pole of $integral (q^2 + m_"IR"^2)^(-3 \/ 2)$ and the vacuum
-    vertices $U_A Pi_A^v (0)$, $U_B Pi_B^v (0)$ at $M$;
-  - the ordinary vacuum add-backs of the U of $A$, $B$, the two-loop spinneys and
-    $G$, at $M$.
+- Under vacuum subtraction, the vacuum-soft
+  $U_G S^0_(h, 3)(1 - hat(U)_A)(1 - hat(U)_B) F$, whose vertices
+  $integral_p (1 - hat(U)_A) Pi_A^v (0)$ vanish: the massless vacuum vertex at zero
+  momentum has no pole, and its hatted integral is zero. So $D = 0$ on the quark and
+  tadpole rings.
+- On the gluon and ghost rings,
+  $ U_G (1 - hat(U)_A)(1 - U_B) S^0_A = & T^2 [integral_p (1 - hat(U)_A) Pi_A^((0))]
+    integral_q integral_k \{ frac(N_0(k, q), (q^2 + m_"IR"^2)^2 (k^2 + m_"IR"^2)
+    ((k - q)^2 + m_"IR"^2)) \
+    & - frac(N_0(k, 0), (q^2 + m_"IR"^2)^2 (k^2 + m_"IR"^2)^2) - (q"-linear") \}, $
+  where the bracket is free of $M$ and the $U_B$ behind the second and the
+  $q$-linear terms takes $m_"IR"$, with a $1 \/ epsilon$ pole and logarithms of
+  $m_"IR"$, the matching pole of the static theory.
 
-No integration-level check of $d integral R \/ d M$ or $d integral R \/ d m_"IR"$
-exists yet.
+The slow lane checks these sectors pointwise: the `*_integrated_zero_mode_subtraction*`
+cases of `tests/tests/thermal_soft_ct.rs` run every soft, collinear and UV profile and
+every approach probe of the local cases on generations with integrated counterterms
+(the run cards' `generate_integrated` and `generate_integrated_novacsub` blocks). The
+add-backs belong to the remainder, which must keep the readings of the local
+generation, except where the second loop goes hard (probe (i)): the add-backs of
+$B$ and of the join decay there like their normalized kernel, $|k|^(-4)$, which is
+integrable, while the local tadpole ring decays like $|k|^(-5)$. The cards localize
+the add-backs at the thermal scale,
+`renormalization_localization_scale` $= 1 \/ beta$. At the default $1000$ the
+normalized kernel suppresses them by about $10^(-9)$ at momenta of order $T$, so the
+soft profiles would hardly see them, and the UV profiles' range $10^3$ to $10^6$
+crosses the kernel's scale, whose mixed slopes fail the profiles (`unstable_fit` and
+`dod_exceeds_threshold` on the quark and ghost rings). On the quark, tadpole and ghost
+rings, with and without vacuum subtraction, and on the gluon ring with vacuum
+subtraction, the integrated cases keep the local readings; the gluon ring's generation
+takes 1.7 hours, its whole case 2.3 hours, so `ci_slow` gives it four hours. Without
+vacuum subtraction the gluon ring stops at the localization of the join's add-back
+with the error that asks for vacuum subtraction, which
+`thermal_gluon_quark_ring_integrated_generation_requires_vacuum_subtraction` checks.
+
+A correlated Monte Carlo checked the integrals once, by hand; it is not automated. An
+integrated ring takes 15 to 60 minutes to generate, mostly in the numerator algebra of
+the zero-temperature lane, and the differences need about $10^7$ points per seed with
+the compiled evaluator. One `integrate` call evaluates five slots on the same points:
+the base ($M = 1$, $m_"IR" = 0.7$, $mu_r = 2$, localization scale $1$, $T = 1$) and
+one slot each for $M = 0.5$, $M = 3$, $m_"IR" = 0.4$ and localization scale $3$, over
+eight or sixteen seeds (32 seeds of $4 dot 10^5$ points on the gluon ring). With
+integrated counterterms the differences in $M$ and in the localization scale vanish
+($|z| <= 2.1$) on the quark, tadpole, ghost and gluon rings, with and without vacuum
+subtraction (the gluon ring only with it). The resolution is $0.04 %$ (tadpole),
+$0.4 %$ (gluon), $0.7 %$ (quark, ghost) and $3 %$ (quark without vacuum subtraction) of
+the $M$ dependence of the local generation, which is 63 to 1140 standard deviations
+from zero. Vacuum subtraction does not change the result on the quark, tadpole and ghost
+rings. On the quark and tadpole rings $m_"IR"$ drops out as predicted, within
+$2 dot 10^(-4)$. On the ghost ring the predicted $m_"IR"$ dependence stays below the
+resolution: at most $1.6 dot 10^(-3)$, against $0.046$ in the local generation. On the
+gluon ring it is resolved: $m_"IR" = 0.7 -> 0.4$ changes the result by
+$-2.233 plus.minus 0.004$, 1.19 times as much as in the local generation. Reliable
+errors need:
+- sampling channels in which the static gluon is a radius, by multichanneling over
+  the loop momentum bases `lmb(0,2,4)`, `lmb(0,3,4)`, `lmb(0,2,5)` and `lmb(0,3,5)` (the
+  first two on the tadpole ring): in the default channel the $|q|^(-2)$ remainder has
+  infinite variance;
+- seeds further apart than the number of iterations, since iteration $i$ samples with
+  the seed plus $i$;
+- the `power` map with `power = 2` on the ghost and gluon rings;
+- on the gluon ring, the compiled evaluator: the uncompiled state takes about a second
+  per sample;
+- on the tadpole ring, quadruple precision above $sum |k| = 100$
+  (`stability.loop_momenta_norm_escalation_factor`): double-precision values go wrong
+  at large loop momenta there without failing the rotation check.
 
 === Limitations
 <zero-mode-limitations>
 - On the gluon and ghost rings the joint soft remainder ($q, k -> 0$ together)
   scales with power $+1$, from a term odd under $(q, k) -> (-q, -k)$; its
-  parity-even part scales with $+2$. The integral converges, but with per-loop
-  spherical maps the Monte Carlo variance of the odd term diverges
-  logarithmically. Antithetic $(q, k) -> (-q, -k)$ sampling is not implemented.
+  parity-even part scales with $+2$. The integral converges, but with the linear
+  radial map (and `log`, which is linear near zero) the Monte Carlo variance of the
+  odd term diverges logarithmically, also in differences between values of $M$, since
+  the odd term depends on $M$ through the $q$-linear Taylor term of $U_A$; LMB
+  multichanneling does not cure it. The `power` radial map with `power = 2`
+  ($r = E_"cm" b (x \/ (1 - x))^p$) makes it finite: its density near zero behaves
+  as $r^(1 \/ p - 3)$ per loop, so the variance integrand of the joint soft limit
+  scales as $lambda^(1 - 2 \/ p)$.
 - $omega(Sigma)$ ignores the suppression of a ghost vertex whose momentum factor is
   soft. It never misses a divergence, but on other graphs it can flag a convergent
   soft set containing ghost lines, which then gets an unnecessary but harmless
@@ -647,6 +870,66 @@ exists yet.
   and $+4.08$ at $r^2 = 0.88$ for $M = 0.745$, while the remainder stays bounded. The
   slow lane's `*_with_static_theory_mass` cases therefore run at
   $m_"IR" = 0.5 M$, away from such a zero.
+- An add-back is localized on its cograph by the 3D generator. On the gluon ring the
+  add-back $C_A C_B$ of the factorized join sits on the bare gluon loop, where the
+  three-gluon vertices raise the numerator's energy degree to one above its two
+  propagators'. Contracting the last of them leaves a quotient polynomial in the loop
+  energy, an unlocalized energy contact (`GenerationError::UnlocalizedEnergyContact`),
+  which no residue localizes. The same add-back arises without hosts; it is a property
+  of the localization, not of the zero-mode route.
+  - With vacuum subtraction, `Localizer::localize` asks the generator to omit such
+    quotients (`UnlocalizedEnergyContacts::OmitUnderVacuumSubtraction`) and keeps the
+    residue part. This is exact for GammaLoop's subtracted weight: a quotient whose term
+    keeps no denominator has no residue and so no distribution, its weight is the bare
+    medium unit, and `W - V(W)` maps that unit to zero, exactly as it does for the
+    constant quotients the generator already emits as unit-weight contacts. The unit
+    weight does not depend on the temperature or the chemical potentials, so this is
+    GammaLoop's convention for the polynomial. A polynomial has no occupation-weighted
+    residue, and the convention agrees with the standard prescriptions for its Matsubara
+    sum minus its vacuum integral: zeta-function regularization ($T sum_n 1 = 0$,
+    $T sum_n omega_n^k = 0$) and the equal-time convergence factor give zero for the
+    sum, as dimensional regularization does for the scaleless vacuum integral. A cutoff
+    on the Matsubara frequencies agrees only at zero chemical potential, where by
+    Poisson summation the regulated sum minus the regulated vacuum integral samples the
+    regulated polynomial's Fourier transform only at nonzero multiples of $1 \/ T$,
+    which vanishes as the regulator is removed. With a chemical potential the
+    energies $i omega_n + mu$ shift the polynomial against its vacuum integral: for
+    $q_0^2$ and a Gaussian cutoff $Lambda$ the difference is $mu^2 Lambda \/ (2 sqrt(pi))$
+    at $T = 1$, and it grows with the cutoff. The gluon cograph is bosonic without a
+    chemical potential. The generator's mode is general, not specific to the ring: it
+    omits exactly the quotients whose term keeps no denominator of the source. A
+    quotient beside surviving denominators, of another loop or of another factor of a
+    disconnected product, multiplies their distributions, which the subtraction keeps
+    (the generator gives a constant quotient there the value one beside them), so it is
+    still reported. The error records which of the two a quotient is
+    (`EnergyContactRemainder`), in either mode. Vacuum generation rejects the mode
+    (`GenerationError::UnlocalizedContactOmissionRequiresMedium`).
+    `three-dimensional-reps` pins the unchanged error, the medium requirement and the
+    quotients beside surviving denominators (`unlocalized_energy_contact_tests`), and, with
+    its `eval` oracle, the residue part against the analytic vacuum-subtracted Matsubara
+    sum and against the regulated Matsubara sum minus the regulated vacuum integral of
+    the whole integrand
+    (`omitted_energy_contacts_leave_the_vacuum_subtracted_matsubara_sum`): a tadpole and
+    a double-pole bubble like the gluon loop, whose quotients the occurrence
+    interpolation omits, and a triangle of three masses, whose last black-box line keeps
+    its residue samples and omits its contact part.
+  - Without vacuum subtraction the gluon ring with integrated counterterms is not
+    supported: the vacuum part of the add-back is a scaleless massless loop in
+    dimensional regularization, which a strict 3D integrand cannot represent.
+    Localization stops with `IntegratedLocalizationError::EnergyContactRequiresVacuumSubtraction`,
+    which names the node and its cograph and asks for vacuum subtraction. It does so only
+    for a quotient that vacuum subtraction removes; a quotient beside surviving
+    denominators keeps the generator's error, with and without vacuum subtraction.
+- A zero-mode projection reads a summand off as projected when its class dependence is
+  one power of the class propagator, also through sums whose terms share it. A frozen
+  summand whose sums mix different powers of one class propagator, as a later series
+  could produce from two orders of one host in one coefficient, would still reach the
+  hard-vacuum sector as unprojected (`ZeroModeError::FrozenHardVacuum`). The rings do
+  not produce it: the only frozen branches in front of a hard-vacuum sector there come
+  from host $A$, whose single tuple restores one power per class. A single-class
+  connected host under vacuum subtraction restores two, $2 nu$ and $2 nu - 1$, which a
+  later series could gather into one sum; an enclosing hard-vacuum sector of the same
+  class would then need the summand split by power, which is not implemented.
 - A host needs the retained whole-graph spinney
   (`ZeroModeHostError::MissingEnclosingSpinney`), so graphs whose full-graph degree is
   negative are rejected: their static cograph has no local R\* subtraction.
@@ -780,9 +1063,14 @@ For accepted tails, tables label the sparse terminal-zero evidence as `zero tail
   reduces to U. At finite temperature, positive-degree `IR` is the operation of a
   zero-mode host, described in
   #link(<finite-temperature-zero-mode-subtraction>)[Finite-temperature zero-mode subtraction],
-  whose integrated add-back is not generated: with integrated counterterms,
-  generation stops where the integrated lane reaches a zero-mode host. Integrated
-  `IR` uses the signed finite projection described above.
+  whose own add-back is deferred: with integrated counterterms, only the U's that
+  carry the vacuum mass get theirs, also inside zero-mode terms, where the
+  zero-temperature lane counts a connected host by its plain U and a union host as
+  zero. An add-back whose cograph numerator exceeds the loop-energy degree of the
+  cograph's propagators, as on the gluon ring's factorized join, is localized only
+  under vacuum subtraction, which removes its polynomial energy contact; without it
+  generation stops with an error that asks for vacuum subtraction. Integrated `IR` uses
+  the signed finite projection described above.
 - Scheme validation rejects a positive-degree MUV parent containing a
   positive-degree IR child: its reduced-cograph subtraction lacks the containing
   soft branch. At finite temperature on the hedge-poset direct-3D route, with and

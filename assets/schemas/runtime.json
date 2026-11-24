@@ -516,7 +516,7 @@
           "$ref": "#/$defs/OrientationPattern"
         },
         "renormalization_localization_scale": {
-          "description": "Localization scale applied to ultraviolet counterterms, in the model's energy units.",
+          "description": "Localization scale applied to ultraviolet counterterms, in the model's energy units: the\nwidth of the normalized kernel that spreads each integrated counterterm over the loop\nmomenta of its subgraph. Integrated results do not depend on it. At finite temperature,\nkeep it of the order of the temperature: much larger values make the localized\ncounterterms negligible against the local ones at thermal momenta.",
           "type": "number",
           "format": "double"
         },

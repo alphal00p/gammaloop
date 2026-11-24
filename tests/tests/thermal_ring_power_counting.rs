@@ -21,8 +21,8 @@ use gammaloop_integration_tests::CLIState;
 use gammaloop_integration_tests::evaluation_comparison;
 use gammaloop_integration_tests::thermal_rings;
 use gammaloop_integration_tests::thermal_rings::{
-    Evaluation, GHOST_RING, MIN_R_SQUARED, MIXED_RING, QUARK_RING, SCALING_TOLERANCE, TADPOLE_RING,
-    ThermalRing, UvScan, VacuumSubtraction,
+    Counterterms, Evaluation, GHOST_RING, MIN_R_SQUARED, MIXED_RING, QUARK_RING, SCALING_TOLERANCE,
+    TADPOLE_RING, ThermalRing, UvScan, VacuumSubtraction,
 };
 
 use Expected::{Collinear, Power};
@@ -279,7 +279,10 @@ fn thermal_ring_static_theory_mass_is_independent_of_m_uv() -> Result<()> {
     let _serial = integration_tests::SERIAL_TEST_LOCK.lock();
     let name = TADPOLE_RING.name;
     let (mut cli, state_path) = TADPOLE_RING.fresh_cli(&format!("{name}_static_theory_mass"))?;
-    integration_tests::run_commands(&mut cli, VacuumSubtraction::Off.subtraction_commands())?;
+    integration_tests::run_commands(
+        &mut cli,
+        VacuumSubtraction::Off.subtraction_commands(Counterterms::Local),
+    )?;
     let m_uv = thermal_rings::assert_run_card_static_theory_mass(&cli, name)?;
     let value = |cli: &mut CLIState| {
         thermal_rings::evaluate_momentum_point(cli, name, Evaluation::Arb, &SOFT_Q_POINT)

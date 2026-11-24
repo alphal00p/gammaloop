@@ -354,6 +354,18 @@ attaching numerator factors; it applies no further medium-dependent normalizatio
 Surviving pole orientations remain independent of numerator interpolation maps,
 so zero or uniform-scale samples never set the chemical-potential sign. Residue
 map identities and labels distinguish both the pole directions and the samples.
+A contact that removes the last denominator carrying a loop energy, while the
+numerator still exceeds that denominator's degree in it, leaves a quotient polynomial
+in the energy that no residue localizes, and generation reports it
+(`GenerationError::UnlocalizedEnergyContact`). A caller that vacuum-subtracts the
+completed weights may request `UnlocalizedEnergyContacts::OmitUnderVacuumSubtraction`:
+a quotient whose term keeps no denominator has the bare medium unit as its weight,
+which `W - V(W)` maps to zero, so generation omits it. A quotient beside surviving
+denominators multiplies their distributions and is still reported, and vacuum
+generation rejects the request. The error records which of the two a quotient is
+(`EnergyContactRemainder`) in either mode. GammaLoop requests the omission only to
+localize integrated add-backs under vacuum subtraction; without vacuum subtraction it
+asks for vacuum subtraction only where that would remove the quotient.
 
 Medium modes use direct local 3D UV subtraction. The ordinary operator `U`
 takes the active distributions' vacuum limit. At finite temperature the soft
@@ -377,8 +389,21 @@ route a divergent soft set without a host is an error that names
 route freezes completed branches and runs this policy, with and without integrated
 counterterms; the other routes reject finite-temperature `IR` components of positive
 degree but do not search for soft sets without a host. With integrated counterterms,
-generation stops where the integrated lane reaches a zero-mode host, whose integrated
-counterparts are not generated yet. Vacuum subtraction is optional. The orders, tags, minimal depth of enclosing operations, add-back
+every U that carries the vacuum mass `mUV` gets its integrated counterpart, the finite
+conversion to 4D MS-bar, also inside zero-mode terms: the zero-temperature lane counts a
+connected host by its plain U and gives nothing to a union host and the nodes above it,
+and the replay applies the zero-mode operations on supports from which integrated
+prefixes were contracted, including the zero mode of a connected host on its own
+add-back. The zero-mode operations and the static-theory U's (`mIR`) stay local; their
+add-back is deferred. The zero-mode charts co-scale every mass of an integrated vertex,
+its terminal vacuum mass `mUV` and its expansion mass `mUVexp` alike, so the zero-mode
+image of each add-back cancels the static mode of its cograph. Vacuum subtraction is
+optional, except for an add-back whose cograph numerator exceeds the loop-energy degree of
+the cograph's propagators, as on the gluon ring, whose localization needs it. A zero-mode
+projection reads a summand $c dot.op "OSE"(r)^(-a)$ that a class already projected off without
+expanding it, also where a later Taylor series carried the class propagators into each term
+of a sum, so a frozen branch behind a static U reaches an enclosing hard-vacuum sector as
+projected. The orders, tags, minimal depth of enclosing operations, add-back
 bookkeeping and known limitations are documented in
 #link("uv-renormalization.typ#finite-temperature-zero-mode-subtraction")[the UV renormalization architecture].
 

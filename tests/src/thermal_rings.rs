@@ -78,11 +78,14 @@ impl VacuumSubtraction {
         }
     }
 
-    /// The zero-mode subtraction of the run card's IR prescription.
-    pub fn subtraction_commands(self) -> &'static [&'static str] {
-        match self {
-            Self::On => &["run generate"],
-            Self::Off => &["run generate_novacsub"],
+    /// The zero-mode subtraction of the run card's IR prescription with
+    /// `counterterms`.
+    pub fn subtraction_commands(self, counterterms: Counterterms) -> &'static [&'static str] {
+        match (counterterms, self) {
+            (Counterterms::Local, Self::On) => &["run generate"],
+            (Counterterms::Local, Self::Off) => &["run generate_novacsub"],
+            (Counterterms::Integrated, Self::On) => &["run generate_integrated"],
+            (Counterterms::Integrated, Self::Off) => &["run generate_integrated_novacsub"],
         }
     }
 }
@@ -92,6 +95,34 @@ impl Display for VacuumSubtraction {
         match self {
             Self::On => write!(f, "with vacuum subtraction"),
             Self::Off => write!(f, "without vacuum subtraction"),
+        }
+    }
+}
+
+/// The UV counterterms of a ring generation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Counterterms {
+    /// Local counterterms only: `uv.generate_integrated = false`.
+    Local,
+    /// Every counterterm with `general.m_uv` also adds back its integrated
+    /// finite conversion to MS-bar, inside the zero-mode terms too, localized
+    /// at the thermal scale. The zero-mode operations and the static theory's
+    /// counterterms, with `general.m_ir`, stay local.
+    Integrated,
+}
+
+impl Counterterms {
+    /// Whether the generation adds back integrated counterterms.
+    pub fn integrated(self) -> bool {
+        matches!(self, Self::Integrated)
+    }
+}
+
+impl Display for Counterterms {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match self {
+            Self::Local => write!(f, "with local counterterms"),
+            Self::Integrated => write!(f, "with integrated counterterms"),
         }
     }
 }

@@ -1245,8 +1245,9 @@ impl Forests {
     ///
     /// # Errors
     ///
-    /// A union host whose soft set meets `prefix`, which a factorized join
-    /// does not produce: it has no U to keep.
+    /// A union host whose soft set meets `prefix`, an internal error
+    /// ([`ZeroModeHostError::PrefixInUnionSoftSet`]): a factorized join does
+    /// not produce it, and the host has no U to keep.
     fn replayed_plain_u(
         &self,
         graph: &Graph,
@@ -1256,22 +1257,17 @@ impl Forests {
         let Some(region) = current.thermal_zero_mode() else {
             return Ok(None);
         };
-        if !graph
-            .paired_edges(prefix)
-            .iter()
-            .any(|edge| region.sigma().contains(edge))
-        {
+        let prefix = graph.paired_edges(prefix);
+        if !prefix.iter().any(|edge| region.sigma().contains(edge)) {
             return Ok(None);
         }
         match region.kind() {
             ZeroModeHostKind::Connected => Ok(Some(current.spinney.to_plain_u())),
-            ZeroModeHostKind::Union => Err(eyre!(
-                "graph '{}': unsupported zero-mode forest: the integrated prefix {} lies in the \
-                 soft set of the union zero-mode host {}",
-                graph.name,
-                prefix.string_label(),
-                current.subgraph().string_label()
-            )),
+            ZeroModeHostKind::Union => Err(ZeroModeHostError::PrefixInUnionSoftSet {
+                host: graph.paired_edges(current.subgraph()).into_iter().collect(),
+                prefix: prefix.into_iter().collect(),
+            }
+            .into()),
         }
     }
 
@@ -1428,78 +1424,14 @@ impl Forests {
                 let prefix_cover = integrated_operation
                     .covers()
                     .unwrap_or_else(|| graph.empty_subgraph());
-                let mut edges = state.local_edges.into_iter().enumerate();
-                let (offset, first_edge) = edges
-                    .next()
-                    .expect("a proper integrated prefix has a local suffix");
-                let step_order = integrated_operation.key.op_count() + offset;
-                let (current, given) = self.wood.current_given_pair(first_edge, step_order);
-                let plain_u = self.replayed_plain_u(graph, &current, &prefix_cover)?;
-                let current = match &plain_u {
-                    Some(spinney) => ForestNode {
-                        spinney,
-                        topo_order: step_order,
-                    },
-                    None => current,
-                };
-
                 // An empty integrated prefix starts from the per-cut root integrand. Every
                 // other prefix enters through the reduced branch of its first local operation.
                 let mut sector = if integrated_operation.key.is_empty() {
-                    let root = Direct3dCts::root(graph, localizer)?;
-                    Direct3dApproximation::new(localizer, graph, settings)
-                        .run_local(&root, &current, &given, &current, &given)?
+                    Some(Direct3dCts::root(graph, localizer)?)
                 } else {
-                    // Retain each connected coefficient's owner before the
-                    // product enters a local suffix. Equal physical masses in
-                    // a disjoint sibling must not acquire the parent's grading.
-                    // Keep disconnected vacuum masses owned as well; the
-                    // complete union still determines the localization kernel.
-                    let components = if self.graph.is_disjoint_union(state.integrated) {
-                        self.disconnected_component_nodes(state.integrated)?
-                    } else {
-                        vec![state.integrated]
-                    };
-                    let finite_components = components
-                        .into_iter()
-                        .map(|component| {
-                            let operation = &self.graph[component];
-                            let integrated = self
-                                .compute_store
-                                .require(operation)?
-                                .integrated(operation)?;
-                            Ok((
-                                integrated.physical_finite_counterterm_atom(),
-                                ForestNode {
-                                    spinney: self.source_spinney(component),
-                                    topo_order: operation.key.op_count(),
-                                },
-                            ))
-                        })
-                        .collect::<Result<Vec<_>>>()?;
-                    let finite_counterterms = finite_components
-                        .iter()
-                        .map(|(coefficient, owner)| (coefficient, owner))
-                        .collect::<Vec<_>>();
-                    // A disabled (or algebraically vanishing) integrated prefix
-                    // still owns its typed component-path frame. Replay that
-                    // zero coefficient through the local suffix; it remains
-                    // algebraically zero without deleting the union sector.
-                    let prefix_node = ForestNode {
-                        spinney: self.source_spinney(state.integrated),
-                        topo_order: integrated_operation.key.op_count(),
-                    };
-                    Direct3dApproximation::new(localizer, graph, settings).run_integrated(
-                        &finite_counterterms,
-                        &prefix_node,
-                        &current,
-                        &given,
-                        &current,
-                        &given,
-                    )?
+                    None
                 };
-
-                for (offset, edge) in edges {
+                for (offset, edge) in state.local_edges.into_iter().enumerate() {
                     let step_order = integrated_operation.key.op_count() + offset;
                     let (current, given) = self.wood.current_given_pair(edge, step_order);
                     let plain_u = self.replayed_plain_u(graph, &current, &prefix_cover)?;
@@ -1510,9 +1442,61 @@ impl Forests {
                         },
                         None => current,
                     };
-                    sector = Direct3dApproximation::new(localizer, graph, settings)
-                        .run_local(&sector, &current, &given, &current, &given)?;
+                    sector = Some(match sector {
+                        Some(sector) => Direct3dApproximation::new(localizer, graph, settings)
+                            .run_local(&sector, &current, &given, &current, &given)?,
+                        None => {
+                            // Retain each connected coefficient's owner before the
+                            // product enters a local suffix. Equal physical masses in
+                            // a disjoint sibling must not acquire the parent's grading.
+                            // Keep disconnected vacuum masses owned as well; the
+                            // complete union still determines the localization kernel.
+                            let components = if self.graph.is_disjoint_union(state.integrated) {
+                                self.disconnected_component_nodes(state.integrated)?
+                            } else {
+                                vec![state.integrated]
+                            };
+                            let finite_components = components
+                                .into_iter()
+                                .map(|component| {
+                                    let operation = &self.graph[component];
+                                    let integrated = self
+                                        .compute_store
+                                        .require(operation)?
+                                        .integrated(operation)?;
+                                    Ok((
+                                        integrated.physical_finite_counterterm_atom(),
+                                        ForestNode {
+                                            spinney: self.source_spinney(component),
+                                            topo_order: operation.key.op_count(),
+                                        },
+                                    ))
+                                })
+                                .collect::<Result<Vec<_>>>()?;
+                            let finite_counterterms = finite_components
+                                .iter()
+                                .map(|(coefficient, owner)| (coefficient, owner))
+                                .collect::<Vec<_>>();
+                            // A disabled (or algebraically vanishing) integrated prefix
+                            // still owns its typed component-path frame. Replay that
+                            // zero coefficient through the local suffix; it remains
+                            // algebraically zero without deleting the union sector.
+                            let prefix_node = ForestNode {
+                                spinney: self.source_spinney(state.integrated),
+                                topo_order: integrated_operation.key.op_count(),
+                            };
+                            Direct3dApproximation::new(localizer, graph, settings).run_integrated(
+                                &finite_counterterms,
+                                &prefix_node,
+                                &current,
+                                &given,
+                                &current,
+                                &given,
+                            )?
+                        }
+                    });
                 }
+                let sector = sector.expect("a proper integrated prefix has a local suffix");
 
                 // Keep each active/frozen split after its root-path replay so any connected
                 // descendants rescale only the loop variables still active in that sector.
@@ -2005,9 +1989,15 @@ mod tests {
     use idenso::shorthands::metric::MetricSimplifier;
 
     use super::*;
+    use crate::uv::approx::local_3d::{Local3DConceptualBranch, Local3DLoopRescaling};
     use crate::uv::test_fixtures::{Ring, edge_set, ring_uv_settings, thermal_medium};
     use crate::uv::thermal_zero_mode::tests::{connected_region, zero_mode_policy};
     use color_eyre::Result;
+    use std::fmt::{Formatter, Result as FmtResult};
+    use symbolica::atom::Symbol;
+    use symbolica::id::Replacement;
+    use symbolica::symbol;
+    use three_dimensional_reps::RepresentationMode;
 
     /// The unfolded wood of a thermal ring under the zero-mode host policy:
     /// the IR prescription on the direct local-3D route at finite temperature,
@@ -2045,6 +2035,246 @@ mod tests {
     }
 
     impl Forests {
+        /// Seeds the integrated counterterm of every node with the symbolic
+        /// integral `(c<node> M^dod + e<node> mUVexp^2 M^(dod - 2)) (1 + ε c'<node>)`
+        /// ([`seed_symbol`], [`expansion_seed_symbol`]) in place of its analytic
+        /// integration, as the zero-temperature lane decides
+        /// ([`Self::compute_4d_for_node`]): zero without a counterpart there,
+        /// the product of the components' for a factorized join. Like vakint's
+        /// counterterms, the vertex holds the vacuum mass both as `mUV` and as
+        /// the expansion mass `mUVexp` that the integrated U leaves in its
+        /// numerators.
+        fn seed_symbolic_integrated(
+            &mut self,
+            graph: &Graph,
+            vacuum_subtraction: bool,
+        ) -> Result<()> {
+            for node in self.graph.topo_sort_kahn(DirectionBasis::Underlying)? {
+                let operation = self.graph[node].clone();
+                let integrated = if operation.key.is_empty()
+                    || !self.has_zero_temperature_counterpart(node, graph, vacuum_subtraction)
+                {
+                    IntegratedCts::root()
+                } else {
+                    let depth = graph.n_loops(&operation.covers().expect("a proper cover")) + 1;
+                    if self.graph.is_disjoint_union(node) {
+                        let factors = self
+                            .disconnected_component_nodes(node)?
+                            .into_iter()
+                            .map(|component| {
+                                let operation = &self.graph[component];
+                                self.compute_store.require(operation)?.integrated(operation)
+                            })
+                            .collect::<Result<Vec<_>>>()?;
+                        IntegratedCts::factorized_product(factors, depth)?
+                    } else {
+                        // The integrated vertex has the mass dimension of its
+                        // subgraph, which the soft charts read off.
+                        let dod = i64::from(self.source_spinney(node).dod);
+                        let mass = Atom::var(GS.m_uv_vacuum);
+                        let finite = Atom::var(seed_symbol(node)) * mass.pow(dod)
+                            + Atom::var(expansion_seed_symbol(node))
+                                * Atom::var(GS.m_uv_expansion).pow(2)
+                                * mass.pow(dod - 2);
+                        let positive =
+                            Atom::var(symbol!(&format!("hedge_poset_test_eps_c{}", node.0)));
+                        IntegratedCts::from_integral(
+                            &(&finite * (Atom::one() + Atom::var(GS.dim_epsilon) * positive)),
+                            depth,
+                        )?
+                    }
+                };
+                self.compute_store.entry(operation).or_default().integrated = Some(integrated);
+            }
+            Ok(())
+        }
+
+        /// Names and subgraphs for the string labels of the wood's subgraphs
+        /// and their differences: `A` = {e2, e3}, `B` the second loop, `AB`
+        /// their union, `G` the whole graph, `D<edges>` a two-loop spinney and
+        /// `∅` the empty subgraph; a difference is named after the spinney it
+        /// equals, else as `X-Y`.
+        fn subgraph_names(&self, graph: &Graph) -> BTreeMap<String, (String, SuBitGraph)> {
+            let filters = self
+                .wood
+                .graph
+                .iter_nodes()
+                .map(|(_, _, spinney)| spinney.filter().clone())
+                .collect::<BTreeSet<_>>();
+            let edges = |subgraph: &SuBitGraph| {
+                graph
+                    .paired_edges(subgraph)
+                    .into_iter()
+                    .map(usize::from)
+                    .collect::<Vec<_>>()
+            };
+            let all = (0..graph.underlying.n_edges()).collect::<Vec<_>>();
+            let name = |subgraph: &SuBitGraph| match edges(subgraph).as_slice() {
+                [] => "∅".to_string(),
+                [2, 3] => "A".to_string(),
+                [4, 5] | [4] => "B".to_string(),
+                [2, 3, 4, 5] | [2, 3, 4] => "AB".to_string(),
+                edges if edges == all.as_slice() => "G".to_string(),
+                edges => format!("D{}", edges.iter().join("")),
+            };
+            let mut names = BTreeMap::new();
+            for outer in &filters {
+                for inner in &filters {
+                    let difference = outer.subtract(inner);
+                    let named = if filters.contains(&difference) || difference.is_empty() {
+                        name(&difference)
+                    } else if outer.includes(inner) {
+                        format!("{}-{}", name(outer), name(inner))
+                    } else {
+                        continue;
+                    };
+                    names
+                        .entry(difference.string_label())
+                        .or_insert((named, difference));
+                }
+            }
+            names
+        }
+
+        /// The rescaled support of an operation on `component` as the
+        /// component less its integrated part: `X` for the whole of `X`,
+        /// `X-Y` once the part `Y` is integrated, `∅` once all of it is.
+        fn support_name(
+            names: &BTreeMap<String, (String, SuBitGraph)>,
+            component: &str,
+            support: &str,
+        ) -> String {
+            let (component_name, component) = &names[component];
+            let (_, support) = &names[support];
+            if support == component {
+                component_name.clone()
+            } else if support.is_empty() {
+                "∅".to_string()
+            } else {
+                format!(
+                    "{component_name}-{}",
+                    names[&component.subtract(support).string_label()].0
+                )
+            }
+        }
+
+        /// The trace of `node` as its Foata levels, each the sorted names
+        /// of its operation scopes.
+        fn trace_name(
+            &self,
+            node: NodeIndex,
+            names: &BTreeMap<String, (String, SuBitGraph)>,
+        ) -> String {
+            trace_levels(self, node)
+                .iter()
+                .map(|level| {
+                    level
+                        .iter()
+                        .map(|scope| names[&scope.string_label()].0.clone())
+                        .sorted()
+                        .join(",")
+                })
+                .join(";")
+        }
+
+        /// The shapes of the sectors of the local 3D counterterm of `node`
+        /// ([`SectorShape`]), vanishing ones included, sorted.
+        fn sector_shapes(
+            &self,
+            node: NodeIndex,
+            names: &BTreeMap<String, (String, SuBitGraph)>,
+        ) -> Result<Vec<SectorShape>> {
+            let operation = &self.graph[node];
+            if operation.key.is_empty() {
+                return Ok(Vec::new());
+            }
+            let cutset = self.cuts.first().expect("a cut").1.clone();
+            let local = self
+                .compute_store
+                .require(operation)?
+                .cut(operation, &cutset)?
+                .local_3d
+                .direct()?;
+            let seeded = self
+                .graph
+                .iter_nodes()
+                .map(|(node, _, _)| {
+                    (
+                        seed_symbol(node),
+                        expansion_seed_symbol(node),
+                        self.trace_name(node, names),
+                    )
+                })
+                .collect::<Vec<_>>();
+            // The expansion masses of the seeded vertices, which no local U
+            // introduced.
+            let without_seeded_expansion_masses = seeded
+                .iter()
+                .map(|(_, expansion, _)| {
+                    Replacement::new(Atom::var(*expansion).to_pattern(), Atom::Zero.to_pattern())
+                })
+                .collect::<Vec<_>>();
+            let mut shapes = Vec::new();
+            for sector in local.sectors()? {
+                let atom = sector.active.factorized_sum();
+                let [path] = sector.projection_paths.as_slice() else {
+                    panic!("a ring sector has one projection path");
+                };
+                let steps = path
+                    .steps
+                    .iter()
+                    .map(|step| {
+                        let branches = step
+                            .conceptual_branches
+                            .iter()
+                            .map(|branch| branch.branch)
+                            .collect::<Vec<_>>();
+                        let kind = match branches.as_slice() {
+                            [Local3DConceptualBranch::U] => StepKind::U,
+                            [Local3DConceptualBranch::S] => StepKind::S0,
+                            _ => StepKind::H,
+                        };
+                        (
+                            kind,
+                            names[&step.current_component].0.clone(),
+                            Self::support_name(
+                                names,
+                                &step.current_component,
+                                &step.rescaled_subgraph,
+                            ),
+                        )
+                    })
+                    .collect();
+                let holds = |terminal: Symbol, expansion: Symbol| {
+                    atom.contains_symbol(terminal) || atom.contains_symbol(expansion)
+                };
+                shapes.push(SectorShape {
+                    local: path
+                        .steps
+                        .first()
+                        .is_some_and(|step| step.rescaling == Local3DLoopRescaling::FullSubgraph),
+                    vanishes: atom.is_zero(),
+                    prefix: seeded
+                        .iter()
+                        .filter(|(symbol, _, _)| atom.contains_symbol(*symbol))
+                        .map(|(_, _, trace)| trace.clone())
+                        .collect(),
+                    keeps_expansion_masses: seeded
+                        .iter()
+                        .filter(|(symbol, _, _)| atom.contains_symbol(*symbol))
+                        .all(|(_, expansion, _)| atom.contains_symbol(*expansion)),
+                    steps,
+                    static_mass: holds(GS.m_ir_vacuum, GS.m_ir_expansion),
+                    vacuum_mass: holds(GS.m_uv_vacuum, GS.m_uv_expansion),
+                    vacuum_expansion_mass: atom
+                        .replace_multiple(&without_seeded_expansion_masses)
+                        .contains_symbol(GS.m_uv_expansion),
+                });
+            }
+            shapes.sort();
+            Ok(shapes)
+        }
+
         fn normalized_node_label(&self, node: NodeIndex) -> String {
             let label = self.node_label(node);
             let mut normalized = String::with_capacity(label.len());
@@ -2658,6 +2888,655 @@ mod tests {
         Ok(())
     }
 
+    /// The kind of a local operation in a sector's projection path: an
+    /// ordinary U, a zero-mode operation alone, or the operation `S0 + U - U S0`
+    /// of a connected host.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    enum StepKind {
+        U,
+        S0,
+        H,
+    }
+
+    /// One sector of a node's local 3D counterterm with the
+    /// zero-temperature lane seeded by symbols
+    /// ([`Forests::seed_symbolic_integrated`]).
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    struct SectorShape {
+        /// Whether the sector is local, its first operation acting on the
+        /// complete integrand rather than on an integrated prefix.
+        local: bool,
+        /// Whether the sector vanishes.
+        vanishes: bool,
+        /// The traces of the nodes whose seeds the sector holds: its
+        /// integrated prefix, one trace per connected component.
+        prefix: Vec<String>,
+        /// Whether the sector holds the expansion-mass seed of every node of
+        /// its prefix, the part of the integrated vertex with `mUVexp`.
+        keeps_expansion_masses: bool,
+        /// The local operations in order, each with its component and its
+        /// rescaled support.
+        steps: Vec<(StepKind, String, String)>,
+        /// Whether the sector holds the static-theory mass `mIR`.
+        static_mass: bool,
+        /// Whether the sector holds the vacuum mass `mUV`.
+        vacuum_mass: bool,
+        /// Whether the sector holds the expansion mass `mUVexp` that a U
+        /// introduces with the vacuum mass, besides that of the seeded
+        /// integrated vertices.
+        vacuum_expansion_mass: bool,
+    }
+
+    impl SectorShape {
+        /// Whether a U follows a zero-mode operation in this sector's word,
+        /// the only way it can hold the static-theory mass: a U after an
+        /// `S0`, or after the operation of a connected host, whose rows of
+        /// `S0` it expands as a static U.
+        fn has_u_after_zero_mode(&self) -> bool {
+            self.steps
+                .iter()
+                .skip_while(|(kind, _, _)| *kind == StepKind::U)
+                .skip(1)
+                .any(|(kind, _, _)| *kind != StepKind::S0)
+        }
+
+        /// Whether this sector's word starts with a zero-mode operation alone,
+        /// after which every row holds a completed zero-mode branch.
+        fn starts_on_zero_mode(&self) -> bool {
+            self.steps
+                .first()
+                .is_some_and(|(kind, _, _)| *kind == StepKind::S0)
+        }
+
+        /// The components of the operations of the integrated prefix.
+        fn prefix_components(&self) -> BTreeSet<&str> {
+            self.prefix
+                .iter()
+                .flat_map(|trace| trace.split([';', ',']))
+                .collect()
+        }
+
+        /// Whether a local sector `partner` is the word of this integrated
+        /// sector with the U's of the prefix in place: without the
+        /// operations of the prefix's components, its steps are this sector's
+        /// suffix, the self-suffix `S0` of a connected host on the empty
+        /// support standing for the host's own U, which the partner keeps.
+        /// A connected host whose plain U alone replays after a prefix in its
+        /// soft set matches the host's operation.
+        fn is_integrated_form_of(&self, partner: &Self) -> bool {
+            let components = self.prefix_components();
+            let suffix = self
+                .steps
+                .iter()
+                .filter(|(kind, component, support)| {
+                    !(*kind == StepKind::S0
+                        && support == "∅"
+                        && components.contains(component.as_str()))
+                })
+                .collect::<Vec<_>>();
+            let local = partner
+                .steps
+                .iter()
+                .filter(|(_, component, _)| !components.contains(component.as_str()))
+                .collect::<Vec<_>>();
+            partner.local
+                && suffix.len() == local.len()
+                && suffix.iter().zip(&local).all(
+                    |((kind, component, _), (partner_kind, partner_component, _))| {
+                        component == partner_component
+                            && (kind == partner_kind
+                                || (*kind == StepKind::U && *partner_kind == StepKind::H))
+                    },
+                )
+        }
+    }
+
+    impl Display for SectorShape {
+        fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+            let prefix = self
+                .prefix
+                .iter()
+                .map(|trace| format!("∫[{trace}]"))
+                .join(" ");
+            let steps = self
+                .steps
+                .iter()
+                .map(|(kind, component, support)| format!("{kind:?}_{component}|{support}"))
+                .join(", ");
+            let masses = [(self.static_mass, "mIR"), (self.vacuum_mass, "mUV")]
+                .into_iter()
+                .filter_map(|(held, name)| held.then_some(name))
+                .join(",");
+            write!(f, "({prefix}; {steps}) [{masses}]")
+        }
+    }
+
+    /// The symbol `c<node>` that stands for the finite counterterm of `node`
+    /// in [`Forests::seed_symbolic_integrated`].
+    fn seed_symbol(node: NodeIndex) -> Symbol {
+        symbol!(&format!("hedge_poset_test_c{}", node.0))
+    }
+
+    /// The symbol `e<node>` of the part with the expansion mass `mUVexp` of
+    /// the finite counterterm of `node` in
+    /// [`Forests::seed_symbolic_integrated`].
+    fn expansion_seed_symbol(node: NodeIndex) -> Symbol {
+        symbol!(&format!("hedge_poset_test_e{}", node.0))
+    }
+
+    /// The integrated-route settings of the zero-mode pins on the ring
+    /// topologies.
+    fn ring_topology_settings(vacuum_subtraction: bool) -> GenerationSettings {
+        GenerationSettings {
+            uv: UVgenerationSettings {
+                generate_integrated: true,
+                ..ring_uv_settings(ApproximationType::MUV)
+            },
+            medium: thermal_medium(vacuum_subtraction),
+            ..Default::default()
+        }
+    }
+
+    /// The spinneys of the host policy on the physical `ring`, with its
+    /// schemes and degrees, transplanted onto `graph`, the topology of `ring`
+    /// with unit numerators, whose expansions and integrals are cheap. The
+    /// hosts carry their regions on the topology ([`Ring::expected_regions`]).
+    /// Returns the forest of plain U's on the same subgraphs and the forest
+    /// of the host policy.
+    fn ring_topology_spinneys(
+        ring: Ring,
+        graph: &Graph,
+        settings: &GenerationSettings,
+    ) -> Result<(Vec<Spinney>, Vec<Spinney>)> {
+        let physical = ring.physical_graph()?;
+        let policy = zero_mode_policy(
+            &physical,
+            &UVgenerationSettings {
+                generate_integrated: true,
+                ..ring_uv_settings(ApproximationType::IR)
+            },
+            &settings.medium,
+        )?;
+        let regions = ring.expected_regions(graph, settings.medium.vacuum_subtraction);
+        let transplant = |spinney: &Spinney, scheme| -> Result<Spinney> {
+            let edges = physical
+                .paired_edges(spinney.filter())
+                .into_iter()
+                .map(usize::from)
+                .collect::<Vec<_>>();
+            if edges.is_empty() {
+                return Ok(Spinney::empty(graph));
+            }
+            let subgraph = InternalSubGraph::try_new(graph.edge_subgraph(&edges), graph.as_ref())
+                .ok_or_else(|| eyre!("{ring:?}: {edges:?} is no internal subgraph"))?;
+            Spinney::with_scheme(
+                subgraph,
+                graph,
+                &graph.loop_momentum_basis,
+                scheme,
+                spinney.dod,
+            )?
+            .ok_or_else(|| {
+                eyre!(
+                    "{ring:?}: {edges:?} is no spinney of degree {}",
+                    spinney.dod
+                )
+            })
+        };
+        let mut plain = Vec::new();
+        let mut hosted = Vec::new();
+        for spinney in &policy {
+            let transplanted = transplant(spinney, spinney.renormalization_scheme)?;
+            if let Some(region) = spinney.thermal_zero_mode() {
+                let edges = physical
+                    .paired_edges(spinney.filter())
+                    .into_iter()
+                    .collect::<BTreeSet<_>>();
+                assert_eq!(regions[&edges].kind(), region.kind(), "{ring:?}");
+                // The plain join of a union host is a spinney of its own.
+                if region.kind() == ZeroModeHostKind::Connected {
+                    plain.push(transplant(spinney, ApproximationType::MUV)?);
+                }
+                hosted.push(transplanted.with_thermal_zero_mode(regions[&edges].clone()));
+            } else {
+                plain.push(transplant(spinney, ApproximationType::MUV)?);
+                hosted.push(transplanted);
+            }
+        }
+        assert_eq!(hosted.len(), plain.len() + 1, "{ring:?}: one union host");
+        Ok((plain, hosted))
+    }
+
+    /// The sector shapes of every node of the physical `ring` on the
+    /// integrated route under the host policy, with the zero-temperature lane
+    /// seeded by symbols ([`Forests::seed_symbolic_integrated`]), keyed by
+    /// the node's trace ([`Forests::trace_name`]).
+    fn symbolic_integrated_inventory(
+        ring: Ring,
+        vacuum_subtraction: bool,
+    ) -> Result<BTreeMap<String, Vec<SectorShape>>> {
+        let mut graph = ring.physical_graph()?;
+        let settings = GenerationSettings {
+            uv: UVgenerationSettings {
+                generate_integrated: true,
+                ..ring_uv_settings(ApproximationType::IR)
+            },
+            medium: thermal_medium(vacuum_subtraction),
+            ..Default::default()
+        };
+        let options = graph.production_3d_expression_options(&settings, RepresentationMode::Cff)?;
+        let contract = graph.paired_edges(&graph.tree_edges.subtract(&graph.initial_state_cut));
+        let production =
+            graph.generate_3d_expression_for_integrand(&contract, &None, &options, None)?;
+        let projection = OrientationProjection::exact_expression(
+            &production,
+            &options,
+            &settings.orientation_pattern,
+            true,
+        )
+        .with_vacuum_subtraction(vacuum_subtraction);
+        let mut forests = Wood::new(CutStructure::empty(&graph), &graph, &settings)?.unfold();
+        forests.seed_symbolic_integrated(&graph, vacuum_subtraction)?;
+        forests.compute(
+            &mut graph,
+            utils::vakint()?,
+            projection,
+            &settings.uv,
+            false,
+            &mut Local4dProjectionContext::default(),
+        )?;
+        let names = forests.subgraph_names(&graph);
+        forests
+            .graph
+            .iter_nodes()
+            .map(|(node, _, _)| {
+                Ok((
+                    forests.trace_name(node, &names),
+                    forests.sector_shapes(node, &names)?,
+                ))
+            })
+            .collect()
+    }
+
+    /// The zero-temperature integrated lane counts a connected zero-mode host
+    /// by its plain U and gives nothing to a union host and to every node
+    /// above one: their zero-mode operations are local only. Under vacuum
+    /// subtraction it gives nothing to a node covering every loop either,
+    /// whose add-back would sit on a loopless cograph. On the ring topologies
+    /// with unit numerators, whose integrals are cheap, with the hosts of the
+    /// host policy ([`ring_topology_spinneys`]), every other node has the
+    /// local and integrated counterterms of the same trace in the forest of
+    /// plain U's, the factorized join the product of its factors'.
+    #[test]
+    fn zero_mode_hosts_integrate_their_plain_u() -> Result<()> {
+        test_initialise()?;
+        for ring in Ring::ALL {
+            let graph = ring.topology()?;
+            let settings = ring_topology_settings(true);
+            let (plain, hosted) = ring_topology_spinneys(ring, &graph, &settings)?;
+            let vakint = utils::vakint()?;
+            let mut forests =
+                Wood::from_spinneys(hosted, &graph, CutStructure::empty(&graph), &settings.uv)?
+                    .unfold();
+            let mut reference =
+                Wood::from_spinneys(plain, &graph, CutStructure::empty(&graph), &settings.uv)?
+                    .unfold();
+            forests.integrate(&graph, vakint, &settings.uv, true)?;
+            reference.integrate(&graph, vakint, &settings.uv, true)?;
+
+            let union =
+                graph.edge_subgraph(&[[2, 3].as_slice(), ring.second_loop_edges()].concat());
+            let a = graph.edge_subgraph(&[2, 3]);
+            let mut compared = BTreeMap::new();
+            for (node, _, operation) in forests.graph.iter_nodes() {
+                if operation.key.is_empty() {
+                    continue;
+                }
+                let levels = trace_levels(&forests, node);
+                let context = format!("{ring:?}: {}", forests.node_label(node));
+                let computed = forests.compute_store.require(operation)?;
+                let local = computed.local_4d(operation)?.atom().clone();
+                let integrated = computed.integrated(operation)?;
+                let above_union_host = levels.iter().any(|level| level.contains(&union));
+                let covers_every_loop = graph.n_loops(&operation.covers().expect("a proper cover"))
+                    == graph.n_loops(&graph.full_filter());
+                assert_eq!(
+                    forests.has_zero_temperature_counterpart(node, &graph, false),
+                    !above_union_host,
+                    "{context}: without vacuum subtraction"
+                );
+                if above_union_host || covers_every_loop {
+                    assert!(local.is_zero(), "{context}: {local}");
+                    assert!(
+                        integrated.physical_finite_counterterm_atom().is_zero()
+                            && integrated.physical_pole_atom().is_zero(),
+                        "{context}"
+                    );
+                    continue;
+                }
+                let (twin, _, twin_operation) = reference
+                    .graph
+                    .iter_nodes()
+                    .find(|(twin, _, _)| trace_levels(&reference, *twin) == levels)
+                    .ok_or_else(|| eyre!("{context}: no plain twin"))?;
+                let twin_computed = reference.compute_store.require(twin_operation)?;
+                let twin_integrated = twin_computed.integrated(twin_operation)?;
+                assert_eq!(
+                    &local,
+                    twin_computed.local_4d(twin_operation)?.atom(),
+                    "{context}: local, against {}",
+                    reference.node_label(twin)
+                );
+                assert_eq!(
+                    integrated.physical_finite_counterterm_atom(),
+                    twin_integrated.physical_finite_counterterm_atom(),
+                    "{context}: finite counterterm"
+                );
+                assert_eq!(
+                    integrated.physical_pole_atom(),
+                    twin_integrated.physical_pole_atom(),
+                    "{context}: pole"
+                );
+                compared.insert(levels, integrated.physical_finite_counterterm_atom());
+            }
+            // The host itself, its bubble partner and their join integrate to
+            // nonzero counterterms.
+            let b = graph.edge_subgraph(ring.second_loop_edges());
+            for levels in [
+                vec![BTreeSet::from([a.clone()])],
+                vec![BTreeSet::from([b.clone()])],
+                vec![BTreeSet::from([a.clone(), b.clone()])],
+            ] {
+                assert!(
+                    compared
+                        .get(&levels)
+                        .is_some_and(|finite| !finite.is_zero()),
+                    "{ring:?}: {levels:?} is not compared or vanishes"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// Checks the sectors of the physical `ring` on the integrated route,
+    /// with or without `vacuum_subtraction`, against the integrated sectors
+    /// of the forest words in `expected`: one line
+    /// `[trace] (∫[prefix trace] ...; operations) [masses]` per nonzero
+    /// sector with an integrated prefix
+    /// ([`symbolic_integrated_inventory`]).
+    ///
+    /// It also checks that the add-back of every U with the vacuum mass
+    /// cancels its mass per counterterm family: every such sector has its
+    /// local partner at its node, the same word with the prefix's U's in
+    /// place ([`SectorShape::is_integrated_form_of`]). No U after a zero-mode
+    /// operation introduces the vacuum mass: only a sector with a U after one
+    /// holds `mIR`, and a sector whose word starts with a zero-mode operation
+    /// alone, all of whose rows hold a completed branch, holds no `mUVexp`.
+    fn check_integrated_sectors(
+        ring: Ring,
+        vacuum_subtraction: bool,
+        expected: &str,
+    ) -> Result<()> {
+        test_initialise()?;
+        let mut integrated = Vec::new();
+        for (trace, shapes) in symbolic_integrated_inventory(ring, vacuum_subtraction)? {
+            for shape in shapes.iter().filter(|shape| !shape.vanishes) {
+                let context = format!(
+                    "{ring:?}, vacuum subtraction {vacuum_subtraction}, [{trace}]: {shape}"
+                );
+                if !shape.local {
+                    assert!(!shape.prefix.is_empty(), "{context}: no integrated prefix");
+                    assert!(
+                        shapes
+                            .iter()
+                            .any(|partner| shape.is_integrated_form_of(partner)),
+                        "{context}: no local partner"
+                    );
+                    integrated.push(format!("[{trace}] {shape}"));
+                }
+                assert!(
+                    !shape.static_mass || shape.has_u_after_zero_mode(),
+                    "{context}: mIR without a U after a zero-mode operation"
+                );
+                assert!(
+                    !shape.starts_on_zero_mode() || !shape.vacuum_expansion_mass,
+                    "{context}: a U after a zero-mode operation introduces mUV"
+                );
+                assert!(
+                    !shape.starts_on_zero_mode() || shape.keeps_expansion_masses,
+                    "{context}: the zero-mode image drops the expansion mass of its integrated \
+                     vertex, and with it part of the vertex's static mode"
+                );
+            }
+        }
+        integrated.sort();
+        let expected = expected
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            integrated,
+            expected,
+            "{ring:?}, vacuum subtraction {vacuum_subtraction}: the integrated sectors are\n{}",
+            integrated.join("\n")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn quark_ring_integrated_sectors_follow_the_forest_words() -> Result<()> {
+        check_integrated_sectors(
+            Ring::Quark,
+            true,
+            r"
+            [A,B;AB;G] (∫[A]; U_B|B, S0_AB|AB-A, U_G|G-A) [mIR,mUV]
+            [A,B;AB;G] (∫[B] ∫[A]; S0_AB|∅, U_G|G-AB) [mIR,mUV]
+            [A,B;AB;G] (∫[B]; U_A|A, S0_AB|AB-B, U_G|G-B) [mIR,mUV]
+            [A,B;AB] (∫[A]; U_B|B, S0_AB|AB-A) [mUV]
+            [A,B;AB] (∫[B] ∫[A]; S0_AB|∅) [mUV]
+            [A,B;AB] (∫[B]; U_A|A, S0_AB|AB-B) [mUV]
+            [A,B] (∫[A]; U_B|B) [mUV]
+            [A,B] (∫[B]; U_A|A) [mUV]
+            [A;AB;G] (∫[A]; S0_AB|AB-A, U_G|G-A) [mIR,mUV]
+            [A;AB] (∫[A]; S0_AB|AB-A) [mUV]
+            [A;D01234] (∫[A]; U_D01234|D01234-A) [mUV]
+            [A;D01235] (∫[A]; U_D01235|D01235-A) [mUV]
+            [B;AB;G] (∫[B]; S0_AB|AB-B, U_G|G-B) [mIR,mUV]
+            [B;AB] (∫[B]; S0_AB|AB-B) [mUV]
+            [B;D01245] (∫[B]; U_D01245|D01245-B) [mUV]
+            [B;D01345] (∫[B]; U_D01345|D01345-B) [mUV]
+            ",
+        )
+    }
+
+    #[test]
+    fn quark_ring_integrated_sectors_without_vacuum_subtraction() -> Result<()> {
+        check_integrated_sectors(
+            Ring::Quark,
+            false,
+            r"
+            [A,B;AB;G] (∫[A]; U_B|B, S0_AB|AB-A, U_G|G-A) [mIR,mUV]
+            [A,B;AB;G] (∫[B]; U_A|A, S0_AB|AB-B, U_G|G-B) [mIR,mUV]
+            [A,B;AB] (∫[A]; U_B|B, S0_AB|AB-A) [mUV]
+            [A,B;AB] (∫[B] ∫[A]; S0_AB|∅) [mUV]
+            [A,B;AB] (∫[B]; U_A|A, S0_AB|AB-B) [mUV]
+            [A,B;G] (∫[A]; U_B|B, U_G|G-A) [mUV]
+            [A,B;G] (∫[B] ∫[A]; U_G|G-AB) [mUV]
+            [A,B;G] (∫[B]; U_A|A, U_G|G-B) [mUV]
+            [A,B] (∫[A]; U_B|B) [mUV]
+            [A,B] (∫[B]; U_A|A) [mUV]
+            [A;AB;G] (∫[A]; S0_AB|AB-A, U_G|G-A) [mIR,mUV]
+            [A;AB] (∫[A]; S0_AB|AB-A) [mUV]
+            [A;D01234;G] (∫[A;D01234]; U_G|G-D01234) [mUV]
+            [A;D01234;G] (∫[A]; U_D01234|D01234-A, U_G|G-A) [mUV]
+            [A;D01234] (∫[A]; U_D01234|D01234-A) [mUV]
+            [A;D01235;G] (∫[A;D01235]; U_G|G-D01235) [mUV]
+            [A;D01235;G] (∫[A]; U_D01235|D01235-A, U_G|G-A) [mUV]
+            [A;D01235] (∫[A]; U_D01235|D01235-A) [mUV]
+            [A;G] (∫[A]; U_G|G-A) [mUV]
+            [B;AB;G] (∫[B]; S0_AB|AB-B, U_G|G-B) [mIR,mUV]
+            [B;AB] (∫[B]; S0_AB|AB-B) [mUV]
+            [B;D01245;G] (∫[B;D01245]; U_G|G-D01245) [mUV]
+            [B;D01245;G] (∫[B]; U_D01245|D01245-B, U_G|G-B) [mUV]
+            [B;D01245] (∫[B]; U_D01245|D01245-B) [mUV]
+            [B;D01345;G] (∫[B;D01345]; U_G|G-D01345) [mUV]
+            [B;D01345;G] (∫[B]; U_D01345|D01345-B, U_G|G-B) [mUV]
+            [B;D01345] (∫[B]; U_D01345|D01345-B) [mUV]
+            [B;G] (∫[B]; U_G|G-B) [mUV]
+            [D01234;G] (∫[D01234]; U_G|G-D01234) [mUV]
+            [D01235;G] (∫[D01235]; U_G|G-D01235) [mUV]
+            [D01245;G] (∫[D01245]; U_G|G-D01245) [mUV]
+            [D01345;G] (∫[D01345]; U_G|G-D01345) [mUV]
+            ",
+        )
+    }
+
+    #[test]
+    fn tadpole_ring_integrated_sectors_follow_the_forest_words() -> Result<()> {
+        check_integrated_sectors(
+            Ring::Tadpole,
+            true,
+            r"
+            [A,B;AB;G] (∫[A]; U_B|B, S0_AB|AB-A, U_G|G-A) [mIR,mUV]
+            [A,B;AB;G] (∫[B] ∫[A]; S0_AB|∅, U_G|G-AB) [mIR,mUV]
+            [A,B;AB;G] (∫[B]; U_A|A, S0_AB|AB-B, U_G|G-B) [mIR,mUV]
+            [A,B;AB] (∫[A]; U_B|B, S0_AB|AB-A) [mUV]
+            [A,B;AB] (∫[B] ∫[A]; S0_AB|∅) [mUV]
+            [A,B;AB] (∫[B]; U_A|A, S0_AB|AB-B) [mUV]
+            [A,B] (∫[A]; U_B|B) [mUV]
+            [A,B] (∫[B]; U_A|A) [mUV]
+            [A;AB;G] (∫[A]; S0_AB|AB-A, U_G|G-A) [mIR,mUV]
+            [A;AB] (∫[A]; S0_AB|AB-A) [mUV]
+            [A;D0123] (∫[A]; U_D0123|D0123-A) [mUV]
+            [B;AB;G] (∫[B]; S0_AB|AB-B, U_G|G-B) [mIR,mUV]
+            [B;AB] (∫[B]; S0_AB|AB-B) [mUV]
+            [B;D0124] (∫[B]; U_D0124|D0124-B) [mUV]
+            [B;D0134] (∫[B]; U_D0134|D0134-B) [mUV]
+            ",
+        )
+    }
+
+    #[test]
+    fn tadpole_ring_integrated_sectors_without_vacuum_subtraction() -> Result<()> {
+        check_integrated_sectors(
+            Ring::Tadpole,
+            false,
+            r"
+            [A,B;AB;G] (∫[B]; U_A|A, S0_AB|AB-B, U_G|G-B) [mIR,mUV]
+            [A,B;AB] (∫[A]; U_B|B, S0_AB|AB-A) [mUV]
+            [A,B;AB] (∫[B] ∫[A]; S0_AB|∅) [mUV]
+            [A,B;AB] (∫[B]; U_A|A, S0_AB|AB-B) [mUV]
+            [A,B;G] (∫[A]; U_B|B, U_G|G-A) [mUV]
+            [A,B;G] (∫[B] ∫[A]; U_G|G-AB) [mUV]
+            [A,B;G] (∫[B]; U_A|A, U_G|G-B) [mUV]
+            [A,B] (∫[A]; U_B|B) [mUV]
+            [A,B] (∫[B]; U_A|A) [mUV]
+            [A;AB] (∫[A]; S0_AB|AB-A) [mUV]
+            [A;D0123;G] (∫[A;D0123]; U_G|G-D0123) [mUV]
+            [A;D0123;G] (∫[A]; U_D0123|D0123-A, U_G|G-A) [mUV]
+            [A;D0123] (∫[A]; U_D0123|D0123-A) [mUV]
+            [A;G] (∫[A]; U_G|G-A) [mUV]
+            [B;AB;G] (∫[B]; S0_AB|AB-B, U_G|G-B) [mIR,mUV]
+            [B;AB] (∫[B]; S0_AB|AB-B) [mUV]
+            [B;D0124;G] (∫[B;D0124]; U_G|G-D0124) [mUV]
+            [B;D0124;G] (∫[B]; U_D0124|D0124-B, U_G|G-B) [mUV]
+            [B;D0124] (∫[B]; U_D0124|D0124-B) [mUV]
+            [B;D0134;G] (∫[B;D0134]; U_G|G-D0134) [mUV]
+            [B;D0134;G] (∫[B]; U_D0134|D0134-B, U_G|G-B) [mUV]
+            [B;D0134] (∫[B]; U_D0134|D0134-B) [mUV]
+            [B;G] (∫[B]; U_G|G-B) [mUV]
+            [D0123;G] (∫[D0123]; U_G|G-D0123) [mUV]
+            [D0124;G] (∫[D0124]; U_G|G-D0124) [mUV]
+            [D0134;G] (∫[D0134]; U_G|G-D0134) [mUV]
+            ",
+        )
+    }
+
+    /// The gluon ring has the forest of the ghost ring, but its local
+    /// counterterms take longer to build than a unit test may run.
+    #[test]
+    fn ghost_ring_integrated_sectors_follow_the_forest_words() -> Result<()> {
+        check_integrated_sectors(
+            Ring::Ghost,
+            true,
+            r"
+            [A,B;AB;G] (∫[A]; S0_A|∅, U_B|B, S0_AB|AB-A, U_G|G-A) [mIR,mUV]
+            [A,B;AB;G] (∫[A]; U_B|B, S0_AB|AB-A, U_G|G-A) [mIR,mUV]
+            [A,B;AB;G] (∫[B] ∫[A]; S0_AB|∅, U_G|G-AB) [mIR,mUV]
+            [A,B;AB;G] (∫[B]; U_A|A, S0_AB|AB-B, U_G|G-B) [mIR,mUV]
+            [A,B;AB] (∫[A]; S0_A|∅, U_B|B, S0_AB|AB-A) [mIR,mUV]
+            [A,B;AB] (∫[A]; U_B|B, S0_AB|AB-A) [mUV]
+            [A,B;AB] (∫[B] ∫[A]; S0_AB|∅) [mUV]
+            [A,B;AB] (∫[B]; U_A|A, S0_AB|AB-B) [mUV]
+            [A,B;G] (∫[A]; S0_A|∅, U_B|B, U_G|G-A) [mIR,mUV]
+            [A,B] (∫[A]; S0_A|∅, U_B|B) [mIR,mUV]
+            [A,B] (∫[A]; U_B|B) [mUV]
+            [A,B] (∫[B]; U_A|A) [mUV]
+            [A;AB;G] (∫[A]; S0_AB|AB-A, U_G|G-A) [mIR,mUV]
+            [A;AB;G] (∫[A]; S0_A|∅, S0_AB|AB-A, U_G|G-A) [mIR,mUV]
+            [A;AB] (∫[A]; S0_AB|AB-A) [mUV]
+            [A;AB] (∫[A]; S0_A|∅, S0_AB|AB-A) [mUV]
+            [A;D01234] (∫[A]; U_D01234|D01234-A) [mUV]
+            [A;D01235] (∫[A]; U_D01235|D01235-A) [mUV]
+            [A;G] (∫[A]; S0_A|∅, U_G|G-A) [mIR,mUV]
+            [B;AB;G] (∫[B]; S0_AB|AB-B, U_G|G-B) [mIR,mUV]
+            [B;AB] (∫[B]; S0_AB|AB-B) [mUV]
+            [B;D01245] (∫[B]; U_D01245|D01245-B) [mUV]
+            [B;D01345] (∫[B]; U_D01345|D01345-B) [mUV]
+            ",
+        )
+    }
+
+    #[test]
+    fn ghost_ring_integrated_sectors_without_vacuum_subtraction() -> Result<()> {
+        check_integrated_sectors(
+            Ring::Ghost,
+            false,
+            r"
+            [A,B;AB;G] (∫[A]; S0_A|∅, U_B|B, S0_AB|AB-A, U_G|G-A) [mIR,mUV]
+            [A,B;AB;G] (∫[A]; U_B|B, S0_AB|AB-A, U_G|G-A) [mIR,mUV]
+            [A,B;AB;G] (∫[B]; U_A|A, S0_AB|AB-B, U_G|G-B) [mIR,mUV]
+            [A,B;AB] (∫[A]; S0_A|∅, U_B|B, S0_AB|AB-A) [mIR,mUV]
+            [A,B;AB] (∫[A]; U_B|B, S0_AB|AB-A) [mUV]
+            [A,B;AB] (∫[B] ∫[A]; S0_AB|∅) [mUV]
+            [A,B;AB] (∫[B]; U_A|A, S0_AB|AB-B) [mUV]
+            [A,B;G] (∫[A]; S0_A|∅, U_B|B, U_G|G-A) [mIR,mUV]
+            [A,B;G] (∫[A]; U_B|B, U_G|G-A) [mUV]
+            [A,B;G] (∫[B] ∫[A]; U_G|G-AB) [mUV]
+            [A,B;G] (∫[B]; U_A|A, U_G|G-B) [mUV]
+            [A,B] (∫[A]; S0_A|∅, U_B|B) [mIR,mUV]
+            [A,B] (∫[A]; U_B|B) [mUV]
+            [A,B] (∫[B]; U_A|A) [mUV]
+            [A;AB;G] (∫[A]; S0_AB|AB-A, U_G|G-A) [mIR,mUV]
+            [A;AB;G] (∫[A]; S0_A|∅, S0_AB|AB-A, U_G|G-A) [mIR,mUV]
+            [A;AB] (∫[A]; S0_AB|AB-A) [mUV]
+            [A;AB] (∫[A]; S0_A|∅, S0_AB|AB-A) [mUV]
+            [A;D01234;G] (∫[A;D01234]; U_G|G-D01234) [mUV]
+            [A;D01234;G] (∫[A]; U_D01234|D01234-A, U_G|G-A) [mUV]
+            [A;D01234] (∫[A]; U_D01234|D01234-A) [mUV]
+            [A;D01235;G] (∫[A;D01235]; U_G|G-D01235) [mUV]
+            [A;D01235;G] (∫[A]; U_D01235|D01235-A, U_G|G-A) [mUV]
+            [A;D01235] (∫[A]; U_D01235|D01235-A) [mUV]
+            [A;G] (∫[A]; S0_A|∅, U_G|G-A) [mIR,mUV]
+            [A;G] (∫[A]; U_G|G-A) [mUV]
+            [B;AB;G] (∫[B]; S0_AB|AB-B, U_G|G-B) [mIR,mUV]
+            [B;AB] (∫[B]; S0_AB|AB-B) [mUV]
+            [B;D01245;G] (∫[B;D01245]; U_G|G-D01245) [mUV]
+            [B;D01245;G] (∫[B]; U_D01245|D01245-B, U_G|G-B) [mUV]
+            [B;D01245] (∫[B]; U_D01245|D01245-B) [mUV]
+            [B;D01345;G] (∫[B;D01345]; U_G|G-D01345) [mUV]
+            [B;D01345;G] (∫[B]; U_D01345|D01345-B, U_G|G-B) [mUV]
+            [B;D01345] (∫[B]; U_D01345|D01345-B) [mUV]
+            [B;G] (∫[B]; U_G|G-B) [mUV]
+            [D01234;G] (∫[D01234]; U_G|G-D01234) [mUV]
+            [D01235;G] (∫[D01235]; U_G|G-D01235) [mUV]
+            [D01245;G] (∫[D01245]; U_G|G-D01245) [mUV]
+            [D01345;G] (∫[D01345]; U_G|G-D01345) [mUV]
+            ",
+        )
+    }
+
     #[test]
     fn mutually_covering_hosts_in_a_join_are_rejected() -> Result<()> {
         test_initialise()?;
@@ -2861,7 +3740,12 @@ mod tests {
         };
         let cut_structure = CutStructure::empty(&graph);
         let mut forests = Wood::new(cut_structure, &graph, &settings)?.unfold();
-        forests.integrate(&graph, crate::utils::vakint()?, &settings.uv, settings.medium.vacuum_subtraction)?;
+        forests.integrate(
+            &graph,
+            crate::utils::vakint()?,
+            &settings.uv,
+            settings.medium.vacuum_subtraction,
+        )?;
 
         let unions = forests
             .graph
@@ -3121,7 +4005,12 @@ mod tests {
             ..Default::default()
         };
         let mut forests = Wood::new(CutStructure::empty(&graph), &graph, &settings)?.unfold();
-        forests.integrate(&graph, crate::utils::vakint()?, &settings.uv, settings.medium.vacuum_subtraction)?;
+        forests.integrate(
+            &graph,
+            crate::utils::vakint()?,
+            &settings.uv,
+            settings.medium.vacuum_subtraction,
+        )?;
 
         let union = forests
             .graph
@@ -3363,7 +4252,12 @@ mod tests {
                 ..Default::default()
             };
             let mut forests = Wood::new(CutStructure::empty(&graph), &graph, &settings)?.unfold();
-            forests.integrate(&graph, utils::vakint()?, &settings.uv, settings.medium.vacuum_subtraction)?;
+            forests.integrate(
+                &graph,
+                utils::vakint()?,
+                &settings.uv,
+                settings.medium.vacuum_subtraction,
+            )?;
             let mut pole = Atom::Zero;
             let mut bare_parent_count = 0;
             let mut nested_parent_count = 0;
@@ -3450,7 +4344,12 @@ mod tests {
             ..Default::default()
         };
         let mut forests = Wood::new(CutStructure::empty(&graph), &graph, &settings)?.unfold();
-        forests.integrate(&graph, crate::utils::vakint()?, &settings.uv, settings.medium.vacuum_subtraction)?;
+        forests.integrate(
+            &graph,
+            crate::utils::vakint()?,
+            &settings.uv,
+            settings.medium.vacuum_subtraction,
+        )?;
 
         let terminals = forests
             .graph
@@ -4333,7 +5232,12 @@ mod tests {
         )?;
         let expected = atomic.atom() + nested.atom();
         let mut forests = wood.unfold();
-        forests.integrate(&graph, crate::utils::vakint()?, &settings.uv, settings.medium.vacuum_subtraction)?;
+        forests.integrate(
+            &graph,
+            crate::utils::vakint()?,
+            &settings.uv,
+            settings.medium.vacuum_subtraction,
+        )?;
         let actual = forests
             .graph
             .iter_nodes()
@@ -4662,7 +5566,12 @@ mod tests {
             expected += term.atom();
         }
         let mut forests = wood.unfold();
-        forests.integrate(&graph, crate::utils::vakint()?, &settings.uv, settings.medium.vacuum_subtraction)?;
+        forests.integrate(
+            &graph,
+            crate::utils::vakint()?,
+            &settings.uv,
+            settings.medium.vacuum_subtraction,
+        )?;
         let actual = forests
             .graph
             .iter_nodes()
@@ -4752,7 +5661,12 @@ mod tests {
                     .then_some((parent, child, edge))
             })
             .expect("spectacles has a connected child above its disconnected union");
-        f.integrate(&spectacles, crate::utils::vakint()?, &settings.uv, settings.medium.vacuum_subtraction)?;
+        f.integrate(
+            &spectacles,
+            crate::utils::vakint()?,
+            &settings.uv,
+            settings.medium.vacuum_subtraction,
+        )?;
 
         let step_order = f.graph[union].key.op_count();
         let (current, given) = f.wood.current_given_pair(edge, step_order);

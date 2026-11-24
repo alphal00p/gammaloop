@@ -368,6 +368,69 @@ pub(crate) mod test_graphs {
         }
     }
 
+    /// A one-loop vacuum tadpole.
+    pub(crate) fn vacuum_tadpole_graph() -> ParsedGraph {
+        ParsedGraph {
+            internal_edges: vec![internal(0, 0, 0, "q0", [1], [], "m")],
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: vec!["k1".to_string()],
+            external_names: Vec::new(),
+            node_name_to_internal: node_map(1),
+        }
+    }
+
+    /// A one-loop vacuum bubble whose two lines carry the same momentum and
+    /// mass, a double pole like a gluon loop between two contracted bubbles.
+    pub(crate) fn vacuum_bubble_graph() -> ParsedGraph {
+        ParsedGraph {
+            internal_edges: vec![
+                internal(0, 0, 1, "q0", [1], [], "m"),
+                internal(1, 1, 0, "q1", [1], [], "m"),
+            ],
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: vec!["k1".to_string()],
+            external_names: Vec::new(),
+            node_name_to_internal: node_map(2),
+        }
+    }
+
+    /// A one-loop vacuum triangle whose three lines carry the same momentum
+    /// and distinct masses.
+    #[cfg(feature = "eval")]
+    pub(crate) fn vacuum_triangle_graph() -> ParsedGraph {
+        ParsedGraph {
+            internal_edges: vec![
+                internal(0, 0, 1, "q0", [1], [], "m0"),
+                internal(1, 1, 2, "q1", [1], [], "m1"),
+                internal(2, 2, 0, "q2", [1], [], "m2"),
+            ],
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: vec!["k1".to_string()],
+            external_names: Vec::new(),
+            node_name_to_internal: node_map(3),
+        }
+    }
+
+    /// Two vacuum tadpoles, joined at one vertex or, if not `joined`, on
+    /// separate vertices.
+    pub(crate) fn two_vacuum_tadpoles_graph(joined: bool) -> ParsedGraph {
+        let second = usize::from(!joined);
+        ParsedGraph {
+            internal_edges: vec![
+                internal(0, 0, 0, "q0", [1, 0], [], "m"),
+                internal(1, second, second, "q1", [0, 1], [], "m"),
+            ],
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: vec!["k1".to_string(), "k2".to_string()],
+            external_names: Vec::new(),
+            node_name_to_internal: node_map(second + 1),
+        }
+    }
+
     fn internal<const L: usize, const E: usize>(
         edge_id: usize,
         tail: usize,

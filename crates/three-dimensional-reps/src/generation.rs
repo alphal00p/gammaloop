@@ -107,6 +107,110 @@ pub enum CffGenerationContext {
     EmbeddedCffFactor,
 }
 
+/// The treatment of an unlocalized energy contact.
+///
+/// Contracting the last denominator that carries a loop energy, while the
+/// numerator's degree in that energy exceeds the denominator's, leaves a
+/// quotient polynomial in the energy. It has no pole, so no residue localizes
+/// it and it has no three-dimensional representation.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum UnlocalizedEnergyContacts {
+    /// Report [`GenerationError::UnlocalizedEnergyContact`].
+    #[default]
+    Reject,
+    /// The caller replaces every completed weight `W` by `W - V(W)`
+    /// ([`crate::thermal::VACUUM_SUBTRACTION`]), so the expression is
+    /// complete only after that subtraction. A quotient whose term keeps no
+    /// denominator of the source ([`EnergyContactRemainder::NoDenominator`])
+    /// has no residue and so no distribution: its weight is the bare medium
+    /// unit, independent of the temperature and the chemical potentials,
+    /// which the subtraction maps to zero. Generation omits such a quotient
+    /// and keeps the residue part. A polynomial has no occupation-weighted
+    /// residue, and the zero value agrees with the standard prescriptions for
+    /// its Matsubara sum minus its vacuum integral: zeta-function
+    /// regularization and the equal-time convergence factor give zero for the
+    /// sum, as dimensional regularization does for the scaleless vacuum
+    /// integral. A cutoff on the Matsubara frequencies agrees only at zero
+    /// chemical potential: with a chemical potential the energies
+    /// `i omega_n + mu` shift the polynomial against its vacuum integral, and
+    /// the difference grows with the cutoff (as `mu^2 Lambda` for `q0^2`).
+    /// A quotient beside surviving denominators
+    /// ([`EnergyContactRemainder::SurvivingDenominators`]) multiplies their
+    /// distributions, which the subtraction keeps, so it is still reported.
+    /// Vacuum generation has no weight to subtract and rejects this mode.
+    OmitUnderVacuumSubtraction,
+}
+
+impl UnlocalizedEnergyContacts {
+    /// Omit the quotient of power `power` in loop energy `variable` that
+    /// contracting its last denominator leaves on `remainder`, when the
+    /// weights are vacuum-subtracted and the subtraction removes it
+    /// ([`EnergyContactRemainder::is_removed_by_vacuum_subtraction`]);
+    /// otherwise report it with what it leaves.
+    fn try_omit(self, variable: usize, power: usize, remainder: &ParsedGraph) -> Result<()> {
+        let remainder = EnergyContactRemainder::of(remainder);
+        match self {
+            Self::OmitUnderVacuumSubtraction if remainder.is_removed_by_vacuum_subtraction() => {
+                Ok(())
+            }
+            Self::Reject | Self::OmitUnderVacuumSubtraction => {
+                Err(GenerationError::UnlocalizedEnergyContact {
+                    variable,
+                    power,
+                    remainder,
+                })
+            }
+        }
+    }
+}
+
+/// What a term keeps beside the quotient polynomial in a loop energy that
+/// contracting the last denominator carrying the energy leaves
+/// ([`GenerationError::UnlocalizedEnergyContact`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EnergyContactRemainder {
+    /// No denominator of the source: the term has no residue and so no
+    /// distribution, and its weight is the bare medium unit.
+    NoDenominator,
+    /// Denominators of its own source or of another factor of a disconnected
+    /// product, whose distributions the quotient multiplies.
+    SurvivingDenominators,
+}
+
+impl EnergyContactRemainder {
+    /// What the contracted graph `remainder` keeps.
+    fn of(remainder: &ParsedGraph) -> Self {
+        if remainder.denominator_internal_edge_ids().is_empty() {
+            Self::NoDenominator
+        } else {
+            Self::SurvivingDenominators
+        }
+    }
+
+    /// Whether replacing every completed weight `W` by `W - V(W)` removes
+    /// the quotient: only beside no denominator is its weight the bare
+    /// medium unit, which the subtraction maps to zero. Beside surviving
+    /// denominators it multiplies their distributions, which the
+    /// subtraction keeps.
+    pub fn is_removed_by_vacuum_subtraction(self) -> bool {
+        match self {
+            Self::NoDenominator => true,
+            Self::SurvivingDenominators => false,
+        }
+    }
+
+    fn description(self) -> &'static str {
+        match self {
+            Self::NoDenominator => "and no denominator",
+            Self::SurvivingDenominators => "beside surviving denominators",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Generate3DExpressionOptions {
     #[serde(default)]
@@ -115,6 +219,10 @@ pub struct Generate3DExpressionOptions {
     pub medium_mode: MediumMode,
     #[serde(default)]
     pub cff_generation_context: CffGenerationContext,
+    /// Omitting unlocalized energy contacts requires a medium mode whose
+    /// completed weights the caller vacuum-subtracts.
+    #[serde(default)]
+    pub unlocalized_energy_contacts: UnlocalizedEnergyContacts,
     /// For CFF, `None` keeps the legacy class affine in every EMR edge energy.
     /// Ordinary LTD ignores these bounds; raised LTD requires `Some` to sample
     /// higher-order residues exactly. Omitted edges in an explicit bounded class
@@ -135,6 +243,7 @@ impl Default for Generate3DExpressionOptions {
             representation: RepresentationMode::Cff,
             medium_mode: MediumMode::Vacuum,
             cff_generation_context: CffGenerationContext::Standalone,
+            unlocalized_energy_contacts: UnlocalizedEnergyContacts::Reject,
             energy_degree_bounds: None,
             numerator_sampling_scale: NumeratorSamplingScaleMode::None,
             preserve_internal_edges_as_four_d_denominators: Vec::new(),
@@ -448,9 +557,18 @@ pub enum GenerationError {
         loop_signature: Vec<i32>,
     },
     #[error(
-        "contracting the last denominator carrying loop-energy variable {variable} leaves an unlocalized quotient of power {power}"
+        "contracting the last denominator carrying loop-energy variable {variable} leaves an unlocalized quotient of power {power} {}",
+        .remainder.description()
     )]
-    UnlocalizedEnergyContact { variable: usize, power: usize },
+    UnlocalizedEnergyContact {
+        variable: usize,
+        power: usize,
+        remainder: EnergyContactRemainder,
+    },
+    #[error(
+        "omitting unlocalized energy contacts relies on vacuum-subtracted medium weights, which vacuum generation does not have"
+    )]
+    UnlocalizedContactOmissionRequiresMedium,
     #[error(
         "disconnected denominator components {left:?} and {right:?} share loop-energy variables {variables:?}; component products require disjoint loop subspaces"
     )]
@@ -473,6 +591,11 @@ pub fn generate_3d_expression<G: ThreeDGraphSource + ?Sized>(
         return Err(GenerationError::LtdRequiresVacuum {
             medium_mode: options.medium_mode,
         });
+    }
+    if options.unlocalized_energy_contacts == UnlocalizedEnergyContacts::OmitUnderVacuumSubtraction
+        && options.medium_mode == MediumMode::Vacuum
+    {
+        return Err(GenerationError::UnlocalizedContactOmissionRequiresMedium);
     }
     let parsed = graph.to_three_d_parsed_graph()?;
     let validation = crate::validate_parsed_graph(&parsed);
@@ -1044,6 +1167,25 @@ struct ParsedComponentEmbedding {
     local_to_orig_loop: Vec<usize>,
 }
 
+impl GenerationError {
+    /// This error of one factor of a disconnected product, embedded by
+    /// `embedding`, as the product's: an unlocalized quotient gets the
+    /// product's loop-energy variable, and one that empties its own factor
+    /// still multiplies the other factors' denominators.
+    fn in_product_factor(self, embedding: &ParsedComponentEmbedding) -> Self {
+        match self {
+            Self::UnlocalizedEnergyContact {
+                variable, power, ..
+            } => Self::UnlocalizedEnergyContact {
+                variable: embedding.local_to_orig_loop[variable],
+                power,
+                remainder: EnergyContactRemainder::SurvivingDenominators,
+            },
+            error => error,
+        }
+    }
+}
+
 fn generate_rational_component_product(
     parsed: &ParsedGraph,
     options: &Generate3DExpressionOptions,
@@ -1088,7 +1230,8 @@ fn generate_rational_component_product(
             let component_options =
                 project_component_options(options, parsed.internal_edges.len(), &embedding)?;
             let generated =
-                generate_3d_expression_from_parsed_generated(&component, &component_options)?;
+                generate_3d_expression_from_parsed_generated(&component, &component_options)
+                    .map_err(|error| error.in_product_factor(&embedding))?;
             Ok((generated, embedding))
         })
         .collect::<Result<Vec<_>>>()?;
@@ -1361,6 +1504,9 @@ fn project_component_options(
         energy_degree_bounds,
         numerator_sampling_scale: options.numerator_sampling_scale,
         cff_generation_context: options.cff_generation_context,
+        // A quotient that empties one factor of the product still multiplies the
+        // other factors' distributions, which vacuum subtraction keeps.
+        unlocalized_energy_contacts: UnlocalizedEnergyContacts::Reject,
         preserve_internal_edges_as_four_d_denominators: Vec::new(),
     })
 }
@@ -2335,6 +2481,7 @@ struct BoundedCffBuilder<'a> {
     context: CffGenerationContext,
     inherited_contour_rows: Vec<Vec<i32>>,
     sampling_scale_mode: NumeratorSamplingScaleMode,
+    unlocalized_energy_contacts: UnlocalizedEnergyContacts,
     // Private child bases retain zero-map carriers for their later append;
     // only a complete output expression may fuse its root samples early.
     normalize_public_output: bool,
@@ -2372,6 +2519,7 @@ impl<'a> BoundedCffBuilder<'a> {
             context: CffGenerationContext::Standalone,
             inherited_contour_rows: Vec::new(),
             sampling_scale_mode: NumeratorSamplingScaleMode::None,
+            unlocalized_energy_contacts: UnlocalizedEnergyContacts::Reject,
             normalize_public_output: false,
             assembly: ExpressionAssembler::new(ThreeDExpression::new_empty()),
         }
@@ -2380,6 +2528,7 @@ impl<'a> BoundedCffBuilder<'a> {
     fn with_options(mut self, options: &Generate3DExpressionOptions) -> Self {
         self.sampling_scale_mode = options.numerator_sampling_scale;
         self.context = options.cff_generation_context;
+        self.unlocalized_energy_contacts = options.unlocalized_energy_contacts;
         self
     }
 
@@ -2415,6 +2564,7 @@ impl<'a> BoundedCffBuilder<'a> {
                 self.medium_mode,
             );
             known.source_prefactor = self.source_prefactor;
+            known.unlocalized_energy_contacts = self.unlocalized_energy_contacts;
             known.normalize_public_output = self.normalize_public_output;
             return known.build_with_inherited_contours(
                 self.context == CffGenerationContext::EmbeddedCffFactor,
@@ -2485,6 +2635,7 @@ impl<'a> BoundedCffBuilder<'a> {
         remainder_builder.source_prefactor = self.source_prefactor.clone();
         remainder_builder.inherited_contour_rows = self.inherited_contour_rows.clone();
         remainder_builder.sampling_scale_mode = self.sampling_scale_mode;
+        remainder_builder.unlocalized_energy_contacts = self.unlocalized_energy_contacts;
         let remainder = remainder_builder.build_quadratic_recursive(lower_sector_base)?;
         self.append_recursive_remainder_terms(active_edge, &remainder)?;
         // The destination now owns the remapped remainder. Release its source
@@ -2509,6 +2660,7 @@ impl<'a> BoundedCffBuilder<'a> {
                 .clone(),
         );
         contact_builder.sampling_scale_mode = self.sampling_scale_mode;
+        contact_builder.unlocalized_energy_contacts = self.unlocalized_energy_contacts;
         let contact = contact_builder.build_quadratic_recursive(true)?;
         self.append_recursive_contact_terms(
             active_edge,
@@ -2993,6 +3145,7 @@ struct KnownFactorCffBuilder<'a> {
     bounds: Vec<usize>,
     medium_mode: MediumMode,
     sampling_scale_mode: NumeratorSamplingScaleMode,
+    unlocalized_energy_contacts: UnlocalizedEnergyContacts,
     // Enabled only for complete output, never a private child base.
     normalize_public_output: bool,
     assembly: ExpressionAssembler,
@@ -3022,6 +3175,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
             bounds,
             medium_mode,
             sampling_scale_mode,
+            unlocalized_energy_contacts: UnlocalizedEnergyContacts::Reject,
             normalize_public_output: false,
             assembly: ExpressionAssembler::new(ThreeDExpression::new_empty()),
             lower_sector_cache: HashMap::new(),
@@ -3132,10 +3286,13 @@ impl<'a> KnownFactorCffBuilder<'a> {
                             .iter()
                             .all(|edge| edge.signature.loop_signature[*variable] == 0)
                     }) {
-                        return Err(GenerationError::UnlocalizedEnergyContact {
+                        // Only a contact that leaves no denominator may be omitted.
+                        self.unlocalized_energy_contacts.try_omit(
                             variable,
-                            power: degree - 2,
-                        });
+                            degree - 2,
+                            &subparsed,
+                        )?;
+                        continue;
                     }
                 }
                 if subparsed.internal_edges.is_empty() {
@@ -3382,10 +3539,13 @@ impl<'a> KnownFactorCffBuilder<'a> {
         if total_bounds[active] > 2
             && let Some(variable) = unlocalized_variable
         {
-            return Err(GenerationError::UnlocalizedEnergyContact {
+            // The residue samples above are the localized part. Only a quotient
+            // that leaves no denominator may be omitted.
+            return self.unlocalized_energy_contacts.try_omit(
                 variable,
-                power: total_bounds[active] - 2,
-            });
+                total_bounds[active] - 2,
+                &subparsed,
+            );
         }
         let sub_local_to_orig = sub_to_local
             .iter()
@@ -3737,6 +3897,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
             };
             bounded.inherited_contour_rows = inherited_contour_rows.to_vec();
             bounded.sampling_scale_mode = self.sampling_scale_mode;
+            bounded.unlocalized_energy_contacts = self.unlocalized_energy_contacts;
             Some(bounded.build()?)
         } else {
             None
@@ -10405,6 +10566,7 @@ mod cff_tests {
                 medium_mode: MediumMode::Vacuum,
                 representation: RepresentationMode::Cff,
                 cff_generation_context: CffGenerationContext::Standalone,
+                unlocalized_energy_contacts: UnlocalizedEnergyContacts::Reject,
                 energy_degree_bounds: Some(vec![(0, 1), (1, 1), (3, 4)]),
                 numerator_sampling_scale: NumeratorSamplingScaleMode::All,
                 preserve_internal_edges_as_four_d_denominators: Vec::new(),
@@ -10444,5 +10606,218 @@ mod cff_tests {
         assert!(!NumeratorSamplingScaleMode::BeyondQuadratic.is_active_for_degree(2));
         assert!(NumeratorSamplingScaleMode::BeyondQuadratic.is_active_for_degree(3));
         assert!(NumeratorSamplingScaleMode::All.is_active_for_degree(1));
+    }
+}
+
+#[cfg(test)]
+mod unlocalized_energy_contact_tests {
+    use crate::expression::AllOrientations;
+    use crate::graph_io::test_graphs;
+
+    use super::*;
+
+    const MEDIA: [MediumMode; 2] = [
+        MediumMode::ThermodynamicEquilibrium,
+        MediumMode::ZeroTemperatureEquilibrium,
+    ];
+
+    const SAMPLING_MODES: [NumeratorSamplingScaleMode; 2] = [
+        NumeratorSamplingScaleMode::None,
+        NumeratorSamplingScaleMode::All,
+    ];
+
+    fn generate(
+        parsed: &ParsedGraph,
+        bounds: &[(usize, usize)],
+        medium_mode: MediumMode,
+        unlocalized_energy_contacts: UnlocalizedEnergyContacts,
+        numerator_sampling_scale: NumeratorSamplingScaleMode,
+    ) -> Result<GeneratedThreeDExpression> {
+        generate_3d_expression(
+            parsed,
+            &Generate3DExpressionOptions {
+                medium_mode,
+                unlocalized_energy_contacts,
+                energy_degree_bounds: Some(bounds.to_vec()),
+                numerator_sampling_scale,
+                ..Default::default()
+            },
+        )
+    }
+
+    /// A source whose numerator energy-degree `bounds` leave an unlocalized
+    /// quotient of `power` in loop energy zero.
+    struct UnlocalizedSource {
+        parsed: ParsedGraph,
+        bounds: Vec<(usize, usize)>,
+        power: usize,
+    }
+
+    /// One-loop sources whose numerator exceeds the loop-energy degree of
+    /// their denominators: a tadpole of degree four, whose occurrence
+    /// interpolation contracts its line with a quotient of power two, and a
+    /// bubble of one double pole like the gluon loop between two contracted
+    /// bubbles, of degrees four and one, whose last contact leaves a quotient
+    /// of power one.
+    fn one_loop_sources() -> [UnlocalizedSource; 2] {
+        [
+            UnlocalizedSource {
+                parsed: test_graphs::vacuum_tadpole_graph(),
+                bounds: vec![(0, 4)],
+                power: 2,
+            },
+            UnlocalizedSource {
+                parsed: test_graphs::vacuum_bubble_graph(),
+                bounds: vec![(0, 4), (1, 1)],
+                power: 1,
+            },
+        ]
+    }
+
+    /// By default the generator reports the unlocalized quotient with its
+    /// loop-energy variable and power, in every medium, and that it leaves no
+    /// denominator, which is what a caller needs to know to ask for its
+    /// omission under vacuum-subtracted weights.
+    #[test]
+    fn unlocalized_energy_contacts_are_rejected_by_default() {
+        for UnlocalizedSource {
+            parsed,
+            bounds,
+            power,
+        } in one_loop_sources()
+        {
+            for medium_mode in [MediumMode::Vacuum, MEDIA[0], MEDIA[1]] {
+                for sampling in SAMPLING_MODES {
+                    let error = generate(
+                        &parsed,
+                        &bounds,
+                        medium_mode,
+                        UnlocalizedEnergyContacts::default(),
+                        sampling,
+                    )
+                    .unwrap_err();
+                    assert!(
+                        matches!(
+                            error,
+                            GenerationError::UnlocalizedEnergyContact {
+                                variable: 0,
+                                power: p,
+                                remainder: EnergyContactRemainder::NoDenominator,
+                            } if p == power
+                        ),
+                        "{bounds:?}, {medium_mode:?}, {sampling:?}: {error}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Vacuum generation has no weight to subtract, so it refuses the
+    /// omission before looking at the source.
+    #[test]
+    fn omitting_unlocalized_energy_contacts_requires_a_medium() {
+        let error = generate(
+            &test_graphs::vacuum_tadpole_graph(),
+            &[],
+            MediumMode::Vacuum,
+            UnlocalizedEnergyContacts::OmitUnderVacuumSubtraction,
+            NumeratorSamplingScaleMode::None,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(
+                error,
+                GenerationError::UnlocalizedContactOmissionRequiresMedium
+            ),
+            "{error}"
+        );
+    }
+
+    /// Under vacuum-subtracted weights the one-loop sources generate: their
+    /// quotient leaves no denominator. The residue part they keep is checked
+    /// against the vacuum-subtracted Matsubara sum in the `eval` oracle tests.
+    /// Where no quotient is unlocalized, as for the same sources at the
+    /// denominators' degree, the omission changes nothing.
+    #[test]
+    fn vacuum_subtracted_weights_omit_quotients_that_leave_no_denominator() {
+        let localized_sources = [
+            (test_graphs::vacuum_tadpole_graph(), vec![(0, 2)]),
+            (test_graphs::vacuum_bubble_graph(), vec![(0, 2), (1, 2)]),
+        ];
+        for medium_mode in MEDIA {
+            for sampling in SAMPLING_MODES {
+                for UnlocalizedSource { parsed, bounds, .. } in one_loop_sources() {
+                    let generated = generate(
+                        &parsed,
+                        &bounds,
+                        medium_mode,
+                        UnlocalizedEnergyContacts::OmitUnderVacuumSubtraction,
+                        sampling,
+                    )
+                    .unwrap();
+                    assert!(
+                        !generated.expression.orientations.is_empty(),
+                        "{bounds:?}, {medium_mode:?}, {sampling:?}: the residue part is kept"
+                    );
+                }
+                for (parsed, bounds) in &localized_sources {
+                    let [rejecting, omitting] = [
+                        UnlocalizedEnergyContacts::Reject,
+                        UnlocalizedEnergyContacts::OmitUnderVacuumSubtraction,
+                    ]
+                    .map(|contacts| {
+                        generate(parsed, bounds, medium_mode, contacts, sampling)
+                            .unwrap()
+                            .expression
+                            .to_atom(AllOrientations)
+                    });
+                    assert_eq!(
+                        rejecting, omitting,
+                        "{bounds:?}, {medium_mode:?}, {sampling:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// A quotient beside surviving denominators multiplies their
+    /// distributions, which vacuum subtraction keeps, so it is reported under
+    /// vacuum-subtracted weights too, and in both modes it is reported as
+    /// beside surviving denominators: on two tadpoles joined at a vertex the
+    /// contact of either leaves the other, and in a product of two
+    /// disconnected tadpoles it empties its own factor but multiplies the
+    /// other, in the product's loop-energy variable. Tadpole `i` carries loop
+    /// momentum `i`.
+    #[test]
+    fn vacuum_subtracted_weights_keep_quotients_beside_surviving_denominators() {
+        for joined in [true, false] {
+            let parsed = test_graphs::two_vacuum_tadpoles_graph(joined);
+            for tadpole in [0, 1] {
+                for contacts in [
+                    UnlocalizedEnergyContacts::Reject,
+                    UnlocalizedEnergyContacts::OmitUnderVacuumSubtraction,
+                ] {
+                    for medium_mode in MEDIA {
+                        for sampling in SAMPLING_MODES {
+                            let error =
+                                generate(&parsed, &[(tadpole, 4)], medium_mode, contacts, sampling)
+                                    .unwrap_err();
+                            assert!(
+                                matches!(
+                                    error,
+                                    GenerationError::UnlocalizedEnergyContact {
+                                        variable: v,
+                                        power: 2,
+                                        remainder: EnergyContactRemainder::SurvivingDenominators,
+                                    } if v == tadpole
+                                ),
+                                "joined {joined}, tadpole {tadpole}, {contacts:?}, \
+                                 {medium_mode:?}, {sampling:?}: {error}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
     }
 }

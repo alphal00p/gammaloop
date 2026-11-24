@@ -927,3 +927,32 @@ fn ring_woods_host_a_zero_mode_only_when_subtracting_at_finite_temperature() -> 
     }
     Ok(())
 }
+
+/// An integrated prefix holds each frequency class of a host wholly or not
+/// at all, or it contracts part of one: on the gluon ring, host A has the
+/// classes `{e0, e1}` and `{e4}`; its own lines and the second loop B, which
+/// holds the class `{e4}` and the implied line `e5`, contract none partly,
+/// while a prefix with only one of the two gluons contracts part of
+/// `{e0, e1}`.
+#[test]
+fn integrated_prefixes_contract_whole_frequency_classes() -> Result<()> {
+    test_initialise()?;
+    let graph = Ring::Mixed.topology()?;
+    let regions = Ring::Mixed.expected_regions(&graph, true);
+    let host = &regions[&edge_set(&[2, 3])];
+    for whole in [&[2, 3][..], &[4, 5], &[0, 1, 4, 5], &[0, 1, 2, 3, 4]] {
+        assert_eq!(
+            host.partly_contracted_class(&edge_set(whole)),
+            None,
+            "{whole:?}"
+        );
+    }
+    for partial in [&[0][..], &[1, 4, 5]] {
+        assert_eq!(
+            host.partly_contracted_class(&edge_set(partial)),
+            Some(&class(&[0, 1])),
+            "{partial:?}"
+        );
+    }
+    Ok(())
+}
