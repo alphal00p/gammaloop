@@ -721,7 +721,14 @@ impl CountertermCache {
         settings_key: String,
         compute: impl FnOnce() -> Result<Atom>,
     ) -> Result<Atom> {
-        self.lookup(graph, support, model, settings_key, KeyKind::Standard, compute)
+        self.lookup(
+            graph,
+            support,
+            model,
+            settings_key,
+            KeyKind::Standard,
+            compute,
+        )
     }
 
     /// [`Self::counterterm_with`] for a lookup of `kind`: an R* child Δ
@@ -800,7 +807,10 @@ impl CountertermCache {
         if kind == KeyKind::RstarChildDelta && delta_key::mode() == DeltaKeyMode::Graph {
             if crate::uv::rstar::ir_hard_fixed_mass_scope() {
                 delta_key::add(&delta_key::C.scoped_flag_lookup, 1);
-                debug_assert!(false, "an R* child Δ lookup inside the IR-hard fixed-mass scope");
+                debug_assert!(
+                    false,
+                    "an R* child Δ lookup inside the IR-hard fixed-mass scope"
+                );
             } else {
                 match CountertermIdentity::for_graph_key(graph, support, model) {
                     Ok(Ok(identity)) => {
@@ -817,7 +827,11 @@ impl CountertermCache {
                         delta_key::add(&delta_key::C.key_fallback_coef, 1)
                     }
                     Err(error) => {
-                        if delta_key::C.key_fallback_error.fetch_add(1, Ordering::Relaxed) < 5 {
+                        if delta_key::C
+                            .key_fallback_error
+                            .fetch_add(1, Ordering::Relaxed)
+                            < 5
+                        {
                             eprintln!(
                                 "DELTA_KEY_FALLBACK_ERROR graph={} support={} error={error:#}",
                                 graph.name,
@@ -951,7 +965,14 @@ impl CountertermCache {
                 let store_key = store.and_then(|_| self.store_key(&identity, &key, graph, support));
                 if let (Some((mode, backing)), Some(store_key)) = (store, &store_key) {
                     match self.store_read(
-                        mode, backing, store_key, &identity, graph, support, model, noted,
+                        mode,
+                        backing,
+                        store_key,
+                        &identity,
+                        graph,
+                        support,
+                        model,
+                        noted,
                         &mut compute,
                     ) {
                         Ok(Some(hit)) => {
@@ -1006,11 +1027,15 @@ impl CountertermCache {
                                 .expect("counterterm cache notes poisoned")
                                 .insert(key.clone(), note);
                         }
-                        if let Some(deps) = &deps {
+                        if let Some(mut inherited) = deps.clone() {
+                            // A parent depends on this child even on its first (cold) fill.
+                            if let Some(child) = &store_key {
+                                inherited.keys.insert(child.key_sha);
+                            }
                             self.store_deps
                                 .lock()
                                 .expect("counterterm cache poisoned")
-                                .insert(key.clone(), Arc::new(deps.clone()));
+                                .insert(key.clone(), Arc::new(inherited));
                         }
                         let canonical = identity.canonicalize_delta(&value);
                         if let (Some((_, backing)), Some(store_key), Ok(canonical)) =
@@ -1146,9 +1171,7 @@ impl CountertermCache {
         if graph_key && !filled {
             let verified = match verify_mode {
                 DeltaVerify::On => !in_cold,
-                DeltaVerify::Sample(n) => {
-                    !in_cold && delta_key::sampled(identity.key_digest(), n)
-                }
+                DeltaVerify::Sample(n) => !in_cold && delta_key::sampled(identity.key_digest(), n),
                 DeltaVerify::Off => false,
             };
             if verified {
@@ -1287,7 +1310,11 @@ impl CountertermCache {
         graph: &Graph,
         support: &SuBitGraph,
     ) -> Option<StoreKey> {
-        let Key::Graph { graph: certificate, settings } = key else {
+        let Key::Graph {
+            graph: certificate,
+            settings,
+        } = key
+        else {
             return None;
         };
         let loops = graph.n_loops(support);
@@ -1303,7 +1330,11 @@ impl CountertermCache {
         let context = match delta_store::context(settings) {
             Ok(context) => context,
             Err(error) => {
-                if delta_store::S.store_context_error.fetch_add(1, Ordering::Relaxed) == 0 {
+                if delta_store::S
+                    .store_context_error
+                    .fetch_add(1, Ordering::Relaxed)
+                    == 0
+                {
                     eprintln!("DELTA_STORE_CONTEXT_ERROR {error:#}");
                 }
                 return None;
@@ -1394,7 +1425,8 @@ impl CountertermCache {
         if identity.restore_delta(&value).is_err() {
             return miss(&S.reject_restore);
         }
-        let audited = mode == StoreMode::Verify
+        let verify_all = mode == StoreMode::Verify || delta_key::verify() == DeltaVerify::On;
+        let audited = verify_all
             || (delta_store::audit_every() > 0
                 && delta_key::sampled(
                     u64::from_le_bytes(store_key.key_sha[..8].try_into().expect("8 bytes")),
@@ -1406,11 +1438,12 @@ impl CountertermCache {
             let previous = COLD_CACHE.with(|slot| slot.replace(Some(cold)));
             let fresh = compute();
             COLD_CACHE.with(|slot| slot.replace(previous));
-            let (fresh, _) =
-                fresh.map_err(|error| error.wrap_err("DELTA_STORE_VERIFY: the fresh computation failed"))?;
+            let (fresh, _) = fresh.map_err(|error| {
+                error.wrap_err("DELTA_STORE_VERIFY: the fresh computation failed")
+            })?;
             let agree = identity.verify_agree(graph, support, model, &value, &fresh)?;
             delta_store::add(&S.verify_ns, started.elapsed().as_nanos() as u64);
-            if mode == StoreMode::Verify {
+            if verify_all {
                 delta_store::add(&S.verify_checked, 1);
             } else {
                 delta_store::add(&S.audit_checked, 1);
@@ -1458,7 +1491,7 @@ impl CountertermCache {
         delta_store::add(&S.store_hits, 1);
         delta_store::add(&S.hit_compute_s_saved_ms, (row.compute_s * 1e3) as u64);
         delta_store::count_loops(store_key.loops, true, false);
-        delta_store::record_hit(&store_key.key_sha, &row, audited);
+        delta_store::record_hit(backing, &store_key.key_sha, &row, audited)?;
         let features = serde_json::from_str::<OccurrenceFeatures>(&row.writer_transport).ok();
         // the symmetry features this hit shows against the writer's occurrence
         if let (Some(writer), Some(transport)) = (&features, identity.graph_transport()) {
@@ -1488,7 +1521,10 @@ impl CountertermCache {
     ) -> std::result::Result<delta_store::DeltaRecord, &'static str> {
         let started = Instant::now();
         let exported = delta_store::export(canonical)?;
-        delta_store::add(&delta_store::S.export_ns, started.elapsed().as_nanos() as u64);
+        delta_store::add(
+            &delta_store::S.export_ns,
+            started.elapsed().as_nanos() as u64,
+        );
         Ok(delta_store::DeltaRecord {
             key_sha: store_key.key_sha,
             context_sha: store_key.context.sha,
@@ -1509,7 +1545,9 @@ impl CountertermCache {
             writer_graph: graph.name.to_string(),
             writer_support: support.string_label(),
             compute_s,
-            deps: deps.map(|deps| deps.keys.iter().copied().collect()).unwrap_or_default(),
+            deps: deps
+                .map(|deps| deps.keys.iter().copied().collect())
+                .unwrap_or_default(),
             dep_builds: deps
                 .map(|deps| deps.builds.iter().cloned().collect())
                 .unwrap_or_default(),

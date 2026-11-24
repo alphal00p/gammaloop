@@ -40,7 +40,10 @@ pub enum DeltaVerify {
 }
 
 fn parse_mode() -> Result<DeltaKeyMode> {
-    match std::env::var("GAMMALOOP_DELTA_KEY").as_deref().map(str::trim) {
+    match std::env::var("GAMMALOOP_DELTA_KEY")
+        .as_deref()
+        .map(str::trim)
+    {
         Err(_) | Ok("") | Ok("legacy") => Ok(DeltaKeyMode::Legacy),
         Ok("graph") => Ok(DeltaKeyMode::Graph),
         Ok(other) => Err(eyre!(
@@ -89,9 +92,8 @@ pub fn verify() -> DeltaVerify {
 }
 
 pub(crate) fn dump() -> bool {
-    static DUMP: LazyLock<bool> = LazyLock::new(|| {
-        std::env::var("GAMMALOOP_DELTA_KEY_DUMP").as_deref() == Ok("stderr")
-    });
+    static DUMP: LazyLock<bool> =
+        LazyLock::new(|| std::env::var("GAMMALOOP_DELTA_KEY_DUMP").as_deref() == Ok("stderr"));
     *DUMP
 }
 
@@ -295,10 +297,7 @@ pub fn stats_json() -> Option<serde_json::Value> {
         return None;
     }
     let mut map = counters_json();
-    map.insert(
-        "mode".into(),
-        format!("{:?}", mode()).to_lowercase().into(),
-    );
+    map.insert("mode".into(), format!("{:?}", mode()).to_lowercase().into());
     map.insert("verify".into(), format!("{:?}", verify()).into());
     let features = FEATURE_COUNTS.lock().expect("delta key counters poisoned");
     let mut by_feature = serde_json::Map::new();

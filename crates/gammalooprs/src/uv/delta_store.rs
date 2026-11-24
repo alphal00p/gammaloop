@@ -131,7 +131,11 @@ pub struct DeltaRecord {
 pub enum StoreEvent {
     /// Another writer stored the key first; this process's value agrees
     /// (`identical`: equal value_sha; otherwise equal after the normal form).
-    Confirm { key_sha: [u8; 32], tier: u8, identical: bool },
+    Confirm {
+        key_sha: [u8; 32],
+        tier: u8,
+        identical: bool,
+    },
     /// A disagreement (`kind`: conflict | verify): the stored row is
     /// quarantined when `quarantine` is set.
     Dispute {
@@ -149,6 +153,8 @@ pub trait DeltaBackingStore: Send + Sync {
     fn get(&self, key_sha: &[u8; 32]) -> StoreGet;
     fn put(&self, record: &DeltaRecord) -> PutResult;
     fn event(&self, event: StoreEvent);
+    /// Persist provenance before returning the first use of a disk value to a caller.
+    fn record_use(&self, key: &[u8; 32], row: &StoredRow, audited: bool) -> Result<()>;
     /// Whether this process writes (rw / verify and not degraded or full).
     fn writable(&self) -> bool;
     fn stats(&self) -> serde_json::Value;
@@ -179,7 +185,9 @@ pub(crate) fn installed() -> Option<(StoreMode, &'static dyn DeltaBackingStore)>
 }
 
 pub fn mode() -> StoreMode {
-    INSTALLED.get().map_or(StoreMode::Off, |installed| installed.mode)
+    INSTALLED
+        .get()
+        .map_or(StoreMode::Off, |installed| installed.mode)
 }
 
 /// Children with fewer loops are not persisted (`GAMMALOOP_DELTA_STORE_MIN_LOOPS`, default 2).
@@ -451,7 +459,11 @@ impl Collector {
     pub(crate) fn finish(self) -> Deps {
         let deps = COLLECTORS.with(|stack| {
             let mut stack = stack.borrow_mut();
-            debug_assert_eq!(stack.len(), self.depth, "delta store collectors out of order");
+            debug_assert_eq!(
+                stack.len(),
+                self.depth,
+                "delta store collectors out of order"
+            );
             stack.pop().unwrap_or_default()
         });
         std::mem::forget(self);
@@ -550,8 +562,16 @@ struct HitLine {
 static HITS: LazyLock<Mutex<BTreeMap<[u8; 32], HitLine>>> =
     LazyLock::new(|| Mutex::new(BTreeMap::new()));
 
-pub(crate) fn record_hit(key_sha: &[u8; 32], row: &StoredRow, audited: bool) {
+pub(crate) fn record_hit(
+    backing: &dyn DeltaBackingStore,
+    key_sha: &[u8; 32],
+    row: &StoredRow,
+    audited: bool,
+) -> Result<()> {
     let mut hits = HITS.lock().expect("delta store hits poisoned");
+    if !hits.contains_key(key_sha) {
+        backing.record_use(key_sha, row, audited)?;
+    }
     let line = hits.entry(*key_sha).or_insert_with(|| HitLine {
         tier: row.tier,
         value_sha: row.value_sha,
@@ -562,12 +582,14 @@ pub(crate) fn record_hit(key_sha: &[u8; 32], row: &StoredRow, audited: bool) {
     });
     line.uses += 1;
     line.audited |= audited;
+    Ok(())
 }
 
 /// The hit list (`delta_store_hits.tsv`): one sorted line per store row used.
 pub fn hits_tsv() -> String {
     let hits = HITS.lock().expect("delta store hits poisoned");
-    let mut text = String::from("key_sha\ttier\tvalue_sha\twriter_build\twriter_run_id\tuses\taudited\n");
+    let mut text =
+        String::from("key_sha\ttier\tvalue_sha\twriter_build\twriter_run_id\tuses\taudited\n");
     for (key, line) in hits.iter() {
         text.push_str(&format!(
             "{}\t{}\t{}\t{}\t{}\t{}\t{}\n",

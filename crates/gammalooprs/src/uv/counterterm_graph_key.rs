@@ -153,12 +153,13 @@ fn bis_rep() -> LibraryRep {
 }
 
 fn bis_head() -> Symbol {
-    static HEAD: LazyLock<Symbol> = LazyLock::new(|| {
-        match (Bispinor {}).new_rep(4).to_symbolic([Atom::Zero]).as_view() {
-            AtomView::Fun(fun) => fun.get_symbol(),
-            other => panic!("unexpected bispinor slot form {other}"),
-        }
-    });
+    static HEAD: LazyLock<Symbol> =
+        LazyLock::new(
+            || match (Bispinor {}).new_rep(4).to_symbolic([Atom::Zero]).as_view() {
+                AtomView::Fun(fun) => fun.get_symbol(),
+                other => panic!("unexpected bispinor slot form {other}"),
+            },
+        );
     *HEAD
 }
 
@@ -174,9 +175,7 @@ fn raw_bis_index(view: AtomView<'_>) -> Option<Atom> {
 
 fn raw_has_bis(view: AtomView<'_>) -> bool {
     match view {
-        AtomView::Fun(fun) => {
-            fun.get_symbol() == bis_head() || fun.iter().any(raw_has_bis)
-        }
+        AtomView::Fun(fun) => fun.get_symbol() == bis_head() || fun.iter().any(raw_has_bis),
         AtomView::Add(add) => add.iter().any(raw_has_bis),
         AtomView::Mul(mul) => mul.iter().any(raw_has_bis),
         AtomView::Pow(pow) => {
@@ -235,10 +234,7 @@ fn transpose_line(factors: &mut [Atom], ports: &[usize; 2]) -> Option<()> {
             return None;
         };
         let args = fun.iter().collect::<Vec<_>>();
-        let spinors = if fun.get_symbol() == gamma
-            && args.len() == 3
-            && !raw_has_bis(args[2])
-        {
+        let spinors = if fun.get_symbol() == gamma && args.len() == 3 && !raw_has_bis(args[2]) {
             is_gamma[position] = true;
             [raw_bis_index(args[0])?, raw_bis_index(args[1])?]
         } else if fun.get_symbol() == metric && args.len() == 2 {
@@ -671,8 +667,7 @@ impl CountertermIdentity {
                     && fun.get_symbol() == GS.emr_mom
                 {
                     let mut args = fun.iter();
-                    let Some(edge) = args.next().and_then(|arg| usize::try_from(arg).ok())
-                    else {
+                    let Some(edge) = args.next().and_then(|arg| usize::try_from(arg).ok()) else {
                         nonincident = true;
                         return;
                     };
@@ -700,8 +695,8 @@ impl CountertermIdentity {
                     match at.as_slice() {
                         [(hedge, _, s)] => **out = momentum(*hedge) * *s,
                         [(first, _, s1), (second, _, s2)] => {
-                            **out = (momentum(*first) * *s1 + momentum(*second) * *s2)
-                                / Atom::num(2)
+                            **out =
+                                (momentum(*first) * *s1 + momentum(*second) * *s2) / Atom::num(2)
                         }
                         _ => nonincident = true,
                     }
@@ -723,12 +718,17 @@ impl CountertermIdentity {
         for (edge, facts) in &edges {
             if facts.quark {
                 for (hedge, vertex, _) in &facts.hedges {
-                    quark_hedges.entry(*vertex).or_default().push((*hedge, *edge));
+                    quark_hedges
+                        .entry(*vertex)
+                        .or_default()
+                        .push((*hedge, *edge));
                 }
             }
         }
-        let mut component: BTreeMap<usize, usize> =
-            quark_hedges.keys().map(|vertex| (*vertex, *vertex)).collect();
+        let mut component: BTreeMap<usize, usize> = quark_hedges
+            .keys()
+            .map(|vertex| (*vertex, *vertex))
+            .collect();
         fn root(component: &mut BTreeMap<usize, usize>, mut x: usize) -> usize {
             while component[&x] != x {
                 x = component[&x];
@@ -891,9 +891,7 @@ impl CountertermIdentity {
             builder.link(rule_node, plus, Link::Numerator);
             builder.link(rule_node, minus, Link::Numerator);
             for (positive, coefficient, monomial) in monomials {
-                let term = builder
-                    .graph
-                    .add_node(NodeColor::Term(coefficient.clone()));
+                let term = builder.graph.add_node(NodeColor::Term(coefficient.clone()));
                 builder.link(if *positive { plus } else { minus }, term, Link::Numerator);
                 let root =
                     builder.expression_graph(monomial.as_view(), rule_line[rule], &mut factors)?;
@@ -1327,7 +1325,9 @@ mod tests {
 
     fn slot(rep: R, index: Aind) -> Atom {
         match rep {
-            R::Mink => Minkowski {}.new_rep(GS.dim).to_symbolic([Atom::from(index)]),
+            R::Mink => Minkowski {}
+                .new_rep(GS.dim)
+                .to_symbolic([Atom::from(index)]),
             R::Bis => Bispinor {}.new_rep(4).to_symbolic([Atom::from(index)]),
         }
     }
@@ -1457,7 +1457,11 @@ mod tests {
                     }, &model
                 )?
             };
-            for edge in graph.iter_edges().map(|(_, edge, _)| edge).collect::<Vec<_>>() {
+            for edge in graph
+                .iter_edges()
+                .map(|(_, edge, _)| edge)
+                .collect::<Vec<_>>()
+            {
                 let data = &mut graph.underlying[edge];
                 data.particle = data.particle.clone().override_mass(Some(Atom::Zero));
             }
@@ -1506,10 +1510,7 @@ mod tests {
             CountertermIdentity::new(&b, &support(&b), &model)?,
         );
         assert_ne!(la.key, lb.key, "the legacy certificate sees the rule sign");
-        let (ta, tb) = (
-            ga.graph_transport().unwrap(),
-            gb.graph_transport().unwrap(),
-        );
+        let (ta, tb) = (ga.graph_transport().unwrap(), gb.graph_transport().unwrap());
         assert_eq!(ta.sigma * tb.sigma, -1);
         assert_ne!(ta.features.routing, tb.features.routing);
         // Δ linear in B's rule: the restored value is the negated image.
@@ -1570,15 +1571,15 @@ mod tests {
         dress(&mut a, &[3, 4, 5], &wa);
         dress(&mut b, &[3, 4, 5], &wb);
         let (ga, gb) = (graph_identity(&a, &model)?, graph_identity(&b, &model)?);
-        assert_eq!(ga.key, gb.key, "a reversed closed quark loop has the same certificate");
+        assert_eq!(
+            ga.key, gb.key,
+            "a reversed closed quark loop has the same certificate"
+        );
         assert_ne!(
             CountertermIdentity::new(&a, &support(&a), &model)?.key,
             CountertermIdentity::new(&b, &support(&b), &model)?.key
         );
-        let (ta, tb) = (
-            ga.graph_transport().unwrap(),
-            gb.graph_transport().unwrap(),
-        );
+        let (ta, tb) = (ga.graph_transport().unwrap(), gb.graph_transport().unwrap());
         assert_eq!(ta.features.closed.len(), 1);
         assert_ne!(ta.features.closed, tb.features.closed);
         assert!(ta.crossed_open.is_empty() && tb.crossed_open.is_empty());
@@ -1632,11 +1633,11 @@ mod tests {
         dress(&mut a, &[0, 1, 2], &wa);
         dress(&mut b, &[0, 1, 2], &wb);
         let (ga, gb) = (graph_identity(&a, &model)?, graph_identity(&b, &model)?);
-        assert_eq!(ga.key, gb.key, "a reversed open quark line has the same certificate");
-        let (ta, tb) = (
-            ga.graph_transport().unwrap(),
-            gb.graph_transport().unwrap(),
+        assert_eq!(
+            ga.key, gb.key,
+            "a reversed open quark line has the same certificate"
         );
+        let (ta, tb) = (ga.graph_transport().unwrap(), gb.graph_transport().unwrap());
         assert_eq!(ta.features.open.len(), 1);
         assert_ne!(ta.features.open, tb.features.open);
         assert_eq!(ta.sigma * tb.sigma, -1, "the quark propagator changes sign");
@@ -1662,7 +1663,11 @@ mod tests {
         assert_eq!(restored, expected);
         // φ in the canonical frame: a chain is transposed, an unknown spinor
         // function is refused.
-        let port = |n: i64| Bispinor {}.new_rep(4).to_symbolic([function!(*DELTA_PORT, n)]);
+        let port = |n: i64| {
+            Bispinor {}
+                .new_rep(4)
+                .to_symbolic([function!(*DELTA_PORT, n)])
+        };
         let chain = function!(AGS.gamma, port(0), port(1), &dummy);
         assert_eq!(
             transpose_open_lines(&chain, &[[0, 1]]),
