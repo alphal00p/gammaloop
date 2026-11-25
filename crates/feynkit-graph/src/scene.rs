@@ -13,12 +13,11 @@ use linnet::half_edge::involution::{EdgeIndex, Orientation};
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use serde_json::{Map, Value};
 
-use crate::{DiagramError, FeynmanDiagram, LoopMomentumBasis, VertexId};
+use crate::{AMBER_HIGHLIGHT_PAINT, DiagramError, FeynmanDiagram, LoopMomentumBasis, VertexId};
 
 /// The physics palette of `physics-edge-style.typ` and the highlight paints.
 const INK: &str = "#3d2645";
 const ACCENT: &str = "#6f4d85";
-const HIGHLIGHT: &str = "#ffd166";
 /// External legs start one layout group either side, ten units apart.
 const EXTERNAL_SPACING: f64 = 10.0;
 
@@ -555,7 +554,7 @@ impl FeynmanDiagram {
         };
         scene.apply_highlights(
             &regions,
-            &HighlightPalette::new(HIGHLIGHT),
+            &HighlightPalette::new(AMBER_HIGHLIGHT_PAINT),
             options.mute_outside,
         );
         Ok(scene)
@@ -799,7 +798,7 @@ mod tests {
     use linnet::half_edge::involution::Hedge;
     use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph};
 
-    use super::{HIGHLIGHT, HighlightLayer, INK};
+    use super::{AMBER_HIGHLIGHT_PAINT, HighlightLayer, INK};
     use crate::SceneOptions;
     use crate::display::tests::one_loop;
 
@@ -867,11 +866,11 @@ mod tests {
                 .contains("<msub><mi>k</mi><mn>0</mn></msub>")
         );
         // A selected half highlights its edge and vertex; the rest fades.
-        assert_eq!(scene.edges[1].stroke.paint, HIGHLIGHT);
+        assert_eq!(scene.edges[1].stroke.paint, AMBER_HIGHLIGHT_PAINT);
         assert_eq!(scene.edges[1].stroke.dash, Dash::Dashed(0.9, 4.05));
         assert_eq!(scene.edges[2].stroke.paint, HighlightPalette::OUTSIDE_PAINT);
         assert_eq!(scene.edges[2].stroke.dash, Dash::Dotted);
-        assert_eq!(scene.nodes[0].stroke.paint, HIGHLIGHT);
+        assert_eq!(scene.nodes[0].stroke.paint, AMBER_HIGHLIGHT_PAINT);
         assert_eq!(scene.nodes[1].stroke.paint, HighlightPalette::OUTSIDE_PAINT);
     }
 
@@ -921,8 +920,8 @@ mod tests {
         );
         let dummy = &scene.edges[1].highlight_strokes[0];
         assert_eq!(dummy.layer, 1);
-        assert_eq!(dummy.stroke.paint, HIGHLIGHT);
-        assert_eq!(scene.nodes[isolated.0].stroke.paint, HIGHLIGHT);
+        assert_eq!(dummy.stroke.paint, AMBER_HIGHLIGHT_PAINT);
+        assert_eq!(scene.nodes[isolated.0].stroke.paint, AMBER_HIGHLIGHT_PAINT);
     }
 
     #[test]

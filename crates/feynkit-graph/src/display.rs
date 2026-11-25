@@ -31,6 +31,9 @@ pub(crate) fn typst_string(value: &str) -> String {
     output
 }
 
+/// Amber paint used by the FeynKit renderer. See [`FeynmanDiagram::to_linnest`].
+pub const AMBER_HIGHLIGHT_PAINT: &str = "#ffd166";
+
 #[derive(Default)]
 struct TypstHighlights {
     after_cut: String,
@@ -51,7 +54,7 @@ impl<'a> TypstLayer<'a> {
         Self {
             hedges,
             isolated,
-            paint: "#ffd166",
+            paint: AMBER_HIGHLIGHT_PAINT,
             width: None,
         }
     }
@@ -140,7 +143,7 @@ impl FeynmanDiagram {
         let layers: Vec<_> = layers
             .iter()
             .map(|layer| TypstLayer {
-                paint: layer.style.light_paint().unwrap_or("#ffd166"),
+                paint: layer.style.light_paint().unwrap_or(AMBER_HIGHLIGHT_PAINT),
                 width: layer.style.width(),
                 ..TypstLayer::amber(layer.hedges, layer.isolated)
             })
@@ -484,14 +487,6 @@ impl FeynmanDiagram {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    #[cfg(feature = "svg")]
-    use std::env;
-    #[cfg(feature = "svg")]
-    use std::io::Write;
-    #[cfg(feature = "svg")]
-    use std::path::PathBuf;
-    #[cfg(feature = "svg")]
-    use std::process::{Command, Stdio};
     use std::{collections::BTreeSet, sync::Arc};
 
     use linnet::half_edge::{
@@ -612,6 +607,10 @@ pub(crate) mod tests {
         let source = diagram
             .to_linnest(Some(&selected), &BTreeSet::new(), None, "(:)")
             .unwrap();
+        assert_eq!(
+            source,
+            include_str!("../tests/fixtures/single-amber-base.typ")
+        );
         let selection =
             "  let highlighted = subgraph.select(raw, source: (1, 3, ), sink: (0, 2, ))\n";
         assert!(source.contains(selection));
@@ -662,57 +661,6 @@ pub(crate) mod tests {
             .unwrap();
         assert!(outer < inner);
         assert!(source.contains("layers = ((subgraph: outside"));
-    }
-
-    #[cfg(feature = "svg")]
-    #[test]
-    #[ignore = "requires the Typst CLI and the workspace's Linnest plugins"]
-    fn compiled_linnest_casings_follow_global_layer_order() {
-        let diagram = one_loop();
-        let mut outer = diagram.graph.empty_subgraph::<SuBitGraph>();
-        outer.add(Hedge(1));
-        outer.add(Hedge(3));
-        let mut inner = diagram.graph.empty_subgraph::<SuBitGraph>();
-        inner.add(Hedge(1));
-        let empty = BTreeSet::new();
-        let layers = [
-            HighlightLayer::new(&outer, &empty, HighlightStyle::ActedOn),
-            HighlightLayer::new(&inner, &empty, HighlightStyle::Treated),
-        ];
-        let source = diagram
-            .to_linnest_with_highlights(&layers, true, None, "(:)")
-            .unwrap();
-        let workspace = env::var_os("GAMMALOOP_WORKSPACE_ROOT").map_or_else(
-            || PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
-            PathBuf::from,
-        );
-        let mut compiler = Command::new("typst")
-            .current_dir(&workspace)
-            .args(["compile", "--root", ".", "--format", "svg", "-", "-"])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .unwrap();
-        compiler
-            .stdin
-            .take()
-            .unwrap()
-            .write_all(source.as_bytes())
-            .unwrap();
-        let result = compiler.wait_with_output().unwrap();
-        assert!(
-            result.status.success(),
-            "{}",
-            String::from_utf8_lossy(&result.stderr)
-        );
-        let svg = String::from_utf8(result.stdout).unwrap();
-        let blue = svg.rfind(r##"stroke="#3b82f6""##).unwrap();
-        let red = svg.find(r##"stroke="#e4504f""##).unwrap();
-        assert!(
-            blue < red,
-            "every outer stroke must precede every inner stroke"
-        );
     }
 
     #[test]

@@ -9,6 +9,7 @@ use pyo3::{Bound, PyResult};
 use HighlightStyle::{ActedOn, Amber, Middle, Treated};
 
 /// A Python selection resolved by its owning graph. See [`extract_highlights`].
+#[derive(Debug, PartialEq)]
 pub struct SelectedHighlight<T> {
     /// Selection validated by the caller's callback.
     pub selection: T,
@@ -87,7 +88,7 @@ pub fn extract_highlights<'py, T>(
 }
 
 /// One CSS palette role. See [`theme_svg`].
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ThemePaint<'a> {
     role: &'a str,
     light: &'a str,
@@ -102,7 +103,7 @@ impl<'a> ThemePaint<'a> {
 }
 
 /// Byte formatting of public SVG exports. See [`theme_svg`].
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ThemeFormat {
     /// Legacy Linnet subgraph style block.
     Linnet,

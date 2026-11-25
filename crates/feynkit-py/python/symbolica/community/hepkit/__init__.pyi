@@ -3926,9 +3926,12 @@ class FeynmanDiagram:
             tuples from this diagram. Styles are "amber" (the default), "acted-on" (blue),
             "middle" (violet), and "treated" (red). Later strokes sit inside
             earlier strokes on shared edges. A Subgraph highlights its own
-            region by default. A styled pair can be passed directly. Up to
-            three unstyled entries use amber, blue/red, or blue/violet/red,
-            respectively. An empty sequence clears highlighting.
+            region by default. Either half-edge highlights its whole edge;
+            Linnet Graph highlights instead require both halves. A styled
+            pair can be passed directly. Defaults depend on the count of
+            unstyled entries regardless of where styled pairs appear. One,
+            two, or three get amber, blue/red, or blue/violet/red respectively.
+            An empty sequence clears highlighting.
         mute_outside : bool, optional
             Fade edges and nodes outside all supplied selections.
         """

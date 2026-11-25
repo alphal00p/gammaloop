@@ -1613,9 +1613,12 @@ impl PyGraph {
     /// config : RenderSettings or None, optional
     ///     Layout and drawing settings.
     /// highlight : Subgraph or pair or sequence, optional
-    ///     Ordered whole-edge selections or (selection, style) pairs.
-    ///     One, two or three unstyled entries use amber, blue/red, or
-    ///     blue/violet/red. Specify styles for additional layers.
+    ///     A selection, a (selection, style) pair, or a sequence of either.
+    ///     Select both halves of internal edges. In FeynKit, selecting either
+    ///     half highlights the whole edge. Defaults depend on the count of
+    ///     unstyled entries regardless of where styled pairs appear. One,
+    ///     two, or three get amber, blue/red, or blue/violet/red respectively.
+    ///     Specify styles for additional layers.
     /// mute_outside : bool, optional
     ///     Fade edges and nodes outside the selected regions.
     #[pyo3(signature = (*, config=None, highlight=None, mute_outside=true))]

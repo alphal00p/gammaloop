@@ -3144,6 +3144,10 @@
   let debug-edge-stroke = options.debug-edge-stroke
   let debug-edge-label-fill = options.debug-edge-label-fill
   let subgraph-edge-style = options.subgraph-edge-style
+  assert(
+    options.subgraph-edge-underlay in (true, false, "casings"),
+    message: "draw: subgraph-edge-underlay must be true, false, or \"casings\"",
+  )
   let subgraph-edge-underlay = options.subgraph-edge-underlay == true
   let subgraph-edge-casings = options.subgraph-edge-underlay == "casings"
   let info = graph-api.info(graph)

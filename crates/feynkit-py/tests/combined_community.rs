@@ -1,10 +1,15 @@
+use std::collections::BTreeSet;
 use std::env;
 use std::ffi::CString;
 use std::path::PathBuf;
 
-use feynkit_graph::{DiagramEdge, DiagramVertex, FeynmanDiagram, NumeratorInterface};
+use feynkit_graph::{
+    DiagramEdge, DiagramVertex, FeynmanDiagram, HighlightLayer, HighlightStyle, NumeratorInterface,
+};
 use feynkit_model::Model;
 use feynkit_py::{FeynkitModule, PyFeynmanDiagram, PyModel};
+use linnet::half_edge::involution::Hedge;
+use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph};
 #[cfg(feature = "linnet-python")]
 use linnet_py::GraphModule;
 #[cfg(not(feature = "linnet-python"))]
@@ -93,15 +98,6 @@ fn shared_numeric_external_states_in_installed_host() {
 #[test]
 #[ignore = "browser fixture producer requires optional Marimo and AnyWidget; runs in the browser CI group"]
 fn browser_display_fixtures() {
-    let test_directory = env::var_os("GAMMALOOP_WORKSPACE_ROOT")
-        .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
-        .map(|root| PathBuf::from(root).join("crates/feynkit-py"))
-        .unwrap_or_else(|| {
-            env::var_os("CARGO_MANIFEST_DIR")
-                .map(PathBuf::from)
-                .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")))
-        })
-        .join("tests");
     Python::initialize();
     Python::attach(|py| -> PyResult<()> {
         let symbolica = install_package(py, "symbolica")?;
@@ -130,7 +126,7 @@ fn browser_display_fixtures() {
         import_wrapper(py, &community, "symbolica.community.tensor", SPENSO_WRAPPER)?;
         let code = CString::new(include_str!("browser_display_fixtures.py")).unwrap();
         let locals = PyDict::new(py);
-        locals.set_item("test_directory", test_directory)?;
+        locals.set_item("test_directory", test_directory())?;
         py.run(&code, Some(&locals), Some(&locals))
     })
     .unwrap();
@@ -210,6 +206,12 @@ assert "typst" not in sys.modules
             Some(&locals),
             Some(&locals),
         )?;
+        let highlight_tests = CString::new(include_str!("installed_graph_highlighting.py")).unwrap();
+        let highlights = PyDict::new(py);
+        highlights.set_item("__file__", test_directory().join("installed_graph_highlighting.py"))?;
+        highlights.set_item("with_linnet", cfg!(feature = "linnet-python"))?;
+        py.run(&highlight_tests, Some(&highlights), Some(&highlights))
+            .inspect_err(|error| error.print(py))?;
         Ok(())
     })
     .unwrap();
@@ -250,6 +252,51 @@ fn community_native_forwarding_uses_registered_owners() {
         py.run(&code, Some(&locals), Some(&locals))
     })
     .unwrap();
+}
+
+#[test]
+fn linnest_casing_source_matches_the_compiled_clinnet_fixture() {
+    let diagram = FeynmanDiagram::from_dot(
+        Model::phi4(),
+        r#"digraph basketball {
+            a -> b [particle="phi"]; a -> b [particle="phi"];
+            a -> b [particle="phi"]; a -> b [particle="phi"];
+        }"#,
+    )
+    .unwrap();
+    let empty = BTreeSet::new();
+    let regions = [8, 6, 4].map(|halves| {
+        let mut region = diagram.underlying().empty_subgraph::<SuBitGraph>();
+        for index in 0..halves {
+            region.add(Hedge(index));
+        }
+        region
+    });
+    let [outer, middle, inner] = &regions;
+    let layers = [
+        HighlightLayer::new(outer, &empty, HighlightStyle::ActedOn),
+        HighlightLayer::new(middle, &empty, HighlightStyle::Middle),
+        HighlightLayer::new(inner, &empty, HighlightStyle::Treated),
+    ];
+    let source = diagram
+        .to_linnest_with_highlights(&layers, true, None, "(:)")
+        .unwrap();
+    assert_eq!(
+        source,
+        include_str!("../../clinnet/tests/resources/feynkit-casings.typ")
+    );
+}
+
+fn test_directory() -> PathBuf {
+    env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+        .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+        .map(|root| PathBuf::from(root).join("crates/feynkit-py"))
+        .unwrap_or_else(|| {
+            env::var_os("CARGO_MANIFEST_DIR")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")))
+        })
+        .join("tests")
 }
 
 fn install_package<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyModule>> {

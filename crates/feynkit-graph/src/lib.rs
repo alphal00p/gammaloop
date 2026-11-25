@@ -22,6 +22,7 @@ pub mod symbols;
 pub mod thresholds;
 mod uv;
 
+pub use display::AMBER_HIGHLIGHT_PAINT;
 pub use integrals::{
     IntegralFamily, IntegralFamilyError, IntegralMapping, PropagatorMapping, QuadraticMomentum,
 };

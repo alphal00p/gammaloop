@@ -1,5 +1,6 @@
 """Native highlights use external metrics; source exports use a fake compiler."""
 
+import base64
 import hashlib
 import re
 import xml.etree.ElementTree as ET
@@ -10,6 +11,18 @@ from pathlib import Path
 
 from symbolica.community import graph as rendering
 from symbolica.community import hepkit as fk
+
+
+def normalize_svg_fonts(svg):
+    """Hash embedded WOFF2 bytes while preserving the SVG and CSS around them."""
+
+    def font_digest(match):
+        font = base64.b64decode(match[0], validate=True)
+        return "sha256:" + hashlib.sha256(font).hexdigest()
+
+    return re.sub(
+        r'(?<=url\("data:font/woff2;base64,)[A-Za-z0-9+/=]+(?="\))', font_digest, svg
+    )
 
 
 def fixture_linnest(owner, **kwargs):
@@ -61,7 +74,9 @@ def external_metrics_snapshot(view):
     )
 
 
-model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
+fixtures = Path(__file__).parent / "fixtures"
+has_linnet = globals().get("with_linnet", True)
+model = fk.Model(fixtures / "scalars_2p_3p.json")
 diagrams = (
     model.process(
         ["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]
@@ -80,10 +95,9 @@ diagram = next(
     )
     > 1
 )
-graph = diagram.to_graph()
 snapshot = diagram.to_json()
 source = fixture_linnest(diagram)
-empty = graph.empty_subgraph()
+empty = diagram.subgraph()
 assert fixture_linnest(diagram, highlight=empty) != source
 empty_svg = ET.fromstring(
     external_metrics_snapshot(diagram.render(highlight=empty)).to_svg()
@@ -94,14 +108,18 @@ assert any(
 assert not any(
     element.get("stroke", "").lower() == "#ffd166" for element in empty_svg.iter()
 )
-internal = graph.filter(edge=lambda edge: not edge.data.is_external)
-paired = next(edge for edge in graph.edges() if not edge.data.is_external)
+internal = diagram.filter(edge=lambda edge: not edge.is_external)
+full = diagram.subgraph(half_edges=[half.id for half in diagram.half_edges])
+paired = next(edge for edge in diagram.edges if not edge.is_external)
 highlights = [
     internal,
-    graph.full_subgraph(),
-    graph.subgraph(half_edges=[paired.source.index]),
-    graph.subgraph(half_edges=[paired.sink.index]),
-    graph.filter(edge=lambda edge: edge.data.is_external),
+    full,
+    *(
+        diagram.subgraph(half_edges=[half.id])
+        for half in diagram.half_edges
+        if half.edge.id == paired.id
+    ),
+    diagram.filter(edge=lambda edge: edge.is_external),
 ]
 for selected in highlights:
     highlighted_source = fixture_linnest(diagram, highlight=selected)
@@ -112,7 +130,7 @@ for selected in highlights:
     assert any(
         element.get("stroke", "").lower() == "#ffd166" for element in root.iter()
     ), "selected half-edges must retain gold strokes"
-    if selected != graph.full_subgraph():
+    if selected != full:
         assert any(
             element.get("stroke", "").lower() == "#77777773"
             and element.get("stroke-dasharray")
@@ -126,7 +144,8 @@ assert (
 )
 
 other = fk.FeynmanDiagram.from_json(model, snapshot)
-for invalid in (other.to_graph().full_subgraph(), object()):
+foreign = other.subgraph(half_edges=[half.id for half in other.half_edges])
+for invalid in (foreign, object()):
     for render in (diagram.to_linnest, diagram.render, diagram.to_html):
         try:
             render(highlight=invalid)
@@ -135,14 +154,20 @@ for invalid in (other.to_graph().full_subgraph(), object()):
         else:
             raise AssertionError("foreign highlight selections must be rejected")
 
-graph.reverse_edge(0)
-for render in (diagram.to_linnest, diagram.render, diagram.to_html):
-    try:
-        render(highlight=internal)
-    except (ValueError, ReferenceError):
-        pass
-    else:
-        raise AssertionError("stale highlight selections must be rejected")
+if has_linnet:
+    graph = diagram.to_graph()
+    stale = graph.full_subgraph()
+    assert fixture_linnest(diagram, highlight=stale) == fixture_linnest(
+        diagram, highlight=full
+    )
+    graph.reverse_edge(0)
+    for render in (diagram.to_linnest, diagram.render, diagram.to_html):
+        try:
+            render(highlight=stale)
+        except (ValueError, ReferenceError):
+            pass
+        else:
+            raise AssertionError("stale highlight selections must be rejected")
 assert diagram.to_json() == snapshot
 assert fixture_linnest(diagram) == source
 cross_section = (
@@ -154,7 +179,7 @@ cross_section = (
 )
 snapshot = cross_section.to_json()
 for selected in (
-    cross_section.to_graph().full_subgraph(),
+    cross_section.subgraph(half_edges=[half.id for half in cross_section.half_edges]),
     cross_section.cuts[0].left.subgraph,
 ):
     root = ET.fromstring(
@@ -323,19 +348,14 @@ check_palette(basketball_svg, "feynkit", "feynkit-diagram-svg")
 assert fixture_linnest(basketball, highlight=layers).count("#image(bytes(") == 1
 
 legacy_style = fk.DiagramStyle(show_particle=False)
-# Full SVG digests from 055fd0c1, ordered FeynKit then Linnet.
-golden = (
-    (Path(__file__).parent / "fixtures" / "single-amber-base.sha256")
-    .read_text()
-    .splitlines()
-)
+# SVGs from 055fd0c1 with embedded WOFF2 payloads replaced by their digests.
 with patch.dict(sys.modules, {"typst": None}):
-    actual = [
-        basketball.render(highlight=inner, style=legacy_style).to_svg(),
-        basketball.to_graph().subgraph(edges=[0, 1]).render().to_svg(),
-    ]
-assert [hashlib.sha256(svg.encode()).hexdigest() for svg in actual] == golden
-assert "#77777773" in actual[0]
+    legacy_svg = basketball.render(highlight=inner, style=legacy_style).to_svg()
+assert (
+    normalize_svg_fonts(legacy_svg).encode()
+    == (fixtures / "single-amber-base-feynkit.svg").read_bytes()
+), "FeynKit single-amber SVG differs from the base fixture"
+assert "#77777773" in legacy_svg
 
 unmuted = ET.fromstring(
     basketball.render(
@@ -345,14 +365,22 @@ unmuted = ET.fromstring(
 )
 assert all(element.get("stroke") != "#77777773" for element in unmuted.iter())
 
-generic = basketball.to_graph()
-generic_outer = generic.full_subgraph()
-generic_middle = generic.subgraph(edges=[0, 1, 2])
-generic_inner = generic.subgraph(edges=[0, 1])
-for owner, selections in (
-    (basketball, [outer, middle, inner]),
-    (generic, [generic_outer, generic_middle, generic_inner]),
-):
+owners = [(basketball, [outer, middle, inner])]
+if has_linnet:
+    assert hasattr(rendering, "Graph"), "expected the Linnet graph bindings"
+    generic = basketball.to_graph()
+    generic_outer = generic.full_subgraph()
+    generic_middle = generic.subgraph(edges=[0, 1, 2])
+    generic_inner = generic.subgraph(edges=[0, 1])
+    with patch.dict(sys.modules, {"typst": None}):
+        legacy_svg = generic_inner.render().to_svg()
+    assert (
+        normalize_svg_fonts(legacy_svg).encode()
+        == (fixtures / "single-amber-base-linnet.svg").read_bytes()
+    ), "Linnet single-amber SVG differs from the base fixture"
+    owners.append((generic, [generic_outer, generic_middle, generic_inner]))
+
+for owner, selections in owners:
 
     def svg(highlight):
         return owner.render(highlight=highlight).to_svg()
@@ -364,6 +392,10 @@ for owner, selections in (
         (3, ("acted-on", "middle", "treated")),
     ):
         assert svg(selections[:count]) == svg(list(zip(selections[:count], roles)))
+    a, b, c = selections
+    assert svg([a, (b, "middle"), c]) == svg(
+        [(a, "acted-on"), (b, "middle"), (c, "treated")]
+    )
     assert svg([]) == owner.render().to_svg()
     try:
         svg(selections + selections[:1])
@@ -372,26 +404,36 @@ for owner, selections in (
     else:
         raise AssertionError("four unstyled layers must require explicit styles")
 
-generic_svg = generic.to_svg(highlight=[generic_outer, generic_middle, generic_inner])
-check_palette(generic_svg, "linnet", "linnet-subgraph")
-disjoint = generic.to_svg(
-    highlight=[generic.subgraph(edges=[0, 1]), generic.subgraph(edges=[2, 3])]
-)
-assert all(len(stack) == 1 for stack in stroke_stacks(disjoint))
-assert all(
-    len(stack) == 1
-    for stack in stroke_stacks(
-        generic.to_svg(highlight=[generic.empty_subgraph(), generic_inner])
+if has_linnet:
+    generic_svg = generic.to_svg(
+        highlight=[generic_outer, generic_middle, generic_inner]
     )
-)
-half_edge = generic.subgraph(half_edges=[generic.edge(0).source.index])
-for selection in (half_edge, (half_edge, "treated"), [half_edge, generic_inner]):
+    check_palette(generic_svg, "linnet", "linnet-subgraph")
+    disjoint = generic.to_svg(
+        highlight=[generic.subgraph(edges=[0, 1]), generic.subgraph(edges=[2, 3])]
+    )
+    assert all(len(stack) == 1 for stack in stroke_stacks(disjoint))
+    assert all(
+        len(stack) == 1
+        for stack in stroke_stacks(
+            generic.to_svg(highlight=[generic.empty_subgraph(), generic_inner])
+        )
+    )
+    half_edge = generic.subgraph(half_edges=[generic.edge(0).source.index])
+    for selection in (half_edge, (half_edge, "treated"), [half_edge, generic_inner]):
+        try:
+            generic.render(highlight=selection)
+        except ValueError as error:
+            assert "requires complete edges" in str(error)
+        else:
+            raise AssertionError("partial paired edges must be rejected in every layer")
     try:
-        generic.render(highlight=selection)
-    except ValueError as error:
-        assert "requires complete edges" in str(error)
+        generic.render(highlight=inner)
+    except TypeError as error:
+        assert "symbolica.community.graph.Subgraph" in str(error)
+        assert "graph.subgraph(" in str(error)
     else:
-        raise AssertionError("partial paired edges must be rejected in every layer")
+        raise AssertionError("a FeynKit region must not be accepted by a Linnet graph")
 for highlight in ([(inner, "missing")], [(diagram.subgraph(edges=[0]), "treated")]):
     try:
         basketball.render(highlight=highlight)

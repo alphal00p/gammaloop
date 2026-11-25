@@ -532,7 +532,10 @@
     "feynkit-amplitude" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-tensor" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-cff" = ["crates/feynkit-model/tests/fixtures"];
-    "feynkit-graph" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-graph" = [
+      "crates/feynkit-model/tests/fixtures"
+      "crates/feynkit-graph/tests/fixtures/single-amber-base.typ"
+    ];
     "feynkit-generator" = [
       "crates/feynkit-model/tests/fixtures"
       "crates/feynkit-generator/tests/fixtures"
@@ -550,6 +553,8 @@
       "crates/feynkit-py/tests/installed_squared_amplitude_display.py"
       "crates/feynkit-py/tests/installed_wavefunctions.py"
       "crates/feynkit-py/tests/installed_offline_rendering.py"
+      "crates/feynkit-py/tests/installed_graph_highlighting.py"
+      "crates/clinnet/tests/resources/feynkit-casings.typ"
       "crates/feynkit-py/tests/native_forwarding.py"
       "crates/spynso3/tests/installed_tensor_network_display.py"
       "crates/linnet-py/tests/test_community_rendering.py"

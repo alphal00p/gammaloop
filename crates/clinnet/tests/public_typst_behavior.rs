@@ -123,6 +123,43 @@ fn paths_with_attr<'a>(svg: &'a str, name: &str, value: &str) -> Vec<(usize, &'a
         .collect()
 }
 
+#[test]
+fn compiled_linnest_casings_follow_global_layer_order() {
+    let (base, renderer) = staged(&PHYSICS_STYLE);
+    // FeynKit tests this fixture against its emitter. Clinnet owns compiler
+    // validation because its runtime carries Typst and the embedded plugins.
+    let source = include_str!("resources/feynkit-casings.typ")
+        .replace(
+            "assets/embedded/drawing/templates/layout-core.typ",
+            PHYSICS_STYLE[2].0,
+        )
+        .replace(
+            "assets/embedded/drawing/templates/physics-edge-style.typ",
+            PHYSICS_STYLE[0].0,
+        );
+    let svg = render(&base, &renderer, "feynkit-casings.typ", &source);
+    let layers = ["#3b82f6", "#8b5cf6", "#e4504f"];
+    for pair in layers.windows(2) {
+        let outer = paths_with_attr(&svg, "stroke", pair[0]);
+        let inner = paths_with_attr(&svg, "stroke", pair[1]);
+        assert!(outer.last().unwrap().0 < inner.first().unwrap().0);
+    }
+
+    let fixture = base.path().join(TEMPLATES).join("invalid-underlay.typ");
+    let typo = source.replace(
+        r#"subgraph-edge-underlay: "casings""#,
+        r#"subgraph-edge-underlay: "casing""#,
+    );
+    fs::write(&fixture, typo).unwrap();
+    let error = renderer
+        .compile_template(&fixture, fixture.with_extension("svg"), &[])
+        .unwrap_err();
+    assert!(
+        format!("{error:?}").contains("subgraph-edge-underlay must be true, false, or"),
+        "{error:?}"
+    );
+}
+
 fn translation(value: &str) -> (f64, f64) {
     let mut coordinates = value
         .strip_prefix("translate(")

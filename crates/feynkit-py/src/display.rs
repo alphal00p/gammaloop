@@ -1,6 +1,6 @@
 use crate::error;
 use crate::graph::PyFeynmanDiagram;
-use feynkit_graph::{FeynmanDiagram, SceneOptions};
+use feynkit_graph::{AMBER_HIGHLIGHT_PAINT, FeynmanDiagram, HighlightStyle, SceneOptions};
 use feynkit_model::{Model, ParticleId};
 use linnet_render_py::PyErrExt;
 use linnet_render_py::PyRenderSettings;
@@ -13,7 +13,6 @@ use crate::render_settings::PyDiagramStyle;
 use pyo3::{PyResult, Python};
 use std::fmt::Write;
 
-use feynkit_graph::HighlightStyle;
 use linnet_render_py::{PyDiagramView, ThemeFormat, ThemePaint, theme_svg};
 
 /// Energy representations reuse Linnet's layout with their own orientation marks.
@@ -68,7 +67,7 @@ pub(crate) fn themed_svg(svg: String, highlights: &[HighlightStyle]) -> String {
             ThemePaint::new("accent", "#6f4d85", "#d8b9e3"),
             ThemePaint::new("ink-sink", "#948899", "#fbf6fc"),
             ThemePaint::new("accent-sink", "#b09dbc", "#ead9f0"),
-            ThemePaint::new("highlight", "#ffd166", "#f0bb4f"),
+            ThemePaint::new("highlight", AMBER_HIGHLIGHT_PAINT, "#f0bb4f"),
             ThemePaint::new("outside", "#77777773", "#aaaaaa73"),
         ],
         highlights,

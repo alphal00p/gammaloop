@@ -9,9 +9,9 @@ use linnet::half_edge::builder::{HedgeData, HedgeGraphBuilder};
 use linnet::half_edge::involution::{Flow, Hedge, HedgePair, Orientation};
 use linnet::half_edge::subgraph::{Inclusion, SubSetLike};
 use linnet_render_py::{extract_highlights, theme_svg, ThemeFormat, ThemePaint};
-use pyo3::exceptions::{PyReferenceError, PyRuntimeError, PyValueError};
-use pyo3::types::{PyAny, PyAnyMethods, PyDict, PyDictMethods, PyList, PyListMethods};
-use pyo3::{Bound, Py, PyRef, PyResult, Python};
+use pyo3::exceptions::{PyReferenceError, PyRuntimeError, PyTypeError, PyValueError};
+use pyo3::types::{PyAny, PyDict, PyDictMethods, PyList, PyListMethods};
+use pyo3::{Bound, Py, PyResult, Python};
 
 use crate::dot::PyGlobalData;
 use crate::drawing::{element_drawing, DrawingKind};
@@ -316,7 +316,12 @@ pub(crate) fn render_with_highlights(
         return render_graph(py, graph, config, &[], mute_outside);
     };
     let selections = extract_highlights(highlight, |entry| {
-        Ok(entry.extract::<PyRef<'_, PySubgraph>>()?)
+        let subgraph = entry.cast::<PySubgraph>().map_err(|_| {
+            PyTypeError::new_err(
+                "highlight expects a symbolica.community.graph.Subgraph from this graph. Use graph.subgraph(...)",
+            )
+        })?;
+        Ok(subgraph.try_borrow()?)
     })?;
     let layers: Vec<_> = selections
         .iter()
