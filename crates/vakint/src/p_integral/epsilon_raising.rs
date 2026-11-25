@@ -53,13 +53,8 @@ pub(super) fn marker_terms(
         }
         true
     });
-    let AtomView::Fun(topo) = integral.as_view() else {
-        return Err(invalid("ep requires one topology per term"));
-    };
-    let props = topo
-        .iter()
-        .next()
-        .ok_or_else(|| invalid("ep requires a topology argument"))?
+    let props = super::input::topology_argument(integral.as_view())
+        .ok_or_else(|| invalid("ep requires one topo argument containing a propagator product"))?
         .to_owned();
     if markers.is_empty() {
         return Ok(vec![(integral.clone(), numerator.clone())]);
@@ -312,12 +307,11 @@ fn analytic_bubble(
 }
 
 pub(super) fn marked_graph(topology: &Atom) -> Result<(PGraph, Vec<(Atom, usize)>), VakintError> {
-    let AtomView::Fun(topo) = topology.as_view() else {
-        return Err(invalid("ep requires a single topology"));
-    };
+    let product = super::input::topology_argument(topology.as_view())
+        .ok_or_else(|| invalid("ep requires one topo argument containing a propagator product"))?;
     let mut props = Atom::one();
     let mut markers = Vec::new();
-    for factor in factors(topo.iter().next().unwrap()) {
+    for factor in factors(product) {
         if !has_marker(factor) {
             props *= factor.to_owned();
             continue;
@@ -431,6 +425,19 @@ impl Vakint {
 mod tests {
     use super::*;
     use crate::utils::vakint_macros::vk_parse;
+
+    #[test]
+    fn malformed_marker_topologies_are_rejected_before_matching() {
+        let marker = S.ep.call((S.k.call(1), 1));
+        for topology in [
+            vk_parse!("topo()").unwrap(),
+            vk_parse!("topo(1,2)").unwrap(),
+            vk_parse!("not_topo(1)").unwrap(),
+        ] {
+            assert!(marked_graph(&topology).is_err());
+            assert!(marker_terms(&marker, &topology).is_err());
+        }
+    }
 
     #[test]
     fn raised_bubble_supplies_the_six_loop_simple_pole() {

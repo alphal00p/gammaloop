@@ -86,7 +86,7 @@ pub(crate) enum Normalized {
 }
 
 /// The `topo(...)` argument of an integral, or `None` for another expression.
-fn topology_argument(integral: AtomView<'_>) -> Option<AtomView<'_>> {
+pub(super) fn topology_argument(integral: AtomView<'_>) -> Option<AtomView<'_>> {
     match integral {
         AtomView::Fun(function) if function.get_symbol() == S.topo && function.get_nargs() == 1 => {
             function.iter().next()
