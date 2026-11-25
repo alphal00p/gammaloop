@@ -4,7 +4,7 @@ use clap::Args;
 use gammalooprs::{
     graph::FeynmanGraph,
     processes::{AmplitudeGraph, AnalyticalEvaluationConfig},
-    uv::UltravioletGraph,
+    uv::UvGraph,
 };
 
 use gammalooprs::processes::{Amplitude, ProcessCollection};

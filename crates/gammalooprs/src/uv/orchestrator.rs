@@ -146,24 +146,24 @@ pub(crate) fn validate_local_counterterm_schemes(
             })?;
         let ir_components = spinneys.iter().filter(|spinney| {
             spinney.n_components() == 1
-                && spinney.renormalization_scheme == crate::uv::ApproximationType::IR
+                && spinney.renormalization_scheme() == crate::uv::ApproximationType::IR
         });
         let os_components = spinneys.iter().filter(|spinney| {
             spinney.n_components() == 1
-                && spinney.renormalization_scheme == crate::uv::ApproximationType::OS
+                && spinney.renormalization_scheme() == crate::uv::ApproximationType::OS
         });
         let pole_components = spinneys.iter().filter(|spinney| {
             spinney.n_components() == 1
-                && spinney.renormalization_scheme == crate::uv::ApproximationType::PolePart
+                && spinney.renormalization_scheme() == crate::uv::ApproximationType::PolePart
         });
         if let Some((child, parent)) = ir_components.clone().find_map(|child| {
-            (child.dod > 0).then(|| {
+            (child.dod() > 0).then(|| {
                 spinneys
                     .iter()
                     .find(|parent| {
                         parent.n_components() == 1
-                            && parent.dod > 0
-                            && parent.renormalization_scheme == crate::uv::ApproximationType::MUV
+                            && parent.dod() > 0
+                            && parent.renormalization_scheme() == crate::uv::ApproximationType::MUV
                             && parent.filter().includes(child.filter())
                             && parent.filter() != child.filter()
                     })
@@ -174,9 +174,9 @@ pub(crate) fn validate_local_counterterm_schemes(
                 "graph '{}' cut {cut_index}: positive-degree MUV component {} (d={}) cannot contain local soft/IR component {} (d={}) in phase 1; its reduced-cograph subtraction is not local without the containing soft branch, so assign IR to the containing component or wait for the deferred finite scheme-change/integrated policy",
                 graph.name,
                 parent.filter().string_label(),
-                parent.dod,
+                parent.dod(),
                 child.filter().string_label(),
-                child.dod,
+                child.dod(),
             ));
         }
         let ir_pole_wood = ir_components.clone().find_map(|ir| {
@@ -545,7 +545,9 @@ mod tests {
         finalized_runtime_dot,
         initialisation::test_initialise,
         utils::load_generic_model,
-        uv::{ApproximationType, CTRenormalizationRule, RenormalizationPrescriptionSettings},
+        uv::{
+            ApproximationType, CTRenormalizationRule, RenormalizationPrescriptionSettings, UvGraph,
+        },
     };
     use idenso::{bis, gamma};
     use linnet::half_edge::{involution::EdgeIndex, subgraph::SubSetLike};
@@ -650,6 +652,7 @@ mod tests {
         uncut.subtract_with(&graph.initial_state_cut.left);
         let component = graph
             .spinneys(&uncut)
+            .unwrap()
             .into_iter()
             .find(|spinney| {
                 !spinney.is_empty()
@@ -660,7 +663,14 @@ mod tests {
         let component_label = component.string_label();
         let dod = graph.compute_dod(&component.filter);
         assert_eq!(
-            graph.approximation_scheme(&component.filter, &graph.model, &settings, dod),
+            graph
+                .approximation_scheme(
+                    &component.filter,
+                    &graph.model,
+                    &settings.renormalization_prescription,
+                    dod
+                )
+                .unwrap(),
             ApproximationType::IR
         );
 
@@ -745,12 +755,12 @@ mod tests {
         let (child, parent) = spinneys
             .iter()
             .find_map(|child| {
-                if child.n_components() == 1 && child.dod > 0 {
+                if child.n_components() == 1 && child.dod() > 0 {
                     spinneys
                         .iter()
                         .find(|parent| {
                             parent.n_components() == 1
-                                && parent.dod > 0
+                                && parent.dod() > 0
                                 && parent.filter() != child.filter()
                                 && parent.filter().includes(child.filter())
                         })
@@ -761,15 +771,15 @@ mod tests {
             })
             .expect("the fixture must contain a positive-degree child and parent");
         assert_ne!(
-            graph.ct_identifier(child.filter(), &graph.model),
-            graph.ct_identifier(parent.filter(), &graph.model),
+            graph.ct_identifier(child.filter(), &graph.model).unwrap(),
+            graph.ct_identifier(parent.filter(), &graph.model).unwrap(),
             "the fixture must allow the child and parent schemes to be selected independently"
         );
         let settings = UVgenerationSettings {
             generate_integrated: false,
             renormalization_prescription: RenormalizationPrescriptionSettings {
                 overrides: vec![CTRenormalizationRule::new(
-                    graph.ct_identifier(child.filter(), &graph.model),
+                    graph.ct_identifier(child.filter(), &graph.model).unwrap(),
                     ApproximationType::IR,
                 )],
                 ..Default::default()
@@ -786,11 +796,11 @@ mod tests {
             .unwrap();
         assert!(classified.iter().any(|spinney| {
             spinney.filter() == child.filter()
-                && spinney.renormalization_scheme == ApproximationType::IR
+                && spinney.renormalization_scheme() == ApproximationType::IR
         }));
         assert!(classified.iter().any(|spinney| {
             spinney.filter() == parent.filter()
-                && spinney.renormalization_scheme == ApproximationType::MUV
+                && spinney.renormalization_scheme() == ApproximationType::MUV
         }));
         // Appendix B.15--B.16 needs the parent's S-US branch to cancel the
         // reduced-cograph limit of the finite child refinement. A positive-
@@ -824,12 +834,13 @@ mod tests {
         .unwrap();
         let identifiers = graph
             .spinneys(&graph.full_filter())
+            .unwrap()
             .into_iter()
             .filter(|spinney| {
                 graph.compute_dod(&spinney.filter) >= 0
                     && graph.underlying.connected_components(spinney).len() == 1
             })
-            .map(|spinney| graph.ct_identifier(&spinney.filter, &graph.model))
+            .map(|spinney| graph.ct_identifier(&spinney.filter, &graph.model).unwrap())
             .collect::<BTreeSet<_>>();
         assert!(
             identifiers.len() >= 2,
@@ -898,6 +909,7 @@ mod tests {
         };
         let union = graph
             .spinneys(&graph.full_filter())
+            .unwrap()
             .into_iter()
             .find(|spinney| graph.underlying.connected_components(spinney).len() == 2)
             .expect("the asymmetric spectacles fixture must contain one disconnected spinney");
@@ -921,8 +933,8 @@ mod tests {
         );
         assert_eq!(union.filter, left.union(right));
 
-        let left_identifier = graph.ct_identifier(left, &graph.model);
-        let right_identifier = graph.ct_identifier(right, &graph.model);
+        let left_identifier = graph.ct_identifier(left, &graph.model).unwrap();
+        let right_identifier = graph.ct_identifier(right, &graph.model).unwrap();
         assert_ne!(
             left_identifier, right_identifier,
             "different internal scalar species must make the two component rules independent"
@@ -965,13 +977,16 @@ mod tests {
             .iter()
             .find(|spinney| spinney.filter() == &union.filter)
             .expect("the disconnected union must remain selected when both factors are selected");
-        assert_eq!(selected_left.renormalization_scheme, ApproximationType::IR);
         assert_eq!(
-            selected_right.renormalization_scheme,
+            selected_left.renormalization_scheme(),
+            ApproximationType::IR
+        );
+        assert_eq!(
+            selected_right.renormalization_scheme(),
             ApproximationType::PolePart
         );
         assert_eq!(
-            selected_union.renormalization_scheme,
+            selected_union.renormalization_scheme(),
             ApproximationType::MUV,
             "the disconnected union must retain only its neutral aggregate scheme"
         );

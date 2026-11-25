@@ -63,7 +63,7 @@ use crate::{
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
     utils::{F, GS, Length, W_},
     uv::{
-        Integrands, RenormalizationPart, UVgenerationSettings, UltravioletGraph,
+        Integrands, RenormalizationPart, UVgenerationSettings, UltravioletGraph, UvGraph,
         approx::{
             CutStructure, OrientationProjection,
             integrated::{Integrated, to_vakint_integrand},

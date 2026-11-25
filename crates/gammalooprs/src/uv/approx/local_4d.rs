@@ -33,7 +33,7 @@ use crate::{
     numerator::{symbolica_ext::NumeratorAtomExt, ufo::UFO},
     utils::{GS, W_},
     uv::{
-        ApproximationType, UltravioletGraph,
+        ApproximationType, UltravioletGraph, UvGraph,
         approx::{ForestNodeLike, Rooted, UVCtx, integrated::IntegratedCts},
         marker::{UvMarker, UvOperation},
     },
@@ -1906,8 +1906,8 @@ impl Graph {
 /// Add the numerator of the reduced subgraph, (without given), to the integrand.
 /// Then, 4d -> d-dim on minkowski indices
 #[debug_instrument(
-        current = %current.log_display(),
-        given = %given.log_display(),
+        current = %current,
+        given = %given,
     )]
 #[cfg(test)]
 fn grow<S: super::ForestNodeLike>(
@@ -1945,8 +1945,8 @@ fn grow_factor<S: super::ForestNodeLike>(
 }
 
 #[debug_instrument(
-        current = %current.log_display(),
-        given = %given.log_display(),
+        current = %current,
+        given = %given,
     )]
 fn t<S: super::ForestNodeLike>(
     integrand: &SymbolicTensor<IndexedStructure>,
@@ -2023,8 +2023,8 @@ fn t<S: super::ForestNodeLike>(
 }
 
 #[debug_instrument(
-        current = %current.log_display(),
-        given = %given.log_display(),
+        current = %current,
+        given = %given,
     )]
 fn compatible_lmb<S: ForestNodeLike>(
     ctx: &UVCtx<'_>,
@@ -2782,8 +2782,8 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
                     component_lmb.clone(),
                 ));
                 debug_tags!(#generation, #uv, #local, #four_d, #trace;
-                    current = %current.log_display(),
-                    given = %given.log_display(),
+                    current = %current,
+                    given = %given,
                     retained_loop_edges = ?retained_loop_edges,
                     component_lmb = ?component_lmb,
                     coordinate_lmb = ?coordinate_lmb,
@@ -2840,8 +2840,8 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
             debug_tags!(#generation, #uv, #local, #four_d, #profile;
                 stage = "local_4d_construction",
                 graph = %ctx.graph.name,
-                current = %current.log_display(),
-                given = %given.log_display(),
+                current = %current,
+                given = %given,
                 elapsed_ms = elapsed.as_secs_f64() * 1000.0,
                 taylor_ms = taylor_time.as_secs_f64() * 1000.0,
                 construction_overhead_ms = elapsed.saturating_sub(taylor_time).as_secs_f64() * 1000.0,
@@ -2859,6 +2859,8 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::{self, Display, Formatter};
+
     use super::*;
     use crate::utils;
     use crate::uv::approx::integrated::Integrated;
@@ -2871,7 +2873,6 @@ mod tests {
         uv::approx::projected_4d::Local4dProjectionContext,
         uv::{Spinney, UVgenerationSettings, hedge_poset::OwnedForestNode, uv_graph::UVE},
     };
-    use gammaloop_tracing_filter::LogMessage;
     use idenso::{
         color::ColorSimplifySettings,
         dirac::GammaSimplifySettings,
@@ -2897,9 +2898,9 @@ mod tests {
         scheme: ApproximationType,
     }
 
-    impl LogMessage for TestNode {
-        fn log_display(&self) -> String {
-            "local-4d test node".to_owned()
+    impl Display for TestNode {
+        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+            f.write_str("local-4d test node")
         }
     }
 
@@ -3165,6 +3166,7 @@ mod tests {
         // consistent child is GL [2,3,5,6], leaving GL e4=paper e5.
         let mut labels = graph
             .spinneys(&graph.full_filter())
+            .unwrap()
             .into_iter()
             .map(|spinney| {
                 (
@@ -3174,8 +3176,12 @@ mod tests {
                         .map(|(_, edge, _)| usize::from(edge))
                         .collect::<Vec<_>>(),
                     graph.compute_dod(&spinney.filter),
-                    graph.boundary_pdg_set(&spinney.filter, &graph.model),
-                    graph.internal_pdg_set(&spinney.filter, &graph.model),
+                    graph
+                        .boundary_pdg_set(&spinney.filter, &graph.model)
+                        .unwrap(),
+                    graph
+                        .internal_pdg_set(&spinney.filter, &graph.model)
+                        .unwrap(),
                 )
             })
             .collect::<Vec<_>>();
@@ -4569,7 +4575,7 @@ mod tests {
                 assert_eq!(graph.compute_dod(&child_subgraph), 1);
                 assert_eq!(graph.compute_dod(&parent_subgraph), 1);
                 let mut nonnegative_connected = graph
-                    .spinneys(&parent_subgraph)
+                    .spinneys(&parent_subgraph).unwrap()
                     .into_iter()
                     .filter(|spinney| !spinney.filter.is_empty())
                     .filter(|spinney| graph.compute_dod(&spinney.filter) >= 0)
@@ -5196,7 +5202,7 @@ mod tests {
                     assert_eq!(graph.compute_dod(&child_subgraph), 2);
                     assert_eq!(graph.compute_dod(&parent_subgraph), parent_dod);
                     let mut nonnegative_connected = graph
-                        .spinneys(&parent_subgraph)
+                        .spinneys(&parent_subgraph).unwrap()
                         .into_iter()
                         .filter(|spinney| !spinney.filter.is_empty())
                         .filter(|spinney| graph.compute_dod(&spinney.filter) >= 0)
@@ -9187,12 +9193,12 @@ mod tests {
             .union(&graph.get_edge_subgraph(EdgeIndex(5)));
         let vertex = graph.underlying.iter_nodes_of(&filter).next().unwrap().0;
         let sibling_vertex = graph.underlying.iter_nodes_of(&sibling).next().unwrap().0;
-        let mut current = OwnedForestNode {
+        let bubble_node = |graph: &Graph, scheme: ApproximationType| OwnedForestNode {
             spinney: Spinney::with_scheme(
-                InternalSubGraph::cleaned_filter_optimist(filter, graph.as_ref()),
-                &graph,
+                InternalSubGraph::cleaned_filter_optimist(filter.clone(), graph.as_ref()),
+                graph,
                 &graph.loop_momentum_basis,
-                ApproximationType::MUV,
+                scheme,
                 0,
             )
             .expect("the scalar bubble has a compatible UV loop-momentum basis")
@@ -9252,7 +9258,7 @@ mod tests {
             ApproximationType::PolePart,
             ApproximationType::IR,
         ] {
-            current.spinney.renormalization_scheme = scheme;
+            let current = bubble_node(&graph, scheme);
             for (label, numerator) in &cases {
                 for on_vertex in [false, true] {
                     if on_vertex {
@@ -9285,7 +9291,7 @@ mod tests {
             }
         }
 
-        current.spinney.renormalization_scheme = ApproximationType::PolePart;
+        let current = bubble_node(&graph, ApproximationType::PolePart);
         let expected = run(&graph, &current, &settings)?;
         assert!(!expected.atom().expression().is_zero());
         // A sibling loop, its vertices, and global external-state projectors
@@ -9768,7 +9774,7 @@ mod tests {
                 .expect("the GL24 UV triangle is retained"),
             topo_order: 0,
         };
-        assert_eq!(current.spinney.dod, 2);
+        assert_eq!(current.spinney.dod(), 2);
 
         let minkowski = LibraryRep::from(Minkowski {});
         let q1_first = GS.emr_mom(owners[0], minkowski.to_symbolic([Atom::num(1)]));

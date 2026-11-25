@@ -141,6 +141,45 @@ The backends share analytic operations and result types. Scheduling,
 dependency lookup, caching, and disconnected-component composition
 belong to the orchestrator because their traversal models differ.
 
+The hedge-poset combinatorics is owned by the standalone `feynkit-uv` crate:
+spinney enumeration and classification, the renormalization-prescription
+settings, the inclusion `Wood`, its trace-unfolded `Forests`, component and
+replay-state lookup, and the structured forest DOT with `label`, `foata` and
+`cover` node attributes. It needs only the `UvGraph` queries: the half-edge
+graph, its UV domain, dummy edges, particle PDG codes and masses, a local
+(pruning) and a classifying degree of divergence, and a parent-compatible
+loop-momentum basis. Enumeration tests every union of two cycle-space elements
+and grows larger unions only from retained ones. A union that passes pruning is
+therefore found when every connected component has a nowhere-zero 4-flow (in
+particular when it is planar or has at most five loops); a larger cover is lost
+when every growth path through retained unions is pruned. The scalar Petersen
+graph with weighted vertices is a recorded known limitation, inherited from the
+reference algorithm. Seeds are subsets of a cycle basis, so the domain's cycle
+rank must stay below 64.
+GammaLoop's `Graph` keeps its requested subgraph as the domain, resolves
+particles in the caller's model, prunes with its stored edge and vertex degrees
+and classifies with its numerator-based `compute_dod`; its pruning degree can be
+below its classifying degree (identically zero numerators on a triangle, a
+factor in another line's momentum), and such a union is not enumerated.
+FeynKit diagrams restrict the domain to internal propagators, accept only their
+own model, classify through `FeynmanDiagram::uv_degree_of_divergence_of` by the
+hard-loop rescaling of `compute_dod` after routing all lines to common loop
+coordinates, and prune with the larger of the superficial local degree and that
+classifying degree, so nothing FeynKit classifies as divergent is pruned. A
+numerator that vanishes after FeynKit's routing, or has an edge or vertex factor
+that expands to zero, has degree zero and is kept; a numerator that vanishes
+only by index contraction across factors is not detected and can be classified
+convergent, since contracting every candidate is too costly. The two
+classifying degrees are not ordered in general: hard momenta of distinct lines can cancel after routing but not under GammaLoop's per-line tags, and a
+numerator detected as vanishing after routing has FeynKit degree zero. GammaLoop's
+tagged degree is the reference for counterterms. Parity tests compare both
+hosts' spinneys, bases, woods and forests and record these differences. GammaLoop's
+hedge-poset `Wood` and `Forests` add the cut structure, Vakint settings, label
+atoms, and the compute store keyed by `OperationNode`. Building the wood checks
+every spinney against the graph and the basis it was classified with, which
+recomputes one compatible sub-basis per spinney on both hosts. The legacy DAG
+wood and forest stay in GammaLoop as the comparison oracle.
+
 Comparison normalization sets the Lorentz dimension to four, reversibly cooks
 index syntax for checked `SymbolicTensor` admission, reduces colour identities,
 and contracts metrics and vector connections with chain and trace collection

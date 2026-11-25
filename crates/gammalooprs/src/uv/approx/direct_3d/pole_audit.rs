@@ -301,14 +301,14 @@ fn physical_full_h_scalar_cancellation_certificates() -> Result<()> {
         &generation,
     )?;
     let soft_components = wood
-        .graph
+        .graph()
         .iter_nodes()
-        .filter(|(_, _, spinney)| spinney.renormalization_scheme == ApproximationType::IR)
+        .filter(|(_, _, spinney)| spinney.renormalization_scheme() == ApproximationType::IR)
         .map(|(_, _, spinney)| {
             (
-                spinney.dod,
+                spinney.dod(),
                 graph
-                    .iter_edges_of(&spinney.subgraph)
+                    .iter_edges_of(spinney.subgraph())
                     .map(|(_, edge, _)| usize::from(edge))
                     .collect::<BTreeSet<_>>(),
             )

@@ -24,6 +24,7 @@ use gammaloop_integration_tests::{
     CLIState, clean_test, get_test_cli, get_tests_workspace_path, workspace_root,
 };
 use gammalooprs::cff::orientations::GraphOrientation;
+use gammalooprs::integrands::process::ProcessIntegrand;
 use gammalooprs::integrands::{
     HasIntegrand,
     evaluation::{EvaluationMetaData, PreciseEvaluationResultOutput, StabilityStatus},
@@ -37,8 +38,9 @@ use gammalooprs::settings::{
 use gammalooprs::utils::{ArbPrec, F, FloatLike};
 use gammalooprs::uv::{
     ApproximationType, CTIdentifier, CTRenormalizationRule, UVOrchestrator, UVProfileAnalysis,
-    UltravioletGraph, settings::FinalIntegrandDimension,
+    UltravioletGraph, UvGraph, settings::FinalIntegrandDimension,
 };
+use linnet::half_edge::subgraph::SubSetLike;
 use ndarray::Array2;
 use serde_json::{Map, Value, json};
 use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
@@ -2342,10 +2344,6 @@ impl GraphUvRichInspectCase {
         integrand_name: &str,
         point: &[f64],
     ) -> Result<()> {
-        use gammalooprs::{integrands::process::ProcessIntegrand, uv::UltravioletGraph};
-        use linnet::half_edge::subgraph::SubSetLike;
-        use std::collections::BTreeSet;
-
         let points = [
             point.to_vec(),
             point.iter().map(|value| 100.0 * value).collect(),
@@ -2404,6 +2402,7 @@ impl GraphUvRichInspectCase {
                 let graph = &amplitude.data.graph_terms[0].graph;
                 let regions = graph
                     .spinneys(&graph.full_filter())
+                    .unwrap()
                     .into_iter()
                     .filter(|region| !region.is_empty())
                     .map(|region| {
@@ -2412,7 +2411,11 @@ impl GraphUvRichInspectCase {
                             .map(|(_, edge, _)| usize::from(edge))
                             .collect::<Vec<_>>();
                         edges.sort_unstable();
-                        (edges, graph.n_loops(&region), graph.local_dod(&region))
+                        (
+                            edges,
+                            graph.n_loops(&region),
+                            graph.local_degree_of_divergence(&region.filter).unwrap(),
+                        )
                     })
                     .collect::<BTreeSet<_>>();
                 // The connected gluon-self-energy / top-self-energy / full-graph
@@ -3606,11 +3609,11 @@ fn classified_local_spinneys(
                         .collect::<Vec<_>>();
                     edge_ids.sort_unstable();
                     ClassifiedLocalSpinney {
-                        identifier: graph.ct_identifier(spinney.filter(), &graph.model),
+                        identifier: graph.ct_identifier(spinney.filter(), &graph.model).unwrap(),
                         edge_ids,
                         n_components: spinney.n_components(),
-                        scheme: spinney.renormalization_scheme,
-                        dod: spinney.dod,
+                        scheme: spinney.renormalization_scheme(),
+                        dod: spinney.dod(),
                     }
                 }),
         );

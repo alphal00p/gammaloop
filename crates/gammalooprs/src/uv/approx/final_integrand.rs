@@ -175,7 +175,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
 
     #[debug_instrument(
         graph = %graph.log_display(),
-        current = %current.log_display(),
+        current = %current,
     )]
     pub(crate) fn build_direct<S: ForestNodeLike>(
         &self,
@@ -265,7 +265,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
 
     #[debug_instrument(
         graph = %graph.log_display(),
-        current = %current.log_display(),
+        current = %current,
     )]
     pub(crate) fn build_projected<S: ForestNodeLike>(
         &self,

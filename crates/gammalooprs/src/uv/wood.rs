@@ -19,7 +19,7 @@ use linnet::half_edge::{
 // use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
 use super::{
-    Forest, Poset, UltravioletGraph,
+    Forest, Poset, UltravioletGraph, UvGraph,
     approx::Approximation,
     poset::{DAG, DagNode, PosetNode},
 };
@@ -58,8 +58,10 @@ impl CutWoods {
             for spinney in spinneys.iter() {
                 debug_tags!(#uv, #graph, #spinney,#generation;
                     log.cutset = cut,
-                    local_dod = %graph.local_dod(&spinney.subgraph),
-                    log.spinney = spinney,
+                    local_dod = %graph
+                        .local_degree_of_divergence(&spinney.subgraph().filter)
+                        .map_or_else(|error| error.to_string(), |dod| dod.to_string()),
+                    spinney = %spinney,
                     "spinneys",
                 );
             }
@@ -129,7 +131,7 @@ impl Wood {
                     for comp in &cs {
                         let comp =
                             InternalSubGraph::cleaned_filter_optimist(comp.clone(), ref_graph);
-                        if comp == poset.nodes[c].data.subgraph {
+                        if &comp == poset.nodes[c].data.subgraph() {
                             // find the components in the wood that this union is made of
                             union.push(c);
                             is_in += 1;

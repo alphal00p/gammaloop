@@ -678,7 +678,7 @@ mod tests {
         initialisation::test_initialise,
         settings::global::OrientationPattern,
         utils::W_,
-        uv::{Spinney, UltravioletGraph, approx::OrientationProjection},
+        uv::{Spinney, UvGraph, approx::OrientationProjection},
     };
     use idenso::tensor::SymbolicTensor;
     use linnet::half_edge::{
@@ -1444,7 +1444,7 @@ mod tests {
                 (
                     inner_subgraph.filter.clone(),
                     inner_subgraph.filter.clone(),
-                    inner_spinney.lmb.clone(),
+                    inner_spinney.lmb().clone(),
                 ),
                 (
                     graph.get_edge_subgraph(EdgeIndex(2)),
@@ -1497,7 +1497,7 @@ mod tests {
             &inner_denominators,
             inner_edges,
             [],
-            &inner_spinney.lmb,
+            inner_spinney.lmb(),
             ExactUvSubLmbFrame::TaylorVacuum,
             &cutset,
             &options,

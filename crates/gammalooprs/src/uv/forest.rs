@@ -251,7 +251,7 @@ impl Forest {
         for (i, n) in order.into_iter().enumerate() {
             let node_started = std::time::Instant::now();
             let parent_count = self.dag.nodes[n].parents.len();
-            let dod = self.dag.nodes[n].data.spinney.dod;
+            let dod = self.dag.nodes[n].data.spinney.dod();
             debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                 stage = "forest_node_start",
                 node = ?n,
@@ -281,13 +281,13 @@ impl Forest {
                         panic!("Should have computed the simple approx");
                     };
                     current.data.simple_approx =
-                        Some(a.dependent(current.data.spinney.subgraph.clone()));
+                        Some(a.dependent(current.data.spinney.subgraph().clone()));
 
                     debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
                         stage = "computing forest node",
                         simple = %current.data.simple_approx.as_ref().map(|a| a.expr(&graph.full_filter()).to_string()).unwrap(),
-                        log.current = current.data.spinney,
-                        log.given = parent.data.spinney,
+                        current = %current.data.spinney,
+                        given = %parent.data.spinney,
                         "Computing UV forest node single"
                     );
 
@@ -394,7 +394,7 @@ impl Forest {
             let physical = physical.multiply(prefactor)?;
             debug_tags!(#generation, #uv, #inspect, #dump;
                 log.expression = physical.expression(),
-                dod = n.data.spinney.dod,
+                dod = n.data.spinney.dod(),
                 "Dumped pole part color simplification input"
             );
             let reduced = physical
@@ -436,7 +436,7 @@ impl Forest {
         for (_, n) in &self.dag.nodes {
             debug_tags!(#generation, #uv, #graph, #term;
                 dod = %n.data.dod(),
-                log.graph = %graph.dot_lmb_of(&n.data.spinney.subgraph,&n.data.spinney.lmb),
+                log.graph = %graph.dot_lmb_of(n.data.spinney.subgraph(),n.data.spinney.lmb()),
                 simple = %n.data.simple_display(graph),"Terms"
             );
             let color = TensorCollectFilter::Reps([

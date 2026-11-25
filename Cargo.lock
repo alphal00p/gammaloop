@@ -2452,6 +2452,7 @@ dependencies = [
  "feynkit-graph",
  "feynkit-kinematics",
  "feynkit-model",
+ "feynkit-uv",
  "gammaloop-tracing-filter",
  "gammaloop-workspace-hack",
  "idenso",

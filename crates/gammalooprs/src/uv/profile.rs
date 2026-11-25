@@ -24,7 +24,7 @@ use crate::momentum::sample::LoopIndex;
 use crate::processes::{Amplitude, AmplitudeGraph, CrossSection, CutId};
 use crate::settings::RuntimeSettings;
 use crate::utils::{ArbPrec, F, FloatLike};
-use crate::uv::UltravioletGraph;
+use crate::uv::{UltravioletGraph, UvGraph};
 use clap::ValueEnum;
 use color_eyre::{Result, eyre::Context};
 use colored::Colorize;
@@ -363,6 +363,8 @@ mod precision_tests;
 #[cfg(test)]
 mod tests {
     use std::sync::OnceLock;
+
+    use crate::uv::UvGraph;
 
     use itertools::Itertools;
     use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};

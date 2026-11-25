@@ -1588,7 +1588,7 @@ mod tests {
         settings::RuntimeSettings,
         utils::{ArbPrec, F, FloatLike, W_, cut_energy},
         uv::{
-            UltravioletGraph,
+            UvGraph,
             approx::{OrientationProjection, local_3d::Localizer, local_4d::Full4dCts},
         },
     };

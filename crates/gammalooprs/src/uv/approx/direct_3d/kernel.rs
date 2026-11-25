@@ -21,7 +21,7 @@ use crate::{
     numerator::symbolica_ext::NumeratorAtomExt,
     utils::{GS, W_},
     uv::{
-        ApproximationType, UltravioletGraph,
+        ApproximationType, UltravioletGraph, UvGraph,
         approx::{ForestNodeLike, OrientationProjection, UVCtx},
         uv_graph::UVE,
     },
@@ -300,8 +300,8 @@ pub(super) fn coordinate_lmb<S: ForestNodeLike>(
 
     debug_tags!(#generation, #uv, #local, #direct, #trace;
         stage = "direct_3d_coordinate_lmb",
-        current = %current.log_display(),
-        given = %given.log_display(),
+        current = %current,
+        given = %given,
         active_subgraph = %active_subgraph.string_label(),
         retained_region = %retained_region.string_label(),
         retained_loop_edges = ?retained_loop_edges,
@@ -414,8 +414,8 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
     let integrands = integrands.multiply_key_mapped(orientation, ctx.graph, &numerator, scope)?;
     debug_tags!(#generation, #profile, #uv, #local, #direct, #trace;
         stage = "direct_3d_taylor_family",
-        current = %current.log_display(),
-        given = %given.log_display(),
+        current = %current,
+        given = %given,
         reduced = %reduced.string_label(),
         loop_edges = ?lmb.loop_edges,
         branch_count = integrands.iter_keys().count(),
@@ -575,8 +575,8 @@ fn start<S: ForestNodeLike>(
 #[cfg(test)]
 impl Local3DLoopRescaling {
     // #[debug_instrument(
-    //     current = %current.log_display(),
-    //     given = %given.log_display(),
+    //     current = %current,
+    //     given = %given,
     //     reduced,
     // )]
     pub(crate) fn t<S: ForestNodeLike>(

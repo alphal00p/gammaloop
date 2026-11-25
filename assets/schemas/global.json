@@ -37,6 +37,7 @@
       "additionalProperties": false
     },
     "ApproximationType": {
+      "description": "Renormalization scheme applied to one UV subgraph.",
       "type": "string",
       "enum": [
         "MUV",
@@ -47,6 +48,7 @@
       ]
     },
     "CTIdentifier": {
+      "description": "Boundary and optional internal PDG codes that select counterterms.",
       "type": "object",
       "properties": {
         "external_pdg_set": {
@@ -74,6 +76,7 @@
       "additionalProperties": false
     },
     "CTRenormalizationRule": {
+      "description": "Scheme override for the counterterms matching an identifier.",
       "type": "object",
       "properties": {
         "ct_identifier": {
@@ -534,6 +537,7 @@
       "additionalProperties": false
     },
     "RenormalizationPrescriptionSettings": {
+      "description": "Default and counterterm-specific renormalization schemes.",
       "type": "object",
       "properties": {
         "log_divergent": {

@@ -33,7 +33,10 @@ use color_eyre::Result;
 use eyre::eyre;
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 
-use std::sync::Mutex;
+use std::{
+    fmt::{self, Display, Formatter},
+    sync::Mutex,
+};
 
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -65,7 +68,7 @@ pub trait Rooted {
     fn root() -> Self;
 }
 
-pub trait ForestNodeLike: LogMessage {
+pub trait ForestNodeLike: Display {
     fn subgraph(&self) -> &SuBitGraph;
     fn lmb(&self) -> &LoopMomentumBasis;
     fn lmb_id(&self) -> EdgeIndex {
@@ -172,7 +175,7 @@ impl Approximation {
             self.local(graph)?,
             self.integrated(graph)?,
             self.renormalization_scheme(),
-            self.spinney.subgraph.is_empty(),
+            self.spinney.subgraph().is_empty(),
             self.lmb(),
         )
     }
@@ -201,34 +204,35 @@ impl Approximation {
     }
 }
 
-impl LogMessage for Approximation {
-    fn log_display(&self) -> String {
-        format!(
+impl Display for Approximation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
             "subgraph={}, topo_order={}, dod={}",
             self.spinney.filter().string_label(),
             self.topo_order,
-            self.spinney.dod
+            self.spinney.dod()
         )
     }
 }
 
 impl ForestNodeLike for Approximation {
     fn dod(&self) -> i32 {
-        self.spinney.dod
+        self.spinney.dod()
     }
 
     fn renormalization_scheme(&self) -> ApproximationType {
-        self.spinney.renormalization_scheme
+        self.spinney.renormalization_scheme()
     }
 
     fn lmb(&self) -> &LoopMomentumBasis {
-        &self.spinney.lmb
+        self.spinney.lmb()
     }
 
     fn reduced_subgraph(&self, given: &Self) -> SuBitGraph {
         self.spinney
-            .subgraph
-            .subtract(&given.spinney.subgraph)
+            .subgraph()
+            .subtract(given.spinney.subgraph())
             .filter
     }
 
@@ -433,7 +437,7 @@ impl Approximation {
         localizer: Localizer<'_>,
         settings: &UVgenerationSettings,
     ) -> Result<()> {
-        self.simple_approx = Some(SimpleApprox::root(self.spinney.subgraph.clone()));
+        self.simple_approx = Some(SimpleApprox::root(self.spinney.subgraph().clone()));
         self.local = Some(Local4dCts::root());
         let integrated = IntegratedCts::root();
         if let FinalIntegrandDimension::ThreeD = settings.final_integrand {
@@ -470,8 +474,8 @@ impl Approximation {
 
     #[debug_instrument(
         graph = %graph.log_display(),
-        current = %self.log_display(),
-        given = %dependent.log_display(),
+        current = %self,
+        given = %dependent,
         reduced = ?self.reduced_subgraph(dependent),
     )]
     pub(crate) fn compute_4d(
@@ -511,8 +515,8 @@ impl Approximation {
     #[allow(clippy::too_many_arguments)]
     #[debug_instrument(
         graph = %graph.log_display(),
-        current = %self.log_display(),
-        given = %dependent.log_display(),
+        current = %self,
+        given = %dependent,
     )]
     pub(crate) fn compute_3d(
         &mut self,
@@ -580,7 +584,7 @@ mod tests {
             ArbPrec, F, FUN_LIB, FloatLike, TENSORLIB, W_, cut_energy,
             hyperdual_utils::{DualOrNot, extract_t_derivatives_complex, simple_n_deriv_shape},
         },
-        uv::UltravioletGraph,
+        uv::{UltravioletGraph, UvGraph},
     };
     use idenso::{
         CookMode, CookSettings,
@@ -912,7 +916,7 @@ mod tests {
         let uv_subgraph = InternalSubGraph::cleaned_filter_optimist(uv_filter, graph.as_ref());
         let child_spinney = Spinney::new(uv_subgraph, &graph, &graph.loop_momentum_basis)?
             .expect("the GL24 e5/e6 bubble has a compatible nonempty UV sub-LMB");
-        assert!(!child_spinney.subgraph.is_empty());
+        assert!(!child_spinney.subgraph().is_empty());
 
         let target_support = [EdgeIndex(3), EdgeIndex(4)]
             .into_iter()
@@ -975,7 +979,7 @@ mod tests {
                 root.simple_approx
                     .as_ref()
                     .expect("the root approximation is initialized")
-                    .dependent(child.spinney.subgraph.clone()),
+                    .dependent(child.spinney.subgraph().clone()),
             );
             let vakint_settings = vakint::VakintSettings::default();
             child.compute_4d(
@@ -1097,7 +1101,7 @@ mod tests {
                 root.simple_approx
                     .as_ref()
                     .expect("the root approximation is initialized")
-                    .dependent(child.spinney.subgraph.clone()),
+                    .dependent(child.spinney.subgraph().clone()),
             );
             child.compute_4d(
                 &route_graph,
@@ -1315,7 +1319,7 @@ mod tests {
             2,
         )?
         .expect("the self-energy bubble has a compatible sub-LMB");
-        assert_eq!(child_spinney.dod, 2);
+        assert_eq!(child_spinney.dod(), 2);
         let cutset = CutSet::empty(graph.n_hedges());
         let orientation_pattern = OrientationPattern::default();
         let build = |mut route_graph: Graph, from_expanded_4d| -> Result<_> {
@@ -1348,7 +1352,7 @@ mod tests {
                 root.simple_approx
                     .as_ref()
                     .expect("the root approximation is initialized")
-                    .dependent(child.spinney.subgraph.clone()),
+                    .dependent(child.spinney.subgraph().clone()),
             );
             let vakint_settings = vakint::VakintSettings::default();
             child.compute_4d(
@@ -1677,7 +1681,7 @@ mod tests {
                             .simple_approx
                             .as_ref()
                             .expect("the parent approximation is initialized")
-                            .dependent(current.spinney.subgraph.clone()),
+                            .dependent(current.spinney.subgraph().clone()),
                     );
                     current.compute_4d(
                         &route_graph,
@@ -2041,7 +2045,7 @@ mod tests {
                     root.simple_approx
                         .as_ref()
                         .expect("the root approximation is initialized")
-                        .dependent(child.spinney.subgraph.clone()),
+                        .dependent(child.spinney.subgraph().clone()),
                 );
                 let vakint_settings = vakint::VakintSettings::default();
                 child.compute_4d(

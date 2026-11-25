@@ -417,6 +417,7 @@
       "packages.x86_64-linux.crate-test-dependencies-feynkit-graph"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-kinematics"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-model"
+      "packages.x86_64-linux.crate-test-dependencies-feynkit-uv"
       "packages.x86_64-linux.crate-test-dependencies-gammaloop-tracing-filter"
       "packages.x86_64-linux.crate-test-dependencies-idenso"
       "packages.x86_64-linux.crate-test-dependencies-linnet"

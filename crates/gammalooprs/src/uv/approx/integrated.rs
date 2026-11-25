@@ -48,7 +48,7 @@ use crate::{
     numerator::aind::Aind,
     utils::{GS, W_},
     uv::{
-        ApproximationType, UltravioletGraph,
+        ApproximationType, UvGraph,
         approx::{
             ForestNodeLike, Rooted, UVCtx,
             local_4d::{FourDSector, Local4dCts},
@@ -377,8 +377,8 @@ impl Integrated<'_> {
     }
 
     #[debug_instrument(
-        current = %current.log_display(),
-        given = %given.log_display(),
+        current = %current,
+        given = %given,
         reduced,
     )]
     fn integrate<S: ForestNodeLike>(
@@ -3222,7 +3222,7 @@ mod tests {
             finalized_runtime_dot,
             graph::Graph,
             numerator::AppliedFeynmanRule,
-            uv::{Spinney, UVgenerationSettings, hedge_poset::OwnedForestNode},
+            uv::{Spinney, UVgenerationSettings, UltravioletGraph, hedge_poset::OwnedForestNode},
         };
         use linnet::half_edge::subgraph::InternalSubGraph;
 
@@ -4250,7 +4250,7 @@ mod tests {
 
     #[test]
     fn vakint_conversion_rejects_a_lost_active_loop() {
-        use crate::{finalized_runtime_dot, graph::Graph};
+        use crate::{finalized_runtime_dot, graph::Graph, uv::UltravioletGraph};
 
         test_initialise().unwrap();
         let graph: Graph =

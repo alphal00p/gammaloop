@@ -10,7 +10,7 @@ use crate::{
     graph::Graph,
     utils::GS,
     uv::{
-        UltravioletGraph,
+        UltravioletGraph, UvGraph,
         approx::{ForestNodeLike, direct_3d::DirectResidueBranches},
     },
 };
@@ -95,7 +95,7 @@ impl Localizer<'_> {
                 .map(|(key, integrands)| {
                     debug_tags!(#generation, #profile, #uv, #integrated, #local, #term, #summary;
                         stage = "localize_integrated_ct_term",
-                        integrated_node = %integrated_node.log_display(),
+                        integrated_node = %integrated_node,
                         contracted = %to_contract.string_label(),
                         reduced = %reduced.string_label(),
                         residue_map_key = key.selector_host.0,
