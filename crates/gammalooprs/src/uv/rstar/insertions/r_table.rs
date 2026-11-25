@@ -108,9 +108,12 @@ impl PropagatorInsertionEvaluator {
             "insertion table preparation requires a counterterm cache"
         );
         let check = |value: &Atom, top: i64| -> Result<()> {
+            // The public guard expects its caller to project to the requested
+            // order. UNKNOWN terms solely in the unused tail are admissible.
+            let retained = Self::truncate_insertion(value, top)?;
             let unknown = vakint.unknown_master_coefficients(
                 &self.settings.vakint.true_settings(),
-                value.as_view(),
+                retained.as_view(),
                 Some(top),
             )?;
             ensure!(
@@ -128,6 +131,7 @@ impl PropagatorInsertionEvaluator {
         }
         if verify_depth {
             let deeper = self.integrate_cached(&req.diagram, vakint, req.depth + 2)?;
+            check(&deeper, top)?;
             ensure!(
                 insertion_coefficients_agree(
                     &Self::truncate_insertion(&bare, top)?,
@@ -142,9 +146,14 @@ impl PropagatorInsertionEvaluator {
                 "renormalized basis changes at depth N+2"
             );
             for (j, (a, b)) in coefficients.iter().zip(&deeper).enumerate() {
+                let top = top + j as i64;
+                check(b, top)?;
                 ensure!(
-                    insertion_coefficients_agree(a, &Self::truncate_insertion(b, top + j as i64)?)?
-                        .1,
+                    insertion_coefficients_agree(
+                        &Self::truncate_insertion(a, top)?,
+                        &Self::truncate_insertion(b, top)?
+                    )?
+                    .1,
                     "renormalized coefficient {j} changes at depth N+2"
                 );
             }
