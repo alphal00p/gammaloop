@@ -866,6 +866,18 @@ impl RStarCost {
     }
 }
 
+/// On by default for dressed roots. Set GAMMALOOP_IR_SOFT_PAIR=off to retain
+/// the original hard evaluation even when the primitive open soft Δ is zero.
+pub fn soft_pair_pruning_enabled() -> bool {
+    static ENABLED: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+        matches!(
+            std::env::var("GAMMALOOP_IR_SOFT_PAIR").as_deref(),
+            Err(std::env::VarError::NotPresent) | Ok("on" | "1")
+        )
+    });
+    *ENABLED
+}
+
 /// Topology of -K I_rem T_compensated [R'_U + sum_gamma C^U B_gamma] G.
 ///
 /// This catalogue is independent of Feynman-rule evaluation. Hard coefficients
@@ -873,6 +885,7 @@ impl RStarCost {
 /// assembled expression. The ordinary and hard preparations deliberately retain
 /// contractions that swallow the marked line: only an actual remaining scaleless
 /// loop integral may be discarded, never an already local mixed contribution.
+#[derive(Clone)]
 pub struct RStarPlan {
     pub support: SuBitGraph,
     pub marked_edge: EdgeIndex,

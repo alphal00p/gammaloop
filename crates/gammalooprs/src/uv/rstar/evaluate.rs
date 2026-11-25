@@ -1,5 +1,7 @@
 //! Assemble the ordinary UV preparation and the UV form of the IR correction.
 
+mod soft_pair;
+
 use std::{
     collections::BTreeMap,
     sync::Arc,
@@ -173,15 +175,13 @@ impl RStarPlan {
         vakint: &Vakint,
         uv_settings: &UVgenerationSettings,
     ) -> Result<Atom> {
-        Evaluation::new(
+        Evaluation::new_counterterm(
             self,
             graph,
             model,
             vakint,
             uv_settings,
             None,
-            None,
-            ChildMass::Reference,
         )?
         .counterterm()
     }
@@ -235,15 +235,13 @@ impl RStarPlan {
         uv_settings: &UVgenerationSettings,
         root_projector: &dyn Fn(&Atom) -> Result<Atom>,
     ) -> Result<Atom> {
-        Evaluation::new(
+        Evaluation::new_counterterm(
             self,
             graph,
             model,
             vakint,
             uv_settings,
             Some(root_projector),
-            None,
-            ChildMass::Reference,
         )?
         .counterterm()
     }
@@ -313,15 +311,13 @@ impl RStarPlan {
         uv_settings: &UVgenerationSettings,
         root_normalization: &dyn Fn(&Atom) -> Result<Atom>,
     ) -> Result<Atom> {
-        Evaluation::new(
+        Evaluation::new_counterterm(
             self,
             graph,
             model,
             vakint,
             uv_settings,
             Some(root_normalization),
-            None,
-            ChildMass::Reference,
         )?
         .closing_root()?
         .counterterm()
@@ -499,15 +495,13 @@ impl RStarPlan {
         // callback elsewhere.
         let typed = TypedRoot::on_closed_scalars(closed_root);
         let projection = |tensor: &Atom| typed.project(tensor, root_normalization);
-        let mut evaluation = Evaluation::new(
+        let mut evaluation = Evaluation::new_counterterm(
             self,
             graph,
             model,
             vakint,
             uv_settings,
             Some(&projection),
-            None,
-            ChildMass::Reference,
         )?
         .closing_root()?;
         evaluation.closed_root = Some(closed_root);
@@ -1243,6 +1237,7 @@ const PROJECTOR_SCOPE: &str = "projector_scope";
 
 struct Evaluation<'a> {
     plan: &'a RStarPlan,
+    soft_pair_zeros: Option<Vec<bool>>,
     graph: &'a Graph,
     model: &'a Model,
     vakint: &'a Vakint,
@@ -1437,6 +1432,7 @@ impl<'a> Evaluation<'a> {
         }
         Ok(Self {
             plan,
+            soft_pair_zeros: None,
             graph,
             model,
             vakint,
@@ -1594,6 +1590,13 @@ impl<'a> Evaluation<'a> {
         }
         let plan = self.plan;
         for (correction_index, correction) in plan.ir.iter().enumerate() {
+            if self.rstar_terms.keeps(true) {
+                let skip = match &self.soft_pair_zeros {
+                    Some(zeros) => zeros[correction_index],
+                    None => self.zero_soft_pair(correction)?,
+                };
+                if skip { continue; }
+            }
             // GAMMALOOP_IR_HARD=child|child-check: the whole correction from
             // its integrated hard part H(γ); a decline takes today's terms.
             let child_mode = super::closed::child_mode();

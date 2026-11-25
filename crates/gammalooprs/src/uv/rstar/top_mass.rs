@@ -195,6 +195,11 @@ pub fn top_level_switches_line() -> String {
         show(MASS_TERMS.clone().map(TopMassTerms::as_str)),
         u8::from(split_enabled())
     );
+    let line = if super::soft_pair_pruning_enabled() {
+        line
+    } else {
+        format!("{line} ir_soft_pair=off")
+    };
     // GAMMALOOP_MASSIVE_ROUTES: shown only when not `allow` (the default
     // line is unchanged).
     let line = match super::plan::validate_massive_routes() {
@@ -223,6 +228,7 @@ pub fn top_level_switches_provenance() -> serde_json::Value {
         && !split_enabled()
         && routes == super::plan::MassiveRoutes::Allow
         && identity == super::insertions::InsertionIdentity::Off
+        && super::soft_pair_pruning_enabled()
     {
         return serde_json::Value::Null;
     }
@@ -231,6 +237,9 @@ pub fn top_level_switches_provenance() -> serde_json::Value {
         "top_mass_terms": mass.as_str(),
         "split": split_enabled(),
     });
+    if !super::soft_pair_pruning_enabled() {
+        value["ir_soft_pair"] = serde_json::Value::from("off");
+    }
     // GAMMALOOP_MASSIVE_ROUTES, absent at `allow` (records unchanged).
     if routes != super::plan::MassiveRoutes::Allow {
         value["massive_routes"] = serde_json::Value::from(routes.as_str());
