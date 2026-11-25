@@ -1743,6 +1743,78 @@ mod tests {
         Ok(())
     }
 
+    /// For a scalar logarithmic one-loop skeleton the UV angular integral is
+    /// independent of external momentum. With x=(mu^2/q_E^2)^eps the UV
+    /// radial integral is (1/eps) int_0^1 dx. Test the full factored product
+    /// at quadrature nodes, without expanding it into graphs or monomials.
+    #[test]
+    fn unexpanded_insertion_product_on_one_loop_skeleton() -> Result<()> {
+        test_initialise()?;
+        let engine = Vakint::new()?;
+        let mut settings = super::super::tests::settings();
+        settings.vakint.normalization = "GScheme".into();
+        let eval = PropagatorInsertionEvaluator::new(settings.clone());
+        let scalar = serial_bubbles(1)?;
+        let model = scalar.model_arc();
+        let particle = model.particle_id("phi")?;
+        let mut b = FeynmanDiagram::builder(model, "nested_dressed_bubbles");
+        for id in 0..6 {
+            b.add_vertex(DiagramVertex {
+                name: format!("v{id}"),
+                interaction: None,
+                numerator: SymbolicTensor::infer(Atom::one())?,
+            });
+        }
+        for (_, ends, edge) in scalar.edges().filter(|(_, _, e)| e.external.is_some()) {
+            b.add_edge(ends.source, ends.target, edge.clone())?;
+        }
+        let mut numerators = Vec::new();
+        for (a, z) in [
+            (0, 1),
+            (0, 2),
+            (3, 1),
+            (2, 3),
+            (2, 4),
+            (4, 5),
+            (4, 5),
+            (5, 3),
+        ] {
+            let id = b.add_edge(VertexId(a), VertexId(z), DiagramEdge::new(particle, false))?;
+            if (a, z) == (0, 2) || (a, z) == (2, 4) {
+                let q = function!(
+                    GS.emr_mom,
+                    id.0,
+                    Minkowski {}.new_rep(GS.dim).to_symbolic([])
+                );
+                numerators.push((
+                    VertexId(z),
+                    SymbolicTensor::infer(
+                        (Atom::one() + Atom::var(GS.dim_epsilon))
+                            * function!(SPENSO_TAG.dot, &q, &q),
+                    )?,
+                ));
+            }
+        }
+        let nested = b.build()?.with_numerator_fragments(numerators, [])?;
+        assert_eq!(
+            selected_insertions(&nested)?
+                .iter()
+                .map(|s| s.loops)
+                .collect::<Vec<_>>(),
+            [2]
+        );
+        for diagram in [scalar, serial_bubbles(2)?, nested, serial_bubbles(3)?] {
+            let graph = diagram.to_gamma_loop_graph(None, true)?;
+            let expected = RStarPlan::with_automatic_edge(&graph, diagram.model(), &settings)?
+                .counterterm(&graph, diagram.model(), &engine, &settings)?;
+            let pole = eval
+                .factored_scalar_bubble_counterterm(&diagram, &engine)?
+                .expect("admitted scalar bubble skeleton");
+            super::super::tests::assert_same_counterterm(&pole, &expected)?;
+        }
+        Ok(())
+    }
+
     #[test]
     fn renormalized_serial_insertions_equal_the_full_counterterm() -> Result<()> {
         test_initialise()?;

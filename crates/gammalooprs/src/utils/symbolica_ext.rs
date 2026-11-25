@@ -156,7 +156,63 @@ impl DOD for AtomView<'_> {
     }
 
     fn trailing_exponent(&self) -> i32 {
-        let series = self.series(GS.rescale, Atom::Zero, 1).unwrap();
+        let series = self
+            .series(GS.rescale, Atom::Zero, 1)
+            .or_else(|original| {
+                // For superficial degree keep t^ε as an independent constant.
+                // If b=t^k b0(t), b^(nε)=(t^ε)^(kn) b0(t)^(nε). Keeping
+                // b0(t) also retains cancellations of leading powers between lines.
+                static T_EPS: LazyLock<Atom> =
+                    LazyLock::new(|| Atom::var(symbol!("uv_counting_t_to_epsilon")));
+                let eps = Atom::var(GS.dim_epsilon);
+                let t = Atom::var(GS.rescale);
+                let mut changed = false;
+                let counted = self.replace_map(|view, _, out| {
+                    let AtomView::Pow(p) = view else { return };
+                    let (base, exp) = p.get_base_exp();
+                    if !exp.contains_symbol(GS.dim_epsilon) || !base.contains_symbol(GS.rescale) {
+                        return;
+                    }
+                    let integer = exp.replace(eps.to_pattern()).with(Atom::Zero);
+                    let Ok(integer) = i64::try_from(integer.as_view()) else {
+                        return;
+                    };
+                    let shift = (exp.to_owned() - Atom::num(integer)) / &eps;
+                    let Ok(shift) = i64::try_from(shift.expand().as_view()) else {
+                        return;
+                    };
+                    let Ok(leading) = base.series(GS.rescale, Atom::Zero, 1) else {
+                        return;
+                    };
+                    if leading.is_zero() {
+                        return;
+                    }
+                    let degree = leading.get_trailing_exponent();
+                    if !degree.is_integer() {
+                        return;
+                    }
+                    let Some(k) = degree.numerator().to_i64() else {
+                        return;
+                    };
+                    if k == 0 {
+                        return;
+                    }
+                    let regular = (base.to_owned() / t.pow(k)).together();
+                    let Some(weight) = k.checked_mul(shift) else {
+                        return;
+                    };
+                    **out = base.to_owned().pow(integer)
+                        * T_EPS.pow(weight)
+                        * regular.pow(Atom::num(shift) * &eps);
+                    changed = true;
+                });
+                if changed {
+                    counted.series(GS.rescale, Atom::Zero, 1)
+                } else {
+                    Err(original)
+                }
+            })
+            .unwrap();
         let dod = series.get_trailing_exponent();
 
         if dod.is_integer() {
@@ -165,6 +221,18 @@ impl DOD for AtomView<'_> {
             panic!("{dod} for {self}")
         }
     }
+}
+
+#[test]
+fn analytic_line_has_logarithmic_scaling_in_uv_counting() {
+    let t = Atom::var(GS.rescale);
+    let exp = -Atom::var(GS.dim_epsilon);
+    let shifted = (Atom::one() / t.pow(2)).pow(&exp);
+    assert_eq!(((Atom::one() - &shifted) / t.pow(2)).trailing_exponent(), 2);
+    let affine = (Atom::one() / t.pow(2)).pow(Atom::num(3) + Atom::num(2) * &exp);
+    assert_eq!(affine.trailing_exponent(), 6);
+    let other = ((Atom::one() + &t) / t.pow(2)).pow(&exp);
+    assert_eq!(((&other - &shifted) / t.pow(2)).trailing_exponent(), 1);
 }
 
 #[test]

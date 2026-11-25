@@ -1,9 +1,19 @@
 //! Reconstruct the renormalized massless self-energy in a basis of scalar
 //! bubble chains. Each coefficient stays inside the pole map of its graph.
 use super::*;
+use linnet::half_edge::subgraph::SubSetLike;
 
 static BUBBLE_POWER: LazyLock<Atom> =
     LazyLock::new(|| Atom::var(symbol!("renormalized_insertion_bubble_power")));
+
+static RADIAL_X: LazyLock<Symbol> = LazyLock::new(|| symbol!("factored_insertion_radial_x"));
+static RADIAL_Q2: LazyLock<Symbol> = LazyLock::new(|| symbol!("factored_insertion_radial_q2"));
+
+type ReplacementTerm = (
+    FeynmanDiagram,
+    Vec<DiagramRelabeling>,
+    Vec<(VertexId, usize)>,
+);
 
 impl PropagatorInsertionEvaluator {
     fn insertion_coefficients(
@@ -77,15 +87,237 @@ impl PropagatorInsertionEvaluator {
         if insertions.is_empty() {
             return Ok(None);
         }
+        let terms = self.replacement_terms(diagram, vakint, &insertions, false)?;
+        if crate::uv::rstar::plan::uv_children_log() || insertion_identity_log() {
+            eprintln!(
+                "RENORMALIZED_INSERTIONS graph={} insertions={} insertion_loops={} replacement_graphs={}",
+                diagram.name(),
+                insertions.len(),
+                insertions.iter().map(|s| s.loops).sum::<usize>(),
+                terms.len()
+            );
+        }
+        let mut sum = Atom::Zero;
+        for (term, maps, holes) in terms {
+            let graph = term.to_gamma_loop_graph(None, true)?;
+            let mut plan = RStarPlan::with_automatic_edge(&graph, term.model(), &self.settings)?;
+            if let Some(cache) = &self.counterterm_cache {
+                plan = plan.with_counterterm_cache(cache.clone());
+            }
+            let provenance = crate::uv::rstar::uncontracted::k5::provenance(
+                diagram,
+                holes
+                    .iter()
+                    .zip(&insertions)
+                    .map(|((vertex, length), sigma)| (vertex.0, *length, &sigma.support)),
+            )?;
+            let mut tagged = crate::uv::rstar::uncontracted::k5::scoped(
+                provenance.as_ref(),
+                &graph.name,
+                closing && plan.closes_root(&graph),
+                &self.settings,
+                || {
+                    crate::uv::rstar::expression::in_dressed_scope(|| {
+                        project(&graph, term.model(), &plan)
+                    })
+                },
+            )?;
+            for map in maps.iter().rev() {
+                tagged = map.restore_atom(&tagged)?;
+            }
+            sum += tagged;
+        }
+        Ok(Some(sum))
+    }
+    /// The physical skeleton with one unexpanded R(σ) tensor per hole.
+    /// Its integration requires momentum-dependent analytic propagator powers.
+    pub fn factored_renormalized_skeleton(
+        &self,
+        diagram: &FeynmanDiagram,
+        vakint: &Vakint,
+    ) -> Result<Option<FeynmanDiagram>> {
+        ensure!(
+            diagram.cuts().is_empty(),
+            "factored insertions require an uncut graph"
+        );
+        let holes = selected_insertions(diagram)?;
+        if holes.is_empty() {
+            return Ok(None);
+        }
+        let mut terms = self.replacement_terms(diagram, vakint, &holes, true)?;
+        ensure!(terms.len() == 1, "expected one factored skeleton");
+        Ok(terms.pop().map(|(diagram, _, _)| diagram))
+    }
+
+    /// Direct UV pole of a massless logarithmic scalar bubble dressed by
+    /// two-point insertions. The physical external momentum keeps its IR finite.
+    /// Each nontrivial scalar vertex must cancel one boundary propagator.
+    /// Return None when the one-loop radial kernel does not apply.
+    pub fn factored_scalar_bubble_counterterm(
+        &self,
+        diagram: &FeynmanDiagram,
+        vakint: &Vakint,
+    ) -> Result<Option<Atom>> {
+        use spenso::{
+            network::tags::SPENSO_TAG,
+            structure::representation::{Minkowski, RepName},
+        };
+        let holes = selected_insertions(diagram)?;
+        let degree: usize = holes.iter().map(|s| s.loops).sum();
+        if degree == 0 || diagram.loop_count() != degree + 1 {
+            return Ok(None);
+        }
+        let Some(skeleton) = self.factored_renormalized_skeleton(diagram, vakint)? else {
+            return Ok(None);
+        };
+        let support = skeleton.internal_subgraph();
+        let external = skeleton
+            .edges()
+            .filter(|(_, _, e)| e.external.is_some())
+            .filter_map(|(_, ends, _)| ends.source.or(ends.target))
+            .collect::<Vec<_>>();
+        if !matches!(external.as_slice(), [a,b] if a != b)
+            || !skeleton.underlying().is_connected(&support)
+            || !skeleton.underlying().bridges_of(&support).is_empty()
+        {
+            return Ok(None);
+        }
+        let x = Atom::var(*RADIAL_X);
+        let t = Atom::var(*RADIAL_Q2);
+        let eps = Atom::var(GS.dim_epsilon);
+        let mut momenta = Vec::new();
+        for (id, _, edge) in skeleton.edges().filter(|(_, _, e)| e.external.is_none()) {
+            if edge.is_dummy
+                || edge.propagator_power != 1
+                || !skeleton
+                    .model()
+                    .particle_by_id(edge.particle)?
+                    .is_massless(skeleton.model())
+                || !NumeratorInterface::export(&edge.numerator).0.is_one()
+            {
+                return Ok(None);
+            }
+            let q = function!(
+                GS.emr_mom,
+                id.0,
+                Minkowski {}.new_rep(GS.dim).to_symbolic([])
+            );
+            let q2 = function!(SPENSO_TAG.dot, &q, &q);
+            momenta.push(((-&q2 / Atom::var(GS.mu_r_sq)).pow(-&eps), q2));
+        }
+        let mut powers = 0;
+        let mut factors = Vec::new();
+        for (_, v) in skeleton.vertices() {
+            let mut local = NumeratorInterface::export(&v.numerator).0;
+            for (power, _) in &momenta {
+                local = local.replace(power.to_pattern()).with(x.to_pattern());
+            }
+            for (_, q2) in &momenta {
+                local = local.replace(q2.to_pattern()).with(t.to_pattern());
+            }
+            if local.contains_symbol(GS.loop_mom)
+                || local.contains_symbol(GS.external_mom)
+                || local.contains_symbol(GS.emr_mom)
+                || local.contains_symbol(GS.mu_r_sq)
+                || super::super::regularity::has_tensor_structure(&local)
+            {
+                return Ok(None);
+            }
+            if local.contains_symbol(*RADIAL_Q2) {
+                let at_one = local.replace(t.to_pattern()).with(Atom::one());
+                if !(&local - &t * &at_one).expand().is_zero() {
+                    return Ok(None);
+                }
+                local = at_one;
+                powers += 1;
+            }
+            factors.push(
+                crate::uv::approx::integrated::Integrated::regulated_for_expansion(
+                    &local,
+                    "factored_radial_vertex",
+                )?
+                .into_owned(),
+            );
+        }
+        if powers + 2 != momenta.len() {
+            return Ok(None);
+        }
+        // UV radial integration is (1/ε) ∫_0^1 dx. Integration of the
+        // product at rational interpolation nodes is exact through 'degree'.
+        let mut mean = Atom::Zero;
+        for i in 0..=degree {
+            let node = Atom::num((i as i64, degree as i64));
+            let mut basis = vec![Atom::one()];
+            for j in (0..=degree).filter(|j| *j != i) {
+                let inv = Atom::one() / Atom::num(i as i64 - j as i64);
+                let mut next = vec![Atom::Zero; basis.len() + 1];
+                for (k, c) in basis.iter().enumerate() {
+                    next[k] -= c * &inv * Atom::num(j as i64);
+                    next[k + 1] += c * &inv * Atom::num(degree as i64);
+                }
+                basis = next;
+            }
+            let weight: Atom = basis
+                .into_iter()
+                .enumerate()
+                .map(|(k, c)| c / Atom::num(k as i64 + 1))
+                .sum();
+            let value: Atom = factors
+                .iter()
+                .map(|f| f.replace(x.to_pattern()).with(node.to_pattern()))
+                .product();
+            mean += weight * value;
+        }
+        // Surface area relative to the unit G(1,1) integral. The first
+        // missing term is O(ε^(degree+1)) and cannot contribute a pole.
+        let unit = self.unit_scalar_bubble(diagram, vakint, degree + 2)?;
+        let log_ratio: Atom = (2..=degree)
+            .map(|n| {
+                let coeff =
+                    Atom::num(2).pow(n) - Atom::num(3) - Atom::num(if n % 2 == 0 { 1 } else { -1 });
+                coeff * function!(symbolica::transcendental::zeta(), n) * eps.pow(n)
+                    / Atom::num(n as i64)
+            })
+            .sum();
+        let ratio = function!(Symbol::EXP, log_ratio)
+            .series(GS.dim_epsilon, 0, degree as i64)?
+            .to_atom()
+            * (Atom::one() - Atom::num(2) * &eps)
+            / (Atom::one() - &eps);
+        Ok(Some(
+            -(mean * unit * ratio)
+                .series(GS.dim_epsilon, 0, -1)?
+                .to_atom()
+                .expand(),
+        ))
+    }
+
+    fn replacement_terms(
+        &self,
+        diagram: &FeynmanDiagram,
+        vakint: &Vakint,
+        insertions: &[PropagatorInsertion],
+        factored: bool,
+    ) -> Result<Vec<ReplacementTerm>> {
         let mut terms = vec![(
             diagram.clone(),
             Vec::<DiagramRelabeling>::new(),
             Vec::<(VertexId, usize)>::new(),
         )];
-        for insertion in &insertions {
+        for insertion in insertions {
             let excised = diagram.excise_with_mapping(&insertion.support, &[])?;
             let coefficients =
                 self.insertion_coefficients(&excised.diagram, vakint, diagram.loop_count())?;
+            let coefficients = if factored {
+                vec![self.factored_insertion(
+                    &excised.diagram,
+                    vakint,
+                    diagram.loop_count(),
+                    &coefficients,
+                )?]
+            } else {
+                coefficients
+            };
             let mut next_terms = Vec::new();
             for (base, maps, holes) in terms {
                 let mut current = insertion.clone();
@@ -106,7 +338,7 @@ impl PropagatorInsertionEvaluator {
                 for (length, c) in coefficients
                     .iter()
                     .enumerate()
-                    .filter(|(_, c)| !c.is_zero())
+                    .filter(|(_, c)| factored || !c.is_zero())
                 {
                     let mut c = excised.relabeling.restore_atom(c)?;
                     for map in &maps {
@@ -150,47 +382,76 @@ impl PropagatorInsertionEvaluator {
                 break;
             }
         }
-        if crate::uv::rstar::plan::uv_children_log() || insertion_identity_log() {
-            eprintln!(
-                "RENORMALIZED_INSERTIONS graph={} insertions={} insertion_loops={} replacement_graphs={}",
-                diagram.name(),
-                insertions.len(),
-                insertions.iter().map(|s| s.loops).sum::<usize>(),
-                terms.len()
-            );
-        }
-        let mut sum = Atom::Zero;
-        for (term, maps, holes) in terms {
-            let graph = term.to_gamma_loop_graph(None, true)?;
-            let mut plan = RStarPlan::with_automatic_edge(&graph, term.model(), &self.settings)?;
-            if let Some(cache) = &self.counterterm_cache {
-                plan = plan.with_counterterm_cache(cache.clone());
-            }
-            let provenance = crate::uv::rstar::uncontracted::k5::provenance(
-                diagram,
-                holes
-                    .iter()
-                    .zip(&insertions)
-                    .map(|((vertex, length), sigma)| (vertex.0, *length, &sigma.support)),
-            )?;
-            let mut tagged = crate::uv::rstar::uncontracted::k5::scoped(
-                provenance.as_ref(),
-                &graph.name,
-                closing && plan.closes_root(&graph),
-                &self.settings,
-                || {
-                    crate::uv::rstar::expression::in_dressed_scope(|| {
-                        project(&graph, term.model(), &plan)
-                    })
-                },
-            )?;
-            for map in maps.iter().rev() {
-                tagged = map.restore_atom(&tagged)?;
-            }
-            sum += tagged;
-        }
-        Ok(Some(sum))
+        Ok(terms)
     }
+
+    fn unit_scalar_bubble(
+        &self,
+        insertion: &FeynmanDiagram,
+        vakint: &Vakint,
+        depth: usize,
+    ) -> Result<Atom> {
+        use spenso::{
+            network::tags::SPENSO_TAG,
+            structure::representation::{Minkowski, RepName},
+        };
+        let q0 = function!(GS.emr_mom, 0, Minkowski {}.new_rep(GS.dim).to_symbolic([]));
+        let unit = self
+            .integrate_cached(&scalar_bubble(insertion)?, vakint, depth)?
+            .replace(function!(SPENSO_TAG.dot, &q0, &q0))
+            .with(Atom::num(-1))
+            .replace(Atom::var(GS.mu_r_sq))
+            .with(Atom::one());
+        ensure!(
+            !unit.contains_symbol(GS.emr_mom),
+            "unit-scale scalar bubble retains its external momentum: {unit}"
+        );
+        Ok(unit)
+    }
+
+    fn factored_insertion(
+        &self,
+        insertion: &FeynmanDiagram,
+        vakint: &Vakint,
+        depth: usize,
+        coefficients: &[Atom],
+    ) -> Result<Atom> {
+        use spenso::{
+            network::tags::SPENSO_TAG,
+            structure::representation::{Minkowski, RepName},
+        };
+        let external = insertion
+            .edges()
+            .find_map(|(id, _, e)| e.external.as_ref().map(|_| id))
+            .ok_or_else(|| eyre!("missing insertion momentum"))?;
+        let q = |edge: usize| {
+            function!(
+                GS.emr_mom,
+                edge,
+                Minkowski {}.new_rep(GS.dim).to_symbolic([])
+            )
+        };
+        let qh = q(external.0);
+        let unit = self.unit_scalar_bubble(insertion, vakint, depth)?;
+        let eps = GS.dim_epsilon;
+        let pole = |a: &Atom| -> Result<Atom> { Ok(a.series(eps, 0, -1)?.to_atom().expand()) };
+        let kb = pole(&unit)?;
+        let x = (-function!(SPENSO_TAG.dot, &qh, &qh) / Atom::var(GS.mu_r_sq)).pow(-Atom::var(eps));
+        let y = unit * x - &kb;
+        // An attached coefficient e contributes e y^j + (e K(B)-K(e B)) y^(j-1).
+        // e is regular and B-K(B) is finite. Horner evaluation keeps the line factor intact.
+        let mut factor = Atom::Zero;
+        let mut correction = Atom::Zero;
+        for (j, e) in coefficients.iter().enumerate().rev() {
+            factor = factor * &y + e + &correction;
+            if j != 0 {
+                let product = e * &kb;
+                correction = &product - pole(&product)?;
+            }
+        }
+        Ok(factor)
+    }
+
     fn renormalized_insertion_uncached(
         &self,
         insertion: &FeynmanDiagram,
