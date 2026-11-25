@@ -140,6 +140,14 @@ impl PropagatorInsertionEvaluator {
         }
         let mut sum = Atom::Zero;
         for (term, maps, holes) in terms {
+            // A zero R(sigma) annihilates this entire skeleton, including its
+            // forest terms. Its zero tensor has no external slots to project.
+            if holes.iter().any(|(id, _)| {
+                term.vertex(*id)
+                    .is_some_and(|v| v.numerator.expression().is_zero())
+            }) {
+                continue;
+            }
             let graph = term.to_gamma_loop_graph(None, true)?;
             let mut plan = RStarPlan::with_automatic_edge(&graph, term.model(), &self.settings)?;
             if let Some(cache) = &self.counterterm_cache {
@@ -461,6 +469,9 @@ impl PropagatorInsertionEvaluator {
             network::tags::SPENSO_TAG,
             structure::representation::{Minkowski, RepName},
         };
+        if coefficients.iter().all(|value| value.is_zero()) {
+            return Ok(Atom::Zero);
+        }
         let external = insertion
             .edges()
             .find_map(|(id, _, e)| e.external.as_ref().map(|_| id))

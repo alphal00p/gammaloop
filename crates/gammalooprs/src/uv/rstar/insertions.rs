@@ -1823,6 +1823,18 @@ mod tests {
     }
 
     #[test]
+    fn zero_renormalized_insertion_skips_the_skeleton_projector() -> Result<()> {
+        let diagram = serial_bubbles_with(1, Atom::Zero)?;
+        let evaluator = PropagatorInsertionEvaluator::new(super::super::tests::settings());
+        let result = evaluator.factored_renormalized_counterterm(
+            &diagram, &Vakint::new()?, true,
+            |_, _, _| panic!("projected a skeleton with a zero insertion"),
+        )?;
+        assert_eq!(result, Some(Atom::Zero));
+        Ok(())
+    }
+
+    #[test]
     fn renormalized_serial_insertions_equal_the_full_counterterm() -> Result<()> {
         test_initialise()?;
         let diagram = serial_bubbles(2)?;
