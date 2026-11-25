@@ -1,5 +1,7 @@
 """Native highlights use external metrics; source exports use a fake compiler."""
 
+import hashlib
+import re
 import xml.etree.ElementTree as ET
 import sys
 from types import ModuleType
@@ -295,35 +297,101 @@ for stack in stacks:
     colors, widths = zip(*stack)
     assert colors == palette
     assert widths[0] > widths[1] > widths[2]
-assert all(color in basketball_svg for color in ("#75a7ff", "#b197fc", "#ff7775"))
+
+
+def check_palette(svg, prefix, scope):
+    theme_rules = {}
+    root = ET.fromstring(svg)
+    css = root.find("{http://www.w3.org/2000/svg}style").text
+    for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css):
+        for theme in ("light", "dark"):
+            if f'.{scope}[data-theme="{theme}"]' in selector:
+                theme_rules[theme] = dict(
+                    re.findall(rf"(--{prefix}-[a-z-]+):\s*(#[a-f0-9]+)", body)
+                )
+    for theme, expected in {
+        "light": palette,
+        "dark": ("#75a7ff", "#b197fc", "#ff7775"),
+    }.items():
+        assert [
+            theme_rules[theme][f"--{prefix}-{role}"]
+            for role in ("acted-on", "middle", "treated")
+        ] == list(expected)
+
+
+check_palette(basketball_svg, "feynkit", "feynkit-diagram-svg")
 assert fixture_linnest(basketball, highlight=layers).count("#image(bytes(") == 1
 
-assert (
-    basketball.render(highlight=inner).to_svg()
-    == basketball.render(highlight=[inner]).to_svg()
+legacy_style = fk.DiagramStyle(show_particle=False)
+# Full SVG digests from 055fd0c1, ordered FeynKit then Linnet.
+golden = (
+    (Path(__file__).parent / "fixtures" / "single-amber-base.sha256")
+    .read_text()
+    .splitlines()
 )
-assert "#77777773" in basketball.render(highlight=inner).to_svg()
+with patch.dict(sys.modules, {"typst": None}):
+    actual = [
+        basketball.render(highlight=inner, style=legacy_style).to_svg(),
+        basketball.to_graph().subgraph(edges=[0, 1]).render().to_svg(),
+    ]
+assert [hashlib.sha256(svg.encode()).hexdigest() for svg in actual] == golden
+assert "#77777773" in actual[0]
+
 unmuted = ET.fromstring(
     basketball.render(
         highlight=layers[1:],
-        style=fk.DiagramStyle(mute_outside=False),
+        mute_outside=False,
     ).to_svg()
 )
 assert all(element.get("stroke") != "#77777773" for element in unmuted.iter())
 
 generic = basketball.to_graph()
 generic_outer = generic.full_subgraph()
+generic_middle = generic.subgraph(edges=[0, 1, 2])
 generic_inner = generic.subgraph(edges=[0, 1])
-generic_svg = generic_outer.render(
-    highlight=[(generic_outer, "acted-on"), (generic_inner, "treated")]
-).to_svg()
-assert any(
-    [paint for paint, _ in stack] == [palette[0], palette[2]]
-    for stack in stroke_stacks(generic_svg)
+for owner, selections in (
+    (basketball, [outer, middle, inner]),
+    (generic, [generic_outer, generic_middle, generic_inner]),
+):
+
+    def svg(highlight):
+        return owner.render(highlight=highlight).to_svg()
+
+    assert svg((selections[-1], "treated")) == svg([(selections[-1], "treated")])
+    assert svg([selections[-1]]) == svg(selections[-1])
+    for count, roles in (
+        (2, ("acted-on", "treated")),
+        (3, ("acted-on", "middle", "treated")),
+    ):
+        assert svg(selections[:count]) == svg(list(zip(selections[:count], roles)))
+    assert svg([]) == owner.render().to_svg()
+    try:
+        svg(selections + selections[:1])
+    except ValueError as error:
+        assert "explicit highlight styles" in str(error)
+    else:
+        raise AssertionError("four unstyled layers must require explicit styles")
+
+generic_svg = generic.to_svg(highlight=[generic_outer, generic_middle, generic_inner])
+check_palette(generic_svg, "linnet", "linnet-subgraph")
+disjoint = generic.to_svg(
+    highlight=[generic.subgraph(edges=[0, 1]), generic.subgraph(edges=[2, 3])]
+)
+assert all(len(stack) == 1 for stack in stroke_stacks(disjoint))
+assert all(
+    len(stack) == 1
+    for stack in stroke_stacks(
+        generic.to_svg(highlight=[generic.empty_subgraph(), generic_inner])
+    )
 )
 half_edge = generic.subgraph(half_edges=[generic.edge(0).source.index])
-half_svg = generic_outer.render(highlight=[(half_edge, "treated")]).to_svg()
-assert any(stack == [(palette[2], 1.65)] for stack in stroke_stacks(half_svg))
+for selection in (half_edge, (half_edge, "treated"), [half_edge, generic_inner]):
+    try:
+        generic.render(highlight=selection)
+    except ValueError as error:
+        assert "requires complete edges" in str(error)
+    else:
+        raise AssertionError("partial paired edges must be rejected in every layer")
 for highlight in ([(inner, "missing")], [(diagram.subgraph(edges=[0]), "treated")]):
     try:
         basketball.render(highlight=highlight)

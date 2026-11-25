@@ -1,11 +1,17 @@
 //! Ordered highlights resolved against the drawing's node and edge order.
 
+use std::borrow::Cow;
 use std::collections::BTreeSet;
+use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::str::FromStr;
+
+use thiserror::Error;
 
 use super::{Dash, NodeDrawing, Scene, Stroke};
 
 /// A named highlight treatment. See [`Scene::apply_highlights`].
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum HighlightStyle {
     /// Keep the owner's traditional amber stroke and node treatment.
     #[default]
@@ -19,43 +25,137 @@ pub enum HighlightStyle {
 }
 
 impl HighlightStyle {
-    /// Theme role, light fallback paint and dark paint for the layered palette.
-    /// Amber retains the palette of the graph's renderer. See [`Scene::apply_highlights`].
-    pub const THEME: [(&'static str, &'static str, &'static str); 3] = [
-        ("acted-on", "#3b82f6", "#75a7ff"),
-        ("middle", "#8b5cf6", "#b197fc"),
-        ("treated", "#e4504f", "#ff7775"),
-    ];
+    /// Named styles available in both themes. Amber is renderer-specific.
+    /// See [`Scene::apply_highlights`].
+    pub const LAYERED: [Self; 3] = [Self::ActedOn, Self::Middle, Self::Treated];
 
-    /// Named stroke paint and preferred width in points. Amber instead derives
-    /// its stroke from the graph's renderer. See [`Scene::apply_highlights`].
-    pub fn stroke(self) -> Option<(&'static str, f64)> {
+    /// Stable role name used by Python and CSS. See [`Scene::apply_highlights`].
+    pub fn role(self) -> &'static str {
+        match self {
+            Self::Amber => "amber",
+            Self::ActedOn => "acted-on",
+            Self::Middle => "middle",
+            Self::Treated => "treated",
+        }
+    }
+
+    /// Light paint. Amber uses the supplied palette. See [`Scene::apply_highlights`].
+    pub fn light_paint(self) -> Option<&'static str> {
         match self {
             Self::Amber => None,
-            Self::ActedOn => Some((Self::THEME[0].1, 1.45)),
-            Self::Middle => Some((Self::THEME[1].1, 1.55)),
-            Self::Treated => Some((Self::THEME[2].1, 1.65)),
+            Self::ActedOn => Some("#3b82f6"),
+            Self::Middle => Some("#8b5cf6"),
+            Self::Treated => Some("#e4504f"),
+        }
+    }
+
+    /// Dark paint. Amber uses the supplied palette. See [`Scene::apply_highlights`].
+    pub fn dark_paint(self) -> Option<&'static str> {
+        match self {
+            Self::Amber => None,
+            Self::ActedOn => Some("#75a7ff"),
+            Self::Middle => Some("#b197fc"),
+            Self::Treated => Some("#ff7775"),
+        }
+    }
+
+    /// Preferred width in points. Amber can inherit the particle's width.
+    /// See [`Scene::apply_highlights`].
+    pub fn width(self) -> Option<f64> {
+        match self {
+            Self::Amber => None,
+            Self::ActedOn => Some(1.45),
+            Self::Middle => Some(1.55),
+            Self::Treated => Some(1.65),
         }
     }
 }
 
+/// The input did not name a highlight style.
+/// See [`Scene::apply_highlights`].
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
+#[error("highlight style must be 'amber', 'acted-on', 'middle', or 'treated'")]
+pub struct UnknownHighlightStyle;
+
+impl FromStr for HighlightStyle {
+    type Err = UnknownHighlightStyle;
+
+    fn from_str(role: &str) -> Result<Self, Self::Err> {
+        [Self::Amber]
+            .into_iter()
+            .chain(Self::LAYERED)
+            .find(|style| style.role() == role)
+            .ok_or(UnknownHighlightStyle)
+    }
+}
+
+impl Display for HighlightStyle {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        formatter.write_str(self.role())
+    }
+}
+
 /// One styled region, indexed in scene order. See [`Scene::apply_highlights`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct HighlightRegion {
+    /// Selected indices in the scene's edge order.
     pub edges: BTreeSet<usize>,
+    /// Selected indices in the scene's node order.
     pub nodes: BTreeSet<usize>,
+    /// Treatment of this region.
     pub style: HighlightStyle,
 }
 
-/// The owner-specific amber and outside paints. See [`Scene::apply_highlights`].
-pub struct HighlightPalette {
-    pub amber_paint: &'static str,
-    /// Override the base edge width and dash for amber if provided.
-    pub amber_edge_width: Option<f64>,
-    pub amber_node_fill: Option<&'static str>,
-    pub outside_node_fill: Option<&'static str>,
+impl HighlightRegion {
+    /// Bind a style to scene edge and node indices. See [`Scene::apply_highlights`].
+    pub fn new(edges: BTreeSet<usize>, nodes: BTreeSet<usize>, style: HighlightStyle) -> Self {
+        Self {
+            edges,
+            nodes,
+            style,
+        }
+    }
 }
 
-impl HighlightPalette {
+/// The owner-specific amber and outside paints. See [`Scene::apply_highlights`].
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct HighlightPalette<'a> {
+    /// Amber paint for edge and node outlines.
+    pub amber_paint: Cow<'a, str>,
+    /// Solid amber width in points. Without an override, inherit edge width and dash.
+    pub amber_solid_width: Option<f64>,
+    /// Replacement fill for amber nodes, if any.
+    pub amber_node_fill: Option<Cow<'a, str>>,
+    /// Replacement fill for outside nodes, if any.
+    pub outside_node_fill: Option<Cow<'a, str>>,
+}
+
+impl<'a> HighlightPalette<'a> {
+    /// Set the amber outline and otherwise inherit the drawing's styles.
+    /// See [`Scene::apply_highlights`].
+    pub fn new(amber_paint: impl Into<Cow<'a, str>>) -> Self {
+        Self {
+            amber_paint: amber_paint.into(),
+            amber_solid_width: None,
+            amber_node_fill: None,
+            outside_node_fill: None,
+        }
+    }
+}
+
+/// An edge stroke and its global paint rank. See [`Scene::apply_highlights`].
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct HighlightStroke {
+    /// Earlier layers paint underneath later layers.
+    pub layer: usize,
+    /// Resolved paint and casing width.
+    pub stroke: Stroke,
+}
+
+impl HighlightPalette<'_> {
     /// The muted complement stroke. See [`Scene::apply_highlights`].
     pub const OUTSIDE_PAINT: &'static str = "#77777773";
 
@@ -70,8 +170,8 @@ impl HighlightPalette {
 
     fn paint_outside_node(&self, node: &mut NodeDrawing) {
         node.stroke = Self::outside_stroke();
-        if let Some(fill) = self.outside_node_fill {
-            node.fill = fill.into();
+        if let Some(fill) = &self.outside_node_fill {
+            node.fill = fill.as_ref().into();
         }
     }
 }
@@ -84,32 +184,22 @@ impl Scene {
 
     /// Paint regions in input order. The innermost stroke keeps its requested
     /// width and earlier strokes grow only as needed to remain visible.
-    /// Named layered styles use solid strokes on the existing edge geometry
-    /// and keep the base node appearance. Amber uses the
+    /// Named layer styles keep the particle's dash and base node appearance. Amber uses the
     /// owner's treatment. Outside paint applies only when at least one region
     /// is supplied and `mute_outside` is true.
     ///
     /// ```
     /// use linnest::svg::{HighlightPalette, HighlightRegion, HighlightStyle, Scene};
     /// # fn highlight(scene: &mut Scene) {
-    /// let palette = HighlightPalette {
-    ///     amber_paint: "#ffd166",
-    ///     amber_edge_width: None,
-    ///     amber_node_fill: None,
-    ///     outside_node_fill: None,
-    /// };
-    /// let region = HighlightRegion {
-    ///     edges: [0, 1].into(),
-    ///     nodes: [0, 1].into(),
-    ///     style: HighlightStyle::ActedOn,
-    /// };
+    /// let palette = HighlightPalette::new("#ffd166");
+    /// let region = HighlightRegion::new([0, 1].into(), [0, 1].into(), HighlightStyle::ActedOn);
     /// scene.apply_highlights(&[region], &palette, true);
     /// # }
     /// ```
     pub fn apply_highlights(
         &mut self,
         regions: &[HighlightRegion],
-        palette: &HighlightPalette,
+        palette: &HighlightPalette<'_>,
         mute_outside: bool,
     ) {
         if regions.is_empty() {
@@ -119,13 +209,13 @@ impl Scene {
             match regions.iter().rfind(|region| region.nodes.contains(&index)) {
                 Some(region) if region.style == HighlightStyle::Amber => {
                     node.stroke = Stroke {
-                        paint: palette.amber_paint.into(),
+                        paint: palette.amber_paint.as_ref().into(),
                         width: 1.2,
                         dash: Dash::Solid,
                         round_cap: false,
                     };
-                    if let Some(fill) = palette.amber_node_fill {
-                        node.fill = fill.into();
+                    if let Some(fill) = &palette.amber_node_fill {
+                        node.fill = fill.as_ref().into();
                     }
                 }
                 None if mute_outside => palette.paint_outside_node(node),
@@ -139,33 +229,44 @@ impl Scene {
                 .filter(|(_, region)| region.edges.contains(&index))
                 .rev()
                 .map(|(layer, region)| {
-                    let named = region.style.stroke();
-                    let (paint, width) = named.unwrap_or((
-                        palette.amber_paint,
-                        palette.amber_edge_width.unwrap_or(edge.stroke.width),
-                    ));
-                    let solid = named.is_some() || palette.amber_edge_width.is_some();
-                    let stroke = Stroke {
-                        paint: paint.into(),
-                        width,
-                        dash: if solid { Dash::Solid } else { edge.stroke.dash },
-                        round_cap: named.is_some() || (!solid && edge.stroke.round_cap),
-                    };
-                    (layer, stroke)
+                    let style = region.style;
+                    let amber_solid_width = palette
+                        .amber_solid_width
+                        .filter(|_| style == HighlightStyle::Amber);
+                    HighlightStroke {
+                        layer,
+                        stroke: Stroke {
+                            paint: style
+                                .light_paint()
+                                .unwrap_or(palette.amber_paint.as_ref())
+                                .into(),
+                            width: style
+                                .width()
+                                .or(amber_solid_width)
+                                .unwrap_or(edge.stroke.width),
+                            dash: if amber_solid_width.is_some() {
+                                Dash::Solid
+                            } else {
+                                edge.stroke.dash
+                            },
+                            round_cap: amber_solid_width.is_none() && edge.stroke.round_cap,
+                        },
+                    }
                 });
             edge.highlight_strokes.clear();
-            if let Some((layer, top)) = strokes.next() {
+            if let Some(top) = strokes.next() {
                 if regions.len() > 1 {
-                    let mut width = top.width;
-                    edge.highlight_strokes.push((layer, top));
-                    for (layer, mut stroke) in strokes {
-                        width = stroke.width.max(width + Self::CASING_WIDTH_STEP);
-                        stroke.width = width;
-                        edge.highlight_strokes.push((layer, stroke));
+                    let mut width = top.stroke.width;
+                    edge.highlight_strokes.push(top);
+                    for mut casing in strokes {
+                        width = casing.stroke.width.max(width + Self::CASING_WIDTH_STEP);
+                        casing.stroke.width = width;
+                        casing.stroke.dash = Dash::Solid;
+                        edge.highlight_strokes.push(casing);
                     }
                     edge.highlight_strokes.reverse();
                 } else {
-                    edge.stroke = top;
+                    edge.stroke = top.stroke;
                 }
             } else if mute_outside {
                 edge.stroke = HighlightPalette::outside_stroke();

@@ -2783,14 +2783,15 @@
   }
 }
 
-#let _subgraph-edge-styles(records, half-edge, edge-data) = {
+#let _subgraph-edge-styles(records, half-edge, edge-data, ranked: false) = {
   if half-edge == none {
     ()
   } else {
     let styles = ()
-    for record in records {
+    for (rank, record) in records.enumerate() {
       if record.hedges.contains(half-edge.hedge) {
-        styles.push(_style(record.edge-style, edge-data))
+        let style = _style(record.edge-style, edge-data)
+        styles.push(if ranked { style + (subgraph-rank: rank) } else { style })
       }
     }
     styles
@@ -2807,14 +2808,17 @@
     width = if index == 0 { resolved.thickness } else {
       calc.max(resolved.thickness, width + 1.1pt)
     }
-    casings.push((stroke: resolved + (thickness: width)))
+    let stroke = resolved + (thickness: width)
+    if index > 0 { stroke.dash = none }
+    casings.push((stroke: stroke, subgraph-rank: style.subgraph-rank))
   }
   casings.rev()
 }
 
-#let _casing-style(base, casings, index) = {
+#let _casing-style(base, casings, rank) = {
   if base == none or _style-value(base, "label-only") { return none }
-  _without-mark-style(base) + casings.at(index, default: (stroke: none))
+  let casing = casings.find(style => style.subgraph-rank == rank)
+  _without-mark-style(base) + (stroke: if casing == none { none } else { casing.stroke })
 }
 
 #let _last-style(styles) = {
@@ -3182,6 +3186,8 @@
           subgraph-edge-style,
         )
 
+        let highlight-paint = subgraph-records.map(_ => ())
+
         for (i, v) in nodes.enumerate() {
           let boundary = v.at("boundary", default: none) != none
           let pos = _node-pos(v)
@@ -3350,11 +3356,13 @@
             subgraph-records,
             record.source-half-edge,
             record.edge-data,
+            ranked: subgraph-edge-casings,
           )
           let sink-subgraph-styles = _subgraph-edge-styles(
             subgraph-records,
             record.sink-half-edge,
             record.edge-data,
+            ranked: subgraph-edge-casings,
           )
           if subgraph-edge-casings {
             source-subgraph-styles = _subgraph-casings(source-subgraph-styles)
@@ -3536,7 +3544,7 @@
               source-in-subgraph and not subgraph-edge-underlay
                 and not _style-value(source-style-value, "label-only")
             ) {
-              source-style-value + _last-style(source-subgraph-styles)
+              source-style-value + if subgraph-edge-casings { (stroke: _last-style(source-subgraph-styles).stroke) } else { _last-style(source-subgraph-styles) }
             } else {
               source-style-value
             }
@@ -3551,7 +3559,7 @@
               sink-in-subgraph and not subgraph-edge-underlay
                 and not _style-value(sink-style-value, "label-only")
             ) {
-              sink-style-value + _last-style(sink-subgraph-styles)
+              sink-style-value + if subgraph-edge-casings { (stroke: _last-style(sink-subgraph-styles).stroke) } else { _last-style(sink-subgraph-styles) }
             } else {
               sink-style-value
             }
@@ -3587,7 +3595,7 @@
             }
             if (
               crossing-under != none
-                and subgraph-edge-underlay
+                and (subgraph-edge-underlay or subgraph-edge-casings)
                 and (source-in-subgraph or sink-in-subgraph)
             ) {
               panic(
@@ -3681,20 +3689,26 @@
                 }
               }
               if subgraph-edge-casings {
-                let source-casings = source-subgraph-styles.slice(0, calc.max(0, source-subgraph-styles.len() - 1))
-                let sink-casings = sink-subgraph-styles.slice(0, calc.max(0, sink-subgraph-styles.len() - 1))
-                for index in range(calc.max(source-casings.len(), sink-casings.len())) {
-                  let source-casing = _casing-style(source-style-value, source-casings, index)
-                  let sink-casing = _casing-style(sink-style-value, sink-casings, index)
+                let ranks = (source-subgraph-styles + sink-subgraph-styles)
+                  .map(style => style.subgraph-rank).dedup()
+                for rank in ranks {
+                  let source-casing = _casing-style(source-style-value, source-subgraph-styles, rank)
+                  let sink-casing = _casing-style(sink-style-value, sink-subgraph-styles, rank)
                   if source-casing != none and sink-casing != none {
-                    elements += _pattern-edge-halves(halves, source-casing, sink-casing)
+                    highlight-paint.at(rank) += _pattern-edge-halves(halves, source-casing, sink-casing)
                   } else {
                     for (segments, style) in ((halves.source, source-casing), (halves.sink, sink-casing)) {
                       if style != none {
-                        elements += _derived-segments-elements(segments, style, auto, true, true, complete: false).elements
+                        highlight-paint.at(rank) += _derived-segments-elements(segments, style, auto, true, true, complete: false).elements
                       }
                     }
                   }
+                }
+                if source-in-subgraph and source-draw-style != none {
+                  source-draw-style.stroke = none
+                }
+                if sink-in-subgraph and sink-draw-style != none {
+                  sink-draw-style.stroke = none
                 }
               }
               if crossing-under != none {
@@ -3913,9 +3927,11 @@
                 }
               }
               if subgraph-edge-casings and source-style-value != none and not _style-value(source-style-value, "label-only") {
-                for casing in source-subgraph-styles.slice(0, calc.max(0, source-subgraph-styles.len() - 1)) {
-                  let style = _without-mark-style(source-style-value) + casing
-                  elements += _pattern-dangling(dangling-path, style, label-pos)
+                for casing in source-subgraph-styles {
+                  let rank = casing.subgraph-rank
+                  let style = _casing-style(source-style-value, source-subgraph-styles, rank)
+                  highlight-paint.at(rank) += _pattern-dangling(dangling-path, style, label-pos)
+                  source-draw-style.stroke = none
                 }
               }
               if source-style-value != none {
@@ -3955,7 +3971,7 @@
                 if attached-label != none {
                   label-placements.push(attached-label + (hrefs: hrefs))
                 }
-                if _has-visible-stroke(draw-style) or _has-mark(draw-style) {
+                if _has-visible-stroke(draw-style) or _has-mark(draw-style) or (subgraph-edge-casings and not _style-value(draw-style, "label-only") and (source-in-subgraph or sink-in-subgraph)) {
                   edge-targets += _edge-identity-targets(
                     ctx, ((segments: curve-api.segments(visible-path), visible: true),), hrefs,
                   )
@@ -4029,9 +4045,11 @@
                 }
               }
               if subgraph-edge-casings and sink-style-value != none and not _style-value(sink-style-value, "label-only") {
-                for casing in sink-subgraph-styles.slice(0, calc.max(0, sink-subgraph-styles.len() - 1)) {
-                  let style = _without-mark-style(sink-style-value) + casing
-                  elements += _pattern-dangling(dangling-path, style, label-pos)
+                for casing in sink-subgraph-styles {
+                  let rank = casing.subgraph-rank
+                  let style = _casing-style(sink-style-value, sink-subgraph-styles, rank)
+                  highlight-paint.at(rank) += _pattern-dangling(dangling-path, style, label-pos)
+                  sink-draw-style.stroke = none
                 }
               }
               if sink-style-value != none {
@@ -4071,7 +4089,7 @@
                 if attached-label != none {
                   label-placements.push(attached-label + (hrefs: hrefs))
                 }
-                if _has-visible-stroke(draw-style) or _has-mark(draw-style) {
+                if _has-visible-stroke(draw-style) or _has-mark(draw-style) or (subgraph-edge-casings and not _style-value(draw-style, "label-only") and (source-in-subgraph or sink-in-subgraph)) {
                   edge-targets += _edge-identity-targets(
                     ctx, ((segments: curve-api.segments(visible-path), visible: true),), hrefs,
                   )
@@ -4207,6 +4225,12 @@
               padding: 0,
             ))
           }
+        }
+
+        // Append matching ranks across the whole graph, including their top strokes.
+        for layer in highlight-paint {
+          elements += layer
+          edge-layers.push((ctx: ctx, elements: layer))
         }
 
         label-placements = label-placements.filter(label => label != none)

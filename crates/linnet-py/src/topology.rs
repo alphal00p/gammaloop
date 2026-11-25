@@ -3,7 +3,6 @@
 use std::collections::BTreeSet;
 
 use linnest::svg::HighlightStyle;
-use linnet_render_py::{extract_highlights, highlight_css};
 
 use linnet::half_edge::algorithms::DirectionBasis;
 use linnet::half_edge::involution::{EdgeIndex, Hedge};
@@ -379,81 +378,51 @@ impl PySubgraph {
             && (self.subgraph != other.subgraph || self.isolated_nodes != other.isolated_nodes))
     }
 
-    /// Prepare the full owner graph with ordered highlights.
+    /// Draw this selection in amber in its owner graph.
     ///
     /// Examples
     /// --------
-    /// >>> drawing = outer.render(highlight=[(outer, "acted-on"), (inner, "treated")])
+    /// >>> drawing = selection.render(mute_outside=False)
     ///
     /// Parameters
     /// ----------
     /// config : RenderSettings or None, optional
     ///     Layout and drawing settings for the owner graph.
-    /// highlight : Subgraph or sequence, optional
-    ///     A selection or ordered sequence of selections and (selection, style)
-    ///     tuples from this graph. Styles are "amber", "acted-on", "middle",
-    ///     and "treated". Defaults to this selection in amber. A single amber
-    ///     layer requires whole edges. Layered colors also accept half-edges
-    ///     and highlight the associated whole edge.
     /// mute_outside : bool, optional
-    ///     Fade and dot edges and nodes outside all supplied regions.
-    #[pyo3(signature = (*, config=None, highlight=None, mute_outside=true))]
+    ///     Fade edges and nodes outside this selection.
+    #[pyo3(signature = (*, config=None, mute_outside=true))]
     fn render(
         &self,
         py: Python<'_>,
         #[gen_stub(override_type(type_repr = "RenderSettings | None"))] config: Option<
             &Bound<'_, PyAny>,
         >,
-        #[gen_stub(override_type(type_repr = "Subgraph | typing.Sequence[Subgraph | tuple[Subgraph, str]] | None", imports = ("typing")))]
-        highlight: Option<&Bound<'_, PyAny>>,
         mute_outside: bool,
     ) -> PyResult<PyDiagramView> {
-        let layers = highlight
-            .map(|value| {
-                extract_highlights(value, |selection| {
-                    Ok(selection.extract::<PyRef<'_, Self>>()?)
-                })
-            })
-            .transpose()?;
-        let layers = layers.as_ref().map_or_else(
-            || vec![(self, HighlightStyle::Amber)],
-            |layers| {
-                layers
-                    .iter()
-                    .map(|(selection, style)| (&**selection, *style))
-                    .collect()
-            },
-        );
-        let view = render::render_graph(
+        render::render_graph(
             py,
             self.owner(py)?.as_unbound(),
             config,
-            &layers,
+            &[(self, HighlightStyle::Amber)],
             mute_outside,
-        )?;
-        let layered_palette = layers
-            .iter()
-            .any(|(_, style)| *style != HighlightStyle::Amber);
-        view.map_svg(move |svg| {
-            let palette = if layered_palette {
-                highlight_css(&svg, "linnet-subgraph", "linnet")
-            } else {
-                String::new()
-            };
-            svg.replacen("<svg ", "<svg class=\"linnet-subgraph\" ", 1)
-                .replacen(
-                    '>',
-                    &format!(
-                        "> <style>{}{palette}</style>",
-                        include_str!("../typst/subgraph.css")
-                    ),
-                    1,
-                )
-        })
+        )
     }
 
     /// Render this selection in the context of the full graph, including isolated nodes.
-    #[pyo3(signature = (*, config=None, browser=None))]
+    ///
+    /// Examples
+    /// --------
+    /// >>> svg = selection.to_svg(mute_outside=False)
+    ///
+    /// Parameters
+    /// ----------
+    /// config : RenderSettings or None, optional
+    ///     Layout and drawing settings.
+    /// browser : str or None, optional
+    ///     Explicit browser for label measurement.
+    /// mute_outside : bool, optional
+    ///     Fade edges and nodes outside this selection.
+    #[pyo3(signature = (*, config=None, browser=None, mute_outside=true))]
     fn to_svg(
         &self,
         py: Python<'_>,
@@ -461,14 +430,15 @@ impl PySubgraph {
             &Bound<'_, PyAny>,
         >,
         browser: Option<&str>,
+        mute_outside: bool,
     ) -> PyResult<String> {
-        self.render(py, config, None, true)?
+        self.render(py, config, mute_outside)?
             .snapshot(py, browser)?
             .to_svg()
     }
 
     fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        self.render(py, None, None, true)?._mime_(py)
+        self.render(py, None, true)?._mime_(py)
     }
 
     /// Show the selected half-edges within their complete graph in notebook output.
@@ -479,7 +449,7 @@ impl PySubgraph {
         include: Option<Vec<String>>,
         exclude: Option<Vec<String>>,
     ) -> PyResult<Py<PyAny>> {
-        self.render(py, None, None, true)?
+        self.render(py, None, true)?
             ._repr_mimebundle_(py, include, exclude)
     }
 

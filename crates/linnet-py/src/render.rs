@@ -7,10 +7,11 @@ use linnest::{
 };
 use linnet::half_edge::builder::{HedgeData, HedgeGraphBuilder};
 use linnet::half_edge::involution::{Flow, Hedge, HedgePair, Orientation};
-use linnet::half_edge::subgraph::Inclusion;
+use linnet::half_edge::subgraph::{Inclusion, SubSetLike};
+use linnet_render_py::{extract_highlights, theme_svg, ThemeFormat, ThemePaint};
 use pyo3::exceptions::{PyReferenceError, PyRuntimeError, PyValueError};
-use pyo3::types::{PyAny, PyDict, PyDictMethods, PyList, PyListMethods};
-use pyo3::{Bound, Py, PyResult, Python};
+use pyo3::types::{PyAny, PyAnyMethods, PyDict, PyDictMethods, PyList, PyListMethods};
+use pyo3::{Bound, Py, PyRef, PyResult, Python};
 
 use crate::dot::PyGlobalData;
 use crate::drawing::{element_drawing, DrawingKind};
@@ -304,6 +305,26 @@ fn topology_spec(graph: &PyGraph) -> PyResult<Vec<u8>> {
     encode_graph_spec_bytes(&spec).map_err(PyRuntimeError::new_err)
 }
 
+pub(crate) fn render_with_highlights(
+    py: Python<'_>,
+    graph: &Py<PyGraph>,
+    config: Option<&Bound<'_, PyAny>>,
+    highlight: Option<&Bound<'_, PyAny>>,
+    mute_outside: bool,
+) -> PyResult<PyDiagramView> {
+    let Some(highlight) = highlight else {
+        return render_graph(py, graph, config, &[], mute_outside);
+    };
+    let selections = extract_highlights(highlight, |entry| {
+        Ok(entry.extract::<PyRef<'_, PySubgraph>>()?)
+    })?;
+    let layers: Vec<_> = selections
+        .iter()
+        .map(|entry| (&*entry.selection, entry.style))
+        .collect();
+    render_graph(py, graph, config, &layers, mute_outside)
+}
+
 pub(crate) fn render_graph(
     py: Python<'_>,
     graph: &Py<PyGraph>,
@@ -321,7 +342,6 @@ pub(crate) fn render_graph(
     let mut scene = transport.native_scene(envelope.graph, None)?;
     let owner = graph.borrow(py);
     let mut regions = Vec::new();
-    let legacy_selection = matches!(highlights, [(_, HighlightStyle::Amber)]);
     for (subgraph, style) in highlights {
         let (selected, isolated) = subgraph.selection_for(py, graph, owner.revision()?)?;
         let state = owner.state.borrow();
@@ -340,13 +360,14 @@ pub(crate) fn render_graph(
             for endpoint in [&mut edge.source, &mut edge.sink].into_iter().flatten() {
                 let id = endpoint
                     .id
-                    .expect("the graph spec retains original half-edge IDs");
+                    .filter(|&id| id < selected.size())
+                    .ok_or_else(|| {
+                        PyRuntimeError::new_err("invalid half-edge ID in the native SVG renderer")
+                    })?;
                 let inside = selected.includes(&Hedge(id));
-                // A legacy amber selection requires matching half-edge paints.
-                // Layered styles select the whole logical edge.
-                if legacy_selection && included.is_some_and(|previous| previous != inside) {
+                if included.is_some_and(|previous| previous != inside) {
                     return Err(PyValueError::new_err(
-                        "drawing settings are not supported by the native SVG renderer: unrecognized native drawing option",
+                        "the native SVG renderer requires complete edges in each highlight layer",
                     ));
                 }
                 included = Some(inside);
@@ -356,20 +377,29 @@ pub(crate) fn render_graph(
                 }
             }
         }
-        regions.push(HighlightRegion {
-            edges,
-            nodes,
-            style: *style,
-        });
+        regions.push(HighlightRegion::new(edges, nodes, *style));
     }
-    let palette = HighlightPalette {
-        amber_paint: "#c58b13",
-        amber_edge_width: Some(1.2),
-        amber_node_fill: Some("#ffd16659"),
-        outside_node_fill: Some("#77777726"),
-    };
+    let mut palette = HighlightPalette::new("#c58b13");
+    palette.amber_solid_width = Some(1.2);
+    palette.amber_node_fill = Some("#ffd16659".into());
+    palette.outside_node_fill = Some("#77777726".into());
     scene.apply_highlights(&regions, &palette, mute_outside);
-    PyDiagramView::from_scene(py, scene, None)
+    let view = PyDiagramView::from_scene(py, scene, None)?;
+    if highlights.is_empty() {
+        return Ok(view);
+    }
+    let styles: Vec<_> = highlights.iter().map(|(_, style)| *style).collect();
+    view.map_svg(move |svg| {
+        theme_svg(
+            svg,
+            &[
+                ThemePaint::new("ink", "#000000", "#f3f4f6"),
+                ThemePaint::new("highlight", "#c58b13", "#ffd166"),
+            ],
+            &styles,
+            ThemeFormat::Linnet,
+        )
+    })
 }
 
 /// Supply live generic graph views only when the optional Linnet bindings are registered.

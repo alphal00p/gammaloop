@@ -2304,17 +2304,7 @@ class DiagramStyle:
         >>> hep.DiagramStyle(debug=True).debug
         True
         """
-    @property
-    def mute_outside(self) -> typing.Optional[builtins.bool]:
-        r"""
-        Fade and dot the complement of the highlighted regions; None defaults to true.
-
-        Examples
-        --------
-        >>> hep.DiagramStyle(mute_outside=False).mute_outside
-        False
-        """
-    def __new__(cls, *, show_particle: typing.Optional[builtins.bool] = None, show_momentum: typing.Optional[builtins.bool] = None, show_edge_index: typing.Optional[builtins.bool] = None, show_node_index: typing.Optional[builtins.bool] = None, momentum_arrows: typing.Optional[builtins.bool] = None, split_initial_state: typing.Optional[builtins.bool] = None, debug: typing.Optional[builtins.bool] = None, mute_outside: typing.Optional[builtins.bool] = None) -> DiagramStyle:
+    def __new__(cls, *, show_particle: typing.Optional[builtins.bool] = None, show_momentum: typing.Optional[builtins.bool] = None, show_edge_index: typing.Optional[builtins.bool] = None, show_node_index: typing.Optional[builtins.bool] = None, momentum_arrows: typing.Optional[builtins.bool] = None, split_initial_state: typing.Optional[builtins.bool] = None, debug: typing.Optional[builtins.bool] = None) -> DiagramStyle:
         r"""
         Select physics presentation without changing graph layout or drawing settings.
 
@@ -2338,8 +2328,6 @@ class DiagramStyle:
             Separate the incoming states of a cross-section drawing.
         debug : bool or None, optional
             Show both vertex and edge indices unless individually overridden.
-        mute_outside : bool or None, optional
-            Fade and dot edges and nodes outside all supplied regions by default.
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -3862,7 +3850,7 @@ class FeynmanDiagram:
         >>> restored = hep.FeynmanDiagram.from_dot(model, dot)
         >>> restored.validate()
         """
-    def to_linnest(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | typing.Sequence[Subgraph | tuple[Subgraph, str]] | None = None) -> builtins.str:
+    def to_linnest(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']]] | None = None, mute_outside: builtins.bool = True) -> builtins.str:
         r"""
         Export a self-contained Typst document embedding an outlined SVG.
 
@@ -3891,8 +3879,10 @@ class FeynmanDiagram:
         highlight : Subgraph or sequence, optional
             A selection or ordered sequence of selections and (selection, style)
             tuples, as in ``render``.
+        mute_outside : bool, optional
+            Fade edges and nodes outside all supplied selections.
         """
-    def render(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | typing.Sequence[Subgraph | tuple[Subgraph, str]] | None = None) -> DiagramView:
+    def render(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']]] | None = None, mute_outside: builtins.bool = True) -> DiagramView:
         r"""
         Prepare a browser-measured view using the shared physics renderer.
 
@@ -3936,10 +3926,13 @@ class FeynmanDiagram:
             tuples from this diagram. Styles are "amber" (the default), "acted-on" (blue),
             "middle" (violet), and "treated" (red). Later strokes sit inside
             earlier strokes on shared edges. A Subgraph highlights its own
-            region by default. Use ``style=DiagramStyle(mute_outside=False)``
-            to keep the original drawing outside the highlighted regions.
+            region by default. A styled pair can be passed directly. Up to
+            three unstyled entries use amber, blue/red, or blue/violet/red,
+            respectively. An empty sequence clears highlighting.
+        mute_outside : bool, optional
+            Fade edges and nodes outside all supplied selections.
         """
-    def to_html(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | typing.Sequence[Subgraph | tuple[Subgraph, str]] | None = None, browser: typing.Optional[builtins.str] = None) -> builtins.str:
+    def to_html(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']]] | None = None, mute_outside: builtins.bool = True, browser: typing.Optional[builtins.str] = None) -> builtins.str:
         r"""
         Export a complete static HTML figure with the same options as ``render``.
 
@@ -3968,6 +3961,8 @@ class FeynmanDiagram:
             Defaults use a completed measurement, optional Typst, or estimated
             MathML label sizes. For exact notebook measurements, use
             ``render().measured().to_html()`` on the displayed view instead.
+        mute_outside : bool, optional
+            Fade edges and nodes outside all supplied selections.
         """
     def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
         r"""

@@ -3021,6 +3021,14 @@ impl DiagramSourceMap {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "svg")]
+    use linnet::half_edge::subgraph::ModifySubSet;
+    #[cfg(feature = "svg")]
+    use serde_json::Value;
+
+    #[cfg(feature = "svg")]
+    use crate::{HighlightLayer, HighlightStyle, SceneOptions};
+
     use super::*;
     use spenso::structure::representation::Euclidean;
     use spenso::tensor_symbol;
@@ -3378,6 +3386,58 @@ mod tests {
             )
             .unwrap();
         builder.build().unwrap()
+    }
+
+    #[cfg(feature = "svg")]
+    #[test]
+    fn sewn_initial_state_keeps_its_highlight_on_both_drawn_halves() {
+        let diagram = cut_scalar_line();
+        let (edge, _, _) = diagram
+            .edges()
+            .find(|(_, ends, edge)| {
+                edge.external.is_some() && ends.source.is_some() && ends.target.is_some()
+            })
+            .unwrap();
+        let mut selected = diagram.graph.empty_subgraph::<SuBitGraph>();
+        let half = DiagramHalfEdge {
+            edge,
+            endpoint: DiagramEndpoint::Source,
+        };
+        selected.add(diagram.half_edge_id(half).unwrap());
+        let empty = BTreeSet::new();
+        let complement = diagram.graph.empty_subgraph::<SuBitGraph>();
+        let layers = [
+            HighlightLayer::new(&complement, &empty, HighlightStyle::Middle),
+            HighlightLayer::new(&selected, &empty, HighlightStyle::Treated),
+        ];
+        for split_initial_state in [false, true] {
+            let scene = diagram
+                .to_scene_with_highlights(
+                    &layers,
+                    None,
+                    &SceneOptions {
+                        split_initial_state,
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            let drawn: Vec<_> = scene
+                .edges
+                .iter()
+                .filter(|drawing| {
+                    drawing.details.get("edge").and_then(Value::as_u64) == Some(edge.0 as u64)
+                })
+                .collect();
+            assert_eq!(drawn.len(), if split_initial_state { 2 } else { 1 });
+            for drawing in drawn {
+                assert_eq!(drawing.highlight_strokes.len(), 1);
+                assert_eq!(drawing.highlight_strokes[0].layer, 1);
+                assert_eq!(
+                    drawing.highlight_strokes[0].stroke.paint,
+                    HighlightStyle::Treated.light_paint().unwrap()
+                );
+            }
+        }
     }
 
     fn cut_scalar_line() -> FeynmanDiagram {

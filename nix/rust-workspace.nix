@@ -127,7 +127,6 @@
     (workspaceRoot + "/crates/linnest/typst/src")
     (workspaceRoot + "/crates/linnest/typst/typst.toml")
     (workspaceRoot + "/crates/linnet-py/README.md")
-    (workspaceRoot + "/crates/linnet-py/typst/subgraph.css")
     # Tensor export sources, browser runtime, and fonts are build inputs.
     (workspaceRoot + "/crates/spynso3/typst")
     (workspaceRoot + "/crates/linnet-render-py/data.json")
@@ -492,7 +491,6 @@
     "linnet-py" = [
       "crates/linnet-py/LICENSE"
       "crates/linnet-py/README.md"
-      "crates/linnet-py/typst/subgraph.css"
     ];
     spynso3 = ["crates/spynso3/typst"];
     "linnet-render-py" = [

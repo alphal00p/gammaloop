@@ -19,22 +19,34 @@ use crate::{DiagramError, FeynmanDiagram, LoopMomentumBasis, VertexId};
 const INK: &str = "#3d2645";
 const ACCENT: &str = "#6f4d85";
 const HIGHLIGHT: &str = "#ffd166";
-const HIGHLIGHT_PALETTE: HighlightPalette = HighlightPalette {
-    amber_paint: HIGHLIGHT,
-    amber_edge_width: None,
-    amber_node_fill: None,
-    outside_node_fill: None,
-};
 /// External legs start one layout group either side, ten units apart.
 const EXTERNAL_SPACING: f64 = 10.0;
 
 /// One highlighted physics region. See [`FeynmanDiagram::to_scene_with_highlights`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct HighlightLayer<'a> {
     /// Original half-edges. Either half selects the entire drawn edge.
     pub hedges: &'a SuBitGraph,
     /// Original vertex IDs selected independently of half-edges.
     pub isolated: &'a BTreeSet<usize>,
+    /// Paint and node treatment.
     pub style: HighlightStyle,
+}
+
+impl<'a> HighlightLayer<'a> {
+    /// Select original half-edges and isolated nodes. See [`FeynmanDiagram::to_scene_with_highlights`].
+    pub fn new(
+        hedges: &'a SuBitGraph,
+        isolated: &'a BTreeSet<usize>,
+        style: HighlightStyle,
+    ) -> Self {
+        Self {
+            hedges,
+            isolated,
+            style,
+        }
+    }
 }
 
 /// Physics drawing options the native renderer honours.
@@ -126,8 +138,8 @@ impl FeynmanDiagram {
     /// # fn scene(diagram: &FeynmanDiagram, outer: &SuBitGraph, inner: &SuBitGraph) -> Result<(), DiagramError> {
     /// let isolated = BTreeSet::new();
     /// let layers = [
-    ///     HighlightLayer { hedges: outer, isolated: &isolated, style: HighlightStyle::ActedOn },
-    ///     HighlightLayer { hedges: inner, isolated: &isolated, style: HighlightStyle::Treated },
+    ///     HighlightLayer::new(outer, &isolated, HighlightStyle::ActedOn),
+    ///     HighlightLayer::new(inner, &isolated, HighlightStyle::Treated),
     /// ];
     /// let scene = diagram.to_scene_with_highlights(&layers, None, &SceneOptions::default())?;
     /// assert_eq!(scene.graph.edges.len(), diagram.edges().count());
@@ -484,8 +496,8 @@ impl FeynmanDiagram {
                     selected_edges.insert(self.graph[&hedge].0);
                 }
                 // Both drawn halves of a sewn initial-state edge retain its paint.
-                HighlightRegion {
-                    edges: edges
+                HighlightRegion::new(
+                    edges
                         .iter()
                         .enumerate()
                         .filter_map(|(index, (edge, _))| {
@@ -494,14 +506,14 @@ impl FeynmanDiagram {
                                 .map(|_| index)
                         })
                         .collect(),
-                    nodes: selected_nodes
+                    selected_nodes
                         .into_iter()
                         .chain(dense.iter().filter_map(|(id, &index)| {
                             layer.isolated.contains(&id.0).then_some(index)
                         }))
                         .collect(),
-                    style: layer.style,
-                }
+                    layer.style,
+                )
             })
             .collect();
         for (index, (edge, _)) in edges.iter_mut().enumerate() {
@@ -541,7 +553,11 @@ impl FeynmanDiagram {
             layout_edges: None,
             label_feedback: options.label_feedback,
         };
-        scene.apply_highlights(&regions, &HIGHLIGHT_PALETTE, options.mute_outside);
+        scene.apply_highlights(
+            &regions,
+            &HighlightPalette::new(HIGHLIGHT),
+            options.mute_outside,
+        );
         Ok(scene)
     }
 }
@@ -771,11 +787,15 @@ impl SceneOptions {
 
 #[cfg(test)]
 mod tests {
-    use crate::DiagramError;
+    use crate::{
+        DiagramEdge, DiagramError, DiagramVertex, ExternalLeg, ExternalState, FeynmanDiagram,
+    };
     use feynkit_model::{Model, ParticleId};
+    use idenso::tensor::SymbolicTensor;
     use std::collections::BTreeSet;
+    use symbolica::atom::Atom;
 
-    use linnest::svg::{Dash, HighlightPalette, HighlightStyle, Scene};
+    use linnest::svg::{Dash, HighlightPalette, HighlightStyle};
     use linnet::half_edge::involution::Hedge;
     use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph};
 
@@ -856,34 +876,53 @@ mod tests {
     }
 
     #[test]
-    fn legacy_highlight_renders_the_same_svg_as_one_amber_layer() {
-        let diagram = one_loop();
-        let options = SceneOptions {
-            show_particle: false,
-            ..Default::default()
+    fn highlights_external_edges_dummy_loops_and_isolated_nodes() {
+        let model = Model::phi4();
+        let particle = model.particle_id("phi").unwrap();
+        let mut builder = FeynmanDiagram::builder(model, "highlight-regions");
+        let vertex = |name: &str| DiagramVertex {
+            name: name.into(),
+            interaction: None,
+            numerator: SymbolicTensor::infer(Atom::one()).unwrap(),
         };
-        let mut selected = diagram.graph.empty_subgraph::<SuBitGraph>();
-        selected.add(Hedge(1));
-        let isolated = BTreeSet::new();
-        let legacy = diagram
-            .to_scene(Some(&selected), &isolated, None, &options)
+        let a = builder.add_vertex(vertex("a"));
+        let isolated = builder.add_vertex(vertex("isolated"));
+        let mut incoming = DiagramEdge::new(particle, false);
+        incoming.external = Some(ExternalLeg {
+            name: "p".into(),
+            index: 0,
+            state: ExternalState::Incoming,
+            connection: 0,
+        });
+        builder.add_edge(None, a, incoming).unwrap();
+        let mut dummy = DiagramEdge::new(particle, false);
+        dummy.is_dummy = true;
+        builder.add_edge(a, a, dummy).unwrap();
+        let diagram = builder.build().unwrap();
+        let mut first = diagram.graph.empty_subgraph::<SuBitGraph>();
+        let mut second = first.clone();
+        first.add(Hedge(0));
+        second.add(Hedge(1));
+        let none = BTreeSet::new();
+        let extra = BTreeSet::from([isolated.0]);
+        let layers = [
+            HighlightLayer::new(&first, &none, HighlightStyle::ActedOn),
+            HighlightLayer::new(&second, &extra, HighlightStyle::Amber),
+        ];
+        let scene = diagram
+            .to_scene_with_highlights(&layers, None, &SceneOptions::default())
             .unwrap();
-        let layered = diagram
-            .to_scene_with_highlights(
-                &[HighlightLayer {
-                    hedges: &selected,
-                    isolated: &isolated,
-                    style: HighlightStyle::Amber,
-                }],
-                None,
-                &options,
-            )
-            .unwrap();
-        let render = |scene: Scene| scene.render(&scene.typeset_mathml(&[]).unwrap()).unwrap();
-        let legacy_svg = render(legacy);
-        assert_eq!(legacy_svg, render(layered));
-        assert!(legacy_svg.contains(r##"stroke="#ffd166""##));
-        assert!(legacy_svg.contains(r##"stroke="#77777773""##));
+        assert_eq!(scene.edges.len(), 2);
+        let external = &scene.edges[0].highlight_strokes[0];
+        assert_eq!(external.layer, 0);
+        assert_eq!(
+            external.stroke.paint,
+            HighlightStyle::ActedOn.light_paint().unwrap()
+        );
+        let dummy = &scene.edges[1].highlight_strokes[0];
+        assert_eq!(dummy.layer, 1);
+        assert_eq!(dummy.stroke.paint, HIGHLIGHT);
+        assert_eq!(scene.nodes[isolated.0].stroke.paint, HIGHLIGHT);
     }
 
     #[test]

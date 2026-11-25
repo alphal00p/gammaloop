@@ -6,7 +6,9 @@
 mod config;
 mod curves;
 pub use config::Config;
-pub use highlight::{HighlightPalette, HighlightRegion, HighlightStyle};
+pub use highlight::{
+    HighlightPalette, HighlightRegion, HighlightStroke, HighlightStyle, UnknownHighlightStyle,
+};
 mod highlight;
 mod interactive;
 mod labels;
@@ -74,9 +76,8 @@ pub struct NodeDrawing {
 #[derive(Clone)]
 pub struct EdgeDrawing {
     pub stroke: Stroke,
-    /// When drawing several regions, paint each (layer index, stroke) in
-    /// layer order above the base drawing. The outermost stroke comes first.
-    pub highlight_strokes: Vec<(usize, Stroke)>,
+    /// Resolved strokes in global layer order, outermost first.
+    pub highlight_strokes: Vec<HighlightStroke>,
     pub pattern: Option<Pattern>,
     /// Particle-flow arrowhead along (`true`) or against the edge orientation.
     pub flow: Option<bool>,
@@ -946,7 +947,7 @@ impl Drawing {
         let outermost = drawing
             .highlight_strokes
             .first()
-            .map_or(&drawing.stroke, |(_, stroke)| stroke);
+            .map_or(&drawing.stroke, |highlight| &highlight.stroke);
         let radius = outermost.width / UNIT / 2.0;
         let paths = if let Some(pattern) = &drawing.pattern {
             vec![curves::pattern(visible, pattern)?]
@@ -969,7 +970,7 @@ impl Drawing {
         let highlights = drawing
             .highlight_strokes
             .iter()
-            .map(|(index, stroke)| (Some(*index), stroke));
+            .map(|highlight| (Some(highlight.layer), &highlight.stroke));
         for (index, stroke) in base_stroke.into_iter().chain(highlights) {
             let paint = match index {
                 Some(index) => highlight_layers.entry(index).or_default(),
@@ -1252,19 +1253,14 @@ mod tests {
                 style: HighlightStyle::Treated,
             },
         ];
-        let palette = HighlightPalette {
-            amber_paint: "#ffd166",
-            amber_edge_width: None,
-            amber_node_fill: None,
-            outside_node_fill: None,
-        };
+        let palette = HighlightPalette::new("#ffd166");
         scene.apply_highlights(&regions, &palette, false);
         let expected = [
             HighlightStyle::ActedOn,
             HighlightStyle::Middle,
             HighlightStyle::Treated,
         ]
-        .map(|style| style.stroke().unwrap().0);
+        .map(|style| style.light_paint().unwrap());
         let svg = scene.render(&typeset(&scene)).unwrap();
         let document = Document::parse(&svg).unwrap();
         let paths: Vec<_> = document

@@ -71,13 +71,6 @@ pub struct PyDiagramStyle {
     /// >>> hep.DiagramStyle(debug=True).debug
     /// True
     debug: Option<bool>,
-    /// Fade and dot the complement of the highlighted regions; None defaults to true.
-    ///
-    /// Examples
-    /// --------
-    /// >>> hep.DiagramStyle(mute_outside=False).mute_outside
-    /// False
-    mute_outside: Option<bool>,
 }
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
@@ -104,10 +97,8 @@ impl PyDiagramStyle {
     ///     Separate the incoming states of a cross-section drawing.
     /// debug : bool or None, optional
     ///     Show both vertex and edge indices unless individually overridden.
-    /// mute_outside : bool or None, optional
-    ///     Fade and dot edges and nodes outside all supplied regions by default.
     #[new]
-    #[pyo3(signature=(*,show_particle=None,show_momentum=None,show_edge_index=None,show_node_index=None,momentum_arrows=None,split_initial_state=None,debug=None,mute_outside=None))]
+    #[pyo3(signature=(*,show_particle=None,show_momentum=None,show_edge_index=None,show_node_index=None,momentum_arrows=None,split_initial_state=None,debug=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         show_particle: Option<bool>,
@@ -117,7 +108,6 @@ impl PyDiagramStyle {
         momentum_arrows: Option<bool>,
         split_initial_state: Option<bool>,
         debug: Option<bool>,
-        mute_outside: Option<bool>,
     ) -> Self {
         Self {
             show_particle,
@@ -127,7 +117,6 @@ impl PyDiagramStyle {
             momentum_arrows,
             split_initial_state,
             debug,
-            mute_outside,
         }
     }
     /// Summarize the explicitly selected physics options.
@@ -145,7 +134,6 @@ impl PyDiagramStyle {
             ("momentum_arrows", self.momentum_arrows),
             ("split_initial_state", self.split_initial_state),
             ("debug", self.debug),
-            ("mute_outside", self.mute_outside),
         ]
         .into_iter()
         .filter_map(|(name, value)| {
@@ -175,7 +163,6 @@ impl PyDiagramStyle {
             split_initial_state: s
                 .split_initial_state
                 .unwrap_or(defaults.split_initial_state),
-            mute_outside: s.mute_outside.unwrap_or(defaults.mute_outside),
             ..defaults
         }
     }

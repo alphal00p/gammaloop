@@ -1603,18 +1603,52 @@ impl PyGraph {
     }
 
     /// Snapshot a drawing, using native SVG geometry for ordinary graph settings.
-    #[pyo3(signature = (*, config=None))]
+    ///
+    /// Examples
+    /// --------
+    /// >>> view = graph.render(highlight=[outer, inner])
+    ///
+    /// Parameters
+    /// ----------
+    /// config : RenderSettings or None, optional
+    ///     Layout and drawing settings.
+    /// highlight : Subgraph or pair or sequence, optional
+    ///     Ordered whole-edge selections or (selection, style) pairs.
+    ///     One, two or three unstyled entries use amber, blue/red, or
+    ///     blue/violet/red. Specify styles for additional layers.
+    /// mute_outside : bool, optional
+    ///     Fade edges and nodes outside the selected regions.
+    #[pyo3(signature = (*, config=None, highlight=None, mute_outside=true))]
     fn render(
         slf: Py<PyGraph>,
         py: Python<'_>,
         #[gen_stub(override_type(type_repr = "RenderSettings | None"))] config: Option<
             &Bound<'_, PyAny>,
         >,
+        #[gen_stub(override_type(type_repr = "Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']]] | None", imports = ("typing")))]
+        highlight: Option<&Bound<'_, PyAny>>,
+        mute_outside: bool,
     ) -> PyResult<PyDiagramView> {
-        render::render_graph(py, &slf, config, &[], true)
+        render::render_with_highlights(py, &slf, config, highlight, mute_outside)
     }
 
-    #[pyo3(signature = (*, config=None, browser=None))]
+    /// Export SVG with the same highlights as ``render``.
+    ///
+    /// Examples
+    /// --------
+    /// >>> svg = graph.to_svg(highlight=(selection, "treated"))
+    ///
+    /// Parameters
+    /// ----------
+    /// config : RenderSettings or None, optional
+    ///     Layout and drawing settings.
+    /// browser : str or None, optional
+    ///     Explicit browser for label measurement.
+    /// highlight : Subgraph or pair or sequence, optional
+    ///     Selections and styles accepted by ``render``.
+    /// mute_outside : bool, optional
+    ///     Fade edges and nodes outside the selected regions.
+    #[pyo3(signature = (*, config=None, browser=None, highlight=None, mute_outside=true))]
     fn to_svg(
         slf: Py<PyGraph>,
         py: Python<'_>,
@@ -1622,8 +1656,11 @@ impl PyGraph {
             &Bound<'_, PyAny>,
         >,
         browser: Option<&str>,
+        #[gen_stub(override_type(type_repr = "Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']]] | None", imports = ("typing")))]
+        highlight: Option<&Bound<'_, PyAny>>,
+        mute_outside: bool,
     ) -> PyResult<String> {
-        render::render_graph(py, &slf, config, &[], true)?
+        render::render_with_highlights(py, &slf, config, highlight, mute_outside)?
             .snapshot(py, browser)?
             .to_svg()
     }
