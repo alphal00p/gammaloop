@@ -2797,6 +2797,26 @@
   }
 }
 
+// Resolve widths from the center outwards. Geometry, pattern and marks
+// still belong to the ordinary edge layer.
+#let _subgraph-casings(styles) = {
+  let casings = ()
+  let width = 0pt
+  for (index, style) in styles.rev().enumerate() {
+    let resolved = cetz.util.resolve-stroke(style.stroke)
+    width = if index == 0 { resolved.thickness } else {
+      calc.max(resolved.thickness, width + 1.1pt)
+    }
+    casings.push((stroke: resolved + (thickness: width)))
+  }
+  casings.rev()
+}
+
+#let _casing-style(base, casings, index) = {
+  if base == none or _style-value(base, "label-only") { return none }
+  _without-mark-style(base) + casings.at(index, default: (stroke: none))
+}
+
 #let _last-style(styles) = {
   if styles.len() == 0 { none } else { styles.last() }
 }
@@ -3120,7 +3140,8 @@
   let debug-edge-stroke = options.debug-edge-stroke
   let debug-edge-label-fill = options.debug-edge-label-fill
   let subgraph-edge-style = options.subgraph-edge-style
-  let subgraph-edge-underlay = options.subgraph-edge-underlay
+  let subgraph-edge-underlay = options.subgraph-edge-underlay == true
+  let subgraph-edge-casings = options.subgraph-edge-underlay == "casings"
   let info = graph-api.info(graph)
   let graph-style = _graph-style(info)
   unit = if unit == auto { graph-style.at("unit", default: 1) } else { unit }
@@ -3335,6 +3356,10 @@
             record.sink-half-edge,
             record.edge-data,
           )
+          if subgraph-edge-casings {
+            source-subgraph-styles = _subgraph-casings(source-subgraph-styles)
+            sink-subgraph-styles = _subgraph-casings(sink-subgraph-styles)
+          }
           let layers = _edge-style-layers(graph-style, options, record.edge-data)
           let hidden = layers.source.len() == 0 and layers.sink.len() == 0
           let ordinary-label = if hidden { none } else {
@@ -3655,6 +3680,23 @@
                   }
                 }
               }
+              if subgraph-edge-casings {
+                let source-casings = source-subgraph-styles.slice(0, calc.max(0, source-subgraph-styles.len() - 1))
+                let sink-casings = sink-subgraph-styles.slice(0, calc.max(0, sink-subgraph-styles.len() - 1))
+                for index in range(calc.max(source-casings.len(), sink-casings.len())) {
+                  let source-casing = _casing-style(source-style-value, source-casings, index)
+                  let sink-casing = _casing-style(sink-style-value, sink-casings, index)
+                  if source-casing != none and sink-casing != none {
+                    elements += _pattern-edge-halves(halves, source-casing, sink-casing)
+                  } else {
+                    for (segments, style) in ((halves.source, source-casing), (halves.sink, sink-casing)) {
+                      if style != none {
+                        elements += _derived-segments-elements(segments, style, auto, true, true, complete: false).elements
+                      }
+                    }
+                  }
+                }
+              }
               if crossing-under != none {
                 let source-paint-style = if source-draw-style == none {
                   none
@@ -3870,6 +3912,12 @@
                   }
                 }
               }
+              if subgraph-edge-casings and source-style-value != none and not _style-value(source-style-value, "label-only") {
+                for casing in source-subgraph-styles.slice(0, calc.max(0, source-subgraph-styles.len() - 1)) {
+                  let style = _without-mark-style(source-style-value) + casing
+                  elements += _pattern-dangling(dangling-path, style, label-pos)
+                }
+              }
               if source-style-value != none {
                 let draw-style = _dangling-mark-style(source-draw-style)
                 let cuts = _crossing-arclengths(
@@ -3978,6 +4026,12 @@
                   ) {
                     elements.push(element)
                   }
+                }
+              }
+              if subgraph-edge-casings and sink-style-value != none and not _style-value(sink-style-value, "label-only") {
+                for casing in sink-subgraph-styles.slice(0, calc.max(0, sink-subgraph-styles.len() - 1)) {
+                  let style = _without-mark-style(sink-style-value) + casing
+                  elements += _pattern-dangling(dangling-path, style, label-pos)
                 }
               }
               if sink-style-value != none {

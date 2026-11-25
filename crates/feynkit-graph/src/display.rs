@@ -1,15 +1,14 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt::Write,
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write;
+
+use linnet::half_edge::EdgeAccessors;
+use linnet::half_edge::involution::{EdgeIndex, Flow, Orientation};
+use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
+use symbolica::atom::AtomCore;
 
 use crate::{DiagramError, FeynmanDiagram, LoopMomentumBasis};
-use linnet::half_edge::{
-    EdgeAccessors,
-    involution::{EdgeIndex, Flow, Orientation},
-    subgraph::{SuBitGraph, SubSetLike},
-};
-use symbolica::atom::AtomCore;
+#[cfg(feature = "svg")]
+use crate::{HighlightLayer, HighlightStyle};
 
 pub(crate) fn typst_string(value: &str) -> String {
     let mut output = String::with_capacity(value.len() + 2);
@@ -30,6 +29,15 @@ pub(crate) fn typst_string(value: &str) -> String {
     }
     output.push('"');
     output
+}
+
+#[derive(Default)]
+struct TypstHighlights {
+    before_cut: String,
+    after_cut: String,
+    draw_setup: String,
+    draw: String,
+    node_style: String,
 }
 
 impl FeynmanDiagram {
@@ -90,6 +98,183 @@ impl FeynmanDiagram {
         isolated: &BTreeSet<usize>,
         lmb: Option<&LoopMomentumBasis>,
         config: &str,
+    ) -> Result<String, DiagramError> {
+        let mut highlights = TypstHighlights::default();
+        if let Some(hedges) = highlight {
+            self.write_typst_selection(&mut highlights.before_cut, "highlighted", hedges, false);
+            let nodes = self.typst_selected_nodes(hedges, isolated);
+            write!(
+                highlights.before_cut,
+                r##"  let selected-nodes = ({nodes})
+  let selected-stroke = rgb("#ffd166") + 1.2pt
+  let selected-edge-style = edge => (stroke: physics.source-style(edge, map: particle-map).stroke + (paint: rgb("#ffd166")))
+  let outside-stroke = (paint: rgb("#777777").transparentize(55%), thickness: 0.6pt, dash: "dotted")
+"##
+            )
+            .expect("writing to a string cannot fail");
+            highlights.after_cut =
+                format!("      {}\n", Self::typst_remap_selection("highlighted"));
+            highlights.draw = "    draw: (subgraph: ((subgraph: subgraph.complement(raw, highlighted), edge-style: (stroke: outside-stroke)), (subgraph: highlighted, edge-style: selected-edge-style)), subgraph-edge-underlay: false),\n".into();
+            highlights.node_style = "node-style: node => physics.node-style + if node.vid in selected-nodes { (stroke: selected-stroke) } else { (stroke: outside-stroke) }".into();
+        }
+        self.to_linnest_document(lmb, config, highlights)
+    }
+
+    /// Emit a Linnest document with ordered subgraph casings on shared edges.
+    /// See [`Self::to_scene_with_highlights`] for an example of specifying layers.
+    /// Use the Typst input `theme=dark` to use the dark palette.
+    ///
+    /// # Errors
+    /// Returns a diagram error when a supplied momentum basis is inconsistent.
+    ///
+    /// # Panics
+    /// Panics if a layer contains half-edges outside this diagram's arena.
+    #[cfg(feature = "svg")]
+    pub fn to_linnest_with_highlights(
+        &self,
+        layers: &[HighlightLayer<'_>],
+        mute_outside: bool,
+        lmb: Option<&LoopMomentumBasis>,
+        config: &str,
+    ) -> Result<String, DiagramError> {
+        if layers.is_empty() {
+            return self.to_linnest(None, &BTreeSet::new(), lmb, config);
+        }
+        let mut highlights = TypstHighlights::default();
+        highlights.before_cut.push_str(
+            r##"  let dark = sys.inputs.at("theme", default: "light") == "dark"
+  let outside-stroke = (paint: if dark { rgb("#aaaaaa73") } else { rgb("#77777773") }, thickness: 0.6pt, dash: "dotted")
+"##,
+        );
+        let mut edge_styles = String::new();
+        let mut node_styles = String::new();
+        for (index, layer) in layers.iter().enumerate() {
+            let selection = format!("highlight-{index}");
+            self.write_typst_selection(&mut highlights.before_cut, &selection, layer.hedges, true);
+            writeln!(
+                highlights.after_cut,
+                "      {}",
+                Self::typst_remap_selection(&selection)
+            )
+            .expect("writing to a string cannot fail");
+            let (paint, width, dark_paint, node_style) = match layer.style.stroke() {
+                Some((paint, width)) => {
+                    let dark_paint = HighlightStyle::THEME
+                        .iter()
+                        .find_map(|(_, light, dark)| (*light == paint).then_some(*dark))
+                        .expect("every layered paint has a dark theme role");
+                    (
+                        paint,
+                        format!(", thickness: {width}pt, dash: none, cap: \"round\""),
+                        dark_paint,
+                        "(:)",
+                    )
+                }
+                None => (
+                    "#ffd166",
+                    String::new(),
+                    "#f0bb4f",
+                    "(stroke: paint + 1.2pt)",
+                ),
+            };
+            let nodes = self.typst_selected_nodes(layer.hedges, layer.isolated);
+            writeln!(
+                highlights.before_cut,
+                "  let paint = rgb(if dark {{ {dark_paint:?} }} else {{ {paint:?} }})\n  let style-{index} = edge => (stroke: physics.source-style(edge, map: particle-map).stroke + (paint: paint{width},))\n  let node-{index} = (nodes: ({nodes}), style: {node_style})",
+            )
+            .expect("writing to a string cannot fail");
+            write!(
+                edge_styles,
+                "(subgraph: {selection}, edge-style: style-{index}), "
+            )
+            .expect("writing to a string cannot fail");
+            write!(node_styles, "node-{index}, ").expect("writing to a string cannot fail");
+        }
+        let outside = if mute_outside {
+            r#"  let covered = subgraph.select(raw, hedges: layers.map(layer => subgraph.hedges(layer.subgraph)).flatten())
+  let outside = subgraph.complement(raw, covered)
+  layers = ((subgraph: outside, edge-style: (stroke: outside-stroke)),) + layers
+"#
+        } else {
+            ""
+        };
+        highlights.draw_setup = format!("  let layers = ({edge_styles})\n{outside}");
+        highlights.draw =
+            "    draw: (subgraph: layers, subgraph-edge-underlay: \"casings\"),\n".into();
+        let outside_node = if mute_outside {
+            "(stroke: outside-stroke)"
+        } else {
+            "(:)"
+        };
+        highlights.node_style = format!(
+            "node-style: node => {{ let matches = ({node_styles}).filter(layer => node.vid in layer.nodes); physics.node-style + if matches.len() > 0 {{ matches.last().style }} else {{ {outside_node} }} }}"
+        );
+        self.to_linnest_document(lmb, config, highlights)
+    }
+
+    fn write_typst_selection(
+        &self,
+        output: &mut String,
+        name: &str,
+        hedges: &SuBitGraph,
+        whole_edges: bool,
+    ) {
+        // Typst rebuilds the graph in edge order. Structural edge IDs
+        // preserve selection identity even when native hedge IDs differ.
+        if whole_edges {
+            let edges: String = hedges
+                .included_iter()
+                .map(|hedge| self.graph[&hedge].0)
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .map(|edge| format!("{edge}, "))
+                .collect();
+            writeln!(
+                output,
+                "  let {name} = subgraph.select(raw, edges: ({edges}))"
+            )
+            .expect("writing to a string cannot fail");
+            return;
+        }
+        let mut source = String::new();
+        let mut sink = String::new();
+        for hedge in hedges.included_iter() {
+            let edge = self.graph[&hedge].0;
+            let selected = match self.graph.flow(hedge) {
+                Flow::Source => &mut source,
+                Flow::Sink => &mut sink,
+            };
+            write!(selected, "{edge}, ").expect("writing to a string cannot fail");
+        }
+        writeln!(
+            output,
+            "  let {name} = subgraph.select(raw, source: ({source}), sink: ({sink}))"
+        )
+        .expect("writing to a string cannot fail");
+    }
+
+    fn typst_selected_nodes(&self, hedges: &SuBitGraph, isolated: &BTreeSet<usize>) -> String {
+        hedges
+            .included_iter()
+            .map(|hedge| self.graph.node_id(hedge).0)
+            .chain(isolated.iter().copied())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .map(|node| format!("{node}, "))
+            .collect()
+    }
+
+    fn typst_remap_selection(selection: &str) -> String {
+        format!(
+            "{selection} = subgraph.select(raw, hedges: graph.edges(raw).map(e => (e.source, e.sink).filter(h => h != none and subgraph.contains({selection}, h.origin)).map(h => h.hedge)).flatten())"
+        )
+    }
+
+    fn to_linnest_document(
+        &self,
+        lmb: Option<&LoopMomentumBasis>,
+        config: &str,
+        highlights: TypstHighlights,
     ) -> Result<String, DiagramError> {
         let basis = lmb.unwrap_or_else(|| self.loop_momentum_basis());
         if lmb.is_some() {
@@ -217,45 +402,7 @@ impl FeynmanDiagram {
   )))
 "#,
         );
-        let (highlight_options, node_style) = if let Some(highlight) = highlight {
-            let mut source = String::new();
-            let mut sink = String::new();
-            let mut nodes = isolated.clone();
-            for hedge in highlight.included_iter() {
-                nodes.insert(self.graph.node_id(hedge).0);
-                let selected = match self.graph.flow(hedge) {
-                    Flow::Source => &mut source,
-                    Flow::Sink => &mut sink,
-                };
-                write!(selected, "{}, ", self.graph[&hedge].0)
-                    .expect("writing to a string cannot fail");
-            }
-            // Typst rebuilds the graph in edge order. Structural edge halves
-            // preserve selection identity even when native hedge IDs differ.
-            writeln!(
-                output,
-                "  let highlighted = subgraph.select(raw, source: ({source}), sink: ({sink}))"
-            )
-            .expect("writing to a string cannot fail");
-            let nodes = nodes
-                .into_iter()
-                .map(|node| format!("{node}, "))
-                .collect::<String>();
-            writeln!(
-                output,
-                r##"  let selected-nodes = ({nodes})
-  let selected-stroke = rgb("#ffd166") + 1.2pt
-  let selected-edge-style = edge => (stroke: physics.source-style(edge, map: particle-map).stroke + (paint: rgb("#ffd166")))
-  let outside-stroke = (paint: rgb("#777777").transparentize(55%), thickness: 0.6pt, dash: "dotted")"##
-            )
-            .expect("writing to a string cannot fail");
-            (
-                "    draw: (subgraph: ((subgraph: subgraph.complement(raw, highlighted), edge-style: (stroke: outside-stroke)), (subgraph: highlighted, edge-style: selected-edge-style)), subgraph-edge-underlay: false),\n",
-                "node-style: node => physics.node-style + if node.vid in selected-nodes { (stroke: selected-stroke) } else { (stroke: outside-stroke) }",
-            )
-        } else {
-            ("    :\n", ":")
-        };
+        output.push_str(&highlights.before_cut);
         write!(
             output,
             r##"
@@ -270,9 +417,9 @@ impl FeynmanDiagram {
     let initial = graph.edges(raw).filter(e => e.source != none and e.sink != none and e.data.at("is_cut", default: none) != none).map(e => e.edge)
     if initial.len() > 0 {{
       raw = graph.cut(raw, left: subgraph.select(raw, sink: initial), right: subgraph.select(raw, source: initial))
-{remap_highlight}    }}
+{after_cut}    }}
   }}
-  let style = config.at("style", default: (:))
+{after_cut_setup}  let style = config.at("style", default: (:))
   let node-label-default = if options.at("show-node-index", default: false) or options.at("debug", default: false) {{ (:) }} else {{ (node-label: none) }}
   let style = node-label-default + ({node_style}) + if style == none {{ (:) }} else {{ style }}
   let draw = config.at("draw", default: (:))
@@ -290,9 +437,10 @@ impl FeynmanDiagram {
 }}
 "##,
             if self.cuts().is_empty() { "amplitude" } else { "cross-section" },
-            remap_highlight = if highlight.is_some() {
-                "      highlighted = subgraph.select(raw, hedges: graph.edges(raw).map(e => (e.source, e.sink).filter(h => h != none and subgraph.contains(highlighted, h.origin)).map(h => h.hedge)).flatten())\n"
-            } else { "" },
+            after_cut = highlights.after_cut,
+            after_cut_setup = highlights.draw_setup,
+            highlight_options = if highlights.draw.is_empty() { "    :\n" } else { &highlights.draw },
+            node_style = if highlights.node_style.is_empty() { ":" } else { &highlights.node_style },
         )
         .expect("writing to a string cannot fail");
         Ok(output)
@@ -309,6 +457,8 @@ pub(crate) mod tests {
     };
 
     use crate::{DiagramEdge, DiagramVertex, ExternalLeg, ExternalState, FeynmanDiagram};
+    #[cfg(feature = "svg")]
+    use crate::{HighlightLayer, HighlightStyle};
     use feynkit_model::Model;
 
     fn display_model() -> Arc<Model> {
@@ -441,6 +591,34 @@ pub(crate) mod tests {
                 .unwrap(),
             baseline
         );
+    }
+
+    #[cfg(feature = "svg")]
+    #[test]
+    fn emits_ordered_linnest_casing_layers_with_whole_edges() {
+        let diagram = one_loop();
+        let mut selected = diagram.graph.empty_subgraph::<SuBitGraph>();
+        selected.add(Hedge(1));
+        let isolated = BTreeSet::new();
+        let layers =
+            [HighlightStyle::ActedOn, HighlightStyle::Treated].map(|style| HighlightLayer {
+                hedges: &selected,
+                isolated: &isolated,
+                style,
+            });
+        let source = diagram
+            .to_linnest_with_highlights(&layers, true, None, "(:)")
+            .unwrap();
+        assert!(source.contains("subgraph-edge-underlay: \"casings\""));
+        assert!(source.contains("let highlight-0 = subgraph.select(raw, edges: (1, ))"));
+        let outer = source
+            .find("subgraph: highlight-0, edge-style: style-0")
+            .unwrap();
+        let inner = source
+            .find("subgraph: highlight-1, edge-style: style-1")
+            .unwrap();
+        assert!(outer < inner);
+        assert!(source.contains("layers = ((subgraph: outside"));
     }
 
     #[test]
