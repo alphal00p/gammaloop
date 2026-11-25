@@ -20,7 +20,7 @@ The runs below used an isolated target directory and low cargo parallelism to av
 competing with background cargo checks and to reduce OOM risk:
 
 ```sh
-env CARGO_TARGET_DIR=/private/tmp/gammaloop-codex-target CARGO_BUILD_JOBS=2 \
+env CARGO_TARGET_DIR="${TMPDIR:-/tmp}/gammaloop-bnl-contraction-target" CARGO_BUILD_JOBS=2 \
   cargo run -p gammalooprs --example bnl_evaluator_atom_mwe --profile dev-optim -- \
   examples/cli/BNL/profiling/bnl_integrated_evaluator_atom_exact.sym first:1 \
   --alias-scalars 4096 --contraction-order ORDER
@@ -68,7 +68,7 @@ bytes than `sparse-atom-aware`.
 Command:
 
 ```sh
-env CARGO_TARGET_DIR=/private/tmp/gammaloop-codex-target CARGO_BUILD_JOBS=2 \
+env CARGO_TARGET_DIR="${TMPDIR:-/tmp}/gammaloop-bnl-contraction-target" CARGO_BUILD_JOBS=2 \
   cargo run -p gammalooprs --example bnl_evaluator_atom_mwe --profile dev-optim -- \
   examples/cli/BNL/profiling/bnl_integrated_evaluator_atom_exact.sym first:1 \
   --alias-scalars 4096 --contraction-order sparse-atom-aware --symbolic-then-concrete
@@ -107,7 +107,7 @@ Date: 2026-05-28
 Command:
 
 ```sh
-env CARGO_TARGET_DIR=/private/tmp/gammaloop-codex-target CARGO_BUILD_JOBS=2 RAYON_NUM_THREADS=1 \
+env CARGO_TARGET_DIR="${TMPDIR:-/tmp}/gammaloop-bnl-contraction-target" CARGO_BUILD_JOBS=2 RAYON_NUM_THREADS=1 \
   cargo run -p gammalooprs --example bnl_evaluator_atom_mwe --profile dev-optim -- \
   examples/cli/BNL/profiling/bnl_integrated_evaluator_atom_exact.sym all \
   --alias-scalars 4096 --contraction-order sparse-atom-aware
@@ -141,7 +141,7 @@ by `bnl_integrated_evaluator_atom_unfiltered_pre_network.sym`.
 Command:
 
 ```sh
-env CARGO_TARGET_DIR=/private/tmp/gammaloop-codex-target CARGO_BUILD_JOBS=2 RAYON_NUM_THREADS=1 \
+env CARGO_TARGET_DIR="${TMPDIR:-/tmp}/gammaloop-bnl-contraction-target" CARGO_BUILD_JOBS=2 RAYON_NUM_THREADS=1 \
   cargo run -p gammalooprs --example bnl_evaluator_atom_mwe --profile dev-optim -- \
   examples/cli/BNL/profiling/bnl_integrated_evaluator_atom_unfiltered_pre_network.sym all \
   --alias-scalars 4096 --contraction-order sparse-atom-aware

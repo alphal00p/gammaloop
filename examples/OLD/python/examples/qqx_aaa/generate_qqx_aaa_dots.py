@@ -10,7 +10,7 @@
 import os
 ROOT_PATH = os.path.dirname(__file__) 
 
-SYMBOLICA_COMMUNITY_PATH = None # If not installed for the current python intepreter, specified e.g. "/Users/vjhirsch/HEP_programs/symbolica-community/python"
+SYMBOLICA_COMMUNITY_PATH = None # If not installed for the current python intepreter, specified e.g. "/path/to/symbolica-community/python"
 ROOT_DIR = ROOT_PATH
 
 GAMMALOOP_CLI_PATH = os.path.join('../../../..','target/dev-optim/gammaloop')
@@ -1342,7 +1342,7 @@ def display_sample_point(kins, hels=None, name=None):
 #display_sample_point(kin_point2_onshell_rotated, helicities2_onshell_rotated, ' "rotated onshell 2"')
 
 # This corresponds then to the ordering (p1,p3,p4,p5,p2) when reading from the quark line from d to d~, which is diagram #2 in MadGraph ordering
-# Targets as obtained from /Users/vjhirsch/MG5/MG5_aMC_v3_5_8/DDX_AAA_from_loops/SubProcesses/P0_ddx_aaa
+# Targets as obtained from the MadGraph SubProcesses/P0_ddx_aaa directory
 MGTarget_kinpoin1 = complex(1.78588223425167137e-3,-1.16298831119980095e-3)
 MGTarget_kinpoin2 = complex(7.67583136957218854e-4, 6.61541093750165753e-5)
 MGTarget_kinpoin1_onshell = complex(-6.19639559102668088e-4,8.41535549668894736e-4)

@@ -1,4 +1,4 @@
-#:schema /Users/lcnbr/.config/gammaloop/schemas/runhistory.json
+#:schema ../../../assets/schemas/runhistory.json
 
 commands = [
   "import model sm",
