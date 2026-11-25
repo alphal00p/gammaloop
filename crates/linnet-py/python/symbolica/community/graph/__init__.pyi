@@ -1379,6 +1379,11 @@ class Stroke:
 class Subgraph:
     r"""
     A graph-bound structural selection.
+
+    Examples
+    --------
+    >>> selection = graph.subgraph(edges=[0, 1])
+    >>> drawing = selection.render()
     """
     @property
     def graph(self) -> Graph: ...
@@ -1422,10 +1427,26 @@ class Subgraph:
     def __lt__(self, other: Subgraph) -> builtins.bool: ...
     def __ge__(self, other: Subgraph) -> builtins.bool: ...
     def __gt__(self, other: Subgraph) -> builtins.bool: ...
-    def render(self, *, config: RenderSettings | None = None) -> DiagramView:
+    def render(self, *, config: RenderSettings | None = None, highlight: Subgraph | typing.Sequence[Subgraph | tuple[Subgraph, str]] | None = None, mute_outside: builtins.bool = True) -> DiagramView:
         r"""
-        Prepare the full owner graph with this selection highlighted and its complement dotted.
-        The owner's layout, drawing configuration, and topology remain unchanged.
+        Prepare the full owner graph with ordered highlights.
+
+        Examples
+        --------
+        >>> drawing = outer.render(highlight=[(outer, "acted-on"), (inner, "treated")])
+
+        Parameters
+        ----------
+        config : RenderSettings or None, optional
+            Layout and drawing settings for the owner graph.
+        highlight : Subgraph or sequence, optional
+            A selection or ordered sequence of selections and (selection, style)
+            tuples from this graph. Styles are "amber", "acted-on", "middle",
+            and "treated". Defaults to this selection in amber. A single amber
+            layer requires whole edges. Layered colors also accept half-edges
+            and highlight the associated whole edge.
+        mute_outside : bool, optional
+            Fade and dot edges and nodes outside all supplied regions.
         """
     def to_svg(self, *, config: RenderSettings | None = None, browser: typing.Optional[builtins.str] = None) -> builtins.str:
         r"""

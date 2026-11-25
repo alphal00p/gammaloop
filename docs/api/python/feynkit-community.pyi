@@ -2304,7 +2304,17 @@ class DiagramStyle:
         >>> hep.DiagramStyle(debug=True).debug
         True
         """
-    def __new__(cls, *, show_particle: typing.Optional[builtins.bool] = None, show_momentum: typing.Optional[builtins.bool] = None, show_edge_index: typing.Optional[builtins.bool] = None, show_node_index: typing.Optional[builtins.bool] = None, momentum_arrows: typing.Optional[builtins.bool] = None, split_initial_state: typing.Optional[builtins.bool] = None, debug: typing.Optional[builtins.bool] = None) -> DiagramStyle:
+    @property
+    def mute_outside(self) -> typing.Optional[builtins.bool]:
+        r"""
+        Fade and dot the complement of the highlighted regions; None defaults to true.
+
+        Examples
+        --------
+        >>> hep.DiagramStyle(mute_outside=False).mute_outside
+        False
+        """
+    def __new__(cls, *, show_particle: typing.Optional[builtins.bool] = None, show_momentum: typing.Optional[builtins.bool] = None, show_edge_index: typing.Optional[builtins.bool] = None, show_node_index: typing.Optional[builtins.bool] = None, momentum_arrows: typing.Optional[builtins.bool] = None, split_initial_state: typing.Optional[builtins.bool] = None, debug: typing.Optional[builtins.bool] = None, mute_outside: typing.Optional[builtins.bool] = None) -> DiagramStyle:
         r"""
         Select physics presentation without changing graph layout or drawing settings.
 
@@ -2328,6 +2338,8 @@ class DiagramStyle:
             Separate the incoming states of a cross-section drawing.
         debug : bool or None, optional
             Show both vertex and edge indices unless individually overridden.
+        mute_outside : bool or None, optional
+            Fade and dot edges and nodes outside all supplied regions by default.
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -3850,7 +3862,7 @@ class FeynmanDiagram:
         >>> restored = hep.FeynmanDiagram.from_dot(model, dot)
         >>> restored.validate()
         """
-    def to_linnest(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | None = None) -> builtins.str:
+    def to_linnest(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | typing.Sequence[Subgraph | tuple[Subgraph, str]] | None = None) -> builtins.str:
         r"""
         Export a self-contained Typst document embedding an outlined SVG.
 
@@ -3876,10 +3888,11 @@ class FeynmanDiagram:
             Draw momentum arrows and labels in the stored basis.
         lmb : LoopMomentumBasis or None, optional
             Routing from this diagram; also enables momentum display.
-        highlight : Subgraph or None, optional
-            Region to highlight in the complete diagram.
+        highlight : Subgraph or sequence, optional
+            A selection or ordered sequence of selections and (selection, style)
+            tuples, as in ``render``.
         """
-    def render(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | None = None) -> DiagramView:
+    def render(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | typing.Sequence[Subgraph | tuple[Subgraph, str]] | None = None) -> DiagramView:
         r"""
         Prepare a browser-measured view using the shared physics renderer.
 
@@ -3899,6 +3912,9 @@ class FeynmanDiagram:
         >>> drawing
         >>> svg = drawing.measured(browser="chromium").to_svg()
         >>> drawing = diagram.render(lmb=next(iter(diagram.loop_momentum_bases())))
+        >>> outer = diagram.subgraph(edges=[0, 1])
+        >>> inner = diagram.subgraph(edges=[1])
+        >>> drawing = diagram.render(highlight=[(outer, "acted-on"), (inner, "treated")])
 
         Parameters
         ----------
@@ -3915,11 +3931,15 @@ class FeynmanDiagram:
         lmb : LoopMomentumBasis or None, optional
             Explicit routing from this diagram; also enables momentum display.
             Rendering never changes the diagram's stored loop-momentum basis.
-        highlight : Subgraph or None, optional
-            Highlight a region while preserving the full diagram as muted context.
-            A Subgraph highlights its own region by default.
+        highlight : Subgraph or sequence, optional
+            A selection or ordered sequence of selections and (selection, style)
+            tuples from this diagram. Styles are "amber" (the default), "acted-on" (blue),
+            "middle" (violet), and "treated" (red). Later strokes sit inside
+            earlier strokes on shared edges. A Subgraph highlights its own
+            region by default. Use ``style=DiagramStyle(mute_outside=False)``
+            to keep the original drawing outside the highlighted regions.
         """
-    def to_html(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | None = None, browser: typing.Optional[builtins.str] = None) -> builtins.str:
+    def to_html(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | typing.Sequence[Subgraph | tuple[Subgraph, str]] | None = None, browser: typing.Optional[builtins.str] = None) -> builtins.str:
         r"""
         Export a complete static HTML figure with the same options as ``render``.
 
@@ -3940,8 +3960,9 @@ class FeynmanDiagram:
             Draw momentum arrows and labels in the stored basis.
         lmb : LoopMomentumBasis or None, optional
             Routing from this diagram; also enables momentum display.
-        highlight : Subgraph or None, optional
-            Region to highlight in the complete diagram.
+        highlight : Subgraph or sequence, optional
+            A selection or ordered sequence of selections and (selection, style)
+            tuples, as in ``render``.
         browser : {"chromium"} or None, optional
             Explicit headless browser for script exports; none is started implicitly.
             Defaults use a completed measurement, optional Typst, or estimated

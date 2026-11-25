@@ -65,6 +65,7 @@ fn fixture_scene(marker: &str) -> Scene {
             .collect(),
         edges: (0..5)
             .map(|index| EdgeDrawing {
+                highlight_strokes: Vec::new(),
                 stroke: Stroke {
                     dash: if index == 2 {
                         Dash::Dashed(3.0, 2.0)

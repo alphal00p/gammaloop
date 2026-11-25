@@ -13,7 +13,7 @@ use crate::render_settings::PyDiagramStyle;
 use pyo3::{PyResult, Python};
 use std::fmt::Write;
 
-use linnet_render_py::PyDiagramView;
+use linnet_render_py::{PyDiagramView, highlight_css};
 
 /// Energy representations reuse Linnet's layout with their own orientation marks.
 pub(crate) fn energy_graph_view(
@@ -38,7 +38,7 @@ pub(crate) fn energy_graph_view(
         edge.flow = None;
         edge.pattern = None;
     }
-    PyDiagramView::from_scene(py, scene, None)?.map_svg(themed_svg)
+    PyDiagramView::from_scene(py, scene, None)?.map_svg(|svg| themed_svg(svg, false))
 }
 
 pub(crate) fn escape_html(value: &str) -> String {
@@ -59,8 +59,11 @@ pub(crate) fn escape_html(value: &str) -> String {
 /// Use the website SVG palette from docs/assets/typst/theme.typ, including
 /// the 45% lightened sink strokes from the shared physics style. Keep SVG
 /// paint attributes as light-mode fallbacks for viewers without CSS support.
-pub(crate) fn themed_svg(svg: String) -> String {
+pub(crate) fn themed_svg(svg: String, layered_palette: bool) -> String {
     let mut styles = String::from("<style>");
+    if layered_palette {
+        styles.push_str(&highlight_css(&svg, "feynkit-diagram-svg", "feynkit"));
+    }
     let mut light = String::new();
     let mut dark = String::new();
     for (name, light_color, dark_color) in [
@@ -210,7 +213,7 @@ pub(crate) fn process_view(
         })
         .collect::<PyResult<Vec<_>>>()?;
     // process_scene resolves these settings before pinning legs around the blob.
-    PyDiagramView::from_scenes(py, scenes, None)?.map_svg(themed_svg)
+    PyDiagramView::from_scenes(py, scenes, None)?.map_svg(|svg| themed_svg(svg, false))
 }
 
 /// Values are escaped text or fragments from Symbolica's native expression printer.

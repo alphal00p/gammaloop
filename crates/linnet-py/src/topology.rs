@@ -2,6 +2,9 @@
 
 use std::collections::BTreeSet;
 
+use linnest::svg::HighlightStyle;
+use linnet_render_py::{extract_highlights, highlight_css};
+
 use linnet::half_edge::algorithms::DirectionBasis;
 use linnet::half_edge::involution::{EdgeIndex, Hedge};
 use linnet::half_edge::subgraph::{
@@ -49,6 +52,11 @@ impl From<PyDirectionBasis> for DirectionBasis {
 }
 
 /// A graph-bound structural selection.
+///
+/// Examples
+/// --------
+/// >>> selection = graph.subgraph(edges=[0, 1])
+/// >>> drawing = selection.render()
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(module = "symbolica.community.graph", unsendable, name = "Subgraph")]
 pub struct PySubgraph {
@@ -371,32 +379,77 @@ impl PySubgraph {
             && (self.subgraph != other.subgraph || self.isolated_nodes != other.isolated_nodes))
     }
 
-    /// Prepare the full owner graph with this selection highlighted and its complement dotted.
-    /// The owner's layout, drawing configuration, and topology remain unchanged.
-    #[pyo3(signature = (*, config=None))]
+    /// Prepare the full owner graph with ordered highlights.
+    ///
+    /// Examples
+    /// --------
+    /// >>> drawing = outer.render(highlight=[(outer, "acted-on"), (inner, "treated")])
+    ///
+    /// Parameters
+    /// ----------
+    /// config : RenderSettings or None, optional
+    ///     Layout and drawing settings for the owner graph.
+    /// highlight : Subgraph or sequence, optional
+    ///     A selection or ordered sequence of selections and (selection, style)
+    ///     tuples from this graph. Styles are "amber", "acted-on", "middle",
+    ///     and "treated". Defaults to this selection in amber. A single amber
+    ///     layer requires whole edges. Layered colors also accept half-edges
+    ///     and highlight the associated whole edge.
+    /// mute_outside : bool, optional
+    ///     Fade and dot edges and nodes outside all supplied regions.
+    #[pyo3(signature = (*, config=None, highlight=None, mute_outside=true))]
     fn render(
         &self,
         py: Python<'_>,
         #[gen_stub(override_type(type_repr = "RenderSettings | None"))] config: Option<
             &Bound<'_, PyAny>,
         >,
+        #[gen_stub(override_type(type_repr = "Subgraph | typing.Sequence[Subgraph | tuple[Subgraph, str]] | None", imports = ("typing")))]
+        highlight: Option<&Bound<'_, PyAny>>,
+        mute_outside: bool,
     ) -> PyResult<PyDiagramView> {
-        render::render_graph(py, self.owner(py)?.as_unbound(), config, Some(self)).and_then(
-            |view| {
-                view.map_svg(|svg| {
-                    svg.replacen("<svg ", "<svg class=\"linnet-subgraph\" ", 1)
-                        .replacen(
-                            '>',
-                            concat!(
-                                "> <style>",
-                                include_str!("../typst/subgraph.css"),
-                                "</style>"
-                            ),
-                            1,
-                        )
+        let layers = highlight
+            .map(|value| {
+                extract_highlights(value, |selection| {
+                    Ok(selection.extract::<PyRef<'_, Self>>()?)
                 })
+            })
+            .transpose()?;
+        let layers = layers.as_ref().map_or_else(
+            || vec![(self, HighlightStyle::Amber)],
+            |layers| {
+                layers
+                    .iter()
+                    .map(|(selection, style)| (&**selection, *style))
+                    .collect()
             },
-        )
+        );
+        let view = render::render_graph(
+            py,
+            self.owner(py)?.as_unbound(),
+            config,
+            &layers,
+            mute_outside,
+        )?;
+        let layered_palette = layers
+            .iter()
+            .any(|(_, style)| *style != HighlightStyle::Amber);
+        view.map_svg(move |svg| {
+            let palette = if layered_palette {
+                highlight_css(&svg, "linnet-subgraph", "linnet")
+            } else {
+                String::new()
+            };
+            svg.replacen("<svg ", "<svg class=\"linnet-subgraph\" ", 1)
+                .replacen(
+                    '>',
+                    &format!(
+                        "> <style>{}{palette}</style>",
+                        include_str!("../typst/subgraph.css")
+                    ),
+                    1,
+                )
+        })
     }
 
     /// Render this selection in the context of the full graph, including isolated nodes.
@@ -409,11 +462,13 @@ impl PySubgraph {
         >,
         browser: Option<&str>,
     ) -> PyResult<String> {
-        self.render(py, config)?.snapshot(py, browser)?.to_svg()
+        self.render(py, config, None, true)?
+            .snapshot(py, browser)?
+            .to_svg()
     }
 
     fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        self.render(py, None)?._mime_(py)
+        self.render(py, None, None, true)?._mime_(py)
     }
 
     /// Show the selected half-edges within their complete graph in notebook output.
@@ -424,7 +479,7 @@ impl PySubgraph {
         include: Option<Vec<String>>,
         exclude: Option<Vec<String>>,
     ) -> PyResult<Py<PyAny>> {
-        self.render(py, None)?
+        self.render(py, None, None, true)?
             ._repr_mimebundle_(py, include, exclude)
     }
 

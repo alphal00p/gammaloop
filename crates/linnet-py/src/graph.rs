@@ -1611,7 +1611,7 @@ impl PyGraph {
             &Bound<'_, PyAny>,
         >,
     ) -> PyResult<PyDiagramView> {
-        render::render_graph(py, &slf, config, None)
+        render::render_graph(py, &slf, config, &[], true)
     }
 
     #[pyo3(signature = (*, config=None, browser=None))]
@@ -1623,14 +1623,14 @@ impl PyGraph {
         >,
         browser: Option<&str>,
     ) -> PyResult<String> {
-        render::render_graph(py, &slf, config, None)?
+        render::render_graph(py, &slf, config, &[], true)?
             .snapshot(py, browser)?
             .to_svg()
     }
 
     #[pyo3(signature = ())]
     fn _mime_(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        render::render_graph(py, &slf, None, None)?._mime_(py)
+        render::render_graph(py, &slf, None, &[], true)?._mime_(py)
     }
 
     #[pyo3(signature = (include=None, exclude=None))]
@@ -1640,7 +1640,7 @@ impl PyGraph {
         include: Option<Vec<String>>,
         exclude: Option<Vec<String>>,
     ) -> PyResult<Py<PyAny>> {
-        render::render_graph(py, &slf, None, None)?._repr_mimebundle_(py, include, exclude)
+        render::render_graph(py, &slf, None, &[], true)?._repr_mimebundle_(py, include, exclude)
     }
 
     #[pyo3(name = "full_subgraph", signature = ())]

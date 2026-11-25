@@ -1319,6 +1319,7 @@ with sync_playwright() as driver:
                 })).unwrap(),
                 nodes: vec![node.clone(), node.clone()],
                 edges: vec![EdgeDrawing {
+                    highlight_strokes: Vec::new(),
                     stroke: stroke.clone(),
                     pattern: None,
                     flow: None,

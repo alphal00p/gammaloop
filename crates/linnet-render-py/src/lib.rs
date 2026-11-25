@@ -29,6 +29,7 @@ use pyo3::Python;
 use pyo3::{Bound, PyResult};
 pub mod drawing;
 mod error;
+mod highlight;
 mod scene;
 mod snapshot;
 mod svg;
@@ -36,6 +37,7 @@ pub mod typst;
 pub mod typst_export;
 mod view;
 pub use error::PyErrExt;
+pub use highlight::{extract_highlights, highlight_css};
 pub use scene::register_scene_selectors;
 pub use snapshot::PyDiagramRender;
 pub use typst::{PyAuto as Auto, PyRenderSettings, PyRenderSettings as RenderSettings};
@@ -470,6 +472,7 @@ config = graph.RenderSettings(
                     node,
                 ],
                 edges: vec![EdgeDrawing {
+                    highlight_strokes: Vec::new(),
                     stroke,
                     pattern: None,
                     flow: None,

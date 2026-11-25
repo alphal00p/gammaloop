@@ -262,3 +262,73 @@ indexed = ET.fromstring(
 assert len(indexed.findall(".//{http://www.w3.org/1998/Math/MathML}math")) > len(
     unlabelled.findall(".//{http://www.w3.org/1998/Math/MathML}math")
 ), "node-index labels must be visible when requested"
+
+basketball = fk.FeynmanDiagram.from_dot(
+    fk.Model.phi4(),
+    "digraph basketball {" + 'a -> b [particle="phi"];' * 4 + "}",
+)
+assert basketball.loop_count == 3
+outer = basketball.subgraph(edges=[0, 1, 2, 3])
+middle = basketball.subgraph(edges=[0, 1, 2])
+inner = basketball.subgraph(edges=[0, 1])
+layers = [(outer, "acted-on"), (middle, "middle"), (inner, "treated")]
+palette = ("#3b82f6", "#8b5cf6", "#e4504f")
+
+
+def stroke_stacks(svg):
+    stacks = {}
+    for element in ET.fromstring(svg).iter():
+        paint = element.get("stroke")
+        if element.get("d") and paint in palette:
+            stacks.setdefault(element.attrib["d"], []).append(
+                (paint, float(element.attrib["stroke-width"]))
+            )
+    return stacks.values()
+
+
+basketball_svg = basketball.render(
+    highlight=layers, style=fk.DiagramStyle(show_particle=False)
+).to_svg()
+stacks = [stack for stack in stroke_stacks(basketball_svg) if len(stack) == 3]
+assert stacks
+for stack in stacks:
+    colors, widths = zip(*stack)
+    assert colors == palette
+    assert widths[0] > widths[1] > widths[2]
+assert all(color in basketball_svg for color in ("#75a7ff", "#b197fc", "#ff7775"))
+assert fixture_linnest(basketball, highlight=layers).count("#image(bytes(") == 1
+
+assert (
+    basketball.render(highlight=inner).to_svg()
+    == basketball.render(highlight=[inner]).to_svg()
+)
+assert "#77777773" in basketball.render(highlight=inner).to_svg()
+unmuted = ET.fromstring(
+    basketball.render(
+        highlight=layers[1:],
+        style=fk.DiagramStyle(mute_outside=False),
+    ).to_svg()
+)
+assert all(element.get("stroke") != "#77777773" for element in unmuted.iter())
+
+generic = basketball.to_graph()
+generic_outer = generic.full_subgraph()
+generic_inner = generic.subgraph(edges=[0, 1])
+generic_svg = generic_outer.render(
+    highlight=[(generic_outer, "acted-on"), (generic_inner, "treated")]
+).to_svg()
+assert any(
+    [paint for paint, _ in stack] == [palette[0], palette[2]]
+    for stack in stroke_stacks(generic_svg)
+)
+half_edge = generic.subgraph(half_edges=[generic.edge(0).source.index])
+half_svg = generic_outer.render(highlight=[(half_edge, "treated")]).to_svg()
+assert any(stack == [(palette[2], 1.65)] for stack in stroke_stacks(half_svg))
+for highlight in ([(inner, "missing")], [(diagram.subgraph(edges=[0]), "treated")]):
+    try:
+        basketball.render(highlight=highlight)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("invalid highlight layers must be rejected")
+print("installed ordered highlight checks passed")

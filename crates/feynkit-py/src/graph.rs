@@ -1,6 +1,6 @@
 use linnet_render_py::PyDiagramView;
-use linnet_render_py::PyRenderSettings;
 use linnet_render_py::typst_export;
+use linnet_render_py::{PyRenderSettings, extract_highlights};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -8,8 +8,8 @@ use feynkit_generator::FeynmanDiagramRulesExt;
 use feynkit_graph::expressions::{GraphExpressions, PropagatorSymbols};
 use feynkit_graph::{
     DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramHalfEdge,
-    DiagramThresholdCandidate, DiagramVertex, FeynmanDiagram, LoopMomentumBasis, MomentumSignature,
-    NumeratorInterface,
+    DiagramThresholdCandidate, DiagramVertex, FeynmanDiagram, HighlightLayer, HighlightStyle,
+    LoopMomentumBasis, MomentumSignature, NumeratorInterface,
 };
 use feynkit_model::Model;
 use feynkit_tensor::FeynmanDiagramTensorExt;
@@ -4462,8 +4462,9 @@ impl PyFeynmanDiagram {
     ///     Draw momentum arrows and labels in the stored basis.
     /// lmb : LoopMomentumBasis or None, optional
     ///     Routing from this diagram; also enables momentum display.
-    /// highlight : Subgraph or None, optional
-    ///     Region to highlight in the complete diagram.
+    /// highlight : Subgraph or sequence, optional
+    ///     A selection or ordered sequence of selections and (selection, style)
+    ///     tuples, as in ``render``.
     #[pyo3(signature = (*, config=None, style=None, momenta=false, lmb=None, highlight=None))]
     fn to_linnest(
         &self,
@@ -4472,9 +4473,8 @@ impl PyFeynmanDiagram {
         style: Option<&PyDiagramStyle>,
         momenta: bool,
         lmb: Option<&PyLoopMomentumBasis>,
-        #[gen_stub(override_type(type_repr = "Subgraph | None"))] highlight: Option<
-            &Bound<'_, PyAny>,
-        >,
+        #[gen_stub(override_type(type_repr = "Subgraph | typing.Sequence[Subgraph | tuple[Subgraph, str]] | None", imports = ("typing")))]
+        highlight: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<String> {
         let view = self.render_drawing(py, config, style, momenta, lmb, highlight)?;
         let drawing = view.outlined(py)?;
@@ -4500,6 +4500,9 @@ impl PyFeynmanDiagram {
     /// >>> drawing
     /// >>> svg = drawing.measured(browser="chromium").to_svg()
     /// >>> drawing = diagram.render(lmb=next(iter(diagram.loop_momentum_bases())))
+    /// >>> outer = diagram.subgraph(edges=[0, 1])
+    /// >>> inner = diagram.subgraph(edges=[1])
+    /// >>> drawing = diagram.render(highlight=[(outer, "acted-on"), (inner, "treated")])
     ///
     /// Parameters
     /// ----------
@@ -4516,9 +4519,13 @@ impl PyFeynmanDiagram {
     /// lmb : LoopMomentumBasis or None, optional
     ///     Explicit routing from this diagram; also enables momentum display.
     ///     Rendering never changes the diagram's stored loop-momentum basis.
-    /// highlight : Subgraph or None, optional
-    ///     Highlight a region while preserving the full diagram as muted context.
-    ///     A Subgraph highlights its own region by default.
+    /// highlight : Subgraph or sequence, optional
+    ///     A selection or ordered sequence of selections and (selection, style)
+    ///     tuples from this diagram. Styles are "amber" (the default), "acted-on" (blue),
+    ///     "middle" (violet), and "treated" (red). Later strokes sit inside
+    ///     earlier strokes on shared edges. A Subgraph highlights its own
+    ///     region by default. Use ``style=DiagramStyle(mute_outside=False)``
+    ///     to keep the original drawing outside the highlighted regions.
     #[pyo3(signature = (*, config=None, style=None, momenta=false, lmb=None, highlight=None))]
     pub(crate) fn render(
         &self,
@@ -4527,9 +4534,8 @@ impl PyFeynmanDiagram {
         style: Option<&PyDiagramStyle>,
         momenta: bool,
         lmb: Option<&PyLoopMomentumBasis>,
-        #[gen_stub(override_type(type_repr = "Subgraph | None"))] highlight: Option<
-            &Bound<'_, PyAny>,
-        >,
+        #[gen_stub(override_type(type_repr = "Subgraph | typing.Sequence[Subgraph | tuple[Subgraph, str]] | None", imports = ("typing")))]
+        highlight: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<PyDiagramView> {
         let drawing = self.render_drawing(py, config, style, momenta, lmb, highlight)?;
         let html = display::render_diagram_html(&self.inner, "<!--linnet-svg-0-->");
@@ -4555,8 +4561,9 @@ impl PyFeynmanDiagram {
     ///     Draw momentum arrows and labels in the stored basis.
     /// lmb : LoopMomentumBasis or None, optional
     ///     Routing from this diagram; also enables momentum display.
-    /// highlight : Subgraph or None, optional
-    ///     Region to highlight in the complete diagram.
+    /// highlight : Subgraph or sequence, optional
+    ///     A selection or ordered sequence of selections and (selection, style)
+    ///     tuples, as in ``render``.
     /// browser : {"chromium"} or None, optional
     ///     Explicit headless browser for script exports; none is started implicitly.
     ///     Defaults use a completed measurement, optional Typst, or estimated
@@ -4571,9 +4578,8 @@ impl PyFeynmanDiagram {
         style: Option<&PyDiagramStyle>,
         momenta: bool,
         lmb: Option<&PyLoopMomentumBasis>,
-        #[gen_stub(override_type(type_repr = "Subgraph | None"))] highlight: Option<
-            &Bound<'_, PyAny>,
-        >,
+        #[gen_stub(override_type(type_repr = "Subgraph | typing.Sequence[Subgraph | tuple[Subgraph, str]] | None", imports = ("typing")))]
+        highlight: Option<&Bound<'_, PyAny>>,
         browser: Option<&str>,
     ) -> PyResult<String> {
         let view = self.render(py, config, style, momenta, lmb, highlight)?;
@@ -5045,32 +5051,32 @@ impl PyFeynmanDiagram {
             ));
         }
         let options = PyDiagramStyle::resolve(style, momenta || lmb.is_some());
-        let region = self.render_region(py, highlight)?;
-        let isolated = region
-            .as_ref()
-            .map_or_else(BTreeSet::new, |r| r.isolated.clone());
+        let regions = if let Some(highlight) = highlight {
+            extract_highlights(highlight, |selection| self.region_argument(py, selection))?
+        } else {
+            self.selected_region
+                .as_ref()
+                .map(|region| (region.clone(), HighlightStyle::Amber))
+                .into_iter()
+                .collect()
+        };
+        let layers: Vec<_> = regions
+            .iter()
+            .map(|(region, style)| HighlightLayer {
+                hedges: &region.hedges,
+                isolated: &region.isolated,
+                style: *style,
+            })
+            .collect();
         let scene = self
             .inner
-            .to_scene(
-                region.as_ref().map(|r| &r.hedges),
-                &isolated,
-                lmb.map(|b| &b.inner),
-                &options,
-            )
+            .to_scene_with_highlights(&layers, lmb.map(|basis| &basis.inner), &options)
             .map_err(error::diagram)?;
-        PyDiagramView::from_scene(py, scene, config)?.map_svg(display::themed_svg)
-    }
-
-    /// The highlighted region: the argument, or this subgraph's own region.
-    fn render_region(
-        &self,
-        py: Python<'_>,
-        highlight: Option<&Bound<'_, PyAny>>,
-    ) -> PyResult<Option<DiagramSelection>> {
-        Ok(highlight
-            .map(|value| self.region_argument(py, value))
-            .transpose()?
-            .or_else(|| self.selected_region.clone()))
+        let layered_palette = layers
+            .iter()
+            .any(|layer| layer.style != HighlightStyle::Amber);
+        PyDiagramView::from_scene(py, scene, config)?
+            .map_svg(move |svg| display::themed_svg(svg, layered_palette))
     }
 }
 

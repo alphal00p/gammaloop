@@ -1,12 +1,13 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
+use linnest::svg::{HighlightPalette, HighlightRegion, HighlightStyle};
 use linnest::{
     encode_graph_spec_bytes, TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec,
     TypstGraphSpecEnvelope, TypstNodeSpec,
 };
 use linnet::half_edge::builder::{HedgeData, HedgeGraphBuilder};
 use linnet::half_edge::involution::{Flow, Hedge, HedgePair, Orientation};
-use linnet::half_edge::subgraph::{Inclusion, SubSetLike};
+use linnet::half_edge::subgraph::Inclusion;
 use pyo3::exceptions::{PyReferenceError, PyRuntimeError, PyValueError};
 use pyo3::types::{PyAny, PyDict, PyDictMethods, PyList, PyListMethods};
 use pyo3::{Bound, Py, PyResult, Python};
@@ -307,21 +308,24 @@ pub(crate) fn render_graph(
     py: Python<'_>,
     graph: &Py<PyGraph>,
     config: Option<&Bound<'_, PyAny>>,
-    subgraph: Option<&PySubgraph>,
+    highlights: &[(&PySubgraph, HighlightStyle)],
+    mute_outside: bool,
 ) -> PyResult<PyDiagramView> {
     // Validate before callbacks and again after preparation of the graph records.
-    if let Some(subgraph) = subgraph {
+    for (subgraph, _) in highlights {
         subgraph.selection_for(py, graph, graph.borrow(py).revision()?)?;
     }
     let (topology, transport) = request(py, graph, config, false)?;
-    let selection = if let Some(subgraph) = subgraph {
-        let owner = graph.borrow(py);
+    let envelope: TypstGraphSpecEnvelope = ciborium::from_reader(topology.as_slice())
+        .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+    let mut scene = transport.native_scene(envelope.graph, None)?;
+    let owner = graph.borrow(py);
+    let mut regions = Vec::new();
+    let legacy_selection = matches!(highlights, [(_, HighlightStyle::Amber)]);
+    for (subgraph, style) in highlights {
         let (selected, isolated) = subgraph.selection_for(py, graph, owner.revision()?)?;
         let state = owner.state.borrow();
         let state = state.as_ref().expect("checked selection owner");
-        let hedges = (0..selected.size())
-            .map(|index| selected.includes(&Hedge(index)))
-            .collect();
         let nodes = state
             .graph
             .iter_nodes()
@@ -330,13 +334,41 @@ pub(crate) fn render_graph(
                     .then_some(node.0)
             })
             .collect();
-        Some((hedges, nodes))
-    } else {
-        None
+        let mut edges = BTreeSet::new();
+        for (index, edge) in scene.graph.edges.iter_mut().enumerate() {
+            let mut included = None;
+            for endpoint in [&mut edge.source, &mut edge.sink].into_iter().flatten() {
+                let id = endpoint
+                    .id
+                    .expect("the graph spec retains original half-edge IDs");
+                let inside = selected.includes(&Hedge(id));
+                // A legacy amber selection requires matching half-edge paints.
+                // Layered styles select the whole logical edge.
+                if legacy_selection && included.is_some_and(|previous| previous != inside) {
+                    return Err(PyValueError::new_err(
+                        "drawing settings are not supported by the native SVG renderer: unrecognized native drawing option",
+                    ));
+                }
+                included = Some(inside);
+                if inside {
+                    endpoint.in_subgraph = true;
+                    edges.insert(index);
+                }
+            }
+        }
+        regions.push(HighlightRegion {
+            edges,
+            nodes,
+            style: *style,
+        });
+    }
+    let palette = HighlightPalette {
+        amber_paint: "#c58b13",
+        amber_edge_width: Some(1.2),
+        amber_node_fill: Some("#ffd16659"),
+        outside_node_fill: Some("#77777726"),
     };
-    let envelope: TypstGraphSpecEnvelope = ciborium::from_reader(topology.as_slice())
-        .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-    let scene = transport.native_scene(envelope.graph, selection.as_ref(), None)?;
+    scene.apply_highlights(&regions, &palette, mute_outside);
     PyDiagramView::from_scene(py, scene, None)
 }
 
@@ -471,7 +503,7 @@ mod tests {
             let case = fixture.getattr("SvgInteractionTests")?.call0()?;
             case.call_method0("setUp")?;
             let graph = case.getattr("graph")?.extract::<Py<PyGraph>>()?;
-            let view = render_graph(py, &graph, None, None)?;
+            let view = render_graph(py, &graph, None, &[], true)?;
             let drawing = metrics
                 .call_method1("external_metrics_snapshot", (Py::new(py, view)?,))?
                 .extract::<PyRef<'_, PyDiagramRender>>()?

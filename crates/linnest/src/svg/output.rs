@@ -216,7 +216,19 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
     for element in layers {
         match element {
             Element::Carrier { .. } => {}
-            Element::Path { path, .. } => include(path.bounding_box()),
+            Element::Path {
+                path,
+                stroke,
+                highlight,
+            } => {
+                let bounds = path.bounding_box();
+                if *highlight {
+                    let overflow = (stroke.width / (2.0 * UNIT) - PAD).max(0.0);
+                    include(bounds.inflate(overflow, overflow));
+                } else {
+                    include(bounds);
+                }
+            }
             Element::Momentum { path, .. } => {
                 include(path.bounding_box());
                 if let Some(points) = marks::CHEVRON.at_end(path) {
@@ -343,7 +355,7 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
                     path_data(path)
                 );
             }
-            Element::Path { path, stroke } => {
+            Element::Path { path, stroke, .. } => {
                 let _ = write!(
                     svg,
                     r#"<path fill="none" {} d="{}"/>"#,

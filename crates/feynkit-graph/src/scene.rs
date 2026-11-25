@@ -4,7 +4,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use feynkit_model::{LineKind, Model, Particle, ParticleId};
 use linnest::svg::{
-    Config, Dash, Details, EdgeDrawing, LabelSource, NodeDrawing, Pattern, Scene, Stroke,
+    Config, Dash, Details, EdgeDrawing, HighlightPalette, HighlightRegion, HighlightStyle,
+    LabelSource, NodeDrawing, Pattern, Scene, Stroke,
 };
 use linnest::{TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstNodeSpec};
 use linnet::half_edge::EdgeAccessors;
@@ -12,15 +13,29 @@ use linnet::half_edge::involution::{EdgeIndex, Orientation};
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use serde_json::{Map, Value};
 
-use crate::{DiagramError, FeynmanDiagram, LoopMomentumBasis};
+use crate::{DiagramError, FeynmanDiagram, LoopMomentumBasis, VertexId};
 
 /// The physics palette of `physics-edge-style.typ` and the highlight paints.
 const INK: &str = "#3d2645";
 const ACCENT: &str = "#6f4d85";
 const HIGHLIGHT: &str = "#ffd166";
-const OUTSIDE: &str = "#77777773";
+const HIGHLIGHT_PALETTE: HighlightPalette = HighlightPalette {
+    amber_paint: HIGHLIGHT,
+    amber_edge_width: None,
+    amber_node_fill: None,
+    outside_node_fill: None,
+};
 /// External legs start one layout group either side, ten units apart.
 const EXTERNAL_SPACING: f64 = 10.0;
+
+/// One highlighted physics region. See [`FeynmanDiagram::to_scene_with_highlights`].
+pub struct HighlightLayer<'a> {
+    /// Original half-edges. Either half selects the entire drawn edge.
+    pub hedges: &'a SuBitGraph,
+    /// Original vertex IDs selected independently of half-edges.
+    pub isolated: &'a BTreeSet<usize>,
+    pub style: HighlightStyle,
+}
 
 /// Physics drawing options the native renderer honours.
 /// See [`Self::process_scene`] for a process schematic and
@@ -37,6 +52,8 @@ pub struct SceneOptions {
     pub show_edge_index: bool,
     pub show_node_index: bool,
     pub split_initial_state: bool,
+    /// Fade and dot drawing elements outside all highlights.
+    pub mute_outside: bool,
     /// Refine the layout around drawn labels in short warm passes.
     pub label_feedback: bool,
     /// Explicit `impred-*` layout options.
@@ -53,6 +70,7 @@ impl Default for SceneOptions {
             show_edge_index: false,
             show_node_index: false,
             split_initial_state: true,
+            mute_outside: true,
             label_feedback: false,
             layout: Map::new(),
         }
@@ -89,6 +107,45 @@ impl FeynmanDiagram {
         lmb: Option<&LoopMomentumBasis>,
         options: &SceneOptions,
     ) -> Result<Scene, DiagramError> {
+        let layers = highlight.map(|hedges| HighlightLayer {
+            hedges,
+            isolated,
+            style: HighlightStyle::Amber,
+        });
+        self.to_scene_with_highlights(layers.as_slice(), lmb, options)
+    }
+
+    /// Draw several regions in order, keeping earlier strokes visible as casings.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use feynkit_graph::{DiagramError, FeynmanDiagram, HighlightLayer, HighlightStyle, SceneOptions};
+    /// use linnet::half_edge::subgraph::SuBitGraph;
+    /// use std::collections::BTreeSet;
+    /// # fn scene(diagram: &FeynmanDiagram, outer: &SuBitGraph, inner: &SuBitGraph) -> Result<(), DiagramError> {
+    /// let isolated = BTreeSet::new();
+    /// let layers = [
+    ///     HighlightLayer { hedges: outer, isolated: &isolated, style: HighlightStyle::ActedOn },
+    ///     HighlightLayer { hedges: inner, isolated: &isolated, style: HighlightStyle::Treated },
+    /// ];
+    /// let scene = diagram.to_scene_with_highlights(&layers, None, &SceneOptions::default())?;
+    /// assert_eq!(scene.graph.edges.len(), diagram.edges().count());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    /// Returns a diagram error when a supplied momentum basis is inconsistent.
+    ///
+    /// # Panics
+    /// Panics if a layer contains half-edges outside this diagram's arena.
+    pub fn to_scene_with_highlights(
+        &self,
+        layers: &[HighlightLayer<'_>],
+        lmb: Option<&LoopMomentumBasis>,
+        options: &SceneOptions,
+    ) -> Result<Scene, DiagramError> {
         let basis = lmb.unwrap_or_else(|| self.loop_momentum_basis());
         if lmb.is_some() {
             basis.validate(self)?;
@@ -100,16 +157,6 @@ impl FeynmanDiagram {
             .map(|(index, (id, _))| (id, index))
             .collect();
 
-        // Highlighted edges carry any selected half; their vertices stay selected.
-        let mut selected_edges = BTreeSet::new();
-        let mut selected_nodes = isolated.clone();
-        if let Some(highlight) = highlight {
-            for hedge in highlight.included_iter() {
-                selected_nodes.insert(self.graph.node_id(hedge).0);
-                selected_edges.insert(self.graph[&hedge].0);
-            }
-        }
-
         let nodes = self
             .vertices()
             .map(|(id, vertex)| {
@@ -118,21 +165,6 @@ impl FeynmanDiagram {
                     .filter(|(_, ends, _)| ends.source == Some(id) || ends.target == Some(id))
                     .map(|(edge, _, _)| edge.0.into())
                     .collect();
-                let stroke = match highlight {
-                    None => Stroke {
-                        paint: INK.to_owned(),
-                        width: 1.45,
-                        dash: Dash::Solid,
-                        round_cap: false,
-                    },
-                    Some(_) if selected_nodes.contains(&id.0) => Stroke {
-                        paint: HIGHLIGHT.to_owned(),
-                        width: 1.2,
-                        dash: Dash::Solid,
-                        round_cap: false,
-                    },
-                    Some(_) => Self::outside_stroke(),
-                };
                 let details = [
                     ("node", Value::from(id.0)),
                     ("edges", incident.into()),
@@ -156,7 +188,12 @@ impl FeynmanDiagram {
                         label: None,
                         rectangular: false,
                         fill: "none".into(),
-                        stroke,
+                        stroke: Stroke {
+                            paint: INK.to_owned(),
+                            width: 1.45,
+                            dash: Dash::Solid,
+                            round_cap: false,
+                        },
                         details,
                     },
                 )
@@ -236,14 +273,6 @@ impl FeynmanDiagram {
             }
 
             let drawing = options.particle_drawing(particle, self.model(), orientation);
-            let stroke = match highlight {
-                None => drawing.stroke,
-                Some(_) if selected_edges.contains(&id.0) => Stroke {
-                    paint: HIGHLIGHT.into(),
-                    ..drawing.stroke
-                },
-                Some(_) => Self::outside_stroke(),
-            };
             let momentum = &basis.edge_signatures[&id];
             let label =
                 (options.show_particle || show_momentum || options.show_edge_index).then(|| {
@@ -338,8 +367,7 @@ impl FeynmanDiagram {
                         })
                 });
 
-            let vertex =
-                |vertex: Option<crate::VertexId>| vertex.map_or(Value::Null, |v| v.0.into());
+            let vertex = |vertex: Option<VertexId>| vertex.map_or(Value::Null, |v| v.0.into());
             let mut details: Details = [
                 ("edge", Value::from(id.0)),
                 ("name", Value::from(format!("e{}", id.0))),
@@ -381,7 +409,8 @@ impl FeynmanDiagram {
                     statements,
                 },
                 EdgeDrawing {
-                    stroke,
+                    highlight_strokes: Vec::new(),
+                    stroke: drawing.stroke,
                     pattern: drawing.pattern,
                     flow: drawing.flow,
                     momentum: options.momentum_arrows,
@@ -445,6 +474,36 @@ impl FeynmanDiagram {
             }
             edges = opened;
         }
+        let regions: Vec<_> = layers
+            .iter()
+            .map(|layer| {
+                let mut selected_edges = BTreeSet::new();
+                let mut selected_nodes = BTreeSet::new();
+                for hedge in layer.hedges.included_iter() {
+                    selected_nodes.insert(dense[&VertexId(self.graph.node_id(hedge).0)]);
+                    selected_edges.insert(self.graph[&hedge].0);
+                }
+                // Both drawn halves of a sewn initial-state edge retain its paint.
+                HighlightRegion {
+                    edges: edges
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(index, (edge, _))| {
+                            edge.id
+                                .filter(|id| selected_edges.contains(id))
+                                .map(|_| index)
+                        })
+                        .collect(),
+                    nodes: selected_nodes
+                        .into_iter()
+                        .chain(dense.iter().filter_map(|(id, &index)| {
+                            layer.isolated.contains(&id.0).then_some(index)
+                        }))
+                        .collect(),
+                    style: layer.style,
+                }
+            })
+            .collect();
         for (index, (edge, _)) in edges.iter_mut().enumerate() {
             edge.id = Some(index);
         }
@@ -461,7 +520,7 @@ impl FeynmanDiagram {
             }
         }
         let (edge_specs, edge_drawings) = edges.into_iter().unzip();
-        Ok(Scene {
+        let mut scene = Scene {
             graph: TypstGraphSpec {
                 name: Some(self.name().to_owned()),
                 data: None,
@@ -481,17 +540,9 @@ impl FeynmanDiagram {
             layout_passes: Vec::new(),
             layout_edges: None,
             label_feedback: options.label_feedback,
-        })
-    }
-
-    /// The faded, dotted stroke of everything outside a highlighted region.
-    fn outside_stroke() -> Stroke {
-        Stroke {
-            paint: OUTSIDE.to_owned(),
-            width: 0.6,
-            dash: Dash::Dotted,
-            round_cap: false,
-        }
+        };
+        scene.apply_highlights(&regions, &HIGHLIGHT_PALETTE, options.mute_outside);
+        Ok(scene)
     }
 }
 
@@ -532,6 +583,7 @@ impl SceneOptions {
         };
 
         EdgeDrawing {
+            highlight_strokes: Vec::new(),
             stroke: base,
             pattern,
             flow: if style.fermion_flow {
@@ -723,11 +775,11 @@ mod tests {
     use feynkit_model::{Model, ParticleId};
     use std::collections::BTreeSet;
 
-    use linnest::svg::Dash;
+    use linnest::svg::{Dash, HighlightPalette, HighlightStyle, Scene};
     use linnet::half_edge::involution::Hedge;
     use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph};
 
-    use super::{HIGHLIGHT, INK, OUTSIDE};
+    use super::{HIGHLIGHT, HighlightLayer, INK};
     use crate::SceneOptions;
     use crate::display::tests::one_loop;
 
@@ -797,10 +849,41 @@ mod tests {
         // A selected half highlights its edge and vertex; the rest fades.
         assert_eq!(scene.edges[1].stroke.paint, HIGHLIGHT);
         assert_eq!(scene.edges[1].stroke.dash, Dash::Dashed(0.9, 4.05));
-        assert_eq!(scene.edges[2].stroke.paint, OUTSIDE);
+        assert_eq!(scene.edges[2].stroke.paint, HighlightPalette::OUTSIDE_PAINT);
         assert_eq!(scene.edges[2].stroke.dash, Dash::Dotted);
         assert_eq!(scene.nodes[0].stroke.paint, HIGHLIGHT);
-        assert_eq!(scene.nodes[1].stroke.paint, OUTSIDE);
+        assert_eq!(scene.nodes[1].stroke.paint, HighlightPalette::OUTSIDE_PAINT);
+    }
+
+    #[test]
+    fn legacy_highlight_renders_the_same_svg_as_one_amber_layer() {
+        let diagram = one_loop();
+        let options = SceneOptions {
+            show_particle: false,
+            ..Default::default()
+        };
+        let mut selected = diagram.graph.empty_subgraph::<SuBitGraph>();
+        selected.add(Hedge(1));
+        let isolated = BTreeSet::new();
+        let legacy = diagram
+            .to_scene(Some(&selected), &isolated, None, &options)
+            .unwrap();
+        let layered = diagram
+            .to_scene_with_highlights(
+                &[HighlightLayer {
+                    hedges: &selected,
+                    isolated: &isolated,
+                    style: HighlightStyle::Amber,
+                }],
+                None,
+                &options,
+            )
+            .unwrap();
+        let render = |scene: Scene| scene.render(&scene.typeset_mathml(&[]).unwrap()).unwrap();
+        let legacy_svg = render(legacy);
+        assert_eq!(legacy_svg, render(layered));
+        assert!(legacy_svg.contains(r##"stroke="#ffd166""##));
+        assert!(legacy_svg.contains(r##"stroke="#77777773""##));
     }
 
     #[test]

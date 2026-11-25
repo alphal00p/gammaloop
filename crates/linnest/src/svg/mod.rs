@@ -6,6 +6,8 @@
 mod config;
 mod curves;
 pub use config::Config;
+pub use highlight::{HighlightPalette, HighlightRegion, HighlightStyle};
+mod highlight;
 mod interactive;
 mod labels;
 mod marks;
@@ -17,6 +19,7 @@ use linnet::half_edge::layout::impred::{EdgeLabel, ImpredConfig};
 use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph};
 use roxmltree::Document;
 use serde_json::{Map, Value};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::{ImpredRun, TypstDotEdge, TypstDotEndpoint, TypstDotNode, TypstGraph, TypstGraphSpec};
@@ -71,6 +74,9 @@ pub struct NodeDrawing {
 #[derive(Clone)]
 pub struct EdgeDrawing {
     pub stroke: Stroke,
+    /// When drawing several regions, paint each (layer index, stroke) in
+    /// layer order above the base drawing. The outermost stroke comes first.
+    pub highlight_strokes: Vec<(usize, Stroke)>,
     pub pattern: Option<Pattern>,
     /// Particle-flow arrowhead along (`true`) or against the edge orientation.
     pub flow: Option<bool>,
@@ -414,6 +420,7 @@ enum Element {
     Path {
         path: BezPath,
         stroke: Stroke,
+        highlight: bool,
     },
     /// Momentum decorations retain their physical edge identity for overlays.
     Momentum {
@@ -497,6 +504,8 @@ impl Drawing {
 
     fn new(scene: &Scene, typeset: &Typeset, laid: &Laid) -> Result<Self, String> {
         let mut layers = Vec::new();
+        let mut highlight_layers = BTreeMap::new();
+        let mut overlay_marks = Vec::new();
         let mut targets = Vec::new();
         let mut strokes = Vec::new();
         let mut placements = Vec::new();
@@ -518,7 +527,15 @@ impl Drawing {
                     href: hrefs.regions[region].clone(),
                 }));
             }
-            Self::paint_edge(drawing, &visible, &parts, &mut layers, &mut strokes)?;
+            Self::paint_edge(
+                drawing,
+                &visible,
+                &parts,
+                &mut layers,
+                &mut highlight_layers,
+                &mut overlay_marks,
+                &mut strokes,
+            )?;
             for (index, path) in parts.iter().enumerate() {
                 layers.push(Element::Carrier {
                     path: path.clone(),
@@ -554,7 +571,12 @@ impl Drawing {
                     0.0,
                 )?;
                 fixed_arrows.extend(labels::arrow_footprint(&arrow));
-                layers.push(Element::Momentum {
+                let paint = if drawing.highlight_strokes.is_empty() {
+                    &mut layers
+                } else {
+                    &mut overlay_marks
+                };
+                paint.push(Element::Momentum {
                     href: hrefs.label.clone(),
                     path: arrow,
                 });
@@ -621,6 +643,9 @@ impl Drawing {
                 }
             }
         }
+
+        layers.extend(highlight_layers.into_values().flatten());
+        layers.extend(overlay_marks);
 
         let obstacles: Vec<Bounds> = laid
             .nodes
@@ -914,31 +939,47 @@ impl Drawing {
         visible: &BezPath,
         parts: &[BezPath],
         layers: &mut Vec<Element>,
+        highlight_layers: &mut BTreeMap<usize, Vec<Element>>,
+        overlay_marks: &mut Vec<Element>,
         strokes: &mut Vec<CollisionStroke>,
     ) -> Result<(), String> {
-        let radius = drawing.stroke.width / UNIT / 2.0;
-        if let Some(pattern) = &drawing.pattern {
-            let path = curves::pattern(visible, pattern)?;
+        let outermost = drawing
+            .highlight_strokes
+            .first()
+            .map_or(&drawing.stroke, |(_, stroke)| stroke);
+        let radius = outermost.width / UNIT / 2.0;
+        let paths = if let Some(pattern) = &drawing.pattern {
+            vec![curves::pattern(visible, pattern)?]
+        } else {
+            curves::cubics(visible)
+                .into_iter()
+                .map(|segment| curves::from_cubics(&[segment]))
+                .collect()
+        };
+        for path in &paths {
             strokes.push(CollisionStroke {
                 radius,
                 path: path.clone(),
             });
-            layers.push(Element::Path {
-                path,
-                stroke: drawing.stroke.clone(),
-            });
-        } else {
-            for segment in curves::cubics(visible) {
-                let path = curves::from_cubics(&[segment]);
-                strokes.push(CollisionStroke {
-                    radius,
-                    path: path.clone(),
-                });
-                layers.push(Element::Path {
-                    path,
-                    stroke: drawing.stroke.clone(),
-                });
-            }
+        }
+        let base_stroke = drawing
+            .highlight_strokes
+            .is_empty()
+            .then_some((None, &drawing.stroke));
+        let highlights = drawing
+            .highlight_strokes
+            .iter()
+            .map(|(index, stroke)| (Some(*index), stroke));
+        for (index, stroke) in base_stroke.into_iter().chain(highlights) {
+            let paint = match index {
+                Some(index) => highlight_layers.entry(index).or_default(),
+                None => &mut *layers,
+            };
+            paint.extend(paths.iter().map(|path| Element::Path {
+                path: path.clone(),
+                stroke: stroke.clone(),
+                highlight: index.is_some(),
+            }));
         }
         if let Some(forward) = drawing.flow {
             let ratio = match parts {
@@ -962,7 +1003,12 @@ impl Drawing {
                         kurbo::PathEl::ClosePath,
                     ]),
                 });
-                layers.push(Element::Triangle(points));
+                let paint = if drawing.highlight_strokes.is_empty() {
+                    layers
+                } else {
+                    overlay_marks
+                };
+                paint.push(Element::Triangle(points));
             }
         }
         Ok(())
@@ -1102,6 +1148,7 @@ mod tests {
                 .into(),
         };
         let drawing = |pattern, flow| EdgeDrawing {
+            highlight_strokes: Vec::new(),
             stroke: ink(1.0),
             pattern,
             flow,
@@ -1183,6 +1230,96 @@ mod tests {
                 label,
             ])
             .unwrap()
+    }
+
+    #[test]
+    fn casings_keep_the_decorated_path_and_paint_outer_strokes_first() {
+        let mut scene = bubble(false);
+        let regions = [
+            HighlightRegion {
+                edges: [1, 2].into(),
+                nodes: [0, 1].into(),
+                style: HighlightStyle::ActedOn,
+            },
+            HighlightRegion {
+                edges: [1].into(),
+                nodes: [0, 1].into(),
+                style: HighlightStyle::Middle,
+            },
+            HighlightRegion {
+                edges: [1].into(),
+                nodes: [0, 1].into(),
+                style: HighlightStyle::Treated,
+            },
+        ];
+        let palette = HighlightPalette {
+            amber_paint: "#ffd166",
+            amber_edge_width: None,
+            amber_node_fill: None,
+            outside_node_fill: None,
+        };
+        scene.apply_highlights(&regions, &palette, false);
+        let expected = [
+            HighlightStyle::ActedOn,
+            HighlightStyle::Middle,
+            HighlightStyle::Treated,
+        ]
+        .map(|style| style.stroke().unwrap().0);
+        let svg = scene.render(&typeset(&scene)).unwrap();
+        let document = Document::parse(&svg).unwrap();
+        let paths: Vec<_> = document
+            .descendants()
+            .filter(|element| element.has_tag_name("path"))
+            .collect();
+        let layered_colors: Vec<_> = paths
+            .iter()
+            .filter_map(|path| {
+                path.attribute("stroke")
+                    .filter(|paint| expected.contains(paint))
+            })
+            .collect();
+        assert!(
+            layered_colors.is_sorted_by_key(|paint| expected.iter().position(|role| role == paint))
+        );
+        let mut count = 0;
+        for top in paths
+            .iter()
+            .filter(|path| path.attribute("stroke") == Some(expected[2]))
+        {
+            let casings: Vec<_> = paths
+                .iter()
+                .filter(|path| {
+                    path.attribute("d") == top.attribute("d")
+                        && path
+                            .attribute("stroke")
+                            .is_some_and(|paint| expected.contains(&paint))
+                })
+                .copied()
+                .collect();
+            let casings: [_; 3] = casings.try_into().unwrap();
+            assert_eq!(
+                casings.map(|path| path.attribute("stroke")),
+                expected.map(Some)
+            );
+            assert!(casings
+                .iter()
+                .all(|path| path.attribute("d") == top.attribute("d")));
+            let widths = casings.map(|path| {
+                path.attribute("stroke-width")
+                    .unwrap()
+                    .parse::<f64>()
+                    .unwrap()
+            });
+            assert!(widths.windows(2).all(|pair| pair[0] > pair[1]));
+            count += 1;
+        }
+        assert_eq!(count, 1, "the decorated edge has one common path");
+        assert_eq!(scene.edges[0].stroke, ink(1.0), "outside stays unmuted");
+        assert_eq!(
+            scene.nodes[0].stroke,
+            ink(1.45),
+            "named styles preserve nodes"
+        );
     }
 
     #[test]

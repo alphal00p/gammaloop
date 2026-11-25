@@ -298,20 +298,14 @@ impl RenderSettingsTransport {
     /// Returns `ValueError` for invalid values or unsupported executable options,
     /// styles, label sources, positions, and topology records. Errors from Python
     /// source/JSON conversion retain their original exception as the cause.
-    pub fn native_scene(
-        &self,
-        graph: TypstGraphSpec,
-        selection: Option<&(Vec<bool>, Vec<usize>)>,
-        defaults: Option<Scene>,
-    ) -> PyResult<Scene> {
-        self.scene(graph, selection, defaults)
+    pub fn native_scene(&self, graph: TypstGraphSpec, defaults: Option<Scene>) -> PyResult<Scene> {
+        self.scene(graph, defaults)
             .map_err(NativeSceneError::into_py_err)
     }
 
     fn scene(
         &self,
         graph: TypstGraphSpec,
-        selection: Option<&(Vec<bool>, Vec<usize>)>,
         defaults: Option<Scene>,
     ) -> Result<Scene, NativeSceneError> {
         if !self.imports.is_empty() {
@@ -734,6 +728,7 @@ impl RenderSettingsTransport {
                 };
             let previous = mem::take(&mut scene.edges);
             let mut edge = default_edge.unwrap_or(EdgeDrawing {
+                highlight_strokes: Vec::new(),
                 stroke: ink(0.9),
                 pattern: None,
                 flow: None,
@@ -768,54 +763,6 @@ impl RenderSettingsTransport {
                 ))?;
             scene.edges = previous;
             scene.edges.push(edge);
-        }
-        if let Some((hedges, nodes)) = selection {
-            let selected = Stroke {
-                paint: "#c58b13".into(),
-                width: 1.2,
-                ..ink(1.2)
-            };
-            let outside = Stroke {
-                paint: "#77777773".into(),
-                width: 0.6,
-                dash: Dash::Dotted,
-                round_cap: false,
-            };
-            for (index, drawing) in scene.nodes.iter_mut().enumerate() {
-                let inside = nodes.contains(&index);
-                drawing.stroke = if inside {
-                    selected.clone()
-                } else {
-                    outside.clone()
-                };
-                drawing.fill = if inside { "#ffd16659" } else { "#77777726" }.into();
-            }
-            for (edge, drawing) in scene.graph.edges.iter_mut().zip(&mut scene.edges) {
-                let mut included = None;
-                for endpoint in [&mut edge.source, &mut edge.sink].into_iter().flatten() {
-                    let id = endpoint.id.ok_or(NativeSceneError::InvalidShape(
-                        "selection endpoint has no half-edge id",
-                    ))?;
-                    let inside = *hedges.get(id).ok_or(NativeSceneError::InvalidShape(
-                        "selection half-edge id is out of bounds",
-                    ))?;
-                    // Different half-edge paints require the full drawing API.
-                    if included.is_some_and(|previous| previous != inside) {
-                        return Err(NativeSceneError::Unsupported(
-                            "unrecognized native drawing option",
-                        ));
-                    }
-                    included = Some(inside);
-                    endpoint.in_subgraph = inside;
-                }
-                drawing.stroke = if included.ok_or(NativeSceneError::InvalidShape(
-                    "selected edge has no endpoints",
-                ))? {
-                    selected.clone()
-                } else {
-                    outside.clone()
-                };
-            }
         }
         Ok(scene)
     }
@@ -929,7 +876,7 @@ mod tests {
                 sink: None,
             },
         };
-        let Err(error) = transport.scene(graph, None, None) else {
+        let Err(error) = transport.scene(graph, None) else {
             panic!("invalid position must fail scene preparation");
         };
         assert!(matches!(error, NativeSceneError::Position(_)));
@@ -1270,7 +1217,7 @@ mod tests {
                 sink: None,
             },
         };
-        let scene = transport.scene(graph, None, None).unwrap();
+        let scene = transport.scene(graph, None).unwrap();
         for (page, em, typst) in [
             (
                 scene.nodes[0].label.unwrap(),
@@ -1329,7 +1276,7 @@ mod tests {
                 sink: None,
             },
         };
-        let scene = transport.scene(graph.clone(), None, None).unwrap();
+        let scene = transport.scene(graph.clone(), None).unwrap();
         for (index, letter) in ["n", "e"].into_iter().enumerate() {
             assert_eq!(
                 scene.pages[index].mathml,
@@ -1347,6 +1294,6 @@ mod tests {
         transport
             .imports
             .insert(TypstModuleSource::File("evil.typ".into()));
-        assert!(transport.scene(graph, None, None).is_err());
+        assert!(transport.scene(graph, None).is_err());
     }
 }

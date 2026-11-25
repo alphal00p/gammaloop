@@ -25,10 +25,12 @@ mod uv;
 pub use integrals::{
     IntegralFamily, IntegralFamilyError, IntegralMapping, PropagatorMapping, QuadraticMomentum,
 };
+#[cfg(feature = "svg")]
+pub use linnest::svg::HighlightStyle;
 pub use numerator_interface::NumeratorInterface;
 pub use power_counting::DOD;
 #[cfg(feature = "svg")]
-pub use scene::SceneOptions;
+pub use scene::{HighlightLayer, SceneOptions};
 
 // Symbolica does not permit adding tags after a bare symbol with the same name
 // has been registered. Claim momentum, index and Lorentz heads during global state

@@ -628,6 +628,7 @@ impl SpensoNet {
                 )]),
             });
             scene.edges.push(EdgeDrawing {
+                highlight_strokes: Vec::new(),
                 stroke: Stroke {
                     paint: if tree { "#555555" } else { "#7f95b8" }.into(),
                     width: if tree { 0.65 } else { 1.0 },
