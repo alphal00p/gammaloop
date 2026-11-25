@@ -8854,6 +8854,9 @@ Evaluated (n_loops=1, mu_r=1) :
             self.refuse_unknown_master_coefficients(settings, &value)?;
             return Ok(value);
         }
+        if p_integral::epsilon_raising::has_marker(input) {
+            return self.evaluate_epsilon_raised(settings, input, observation, progress);
+        }
         if let Some(progress) = progress {
             progress.configure(settings);
         }
@@ -8997,6 +9000,9 @@ Evaluated (n_loops=1, mu_r=1) :
             let value = self.evaluate_integral_observed(&inner, input, observation, progress)?;
             self.refuse_unknown_master_coefficients(settings, &value)?;
             return Ok(value);
+        }
+        if p_integral::epsilon_raising::has_marker(input) {
+            return self.evaluate_epsilon_raised(settings, input, observation, progress);
         }
         if let Some(progress) = progress {
             progress.configure(settings);

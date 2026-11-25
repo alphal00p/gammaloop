@@ -75,6 +75,8 @@ pub struct VakintSymbols {
     pub lambda: Symbol,
     pub cmplx_i: Symbol,
     pub lambda_a: Atom,
+    /// ep(q, m) multiplies a propagator integral by (-q²/μ²)^(-m ε).
+    pub ep: Symbol,
     pub prop: Symbol,
     pub edge: Symbol,
     pub mom: Symbol,
@@ -199,6 +201,7 @@ pub static S: LazyLock<VakintSymbols> = LazyLock::new(|| VakintSymbols {
     cmplx_i: symbol!(format!("{}::𝑖", crate::NAMESPACE)),
     lambda: vk_symbol!("VakintLambdaScalingAnalysis"),
     lambda_a: Atom::var(vk_symbol!("VakintLambdaScalingAnalysis")),
+    ep: vk_symbol!("ep"),
     prop: vk_symbol!("prop"),
     edge: vk_symbol!("edge"),
     mom: vk_symbol!("k"),

@@ -781,3 +781,22 @@ Per loop count:
   - catalogue determinism;
   - census: every 1PI cubic p-multigraph with <= 4 loops is covered after normalization;
   - the scaleless rule equals RustRed's zero analyzer on all sectors (M2).
+
+### Epsilon-raised propagators
+
+On the RustRed evaluation path, a long-form massless topology can carry
+`ep(q,m)` alongside its propagators. It multiplies the integrand by
+`(-q²/μ²)^(-m ε)`. The momentum must match a propagator up to sign,
+and the raising must be a nonnegative integer. Markers may also multiply the topology in the numerator. For example,
+
+```
+topo(prop(1,edge(0,1),k(1),0,1)*prop(2,edge(0,1),p(1)-k(1),0,1)*ep(k(1),1))
+```
+
+Vakint represents each unit raising by a G-scheme bubble in series with
+the line. RustRed reduces the resulting integer family. Vakint removes the
+auxiliary bubble normalization and applies the requested normalization to the
+physical loops. The lifted topology must be covered by the loaded library
+(up to five integration loops). A scalar unit two-line bubble also supports higher raisings through its exact gamma integral. The Laurent upper order remains
+`number_of_terms_in_epsilon_expansion - physical_loops - 1`. Include
+spectator pole factors in the input if they affect the required order.

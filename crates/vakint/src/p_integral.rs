@@ -22,6 +22,8 @@ pub(crate) mod forcer;
 #[cfg(test)]
 mod frontend_tests;
 mod input;
+pub(crate) mod epsilon_raising;
+pub use epsilon_raising::with_analytic_line_powers;
 pub(crate) mod laurent;
 pub(crate) mod massive;
 pub mod master_basis;
