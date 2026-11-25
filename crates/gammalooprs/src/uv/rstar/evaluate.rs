@@ -869,6 +869,60 @@ impl RStarPlan {
         RStarIntegrand::root_closure(graph, &self.support).is_ok()
     }
 
+    /// The nonempty proper-UV forest of this massless two-point graph at its
+    /// physical momentum, grouped by the loop number of the contracted
+    /// remainder, *without* the final pole map. Every remainder integral is
+    /// requested with `terms` Vakint terms (a k-loop integral through
+    /// `eps^(terms-k-1)`), independent of the child counterterms' poles. Together with the bare integral
+    /// and `Delta(G) = -K[bare + sum]`, this is the complete `R(G)` used by the
+    /// summed-insertion scheme. Prefactors and projectors are excluded.
+    pub(super) fn physical_uv_terms_by_loops(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        vakint: &Vakint,
+        uv_settings: &UVgenerationSettings,
+        terms: usize,
+    ) -> Result<BTreeMap<usize, Atom>> {
+        let (_, external_routing) = RStarIntegrand::physical_external_routing(
+            graph,
+            &graph.external_filter::<SuBitGraph>(),
+        )?;
+        let mut evaluation = Evaluation::new(
+            self,
+            graph,
+            model,
+            vakint,
+            uv_settings,
+            None,
+            None,
+            ChildMass::Reference,
+        )?;
+        let mut groups = BTreeMap::new();
+        for term in self
+            .ordinary_uv
+            .iter()
+            .filter(|term| !term.counterterms.is_empty())
+        {
+            let remainder = evaluation.physical_remainder(term)?;
+            evaluation.integration_id += 1;
+            let mut settings = evaluation.settings.clone();
+            settings.number_of_terms_in_epsilon_expansion =
+                i64::try_from(terms.max(term.remainder.loops))?;
+            let value = remainder.integrate_physical(
+                vakint,
+                uv_settings,
+                &settings,
+                evaluation.integration_id,
+            )?;
+            let entry = groups
+                .entry(term.remainder.loops)
+                .or_insert_with(|| Atom::Zero);
+            *entry += value.replace_multiple(&external_routing);
+        }
+        Ok(groups)
+    }
+
     /// [`Self::pole_part`] of the root-closed graph, `K[g_root G]`: the
     /// momentum-free root metric [`RStarIntegrand::root_closure`] is
     /// contracted in every root-scope remainder and every physical proper-UV

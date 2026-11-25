@@ -251,6 +251,7 @@ enum Key {
 
 /// GAMMALOOP_DELTA_STORE: the store key of one graph-key lookup.
 struct StoreKey {
+    kind: &'static str,
     key_sha: [u8; 32],
     graph_sha: [u8; 32],
     model_fp: [u8; 32],
@@ -273,6 +274,22 @@ struct StoreHit {
 pub(crate) enum KeyKind {
     Standard,
     RstarChildDelta,
+    BareInsertion,
+    RenormalizedInsertion,
+}
+
+impl KeyKind {
+    fn insertion(self) -> bool {
+        matches!(self, Self::BareInsertion | Self::RenormalizedInsertion)
+    }
+
+    fn store_kind(self) -> &'static str {
+        match self {
+            Self::BareInsertion => "bare-sigma",
+            Self::RenormalizedInsertion => "renormalized-sigma",
+            _ => delta_store::KIND_RSTAR_CHILD,
+        }
+    }
 }
 
 thread_local! {
@@ -804,6 +821,14 @@ impl CountertermCache {
         settings_key: String,
         kind: KeyKind,
     ) -> Result<(CountertermIdentity, Key, bool)> {
+        if kind.insertion() {
+            let identity = CountertermIdentity::for_insertion(graph, support, model)?;
+            let key = Key::Graph {
+                graph: identity.key.clone(),
+                settings: settings_key,
+            };
+            return Ok((identity, key, false));
+        }
         if kind == KeyKind::RstarChildDelta && delta_key::mode() == DeltaKeyMode::Graph {
             if crate::uv::rstar::ir_hard_fixed_mass_scope() {
                 delta_key::add(&delta_key::C.scoped_flag_lookup, 1);
@@ -924,7 +949,7 @@ impl CountertermCache {
         let mut unsupported_value: Option<Atom> = None;
         // GAMMALOOP_DELTA_STORE (graph key, not in a private cold cache): the
         // store; `from_store`: the filler took the value from it.
-        let store = if graph_key && !in_cold {
+        let store = if (graph_key || kind.insertion()) && !in_cold {
             delta_store::installed()
         } else {
             None
@@ -962,7 +987,7 @@ impl CountertermCache {
                 computed = true;
                 // GAMMALOOP_DELTA_STORE: the single filler reads the store
                 // first; the fill's nested lookups add their store keys.
-                let store_key = store.and_then(|_| self.store_key(&identity, &key, graph, support));
+                let store_key = store.and_then(|_| self.store_key(kind, &key, graph, support));
                 if let (Some((mode, backing)), Some(store_key)) = (store, &store_key) {
                     match self.store_read(
                         mode,
@@ -1305,7 +1330,7 @@ impl CountertermCache {
     /// portable, or no context: never persisted, counted).
     fn store_key(
         &self,
-        identity: &CountertermIdentity,
+        kind: KeyKind,
         key: &Key,
         graph: &Graph,
         support: &SuBitGraph,
@@ -1318,7 +1343,7 @@ impl CountertermCache {
             return None;
         };
         let loops = graph.n_loops(support);
-        if loops < delta_store::min_loops() {
+        if loops < delta_store::min_loops(if kind.insertion() { 1 } else { 2 }) {
             delta_store::add(&delta_store::S.store_below_min_loops, 1);
             return None;
         }
@@ -1341,10 +1366,10 @@ impl CountertermCache {
             }
         };
         let (key_sha, graph_sha, key_bytes) =
-            delta_store::key_sha(&model_fp, &context.sha, &graph_bytes);
+            delta_store::key_sha(kind.store_kind(), &model_fp, &context.sha, &graph_bytes);
         delta_store::add(&delta_store::S.key_ns, started.elapsed().as_nanos() as u64);
-        let _ = identity;
         Some(StoreKey {
+            kind: kind.store_kind(),
             key_sha,
             graph_sha,
             model_fp,
@@ -1526,6 +1551,7 @@ impl CountertermCache {
             started.elapsed().as_nanos() as u64,
         );
         Ok(delta_store::DeltaRecord {
+            kind: store_key.kind,
             key_sha: store_key.key_sha,
             context_sha: store_key.context.sha,
             context_json: store_key.context.json.clone(),

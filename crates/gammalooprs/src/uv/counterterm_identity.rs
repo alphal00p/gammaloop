@@ -203,7 +203,9 @@ impl CountertermIdentity {
         marked: Option<linnet::half_edge::involution::EdgeIndex>,
         decorated: &BTreeSet<usize>,
     ) -> Result<Self> {
-        Self::build_decorated(graph, support, model, false, false, marked, decorated)
+        Self::build_decorated(
+            graph, support, model, false, false, marked, decorated, false,
+        )
     }
 
     /// A 64-bit digest of the key, stable within one process.
@@ -229,6 +231,26 @@ impl CountertermIdentity {
             fixed_boundary,
             None,
             &BTreeSet::new(),
+            false,
+        )
+    }
+
+    /// The complete dressed graph with portable colours before canonical
+    /// labelling, so the port permutation is reproducible across processes.
+    pub(crate) fn for_insertion(
+        graph: &Graph,
+        support: &SuBitGraph,
+        model: &Model,
+    ) -> Result<Self> {
+        Self::build_decorated(
+            graph,
+            support,
+            model,
+            false,
+            false,
+            None,
+            &BTreeSet::new(),
+            true,
         )
     }
 
@@ -240,6 +262,7 @@ impl CountertermIdentity {
         fixed_boundary: bool,
         marked: Option<linnet::half_edge::involution::EdgeIndex>,
         decorated: &BTreeSet<usize>,
+        portable: bool,
     ) -> Result<Self> {
         ensure!(
             graph.is_connected(support),
@@ -281,7 +304,7 @@ impl CountertermIdentity {
             .get_single_atom()?;
         let mut public = BTreeSet::new();
         let mut interfaces = vec![&numerator];
-        if bare_skeleton {
+        if bare_skeleton || portable {
             interfaces.extend([
                 &graph.global_prefactor.num,
                 &graph.global_prefactor.projector,
@@ -301,6 +324,7 @@ impl CountertermIdentity {
         }
 
         let mut builder = IdentityBuilder {
+            portable,
             graph: IncidenceGraph::new(),
             indices: BTreeMap::new(),
             edges: BTreeMap::new(),
@@ -330,7 +354,7 @@ impl CountertermIdentity {
             let is_boundary = graph
                 .iter_edges_of(&boundary)
                 .any(|(_, candidate, _)| candidate == edge);
-            let node = builder.graph.add_node(NodeColor::Edge {
+            let node = builder.add_color(NodeColor::Edge {
                 particle: data.data.particle().map(|particle| particle.index()),
                 // The parent carrier is an amputated leg of this integral.
                 // Its propagator denominator is not part of the counterterm.
@@ -440,7 +464,7 @@ impl CountertermIdentity {
             let root = builder.expression(expression.as_view())?;
             builder.link(builder.edges[&usize::from(edge)], root, Link::Numerator);
         }
-        if bare_skeleton {
+        if bare_skeleton || portable {
             for (color, expression) in [
                 (NodeColor::GlobalPrefactor, &graph.global_prefactor.num),
                 (
@@ -691,6 +715,7 @@ const CANONICAL_OWNER_OFFSET: u16 = 1 << 14;
 pub(crate) mod graph_key;
 
 struct IdentityBuilder {
+    portable: bool,
     graph: IncidenceGraph<NodeColor, Link>,
     edges: BTreeMap<usize, usize>,
     hedges: BTreeMap<usize, usize>,
@@ -708,6 +733,35 @@ struct IdentityBuilder {
 }
 
 impl IdentityBuilder {
+    fn add_color(&mut self, color: NodeColor) -> usize {
+        let color = if self.portable {
+            match color {
+                NodeColor::Edge {
+                    particle,
+                    mass,
+                    power,
+                    dod,
+                    boundary,
+                    orientation,
+                } => NodeColor::EdgeP {
+                    particle,
+                    mass: mass.to_canonical_string(),
+                    power,
+                    dod,
+                    boundary,
+                    orientation,
+                },
+                NodeColor::Slot(value) => NodeColor::SlotP(value.to_canonical_string()),
+                NodeColor::Leaf(value) => NodeColor::LeafP(value.to_canonical_string()),
+                NodeColor::Function(symbol) => NodeColor::FunctionP(symbol.get_name().to_owned()),
+                other => other,
+            }
+        } else {
+            color
+        };
+        self.graph.add_node(color)
+    }
+
     fn link(&mut self, from: usize, to: usize, color: Link) {
         self.graph
             .add_edge(from, to, true, color)
@@ -833,9 +887,7 @@ impl IdentityBuilder {
                 .copied()
                 .unwrap_or(normalized);
             let index = self.index(slot.rep().rep, original);
-            let node = self
-                .graph
-                .add_node(NodeColor::Slot(slot.rep().to_symbolic([])));
+            let node = self.add_color(NodeColor::Slot(slot.rep().to_symbolic([])));
             self.link(node, index, Link::Index);
             return Ok(node);
         }
@@ -874,9 +926,9 @@ impl IdentityBuilder {
                 let (base, exponent) = power.get_base_exp();
                 (NodeColor::Power, vec![base, exponent], true)
             }
-            _ => return Ok(self.graph.add_node(NodeColor::Leaf(expression.to_owned()))),
+            _ => return Ok(self.add_color(NodeColor::Leaf(expression.to_owned()))),
         };
-        let node = self.graph.add_node(color);
+        let node = self.add_color(color);
         for (position, arg) in args.into_iter().enumerate() {
             let child = self.expression(arg)?;
             self.link(

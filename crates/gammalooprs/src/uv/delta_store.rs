@@ -105,6 +105,7 @@ pub enum PutResult {
 /// One value for the store, from the computing thread.
 #[derive(Clone, Debug)]
 pub struct DeltaRecord {
+    pub kind: &'static str,
     pub key_sha: [u8; 32],
     pub context_sha: [u8; 32],
     pub context_json: Arc<str>,
@@ -191,14 +192,13 @@ pub fn mode() -> StoreMode {
 }
 
 /// Children with fewer loops are not persisted (`GAMMALOOP_DELTA_STORE_MIN_LOOPS`, default 2).
-pub(crate) fn min_loops() -> usize {
-    static MIN: LazyLock<usize> = LazyLock::new(|| {
+pub(crate) fn min_loops(default: usize) -> usize {
+    static MIN: LazyLock<Option<usize>> = LazyLock::new(|| {
         std::env::var("GAMMALOOP_DELTA_STORE_MIN_LOOPS")
             .ok()
             .and_then(|value| value.trim().parse().ok())
-            .unwrap_or(2)
     });
-    *MIN
+    MIN.unwrap_or(default)
 }
 
 /// `GAMMALOOP_DELTA_STORE_AUDIT=N` (default 256; 0 off): a store hit in the
@@ -350,6 +350,7 @@ pub(crate) fn context(settings_key: &str) -> Result<Arc<Context>> {
 
 /// GLDK/1 key bytes and their hashes: `(key_sha, graph_sha)`.
 pub(crate) fn key_sha(
+    kind: &str,
     model_fp: &[u8; 32],
     context_sha: &[u8; 32],
     graph_bytes: &[u8],
@@ -358,8 +359,8 @@ pub(crate) fn key_sha(
     bytes.extend_from_slice(b"GLDK");
     bytes.extend_from_slice(&KEY_FORMAT.to_le_bytes());
     bytes.extend_from_slice(&DELTA_SEMANTICS.to_le_bytes());
-    bytes.extend_from_slice(&(KIND_RSTAR_CHILD.len() as u32).to_le_bytes());
-    bytes.extend_from_slice(KIND_RSTAR_CHILD.as_bytes());
+    bytes.extend_from_slice(&(kind.len() as u32).to_le_bytes());
+    bytes.extend_from_slice(kind.as_bytes());
     bytes.extend_from_slice(model_fp);
     bytes.extend_from_slice(context_sha);
     bytes.extend_from_slice(graph_bytes);

@@ -42,6 +42,8 @@ use super::{
     integrate_propagator,
 };
 
+mod renormalized;
+
 type CachedIntegral = Arc<OnceLock<Result<Atom, String>>>;
 
 /// Every slashed momentum `gamma(i, j, Q(e, R(D)))` of an insertion
@@ -462,6 +464,7 @@ pub struct GroupedInsertionPoleResult {
 /// the stored open amplitude into each caller's boundary slots and momenta.
 pub struct PropagatorInsertionEvaluator {
     settings: UVgenerationSettings,
+    settings_key: String,
     cache: Mutex<HashMap<(String, usize, CountertermKey), CachedIntegral>>,
     counterterm_cache: Option<Arc<CountertermCache>>,
     timings: CacheTimings,
@@ -472,6 +475,7 @@ pub struct PropagatorInsertionEvaluator {
 impl PropagatorInsertionEvaluator {
     pub fn new(settings: UVgenerationSettings) -> Self {
         Self {
+            settings_key: format!("{settings:?}"),
             settings,
             cache: Mutex::new(HashMap::new()),
             counterterm_cache: None,
@@ -546,22 +550,7 @@ impl PropagatorInsertionEvaluator {
             diagram.cuts().is_empty(),
             "insertion evaluation requires an uncut amplitude"
         );
-        let mut candidates = diagram.propagator_insertions()?;
-        candidates.retain(|candidate| candidate.loops <= 4);
-        candidates.sort_by_key(|candidate| std::cmp::Reverse(candidate.loops));
-        let mut occupied = BTreeSet::new();
-        let selected = candidates
-            .into_iter()
-            .filter(|candidate| {
-                let vertices = diagram.underlying().nodes(&candidate.support);
-                if vertices.iter().any(|vertex| occupied.contains(vertex)) {
-                    false
-                } else {
-                    occupied.extend(vertices);
-                    true
-                }
-            })
-            .collect::<Vec<_>>();
+        let selected = selected_insertions(diagram)?;
         if selected.is_empty() {
             return Ok(None);
         }
@@ -1167,33 +1156,8 @@ impl PropagatorInsertionEvaluator {
         let graph = diagram.to_gamma_loop_graph(None, true)?;
         let boundary = graph.external_filter::<SuBitGraph>();
         let support = graph.no_dummy().subtract(&boundary);
-        let identity = CountertermIdentity::new(&graph, &support, diagram.model())?;
-        // The complete bare tensor is stored, not just its poles. Expansion
-        // depth belongs to the key; lower-loop finite terms enter parent poles.
-        let fingerprint = format!("{:?}", diagram.model().fingerprint());
-        let key = (
-            if closed {
-                format!("{fingerprint}#insertion-closure")
-            } else {
-                fingerprint
-            },
-            terms,
-            identity.key.clone(),
-        );
-        timing.lap(CacheTimingPhase::Key);
-        let entry = {
-            let mut cache = self
-                .cache
-                .lock()
-                .map_err(|_| eyre!("insertion cache lock poisoned"))?;
-            timing.lap(CacheTimingPhase::MapLockWait);
-            let entry = cache.entry(key).or_default().clone();
-            drop(cache);
-            timing.lap(CacheTimingPhase::MapLockHold);
-            entry
-        };
-        let canonical = timing
-            .resolve(&entry, |timing| {
+        let lookup_started = Instant::now();
+        let integrate = || -> Result<Atom> {
                 let started = Instant::now();
                 let integral = if closed {
                     let counted = vakint::timing::Snapshot::now();
@@ -1229,15 +1193,62 @@ impl PropagatorInsertionEvaluator {
                             )
                         }
                     })
-                } else {
-                    integrate_propagator(
-                        &graph,
-                        diagram.model(),
-                        vakint,
-                        &self.settings,
-                        terms as i64,
-                    )
-                };
+            } else {
+                integrate_propagator(
+                    &graph,
+                    diagram.model(),
+                    vakint,
+                    &self.settings,
+                    terms as i64,
+                )
+            };
+            integral
+        };
+        if let Some(cache) = &self.counterterm_cache {
+            let value = cache.counterterm_with_kind(
+                &graph,
+                &support,
+                diagram.model(),
+                format!(
+                    "bare-sigma:v1:depth={terms}:closed={closed}:{}",
+                    self.settings_key
+                ),
+                crate::uv::counterterm_cache::KeyKind::BareInsertion,
+                integrate,
+            )?;
+            let (_, routing) = RStarIntegrand::physical_external_routing(&graph, &boundary)?;
+            return Ok(super::linearize::linearize(
+                value.replace_multiple(&routing),
+            ));
+        }
+        let identity = CountertermIdentity::new(&graph, &support, diagram.model())?;
+        // The complete bare tensor is stored, not just its poles. Expansion
+        // depth belongs to the key; lower-loop finite terms enter parent poles.
+        let fingerprint = format!("{:?}", diagram.model().fingerprint());
+        let key = (
+            if closed {
+                format!("{fingerprint}#insertion-closure")
+            } else {
+                fingerprint
+            },
+            terms,
+            identity.key.clone(),
+        );
+        timing.lap(CacheTimingPhase::Key);
+        let entry = {
+            let mut cache = self
+                .cache
+                .lock()
+                .map_err(|_| eyre!("insertion cache lock poisoned"))?;
+            timing.lap(CacheTimingPhase::MapLockWait);
+            let entry = cache.entry(key).or_default().clone();
+            drop(cache);
+            timing.lap(CacheTimingPhase::MapLockHold);
+            entry
+        };
+        let canonical = timing
+            .resolve(&entry, |timing| {
+                let integral = integrate();
                 timing.lap(CacheTimingPhase::Initializer);
                 let result = integral
                     .and_then(|integral| identity.canonicalize_delta(&integral))
@@ -1249,7 +1260,7 @@ impl PropagatorInsertionEvaluator {
                     timing = true,
                     loops = diagram.loop_count(),
                     terms = terms,
-                    seconds = started.elapsed().as_secs_f64(),
+                    seconds = lookup_started.elapsed().as_secs_f64(),
                     "Computed an uncached bare propagator insertion"
                 );
                 result
@@ -1308,6 +1319,25 @@ pub(super) fn insertion_coefficients_agree(closed: &Atom, open: &Atom) -> Result
     let canonical = SymbolicTensor::infer(cooking.try_cook(reduced.as_view())?)?.canonize()?;
     let canonical = cooking.uncook(canonical.expression().as_view()).expand();
     Ok((false, canonical.together().is_zero()))
+}
+
+fn selected_insertions(diagram: &FeynmanDiagram) -> Result<Vec<PropagatorInsertion>> {
+    let mut candidates = diagram.propagator_insertions()?;
+    candidates.retain(|candidate| candidate.loops <= 4);
+    candidates.sort_by_key(|candidate| std::cmp::Reverse(candidate.loops));
+    let mut occupied = BTreeSet::new();
+    Ok(candidates
+        .into_iter()
+        .filter(|candidate| {
+            let vertices = diagram.underlying().nodes(&candidate.support);
+            if vertices.iter().any(|vertex| occupied.contains(vertex)) {
+                false
+            } else {
+                occupied.extend(vertices);
+                true
+            }
+        })
+        .collect())
 }
 
 fn scalar_bubble(source: &FeynmanDiagram) -> Result<FeynmanDiagram> {
@@ -1710,6 +1740,29 @@ mod tests {
             }
         }
         assert!(failures.is_empty(), "{failures:#?}");
+        Ok(())
+    }
+
+    #[test]
+    fn renormalized_serial_insertions_equal_the_full_counterterm() -> Result<()> {
+        test_initialise()?;
+        let diagram = serial_bubbles(2)?;
+        let graph = diagram.to_gamma_loop_graph(None, true)?;
+        let mut settings = super::super::tests::settings();
+        settings.vakint.normalization = "GScheme".into();
+        let engine = Vakint::new()?;
+        let expected = RStarPlan::with_automatic_edge(&graph, diagram.model(), &settings)?
+            .counterterm(&graph, diagram.model(), &engine, &settings)?;
+        let evaluator = PropagatorInsertionEvaluator::new(settings.clone())
+            .with_counterterm_cache(Arc::new(CountertermCache::default()));
+        for _ in 0..2 {
+            let actual = evaluator
+                .renormalized_counterterm(&diagram, &engine, false, |g, m, p| {
+                    p.counterterm(g, m, &engine, &settings)
+                })?
+                .expect("two insertion holes");
+            super::super::tests::assert_same_counterterm(&actual, &expected)?;
+        }
         Ok(())
     }
 

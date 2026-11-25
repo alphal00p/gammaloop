@@ -835,6 +835,7 @@ impl CountertermIdentity {
 
         // The certificate.
         let mut builder = IdentityBuilder {
+            portable: false,
             graph: IncidenceGraph::new(),
             indices: BTreeMap::new(),
             edges: BTreeMap::new(),

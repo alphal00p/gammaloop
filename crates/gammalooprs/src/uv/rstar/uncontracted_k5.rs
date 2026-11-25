@@ -651,7 +651,22 @@ pub(super) fn chains(
                 ))),
             }
         };
-        let inner = [inner_at(vertices[0])?, inner_at(*vertices.last().unwrap())?];
+        let inner = if hole.loops == 0 {
+            // The local term of R(sigma) joins both carriers at one vertex.
+            let ports: Vec<_> = at[&hole.vertex]
+                .iter()
+                .filter(|(_, edge)| !dummy.contains(edge))
+                .map(|(hedge, _)| *hedge)
+                .collect();
+            ports.try_into().map_err(|_| {
+                chain_error(format!(
+                    "local insertion at {} needs two carriers",
+                    hole.vertex
+                ))
+            })?
+        } else {
+            [inner_at(vertices[0])?, inner_at(*vertices.last().unwrap())?]
+        };
         let edge_of = |h: usize| {
             hedge_edge
                 .get(&h)

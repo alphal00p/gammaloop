@@ -65,6 +65,17 @@ impl FeynmanDiagram {
         insertion: &PropagatorInsertion,
         carrier: ParticleId,
     ) -> Result<ScalarBubbleSurrogate, DiagramError> {
+        self.scalar_bubble_surrogate_with_length(insertion, carrier, insertion.loops)
+    }
+
+    /// Replace a proper insertion by a chain of scalar bubbles. Length zero
+    /// joins the two boundary propagators at a local coefficient vertex.
+    pub fn scalar_bubble_surrogate_with_length(
+        &self,
+        insertion: &PropagatorInsertion,
+        carrier: ParticleId,
+        length: usize,
+    ) -> Result<ScalarBubbleSurrogate, DiagramError> {
         let error = |message: &str| DiagramError::Invariant {
             operation: "constructing a scalar insertion representative",
             message: message.into(),
@@ -108,7 +119,7 @@ impl FeynmanDiagram {
                 vertices.insert(id.0, builder.add_vertex(vertex.clone()).0);
             }
         }
-        let chain = (0..=insertion.loops)
+        let chain = (0..=length)
             .map(|i| {
                 builder.add_vertex(DiagramVertex {
                     name: format!("scalar_insertion_{i}"),
@@ -164,7 +175,7 @@ impl FeynmanDiagram {
                     let index = if boundary == insertion.boundary[0] {
                         0
                     } else if boundary == insertion.boundary[1] {
-                        insertion.loops
+                        length
                     } else if data.data.is_dummy {
                         0
                     } else {
@@ -211,7 +222,7 @@ impl FeynmanDiagram {
                 );
             }
         }
-        for index in 0..insertion.loops {
+        for index in 0..length {
             for _ in 0..2 {
                 let source_slot = VertexSlot(chain_slots[index]);
                 let target_slot = VertexSlot(chain_slots[index + 1]);
@@ -269,7 +280,7 @@ impl FeynmanDiagram {
             relabeling.translate_tensor(&self.numerator_prefactor, None)?;
         diagram.projector = relabeling.translate_tensor(&self.projector, None)?;
         diagram.numerator = Self::fragment_numerator(&diagram.graph)?;
-        if diagram.loop_count() != self.loop_count() {
+        if diagram.loop_count() != self.loop_count() - insertion.loops + length {
             return Err(error("the scalar representative changed the loop count"));
         }
         diagram.validate()?;
