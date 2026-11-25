@@ -45,12 +45,16 @@ pub struct DirectClosureInput {
 impl DirectClosureInput {
     /// The ordinary closure input `numerator(routing).expand() * topology`.
     pub fn ordinary(&self) -> Atom {
+        self.routed_numerator().expand() * &self.topology
+    }
+
+    fn routed_numerator(&self) -> Atom {
         let routing = self
             .routing
             .iter()
             .map(|(head, image)| symbolica::id::Replacement::new(head.to_pattern(), image.clone()))
             .collect::<Vec<_>>();
-        self.numerator.replace_multiple(&routing).expand() * &self.topology
+        self.numerator.replace_multiple(&routing)
     }
 }
 
@@ -1880,6 +1884,56 @@ impl MassiveClosure {
         Some(expression.replace_multiple(&substitutions))
     }
 
+    /// Handle a direct-reader decline caused by a recognized analytic line.
+    /// Route the scalar expression without distributing products over sums.
+    /// The raised-cut evaluator validates the momenta against this topology.
+    pub(super) fn evaluate_raised_direct(
+        &self,
+        vakint: &Vakint,
+        settings: &crate::VakintSettings,
+        input: &DirectClosureInput,
+    ) -> Result<Option<Atom>, VakintError> {
+        let eps = vk_symbol!(&settings.epsilon_symbol);
+        if !super::epsilon_raising::has_marker(input.topology.as_view())
+            && !Self::has_analytic_momentum(&input.numerator, eps)
+        {
+            return Ok(None);
+        }
+        let head = self.validated_head(settings)?;
+        let Some(EvaluationMethod::RustRed(options)) = settings.evaluation_order.0.first() else {
+            return Ok(None);
+        };
+        let value = self.raised_cut(
+            vakint,
+            settings,
+            &input.topology,
+            &input.routed_numerator(),
+            &head,
+            options.master_mode,
+        )?;
+        match (value, options.master_mode) {
+            (Some(value), RustRedMasterMode::Numerical) => {
+                Ok(Some(vakint.resolve_rustred_numerical(value, settings)?))
+            }
+            (value, _) => Ok(value),
+        }
+    }
+
+    fn has_analytic_momentum(numerator: &Atom, eps: Symbol) -> bool {
+        if super::epsilon_raising::has_marker(numerator.as_view()) {
+            return true;
+        }
+        let mut found = false;
+        if numerator.contains_symbol(eps) {
+            numerator.visitor(&mut |part| {
+                found |= matches!(part, AtomView::Pow(p) if p.get_exp().contains_symbol(eps)
+                    && (p.get_base().contains_symbol(S.k) || p.get_base().contains_symbol(S.p)));
+                !found
+            });
+        }
+        found
+    }
+
     /// A raised cut is an integer-family reduction with a known remaining
     /// scale power. Each auxiliary G-scheme bubble contributes ε times its
     /// reduced value and one extra radial raising; only the physical loops
@@ -1895,14 +1949,7 @@ impl MassiveClosure {
     ) -> Result<Option<Atom>, VakintError> {
         use super::epsilon_raising::{collect_markers, has_marker, lifted, marked_graph};
         let eps = vk_symbol!(&settings.epsilon_symbol);
-        let mut found = has_marker(topology.as_view()) || has_marker(numerator.as_view());
-        if !found && numerator.contains_symbol(eps) {
-            numerator.visitor(&mut |p|{
-                found|=matches!(p,AtomView::Pow(a) if a.get_exp().contains_symbol(eps) && (a.get_base().contains_symbol(S.k)||a.get_base().contains_symbol(S.p)));
-                !found
-            });
-        }
-        if !found {
+        if !has_marker(topology.as_view()) && !Self::has_analytic_momentum(numerator, eps) {
             return Ok(None);
         }
         if !matches!(
@@ -2574,6 +2621,25 @@ mod tests {
         let value = c.evaluate(&VAKINT, &s, integrand.as_view()).unwrap();
         let batch = MassiveClosure::evaluate_batch(&VAKINT, &s, &[(c.clone(), integrand)]).unwrap();
         assert_equal(&value, &batch[0]);
+        let topology = parse("topo(prop(1,edge(0,1),k(1),0,1)*prop(2,edge(0,1),p(1)-k(1),0,1))");
+        let routed = |numerator| DirectClosureInput {
+            topology: topology.clone(),
+            routing: vec![(S.k.call(2), S.p.call(1)), (S.k.call(1), S.k.call(1))],
+            numerator: parse(numerator),
+        };
+        let strict = super::super::BoundaryOptions { strict: true };
+        for numerator in [
+            "(-dot(k(2),k(2))/mursq)^(-ε)*(-dot(k(1),k(1))/mursq)^(-ε)/ε^4",
+            "ep(k(2),1)*ep(k(1),1)/ε^4",
+        ] {
+            let boundary = super::super::RemainderBoundary::from_direct(&c, &routed(numerator));
+            let (result, stats) = boundary.evaluate_with_stats(&VAKINT, &s, strict).unwrap();
+            assert!(stats.declined.is_empty());
+            assert!(stats.analytic_seconds > 0.);
+            assert_equal(&value, &result);
+        }
+        let bad = super::super::RemainderBoundary::from_direct(&c, &routed("1/dot(k(1),k(1))"));
+        assert!(bad.evaluate(&VAKINT, &s, strict).is_err());
         s.number_of_terms_in_epsilon_expansion += 2;
         let explicit = parse(
             "topo(prop(1,edge(0,3),k(1),0,1)*prop(2,edge(0,1),p(1)-k(1),0,1)*prop(3,edge(3,1),k(2),0,1)*prop(4,edge(3,1),k(1)-k(2),0,1)*prop(5,edge(1,2),k(3),0,1)*prop(6,edge(1,2),p(1)-k(3),0,1))/ε^2",

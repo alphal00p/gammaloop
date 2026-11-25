@@ -2538,6 +2538,7 @@ pub(super) struct EvaluateSplit {
     pub lower: f64,
     pub reduce: f64,
     pub ordinary: f64,
+    pub analytic: f64,
     pub expand: f64,
 }
 
@@ -2546,6 +2547,9 @@ impl EvaluateSplit {
         stats.seconds.push(("lower", self.lower));
         stats.seconds.push(("reduce", self.reduce));
         stats.seconds.push(("ordinary", self.ordinary));
+        if self.analytic > 0.0 {
+            stats.seconds.push(("analytic_line", self.analytic));
+        }
         stats.seconds.push(("expand", self.expand));
     }
 }
@@ -2558,49 +2562,19 @@ pub(super) fn evaluate_boundary(
     settings: &VakintSettings,
     options: BoundaryOptions,
 ) -> Result<(Atom, usize, usize, EvaluateSplit)> {
-    let mut split = EvaluateSplit::default();
-    // As `RemainderBoundary::evaluate` (the settings' RustRed resource
-    // budget around the whole lowering and reduction), keeping the counts.
-    symbolica::utils::resources::ResourceBudget::new(settings.rustred_resources).run(|| {
-        symbolica::utils::resources::checkpoint().map_err(|error| eyre!("{error}"))?;
-        let clock = Instant::now();
-        let (classes, declined, (reads, hits)) = boundary
-            .lower_counted(vakint, settings, options)
-            .map_err(|error| eyre!("{error}"))
-            .wrap_err("while lowering an R* remainder boundary")?;
-        split.lower = clock.elapsed().as_secs_f64();
-        let clock = Instant::now();
-        let mut result = Atom::Zero;
-        for class in classes {
-            result += class
-                .evaluate(vakint, settings)
-                .map_err(|error| eyre!("{error}"))
-                .wrap_err("while reducing an R* remainder boundary")?;
-        }
-        split.reduce = clock.elapsed().as_secs_f64();
-        let clock = Instant::now();
-        for index in declined {
-            let pattern = &boundary.patterns[index];
-            result += MassiveClosure::evaluate_batch(
-                vakint,
-                settings,
-                &[(
-                    boundary.closure(pattern),
-                    boundary.direct_input(pattern).ordinary(),
-                )],
-            )
-            .map_err(|error| eyre!("{error}"))?
-            .pop()
-            .unwrap_or_default();
-        }
-        split.ordinary = clock.elapsed().as_secs_f64();
-        super::integrate::log_unknown_masters("boundary", vakint, settings, &result);
-        symbolica::utils::resources::checkpoint().map_err(|error| eyre!("{error}"))?;
-        let clock = Instant::now();
-        let result = result.expand();
-        split.expand = clock.elapsed().as_secs_f64();
-        Ok((result, reads, hits, split))
-    })
+    let (value, stats) = boundary
+        .evaluate_with_stats(vakint, settings, options)
+        .map_err(|error| eyre!("{error}"))
+        .wrap_err("while evaluating an R* remainder boundary")?;
+    super::integrate::log_unknown_masters("boundary", vakint, settings, &value);
+    let split = EvaluateSplit {
+        lower: stats.lower_seconds,
+        reduce: stats.reduce_finalize_seconds,
+        ordinary: stats.ordinary_seconds,
+        analytic: stats.analytic_seconds,
+        expand: stats.expand_seconds,
+    };
+    Ok((value, stats.block_reads, stats.block_reuses, split))
 }
 
 // ---------------------------------------------------------------------------

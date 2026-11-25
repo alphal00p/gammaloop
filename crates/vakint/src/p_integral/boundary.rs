@@ -219,6 +219,16 @@ impl RemainderBoundary {
         settings: &VakintSettings,
         options: BoundaryOptions,
     ) -> Result<(Vec<LoweredClosure>, BoundaryStats), VakintError> {
+        self.lower_patterns(vakint, settings, options, |_| Ok(false))
+    }
+
+    fn lower_patterns(
+        &self,
+        vakint: &Vakint,
+        settings: &VakintSettings,
+        options: BoundaryOptions,
+        mut evaluate_analytic: impl FnMut(usize) -> Result<bool, VakintError>,
+    ) -> Result<(Vec<LoweredClosure>, BoundaryStats), VakintError> {
         let _timing = crate::timing::lower();
         let mut cache = crate::rustred_evaluation::p_lowering::BlockReadCache::default();
         let mut direct = crate::rustred_evaluation::p_lowering::DirectStats::default();
@@ -246,6 +256,7 @@ impl RemainderBoundary {
                         classes.push(lowered);
                     }
                 }
+                Err(_) if evaluate_analytic(index)? => {}
                 Err(reason) if options.strict() => {
                     return Err(super::invalid(format!(
                         "remainder boundary {:?}: the direct reader declined pattern {index}: {reason} (strict mode)",
@@ -342,8 +353,27 @@ impl RemainderBoundary {
             return Ok((value, stats));
         }
         settings.with_resource_budget(|| {
-            let (classes, mut stats) = self.lower_with_stats(vakint, settings, options)?;
+            let planning = std::time::Instant::now();
+            let mut analytic_seconds = 0.0;
             let mut result = Atom::Zero;
+            let (classes, mut stats) = self.lower_patterns(vakint, settings, options, |index| {
+                let clock = std::time::Instant::now();
+                let pattern = &self.patterns[index];
+                let value = self.closure(pattern).evaluate_raised_direct(
+                    vakint,
+                    settings,
+                    &self.direct_input(pattern),
+                )?;
+                if let Some(value) = value {
+                    analytic_seconds += clock.elapsed().as_secs_f64();
+                    result += value;
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
+            })?;
+            stats.lower_seconds = planning.elapsed().as_secs_f64() - analytic_seconds;
+            stats.analytic_seconds = analytic_seconds;
             let reducing = std::time::Instant::now();
             for class in classes {
                 result += class.evaluate(vakint, settings)?;
@@ -361,7 +391,10 @@ impl RemainderBoundary {
                 .unwrap_or_default();
             }
             stats.ordinary_seconds = ordinary.elapsed().as_secs_f64();
-            Ok((result.expand(), stats))
+            let expand = std::time::Instant::now();
+            let result = result.expand();
+            stats.expand_seconds = expand.elapsed().as_secs_f64();
+            Ok((result, stats))
         })
     }
 }
@@ -393,6 +426,10 @@ pub struct BoundaryStats {
     /// Reduction and finalisation of the key plans; ordinary path of declines.
     pub reduce_finalize_seconds: f64,
     pub ordinary_seconds: f64,
+    /// Direct lowering, exact analytic-line evaluation and final expansion.
+    pub lower_seconds: f64,
+    pub analytic_seconds: f64,
+    pub expand_seconds: f64,
 }
 
 impl BoundaryStats {
