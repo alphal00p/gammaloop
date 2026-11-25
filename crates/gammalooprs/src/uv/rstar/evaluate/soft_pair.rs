@@ -67,6 +67,83 @@ fn primitive_pair<'a>(graph: &Graph, correction: &'a IrCorrection) -> Option<&'a
     (half_edges.count() == 2 && vertex.dod.value > 0).then_some(call)
 }
 
+/// Only a regular hard attachment may multiply the completed zero kernel.
+/// Scalar Laurent coefficients remain outside K. A singular dimension in a
+/// tensor slot or an opaque tensor operation can defeat that separation.
+fn regular_hard_attachments(graph: &Graph, correction: &IrCorrection) -> bool {
+    use crate::{
+        utils::GS,
+        uv::rstar::{
+            moments::analytic_line_edge,
+            regularity::{Factor, has_tensor_structure, normalise},
+        },
+    };
+    use spenso::{
+        network::tags::SPENSO_TAG,
+        structure::representation::{Minkowski, RepName},
+    };
+    use symbolica::{atom::AtomView, function};
+    fn regular(view: AtomView<'_>) -> bool {
+        // Pure scalar spectators, including arbitrary Laurent coefficients,
+        // belong to the hard coefficient and do not enter the quotient K.
+        if !has_tensor_structure(&view.to_owned()) {
+            return true;
+        }
+        match view {
+            AtomView::Fun(_) => normalise(Factor::HardNumerator, &view.to_owned()).is_ok(),
+            AtomView::Add(sum) => sum.iter().all(regular),
+            AtomView::Mul(product) => product.iter().all(regular),
+            AtomView::Pow(power) => {
+                i64::try_from(power.get_exp()).is_ok_and(|n| n >= 0) && regular(power.get_base())
+            }
+            _ => true,
+        }
+    }
+    let bare = Minkowski {}.new_rep(GS.dim).to_symbolic([]);
+    let vectors: Vec<_> = graph
+        .underlying
+        .iter_edges_of(&correction.hard)
+        .map(|(_, edge, _)| function!(GS.emr_mom, usize::from(edge), &bare))
+        .collect();
+    let squares: Vec<_> = vectors
+        .iter()
+        .map(|q| -function!(SPENSO_TAG.dot, q, q) / Atom::var(GS.mu_r_sq))
+        .collect();
+    let factors = graph
+        .underlying
+        .iter_nodes_of(&correction.hard)
+        .map(|(_, _, v)| &v.num.value)
+        .chain(
+            graph
+                .underlying
+                .iter_edges_of(&correction.hard)
+                .map(|(_, _, e)| &e.data.num.value),
+        );
+    for factor in factors {
+        // For this grammar check alone, omit the known scalar invariants of
+        // hard lines. Their vector arguments must have the physical dimension
+        // and no open slots; the analytic exponents must be -m epsilon.
+        let attachments = factor.replace_map(|v, _, out| {
+            let scalar = match v {
+                AtomView::Fun(f) if f.get_symbol() == SPENSO_TAG.dot && f.get_nargs() == 2 => f
+                    .iter()
+                    .all(|q| vectors.iter().any(|hard| hard.as_view() == q)),
+                AtomView::Pow(p) if squares.iter().any(|sq| sq.as_view() == p.get_base()) => {
+                    analytic_line_edge(v).is_some()
+                }
+                _ => false,
+            };
+            if scalar {
+                **out = Atom::one();
+            }
+        });
+        if !regular(attachments.as_view()) {
+            return false;
+        }
+    }
+    true
+}
+
 impl<'a> Evaluation<'a> {
     /// Used only by pure counterterm entry points. A physical pole reconstruction
     /// also needs UV children of terms that become scaleless in the rearranged
@@ -225,6 +302,9 @@ impl Evaluation<'_> {
         let Some(call) = primitive_pair(self.graph, correction) else {
             return Ok(false);
         };
+        if !regular_hard_attachments(self.graph, correction) {
+            return Ok(false);
+        }
         let start = Instant::now();
         let zero = match self.open_pair_is_zero(call) {
             Ok(zero) => zero,
@@ -358,6 +438,45 @@ mod tests {
                 assert!(eval.counterterm()?.is_zero());
             }
         }
+        // A hard tensor has a non-polynomial dimension in its attachment.
+        // An open scalar soft kernel is zero, but the ordinary evaluator
+        // rejects the malformed hard slot. Pruning must preserve that error.
+        use crate::numerator::aind::Aind;
+        use spenso::{
+            network::library::symbolic::ETS,
+            structure::{representation::Euclidean, slot::ParseableAind},
+        };
+        let hard_vertex = graph
+            .underlying
+            .iter_nodes()
+            .find(|(_, _, v)| v.name.value == "A")
+            .unwrap()
+            .0;
+        let index = |n| {
+            Euclidean {}
+                .new_rep(GS.dim)
+                .to_symbolic([Aind::Hedge(n, 0).to_atom()])
+        };
+        graph.underlying[hard_vertex].num = Autogen::explicit(
+            function!(ETS.metric, index(2), index(3))
+                .replace(GS.dim)
+                .with(Atom::one() / &eps),
+        );
+        graph.underlying[c].num = Autogen::explicit(q2);
+        let mut plan = RStarPlan::new(&graph, &model, EdgeIndex::from(0), &settings)?;
+        plan.ir.retain(|ir| primitive_pair(&graph, ir).is_some());
+        plan.ordinary_uv.clear();
+        assert_eq!(plan.ir.len(), 1);
+        assert!(!regular_hard_attachments(&graph, &plan.ir[0]));
+        let ordinary = plan
+            .counterterm(&graph, &model, &vakint, &settings)
+            .unwrap_err();
+        let dressed =
+            in_dressed_scope(|| plan.counterterm(&graph, &model, &vakint, &settings)).unwrap_err();
+        assert_eq!(
+            dressed.root_cause().to_string(),
+            ordinary.root_cause().to_string()
+        );
         Ok(())
     }
 }
