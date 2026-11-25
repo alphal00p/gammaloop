@@ -44,6 +44,21 @@ static DELTA_PRIVATE: LazyLock<Symbol> = LazyLock::new(|| symbol!("uv_delta_cach
 static DELTA_PORT: LazyLock<Symbol> = LazyLock::new(|| symbol!("uv_delta_cache_port"));
 static DELTA_MOMENTUM: LazyLock<Symbol> = LazyLock::new(|| symbol!("uv_delta_cache_momentum"));
 
+/// An analytic line power must retain its factored form in both cache keys.
+fn has_analytic_power(expression: AtomView<'_>, momentum: Symbol) -> bool {
+    let mut found = false;
+    expression.visitor(&mut |part| {
+        if let AtomView::Pow(power) = part
+            && power.get_exp().contains_symbol(GS.dim_epsilon)
+            && power.get_base().contains_symbol(momentum)
+        {
+            found = true;
+        }
+        !found
+    });
+    found
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 enum NodeColor {
     Vertex(i32),
@@ -89,6 +104,7 @@ enum NodeColor {
     Rule,
     SignClass,
     Term(String),
+    AnalyticScalar(String),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -855,17 +871,7 @@ impl IdentityBuilder {
         // factors creates a large incidence graph just to ask the cache a
         // question. The complete factored expression is also an exact key:
         // two differently factored equal vertices can at worst miss.
-        let mut analytic_line = false;
-        expression.visitor(&mut |part| {
-            if let AtomView::Pow(power) = part
-                && power.get_exp().contains_symbol(GS.dim_epsilon)
-                && power.get_base().contains_symbol(GS.emr_mom)
-            {
-                analytic_line = true;
-            }
-            !analytic_line
-        });
-        Ok(if analytic_line {
+        Ok(if has_analytic_power(expression.as_view(), GS.emr_mom) {
             expression
         } else {
             expression.expand()

@@ -648,6 +648,7 @@ impl CountertermIdentity {
 
         // The local rules, with half-edge momenta, as signed monomials.
         let mut rules: Vec<(Owner, Vec<Monomial>)> = Vec::new();
+        let mut factored_rules = BTreeSet::new();
         let sources = graph
             .underlying
             .iter_nodes_of(support)
@@ -705,7 +706,16 @@ impl CountertermIdentity {
             if nonincident {
                 return Ok(Err(Fallback::NonIncident));
             }
-            let Some(monomials) = monomials(&rule.expand()) else {
+            // The attached R(sigma) is a polynomial in a scalar bubble whose
+            // momentum carries an epsilon power. Expanding it replicates the
+            // same tensor and momentum incidence for every Laurent monomial.
+            let rule = if has_analytic_power(rule.as_view(), *HEDGE_MOMENTUM) {
+                factored_rules.insert(rules.len());
+                rule
+            } else {
+                rule.expand()
+            };
+            let Some(monomials) = monomials(&rule) else {
                 return Ok(Err(Fallback::Coefficient));
             };
             rules.push((owner, monomials));
@@ -894,8 +904,12 @@ impl CountertermIdentity {
             for (positive, coefficient, monomial) in monomials {
                 let term = builder.graph.add_node(NodeColor::Term(coefficient.clone()));
                 builder.link(if *positive { plus } else { minus }, term, Link::Numerator);
-                let root =
-                    builder.expression_graph(monomial.as_view(), rule_line[rule], &mut factors)?;
+                let root = builder.expression_graph(
+                    monomial.as_view(),
+                    rule_line[rule],
+                    &mut factors,
+                    factored_rules.contains(&rule),
+                )?;
                 builder.link(term, root, Link::Numerator);
             }
             sign_classes.push((plus, minus));
@@ -1196,6 +1210,53 @@ fn conserve(value: &Atom, legs: &[(usize, i64)]) -> Atom {
         .expand()
 }
 
+/// A subtree with no explicit tensor slot and at most one half-edge momentum
+/// can be represented exactly by its canonical scalar expression and that
+/// half-edge. Replacing only the first argument preserves repeated occurrences,
+/// powers, momentum signs, and the order of all function arguments.
+fn analytic_scalar(expression: AtomView<'_>) -> Option<(String, Option<usize>)> {
+    let mut hedge = None;
+    let mut scalar = true;
+    expression.visitor(&mut |part| {
+        if !scalar {
+            return false;
+        }
+        if let AtomView::Fun(fun) = part {
+            if fun.get_symbol() == *HEDGE_MOMENTUM {
+                match fun.iter().next().and_then(|arg| usize::try_from(arg).ok()) {
+                    Some(h) if hedge.is_none_or(|seen| seen == h) => hedge = Some(h),
+                    _ => scalar = false,
+                }
+            } else if fun.get_symbol() == GS.emr_mom
+                || fun.get_symbol() == AGS.gamma
+                || LibrarySlot::<Aind>::try_from(part).is_ok()
+            {
+                scalar = false;
+            }
+        }
+        scalar
+    });
+    if !scalar {
+        return None;
+    }
+    let normalized = if hedge.is_some() {
+        expression.replace_map(|part, _, out| {
+            if let AtomView::Fun(fun) = part
+                && fun.get_symbol() == *HEDGE_MOMENTUM
+            {
+                let mut f = FunctionBuilder::new(*HEDGE_MOMENTUM).add_arg(0);
+                for arg in fun.iter().skip(1) {
+                    f = f.add_arg(arg);
+                }
+                **out = f.finish();
+            }
+        })
+    } else {
+        expression.to_owned()
+    };
+    Some((normalized.to_canonical_string(), hedge))
+}
+
 impl IdentityBuilder {
     /// [`IdentityBuilder::expression`] of the graph certificate: portable
     /// colours, half-edge momenta, and unordered spinor slots of the gammas of
@@ -1205,7 +1266,23 @@ impl IdentityBuilder {
         expression: AtomView<'_>,
         line: Option<usize>,
         factors: &mut Vec<(usize, usize, [usize; 2])>,
+        factored: bool,
     ) -> Result<usize> {
+        // A scalar expression in one incident momentum has no index or Dirac
+        // transport. Keep its exact syntax as a colour, with the physical
+        // half-edge attached separately. Neither Laurent depth nor powers
+        // of this scalar then introduce artificial graph automorphisms.
+        if factored && let Some((scalar, hedge)) = analytic_scalar(expression) {
+            let node = self.graph.add_node(NodeColor::AnalyticScalar(scalar));
+            if let Some(hedge) = hedge {
+                let owner = *self
+                    .hedges
+                    .get(&hedge)
+                    .ok_or_else(|| eyre!("analytic scalar momentum outside S and its crown"))?;
+                self.link(node, owner, Link::Momentum);
+            }
+            return Ok(node);
+        }
         if let Ok(slot) = LibrarySlot::<Aind>::try_from(expression) {
             let raw = self.cooking.uncook(slot.aind.to_atom().as_view());
             let original = Aind::try_from(raw.as_view())?;
@@ -1231,7 +1308,7 @@ impl IdentityBuilder {
                 let node = self.graph.add_node(NodeColor::HedgeMomentum);
                 self.link(node, owner, Link::Momentum);
                 for (position, arg) in args.enumerate() {
-                    let child = self.expression_graph(arg, line, factors)?;
+                    let child = self.expression_graph(arg, line, factors, factored)?;
                     self.link(node, child, Link::Argument(position));
                 }
                 return Ok(node);
@@ -1246,9 +1323,9 @@ impl IdentityBuilder {
                     .graph
                     .add_node(NodeColor::FunctionP(fun.get_symbol().get_name().to_owned()));
                 let args = fun.iter().collect::<Vec<_>>();
-                let row = self.expression_graph(args[0], line, factors)?;
-                let column = self.expression_graph(args[1], line, factors)?;
-                let lorentz = self.expression_graph(args[2], line, factors)?;
+                let row = self.expression_graph(args[0], line, factors, factored)?;
+                let column = self.expression_graph(args[1], line, factors, factored)?;
+                let lorentz = self.expression_graph(args[2], line, factors, factored)?;
                 self.link(node, row, Link::Unordered);
                 self.link(node, column, Link::Unordered);
                 self.link(node, lorentz, Link::Argument(2));
@@ -1274,7 +1351,7 @@ impl IdentityBuilder {
         };
         let node = self.graph.add_node(color);
         for (position, arg) in args.into_iter().enumerate() {
-            let child = self.expression_graph(arg, line, factors)?;
+            let child = self.expression_graph(arg, line, factors, factored)?;
             self.link(
                 node,
                 child,
@@ -1427,6 +1504,85 @@ mod tests {
             .map_err(|fallback| eyre!("graph key fell back: {fallback:?}"))
     }
 
+    fn scalar_bubble(model: &Model, permuted: bool) -> Result<Graph> {
+        let mut graph: Graph = if permuted {
+            finalized_runtime_dot!(
+                digraph G {
+                    graph [projector=19]; node [num=1]; edge [particle="scalar_1" num=1];
+                    e [style=invis]; B; A;
+                    A:0 -> e [id=0 source="{ufo_order:0}"];
+                    e -> B:1 [id=1 sink="{ufo_order:0}"];
+                    B -> A [id=3 source="{ufo_order:1}" sink="{ufo_order:1}"];
+                    A -> B [id=2 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:2}"];
+                }, model
+            )?
+        } else {
+            finalized_runtime_dot!(
+                digraph G {
+                    graph [projector=7]; node [num=1]; edge [particle="scalar_1" num=1];
+                    e [style=invis]; A; B;
+                    e -> A:0 [id=2 sink="{ufo_order:0}"];
+                    B:1 -> e [id=3 source="{ufo_order:0}"];
+                    A -> B [id=0 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
+                    A -> B [id=1 source="{ufo_order:2}" sink="{ufo_order:2}"];
+                }, model
+            )?
+        };
+        for edge in graph
+            .iter_edges()
+            .map(|(_, edge, _)| edge)
+            .collect::<Vec<_>>()
+        {
+            let data = &mut graph.underlying[edge];
+            data.particle = data.particle.clone().override_mass(Some(Atom::Zero));
+        }
+        Ok(graph)
+    }
+
+    #[test]
+    fn graph_key_keeps_analytic_scalar_factors_compact_and_transports_ports() -> Result<()> {
+        test_initialise()?;
+        let model = load_generic_model("scalars");
+        let decorate = |permuted, degree, sign: i64, momentum_edge: Option<usize>| -> Result<_> {
+            let mut graph = scalar_bubble(&model, permuted)?;
+            // Both of these externally outgoing edges map to the same leg.
+            let edge = if permuted { 0 } else { 3 };
+            let ends = ends(&graph);
+            let h = ends[&edge].0.or(ends[&edge].1).unwrap();
+            let vertex = vertex_of(&graph, h);
+            let port = slot(mink(), hedge(h));
+            let q = function!(
+                GS.emr_mom,
+                momentum_edge.unwrap_or(edge) as i64,
+                Minkowski {}.new_rep(GS.dim).to_symbolic([])
+            );
+            let eps = Atom::var(GS.dim_epsilon);
+            let q2 = function!(spenso::network::tags::SPENSO_TAG.dot, &q, &q);
+            let series = (Atom::one() + &eps).pow(degree).expand();
+            let factor = Atom::one() + series * q2.pow(-eps);
+            let value = function!(GS.emr_mom, edge as i64, &port);
+            graph.underlying[vertex].num = Autogen::explicit(factor * &value * sign);
+            Ok((graph_identity(&graph, &model)?, value))
+        };
+        let (a, va) = decorate(false, 3, 1, None)?;
+        let (b, vb) = decorate(true, 3, -1, None)?;
+        let (deeper, _) = decorate(false, 17, 1, None)?;
+        let (other_momentum, _) = decorate(false, 3, 1, Some(0))?;
+        assert_ne!(
+            a.key, other_momentum.key,
+            "the bound half-edge is in the key"
+        );
+        assert_eq!(a.key, b.key);
+        assert_eq!(b.restore_delta(&a.canonicalize_delta(&va)?)?, -vb);
+        assert_ne!(a.key, deeper.key, "all scalar coefficients are in the key");
+        assert_eq!(
+            a.key.incidence_nodes(),
+            deeper.key.incidence_nodes(),
+            "higher Laurent depth must not replicate the momentum incidence"
+        );
+        Ok(())
+    }
+
     /// Relabelling, a different loop-momentum basis and a negated local rule:
     /// one graph certificate, the legacy ones differ, and the transport
     /// carries the rule sign and the momentum orientation of the legs.
@@ -1434,40 +1590,6 @@ mod tests {
     fn graph_key_ignores_numbering_routing_and_rule_sign_and_transports() -> Result<()> {
         test_initialise()?;
         let model = load_generic_model("scalars");
-        let bubble = |permuted: bool| -> Result<Graph> {
-            let mut graph: Graph = if permuted {
-                finalized_runtime_dot!(
-                    digraph G {
-                        graph [projector=19]; node [num=1]; edge [particle="scalar_1" num=1];
-                        e [style=invis]; B; A;
-                        A:0 -> e [id=0 source="{ufo_order:0}"];
-                        e -> B:1 [id=1 sink="{ufo_order:0}"];
-                        B -> A [id=3 source="{ufo_order:1}" sink="{ufo_order:1}"];
-                        A -> B [id=2 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:2}"];
-                    }, &model
-                )?
-            } else {
-                finalized_runtime_dot!(
-                    digraph G {
-                        graph [projector=7]; node [num=1]; edge [particle="scalar_1" num=1];
-                        e [style=invis]; A; B;
-                        e -> A:0 [id=2 sink="{ufo_order:0}"];
-                        B:1 -> e [id=3 source="{ufo_order:0}"];
-                        A -> B [id=0 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
-                        A -> B [id=1 source="{ufo_order:2}" sink="{ufo_order:2}"];
-                    }, &model
-                )?
-            };
-            for edge in graph
-                .iter_edges()
-                .map(|(_, edge, _)| edge)
-                .collect::<Vec<_>>()
-            {
-                let data = &mut graph.underlying[edge];
-                data.particle = data.particle.clone().override_mass(Some(Atom::Zero));
-            }
-            Ok(graph)
-        };
         // External edge `ext`, internal edges `first` (rule momentum) and `second`.
         let decorate = |graph: &mut Graph, ext: [usize; 2], first: usize, sign: i64| {
             let ends = ends(graph);
@@ -1500,8 +1622,8 @@ mod tests {
             }
             [ports[0], ports[1]]
         };
-        let mut a = bubble(false)?;
-        let mut b = bubble(true)?;
+        let mut a = scalar_bubble(&model, false)?;
+        let mut b = scalar_bubble(&model, true)?;
         let a_ports = decorate(&mut a, [2, 3], 0, 1);
         let b_ports = decorate(&mut b, [0, 1], 3, -1);
         let (ga, gb) = (graph_identity(&a, &model)?, graph_identity(&b, &model)?);
