@@ -851,7 +851,25 @@ impl IdentityBuilder {
         ensure!(failure.is_none(), "{}", failure.unwrap_or_default());
         // Reorienting Q can move a minus sign through a sum. Expand within
         // this rule only; epsilon-dependent factors never cross UV vertices.
-        Ok(expression.expand())
+        // Distributing an effective R(σ) vertex over its scalar bubble
+        // factors creates a large incidence graph just to ask the cache a
+        // question. The complete factored expression is also an exact key:
+        // two differently factored equal vertices can at worst miss.
+        let mut analytic_line = false;
+        expression.visitor(&mut |part| {
+            if let AtomView::Pow(power) = part
+                && power.get_exp().contains_symbol(GS.dim_epsilon)
+                && power.get_base().contains_symbol(GS.emr_mom)
+            {
+                analytic_line = true;
+            }
+            !analytic_line
+        });
+        Ok(if analytic_line {
+            expression
+        } else {
+            expression.expand()
+        })
     }
 
     fn index(&mut self, representation: LibraryRep, index: Aind) -> usize {

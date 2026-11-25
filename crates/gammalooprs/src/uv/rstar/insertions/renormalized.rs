@@ -77,6 +77,29 @@ impl PropagatorInsertionEvaluator {
         diagram: &FeynmanDiagram,
         vakint: &Vakint,
         closing: bool,
+        project: impl FnMut(&Graph, &Model, &RStarPlan) -> Result<Atom>,
+    ) -> Result<Option<Atom>> {
+        self.project_insertions(diagram, vakint, closing, false, project)
+    }
+
+    /// Evaluate the physical skeleton with a single retained R(σ) tensor at each vertex.
+    /// Experimental: the projector can reject non-polynomial dressed vertices.
+    pub fn factored_renormalized_counterterm(
+        &self,
+        diagram: &FeynmanDiagram,
+        vakint: &Vakint,
+        closing: bool,
+        project: impl FnMut(&Graph, &Model, &RStarPlan) -> Result<Atom>,
+    ) -> Result<Option<Atom>> {
+        self.project_insertions(diagram, vakint, closing, true, project)
+    }
+
+    fn project_insertions(
+        &self,
+        diagram: &FeynmanDiagram,
+        vakint: &Vakint,
+        closing: bool,
+        factored: bool,
         mut project: impl FnMut(&Graph, &Model, &RStarPlan) -> Result<Atom>,
     ) -> Result<Option<Atom>> {
         ensure!(
@@ -87,7 +110,7 @@ impl PropagatorInsertionEvaluator {
         if insertions.is_empty() {
             return Ok(None);
         }
-        let terms = self.replacement_terms(diagram, vakint, &insertions, false)?;
+        let terms = self.replacement_terms(diagram, vakint, &insertions, factored)?;
         if crate::uv::rstar::plan::uv_children_log() || insertion_identity_log() {
             eprintln!(
                 "RENORMALIZED_INSERTIONS graph={} insertions={} insertion_loops={} replacement_graphs={}",

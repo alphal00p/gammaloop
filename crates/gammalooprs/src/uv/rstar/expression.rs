@@ -2661,7 +2661,12 @@ impl RStarIntegrand {
         // 4 − 2ε first.
         let numerator = Integrated::regulated_for_expansion(&numerator, "physical_integral_input")?
             .into_owned();
-        let input = numerator * function!(S.topo, propagators);
+        let input = vakint::p_integral::with_analytic_line_powers(
+            numerator,
+            function!(S.topo, propagators),
+            GS.dim_epsilon,
+            GS.mu_r_sq,
+        )?;
         debug_tags!(#uv, #integrated, #rstar, #trace;
             stage = "rstar_physical_remainder",
             log.input = input,
