@@ -43,6 +43,8 @@ use super::{
 };
 
 mod renormalized;
+mod r_table;
+pub use r_table::RTableRequest;
 
 type CachedIntegral = Arc<OnceLock<Result<Atom, String>>>;
 
@@ -1131,6 +1133,10 @@ impl PropagatorInsertionEvaluator {
         Ok(coefficient)
     }
 
+    fn bare_key(&self, terms: usize, closed: bool) -> String {
+        format!("bare-sigma:v1:depth={terms}:closed={closed}:{}", self.settings_key)
+    }
+
     fn integrate_cached(
         &self,
         diagram: &FeynmanDiagram,
@@ -1209,10 +1215,7 @@ impl PropagatorInsertionEvaluator {
                 &graph,
                 &support,
                 diagram.model(),
-                format!(
-                    "bare-sigma:v1:depth={terms}:closed={closed}:{}",
-                    self.settings_key
-                ),
+                self.bare_key(terms, closed),
                 crate::uv::counterterm_cache::KeyKind::BareInsertion,
                 integrate,
             )?;
@@ -1322,8 +1325,12 @@ pub(super) fn insertion_coefficients_agree(closed: &Atom, open: &Atom) -> Result
 }
 
 fn selected_insertions(diagram: &FeynmanDiagram) -> Result<Vec<PropagatorInsertion>> {
+    select_insertions_through(diagram, 4)
+}
+
+fn select_insertions_through(diagram: &FeynmanDiagram, max_loops: usize) -> Result<Vec<PropagatorInsertion>> {
     let mut candidates = diagram.propagator_insertions()?;
-    candidates.retain(|candidate| candidate.loops <= 4);
+    candidates.retain(|candidate| candidate.loops <= max_loops);
     candidates.sort_by_key(|candidate| std::cmp::Reverse(candidate.loops));
     let mut occupied = BTreeSet::new();
     Ok(candidates

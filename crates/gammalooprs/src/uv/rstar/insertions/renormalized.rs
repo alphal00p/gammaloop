@@ -22,6 +22,27 @@ impl PropagatorInsertionEvaluator {
         vakint: &Vakint,
         depth: usize,
     ) -> Result<Vec<Atom>> {
+        let stored_depth = if crate::uv::delta_store::installed().is_some() {
+            depth.max(6)
+        } else {
+            depth
+        };
+        let mut values = self.insertion_coefficients_at(insertion, vakint, stored_depth)?;
+        if stored_depth > depth {
+            for (j, value) in values.iter_mut().enumerate() {
+                *value = Self::truncate_insertion(value, depth as i64 - insertion.loop_count() as i64 + j as i64 - 1)?;
+            }
+        }
+        Ok(values)
+    }
+
+    pub(super) fn renormalized_key(&self, depth: usize) -> String {
+        format!("renormalized-sigma:attached-v1:depth={depth}:closure={:?}:{}", self.closure, self.settings_key)
+    }
+
+    pub(super) fn insertion_coefficients_at(
+        &self, insertion: &FeynmanDiagram, vakint: &Vakint, depth: usize,
+    ) -> Result<Vec<Atom>> {
         let n = insertion.loop_count();
         let compute = || -> Result<Vec<Atom>> {
             if n == 1 {
@@ -44,10 +65,7 @@ impl PropagatorInsertionEvaluator {
             &graph,
             &support,
             insertion.model(),
-            format!(
-                "renormalized-sigma:attached-v1:depth={depth}:closure={:?}:{}",
-                self.closure, self.settings_key
-            ),
+            self.renormalized_key(depth),
             crate::uv::counterterm_cache::KeyKind::RenormalizedInsertion,
             || {
                 Ok(compute()?
@@ -106,7 +124,7 @@ impl PropagatorInsertionEvaluator {
             diagram.cuts().is_empty(),
             "insertion extraction requires an uncut amplitude"
         );
-        let insertions = selected_insertions(diagram)?;
+        let insertions = self.selected_r_insertions(diagram)?;
         if insertions.is_empty() {
             return Ok(None);
         }
@@ -163,7 +181,7 @@ impl PropagatorInsertionEvaluator {
             diagram.cuts().is_empty(),
             "factored insertions require an uncut graph"
         );
-        let holes = selected_insertions(diagram)?;
+        let holes = self.selected_r_insertions(diagram)?;
         if holes.is_empty() {
             return Ok(None);
         }
@@ -185,7 +203,7 @@ impl PropagatorInsertionEvaluator {
             network::tags::SPENSO_TAG,
             structure::representation::{Minkowski, RepName},
         };
-        let holes = selected_insertions(diagram)?;
+        let holes = self.selected_r_insertions(diagram)?;
         let degree: usize = holes.iter().map(|s| s.loops).sum();
         if degree == 0 || diagram.loop_count() != degree + 1 {
             return Ok(None);

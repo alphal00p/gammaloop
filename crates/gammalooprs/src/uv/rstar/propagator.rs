@@ -23,7 +23,7 @@ use super::{GraphRegion, expression::RStarIntegrand};
 ///
 /// This invokes the physical p-integral backend directly, without building a
 /// forest or computing a counterterm. Include `forcer` in the evaluation
-/// methods; it currently supports at most four loops. Propagators must have
+/// methods for up to four loops, or RustRed for up to five loops. Propagators must have
 /// unit powers. Physical infrared poles, if present, remain in the result.
 ///
 /// `number_of_terms` has Vakint's convention: an L-loop integral is retained
@@ -58,10 +58,9 @@ fn integrate_propagator_with(
     RStarIntegrand::physical_external_routing(graph, &boundary)?;
     let support = graph.no_dummy().subtract(&boundary);
     let loops = graph.n_loops(&support);
-    ensure!(
-        (1..=4).contains(&loops),
-        "direct propagator integration currently supports one through four loops"
-    );
+    let max_loops = if matches!(uv_settings.vakint.true_settings().evaluation_order.0.first(), Some(vakint::EvaluationMethod::RustRed(_))) { 5 } else { 4 };
+    ensure!((1..=max_loops).contains(&loops),
+        "direct propagator integration supports one through {max_loops} loops with this backend");
     ensure!(
         graph.is_connected(&support) && graph.bridges_of(&support).is_empty(),
         "direct propagator integration requires a connected 1PI graph"

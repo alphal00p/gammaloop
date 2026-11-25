@@ -150,6 +150,7 @@ pub use boundary::{
 pub use expression::{ClosedSkipMode, closed_dot_scalar, closed_skip_mode, set_memory_release};
 pub use insertion_identity::{InsertionSkeletonIdentity, InsertionSkeletonKey};
 pub use insertions::{
+    RTableRequest,
     GroupedInsertionPoleResult, IdentityCounterterm, InsertionIdentity, InsertionPoleResult,
     PreparedInsertion, PreparedInsertionHole, PropagatorInsertionEvaluator, insertion_identity,
     insertion_identity_log,
