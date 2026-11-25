@@ -723,6 +723,46 @@ pub(super) fn finish(
     )
 }
 
+/// The v1.4 polynomial record cannot carry a Euclidean line raising. Identify
+/// that case exactly so it can use the massive closure's analytic integral.
+/// This copy is for classifying a refusal only; the evaluator receives the
+/// entire original factor, including its momentum dependence.
+fn strip_analytic_line_raisings(atom: &Atom) -> Option<Atom> {
+    let mu = Atom::var(GS.mu_r_sq);
+    let eps = Atom::var(GS.dim_epsilon);
+    let mut found = false;
+    let stripped = atom.replace_map(|part, _, out| {
+        let AtomView::Pow(power) = part else {
+            return;
+        };
+        if !power.get_exp().contains_symbol(GS.dim_epsilon) {
+            return;
+        }
+        let Ok(n) = i64::try_from((-power.get_exp().to_owned() / &eps).as_view()) else {
+            return;
+        };
+        if n <= 0 {
+            return;
+        }
+        let square = -power.get_base().to_owned() * &mu;
+        let AtomView::Fun(dot) = square.as_view() else {
+            return;
+        };
+        if dot.get_symbol() != spenso::network::tags::SPENSO_TAG.dot || dot.get_nargs() != 2 {
+            return;
+        }
+        let mut args = dot.iter();
+        let first = args.next().unwrap();
+        if args.next() == Some(first)
+            && matches!(first,AtomView::Fun(q) if q.get_symbol()==GS.emr_mom)
+        {
+            **out = Atom::one();
+            found = true;
+        }
+    });
+    found.then_some(stripped)
+}
+
 /// How `atom` depends on the symbol `eps` (WH-RECORD-FORMAT v1.4
 /// correction 4: only through sums, products and integer powers; Minkowski
 /// and bispinor slot arguments aside): `Ok(true)` polynomially, `Ok(false)`
@@ -1001,6 +1041,7 @@ fn finish_with(
     // correction 4: every insertion's coefficient and factor depends on eps
     // only through sums, products and integer powers; a direct record's
     // coefficient vertex is regular (its entry raises no depth)
+    let mut analytic_vertex = None;
     for insertion in insertions.iter() {
         for (what, atom) in [
             ("coefficient", &insertion.coefficient),
@@ -1008,6 +1049,12 @@ fn finish_with(
         ] {
             match eps_dependence(atom.as_view(), GS.dim_epsilon) {
                 Err(why) => {
+                    if let Some(stripped) = strip_analytic_line_raisings(atom)
+                        && eps_dependence(stripped.as_view(), GS.dim_epsilon).is_ok()
+                    {
+                        analytic_vertex = Some(insertion.vertex);
+                        continue;
+                    }
                     return Err(Decline::new(
                         "surrogate_insertion_eps",
                         format!("insertion at {} {what}: {why}", insertion.vertex),
@@ -1025,6 +1072,12 @@ fn finish_with(
                 Ok(_) => {}
             }
         }
+    }
+    if let Some(vertex) = analytic_vertex {
+        return Err(Decline::new(
+            "surrogate_analytic_line",
+            format!("insertion at {vertex} requires the analytic line-power closure"),
+        ));
     }
     // A hole cut by a child boundary (a chain of two or more loops): a slot
     // of the coefficient, or of a chain end's edge, whose partner lies outside
@@ -1769,4 +1822,23 @@ pub(crate) fn without_settings_check<T>(f: impl FnOnce() -> T) -> T {
 #[cfg(test)]
 pub(crate) fn with_test_context<T>(provenance: Arc<Provenance>, f: impl FnOnce() -> T) -> T {
     with_context(provenance, f)
+}
+
+#[cfg(test)]
+mod analytic_line_tests {
+    use super::*;
+
+    #[test]
+    fn only_euclidean_propagator_raisings_have_an_analytic_fallback() {
+        let eps = Atom::var(GS.dim_epsilon);
+        let q = GS.emr_mom.call((4, Atom::one()));
+        let scale = -spenso::network::tags::SPENSO_TAG.dot.call((&q, &q)) / Atom::var(GS.mu_r_sq);
+        let raising = scale.pow(-Atom::num(2) * &eps);
+        let bad = Atom::num(2).pow(&eps);
+        let good = strip_analytic_line_raisings(&raising).unwrap();
+        assert!(good.is_one());
+        assert!(strip_analytic_line_raisings(&bad).is_none());
+        let mixed = strip_analytic_line_raisings(&(raising * bad)).unwrap();
+        assert!(eps_dependence(mixed.as_view(), GS.dim_epsilon).is_err());
+    }
 }

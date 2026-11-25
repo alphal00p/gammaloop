@@ -646,8 +646,7 @@ static DEMOTED: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
 /// U8: whether [`ENVIRONMENT`] has been read (a demotion after it prints its
 /// own notice).
-static ENVIRONMENT_READ: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
+static ENVIRONMENT_READ: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// The notice of a default switch turned off.
 fn demoted_line(reason: &str) -> String {
@@ -1042,6 +1041,8 @@ pub(super) const DESIGNED_LOCAL: &[&str] = &[
     // (no verified fixture; Astra #10 keeps such terms out of `ir-hard`):
     // declined before its record is built, today's path takes it
     "surrogate_ir_hard",
+    // The scalar closure carries epsilon line powers that the polynomial record cannot encode.
+    "surrogate_analytic_line",
     // U7c (K5): a record that holds only part of a hole's chain (a hole of
     // two or more loops above four loops; no verified fixture): declined
     // before its record is built, today's path takes it
