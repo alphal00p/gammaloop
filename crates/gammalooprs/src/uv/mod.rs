@@ -544,4 +544,6 @@ pub mod profile;
 pub use profile::{UVProfile, UVProfileAnalysis, UVProfilePassFail};
 
 #[cfg(test)]
+mod feynkit_parity_tests;
+#[cfg(test)]
 mod tests;
