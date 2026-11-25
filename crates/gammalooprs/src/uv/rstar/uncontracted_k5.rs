@@ -728,34 +728,9 @@ pub(super) fn finish(
 /// This copy is for classifying a refusal only; the evaluator receives the
 /// entire original factor, including its momentum dependence.
 fn strip_analytic_line_raisings(atom: &Atom) -> Option<Atom> {
-    let mu = Atom::var(GS.mu_r_sq);
-    let eps = Atom::var(GS.dim_epsilon);
     let mut found = false;
     let stripped = atom.replace_map(|part, _, out| {
-        let AtomView::Pow(power) = part else {
-            return;
-        };
-        if !power.get_exp().contains_symbol(GS.dim_epsilon) {
-            return;
-        }
-        let Ok(n) = i64::try_from((-power.get_exp().to_owned() / &eps).as_view()) else {
-            return;
-        };
-        if n <= 0 {
-            return;
-        }
-        let square = -power.get_base().to_owned() * &mu;
-        let AtomView::Fun(dot) = square.as_view() else {
-            return;
-        };
-        if dot.get_symbol() != spenso::network::tags::SPENSO_TAG.dot || dot.get_nargs() != 2 {
-            return;
-        }
-        let mut args = dot.iter();
-        let first = args.next().unwrap();
-        if args.next() == Some(first)
-            && matches!(first,AtomView::Fun(q) if q.get_symbol()==GS.emr_mom)
-        {
+        if super::super::moments::analytic_line_edge(part).is_some() {
             **out = Atom::one();
             found = true;
         }
