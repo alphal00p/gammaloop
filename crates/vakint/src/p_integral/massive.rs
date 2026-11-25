@@ -1947,7 +1947,9 @@ impl MassiveClosure {
         head: &Atom,
         mode: RustRedMasterMode,
     ) -> Result<Option<Atom>, VakintError> {
-        use super::epsilon_raising::{collect_markers, has_marker, lifted, marked_graph};
+        use super::epsilon_raising::{
+            has_marker, lifted, mark_internal_powers, marked_graph, marker_terms,
+        };
         let eps = vk_symbol!(&settings.epsilon_symbol);
         if !has_marker(topology.as_view()) && !Self::has_analytic_momentum(numerator, eps) {
             return Ok(None);
@@ -1960,67 +1962,65 @@ impl MassiveClosure {
         }
         let numerator =
             Self::mark_radial(numerator, head, settings).unwrap_or_else(|| numerator.clone());
-        let marked = super::with_analytic_line_powers(
+        let numerator = mark_internal_powers(
             numerator,
-            topology.clone(),
+            topology,
             eps,
             vk_symbol!(&settings.mu_r_sq_symbol),
         )?;
         let mut value = Atom::Zero;
-        for term in VakintExpression::split_integrals(marked.as_view())? {
-            let input = collect_markers(&term.numerator, &term.integral)?;
-            for mut group in VakintExpression::split_integrals(input.as_view())? {
-                let (mut graph, markers) = marked_graph(&group.integral)?;
-                if graph.external != *head && graph.external != -head {
-                    return Err(super::invalid(
-                        "epsilon-raised cut uses a different closing momentum",
-                    ));
-                }
-                let physical = graph.loops;
-                let mut shift = 0i64;
-                for (q, m) in markers {
-                    shift = shift
-                        .checked_add(
-                            i64::try_from(m).map_err(|_| super::invalid("ep count overflow"))?,
-                        )
-                        .ok_or_else(|| super::invalid("ep count overflow"))?;
-                    if q != *head && q != -head {
-                        lifted(&mut graph, &q, m)?;
-                    }
-                }
-                let extra = graph.loops - physical;
-                group.integral = graph.to_atom();
-                if !group.normalize_propagator()? {
-                    continue;
-                }
-                group.numerator =
-                    super::scalar_numerator_with(group.numerator.as_view(), head, false)?;
-                let matched = group.prepare_integral_specs(vakint, settings, None)?;
-                let request = matched
-                    .propagator_request(group.numerator.as_view())
-                    .ok_or_else(|| super::invalid("no RustRed request for a raised cut"))?;
-                let rows = crate::rustred_evaluation::p_integral::reduce_requests_factored(
-                    vakint,
-                    settings,
-                    &[request],
-                    None,
-                )?;
-                let weight = Atom::var(eps).pow(extra as u64)
-                    * if shift == 0 {
-                        Atom::one()
-                    } else {
-                        S.ep.call((head, shift))
-                    };
-                let values = rows
-                    .into_values()
-                    .flatten()
-                    .map(|mut v| {
-                        v.spectator = Some(v.spectator.take().unwrap_or_else(Atom::one) * &weight);
-                        v
-                    })
-                    .collect::<Vec<_>>();
-                value += self.finalize(vakint, &values, physical, head, settings, mode)?;
+        for (tagged, coefficient) in marker_terms(&numerator, topology)? {
+            let (mut graph, markers) = marked_graph(&tagged)?;
+            if graph.external != *head && graph.external != -head {
+                return Err(super::invalid(
+                    "epsilon-raised cut uses a different closing momentum",
+                ));
             }
+            let physical = graph.loops;
+            let mut shift = 0i64;
+            for (q, m) in markers {
+                shift = shift
+                    .checked_add(i64::try_from(m).map_err(|_| super::invalid("ep count overflow"))?)
+                    .ok_or_else(|| super::invalid("ep count overflow"))?;
+                if q != *head && q != -head {
+                    lifted(&mut graph, &q, m)?;
+                }
+            }
+            let extra = graph.loops - physical;
+            let mut group = crate::VakintTerm {
+                integral: graph.to_atom(),
+                vectors: crate::VakintTerm::identify_vectors_in_numerator(coefficient.as_view())?,
+                numerator: coefficient,
+            };
+            if !group.normalize_propagator()? {
+                continue;
+            }
+            group.numerator = super::scalar_numerator_with(group.numerator.as_view(), head, false)?;
+            let matched = group.prepare_integral_specs(vakint, settings, None)?;
+            let request = matched
+                .propagator_request(group.numerator.as_view())
+                .ok_or_else(|| super::invalid("no RustRed request for a raised cut"))?;
+            let rows = crate::rustred_evaluation::p_integral::reduce_requests_factored(
+                vakint,
+                settings,
+                &[request],
+                None,
+            )?;
+            let weight = Atom::var(eps).pow(extra as u64)
+                * if shift == 0 {
+                    Atom::one()
+                } else {
+                    S.ep.call((head, shift))
+                };
+            let values = rows
+                .into_values()
+                .flatten()
+                .map(|mut v| {
+                    v.spectator = Some(v.spectator.take().unwrap_or_else(Atom::one) * &weight);
+                    v
+                })
+                .collect::<Vec<_>>();
+            value += self.finalize(vakint, &values, physical, head, settings, mode)?;
         }
         Ok(Some(value))
     }

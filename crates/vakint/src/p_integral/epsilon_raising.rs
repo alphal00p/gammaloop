@@ -32,7 +32,19 @@ fn factors(view: AtomView<'_>) -> Vec<AtomView<'_>> {
 
 /// Collect multiplicative ep factors into each topology before matching its
 /// integer family. Coefficients are grouped at fixed powers of all markers.
-pub(super) fn collect_markers(numerator: &Atom, integral: &Atom) -> Result<Atom, VakintError> {
+fn collect_markers(numerator: &Atom, integral: &Atom) -> Result<Atom, VakintError> {
+    Ok(Atom::add_many(
+        marker_terms(numerator, integral)?
+            .into_iter()
+            .map(|(topology, coefficient)| topology * coefficient),
+    ))
+}
+
+/// One topology and its numerator per monomial of analytic weights.
+pub(super) fn marker_terms(
+    numerator: &Atom,
+    integral: &Atom,
+) -> Result<Vec<(Atom, Atom)>, VakintError> {
     let mut markers = std::collections::BTreeSet::new();
     numerator.visitor(&mut |part| {
         if matches!(part,AtomView::Fun(f) if f.get_symbol()==S.ep) {
@@ -49,7 +61,10 @@ pub(super) fn collect_markers(numerator: &Atom, integral: &Atom) -> Result<Atom,
         .next()
         .ok_or_else(|| invalid("ep requires a topology argument"))?
         .to_owned();
-    let mut result = Atom::Zero;
+    if markers.is_empty() {
+        return Ok(vec![(integral.clone(), numerator.clone())]);
+    }
+    let mut result = Vec::new();
     for (powers, coefficient) in
         numerator.coefficient_list::<i16>(&markers.iter().collect::<Vec<_>>())
     {
@@ -64,7 +79,7 @@ pub(super) fn collect_markers(numerator: &Atom, integral: &Atom) -> Result<Atom,
             let (q, m) = marker_power(power)?;
             tagged *= S.ep.call((q, m));
         }
-        result += coefficient * S.topo.call(tagged);
+        result.push((S.topo.call(tagged), coefficient));
     }
     Ok(result)
 }
@@ -104,6 +119,15 @@ pub fn with_analytic_line_powers(
     epsilon: Symbol,
     mu_squared: Symbol,
 ) -> Result<Atom, VakintError> {
+    Ok(mark_internal_powers(numerator, &topology, epsilon, mu_squared)? * topology)
+}
+
+pub(super) fn mark_internal_powers(
+    numerator: Atom,
+    topology: &Atom,
+    epsilon: Symbol,
+    mu_squared: Symbol,
+) -> Result<Atom, VakintError> {
     let mut candidates = std::collections::BTreeSet::new();
     numerator.visitor(&mut |part| {
         if let AtomView::Pow(p) = part
@@ -116,9 +140,9 @@ pub fn with_analytic_line_powers(
         true
     });
     if candidates.is_empty() {
-        return Ok(numerator * topology);
+        return Ok(numerator);
     }
-    let (graph, _) = marked_graph(&topology)?;
+    let (graph, _) = marked_graph(topology)?;
     let mu = Atom::var(mu_squared);
     let mut squares = std::collections::BTreeMap::new();
     for line in graph.lines {
@@ -157,7 +181,7 @@ pub fn with_analytic_line_powers(
             S.ep.call((q, m)).to_pattern(),
         ));
     }
-    Ok(numerator.replace_multiple(&replacements) * topology)
+    Ok(numerator.replace_multiple(&replacements))
 }
 
 pub(super) fn lifted(graph: &mut PGraph, momentum: &Atom, count: usize) -> Result<(), VakintError> {
