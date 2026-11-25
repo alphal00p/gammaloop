@@ -46,60 +46,15 @@ pub(super) fn marker_terms(
     numerator: &Atom,
     integral: &Atom,
 ) -> Result<Vec<(Atom, Atom)>, VakintError> {
-    let mut markers = std::collections::BTreeSet::new();
-    numerator.visitor(&mut |part| {
-        if matches!(part,AtomView::Fun(f) if f.get_symbol()==S.ep) {
-            markers.insert(part.to_owned());
-            return false;
-        }
-        true
-    });
     let props = super::input::topology_argument(integral.as_view())
-        .ok_or_else(|| invalid("ep requires one topo argument containing a propagator product"))?
-        .to_owned();
-    if markers.is_empty() {
+        .ok_or_else(|| invalid("ep requires one topo argument containing a propagator product"))?;
+    if !has_marker(numerator.as_view()) {
         return Ok(vec![(integral.clone(), numerator.clone())]);
     }
-    // The closed numerator can have hundreds of thousands of terms sharing a
-    // few marker factors. Feeding it directly to the polynomial converter
-    // repeatedly adds each scalar term to the same growing Atom coefficient.
-    let mut by_weight = BTreeMap::<Atom, Vec<Atom>>::new();
-    let mut collect = |term: AtomView<'_>| {
-        let (weight, scalar): (Vec<_>, Vec<_>) = factors(term)
-            .into_iter()
-            .partition(|factor| factor.contains_symbol(S.ep));
-        by_weight
-            .entry(Atom::mul_many(weight))
-            .or_default()
-            .push(Atom::mul_many(scalar));
-    };
-    if let AtomView::Add(sum) = numerator.as_view() {
-        sum.iter().for_each(collect);
-    } else {
-        collect(numerator.as_view());
-    }
-    let variables = markers.iter().collect::<Vec<_>>();
-    let mut by_power = BTreeMap::<Atom, Vec<Atom>>::new();
-    for (weight, terms) in by_weight {
-        let scalar = Atom::add_many(terms);
-        // A weight may itself be a polynomial, e.g. (ep(q,1)-1)^5.
-        for (power, coefficient) in weight.coefficient_list::<i16>(&variables) {
-            if has_marker(coefficient.as_view()) {
-                return Err(invalid("the numerator must be polynomial in ep markers"));
-            }
-            by_power
-                .entry(power)
-                .or_default()
-                .push(coefficient * &scalar);
-        }
-    }
-    let mut result = Vec::with_capacity(by_power.len());
-    for (powers, coefficients) in by_power {
-        let coefficient = Atom::add_many(coefficients);
-        if coefficient.is_zero() {
-            continue;
-        }
-        let mut tagged = props.clone();
+    let terms = marker_polynomial(numerator.as_view())?;
+    let mut result = Vec::with_capacity(terms.len());
+    for (powers, coefficient) in terms {
+        let mut tagged = props.to_owned();
         for power in factors(powers.as_view()) {
             if power.is_one() {
                 continue;
@@ -110,6 +65,99 @@ pub(super) fn marker_terms(
         result.push((S.topo.call(tagged), coefficient));
     }
     Ok(result)
+}
+
+type MarkerPolynomial = BTreeMap<Atom, Atom>;
+
+fn sum_coefficients(groups: BTreeMap<Atom, Vec<Atom>>) -> MarkerPolynomial {
+    groups
+        .into_iter()
+        .filter_map(|(power, terms)| {
+            let coefficient = Atom::add_many(terms);
+            (!coefficient.is_zero()).then_some((power, coefficient))
+        })
+        .collect()
+}
+
+fn multiply_markers(lhs: &MarkerPolynomial, rhs: &MarkerPolynomial) -> MarkerPolynomial {
+    let mut groups = BTreeMap::<Atom, Vec<Atom>>::new();
+    for (x, a) in lhs {
+        for (y, b) in rhs {
+            groups.entry(x * y).or_default().push(a * b);
+        }
+    }
+    sum_coefficients(groups)
+}
+
+/// Distribute only factors that contain ep. Scalar coefficients of a
+/// closed tensor can themselves be large factored polynomials. Even when a
+/// marked sum is nested inside a product, each coefficient is summed once.
+fn marker_polynomial(value: AtomView<'_>) -> Result<MarkerPolynomial, VakintError> {
+    if !has_marker(value) {
+        return Ok(BTreeMap::from([(Atom::one(), value.to_owned())]));
+    }
+    match value {
+        AtomView::Fun(f) if f.get_symbol() == S.ep => {
+            let _ = marker_power(value)?;
+            Ok(BTreeMap::from([(value.to_owned(), Atom::one())]))
+        }
+        AtomView::Add(sum) => {
+            let mut by_weight = BTreeMap::<Atom, Vec<Atom>>::new();
+            for term in sum.iter() {
+                let (weight, scalar): (Vec<_>, Vec<_>) = factors(term)
+                    .into_iter()
+                    .partition(|factor| has_marker(*factor));
+                by_weight
+                    .entry(Atom::mul_many(weight))
+                    .or_default()
+                    .push(Atom::mul_many(scalar));
+            }
+            let mut groups = BTreeMap::<Atom, Vec<Atom>>::new();
+            for (weight, terms) in by_weight {
+                let scalar = Atom::add_many(terms);
+                for (power, coefficient) in marker_polynomial(weight.as_view())? {
+                    groups.entry(power).or_default().push(coefficient * &scalar);
+                }
+            }
+            Ok(sum_coefficients(groups))
+        }
+        AtomView::Mul(product) => {
+            let (weights, scalars): (Vec<_>, Vec<_>) =
+                product.iter().partition(|factor| has_marker(*factor));
+            let mut poly = BTreeMap::from([(Atom::one(), Atom::one())]);
+            for weight in weights {
+                poly = multiply_markers(&poly, &marker_polynomial(weight)?);
+            }
+            let scalar = Atom::mul_many(scalars);
+            for coefficient in poly.values_mut() {
+                *coefficient *= &scalar;
+            }
+            Ok(poly)
+        }
+        AtomView::Pow(power) => {
+            let exp = get_integer_from_atom(power.get_exp())
+                .filter(|n| *n >= 0)
+                .ok_or_else(|| invalid("the numerator must be polynomial in ep markers"))?;
+            if matches!(power.get_base(), AtomView::Fun(f) if f.get_symbol() == S.ep) {
+                let _ = marker_power(value)?;
+                return Ok(BTreeMap::from([(value.to_owned(), Atom::one())]));
+            }
+            let mut base = marker_polynomial(power.get_base())?;
+            let mut n = exp;
+            let mut poly = BTreeMap::from([(Atom::one(), Atom::one())]);
+            while n > 0 {
+                if n % 2 != 0 {
+                    poly = multiply_markers(&poly, &base);
+                }
+                n /= 2;
+                if n > 0 {
+                    base = multiply_markers(&base, &base);
+                }
+            }
+            Ok(poly)
+        }
+        _ => Err(invalid("the numerator must be polynomial in ep markers")),
+    }
 }
 
 fn marker_power(power: AtomView<'_>) -> Result<(Atom, i64), VakintError> {
@@ -499,6 +547,27 @@ mod tests {
     }
 
     #[test]
+    fn nested_weighted_sum_keeps_scalar_epsilon_poles_and_opaque_functions() {
+        let marker = S.ep.call((S.k.call(1), 1));
+        let epsilon = Atom::var(S.ep);
+        let opaque = vk_symbol!("test_coefficient").call(&epsilon);
+        let a = &opaque / epsilon.pow(4);
+        let inner = &marker * &a + &opaque;
+        let value = &a * inner.pow(2);
+        let expected = value
+            .coefficient_list::<i16>(&[&marker])
+            .into_iter()
+            .map(|(m, c)| (m, c.expand()))
+            .collect::<BTreeMap<_, _>>();
+        let actual = marker_polynomial(value.as_view())
+            .unwrap()
+            .into_iter()
+            .map(|(m, c)| (m, c.expand()))
+            .collect::<BTreeMap<_, _>>();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
     #[ignore = "timing comparison on a large closed numerator"]
     fn time_many_terms_sharing_an_analytic_weight() {
         let q = S.k.call(1);
@@ -506,7 +575,11 @@ mod tests {
         let tagged = S.topo.call(&x);
         let scalar = vk_symbol!("bench_scalar");
         let terms = 16_384;
-        let numerator = Atom::add_many((0..terms).map(|i| &x * scalar.call(i)));
+        // Scalar epsilon and the ep function share a symbol in this convention.
+        // An outer product keeps the marked sum nested, as in the cut numerator.
+        let eps = Atom::var(S.ep);
+        let numerator = (Atom::one() + &eps)
+            * Atom::add_many((0..terms).map(|i| &x * scalar.call((i, &eps)) / eps.pow(i % 6)));
         let start = std::time::Instant::now();
         let reference = numerator.coefficient_list::<i16>(&[&x]);
         let unbatched = start.elapsed();
@@ -514,7 +587,8 @@ mod tests {
         let grouped = marker_terms(&numerator, &S.topo.call(Atom::one())).unwrap();
         let batched = start.elapsed();
         assert_eq!(grouped.len(), 1);
-        assert_eq!(grouped[0], (tagged, reference[0].1.clone()));
+        assert_eq!(grouped[0].0, tagged);
+        assert!((&grouped[0].1 - &reference[0].1).expand().is_zero());
         println!("{terms} terms: unbatched {unbatched:?}, batched {batched:?}");
     }
 
