@@ -9,6 +9,7 @@ use crate::{
     VakintExpression, VakintSettings, get_integer_from_atom, symbols::S,
     utils::vakint_macros::vk_symbol,
 };
+use std::collections::BTreeMap;
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 
 pub(crate) fn has_marker(input: AtomView<'_>) -> bool {
@@ -59,12 +60,44 @@ pub(super) fn marker_terms(
     if markers.is_empty() {
         return Ok(vec![(integral.clone(), numerator.clone())]);
     }
-    let mut result = Vec::new();
-    for (powers, coefficient) in
-        numerator.coefficient_list::<i16>(&markers.iter().collect::<Vec<_>>())
-    {
-        if has_marker(coefficient.as_view()) {
-            return Err(invalid("the numerator must be polynomial in ep markers"));
+    // The closed numerator can have hundreds of thousands of terms sharing a
+    // few marker factors. Feeding it directly to the polynomial converter
+    // repeatedly adds each scalar term to the same growing Atom coefficient.
+    let mut by_weight = BTreeMap::<Atom, Vec<Atom>>::new();
+    let mut collect = |term: AtomView<'_>| {
+        let (weight, scalar): (Vec<_>, Vec<_>) = factors(term)
+            .into_iter()
+            .partition(|factor| factor.contains_symbol(S.ep));
+        by_weight
+            .entry(Atom::mul_many(weight))
+            .or_default()
+            .push(Atom::mul_many(scalar));
+    };
+    if let AtomView::Add(sum) = numerator.as_view() {
+        sum.iter().for_each(collect);
+    } else {
+        collect(numerator.as_view());
+    }
+    let variables = markers.iter().collect::<Vec<_>>();
+    let mut by_power = BTreeMap::<Atom, Vec<Atom>>::new();
+    for (weight, terms) in by_weight {
+        let scalar = Atom::add_many(terms);
+        // A weight may itself be a polynomial, e.g. (ep(q,1)-1)^5.
+        for (power, coefficient) in weight.coefficient_list::<i16>(&variables) {
+            if has_marker(coefficient.as_view()) {
+                return Err(invalid("the numerator must be polynomial in ep markers"));
+            }
+            by_power
+                .entry(power)
+                .or_default()
+                .push(coefficient * &scalar);
+        }
+    }
+    let mut result = Vec::with_capacity(by_power.len());
+    for (powers, coefficients) in by_power {
+        let coefficient = Atom::add_many(coefficients);
+        if coefficient.is_zero() {
+            continue;
         }
         let mut tagged = props.clone();
         for power in factors(powers.as_view()) {
@@ -437,6 +470,52 @@ mod tests {
             assert!(marked_graph(&topology).is_err());
             assert!(marker_terms(&marker, &topology).is_err());
         }
+    }
+
+    #[test]
+    fn batched_marker_collection_preserves_nested_polynomials_and_cancellations() {
+        let q = S.k.call(1);
+        let r = S.k.call(2);
+        let x = S.ep.call((&q, 1));
+        let y = S.ep.call((&r, 1));
+        let a = vk_parse!("a").unwrap();
+        let b = vk_parse!("b").unwrap();
+        let props = vk_parse!("prop(1,edge(0,1),k(1),0,1)").unwrap();
+        let topo = S.topo.call(&props);
+        let numerator = (&x + &y).pow(2) * &a - &x * &x * &a + &x * &y * &b + &a + &b;
+        let mut expected = BTreeMap::new();
+        expected.insert(topo.clone(), &a + &b);
+        expected.insert(S.topo.call(&props * &x * &y), Atom::num(2) * &a + &b);
+        expected.insert(S.topo.call(&props * S.ep.call((&r, 2))), a);
+        for input in [numerator.clone(), numerator.expand()] {
+            let got = marker_terms(&input, &topo)
+                .unwrap()
+                .into_iter()
+                .map(|(topology, coefficient)| (topology, coefficient.expand()))
+                .collect::<BTreeMap<_, _>>();
+            assert_eq!(got, expected);
+        }
+        assert!(marker_terms(&Symbol::LOG.call(x), &topo).is_err());
+    }
+
+    #[test]
+    #[ignore = "timing comparison on a large closed numerator"]
+    fn time_many_terms_sharing_an_analytic_weight() {
+        let q = S.k.call(1);
+        let x = S.ep.call((&q, 1));
+        let tagged = S.topo.call(&x);
+        let scalar = vk_symbol!("bench_scalar");
+        let terms = 16_384;
+        let numerator = Atom::add_many((0..terms).map(|i| &x * scalar.call(i)));
+        let start = std::time::Instant::now();
+        let reference = numerator.coefficient_list::<i16>(&[&x]);
+        let unbatched = start.elapsed();
+        let start = std::time::Instant::now();
+        let grouped = marker_terms(&numerator, &S.topo.call(Atom::one())).unwrap();
+        let batched = start.elapsed();
+        assert_eq!(grouped.len(), 1);
+        assert_eq!(grouped[0], (tagged, reference[0].1.clone()));
+        println!("{terms} terms: unbatched {unbatched:?}, batched {batched:?}");
     }
 
     #[test]
