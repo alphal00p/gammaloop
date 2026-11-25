@@ -1,6 +1,7 @@
 //! Local massive UV Taylor expansion, before integration or forest subtraction.
 
 use std::collections::BTreeMap;
+use std::convert::Infallible;
 
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike, SubSetOps};
 use spenso::structure::representation::{Minkowski, RepName};
@@ -11,7 +12,7 @@ use symbolica::{
     symbol,
 };
 
-use crate::{DiagramError, EdgeId, FeynmanDiagram, expressions::GraphExpressions, symbols};
+use crate::{DOD, DiagramError, EdgeId, FeynmanDiagram, expressions::GraphExpressions, symbols};
 
 impl FeynmanDiagram {
     /// Expand the selected local integrand through its UV degree of divergence.
@@ -134,5 +135,103 @@ impl FeynmanDiagram {
         })
         .collect::<Vec<_>>();
         Ok(expanded.replace_multiple(&replacements))
+    }
+}
+
+impl FeynmanDiagram {
+    /// Classifying UV degree of divergence of a selected region in `dimension`
+    /// spacetime dimensions, by rescaling only its hard loop momenta.
+    ///
+    /// The region's local numerator (as [`Self::numerator_of`], with dummy edges
+    /// excluded) is routed in the region's own momentum basis, whose external
+    /// coordinates are the momenta crossing its boundary. Every independent loop
+    /// momentum `k` becomes `k/t`; external momenta stay fixed. Each internal
+    /// propagator of the region contributes a massless `1/q²`, and the measure
+    /// contributes `t^(-dimension * loops)`. The result is the leading power of
+    /// `1/t`: zero is logarithmic, positive is power divergent and negative is
+    /// convergent. Unlike [`Self::superficial_degree_of_divergence_of`], numerator
+    /// factors carrying only external momenta do not count. Masses do not change
+    /// the degree.
+    ///
+    /// All lines are routed to common loop coordinates before rescaling, so hard
+    /// parts of distinct lines can cancel in a local factor: a vertex factor
+    /// `(q₂⁰ + q₃⁰)²` on two parallel bubble lines oriented alike counts as zero.
+    /// GammaLoop's runtime counting tags each line's hard momentum, does not
+    /// cancel them, and gives two there.
+    ///
+    /// A local numerator that vanishes has no leading power; it is assigned degree
+    /// zero, so such a region counts as logarithmically divergent with a vanishing
+    /// integrand. Vanishing is detected when the routed numerator is zero or one
+    /// routed edge or vertex factor expands to zero. Indices are never contracted:
+    /// a numerator that vanishes only by contraction across factors, such as
+    /// `g_μν (q₀^μ p^ν − q₀^ν p^μ)` split over two vertices, is not detected and can
+    /// come out at any degree, including a negative one, so such a region may be
+    /// classified as convergent although its integrand is zero. Contracting is not
+    /// done because it is too costly to run on every candidate region.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the region cannot be routed or its leading power is not an
+    /// integer.
+    pub fn uv_degree_of_divergence_of(
+        &self,
+        subgraph: &SuBitGraph,
+        dimension: i32,
+    ) -> Result<i32, DiagramError> {
+        let selected = subgraph.intersection(&self.momentum_subgraph());
+        let basis = self.momentum_basis_of(&selected)?;
+        let scale = symbol!("feynkit_graph::uv_degree_scale"; Scalar);
+        let args = symbol!("feynkit_graph::uv_degree_args___");
+        let loop_pattern = function!(symbols::loop_momentum(), args);
+        let rescale = |expression: &Atom| {
+            basis
+                .route_expression(expression)
+                .replace(loop_pattern.to_pattern())
+                .with(&loop_pattern / scale)
+        };
+        let numerator = self.numerator_of(&selected, &self.graph.empty_subgraph::<SuBitGraph>())?;
+        let metric = Minkowski {}.new_rep(symbols::dimension());
+        let routed = rescale(numerator.expression());
+        // The local numerator is a product of edge and vertex factors, so it
+        // vanishes when one routed factor expands to zero. Expanding the factors
+        // separately exposes exact cancellations, such as an identity of
+        // squares, without expanding their product.
+        let vanishing_factor = self
+            .graph
+            .try_fold_numerator(
+                &selected,
+                &self.graph.empty_subgraph::<SuBitGraph>(),
+                false,
+                |_, vertex| {
+                    basis
+                        .route_expression(vertex.numerator.expression())
+                        .expand()
+                        .is_zero()
+                },
+                |edge| {
+                    basis
+                        .route_expression(edge.numerator.expression())
+                        .expand()
+                        .is_zero()
+                },
+                |edge| edge.is_dummy,
+                |vanishes, factor| Ok::<_, Infallible>(vanishes || factor),
+            )
+            .unwrap_or_else(|never| match never {});
+        if routed.is_zero() || vanishing_factor {
+            return Ok(0);
+        }
+        let mut integrand =
+            routed * Atom::var(scale).pow(-i64::from(dimension) * basis.loop_edges.len() as i64);
+        for (pair, edge, _) in self
+            .graph
+            .iter_edges_of(&selected.intersection(&self.internal_subgraph()))
+        {
+            if pair.is_paired() {
+                let momentum = symbols::momentum().call(edge.0);
+                integrand /= rescale(&metric.inner_product(&momentum, &momentum));
+            }
+        }
+        integrand.trailing_exponent(scale)
     }
 }

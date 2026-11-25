@@ -88,6 +88,16 @@ fn feynkit_cff_entry() {}
 )]
 fn feynkit_tensor_entry() {}
 
+#[alphal00p_docs::ty(
+    id = "Wood",
+    title = "Wood",
+    summary = "Orders classified UV spinneys by inclusion and unfolds them into forests.",
+    format = "rust-markdown",
+    source = "crates/feynkit-uv/src/wood.rs",
+    source_id = "feynkit_uv::wood::Wood"
+)]
+fn feynkit_uv_entry() {}
+
 #[alphal00p_docs::trait_item(
     id = "GammaLoopContext",
     title = "GammaLoopContext",
@@ -1303,6 +1313,7 @@ pub(super) fn for_component(component: &str) -> Option<Vec<DocItem>> {
         "feynkit-generator" => vec![__alphal00p_docs_ty_feynkit_generator_entry()],
         "feynkit-cff" => vec![__alphal00p_docs_ty_feynkit_cff_entry()],
         "feynkit-tensor" => vec![__alphal00p_docs_ty_feynkit_tensor_entry()],
+        "feynkit-uv" => vec![__alphal00p_docs_ty_feynkit_uv_entry()],
         _ => return None,
     })
 }

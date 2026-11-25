@@ -1260,11 +1260,18 @@ impl crate::FeynmanDiagram {
             .collect()
     }
 
+    /// A basis of `subgraph` that reuses the loop edges of `parent` where possible.
+    ///
+    /// # Errors
+    ///
+    /// Fails when `subgraph` is not a selection of this diagram, when `parent`
+    /// does not route this diagram's edges, or when no compatible basis exists.
     pub fn compatible_momentum_basis_of(
         &self,
         subgraph: &SuBitGraph,
         parent: &crate::LoopMomentumBasis,
     ) -> Result<crate::LoopMomentumBasis, crate::DiagramError> {
+        self.ensure_parent_routing(subgraph, parent)?;
         let selected = subgraph.intersection(&self.momentum_subgraph());
         self.graph
             .try_compatible_sub_lmb(
@@ -1274,6 +1281,45 @@ impl crate::FeynmanDiagram {
             )
             .map(|basis| self.normalize_routing(basis))
             .map_err(|error| crate::DiagramError::InvalidLoopMomentumBasis(error.to_string()))
+    }
+
+    /// Check that `subgraph` selects half-edges of this diagram and that `parent`
+    /// is a routing of its edges, so that the conversion to a routing cannot fail.
+    fn ensure_parent_routing(
+        &self,
+        subgraph: &SuBitGraph,
+        parent: &crate::LoopMomentumBasis,
+    ) -> Result<(), crate::DiagramError> {
+        let invalid = |message: String| Err(crate::DiagramError::InvalidLoopMomentumBasis(message));
+        if subgraph.size() != self.graph.n_hedges() {
+            return invalid(format!(
+                "the selection has {} half-edges, the diagram has {}",
+                subgraph.size(),
+                self.graph.n_hedges()
+            ));
+        }
+        let edges = self.graph.n_edges();
+        let in_range = |edge: &crate::EdgeId| edge.0 < edges;
+        if !parent.tree_edges.iter().all(in_range)
+            || !parent.loop_edges.iter().all(in_range)
+            || !parent.external_edges.iter().all(in_range)
+        {
+            return invalid("the parent basis names edges outside the diagram".to_owned());
+        }
+        for (_, edge, _) in self.graph.iter_edges() {
+            let Some(signature) = parent.edge_signatures.get(&crate::EdgeId(edge.0)) else {
+                return invalid(format!("the parent basis does not route edge {}", edge.0));
+            };
+            if signature.loops.len() != parent.loop_edges.len()
+                || signature.external.len() != parent.external_edges.len()
+            {
+                return invalid(format!(
+                    "the parent basis signature of edge {} has the wrong length",
+                    edge.0
+                ));
+            }
+        }
+        Ok(())
     }
 
     pub fn contracted_momentum_basis_of(

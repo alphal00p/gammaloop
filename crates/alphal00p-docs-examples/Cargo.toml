@@ -15,6 +15,7 @@ feynkit-graph.workspace = true
 feynkit-generator.workspace = true
 feynkit-cff.workspace = true
 feynkit-tensor.workspace = true
+feynkit-uv.workspace = true
 gammaloop-api = { path = "../gammaloop-api", default-features = false, features = ["cli"] }
 gammalooprs = { path = "../gammalooprs", default-features = false }
 idenso = { workspace = true, features = ["bincode", "reference-cases"] }

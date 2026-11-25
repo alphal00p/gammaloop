@@ -28,6 +28,8 @@ pub use feynkit_model as model;
 pub use feynkit_tensor as tensor;
 #[cfg(feature = "ufo")]
 pub use feynkit_ufo as ufo;
+#[cfg(feature = "uv")]
+pub use feynkit_uv as uv;
 
 #[cfg(feature = "cff")]
 pub use feynkit_cff::{CffGenerator, CffOptions, CffResult};
@@ -55,6 +57,11 @@ pub use feynkit_tensor::{
 };
 #[cfg(feature = "ufo")]
 pub use feynkit_ufo::{LoadedModel, UfoLoadOptions, UfoLoader};
+#[cfg(feature = "uv")]
+pub use feynkit_uv::{
+    ApproximationType, CTIdentifier, Forests, OperationNode, RenormalizationPrescriptionSettings,
+    Spinney, UvGraph, Wood,
+};
 
 #[cfg(all(
     test,
@@ -63,7 +70,8 @@ pub use feynkit_ufo::{LoadedModel, UfoLoadOptions, UfoLoader};
     feature = "graph",
     feature = "kinematics",
     feature = "model",
-    feature = "tensor"
+    feature = "tensor",
+    feature = "uv"
 ))]
 mod tests {
     #[test]
@@ -73,5 +81,6 @@ mod tests {
         let _ = std::any::TypeId::of::<super::CffGenerator>();
         let _ = std::any::TypeId::of::<super::FourMomentum<f64>>();
         let _ = std::any::TypeId::of::<super::TensorReducer>();
+        let _ = std::any::TypeId::of::<super::Wood<super::LoopMomentumBasis>>();
     }
 }

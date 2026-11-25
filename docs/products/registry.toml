@@ -197,7 +197,7 @@ pages = [
 ]
 related = ["gammaloop", "linnet", "spenso", "idenso", "vakint"]
 rust_components = [
-  { id = "feynkit", package = "feynkit", kind = "library", version_source = "crates/feynkit/Cargo.toml", features = ["amplitude", "cff", "generator", "graph", "kinematics", "model", "tensor", "ufo"] },
+  { id = "feynkit", package = "feynkit", kind = "library", version_source = "crates/feynkit/Cargo.toml", features = ["amplitude", "cff", "generator", "graph", "kinematics", "model", "tensor", "ufo", "uv"] },
   { id = "feynkit-model", package = "feynkit-model", kind = "library", version_source = "crates/feynkit-model/Cargo.toml", features = ["native"] },
   { id = "feynkit-ufo", package = "feynkit-ufo", kind = "library", version_source = "crates/feynkit-ufo/Cargo.toml", features = ["feynkit-model/native"] },
   { id = "feynkit-kinematics", package = "feynkit-kinematics", kind = "library", version_source = "crates/feynkit-kinematics/Cargo.toml", features = ["native"] },
@@ -206,6 +206,7 @@ rust_components = [
   { id = "feynkit-generator", package = "feynkit-generator", kind = "library", version_source = "crates/feynkit-generator/Cargo.toml", features = ["native"] },
   { id = "feynkit-cff", package = "feynkit-cff", kind = "library", version_source = "crates/feynkit-cff/Cargo.toml", features = ["native"] },
   { id = "feynkit-tensor", package = "feynkit-tensor", kind = "library", version_source = "crates/feynkit-tensor/Cargo.toml", features = ["native"] },
+  { id = "feynkit-uv", package = "feynkit-uv", kind = "library", version_source = "crates/feynkit-uv/Cargo.toml", features = [] },
 ]
 python_components = [
   { id = "feynkit-community", package = "feynkit-py", kind = "symbolica-community-module", version_source = "crates/feynkit-py/Cargo.toml", module = "symbolica.community.hepkit", features = ["native", "ufo", "python_stubgen"] },

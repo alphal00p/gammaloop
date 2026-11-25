@@ -163,6 +163,15 @@ mod annotated_scopes {
     )]
     mod feynkit_tensor {}
 
+    /// Enumerates UV spinneys and unfolds their wood into forests.
+    /// See #link("reference/rust/")[full Rustdoc] for this component.
+    #[alphal00p_docs::scope(
+        id = "feynkit-uv",
+        title = "feynkit-uv supported API",
+        format = "typst"
+    )]
+    mod feynkit_uv {}
+
     pub(super) fn for_component(component: &str) -> Option<alphal00p_docs_schema::DocScope> {
         match component {
             "gammalooprs" => Some(__alphal00p_docs_scope_gammalooprs()),
@@ -182,6 +191,7 @@ mod annotated_scopes {
             "feynkit-generator" => Some(__alphal00p_docs_scope_feynkit_generator()),
             "feynkit-cff" => Some(__alphal00p_docs_scope_feynkit_cff()),
             "feynkit-tensor" => Some(__alphal00p_docs_scope_feynkit_tensor()),
+            "feynkit-uv" => Some(__alphal00p_docs_scope_feynkit_uv()),
             _ => None,
         }
     }
@@ -399,6 +409,7 @@ fn rust_examples(component: &str) -> Result<&'static [RustExampleSpec]> {
         "feynkit-generator" => Ok(FEYNKIT_GENERATOR),
         "feynkit-cff" => Ok(FEYNKIT_CFF),
         "feynkit-tensor" => Ok(FEYNKIT_TENSOR),
+        "feynkit-uv" => Ok(FEYNKIT_UV),
         _ => bail!("unknown Rust component {component}"),
     }
 }
@@ -455,6 +466,12 @@ const FEYNKIT_TENSOR: &[RustExampleSpec] = &[example!(
     "TensorReducer",
     "rust",
     "use feynkit_tensor::TensorReducer;\nuse idenso::tensor::SymbolicTensor;\nuse symbolica::{parse, symbol};\nlet _ = spenso::vector_symbol!(\"k\");\nlet reducer = TensorReducer::new(parse!(\"D\")).with_integrated_head(symbol!(\"k\"));\nlet numerator = SymbolicTensor::infer(parse!(\"k(spenso::mink(D,mu))*k(spenso::mink(D,nu))\"))?;\nlet reduced = reducer.reduce(&numerator)?;\nassert_eq!(reduced.terms().len(), 1);"
+)];
+
+const FEYNKIT_UV: &[RustExampleSpec] = &[example!(
+    "Wood",
+    "rust",
+    "use feynkit_graph::FeynmanDiagram;\nuse feynkit_model::Model;\nuse feynkit_uv::{RenormalizationPrescriptionSettings, UvGraph, Wood};\nlet diagram = FeynmanDiagram::from_dot(Model::phi4(), \"digraph basketball { edge [particle=phi]; a -> b; a -> b; a -> b; a -> b; }\")?;\nlet spinneys = diagram.classify_spinneys(&diagram.hedge_graph().full_filter(), diagram.model(), &RenormalizationPrescriptionSettings::default(), diagram.loop_momentum_basis())?;\nlet forests = Wood::from_spinneys(spinneys, &diagram, diagram.loop_momentum_basis())?.unfold();\nassert_eq!(forests.n_forests(), 46);"
 )];
 
 const GAMMALOOPRS: &[RustExampleSpec] = &[
@@ -1181,6 +1198,7 @@ mod tests {
             "feynkit-generator",
             "feynkit-cff",
             "feynkit-tensor",
+            "feynkit-uv",
         ] {
             let request = CatalogRequest {
                 product_id: "test".to_owned(),

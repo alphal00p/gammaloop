@@ -2149,7 +2149,9 @@ end_anchor = "\nin\n{\n  inherit"
 # matching supported publication.
 # This supplies the shared editor/timing configuration; all readiness, timing,
 # scientific assertions, producer ownership and publication policy stay intact.
-digest = "87987f73ace1c5bb4203846d9b3b702cde6710f4"
+# No-impact attestation 2026-11-25: the publication check also requires the new
+# feynkit_uv Rustdoc component page; producers and cache reuse are unchanged.
+digest = "dd1976eb301ce55857cfac5b914e1fe9e43020f8"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"

@@ -130,6 +130,7 @@ dependencies = [
  "feynkit-model",
  "feynkit-tensor",
  "feynkit-ufo",
+ "feynkit-uv",
  "gammaloop-api",
  "gammalooprs",
  "idenso",
@@ -1878,6 +1879,7 @@ dependencies = [
  "feynkit-model",
  "feynkit-tensor",
  "feynkit-ufo",
+ "feynkit-uv",
 ]
 
 [[package]]
@@ -2030,6 +2032,28 @@ dependencies = [
  "pyo3",
  "serde_json",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "feynkit-uv"
+version = "0.1.0"
+dependencies = [
+ "ahash 0.8.12",
+ "bincode 2.0.1",
+ "bincode-trait-derive",
+ "feynkit-generator",
+ "feynkit-graph",
+ "feynkit-model",
+ "itertools 0.14.0",
+ "linnet",
+ "pyo3",
+ "schemars",
+ "serde",
+ "serde_json",
+ "symbolica",
+ "thiserror 2.0.18",
+ "toml 0.9.12+spec-1.1.0",
+ "tracing",
 ]
 
 [[package]]
