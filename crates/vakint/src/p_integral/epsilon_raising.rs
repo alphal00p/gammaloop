@@ -32,7 +32,7 @@ fn factors(view: AtomView<'_>) -> Vec<AtomView<'_>> {
 
 /// Collect multiplicative ep factors into each topology before matching its
 /// integer family. Coefficients are grouped at fixed powers of all markers.
-fn collect_markers(numerator: &Atom, integral: &Atom) -> Result<Atom, VakintError> {
+pub(super) fn collect_markers(numerator: &Atom, integral: &Atom) -> Result<Atom, VakintError> {
     let mut markers = std::collections::BTreeSet::new();
     numerator.visitor(&mut |part| {
         if matches!(part,AtomView::Fun(f) if f.get_symbol()==S.ep) {
@@ -118,7 +118,7 @@ pub fn with_analytic_line_powers(
     if candidates.is_empty() {
         return Ok(numerator * topology);
     }
-    let graph = PGraph::parse(topology.as_view())?;
+    let (graph, _) = marked_graph(&topology)?;
     let mu = Atom::var(mu_squared);
     let mut squares = std::collections::BTreeMap::new();
     for line in graph.lines {
@@ -160,7 +160,7 @@ pub fn with_analytic_line_powers(
     Ok(numerator.replace_multiple(&replacements) * topology)
 }
 
-fn lifted(graph: &mut PGraph, momentum: &Atom, count: usize) -> Result<(), VakintError> {
+pub(super) fn lifted(graph: &mut PGraph, momentum: &Atom, count: usize) -> Result<(), VakintError> {
     if graph.loops.saturating_add(count) > 5 {
         return Err(invalid(format!(
             "ep({momentum},{count}) on a {}-loop graph exceeds the five-loop RustRed family library",
@@ -287,6 +287,24 @@ fn analytic_bubble(
     ))
 }
 
+pub(super) fn marked_graph(topology: &Atom) -> Result<(PGraph, Vec<(Atom, usize)>), VakintError> {
+    let AtomView::Fun(topo) = topology.as_view() else {
+        return Err(invalid("ep requires a single topology"));
+    };
+    let mut props = Atom::one();
+    let mut markers = Vec::new();
+    for factor in factors(topo.iter().next().unwrap()) {
+        if !has_marker(factor) {
+            props *= factor.to_owned();
+            continue;
+        }
+        let (q, m) = marker_power(factor)?;
+        let count = usize::try_from(m).map_err(|_| invalid("ep count overflow"))?;
+        markers.push((q, count));
+    }
+    Ok((PGraph::parse(S.topo.call(props).as_view())?, markers))
+}
+
 impl Vakint {
     pub(crate) fn evaluate_epsilon_raised(
         &self,
@@ -324,21 +342,7 @@ impl Vakint {
                     "ep requires RustRed as the first evaluation method",
                 ));
             };
-            let AtomView::Fun(topo) = term.integral.as_view() else {
-                return Err(invalid("ep requires a single topology"));
-            };
-            let mut props = Atom::one();
-            let mut markers = Vec::new();
-            for factor in factors(topo.iter().next().unwrap()) {
-                if !has_marker(factor) {
-                    props *= factor.to_owned();
-                    continue;
-                }
-                let (q, m) = marker_power(factor)?;
-                let count = usize::try_from(m).map_err(|_| invalid("ep count overflow"))?;
-                markers.push((q, count));
-            }
-            let mut graph = PGraph::parse(S.topo.call(props).as_view())?;
+            let (mut graph, markers) = marked_graph(&term.integral)?;
             let physical = graph.loops;
             let extra = markers
                 .iter()

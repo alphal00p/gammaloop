@@ -1353,6 +1353,16 @@ impl MassiveClosure {
                     }
                     continue;
                 }
+                if let Some(value) =
+                    closure.raised_cut(vakint, settings, &topology, &numerator, &head, mode)?
+                {
+                    if mode == RustRedMasterMode::Numerical {
+                        numerical[owner] += value;
+                    } else {
+                        results[owner] += value;
+                    }
+                    continue;
+                }
                 let mut expression = if matches!(topology.as_view(), AtomView::Fun(function) if function.get_symbol() == S.topo)
                     && !numerator.contains_symbol(S.topo)
                 {
@@ -1679,6 +1689,16 @@ impl MassiveClosure {
                     }
                     continue;
                 }
+                if let Some(value) =
+                    self.raised_cut(vakint, settings, &topology, &numerator, &head, mode)?
+                {
+                    if mode == RustRedMasterMode::Numerical {
+                        numerical += value;
+                    } else {
+                        result += value;
+                    }
+                    continue;
+                }
                 let mut expression = VakintExpression::try_from(topology * numerator)?;
                 for term in &mut expression.0 {
                     if !term.normalize_propagator()? {
@@ -1795,6 +1815,37 @@ impl MassiveClosure {
             Ok(terms) => return Ok(terms.into_iter().map(|(power, c)| (power, 0, c)).collect()),
             Err(error) => error,
         };
+        let marker = S.ep.call((head, 1));
+        let Some(expression) = Self::mark_radial(expression, head, settings) else {
+            return Err(integer_error);
+        };
+        let mut terms = Vec::new();
+        for (power, coefficient) in expression.coefficient_list::<i16>(&[&marker]) {
+            let shift = if power.is_one() {
+                0
+            } else if power == marker {
+                1
+            } else if let AtomView::Pow(p) = power.as_view()
+                && p.get_base() == marker.as_view()
+            {
+                crate::get_integer_from_atom(p.get_exp())
+                    .filter(|i| *i >= 0)
+                    .ok_or_else(|| super::invalid("invalid analytic radial power"))?
+            } else {
+                return Err(super::invalid("invalid analytic radial power"));
+            };
+            for (n, c) in Self::radial_terms(&coefficient, head)? {
+                terms.push((n, shift, c));
+            }
+        }
+        Ok(terms)
+    }
+
+    fn mark_radial(
+        expression: &Atom,
+        head: &Atom,
+        settings: &crate::VakintSettings,
+    ) -> Option<Atom> {
         let eps = Atom::var(vk_symbol!(&settings.epsilon_symbol));
         let scale = -S.dot.call((head, head)) / Atom::var(vk_symbol!(&settings.mu_r_sq_symbol));
         let marker = S.ep.call((head, 1));
@@ -1820,33 +1871,111 @@ impl MassiveClosure {
             true
         });
         if substitutions.is_empty() {
-            return Err(integer_error);
+            return None;
         }
         let substitutions = substitutions
             .into_iter()
             .map(|(a, b)| symbolica::id::Replacement::new(a.to_pattern(), b.to_pattern()))
             .collect::<Vec<_>>();
-        let expression = expression.replace_multiple(&substitutions);
-        let mut terms = Vec::new();
-        for (power, coefficient) in expression.coefficient_list::<i16>(&[&marker]) {
-            let shift = if power.is_one() {
-                0
-            } else if power == marker {
-                1
-            } else if let AtomView::Pow(p) = power.as_view()
-                && p.get_base() == marker.as_view()
-            {
-                crate::get_integer_from_atom(p.get_exp())
-                    .filter(|i| *i >= 0)
-                    .ok_or_else(|| super::invalid("invalid analytic radial power"))?
-            } else {
-                return Err(super::invalid("invalid analytic radial power"));
-            };
-            for (n, c) in Self::radial_terms(&coefficient, head)? {
-                terms.push((n, shift, c));
+        Some(expression.replace_multiple(&substitutions))
+    }
+
+    /// A raised cut is an integer-family reduction with a known remaining
+    /// scale power. Each auxiliary G-scheme bubble contributes ε times its
+    /// reduced value and one extra radial raising; only the physical loops
+    /// count toward the measure and the requested Laurent depth.
+    fn raised_cut(
+        &self,
+        vakint: &Vakint,
+        settings: &crate::VakintSettings,
+        topology: &Atom,
+        numerator: &Atom,
+        head: &Atom,
+        mode: RustRedMasterMode,
+    ) -> Result<Option<Atom>, VakintError> {
+        use super::epsilon_raising::{collect_markers, has_marker, lifted, marked_graph};
+        let eps = vk_symbol!(&settings.epsilon_symbol);
+        let mut found = has_marker(topology.as_view()) || has_marker(numerator.as_view());
+        if !found && numerator.contains_symbol(eps) {
+            numerator.visitor(&mut |p|{
+                found|=matches!(p,AtomView::Pow(a) if a.get_exp().contains_symbol(eps) && (a.get_base().contains_symbol(S.k)||a.get_base().contains_symbol(S.p)));
+                !found
+            });
+        }
+        if !found {
+            return Ok(None);
+        }
+        if !matches!(
+            settings.evaluation_order.0.first(),
+            Some(EvaluationMethod::RustRed(_))
+        ) {
+            return Err(super::invalid("epsilon-raised cut requires RustRed"));
+        }
+        let numerator =
+            Self::mark_radial(numerator, head, settings).unwrap_or_else(|| numerator.clone());
+        let marked = super::with_analytic_line_powers(
+            numerator,
+            topology.clone(),
+            eps,
+            vk_symbol!(&settings.mu_r_sq_symbol),
+        )?;
+        let mut value = Atom::Zero;
+        for term in VakintExpression::split_integrals(marked.as_view())? {
+            let input = collect_markers(&term.numerator, &term.integral)?;
+            for mut group in VakintExpression::split_integrals(input.as_view())? {
+                let (mut graph, markers) = marked_graph(&group.integral)?;
+                if graph.external != *head && graph.external != -head {
+                    return Err(super::invalid(
+                        "epsilon-raised cut uses a different closing momentum",
+                    ));
+                }
+                let physical = graph.loops;
+                let mut shift = 0i64;
+                for (q, m) in markers {
+                    shift = shift
+                        .checked_add(
+                            i64::try_from(m).map_err(|_| super::invalid("ep count overflow"))?,
+                        )
+                        .ok_or_else(|| super::invalid("ep count overflow"))?;
+                    if q != *head && q != -head {
+                        lifted(&mut graph, &q, m)?;
+                    }
+                }
+                let extra = graph.loops - physical;
+                group.integral = graph.to_atom();
+                if !group.normalize_propagator()? {
+                    continue;
+                }
+                group.numerator =
+                    super::scalar_numerator_with(group.numerator.as_view(), head, false)?;
+                let matched = group.prepare_integral_specs(vakint, settings, None)?;
+                let request = matched
+                    .propagator_request(group.numerator.as_view())
+                    .ok_or_else(|| super::invalid("no RustRed request for a raised cut"))?;
+                let rows = crate::rustred_evaluation::p_integral::reduce_requests_factored(
+                    vakint,
+                    settings,
+                    &[request],
+                    None,
+                )?;
+                let weight = Atom::var(eps).pow(extra as u64)
+                    * if shift == 0 {
+                        Atom::one()
+                    } else {
+                        S.ep.call((head, shift))
+                    };
+                let values = rows
+                    .into_values()
+                    .flatten()
+                    .map(|mut v| {
+                        v.spectator = Some(v.spectator.take().unwrap_or_else(Atom::one) * &weight);
+                        v
+                    })
+                    .collect::<Vec<_>>();
+                value += self.finalize(vakint, &values, physical, head, settings, mode)?;
             }
         }
-        Ok(terms)
+        Ok(Some(value))
     }
 
     /// `coefficient` is free of loop momenta and of the hard momentum and
@@ -2427,6 +2556,32 @@ mod tests {
             parse("topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(1,2),p(1)-k(1),0,1))/ε^4");
         let reference = c.evaluate(&VAKINT, &s, auxiliary.as_view()).unwrap();
         assert_equal(&value, &reference);
+    }
+
+    #[test]
+    fn a_mixed_radial_and_internal_raising_matches_two_explicit_bubbles() {
+        let mut s = settings(2);
+        s.integral_normalization_factor = LoopNormalizationFactor::GScheme;
+        s.evaluation_order = EvaluationOrder(vec![EvaluationMethod::RustRed(
+            crate::RustRedEvaluationOptions {
+                master_mode: RustRedMasterMode::Symbolic,
+            },
+        )]);
+        let c = closure(2);
+        let integrand = parse(
+            "topo(prop(1,edge(0,1),k(1),0,1)*prop(2,edge(0,1),p(1)-k(1),0,1))*(-dot(p(1),p(1))/mursq)^(-ε)*(-dot(k(1),k(1))/mursq)^(-ε)/ε^4",
+        );
+        let value = c.evaluate(&VAKINT, &s, integrand.as_view()).unwrap();
+        let batch = MassiveClosure::evaluate_batch(&VAKINT, &s, &[(c.clone(), integrand)]).unwrap();
+        assert_equal(&value, &batch[0]);
+        s.number_of_terms_in_epsilon_expansion += 2;
+        let explicit = parse(
+            "topo(prop(1,edge(0,3),k(1),0,1)*prop(2,edge(0,1),p(1)-k(1),0,1)*prop(3,edge(3,1),k(2),0,1)*prop(4,edge(3,1),k(1)-k(2),0,1)*prop(5,edge(1,2),k(3),0,1)*prop(6,edge(1,2),p(1)-k(3),0,1))/ε^2",
+        );
+        assert_equal(
+            &value,
+            &c.evaluate(&VAKINT, &s, explicit.as_view()).unwrap(),
+        );
     }
 
     #[test]

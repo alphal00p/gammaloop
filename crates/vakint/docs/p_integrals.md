@@ -807,3 +807,9 @@ arguments use the slope L+1+m, while the normalization and the Laurent
 budget still count L+1 loops. The scale factor includes
 `(μ²/M²)^(m ε)`. The closure accepts both `ep(p(i),m)` and the
 corresponding power of the Euclidean square.
+
+A cut may carry both closing-momentum and internal-line raisings. An
+internal raising is reduced in its lifted integer family. Its extra
+scale power is then passed to the radial integration, along with the
+explicit closing-momentum raisings. The auxiliary loop contributes no
+additional physical loop normalization.
