@@ -597,6 +597,7 @@ impl RenderSettingsTransport {
                     )?
                 };
             let mut node = default_node.unwrap_or(NodeDrawing {
+                highlight_ring: Vec::new(),
                 radius,
                 label_padding,
                 label,

@@ -120,7 +120,7 @@ pub(crate) fn collection_view(
     }
     let mut drawings = Vec::new();
     for (index, diagram) in diagrams.take(limit).enumerate() {
-        let drawing = diagram.render(py, config, style, false, None, None, true)?;
+        let drawing = diagram.render(py, config, style, false, None, None, true, "casings")?;
         write!(
             templates,
             "<template data-feynkit-drawing><!--linnet-svg-{index}--></template>"

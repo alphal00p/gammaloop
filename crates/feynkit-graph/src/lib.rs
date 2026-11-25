@@ -27,7 +27,7 @@ pub use integrals::{
     IntegralFamily, IntegralFamilyError, IntegralMapping, PropagatorMapping, QuadraticMomentum,
 };
 #[cfg(feature = "svg")]
-pub use linnest::svg::HighlightStyle;
+pub use linnest::svg::{HighlightOverlap, HighlightStyle};
 pub use numerator_interface::NumeratorInterface;
 pub use power_counting::DOD;
 #[cfg(feature = "svg")]

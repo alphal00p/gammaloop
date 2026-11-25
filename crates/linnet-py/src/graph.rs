@@ -1621,7 +1621,10 @@ impl PyGraph {
     ///     Specify styles for additional layers.
     /// mute_outside : bool, optional
     ///     Fade edges and nodes outside the selected regions.
-    #[pyo3(signature = (*, config=None, highlight=None, mute_outside=true))]
+    /// overlap : {"casings", "bands", "bands-miniature"}, optional
+    ///     Use nested strokes, or parallel bands and segmented node rings.
+    ///     Bands use automatic palette slots for unstyled entries.
+    #[pyo3(signature = (*, config=None, highlight=None, mute_outside=true, overlap="casings"))]
     fn render(
         slf: Py<PyGraph>,
         py: Python<'_>,
@@ -1631,8 +1634,10 @@ impl PyGraph {
         #[gen_stub(override_type(type_repr = "Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']]] | None", imports = ("typing")))]
         highlight: Option<&Bound<'_, PyAny>>,
         mute_outside: bool,
+        #[gen_stub(override_type(type_repr = "typing.Literal['casings', 'bands', 'bands-miniature']", imports = ("typing")))]
+        overlap: &str,
     ) -> PyResult<PyDiagramView> {
-        render::render_with_highlights(py, &slf, config, highlight, mute_outside)
+        render::render_with_highlights(py, &slf, config, highlight, mute_outside, overlap)
     }
 
     /// Export SVG with the same highlights as ``render``.
@@ -1651,7 +1656,10 @@ impl PyGraph {
     ///     Selections and styles accepted by ``render``.
     /// mute_outside : bool, optional
     ///     Fade edges and nodes outside the selected regions.
-    #[pyo3(signature = (*, config=None, browser=None, highlight=None, mute_outside=true))]
+    /// overlap : {"casings", "bands", "bands-miniature"}, optional
+    ///     Use nested strokes, or parallel bands and segmented node rings.
+    ///     Bands use automatic palette slots for unstyled entries.
+    #[pyo3(signature = (*, config=None, browser=None, highlight=None, mute_outside=true, overlap="casings"))]
     fn to_svg(
         slf: Py<PyGraph>,
         py: Python<'_>,
@@ -1662,8 +1670,10 @@ impl PyGraph {
         #[gen_stub(override_type(type_repr = "Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']]] | None", imports = ("typing")))]
         highlight: Option<&Bound<'_, PyAny>>,
         mute_outside: bool,
+        #[gen_stub(override_type(type_repr = "typing.Literal['casings', 'bands', 'bands-miniature']", imports = ("typing")))]
+        overlap: &str,
     ) -> PyResult<String> {
-        render::render_with_highlights(py, &slf, config, highlight, mute_outside)?
+        render::render_with_highlights(py, &slf, config, highlight, mute_outside, overlap)?
             .snapshot(py, browser)?
             .to_svg()
     }

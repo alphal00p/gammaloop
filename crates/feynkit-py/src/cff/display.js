@@ -120,9 +120,7 @@
     const definition = (s) => s.expression_html;
     const color = (id, term) => {
       const slot = paletteFor(term)[id];
-      return slot <= 7
-        ? `var(--hs-${slot})`
-        : `light-dark(hsl(${(slot * 137.508) % 360} 55% 38%),hsl(${(slot * 137.508) % 360} 65% 73%))`;
+      return `var(--hs-${slot}, ${data.slot_colors[slot - 1]})`;
     };
     function element(name, attrs) {
       const el = document.createElementNS(ns, name);

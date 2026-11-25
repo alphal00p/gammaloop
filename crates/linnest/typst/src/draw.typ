@@ -548,6 +548,8 @@
   /// the last matching style replaces it. Use `"casings"` to preserve earlier
   /// matching strokes on the same path, widening them outward by at least
   /// 1.1pt per layer. Each matching style must supply a stroke.
+  /// `"bands"` paints parallel carrier bands underneath particle strokes.
+  /// `"bands-miniature"` increases the gap for small diagrams.
   /// -> bool | str
   subgraph-edge-underlay: true,
 ) = {

@@ -1304,6 +1304,7 @@ with sync_playwright() as driver:
             round_cap: false,
         };
         let node = NodeDrawing {
+            highlight_ring: Vec::new(),
             radius: 0.2,
             label_padding: None,
             label: None,

@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use linnest::svg::{HighlightPalette, HighlightRegion, HighlightStyle};
+use linnest::svg::{HighlightOverlap, HighlightPalette, HighlightRegion, HighlightStyle};
 use linnest::{
     encode_graph_spec_bytes, TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec,
     TypstGraphSpecEnvelope, TypstNodeSpec,
@@ -8,7 +8,7 @@ use linnest::{
 use linnet::half_edge::builder::{HedgeData, HedgeGraphBuilder};
 use linnet::half_edge::involution::{Flow, Hedge, HedgePair, Orientation};
 use linnet::half_edge::subgraph::{Inclusion, SubSetLike};
-use linnet_render_py::{extract_highlights, theme_svg, ThemeFormat, ThemePaint};
+use linnet_render_py::{extract_highlights, highlight_overlap, theme_svg, ThemeFormat, ThemePaint};
 use pyo3::exceptions::{PyReferenceError, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::types::{PyAny, PyDict, PyDictMethods, PyList, PyListMethods};
 use pyo3::{Bound, Py, PyResult, Python};
@@ -311,11 +311,13 @@ pub(crate) fn render_with_highlights(
     config: Option<&Bound<'_, PyAny>>,
     highlight: Option<&Bound<'_, PyAny>>,
     mute_outside: bool,
+    overlap: &str,
 ) -> PyResult<PyDiagramView> {
+    let overlap = highlight_overlap(overlap)?;
     let Some(highlight) = highlight else {
-        return render_graph(py, graph, config, &[], mute_outside);
+        return render_graph_with_overlap(py, graph, config, &[], mute_outside, overlap);
     };
-    let selections = extract_highlights(highlight, |entry| {
+    let selections = extract_highlights(highlight, overlap, |entry| {
         let subgraph = entry.cast::<PySubgraph>().map_err(|_| {
             PyTypeError::new_err(
                 "highlight expects a symbolica.community.graph.Subgraph from this graph. Use graph.subgraph(...)",
@@ -327,7 +329,7 @@ pub(crate) fn render_with_highlights(
         .iter()
         .map(|entry| (&*entry.selection, entry.style))
         .collect();
-    render_graph(py, graph, config, &layers, mute_outside)
+    render_graph_with_overlap(py, graph, config, &layers, mute_outside, overlap)
 }
 
 pub(crate) fn render_graph(
@@ -336,6 +338,24 @@ pub(crate) fn render_graph(
     config: Option<&Bound<'_, PyAny>>,
     highlights: &[(&PySubgraph, HighlightStyle)],
     mute_outside: bool,
+) -> PyResult<PyDiagramView> {
+    render_graph_with_overlap(
+        py,
+        graph,
+        config,
+        highlights,
+        mute_outside,
+        HighlightOverlap::Casings,
+    )
+}
+
+fn render_graph_with_overlap(
+    py: Python<'_>,
+    graph: &Py<PyGraph>,
+    config: Option<&Bound<'_, PyAny>>,
+    highlights: &[(&PySubgraph, HighlightStyle)],
+    mute_outside: bool,
+    overlap: HighlightOverlap,
 ) -> PyResult<PyDiagramView> {
     // Validate before callbacks and again after preparation of the graph records.
     for (subgraph, _) in highlights {
@@ -388,7 +408,7 @@ pub(crate) fn render_graph(
     palette.amber_solid_width = Some(1.2);
     palette.amber_node_fill = Some("#ffd16659".into());
     palette.outside_node_fill = Some("#77777726".into());
-    scene.apply_highlights(&regions, &palette, mute_outside);
+    scene.apply_highlights_with_overlap(&regions, &palette, mute_outside, overlap);
     let view = PyDiagramView::from_scene(py, scene, None)?;
     if highlights.is_empty() {
         return Ok(view);

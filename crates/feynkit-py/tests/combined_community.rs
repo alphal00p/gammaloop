@@ -4,7 +4,8 @@ use std::ffi::CString;
 use std::path::PathBuf;
 
 use feynkit_graph::{
-    DiagramEdge, DiagramVertex, FeynmanDiagram, HighlightLayer, HighlightStyle, NumeratorInterface,
+    DiagramEdge, DiagramVertex, FeynmanDiagram, HighlightLayer, HighlightOverlap, HighlightStyle,
+    NumeratorInterface,
 };
 use feynkit_model::Model;
 use feynkit_py::{FeynkitModule, PyFeynmanDiagram, PyModel};
@@ -255,7 +256,7 @@ fn community_native_forwarding_uses_registered_owners() {
 }
 
 #[test]
-fn linnest_casing_source_matches_the_compiled_clinnet_fixture() {
+fn linnest_overlap_sources_match_the_compiled_clinnet_fixtures() {
     let diagram = FeynmanDiagram::from_dot(
         Model::phi4(),
         r#"digraph basketball {
@@ -284,6 +285,13 @@ fn linnest_casing_source_matches_the_compiled_clinnet_fixture() {
     assert_eq!(
         source,
         include_str!("../../clinnet/tests/resources/feynkit-casings.typ")
+    );
+    let bands = diagram
+        .to_linnest_with_overlap(&layers, true, None, "(:)", HighlightOverlap::Bands)
+        .unwrap();
+    assert_eq!(
+        bands,
+        include_str!("../../clinnet/tests/resources/feynkit-bands.typ")
     );
 }
 

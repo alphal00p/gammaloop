@@ -7,7 +7,8 @@ mod config;
 mod curves;
 pub use config::Config;
 pub use highlight::{
-    HighlightPalette, HighlightRegion, HighlightStroke, HighlightStyle, UnknownHighlightStyle,
+    HighlightOverlap, HighlightPalette, HighlightRegion, HighlightStroke, HighlightStyle,
+    SlotPaint, UnknownHighlightOverlap, UnknownHighlightStyle,
 };
 mod highlight;
 mod interactive;
@@ -15,13 +16,14 @@ mod labels;
 mod marks;
 mod output;
 
-use kurbo::{BezPath, Point};
+use kurbo::{Arc as CurveArc, BezPath, Point, Vec2};
 use linnet::half_edge::involution::EdgeIndex;
 use linnet::half_edge::layout::impred::{EdgeLabel, ImpredConfig};
 use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph};
 use roxmltree::Document;
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
+use std::f64::consts::{FRAC_PI_2, TAU};
 use std::sync::Arc;
 
 use crate::{ImpredRun, TypstDotEdge, TypstDotEndpoint, TypstDotNode, TypstGraph, TypstGraphSpec};
@@ -61,6 +63,8 @@ pub struct Scene {
 
 #[derive(Clone)]
 pub struct NodeDrawing {
+    /// Ordered paints for a segmented highlight ring.
+    pub highlight_ring: Vec<String>,
     /// Radius/minimum half-size in drawing units.
     pub radius: f64,
     /// Fit labels with this padding, or keep an explicit fixed radius.
@@ -91,6 +95,12 @@ pub struct EdgeDrawing {
 }
 
 impl EdgeDrawing {
+    fn has_bands(&self) -> bool {
+        self.highlight_strokes
+            .first()
+            .is_some_and(|stroke| stroke.offset.is_some())
+    }
+
     /// Default clearance used by the shared physics renderer.
     pub const DEFAULT_MOMENTUM_OFFSET: f64 = 0.35;
 }
@@ -645,7 +655,12 @@ impl Drawing {
             }
         }
 
-        layers.extend(highlight_layers.into_values().flatten());
+        let highlight_elements = highlight_layers.into_values().flatten();
+        if scene.edges.iter().any(EdgeDrawing::has_bands) {
+            layers.splice(..0, highlight_elements);
+        } else {
+            layers.extend(highlight_elements);
+        }
         layers.extend(overlay_marks);
 
         let obstacles: Vec<Bounds> = laid
@@ -718,6 +733,41 @@ impl Drawing {
                 fill: drawing.fill.clone(),
                 stroke: drawing.stroke.clone(),
             });
+            let (width, height) = drawing.size(typeset);
+            let radius = width.max(height) + 1.15 / UNIT;
+            let count = drawing.highlight_ring.len();
+            for (index, paint) in drawing.highlight_ring.iter().enumerate() {
+                let step = TAU / count as f64;
+                let gap = if count == 1 {
+                    0.0
+                } else {
+                    0.035_f64.min(step / 4.0)
+                };
+                let arc = CurveArc {
+                    center: Point::new(at[0], at[1]),
+                    radii: Vec2::new(radius, radius),
+                    start_angle: FRAC_PI_2 - index as f64 * step - gap,
+                    sweep_angle: -step + 2.0 * gap,
+                    x_rotation: 0.0,
+                };
+                let start = Point::new(
+                    at[0] + radius * arc.start_angle.cos(),
+                    at[1] + radius * arc.start_angle.sin(),
+                );
+                let mut path = BezPath::new();
+                path.move_to(start);
+                path.extend(arc.append_iter(curves::ACCURACY));
+                layers.push(Element::Path {
+                    path,
+                    stroke: Stroke {
+                        paint: paint.clone(),
+                        width: 2.5,
+                        dash: Dash::Solid,
+                        round_cap: false,
+                    },
+                    highlight: true,
+                });
+            }
             if let Some(page) = drawing.label {
                 let label = &typeset.pages[page];
                 layers.push(Element::Label {
@@ -944,9 +994,30 @@ impl Drawing {
         overlay_marks: &mut Vec<Element>,
         strokes: &mut Vec<CollisionStroke>,
     ) -> Result<(), String> {
+        let bands = drawing.has_bands();
+        if bands && !visible.elements().is_empty() {
+            for band in &drawing.highlight_strokes {
+                let offset = band.offset.unwrap_or_default() / UNIT;
+                let path = if offset == 0.0 {
+                    visible.clone()
+                } else {
+                    curves::parallel(visible, offset)?
+                };
+                strokes.push(CollisionStroke {
+                    radius: band.stroke.width / UNIT / 2.0,
+                    path: path.clone(),
+                });
+                highlight_layers.entry(0).or_default().push(Element::Path {
+                    path,
+                    stroke: band.stroke.clone(),
+                    highlight: true,
+                });
+            }
+        }
         let outermost = drawing
             .highlight_strokes
             .first()
+            .filter(|_| !bands)
             .map_or(&drawing.stroke, |highlight| &highlight.stroke);
         let radius = outermost.width / UNIT / 2.0;
         let paths = if let Some(pattern) = &drawing.pattern {
@@ -963,13 +1034,12 @@ impl Drawing {
                 path: path.clone(),
             });
         }
-        let base_stroke = drawing
-            .highlight_strokes
-            .is_empty()
-            .then_some((None, &drawing.stroke));
+        let base_stroke =
+            (bands || drawing.highlight_strokes.is_empty()).then_some((None, &drawing.stroke));
         let highlights = drawing
             .highlight_strokes
             .iter()
+            .filter(|_| !bands)
             .map(|highlight| (Some(highlight.layer), &highlight.stroke));
         for (index, stroke) in base_stroke.into_iter().chain(highlights) {
             let paint = match index {
@@ -1088,6 +1158,7 @@ impl Scene {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    use std::collections::BTreeSet;
 
     use super::*;
     use crate::{TypstEdgeSpec, TypstEndpointSpec, TypstNodeSpec};
@@ -1180,6 +1251,7 @@ mod tests {
             },
             nodes: (0..2)
                 .map(|_| NodeDrawing {
+                    highlight_ring: Vec::new(),
                     radius: NODE_RADIUS,
                     label_padding: Some(0.25),
                     label: None,
@@ -1231,6 +1303,84 @@ mod tests {
                 label,
             ])
             .unwrap()
+    }
+
+    #[test]
+    fn bands_are_offset_from_the_carrier_and_keep_node_arcs_separate() {
+        let mut scene = bubble(false);
+        let regions: Vec<_> = (1..=3)
+            .map(|slot| {
+                HighlightRegion::new([0, 1].into(), [0, 1].into(), HighlightStyle::Slot(slot))
+            })
+            .collect();
+        let palette = HighlightPalette::new("#ffd166");
+        let original = scene.edges[1].stroke.clone();
+        scene.apply_highlights_with_overlap(
+            &regions,
+            &palette,
+            false,
+            HighlightOverlap::BandsMiniature,
+        );
+        assert_eq!(scene.edges[1].stroke, original);
+        assert_eq!(
+            scene.edges[1]
+                .highlight_strokes
+                .iter()
+                .map(|stroke| stroke.offset)
+                .collect::<Vec<_>>(),
+            [Some(-4.0), Some(0.0), Some(4.0)]
+        );
+        let svg = scene.render(&typeset(&scene)).unwrap();
+        let document = Document::parse(&svg).unwrap();
+        let paths = |width: &str| {
+            document
+                .descendants()
+                .filter(|element| {
+                    element.has_tag_name("path") && element.attribute("stroke-width") == Some(width)
+                })
+                .filter_map(|element| element.attribute("d"))
+                .collect::<Vec<_>>()
+        };
+        let strokes: Vec<_> = document
+            .descendants()
+            .filter(|element| element.has_tag_name("path"))
+            .collect();
+        let last_band = strokes
+            .iter()
+            .rposition(|element| element.attribute("stroke-width") == Some("2.4"))
+            .unwrap();
+        let first_particle = strokes
+            .iter()
+            .position(|element| element.attribute("stroke") == Some(original.paint.as_str()))
+            .unwrap();
+        assert!(
+            last_band < first_particle,
+            "all particle strokes must remain above the bands"
+        );
+        let bands = paths("2.4");
+        assert_eq!(bands.len(), 6);
+        for edge in bands.as_chunks::<3>().0 {
+            assert_ne!(edge[0], edge[1]);
+            assert_ne!(edge[1], edge[2]);
+        }
+        let rings = paths("2.5");
+        assert_eq!(rings.len(), 6);
+        assert!(rings
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .all(|node| node[0] != node[1] && node[1] != node[2]));
+        let palette = (1..=16).map(SlotPaint::new).collect::<Vec<_>>();
+        assert_eq!(palette[0].light, "#0077bb");
+        assert_eq!(
+            palette
+                .iter()
+                .map(|paint| &paint.light)
+                .collect::<BTreeSet<_>>()
+                .len(),
+            palette.len()
+        );
+        assert!(palette.iter().all(|paint| paint.light != paint.dark));
     }
 
     #[test]

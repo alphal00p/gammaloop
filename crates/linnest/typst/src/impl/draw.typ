@@ -2821,6 +2821,19 @@
   _without-mark-style(base) + (stroke: if casing == none { none } else { casing.stroke })
 }
 
+// Offset the visible carrier before the particle's patterned stroke is drawn.
+#let _edge-bands(path, styles, spacing) = {
+  if curve-api.segments(path).len() == 0 { return () }
+  let colors = styles.filter(style => not style.at("band-base", default: false))
+  let middle = (colors.len() - 1) / 2
+  for (index, style) in colors.enumerate() {
+    let offset = (index - middle) * spacing
+    let shifted = if offset == 0 { path } else { curve-api.parallel(path, distance: offset) }
+    let stroke = cetz.util.resolve-stroke(style.stroke) + (thickness: 2.4pt, dash: none, cap: "round")
+    curve-api.to-cetz(shifted, stroke: stroke, fill: none)
+  }
+}
+
 #let _last-style(styles) = {
   if styles.len() == 0 { none } else { styles.last() }
 }
@@ -3145,11 +3158,13 @@
   let debug-edge-label-fill = options.debug-edge-label-fill
   let subgraph-edge-style = options.subgraph-edge-style
   assert(
-    options.subgraph-edge-underlay in (true, false, "casings"),
-    message: "draw: subgraph-edge-underlay must be true, false, or \"casings\"",
+    options.subgraph-edge-underlay in (true, false, "casings", "bands", "bands-miniature"),
+    message: "draw: subgraph-edge-underlay must be true, false, or a supported overlap mode (\"casings\", \"bands\", \"bands-miniature\")",
   )
   let subgraph-edge-underlay = options.subgraph-edge-underlay == true
   let subgraph-edge-casings = options.subgraph-edge-underlay == "casings"
+  let subgraph-edge-bands = options.subgraph-edge-underlay in ("bands", "bands-miniature")
+  let band-spacing = if options.subgraph-edge-underlay == "bands-miniature" { 4pt } else { 3pt }
   let info = graph-api.info(graph)
   let graph-style = _graph-style(info)
   unit = if unit == auto { graph-style.at("unit", default: 1) } else { unit }
@@ -3191,6 +3206,7 @@
         )
 
         let highlight-paint = subgraph-records.map(_ => ())
+        let band-underlays = ()
 
         for (i, v) in nodes.enumerate() {
           let boundary = v.at("boundary", default: none) != none
@@ -3297,11 +3313,30 @@
             // Cut boundary nodes are endpoint positions, not interactions.
             node-elements.push(cetz.draw.anchor(box.name, box.center))
           } else if draw-node == auto {
+            let ring = node-style.at("highlight-ring", default: ())
+            let circle-style = _without-keys(node-style, ("highlight-ring",))
             node-elements.push(cetz.draw.circle(
               _point(pos),
               name: box.name,
-              ..node-style,
+              ..circle-style,
             ))
+            let radius = node-style.radius + 1.15pt / ctx.length
+            if ring.len() == 1 {
+              node-elements.push(cetz.draw.circle(
+                box.center, radius: radius, fill: none, stroke: ring.first() + 2.5pt,
+              ))
+            } else if ring.len() > 1 {
+              let step = 360deg / ring.len()
+              let gap = calc.min(0.035rad, step / 4)
+              for (index, paint) in ring.enumerate() {
+                node-elements.push(cetz.draw.arc(
+                  box.center, anchor: "origin", radius: radius,
+                  start: 90deg - index * step - gap,
+                  stop: 90deg - (index + 1) * step + gap,
+                  fill: none, stroke: paint + 2.5pt,
+                ))
+              }
+            }
           } else {
             node-elements.push(draw-node(node-data, box))
           }
@@ -3544,6 +3579,13 @@
             }
             let source-draw-style = if source-style-value == none {
               none
+            } else if subgraph-edge-bands {
+              let base = source-subgraph-styles.find(style => style.at("band-base", default: false))
+              if base == none or _style-value(source-style-value, "label-only") {
+                source-style-value
+              } else {
+                source-style-value + (stroke: base.stroke)
+              }
             } else if (
               source-in-subgraph and not subgraph-edge-underlay
                 and not _style-value(source-style-value, "label-only")
@@ -3559,6 +3601,13 @@
             )
             let sink-draw-style = if sink-style-value == none {
               none
+            } else if subgraph-edge-bands {
+              let base = sink-subgraph-styles.find(style => style.at("band-base", default: false))
+              if base == none or _style-value(sink-style-value, "label-only") {
+                sink-style-value
+              } else {
+                sink-style-value + (stroke: base.stroke)
+              }
             } else if (
               sink-in-subgraph and not subgraph-edge-underlay
                 and not _style-value(sink-style-value, "label-only")
@@ -3599,7 +3648,7 @@
             }
             if (
               crossing-under != none
-                and (subgraph-edge-underlay or subgraph-edge-casings)
+                and (subgraph-edge-underlay or subgraph-edge-casings or subgraph-edge-bands)
                 and (source-in-subgraph or sink-in-subgraph)
             ) {
               panic(
@@ -3690,6 +3739,17 @@
                   ) {
                     elements.push(element)
                   }
+                }
+              }
+              if subgraph-edge-bands and layer-index == 0 {
+                let spacing = band-spacing / ctx.length
+                if source-subgraph-styles == sink-subgraph-styles {
+                  let whole = halves.at("whole", default: none)
+                  let path = _segments-path(if whole == none { halves.source + halves.sink } else { whole })
+                  band-underlays += _edge-bands(path, source-subgraph-styles, spacing)
+                } else {
+                  band-underlays += _edge-bands(_segments-path(halves.source), source-subgraph-styles, spacing)
+                  band-underlays += _edge-bands(_segments-path(halves.sink), sink-subgraph-styles, spacing)
                 }
               }
               if subgraph-edge-casings {
@@ -3930,6 +3990,9 @@
                   }
                 }
               }
+              if subgraph-edge-bands and layer-index == 0 {
+                band-underlays += _edge-bands(visible-path, source-subgraph-styles, band-spacing / ctx.length)
+              }
               if subgraph-edge-casings and source-style-value != none and not _style-value(source-style-value, "label-only") {
                 for casing in source-subgraph-styles {
                   let rank = casing.subgraph-rank
@@ -4047,6 +4110,9 @@
                     elements.push(element)
                   }
                 }
+              }
+              if subgraph-edge-bands and layer-index == 0 {
+                band-underlays += _edge-bands(visible-path, sink-subgraph-styles, band-spacing / ctx.length)
               }
               if subgraph-edge-casings and sink-style-value != none and not _style-value(sink-style-value, "label-only") {
                 for casing in sink-subgraph-styles {
@@ -4231,6 +4297,10 @@
           }
         }
 
+        if band-underlays.len() > 0 {
+          elements = band-underlays + elements
+          edge-layers.push((ctx: ctx, elements: band-underlays))
+        }
         // Append matching ranks across the whole graph, including their top strokes.
         for layer in highlight-paint {
           elements += layer

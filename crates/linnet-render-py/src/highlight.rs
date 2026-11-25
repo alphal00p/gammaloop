@@ -1,6 +1,8 @@
 use std::fmt::Write;
 
-use linnest::svg::{HighlightStyle, UnknownHighlightStyle};
+use linnest::svg::{
+    HighlightOverlap, HighlightStyle, SlotPaint, UnknownHighlightOverlap, UnknownHighlightStyle,
+};
 use pyo3::exceptions::PyValueError;
 use pyo3::types::{
     PyAny, PyAnyMethods, PySequence, PySequenceMethods, PyString, PyTuple, PyTupleMethods,
@@ -17,6 +19,15 @@ pub struct SelectedHighlight<T> {
     pub style: HighlightStyle,
 }
 
+/// Parse a Python overlap keyword. See [`extract_highlights`].
+///
+/// # Errors
+/// Raises ValueError for an unknown mode.
+pub fn highlight_overlap(mode: &str) -> PyResult<HighlightOverlap> {
+    mode.parse()
+        .map_err(|error: UnknownHighlightOverlap| PyValueError::new_err(error.to_string()))
+}
+
 /// Resolve a selection, a styled pair, or an ordered sequence of either.
 /// The callback validates the owner of each selection. One, two, or three
 /// unstyled entries receive amber, blue/red, or blue/violet/red respectively.
@@ -26,6 +37,7 @@ pub struct SelectedHighlight<T> {
 /// Returns a Python exception for an invalid selection, name, or sequence.
 pub fn extract_highlights<'py, T>(
     highlight: &Bound<'py, PyAny>,
+    overlap: HighlightOverlap,
     mut selection: impl FnMut(&Bound<'py, PyAny>) -> PyResult<T>,
 ) -> PyResult<Vec<SelectedHighlight<T>>> {
     let pair = |entry: &Bound<'py, PyAny>| -> PyResult<_> {
@@ -61,27 +73,34 @@ pub fn extract_highlights<'py, T>(
     } else {
         vec![(highlight.clone(), None)]
     };
-    let defaults: &[HighlightStyle] =
-        match entries.iter().filter(|(_, style)| style.is_none()).count() {
-            0 => &[],
-            1 => &[Amber],
-            2 => &[ActedOn, Treated],
-            3 => &[ActedOn, Middle, Treated],
-            _ => {
-                return Err(PyValueError::new_err(
-                    "provide explicit highlight styles for all but at most three layers",
-                ))
-            }
-        };
+    let defaults: &[HighlightStyle] = match (
+        overlap.band_spacing(),
+        entries.iter().filter(|(_, style)| style.is_none()).count(),
+    ) {
+        (Some(_), _) | (None, 0) => &[],
+        (None, 1) => &[Amber],
+        (None, 2) => &[ActedOn, Treated],
+        (None, 3) => &[ActedOn, Middle, Treated],
+        _ => {
+            return Err(PyValueError::new_err(
+                "provide explicit highlight styles for all but at most three layers",
+            ))
+        }
+    };
     let mut defaults = defaults.iter().copied();
     entries
         .into_iter()
-        .map(|(entry, style)| {
+        .enumerate()
+        .map(|(index, (entry, style))| {
             Ok(SelectedHighlight {
                 selection: selection(&entry)?,
-                style: style
-                    .or_else(|| defaults.next())
-                    .expect("one default per unstyled entry"),
+                style: style.unwrap_or_else(|| {
+                    if overlap == HighlightOverlap::Casings {
+                        defaults.next().expect("one default per unstyled entry")
+                    } else {
+                        HighlightStyle::Slot(index + 1)
+                    }
+                }),
             })
         })
         .collect()
@@ -146,7 +165,17 @@ pub fn theme_svg(
             style.dark_paint()?,
         ))
     });
-    for paint in palette.iter().copied().chain(named) {
+    let slots = highlights
+        .iter()
+        .filter_map(|style| match *style {
+            HighlightStyle::Slot(slot) => Some((style.to_string(), SlotPaint::new(slot))),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let slot_rows = slots
+        .iter()
+        .map(|(role, colors)| ThemePaint::new(role, &colors.light, &colors.dark));
+    for paint in palette.iter().copied().chain(named).chain(slot_rows) {
         let variable = format!("--{prefix}-{}", paint.role);
         write!(light, "{variable}:{gap}{};{gap}", paint.light).expect("writing a string");
         write!(dark, "{variable}:{gap}{};{gap}", paint.dark).expect("writing a string");

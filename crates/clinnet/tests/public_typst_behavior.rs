@@ -160,6 +160,45 @@ fn compiled_linnest_casings_follow_global_layer_order() {
     );
 }
 
+#[test]
+fn compiled_linnest_bands_have_distinct_carriers_and_segmented_rings() {
+    let (base, renderer) = staged(&PHYSICS_STYLE);
+    let source = include_str!("resources/feynkit-bands.typ")
+        .replace(
+            "assets/embedded/drawing/templates/layout-core.typ",
+            PHYSICS_STYLE[2].0,
+        )
+        .replace(
+            "assets/embedded/drawing/templates/physics-edge-style.typ",
+            PHYSICS_STYLE[0].0,
+        );
+    let svg = render(&base, &renderer, "feynkit-bands.typ", &source);
+    let bands = paths_with_attr(&svg, "stroke-width", "2.4");
+    let rings = paths_with_attr(&svg, "stroke-width", "2.5");
+    assert!(bands.last().unwrap().0 < svg.find(r#"stroke-dasharray="0.9 4.05""#).unwrap());
+    assert_eq!(bands.len(), 9);
+    assert_eq!(rings.len(), 6);
+    let mut paths_by_color = BTreeMap::new();
+    for (_, tag) in bands {
+        paths_by_color
+            .entry(svg_attr(tag, "stroke").unwrap())
+            .or_insert_with(Vec::new)
+            .push(svg_attr(tag, "d").unwrap());
+    }
+    assert_eq!(paths_by_color["#3b82f6"].len(), 4);
+    assert_eq!(paths_by_color["#8b5cf6"].len(), 3);
+    assert_eq!(paths_by_color["#e4504f"].len(), 2);
+    assert!(
+        paths_by_color["#3b82f6"]
+            .iter()
+            .all(|path| !paths_by_color["#e4504f"].contains(path))
+    );
+    assert!(
+        svg.contains(r#"stroke-dasharray="0.9 4.05""#),
+        "scalar styling stays visible"
+    );
+}
+
 fn translation(value: &str) -> (f64, f64) {
     let mut coordinates = value
         .strip_prefix("translate(")

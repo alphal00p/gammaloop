@@ -1,6 +1,8 @@
 use linnet_render_py::PyDiagramView;
 use linnet_render_py::typst_export;
-use linnet_render_py::{PyRenderSettings, SelectedHighlight, extract_highlights};
+use linnet_render_py::{
+    PyRenderSettings, SelectedHighlight, extract_highlights, highlight_overlap,
+};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -4467,7 +4469,9 @@ impl PyFeynmanDiagram {
     ///     tuples, as in ``render``.
     /// mute_outside : bool, optional
     ///     Fade edges and nodes outside all supplied selections.
-    #[pyo3(signature = (*, config=None, style=None, momenta=false, lmb=None, highlight=None, mute_outside=true))]
+    /// overlap : {"casings", "bands", "bands-miniature"}, optional
+    ///     Highlight geometry and automatic palette, as in ``render``.
+    #[pyo3(signature = (*, config=None, style=None, momenta=false, lmb=None, highlight=None, mute_outside=true, overlap="casings"))]
     #[allow(clippy::too_many_arguments)] // Mirrors the Python drawing options.
     fn to_linnest(
         &self,
@@ -4479,8 +4483,19 @@ impl PyFeynmanDiagram {
         #[gen_stub(override_type(type_repr = "Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']]] | None", imports = ("typing")))]
         highlight: Option<&Bound<'_, PyAny>>,
         mute_outside: bool,
+        #[gen_stub(override_type(type_repr = "typing.Literal['casings', 'bands', 'bands-miniature']", imports = ("typing")))]
+        overlap: &str,
     ) -> PyResult<String> {
-        let view = self.render_drawing(py, config, style, momenta, lmb, highlight, mute_outside)?;
+        let view = self.render_drawing(
+            py,
+            config,
+            style,
+            momenta,
+            lmb,
+            highlight,
+            mute_outside,
+            overlap,
+        )?;
         let drawing = view.outlined(py)?;
         let svg = drawing.to_svg()?;
         Ok(typst_export::svg_source(&svg))
@@ -4536,7 +4551,11 @@ impl PyFeynmanDiagram {
     ///     An empty sequence clears highlighting.
     /// mute_outside : bool, optional
     ///     Fade edges and nodes outside all supplied selections.
-    #[pyo3(signature = (*, config=None, style=None, momenta=false, lmb=None, highlight=None, mute_outside=true))]
+    /// overlap : {"casings", "bands", "bands-miniature"}, optional
+    ///     Use nested strokes, or parallel carrier bands and membership rings.
+    ///     The miniature mode spaces the bands further apart. Unstyled entries
+    ///     in either band mode use automatic palette slots.
+    #[pyo3(signature = (*, config=None, style=None, momenta=false, lmb=None, highlight=None, mute_outside=true, overlap="casings"))]
     #[allow(clippy::too_many_arguments)] // Mirrors the Python drawing options.
     pub(crate) fn render(
         &self,
@@ -4548,9 +4567,19 @@ impl PyFeynmanDiagram {
         #[gen_stub(override_type(type_repr = "Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']]] | None", imports = ("typing")))]
         highlight: Option<&Bound<'_, PyAny>>,
         mute_outside: bool,
+        #[gen_stub(override_type(type_repr = "typing.Literal['casings', 'bands', 'bands-miniature']", imports = ("typing")))]
+        overlap: &str,
     ) -> PyResult<PyDiagramView> {
-        let drawing =
-            self.render_drawing(py, config, style, momenta, lmb, highlight, mute_outside)?;
+        let drawing = self.render_drawing(
+            py,
+            config,
+            style,
+            momenta,
+            lmb,
+            highlight,
+            mute_outside,
+            overlap,
+        )?;
         let html = display::render_diagram_html(&self.inner, "<!--linnet-svg-0-->");
         Ok(drawing.with_html(html))
     }
@@ -4584,7 +4613,11 @@ impl PyFeynmanDiagram {
     ///     ``render().measured().to_html()`` on the displayed view instead.
     /// mute_outside : bool, optional
     ///     Fade edges and nodes outside all supplied selections.
-    #[pyo3(signature = (*, config=None, style=None, momenta=false, lmb=None, highlight=None, mute_outside=true, browser=None))]
+    /// overlap : {"casings", "bands", "bands-miniature"}, optional
+    ///     Use nested strokes, or parallel carrier bands and membership rings.
+    ///     The miniature mode spaces the bands further apart. Unstyled entries
+    ///     in either band mode use automatic palette slots.
+    #[pyo3(signature = (*, config=None, style=None, momenta=false, lmb=None, highlight=None, mute_outside=true, overlap="casings", browser=None))]
     #[allow(clippy::too_many_arguments)] // Mirrors render's Python keywords plus explicit browser selection.
     fn to_html(
         &self,
@@ -4596,9 +4629,20 @@ impl PyFeynmanDiagram {
         #[gen_stub(override_type(type_repr = "Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']]] | None", imports = ("typing")))]
         highlight: Option<&Bound<'_, PyAny>>,
         mute_outside: bool,
+        #[gen_stub(override_type(type_repr = "typing.Literal['casings', 'bands', 'bands-miniature']", imports = ("typing")))]
+        overlap: &str,
         browser: Option<&str>,
     ) -> PyResult<String> {
-        let view = self.render(py, config, style, momenta, lmb, highlight, mute_outside)?;
+        let view = self.render(
+            py,
+            config,
+            style,
+            momenta,
+            lmb,
+            highlight,
+            mute_outside,
+            overlap,
+        )?;
         view.snapshot(py, browser)?.to_html()
     }
 
@@ -4624,7 +4668,7 @@ impl PyFeynmanDiagram {
         include: Option<Vec<String>>,
         exclude: Option<Vec<String>>,
     ) -> PyResult<Py<PyAny>> {
-        let view = self.render(py, None, None, false, None, None, true)?;
+        let view = self.render(py, None, None, false, None, None, true, "casings")?;
         view._repr_mimebundle_(py, include, exclude)
     }
 
@@ -4638,7 +4682,7 @@ impl PyFeynmanDiagram {
     /// >>> view  # notebook display measures labels before mounting the diagram
     /// >>> snapshot = view.measured(browser="chromium")
     fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let view = self.render(py, None, None, false, None, None, true)?;
+        let view = self.render(py, None, None, false, None, None, true, "casings")?;
         view._mime_(py)
     }
 
@@ -5060,6 +5104,7 @@ impl PyFeynmanDiagram {
         lmb: Option<&PyLoopMomentumBasis>,
         highlight: Option<&Bound<'_, PyAny>>,
         mute_outside: bool,
+        overlap: &str,
     ) -> PyResult<PyDiagramView> {
         if let Some(basis) = lmb
             && !Arc::ptr_eq(&basis.owner, &self.owner)
@@ -5070,8 +5115,11 @@ impl PyFeynmanDiagram {
         }
         let mut options = PyDiagramStyle::resolve(style, momenta || lmb.is_some());
         options.mute_outside = mute_outside;
+        options.overlap = highlight_overlap(overlap)?;
         let regions = if let Some(highlight) = highlight {
-            extract_highlights(highlight, |selection| self.region_argument(py, selection))?
+            extract_highlights(highlight, options.overlap, |selection| {
+                self.region_argument(py, selection)
+            })?
         } else {
             self.selected_region
                 .as_ref()

@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
@@ -6,9 +7,9 @@ use linnet::half_edge::involution::{EdgeIndex, Flow, Orientation};
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use symbolica::atom::AtomCore;
 
-#[cfg(feature = "svg")]
-use crate::HighlightLayer;
 use crate::{DiagramError, FeynmanDiagram, LoopMomentumBasis};
+#[cfg(feature = "svg")]
+use crate::{HighlightLayer, HighlightOverlap, HighlightStyle};
 
 pub(crate) fn typst_string(value: &str) -> String {
     let mut output = String::with_capacity(value.len() + 2);
@@ -45,7 +46,7 @@ struct TypstHighlights {
 struct TypstLayer<'a> {
     hedges: &'a SuBitGraph,
     isolated: &'a BTreeSet<usize>,
-    paint: &'static str,
+    paint: Cow<'a, str>,
     width: Option<f64>,
 }
 
@@ -54,7 +55,7 @@ impl<'a> TypstLayer<'a> {
         Self {
             hedges,
             isolated,
-            paint: AMBER_HIGHLIGHT_PAINT,
+            paint: Cow::Borrowed(AMBER_HIGHLIGHT_PAINT),
             width: None,
         }
     }
@@ -120,7 +121,7 @@ impl FeynmanDiagram {
         config: &str,
     ) -> Result<String, DiagramError> {
         let layer = highlight.map(|hedges| TypstLayer::amber(hedges, isolated));
-        self.to_linnest_document(lmb, config, layer.as_slice(), true)
+        self.to_linnest_document(lmb, config, layer.as_slice(), true, None)
     }
 
     /// Emit a Linnest document with ordered subgraph casings on shared edges.
@@ -140,15 +141,39 @@ impl FeynmanDiagram {
         lmb: Option<&LoopMomentumBasis>,
         config: &str,
     ) -> Result<String, DiagramError> {
+        self.to_linnest_with_overlap(layers, mute_outside, lmb, config, HighlightOverlap::Casings)
+    }
+
+    /// Emit a standalone light-palette source with the chosen highlight geometry.
+    /// See [`Self::to_scene_with_highlights`] for an example of building layers.
+    ///
+    /// # Errors
+    /// Returns a diagram error for an inconsistent momentum basis.
+    ///
+    /// # Panics
+    /// Panics if a layer contains half-edges outside this diagram.
+    #[cfg(feature = "svg")]
+    pub fn to_linnest_with_overlap(
+        &self,
+        layers: &[HighlightLayer<'_>],
+        mute_outside: bool,
+        lmb: Option<&LoopMomentumBasis>,
+        config: &str,
+        overlap: HighlightOverlap,
+    ) -> Result<String, DiagramError> {
+        let band_mode = overlap
+            .band_spacing()
+            .filter(|_| !matches!(layers, [layer] if layer.style == HighlightStyle::Amber))
+            .map(|_| overlap.as_str());
         let layers: Vec<_> = layers
             .iter()
             .map(|layer| TypstLayer {
-                paint: layer.style.light_paint().unwrap_or(AMBER_HIGHLIGHT_PAINT),
+                paint: layer.style.paint(AMBER_HIGHLIGHT_PAINT),
                 width: layer.style.width(),
                 ..TypstLayer::amber(layer.hedges, layer.isolated)
             })
             .collect();
-        self.to_linnest_document(lmb, config, &layers, mute_outside)
+        self.to_linnest_document(lmb, config, &layers, mute_outside, band_mode)
     }
 
     fn write_typst_highlights(
@@ -156,6 +181,7 @@ impl FeynmanDiagram {
         output: &mut String,
         layers: &[TypstLayer<'_>],
         mute_outside: bool,
+        band_mode: Option<&str>,
     ) -> TypstHighlights {
         let mut highlights = TypstHighlights::default();
         if layers.is_empty() {
@@ -163,7 +189,9 @@ impl FeynmanDiagram {
         }
         // The single amber source is a public text format, including its
         // half-edge selection and transparency expression.
-        let single_amber = matches!(layers, [layer] if layer.width.is_none()) && mute_outside;
+        let single_amber = matches!(layers, [layer] if layer.width.is_none() && layer.paint == AMBER_HIGHLIGHT_PAINT)
+            && mute_outside
+            && band_mode.is_none();
         let outside = r##"  let outside-stroke = (paint: rgb("#777777").transparentize(55%), thickness: 0.6pt, dash: "dotted")"##;
         if !single_amber {
             writeln!(output, "{outside}").expect("writing to a string cannot fail");
@@ -187,7 +215,7 @@ impl FeynmanDiagram {
             let width = layer
                 .width
                 .map_or_else(String::new, |width| format!(", thickness: {width}pt,"));
-            let paint = layer.paint;
+            let paint = &layer.paint;
             let style = if single_amber {
                 "selected-edge-style".into()
             } else {
@@ -197,11 +225,18 @@ impl FeynmanDiagram {
                 writeln!(output, "  let selected-nodes = ({nodes})\n  let selected-stroke = rgb({paint:?}) + 1.2pt")
                     .expect("writing to a string cannot fail");
             }
-            writeln!(output,
+            if band_mode.is_some() {
+                writeln!(output, "  let {style} = (stroke: (paint: rgb({paint:?}), thickness: 2.4pt, cap: \"round\"))")
+                    .expect("writing to a string cannot fail");
+            } else {
+                writeln!(output,
                 "  let {style} = edge => (stroke: physics.source-style(edge, map: particle-map).stroke + (paint: rgb({paint:?}){width}))",
             ).expect("writing to a string cannot fail");
+            }
             if !single_amber {
-                let node_style = if layer.width.is_none() {
+                let node_style = if band_mode.is_some() {
+                    format!("rgb({paint:?})")
+                } else if layer.width.is_none() {
                     format!("(stroke: rgb({paint:?}) + 1.2pt)")
                 } else {
                     "(:)".into()
@@ -226,7 +261,12 @@ impl FeynmanDiagram {
             );
             highlights.node_style = "node-style: node => physics.node-style + if node.vid in selected-nodes { (stroke: selected-stroke) } else { (stroke: outside-stroke) }".into();
         } else {
-            let outside_setup = if mute_outside {
+            let outside_setup = if mute_outside && band_mode.is_some() {
+                r#"  let covered = subgraph.select(raw, hedges: layers.map(layer => subgraph.hedges(layer.subgraph)).flatten())
+  let outside = subgraph.complement(raw, covered)
+  layers = ((subgraph: outside, edge-style: (stroke: outside-stroke, band-base: true)),) + layers
+"#
+            } else if mute_outside {
                 r#"  let covered = subgraph.select(raw, hedges: layers.map(layer => subgraph.hedges(layer.subgraph)).flatten())
   let outside = subgraph.complement(raw, covered)
   layers = ((subgraph: outside, edge-style: (stroke: outside-stroke)),) + layers
@@ -235,15 +275,23 @@ impl FeynmanDiagram {
                 ""
             };
             highlights.draw_setup = format!("  let layers = ({edge_styles})\n{outside_setup}");
-            highlights.draw =
-                "    draw: (subgraph: layers, subgraph-edge-underlay: \"casings\"),\n".into();
+            highlights.draw = if let Some(mode) = band_mode {
+                format!("    draw: (subgraph: layers, subgraph-edge-underlay: {mode:?}),\n")
+            } else {
+                "    draw: (subgraph: layers, subgraph-edge-underlay: \"casings\"),\n".into()
+            };
             let outside_node = if mute_outside {
                 "(stroke: outside-stroke)"
             } else {
                 "(:)"
             };
+            let member_style = if band_mode.is_some() {
+                "(highlight-ring: matches.map(layer => layer.style))"
+            } else {
+                "matches.last().style"
+            };
             highlights.node_style = format!(
-                "node-style: node => {{ let matches = ({node_styles}).filter(layer => node.vid in layer.nodes); physics.node-style + if matches.len() > 0 {{ matches.last().style }} else {{ {outside_node} }} }}"
+                "node-style: node => {{ let matches = ({node_styles}).filter(layer => node.vid in layer.nodes); physics.node-style + if matches.len() > 0 {{ {member_style} }} else {{ {outside_node} }} }}"
             );
         }
         highlights
@@ -313,6 +361,7 @@ impl FeynmanDiagram {
         config: &str,
         layers: &[TypstLayer<'_>],
         mute_outside: bool,
+        band_mode: Option<&str>,
     ) -> Result<String, DiagramError> {
         let basis = lmb.unwrap_or_else(|| self.loop_momentum_basis());
         if lmb.is_some() {
@@ -440,7 +489,7 @@ impl FeynmanDiagram {
   )))
 "#,
         );
-        let highlights = self.write_typst_highlights(&mut output, layers, mute_outside);
+        let highlights = self.write_typst_highlights(&mut output, layers, mute_outside, band_mode);
         write!(
             output,
             r##"

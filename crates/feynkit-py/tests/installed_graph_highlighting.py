@@ -442,3 +442,63 @@ for highlight in ([(inner, "missing")], [(diagram.subgraph(edges=[0]), "treated"
     else:
         raise AssertionError("invalid highlight layers must be rejected")
 print("installed ordered highlight checks passed")
+
+# Requesting bands explicitly preserves a single explicit amber selection.
+with patch.dict(sys.modules, {"typst": None}):
+    amber = basketball.render(
+        highlight=(inner, "amber"), style=legacy_style, overlap="bands"
+    ).to_svg()
+assert (
+    normalize_svg_fonts(amber).encode()
+    == (fixtures / "single-amber-base-feynkit.svg").read_bytes()
+)
+
+
+def svg_paths_at_width(svg, width):
+    return [
+        element
+        for element in ET.fromstring(svg).iter()
+        if element.tag.endswith("}path") and element.get("stroke-width") == width
+    ]
+
+
+many = basketball.render(
+    highlight=[outer] * 8, style=legacy_style, overlap="bands"
+).to_svg()
+assert len(svg_paths_at_width(many, "2.4")) == 32
+assert len(svg_paths_at_width(many, "2.5")) == 16
+assert "--feynkit-slot-8:" in many
+assert len({path.get("stroke") for path in svg_paths_at_width(many, "2.4")}) == 8
+for overlap in ("bands", "bands-miniature"):
+    single = basketball.render(
+        highlight=[inner], style=legacy_style, overlap=overlap
+    ).to_svg()
+    assert len(svg_paths_at_width(single, "2.4")) == 2
+    assert len(svg_paths_at_width(single, "2.5")) == 2
+    assert any(path.get("stroke-dasharray") for path in ET.fromstring(single).iter())
+
+tadpole = fk.FeynmanDiagram.from_dot(
+    fk.Model.phi4(),
+    """digraph tadpole {
+        ext [style=invis];
+        ext -> a [particle="phi"];
+        a -> a [particle="phi"];
+        a -> ext [particle="phi"];
+    }""",
+)
+region = tadpole.subgraph(edges=[edge.id for edge in tadpole.edges])
+svg = tadpole.render(
+    overlap="bands", highlight=[region] * 2, style=legacy_style
+).to_svg()
+assert len(svg_paths_at_width(svg, "2.4")) == 6
+assert len(svg_paths_at_width(svg, "2.5")) == 2
+assert (
+    fixture_linnest(basketball, highlight=layers, overlap="bands").count(
+        "#image(bytes("
+    )
+    == 1
+)
+if has_linnet:
+    svg = generic.to_svg(highlight=[generic_inner] * 2, overlap="bands")
+    assert len(svg_paths_at_width(svg, "2.4")) == 4
+print("installed parallel band checks passed")

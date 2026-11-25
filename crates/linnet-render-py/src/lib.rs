@@ -37,7 +37,9 @@ pub mod typst;
 pub mod typst_export;
 mod view;
 pub use error::PyErrExt;
-pub use highlight::{extract_highlights, theme_svg, SelectedHighlight, ThemeFormat, ThemePaint};
+pub use highlight::{
+    extract_highlights, highlight_overlap, theme_svg, SelectedHighlight, ThemeFormat, ThemePaint,
+};
 pub use scene::register_scene_selectors;
 pub use snapshot::PyDiagramRender;
 pub use typst::{PyAuto as Auto, PyRenderSettings, PyRenderSettings as RenderSettings};
@@ -454,6 +456,7 @@ config = graph.RenderSettings(
                 round_cap: false,
             };
             let node = NodeDrawing {
+                highlight_ring: Vec::new(),
                 radius: 0.2,
                 label_padding: None,
                 label: None,

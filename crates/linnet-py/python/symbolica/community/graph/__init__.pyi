@@ -713,7 +713,7 @@ class Graph:
     @classmethod
     def from_dot_file(cls, path: builtins.str | os.PathLike[builtins.str], codec: DotCodec, *, node_store: NodeStore = NodeStore.Vec) -> Graph: ...
     def to_dot(self, codec: typing.Optional[DotCodec] = None) -> builtins.str: ...
-    def render(self, *, config: RenderSettings | None = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']]] | None = None, mute_outside: builtins.bool = True) -> DiagramView:
+    def render(self, *, config: RenderSettings | None = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['casings', 'bands', 'bands-miniature'] = "casings") -> DiagramView:
         r"""
         Snapshot a drawing, using native SVG geometry for ordinary graph settings.
 
@@ -734,8 +734,11 @@ class Graph:
             Specify styles for additional layers.
         mute_outside : bool, optional
             Fade edges and nodes outside the selected regions.
+        overlap : {"casings", "bands", "bands-miniature"}, optional
+            Use nested strokes, or parallel bands and segmented node rings.
+            Bands use automatic palette slots for unstyled entries.
         """
-    def to_svg(self, *, config: RenderSettings | None = None, browser: typing.Optional[builtins.str] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']]] | None = None, mute_outside: builtins.bool = True) -> builtins.str:
+    def to_svg(self, *, config: RenderSettings | None = None, browser: typing.Optional[builtins.str] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['casings', 'bands', 'bands-miniature'] = "casings") -> builtins.str:
         r"""
         Export SVG with the same highlights as ``render``.
 
@@ -753,6 +756,9 @@ class Graph:
             Selections and styles accepted by ``render``.
         mute_outside : bool, optional
             Fade edges and nodes outside the selected regions.
+        overlap : {"casings", "bands", "bands-miniature"}, optional
+            Use nested strokes, or parallel bands and segmented node rings.
+            Bands use automatic palette slots for unstyled entries.
         """
     def _mime_(self) -> typing.Any: ...
     def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any: ...

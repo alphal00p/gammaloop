@@ -532,6 +532,7 @@ impl SpensoNet {
                 statements: BTreeMap::new(),
             });
             scene.nodes.push(NodeDrawing {
+                highlight_ring: Vec::new(),
                 radius: if operator { 0.6 } else { 0.35 },
                 label_padding: Some(0.25),
                 label: Some(page),

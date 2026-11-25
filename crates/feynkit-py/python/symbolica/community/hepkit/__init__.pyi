@@ -3850,7 +3850,7 @@ class FeynmanDiagram:
         >>> restored = hep.FeynmanDiagram.from_dot(model, dot)
         >>> restored.validate()
         """
-    def to_linnest(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']]] | None = None, mute_outside: builtins.bool = True) -> builtins.str:
+    def to_linnest(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['casings', 'bands', 'bands-miniature'] = "casings") -> builtins.str:
         r"""
         Export a self-contained Typst document embedding an outlined SVG.
 
@@ -3881,8 +3881,10 @@ class FeynmanDiagram:
             tuples, as in ``render``.
         mute_outside : bool, optional
             Fade edges and nodes outside all supplied selections.
+        overlap : {"casings", "bands", "bands-miniature"}, optional
+            Highlight geometry and automatic palette, as in ``render``.
         """
-    def render(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']]] | None = None, mute_outside: builtins.bool = True) -> DiagramView:
+    def render(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['casings', 'bands', 'bands-miniature'] = "casings") -> DiagramView:
         r"""
         Prepare a browser-measured view using the shared physics renderer.
 
@@ -3934,8 +3936,12 @@ class FeynmanDiagram:
             An empty sequence clears highlighting.
         mute_outside : bool, optional
             Fade edges and nodes outside all supplied selections.
+        overlap : {"casings", "bands", "bands-miniature"}, optional
+            Use nested strokes, or parallel carrier bands and membership rings.
+            The miniature mode spaces the bands further apart. Unstyled entries
+            in either band mode use automatic palette slots.
         """
-    def to_html(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']]] | None = None, mute_outside: builtins.bool = True, browser: typing.Optional[builtins.str] = None) -> builtins.str:
+    def to_html(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['casings', 'bands', 'bands-miniature'] = "casings", browser: typing.Optional[builtins.str] = None) -> builtins.str:
         r"""
         Export a complete static HTML figure with the same options as ``render``.
 
@@ -3966,6 +3972,10 @@ class FeynmanDiagram:
             ``render().measured().to_html()`` on the displayed view instead.
         mute_outside : bool, optional
             Fade edges and nodes outside all supplied selections.
+        overlap : {"casings", "bands", "bands-miniature"}, optional
+            Use nested strokes, or parallel carrier bands and membership rings.
+            The miniature mode spaces the bands further apart. Unstyled entries
+            in either band mode use automatic palette slots.
         """
     def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
         r"""

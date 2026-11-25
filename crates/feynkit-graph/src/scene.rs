@@ -4,8 +4,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use feynkit_model::{LineKind, Model, Particle, ParticleId};
 use linnest::svg::{
-    Config, Dash, Details, EdgeDrawing, HighlightPalette, HighlightRegion, HighlightStyle,
-    LabelSource, NodeDrawing, Pattern, Scene, Stroke,
+    Config, Dash, Details, EdgeDrawing, HighlightOverlap, HighlightPalette, HighlightRegion,
+    HighlightStyle, LabelSource, NodeDrawing, Pattern, Scene, Stroke,
 };
 use linnest::{TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstNodeSpec};
 use linnet::half_edge::EdgeAccessors;
@@ -65,6 +65,8 @@ pub struct SceneOptions {
     pub split_initial_state: bool,
     /// Fade and dot drawing elements outside all highlights.
     pub mute_outside: bool,
+    /// Overlap geometry for highlighted regions.
+    pub overlap: HighlightOverlap,
     /// Refine the layout around drawn labels in short warm passes.
     pub label_feedback: bool,
     /// Explicit `impred-*` layout options.
@@ -82,6 +84,7 @@ impl Default for SceneOptions {
             show_node_index: false,
             split_initial_state: true,
             mute_outside: true,
+            overlap: HighlightOverlap::Casings,
             label_feedback: false,
             layout: Map::new(),
         }
@@ -194,6 +197,7 @@ impl FeynmanDiagram {
                             .into(),
                     },
                     NodeDrawing {
+                        highlight_ring: Vec::new(),
                         radius: 0.16,
                         label_padding: Some(0.25),
                         label: None,
@@ -552,10 +556,11 @@ impl FeynmanDiagram {
             layout_edges: None,
             label_feedback: options.label_feedback,
         };
-        scene.apply_highlights(
+        scene.apply_highlights_with_overlap(
             &regions,
             &HighlightPalette::new(AMBER_HIGHLIGHT_PAINT),
             options.mute_outside,
+            options.overlap,
         );
         Ok(scene)
     }
@@ -665,6 +670,7 @@ impl SceneOptions {
                 edges: vec![],
             },
             nodes: vec![NodeDrawing {
+                highlight_ring: Vec::new(),
                 // Preserve the original 3 × 1.5em blob at 10pt in the native
                 // renderer's 13.5pt drawing units.
                 radius: 10.0 / 3.0,

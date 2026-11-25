@@ -49,6 +49,7 @@ fn fixture_scene(marker: &str) -> Scene {
         .unwrap(),
         nodes: (0..3)
             .map(|index| NodeDrawing {
+                highlight_ring: Vec::new(),
                 radius: 0.2,
                 label_padding: Some(0.3),
                 label: Some(index),
