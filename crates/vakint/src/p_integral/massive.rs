@@ -1783,6 +1783,72 @@ impl MassiveClosure {
         Ok(terms)
     }
 
+    /// Separate analytic powers of the closing momentum before collecting
+    /// integer powers. Its epsilon-dependent dimension changes the radial
+    /// gamma integral, while its Euclidean square contributes no Wick sign.
+    fn analytic_radial_terms(
+        expression: &Atom,
+        head: &Atom,
+        settings: &crate::VakintSettings,
+    ) -> Result<Vec<(i64, i64, Atom)>, VakintError> {
+        let integer_error = match Self::radial_terms(expression, head) {
+            Ok(terms) => return Ok(terms.into_iter().map(|(power, c)| (power, 0, c)).collect()),
+            Err(error) => error,
+        };
+        let eps = Atom::var(vk_symbol!(&settings.epsilon_symbol));
+        let scale = -S.dot.call((head, head)) / Atom::var(vk_symbol!(&settings.mu_r_sq_symbol));
+        let marker = S.ep.call((head, 1));
+        let mut substitutions = std::collections::BTreeMap::new();
+        expression.visitor(&mut |part| {
+            let shift = match part {
+                AtomView::Pow(p) if p.get_base() == scale.as_view() => {
+                    crate::get_integer_from_atom((-p.get_exp().to_owned() / &eps).as_view())
+                }
+                AtomView::Fun(f)
+                    if f.get_symbol() == S.ep
+                        && f.get_nargs() == 2
+                        && f.iter().next() == Some(head.as_view()) =>
+                {
+                    crate::get_integer_from_atom(f.iter().nth(1).unwrap())
+                }
+                _ => None,
+            };
+            if let Some(m) = shift.filter(|m| *m >= 0) {
+                substitutions.insert(part.to_owned(), marker.pow(m));
+                return false;
+            }
+            true
+        });
+        if substitutions.is_empty() {
+            return Err(integer_error);
+        }
+        let substitutions = substitutions
+            .into_iter()
+            .map(|(a, b)| symbolica::id::Replacement::new(a.to_pattern(), b.to_pattern()))
+            .collect::<Vec<_>>();
+        let expression = expression.replace_multiple(&substitutions);
+        let mut terms = Vec::new();
+        for (power, coefficient) in expression.coefficient_list::<i16>(&[&marker]) {
+            let shift = if power.is_one() {
+                0
+            } else if power == marker {
+                1
+            } else if let AtomView::Pow(p) = power.as_view()
+                && p.get_base() == marker.as_view()
+            {
+                crate::get_integer_from_atom(p.get_exp())
+                    .filter(|i| *i >= 0)
+                    .ok_or_else(|| super::invalid("invalid analytic radial power"))?
+            } else {
+                return Err(super::invalid("invalid analytic radial power"));
+            };
+            for (n, c) in Self::radial_terms(&coefficient, head)? {
+                terms.push((n, shift, c));
+            }
+        }
+        Ok(terms)
+    }
+
     /// `coefficient` is free of loop momenta and of the hard momentum and
     /// uses only known master symbols.
     fn check_scalar(coefficient: &Atom, head: &Atom) -> Result<(), VakintError> {
@@ -1859,7 +1925,7 @@ impl MassiveClosure {
         );
         let source = super::master_catalogue::PMasterSource::new(catalogue, &request);
         // The radial prefactor depends only on the scale power.
-        let mut prefactors = std::collections::BTreeMap::<i64, Atom>::new();
+        let mut prefactors = std::collections::BTreeMap::<(i64, i64), Atom>::new();
         for value in values {
             if mode != RustRedMasterMode::Retain
                 && !has_residual(&value.reduced)
@@ -1882,10 +1948,17 @@ impl MassiveClosure {
             // factors are scalar master tags, not two-index vectors for the
             // generic tensor notation converter.
             let reduced = value.value().expand();
-            for (radial_power, coefficient) in Self::radial_terms(&reduced, head)? {
+            for (radial_power, shift, coefficient) in
+                Self::analytic_radial_terms(&reduced, head, settings)?
+            {
                 let scale_power = value.scale_power + radial_power;
-                let prefactor =
-                    self.memoised_prefactor(&mut prefactors, settings, cut_loops, scale_power)?;
+                let prefactor = self.memoised_prefactor(
+                    &mut prefactors,
+                    settings,
+                    cut_loops,
+                    scale_power,
+                    shift,
+                )?;
                 let coefficient = Atom::num(self.radial_sign(radial_power)) * coefficient;
                 result += if mode == RustRedMasterMode::Retain {
                     simplify_real((prefactor * coefficient).as_view())
@@ -1943,7 +2016,7 @@ impl MassiveClosure {
         cut_loops: usize,
         head: &Atom,
         settings: &crate::VakintSettings,
-        prefactors: &mut std::collections::BTreeMap<i64, Atom>,
+        prefactors: &mut std::collections::BTreeMap<(i64, i64), Atom>,
     ) -> Result<Option<Atom>, VakintError> {
         let _timing = crate::timing::reduce();
         let _step = crate::timing::finalize();
@@ -1953,26 +2026,27 @@ impl MassiveClosure {
         if masters.is_zero() {
             return Ok(Some(Atom::Zero));
         }
-        let terms = Self::radial_terms(&spectator.expand(), head)?;
+        let terms = Self::analytic_radial_terms(&spectator.expand(), head, settings)?;
         if terms.is_empty() {
             return Ok(Some(Atom::Zero));
         }
         Self::check_scalar(masters, head)?;
         let mut spectators = Vec::with_capacity(terms.len());
-        for (radial_power, coefficient) in terms {
+        for (radial_power, shift, coefficient) in terms {
             let coefficient = Atom::num(self.radial_sign(radial_power)) * coefficient;
             let Some(prepared) = laurent::Spectator::new(&coefficient, epsilon) else {
                 return Ok(None);
             };
-            spectators.push((radial_power, prepared));
+            spectators.push((radial_power, shift, prepared));
         }
         let mut result = Atom::Zero;
-        for (radial_power, prepared) in spectators {
+        for (radial_power, shift, prepared) in spectators {
             let prefactor = self.memoised_prefactor(
                 prefactors,
                 settings,
                 cut_loops,
                 scale_power + radial_power,
+                shift,
             )?;
             let Some(value) =
                 laurent::expand_factored(prefactor, masters, &prepared, epsilon, target)?
@@ -1996,15 +2070,18 @@ impl MassiveClosure {
     /// [`Self::radial_prefactor`], computed once per scale power.
     fn memoised_prefactor<'p>(
         &self,
-        prefactors: &'p mut std::collections::BTreeMap<i64, Atom>,
+        prefactors: &'p mut std::collections::BTreeMap<(i64, i64), Atom>,
         settings: &crate::VakintSettings,
         cut_loops: usize,
         scale_power: i64,
+        shift: i64,
     ) -> Result<&'p Atom, VakintError> {
-        if let std::collections::btree_map::Entry::Vacant(entry) = prefactors.entry(scale_power) {
-            entry.insert(self.radial_prefactor(settings, cut_loops, scale_power)?);
+        if let std::collections::btree_map::Entry::Vacant(entry) =
+            prefactors.entry((scale_power, shift))
+        {
+            entry.insert(self.radial_prefactor(settings, cut_loops, scale_power, shift)?);
         }
-        Ok(&prefactors[&scale_power])
+        Ok(&prefactors[&(scale_power, shift)])
     }
 
     fn radial_prefactor(
@@ -2012,6 +2089,7 @@ impl MassiveClosure {
         settings: &crate::VakintSettings,
         cut_loops: usize,
         scale_power: i64,
+        shift: i64,
     ) -> Result<Atom, VakintError> {
         let epsilon = Atom::var(vk_symbol!(&settings.epsilon_symbol));
         let loops = cut_loops as i64 + 1;
@@ -2029,12 +2107,26 @@ impl MassiveClosure {
         // ∫ d^d q_E/π^(d/2) (q_E²)^(w-l ε)/(q_E²+M²)^a
         // = (M²)^(2+w-a-(l+1)ε) Γ(2+w-(l+1)ε)
         //   Γ(a-2-w+(l+1)ε)/(Γ(2-ε) Γ(a)).
-        let gamma_ratio = gamma().call(Atom::num(2 + scale_power) - Atom::num(loops) * &epsilon)
-            * gamma().call(Atom::num(self.power - 2 - scale_power) + Atom::num(loops) * &epsilon)
+        let slope = loops
+            .checked_add(shift)
+            .ok_or_else(|| super::invalid("radial epsilon slope overflow"))?;
+        let scale_ratio = if shift == 0 {
+            Atom::one()
+        } else {
+            Symbol::EXP.call(
+                Atom::num(shift)
+                    * &epsilon
+                    * (Atom::var(vk_symbol!("log_mu_sq"))
+                        - Atom::var(vk_symbol!("logMassiveClosure"))),
+            )
+        };
+        let gamma_ratio = gamma().call(Atom::num(2 + scale_power) - Atom::num(slope) * &epsilon)
+            * gamma().call(Atom::num(self.power - 2 - scale_power) + Atom::num(slope) * &epsilon)
             / (gamma().call(Atom::num(2) - &epsilon) * gamma().call(Atom::num(self.power)));
         Ok(Vakint::normalize_gamma_functions(
             (normalization
                 * measure
+                * scale_ratio
                 * self
                     .mass_squared
                     .pow(Atom::num(2 + scale_power - self.power))
@@ -2312,6 +2404,29 @@ mod tests {
             &with_numerator,
             &(lower_power + &massive.mass_squared * scalar),
         );
+    }
+
+    #[test]
+    fn raised_radial_line_matches_an_explicit_bubble_at_six_loop_pole_depth() {
+        let mut s = settings(1);
+        s.integral_normalization_factor = LoopNormalizationFactor::GScheme;
+        s.evaluation_order = EvaluationOrder(vec![EvaluationMethod::RustRed(
+            crate::RustRedEvaluationOptions {
+                master_mode: RustRedMasterMode::Symbolic,
+            },
+        )]);
+        let c = closure(2);
+        let raised = parse("(-dot(p(1),p(1))/mursq)^(-ε)/ε^5");
+        let value = c.evaluate(&VAKINT, &s, raised.as_view()).unwrap();
+        let marked = c
+            .evaluate(&VAKINT, &s, parse("ep(p(1),1)/ε^5").as_view())
+            .unwrap();
+        assert_equal(&value, &marked);
+        s.number_of_terms_in_epsilon_expansion += 1;
+        let auxiliary =
+            parse("topo(prop(1,edge(1,2),k(1),0,1)*prop(2,edge(1,2),p(1)-k(1),0,1))/ε^4");
+        let reference = c.evaluate(&VAKINT, &s, auxiliary.as_view()).unwrap();
+        assert_equal(&value, &reference);
     }
 
     #[test]

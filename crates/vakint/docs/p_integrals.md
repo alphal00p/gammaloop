@@ -800,3 +800,10 @@ physical loops. The lifted topology must be covered by the loaded library
 (up to five integration loops). A scalar unit two-line bubble also supports higher raisings through its exact gamma integral. The Laurent upper order remains
 `number_of_terms_in_epsilon_expansion - physical_loops - 1`. Include
 spectator pole factors in the input if they affect the required order.
+
+For a massive one-line closure the same marker on the closing momentum
+changes the radial gamma integral. With a cut of L loops, the two gamma
+arguments use the slope L+1+m, while the normalization and the Laurent
+budget still count L+1 loops. The scale factor includes
+`(μ²/M²)^(m ε)`. The closure accepts both `ep(p(i),m)` and the
+corresponding power of the Euclidean square.
