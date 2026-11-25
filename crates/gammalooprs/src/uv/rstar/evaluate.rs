@@ -920,7 +920,7 @@ impl RStarPlan {
                 .or_insert_with(|| Atom::Zero);
             *entry += value.replace_multiple(&external_routing);
         }
-        Ok(groups)
+        evaluation.close_ledger(Ok(groups))
     }
 
     /// [`Self::pole_part`] of the root-closed graph, `K[g_root G]`: the
@@ -1553,7 +1553,7 @@ impl<'a> Evaluation<'a> {
     /// coverage rule, an error of an otherwise successful evaluation
     /// ([`super::uncontracted_ledger::DiagramLedger::close`]); `result`
     /// unchanged without a ledger.
-    fn close_ledger(&mut self, result: Result<Atom>) -> Result<Atom> {
+    fn close_ledger<T>(&mut self, result: Result<T>) -> Result<T> {
         let Some(ledger) = self.ledger.take() else {
             return result;
         };
