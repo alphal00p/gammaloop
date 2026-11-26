@@ -9,7 +9,7 @@ use feynkit_graph::{
 };
 use feynkit_model::Model;
 use feynkit_py::{FeynkitModule, PyFeynmanDiagram, PyModel};
-use linnet::half_edge::involution::Hedge;
+use linnet::half_edge::involution::{EdgeIndex, Hedge};
 use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph};
 #[cfg(feature = "linnet-python")]
 use linnet_py::GraphModule;
@@ -318,6 +318,39 @@ fn native_counterterm_source_matches_the_compiled_clinnet_fixture() {
     assert_eq!(
         source,
         include_str!("../../clinnet/tests/resources/feynkit-hull-counterterm.typ")
+    );
+}
+
+#[test]
+fn native_lanes_source_matches_the_compiled_clinnet_fixture() {
+    let diagram = FeynmanDiagram::from_dot(
+        Model::phi4(),
+        r#"digraph fixture {
+            a -> b [particle="phi"]; a -> b [particle="phi"];
+            a -> b [particle="phi"]; a -> b [particle="phi"];
+        }"#,
+    )
+    .unwrap();
+    let graph = diagram.underlying();
+    let empty = BTreeSet::new();
+    let mut outer = graph.empty_subgraph::<SuBitGraph>();
+    let mut inner = graph.empty_subgraph::<SuBitGraph>();
+    for index in 0..4 {
+        outer.add(graph[&EdgeIndex(index)].1);
+        if index < 2 {
+            inner.add(graph[&EdgeIndex(index)].1);
+        }
+    }
+    let layers = [
+        HighlightLayer::new(&outer, &empty, HighlightStyle::ActedOn),
+        HighlightLayer::new(&inner, &empty, HighlightStyle::Treated),
+    ];
+    let source = diagram
+        .to_linnest_with_overlap(&layers, true, None, "(:)", HighlightOverlap::Lanes)
+        .unwrap();
+    assert_eq!(
+        source,
+        include_str!("../../clinnet/tests/resources/feynkit-lanes.typ")
     );
 }
 

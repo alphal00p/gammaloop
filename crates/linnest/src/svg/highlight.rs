@@ -25,6 +25,8 @@ pub enum HighlightOverlap {
     Bands,
     /// Parallel strokes on 4pt centers for small diagrams.
     BandsMiniature,
+    /// Global parallel slots joined by cubic turns around vertices.
+    Lanes,
 }
 
 impl HighlightOverlap {
@@ -37,6 +39,7 @@ impl HighlightOverlap {
             Self::Recolour => "recolour",
             Self::Bands => "bands",
             Self::BandsMiniature => "bands-miniature",
+            Self::Lanes => "lanes",
         }
     }
 
@@ -44,7 +47,7 @@ impl HighlightOverlap {
     /// See [`Scene::apply_highlights_with_overlap`].
     pub fn band_spacing(self) -> Option<f64> {
         match self {
-            Self::Casings | Self::Hulls | Self::Recolour => None,
+            Self::Casings | Self::Hulls | Self::Recolour | Self::Lanes => None,
             Self::Bands => Some(3.0),
             Self::BandsMiniature => Some(4.0),
         }
@@ -61,6 +64,7 @@ impl FromStr for HighlightOverlap {
             Self::BandsMiniature,
             Self::Hulls,
             Self::Recolour,
+            Self::Lanes,
         ]
         .into_iter()
         .find(|candidate| candidate.as_str() == mode)
@@ -70,7 +74,7 @@ impl FromStr for HighlightOverlap {
 
 /// An unknown overlap mode. See [`Scene::apply_highlights_with_overlap`].
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
-#[error("overlap must be 'hulls', 'recolour', 'casings', 'bands', or 'bands-miniature'")]
+#[error("overlap must be 'hulls', 'recolour', 'casings', 'bands', 'bands-miniature', or 'lanes'")]
 pub struct UnknownHighlightOverlap;
 
 /// Theme paints for an automatic palette slot.
@@ -318,6 +322,14 @@ pub struct HullRegion {
     pub(super) details: HighlightDetails,
 }
 
+/// Lane membership resolved against the routed edge carriers.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LaneRegion {
+    pub(super) edges: BTreeSet<usize>,
+    pub(super) paint: String,
+    pub(super) details: HighlightDetails,
+}
+
 impl HullRegion {
     fn resolve(
         regions: &[HighlightRegion],
@@ -517,6 +529,7 @@ impl Scene {
             return;
         }
         self.hulls.clear();
+        self.lanes.clear();
         let legacy = matches!(regions, [region] if region.style == HighlightStyle::Amber && !region.details.contracted && region.details.label.is_empty() && region.details.description.is_empty());
         self.counterterm_opacity = if overlap == HighlightOverlap::Recolour {
             0.62
@@ -563,6 +576,17 @@ impl Scene {
         if has_counterterm {
             // CT2 keeps the ink, geometry and visibility of the interior lines.
             // Other selections remain visible as hulls at reading size.
+            return;
+        }
+        if overlap == HighlightOverlap::Lanes && !legacy {
+            self.lanes = regions
+                .iter()
+                .map(|region| LaneRegion {
+                    edges: region.edges.clone(),
+                    paint: region.style.paint(&palette.amber_paint).into_owned(),
+                    details: region.details.clone(),
+                })
+                .collect();
             return;
         }
         if let Some(spacing) = overlap

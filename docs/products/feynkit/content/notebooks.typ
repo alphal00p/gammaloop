@@ -188,8 +188,15 @@ translucent hulls around member edges and vertices. It increases the radius of e
 regions, then draws the original particle lines over the hulls. Use
 `DiagramStyle(miniature=True)` for stamps. The last matching layer supplies the
 edge colour. `overlap` can explicitly select `"hulls"`, `"recolour"`, `"casings"`,
-`"bands"`, or `"bands-miniature"`. The `hull_radius` and `hull_step` style options
+`"bands"`, `"bands-miniature"`, or `"lanes"`. The `hull_radius` and `hull_step` style options
 are measured in points.
+
+At reading size, `overlap="lanes"` assigns each layer a fixed slot along its
+internal edges. Cubic turns connect the slots at vertices while the particle
+lines retain their original styling. Some selections require crossings where
+the same edges belong to incompatible turns. A layer's label and description
+are available on its SVG strokes. Contracted selections keep the counterterm
+hull treatment.
 
 // docs-example: compile
 ```python

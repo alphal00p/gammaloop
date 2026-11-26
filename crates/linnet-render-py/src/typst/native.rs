@@ -357,6 +357,7 @@ impl RenderSettingsTransport {
             ));
         }
         let mut scene = defaults.unwrap_or_else(|| Scene {
+            lanes: Vec::new(),
             hulls: Vec::new(),
             counterterm_opacity: 0.35,
             recolour_stamp: false,

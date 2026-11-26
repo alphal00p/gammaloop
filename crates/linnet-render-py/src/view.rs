@@ -1314,6 +1314,7 @@ with sync_playwright() as driver:
             details: Details::default(),
         };
         let scenes = (0..count).map(|_| Scene {
+                lanes: Vec::new(),
                 hulls: Vec::new(),
                 counterterm_opacity: 0.35,
                 recolour_stamp: false,

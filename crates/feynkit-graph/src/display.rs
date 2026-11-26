@@ -145,7 +145,7 @@ impl FeynmanDiagram {
     }
 
     /// Emit a standalone light-palette source with the chosen highlight geometry.
-    /// Hull and recolour exports with highlight layers embed the native scene
+    /// Hull, lane and recolour exports with highlight layers embed the native scene
     /// without labels and accept the default configuration `(:)`. To set native
     /// layout options or include outlined labels, prepare a scene and call
     /// `Scene::render_typst` with its label pages.
@@ -169,13 +169,13 @@ impl FeynmanDiagram {
             && (layers.iter().any(|layer| layer.details.contracted)
                 || matches!(
                     overlap,
-                    HighlightOverlap::Hulls | HighlightOverlap::Recolour
+                    HighlightOverlap::Hulls | HighlightOverlap::Recolour | HighlightOverlap::Lanes
                 ) && !matches!(layers, [layer] if layer.style == HighlightStyle::Amber
                     && layer.details.label.is_empty() && layer.details.description.is_empty()));
         if native {
             if config.trim() != "(:)" {
                 return Err(DiagramError::Drawing(
-                    "native hull and recolour exports use SceneOptions; prepare a scene and call render_typst".into(),
+                    "native hull, lane and recolour exports use SceneOptions; prepare a scene and call render_typst".into(),
                 ));
             }
             let options = SceneOptions {

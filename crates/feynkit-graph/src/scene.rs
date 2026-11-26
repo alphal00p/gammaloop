@@ -545,6 +545,7 @@ impl FeynmanDiagram {
         }
         let (edge_specs, edge_drawings) = edges.into_iter().unzip();
         let mut scene = Scene {
+            lanes: Vec::new(),
             hulls: Vec::new(),
             counterterm_opacity: 0.35,
             recolour_stamp: false,
@@ -673,6 +674,7 @@ impl SceneOptions {
             ]),
         };
         let mut scene = Scene {
+            lanes: Vec::new(),
             hulls: Vec::new(),
             counterterm_opacity: 0.35,
             recolour_stamp: false,

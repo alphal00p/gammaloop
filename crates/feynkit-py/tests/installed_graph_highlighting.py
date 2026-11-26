@@ -596,3 +596,62 @@ except ValueError as error:
 else:
     raise AssertionError("unknown counterterm scheme must fail")
 print("installed mixed CT2f scheme checks passed")
+
+with patch.dict(sys.modules, {"typst": None}):
+    single_lane = basketball.render(
+        highlight=inner, style=legacy_style, overlap="lanes"
+    ).to_svg()
+assert (
+    normalize_svg_fonts(single_lane).encode()
+    == (fixtures / "single-amber-base-feynkit.svg").read_bytes()
+)
+
+label = 'γ₂ & <subgraph> "name"'
+description = "local <integrated> & finite"
+metro = basketball.render(
+    highlight=[
+        (outer, {"style": "acted-on", "label": label, "description": description}),
+        (inner, "treated"),
+    ],
+    style=legacy_style,
+    overlap="lanes",
+).to_svg()
+root = ET.fromstring(metro)
+lanes = root.findall(".//*[@data-linnet-lane]")
+assert {lane.get("data-linnet-lane") for lane in lanes} == {"0", "1"}
+assert root.find(".//*[@data-linnet-lane-crossings]").get("data-linnet-lane-crossings") == "0"
+assert len(root.findall(".//*[@data-linnet-paper]")) == 2
+assert "stroke-dasharray" in metro
+for lane in lanes:
+    path = lane.find("{*}path")
+    assert path.get("fill") == "none"
+    assert path.get("stroke-width") == "2.1"
+    if lane.get("data-linnet-lane") == "0":
+        assert lane.get("data-label") == label
+        assert lane.get("data-description") == description
+        assert label in lane.find("{*}title").text
+        assert path.get("stroke") == "#3b82f6"
+assert any("C" in lane.find("{*}path").get("d") for lane in lanes)
+
+many_lanes = basketball.render(
+    highlight=[outer] * 5, style=legacy_style, overlap="lanes"
+).to_svg()
+slots = ET.fromstring(many_lanes).findall(".//*[@data-linnet-lane]")
+assert {lane.get("data-linnet-lane") for lane in slots} == set("01234")
+assert len({lane.find("{*}path").get("stroke") for lane in slots}) == 5
+
+# A loop has one carrier and one turn per slot. The selected external legs
+# retain their particle ink and contribute no lanes.
+loop_lanes = tadpole.render(
+    overlap="lanes", highlight=[region, region], style=legacy_style
+).to_svg()
+loop_root = ET.fromstring(loop_lanes)
+for slot in ("0", "1"):
+    assert len(loop_root.findall(f".//*[@data-linnet-lane='{slot}']")) == 2
+assert "data-linnet-lane" in fixture_linnest(basketball, highlight=layers, overlap="lanes")
+
+if has_linnet:
+    generic_lanes = generic.to_svg(highlight=[generic_outer, generic_inner], overlap="lanes")
+    assert ET.fromstring(generic_lanes).find(".//*[@data-linnet-lane]") is not None
+    assert "[data-linnet-paper]" in generic_lanes
+print("installed transit corner lane checks passed")

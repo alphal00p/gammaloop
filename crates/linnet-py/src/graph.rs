@@ -1618,13 +1618,15 @@ impl PyGraph {
     ///     half highlights the whole edge. Defaults depend on the count of
     ///     unstyled entries regardless of where styled pairs appear. One,
     ///     two, or three get amber, blue/red, or blue/violet/red respectively.
-    ///     Further layers get palette slots, except in casings mode.
+    ///     Further layers get palette slots, except in casings mode. Bands
+    ///     and multi-layer lanes assign slots to all unstyled layers.
     ///     A style dictionary accepts style, label, description, contracted, and scheme.
     /// mute_outside : bool, optional
-    ///     Fade edges and nodes outside the selected regions.
-    /// overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature"}, optional
-    ///     Use hulls by default, or stamp recolouring, casings, or bands.
-    ///     Bands use automatic palette slots for unstyled entries.
+    ///     Fade edges and nodes outside the selected regions in applicable modes.
+    ///     Hulls and lanes keep all particle lines in normal ink.
+    /// overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature", "lanes"}, optional
+    ///     Use hulls by default. Lanes place layers in global colour slots
+    ///     joined by cubic turns at vertices.
     #[pyo3(signature = (*, config=None, highlight=None, mute_outside=true, overlap="hulls"))]
     fn render(
         slf: Py<PyGraph>,
@@ -1635,7 +1637,7 @@ impl PyGraph {
         #[gen_stub(override_type(type_repr = "Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None", imports = ("typing")))]
         highlight: Option<&Bound<'_, PyAny>>,
         mute_outside: bool,
-        #[gen_stub(override_type(type_repr = "typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature']", imports = ("typing")))]
+        #[gen_stub(override_type(type_repr = "typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature', 'lanes']", imports = ("typing")))]
         overlap: &str,
     ) -> PyResult<PyDiagramView> {
         render::render_with_highlights(py, &slf, config, highlight, mute_outside, overlap)
@@ -1656,10 +1658,11 @@ impl PyGraph {
     /// highlight : Subgraph or pair or sequence, optional
     ///     Selections and styles accepted by ``render``.
     /// mute_outside : bool, optional
-    ///     Fade edges and nodes outside the selected regions.
-    /// overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature"}, optional
-    ///     Use hulls by default, or stamp recolouring, casings, or bands.
-    ///     Bands use automatic palette slots for unstyled entries.
+    ///     Fade edges and nodes outside the selected regions in applicable modes.
+    ///     Hulls and lanes keep all particle lines in normal ink.
+    /// overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature", "lanes"}, optional
+    ///     Use hulls by default. Lanes place layers in global colour slots
+    ///     joined by cubic turns at vertices.
     #[pyo3(signature = (*, config=None, browser=None, highlight=None, mute_outside=true, overlap="hulls"))]
     fn to_svg(
         slf: Py<PyGraph>,
@@ -1671,7 +1674,7 @@ impl PyGraph {
         #[gen_stub(override_type(type_repr = "Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None", imports = ("typing")))]
         highlight: Option<&Bound<'_, PyAny>>,
         mute_outside: bool,
-        #[gen_stub(override_type(type_repr = "typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature']", imports = ("typing")))]
+        #[gen_stub(override_type(type_repr = "typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature', 'lanes']", imports = ("typing")))]
         overlap: &str,
     ) -> PyResult<String> {
         render::render_with_highlights(py, &slf, config, highlight, mute_outside, overlap)?

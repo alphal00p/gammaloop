@@ -8,13 +8,14 @@ mod curves;
 pub use config::Config;
 pub use highlight::{
     CountertermScheme, HighlightDetails, HighlightOverlap, HighlightPalette, HighlightRegion,
-    HighlightStroke, HighlightStyle, HullOptions, HullRegion, SlotPaint, UnknownCountertermScheme,
-    UnknownHighlightOverlap, UnknownHighlightStyle,
+    HighlightStroke, HighlightStyle, HullOptions, HullRegion, LaneRegion, SlotPaint,
+    UnknownCountertermScheme, UnknownHighlightOverlap, UnknownHighlightStyle,
 };
 mod highlight;
 mod hulls;
 mod interactive;
 mod labels;
+mod lanes;
 mod marks;
 mod output;
 
@@ -31,7 +32,9 @@ use std::sync::Arc;
 use crate::{ImpredRun, TypstDotEdge, TypstDotEndpoint, TypstDotNode, TypstGraph, TypstGraphSpec};
 use labels::{Anchor, Bounds, Placement, Stroke as CollisionStroke};
 pub use labels::{LabelError, LabelMetrics, LabelPage, LabelSource, Typeset};
+use lanes::{Carrier as LaneCarrier, Station as LaneStation};
 pub use output::Details;
+use output::INK;
 
 /// Drawing unit in points: Linnest's default 1.5em at 9pt text.
 const UNIT: f64 = 13.5;
@@ -43,6 +46,8 @@ const NODE_RADIUS: f64 = 0.16;
 pub struct Scene {
     /// Hull memberships resolved after layout.
     pub hulls: Vec<HullRegion>,
+    /// Global lane memberships resolved after layout.
+    pub lanes: Vec<LaneRegion>,
     /// Opacity of particle lines in a ghost counterterm.
     pub counterterm_opacity: f64,
     /// Scale the diagram ink for a recoloured stamp.
@@ -207,6 +212,7 @@ impl Scene {
     /// use serde_json;
     /// use std::error::Error;
     /// let scene = Scene {
+    ///     lanes: Vec::new(),
     ///     hulls: Vec::new(), counterterm_opacity: 0.35, recolour_stamp: false,
     ///     graph: serde_json::from_str(r#"{"nodes":[],"edges":[]}"#)?,
     ///     nodes: Vec::new(), edges: Vec::new(), preamble: String::new(),
@@ -473,6 +479,18 @@ enum Element {
         path: BezPath,
         paint: String,
     },
+    Lane {
+        slot: usize,
+        path: BezPath,
+        paint: String,
+        details: HighlightDetails,
+        width: f64,
+    },
+    LaneCrossings(usize),
+    LaneHalo {
+        center: Point,
+        radius: f64,
+    },
     Counterterm {
         center: Point,
         paint: String,
@@ -563,6 +581,7 @@ impl Drawing {
         let mut fixed_arrows = Vec::new();
         let mut region_hrefs = Vec::new();
         let mut hull_paths = BTreeMap::new();
+        let mut lane_paths = BTreeMap::new();
         for (edge, carrier) in laid.edges.iter().zip(&laid.carriers) {
             let drawing = scene
                 .edges
@@ -581,6 +600,21 @@ impl Drawing {
                 .any(|region| region.details.contracted && region.edges.contains(&edge.edge));
             if member {
                 hull_paths.insert(edge.edge, visible.clone());
+            }
+            if let (Some(source), Some(sink)) = (&edge.source, &edge.sink) {
+                if scene
+                    .lanes
+                    .iter()
+                    .any(|region| region.edges.contains(&edge.edge))
+                {
+                    lane_paths.insert(
+                        edge.edge,
+                        LaneCarrier {
+                            nodes: [source.node, sink.node],
+                            path: visible.clone(),
+                        },
+                    );
+                }
             }
             let part_refs: Vec<&BezPath> = parts.iter().collect();
             for (region, points) in curves::region_samples(&part_refs, UNIT)? {
@@ -720,6 +754,25 @@ impl Drawing {
             layers.extend(highlight_elements);
         }
         layers.extend(overlay_marks);
+        if !scene.lanes.is_empty() {
+            let stations: Vec<_> = scene
+                .nodes
+                .iter()
+                .enumerate()
+                .map(|(node, drawing)| {
+                    let [x, y] = laid.node(node);
+                    let (width, height) = drawing.size(typeset);
+                    LaneStation {
+                        center: Point::new(x, y),
+                        radius: width.max(height),
+                    }
+                })
+                .collect();
+            layers.splice(
+                ..0,
+                lanes::draw(&scene.lanes, &lane_paths, &stations, scene.edges.len())?,
+            );
+        }
         let mut regions = Vec::new();
         let mut outlines = Vec::new();
         let mut counterterms = Vec::new();
@@ -831,6 +884,16 @@ impl Drawing {
         for (node, drawing) in laid.nodes.iter().zip(&scene.nodes) {
             let at = laid.node(node.node);
             let href = output::node_href(node, &laid.edges, &drawing.details);
+            let is_station = !drawing.rectangular
+                && lane_paths
+                    .values()
+                    .any(|carrier| carrier.nodes.contains(&node.node));
+            if is_station {
+                layers.push(Element::LaneHalo {
+                    center: Point::new(at[0], at[1]),
+                    radius: drawing.size(typeset).0,
+                });
+            }
             layers.push(Element::Node {
                 id: drawing
                     .details
@@ -840,7 +903,11 @@ impl Drawing {
                 at,
                 size: drawing.size(typeset),
                 rectangular: drawing.rectangular,
-                fill: drawing.fill.clone(),
+                fill: if is_station {
+                    INK.to_owned()
+                } else {
+                    drawing.fill.clone()
+                },
                 stroke: drawing.stroke.clone(),
             });
             let (width, height) = drawing.size(typeset);
@@ -1347,6 +1414,7 @@ mod tests {
             longitudinal_scale: 1.4,
         };
         Scene {
+            lanes: Vec::new(),
             hulls: Vec::new(),
             counterterm_opacity: 0.35,
             recolour_stamp: false,

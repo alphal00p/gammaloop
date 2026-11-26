@@ -713,7 +713,7 @@ class Graph:
     @classmethod
     def from_dot_file(cls, path: builtins.str | os.PathLike[builtins.str], codec: DotCodec, *, node_store: NodeStore = NodeStore.Vec) -> Graph: ...
     def to_dot(self, codec: typing.Optional[DotCodec] = None) -> builtins.str: ...
-    def render(self, *, config: RenderSettings | None = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature'] = "hulls") -> DiagramView:
+    def render(self, *, config: RenderSettings | None = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature', 'lanes'] = "hulls") -> DiagramView:
         r"""
         Snapshot a drawing, using native SVG geometry for ordinary graph settings.
 
@@ -731,15 +731,17 @@ class Graph:
             half highlights the whole edge. Defaults depend on the count of
             unstyled entries regardless of where styled pairs appear. One,
             two, or three get amber, blue/red, or blue/violet/red respectively.
-            Further layers get palette slots, except in casings mode.
+            Further layers get palette slots, except in casings mode. Bands
+            and multi-layer lanes assign slots to all unstyled layers.
             A style dictionary accepts style, label, description, contracted, and scheme.
         mute_outside : bool, optional
-            Fade edges and nodes outside the selected regions.
-        overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature"}, optional
-            Use hulls by default, or stamp recolouring, casings, or bands.
-            Bands use automatic palette slots for unstyled entries.
+            Fade edges and nodes outside the selected regions in applicable modes.
+            Hulls and lanes keep all particle lines in normal ink.
+        overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature", "lanes"}, optional
+            Use hulls by default. Lanes place layers in global colour slots
+            joined by cubic turns at vertices.
         """
-    def to_svg(self, *, config: RenderSettings | None = None, browser: typing.Optional[builtins.str] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature'] = "hulls") -> builtins.str:
+    def to_svg(self, *, config: RenderSettings | None = None, browser: typing.Optional[builtins.str] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature', 'lanes'] = "hulls") -> builtins.str:
         r"""
         Export SVG with the same highlights as ``render``.
 
@@ -756,10 +758,11 @@ class Graph:
         highlight : Subgraph or pair or sequence, optional
             Selections and styles accepted by ``render``.
         mute_outside : bool, optional
-            Fade edges and nodes outside the selected regions.
-        overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature"}, optional
-            Use hulls by default, or stamp recolouring, casings, or bands.
-            Bands use automatic palette slots for unstyled entries.
+            Fade edges and nodes outside the selected regions in applicable modes.
+            Hulls and lanes keep all particle lines in normal ink.
+        overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature", "lanes"}, optional
+            Use hulls by default. Lanes place layers in global colour slots
+            joined by cubic turns at vertices.
         """
     def _mime_(self) -> typing.Any: ...
     def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any: ...

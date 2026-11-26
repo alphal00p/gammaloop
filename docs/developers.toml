@@ -2097,7 +2097,9 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Highlight regressions add compile-time fixtures to their test producers.
 # Production asset cleanup and fixture ownership follow the existing
 # source tiers.
-digest = "9a8b74ad598f9704a75bb194fcb7cb4ff70112d0"
+# No-impact attestation 2026-11-26: Native lane regression fixtures are
+# compile-time test inputs. Production and runtime source ownership is unchanged.
+digest = "64d7001acdd1867f693631acbbaae29773543659"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

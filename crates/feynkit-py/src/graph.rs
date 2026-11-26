@@ -4469,8 +4469,8 @@ impl PyFeynmanDiagram {
     ///     tuples, as in ``render``.
     /// mute_outside : bool, optional
     ///     Mute unselected drawing elements in legacy and stroke modes.
-    ///     H1 hulls keep all particle lines in normal ink.
-    /// overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature"} or None, optional
+    ///     Hulls and lanes keep all particle lines in normal ink.
+    /// overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature", "lanes"} or None, optional
     ///     Highlight geometry and automatic palette, as in ``render``.
     #[pyo3(signature = (*, config=None, style=None, momenta=false, lmb=None, highlight=None, mute_outside=true, overlap=None))]
     #[allow(clippy::too_many_arguments)] // Mirrors the Python drawing options.
@@ -4484,7 +4484,7 @@ impl PyFeynmanDiagram {
         #[gen_stub(override_type(type_repr = "Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None", imports = ("typing")))]
         highlight: Option<&Bound<'_, PyAny>>,
         mute_outside: bool,
-        #[gen_stub(override_type(type_repr = "typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature'] | None", imports = ("typing")))]
+        #[gen_stub(override_type(type_repr = "typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature', 'lanes'] | None", imports = ("typing")))]
         overlap: Option<&str>,
     ) -> PyResult<String> {
         let view = self.render_drawing(
@@ -4560,12 +4560,13 @@ impl PyFeynmanDiagram {
     ///     filled glyph. None or "unspecified" uses the plain open CT2 glyph.
     /// mute_outside : bool, optional
     ///     Mute unselected drawing elements in legacy and stroke modes.
-    ///     H1 hulls keep all particle lines in normal ink.
-    /// overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature"} or None, optional
+    ///     Hulls and lanes keep all particle lines in normal ink.
+    /// overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature", "lanes"} or None, optional
     ///     Defaults to H1 hulls at reading size and recolouring for
-    ///     DiagramStyle(miniature=True). Casings and bands remain available.
-    ///     Bands use palette slots; casings require explicit styles after
-    ///     three unstyled layers.
+    ///     DiagramStyle(miniature=True). Use "lanes" for global colour slots
+    ///     joined by cubic turns at vertices. Lanes and bands can assign
+    ///     distinct palette slots to unstyled layers. Casings require
+    ///     explicit styles after three unstyled layers.
     #[pyo3(signature = (*, config=None, style=None, momenta=false, lmb=None, highlight=None, mute_outside=true, overlap=None))]
     #[allow(clippy::too_many_arguments)] // Mirrors the Python drawing options.
     pub(crate) fn render(
@@ -4578,7 +4579,7 @@ impl PyFeynmanDiagram {
         #[gen_stub(override_type(type_repr = "Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None", imports = ("typing")))]
         highlight: Option<&Bound<'_, PyAny>>,
         mute_outside: bool,
-        #[gen_stub(override_type(type_repr = "typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature'] | None", imports = ("typing")))]
+        #[gen_stub(override_type(type_repr = "typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature', 'lanes'] | None", imports = ("typing")))]
         overlap: Option<&str>,
     ) -> PyResult<PyDiagramView> {
         let drawing = self.render_drawing(
@@ -4624,12 +4625,13 @@ impl PyFeynmanDiagram {
     ///     ``render().measured().to_html()`` on the displayed view instead.
     /// mute_outside : bool, optional
     ///     Mute unselected drawing elements in legacy and stroke modes.
-    ///     H1 hulls keep all particle lines in normal ink.
-    /// overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature"} or None, optional
+    ///     Hulls and lanes keep all particle lines in normal ink.
+    /// overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature", "lanes"} or None, optional
     ///     Defaults to H1 hulls at reading size and recolouring for
-    ///     DiagramStyle(miniature=True). Casings and bands remain available.
-    ///     Bands use palette slots; casings require explicit styles after
-    ///     three unstyled layers.
+    ///     DiagramStyle(miniature=True). Use "lanes" for global colour slots
+    ///     joined by cubic turns at vertices. Lanes and bands can assign
+    ///     distinct palette slots to unstyled layers. Casings require
+    ///     explicit styles after three unstyled layers.
     #[pyo3(signature = (*, config=None, style=None, momenta=false, lmb=None, highlight=None, mute_outside=true, overlap=None, browser=None))]
     #[allow(clippy::too_many_arguments)] // Mirrors render's Python keywords plus explicit browser selection.
     fn to_html(
@@ -4642,7 +4644,7 @@ impl PyFeynmanDiagram {
         #[gen_stub(override_type(type_repr = "Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None", imports = ("typing")))]
         highlight: Option<&Bound<'_, PyAny>>,
         mute_outside: bool,
-        #[gen_stub(override_type(type_repr = "typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature'] | None", imports = ("typing")))]
+        #[gen_stub(override_type(type_repr = "typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature', 'lanes'] | None", imports = ("typing")))]
         overlap: Option<&str>,
         browser: Option<&str>,
     ) -> PyResult<String> {

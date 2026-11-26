@@ -129,6 +129,7 @@ pub fn extract_highlights<'py, T>(
             .filter(|(_, style, _)| style.is_none())
             .count(),
     ) {
+        _ if overlap == HighlightOverlap::Lanes && entries.len() > 1 => &[],
         (Some(_), _) | (None, 0) => &[],
         (None, 1) => &[Amber],
         (None, 2) => &[ActedOn, Treated],
@@ -237,7 +238,7 @@ pub fn theme_svg(
             write!(rules, ".{class} [{attribute}=\"{}\"]{gap}{{{gap}{attribute}:{gap}{value};{gap}}}{separator}", paint.light).expect("writing a string");
         }
     }
-    if svg.contains("data-linnet-counterterm=") {
+    if svg.contains("data-linnet-counterterm=") || svg.contains("data-linnet-paper=") {
         let paper = format!("--{prefix}-counterterm-paper");
         write!(light, "{paper}:#ffffff;{gap}").expect("writing a string");
         write!(dark, "{paper}:#1b1d23;{gap}").expect("writing a string");

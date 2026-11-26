@@ -528,6 +528,7 @@
     linnest = [
       "crates/linnest/layout/native/fixtures"
       "crates/linnest/src/ec_seed/fixtures"
+      "crates/linnest/src/svg/fixtures/round3-lane-stations.json"
     ];
     "feynkit-amplitude" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-tensor" = ["crates/feynkit-model/tests/fixtures"];
@@ -557,6 +558,7 @@
       "crates/clinnet/tests/resources/feynkit-casings.typ"
       "crates/clinnet/tests/resources/feynkit-bands.typ"
       "crates/clinnet/tests/resources/feynkit-hull-counterterm.typ"
+      "crates/clinnet/tests/resources/feynkit-lanes.typ"
       "crates/feynkit-py/tests/native_forwarding.py"
       "crates/spynso3/tests/installed_tensor_network_display.py"
       "crates/linnet-py/tests/test_community_rendering.py"

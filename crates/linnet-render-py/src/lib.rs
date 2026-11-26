@@ -466,6 +466,7 @@ config = graph.RenderSettings(
                 details: Details::default(),
             };
             let scene = Scene {
+                lanes: Vec::new(),
                 hulls: Vec::new(),
                 counterterm_opacity: 0.35,
                 recolour_stamp: false,

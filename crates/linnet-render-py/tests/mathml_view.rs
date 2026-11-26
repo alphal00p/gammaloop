@@ -35,6 +35,7 @@ fn fixture_scene(marker: &str) -> Scene {
         ("<msub><mi>ℓ</mi><mn>0</mn></msub>", "$ell_0$"),
     ];
     Scene {
+        lanes: Vec::new(),
         hulls: Vec::new(),
         counterterm_opacity: 0.35,
         recolour_stamp: false,

@@ -471,6 +471,7 @@ impl SpensoNet {
             .as_array()
             .ok_or("missing network edges")?;
         let mut scene = Scene {
+            lanes: Vec::new(),
             hulls: Vec::new(),
             counterterm_opacity: 0.35,
             recolour_stamp: false,

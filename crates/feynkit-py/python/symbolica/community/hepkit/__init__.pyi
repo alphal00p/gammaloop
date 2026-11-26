@@ -3886,7 +3886,7 @@ class FeynmanDiagram:
         >>> restored = hep.FeynmanDiagram.from_dot(model, dot)
         >>> restored.validate()
         """
-    def to_linnest(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature'] | None = None) -> builtins.str:
+    def to_linnest(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature', 'lanes'] | None = None) -> builtins.str:
         r"""
         Export a self-contained Typst document embedding an outlined SVG.
 
@@ -3917,11 +3917,11 @@ class FeynmanDiagram:
             tuples, as in ``render``.
         mute_outside : bool, optional
             Mute unselected drawing elements in legacy and stroke modes.
-            H1 hulls keep all particle lines in normal ink.
-        overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature"} or None, optional
+            Hulls and lanes keep all particle lines in normal ink.
+        overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature", "lanes"} or None, optional
             Highlight geometry and automatic palette, as in ``render``.
         """
-    def render(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature'] | None = None) -> DiagramView:
+    def render(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature', 'lanes'] | None = None) -> DiagramView:
         r"""
         Prepare a browser-measured view using the shared physics renderer.
 
@@ -3981,14 +3981,15 @@ class FeynmanDiagram:
             filled glyph. None or "unspecified" uses the plain open CT2 glyph.
         mute_outside : bool, optional
             Mute unselected drawing elements in legacy and stroke modes.
-            H1 hulls keep all particle lines in normal ink.
-        overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature"} or None, optional
+            Hulls and lanes keep all particle lines in normal ink.
+        overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature", "lanes"} or None, optional
             Defaults to H1 hulls at reading size and recolouring for
-            DiagramStyle(miniature=True). Casings and bands remain available.
-            Bands use palette slots; casings require explicit styles after
-            three unstyled layers.
+            DiagramStyle(miniature=True). Use "lanes" for global colour slots
+            joined by cubic turns at vertices. Lanes and bands can assign
+            distinct palette slots to unstyled layers. Casings require
+            explicit styles after three unstyled layers.
         """
-    def to_html(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature'] | None = None, browser: typing.Optional[builtins.str] = None) -> builtins.str:
+    def to_html(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature', 'lanes'] | None = None, browser: typing.Optional[builtins.str] = None) -> builtins.str:
         r"""
         Export a complete static HTML figure with the same options as ``render``.
 
@@ -4019,12 +4020,13 @@ class FeynmanDiagram:
             ``render().measured().to_html()`` on the displayed view instead.
         mute_outside : bool, optional
             Mute unselected drawing elements in legacy and stroke modes.
-            H1 hulls keep all particle lines in normal ink.
-        overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature"} or None, optional
+            Hulls and lanes keep all particle lines in normal ink.
+        overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature", "lanes"} or None, optional
             Defaults to H1 hulls at reading size and recolouring for
-            DiagramStyle(miniature=True). Casings and bands remain available.
-            Bands use palette slots; casings require explicit styles after
-            three unstyled layers.
+            DiagramStyle(miniature=True). Use "lanes" for global colour slots
+            joined by cubic turns at vertices. Lanes and bands can assign
+            distinct palette slots to unstyled layers. Casings require
+            explicit styles after three unstyled layers.
         """
     def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
         r"""

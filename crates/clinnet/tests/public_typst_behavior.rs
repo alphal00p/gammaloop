@@ -216,6 +216,22 @@ fn compiled_linnest_hull_counterterm_retains_the_filled_region_and_ink() {
     assert!(svg.contains("<image") && svg.contains("image/svg+xml"));
 }
 
+#[test]
+fn compiled_linnest_lanes_retain_the_strokes_and_particle_ink() {
+    let (base, renderer) = staged(&[]);
+    let source = include_str!("resources/feynkit-lanes.typ");
+    let svg = render(&base, &renderer, "feynkit-lanes.typ", source);
+    assert!(source.contains(r#"data-linnet-lane-crossings=\"0"#));
+    for paint in ["#3b82f6", "#e4504f"] {
+        assert!(source.contains(&format!(
+            r#"fill=\"none\" stroke=\"{paint}\" stroke-width=\"2.1\" "#
+        )));
+    }
+    assert!(source.contains("stroke-dasharray="));
+    assert!(source.contains("data-linnet-paper="));
+    assert!(svg.contains("<image") && svg.contains("image/svg+xml"));
+}
+
 fn translation(value: &str) -> (f64, f64) {
     let mut coordinates = value
         .strip_prefix("translate(")

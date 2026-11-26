@@ -259,8 +259,13 @@ pub(super) fn svg(
     for element in layers {
         match element {
             Element::Carrier { .. } | Element::BeginGhost(_) | Element::EndGhost => {}
-            Element::Hull { path, .. } | Element::HullOutline { path, .. } => {
-                include(path.bounding_box())
+            Element::LaneCrossings(_) => {}
+            Element::Hull { path, .. }
+            | Element::HullOutline { path, .. }
+            | Element::Lane { path, .. } => include(path.bounding_box()),
+            Element::LaneHalo { center, radius } => {
+                let radius = radius + 1.6 / UNIT;
+                include(Rect::from_points(*center, *center).inflate(radius, radius));
             }
             Element::Counterterm { center, .. } => {
                 include(Rect::from_points(*center, *center).inflate(5.2 / UNIT, 5.2 / UNIT));
@@ -402,6 +407,23 @@ pub(super) fn svg(
             y(points[2].y)
         )
     };
+    let has_lanes = layers
+        .iter()
+        .any(|element| matches!(element, Element::Lane { .. }));
+    let write_targets = |svg: &mut String| {
+        for Target { at, size, href } in targets {
+            let _ = write!(
+                svg,
+                r#"<a href="{href}" transform="translate({} {})"><rect width="{s}" height="{s}" fill="transparent" stroke="none"/></a>"#,
+                number(ox + (at[0] - bounds.x0 + PAD) * UNIT - size / 2.0),
+                number(oy + (bounds.y1 + PAD - at[1]) * UNIT - size / 2.0),
+                s = number(*size)
+            );
+        }
+    };
+    if has_lanes {
+        write_targets(&mut svg);
+    }
     for element in layers {
         match element {
             Element::Carrier { path, href } => {
@@ -460,6 +482,36 @@ pub(super) fn svg(
                 let _ = write!(
                     svg,
                     r#"<path data-linnet-hull-outline="true" pointer-events="none" d="{d}" fill="none" stroke="{paint}" stroke-width="1.1" stroke-linejoin="round"/>"#
+                );
+            }
+            Element::Lane {
+                slot,
+                path,
+                paint,
+                details,
+                width,
+            } => {
+                let paint = xml_escape(paint);
+                let (label, description, title, _) = hover_details(details);
+                let _ = write!(
+                    svg,
+                    r#"<g data-linnet-lane="{slot}" data-label="{label}" data-description="{description}"><title>{title}</title><path d="{}" fill="none" stroke="{paint}" stroke-width="{width}" stroke-linecap="round" stroke-linejoin="round"/></g>"#,
+                    path_data(path)
+                );
+            }
+            Element::LaneCrossings(crossings) => {
+                let _ = write!(
+                    svg,
+                    r#"<metadata data-linnet-lane-crossings="{crossings}"/>"#
+                );
+            }
+            Element::LaneHalo { center, radius } => {
+                let _ = write!(
+                    svg,
+                    r##"<circle cx="{}" cy="{}" r="{}" fill="none" stroke="#ffffff" stroke-width="1.6" data-linnet-paper="true" pointer-events="none"/>"##,
+                    x(center.x),
+                    y(center.y),
+                    number(radius * UNIT + 0.8)
                 );
             }
             Element::Counterterm {
@@ -547,14 +599,8 @@ pub(super) fn svg(
             }
         }
     }
-    for Target { at, size, href } in targets {
-        let _ = write!(
-            svg,
-            r#"<a href="{href}" transform="translate({} {})"><rect width="{s}" height="{s}" fill="transparent" stroke="none"/></a>"#,
-            number(ox + (at[0] - bounds.x0 + PAD) * UNIT - size / 2.0),
-            number(oy + (bounds.y1 + PAD - at[1]) * UNIT - size / 2.0),
-            s = number(*size)
-        );
+    if !has_lanes {
+        write_targets(&mut svg);
     }
     let _ = write!(
         svg,
