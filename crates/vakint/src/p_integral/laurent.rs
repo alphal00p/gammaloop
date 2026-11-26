@@ -467,6 +467,18 @@ fn trace_generic<T>(
     exact_plan_available: bool,
     evaluate: impl FnOnce() -> Result<T, VakintError>,
 ) -> Result<T, VakintError> {
+    // diagnostics: the declined input to a file named by the caller
+    if let Some(path) = std::env::var_os("VAKINT_SERIES_DECLINE_LOG") {
+        use std::io::Write;
+        if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+            let _ = writeln!(
+                file,
+                "DECLINE phase={phase} order={order} exact_plan={exact_plan_available}\nmonomial={}\nexpression={}",
+                monomial.to_canonical_string(),
+                expression.to_canonical_string()
+            );
+        }
+    }
     if !tracing::enabled!(target: "vakint::p_integral::series_input", tracing::Level::INFO) {
         return evaluate();
     }

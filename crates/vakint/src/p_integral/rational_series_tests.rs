@@ -1,4 +1,4 @@
-use super::{Laurent, rational_series::RationalSeries};
+use super::{Laurent, rational_series::{RationalPart, RationalSeries}};
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 use symbolica::atom::{Atom, AtomCore, Symbol};
 use symbolica::domains::rational::Rational;
@@ -373,6 +373,51 @@ fn nonzero_analytic_denominator_factors_may_still_cancel() {
     compare(&input, epsilon, 3);
 }
 
+/// More spectator monomials × numerator degree than one exact part admits
+/// (Q L4 entry 1621, two-point row at depth 7: 1927 monomials × degree 17):
+/// the input is split per spectator monomial and the parts' series summed.
+/// 1100 monomials `a^i b^j` over 30 distinct denominators `1 + kε`
+/// (support 1100 × 31 > 32768), against the closed form
+/// `Σ mono/(1+kε) = Σ mono Σ_n (−kε)^n`; and the phase and an ε-free
+/// spectator denominator (`𝜋^-2`) carried as in the declined input.
+#[test]
+fn many_spectator_monomials_are_expanded_per_monomial() {
+    crate::Vakint::initialize_vakint_symbols();
+    let epsilon = vk_symbol!("ε");
+    let e = Atom::var(epsilon);
+    let (a, b) = (Atom::var(vk_symbol!("a")), Atom::var(vk_symbol!("b")));
+    let pi2 = vk_parse!("𝜋^(-2)").unwrap();
+    let terms = (0..1100i64)
+        .map(|i| {
+            let k = i % 30 + 1;
+            let monomial = a.pow(Atom::num(i % 40)) * b.pow(Atom::num(i / 40));
+            (monomial, k)
+        })
+        .collect::<Vec<_>>();
+    let sum = Atom::add_many(
+        terms
+            .iter()
+            .map(|(monomial, k)| monomial * &pi2 / (Atom::one() + Atom::num(*k) * &e)),
+    );
+    let phase = vk_parse!("-𝑖/4096").unwrap();
+    let input = &phase * &sum;
+    assert!(
+        RationalPart::new(&input, epsilon).is_none(),
+        "one part admits it: the test does not exercise the split"
+    );
+    let prepared = RationalSeries::new(&input, epsilon).expect("split per spectator monomial");
+    assert_eq!(prepared.valuation(), Some(0));
+    let order = 3;
+    let actual = prepared.series(order).unwrap().to_atom(epsilon);
+    let expected = Atom::add_many(terms.iter().map(|(monomial, k)| {
+        let mut series = Atom::Zero;
+        for n in 0..=order {
+            series += (Atom::num(-*k) * &e).pow(Atom::num(n));
+        }
+        &phase * monomial * &pi2 * series
+    }));
+    assert!((actual - expected).expand().is_zero());
+}
 // Depth-dependent declines of the exact plan (Q L4 entry 1621 at depth 7).
 //
 // The declined input of that entry is not readable here, so the factors

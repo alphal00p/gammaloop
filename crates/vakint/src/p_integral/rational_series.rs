@@ -481,7 +481,126 @@ impl UnivariateScan {
     }
 }
 
+/// The exact series of a rational function of ε with spectator coefficients:
+/// one [`RationalPart`], or — when the whole input exceeds the part's support
+/// bound (spectator monomials × numerator degree, [`MAX_SUPPORT`]) — one part
+/// per spectator monomial ([`Self::grouped`]), the series being the sum of the
+/// parts' series.
 pub(super) struct RationalSeries {
+    parts: Vec<RationalPart>,
+}
+
+/// Groups of a split input at most (one per distinct spectator monomial).
+const MAX_GROUPS: usize = 65_536;
+
+impl RationalSeries {
+    #[cfg(test)]
+    pub(super) fn validate_spectators(expression: &Atom, epsilon: Symbol) -> Option<()> {
+        RationalPart::validate_spectators(expression, epsilon)
+    }
+
+    pub(super) fn new(expression: &Atom, epsilon: Symbol) -> Option<Self> {
+        match RationalPart::new(expression, epsilon) {
+            Some(part) => Some(Self { parts: vec![part] }),
+            None => Self::grouped(expression, epsilon),
+        }
+    }
+
+    /// The input as a sum over its spectator monomials `s`: `Σ_s s·R_s(ε)`,
+    /// every `R_s` a univariate rational function of ε (its own denominators),
+    /// each prepared as one [`RationalPart`] with every guard of the single
+    /// path (a group the part refuses refuses the whole). Admitted only when
+    /// the whole input passes the spectator-coordinate and semantic-zero
+    /// checks ([`RationalPart::validate_spectators`]). The valuation is the
+    /// least of the parts' valuations: a lower bound of the sum's (spectator
+    /// monomials may still be related, `ζ(2)³` and `ζ(6)`), so a caller that
+    /// expands its other factors that much deeper stays exact.
+    fn grouped(expression: &Atom, epsilon: Symbol) -> Option<Self> {
+        RationalPart::validate_spectators(expression, epsilon)?;
+        // an overall numeric (complex) phase stays a factor of every group
+        let factors = match expression.as_view() {
+            AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+            view => vec![view],
+        };
+        let (phase, rest): (Vec<_>, Vec<_>) =
+            factors.into_iter().partition(|factor| matches!(factor, AtomView::Num(_)));
+        let phase = Atom::mul_many(phase);
+        let expanded = Atom::mul_many(rest).expand();
+        let summands = match expanded.as_view() {
+            AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
+            view => vec![view],
+        };
+        let mut index = std::collections::HashMap::<Atom, usize>::new();
+        let mut groups: Vec<(Atom, Vec<Atom>)> = Vec::new();
+        for summand in summands {
+            let factors = match summand {
+                AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+                view => vec![view],
+            };
+            let (key, coefficient): (Vec<_>, Vec<_>) = factors
+                .into_iter()
+                .partition(|f| !matches!(f, AtomView::Num(_)) && !f.contains_symbol(epsilon));
+            let key = Atom::mul_many(key);
+            let coefficient = Atom::mul_many(coefficient);
+            match index.get(&key) {
+                Some(&i) => groups[i].1.push(coefficient),
+                None => {
+                    if groups.len() >= MAX_GROUPS {
+                        return None;
+                    }
+                    index.insert(key.clone(), groups.len());
+                    groups.push((key, vec![coefficient]));
+                }
+            }
+        }
+        if groups.len() < 2 {
+            return None;
+        }
+        let parts = groups
+            .into_iter()
+            .map(|(key, coefficients)| {
+                RationalPart::new(&(&phase * &key * Atom::add_many(coefficients.iter())), epsilon)
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Some(Self { parts })
+    }
+
+    pub(super) fn valuation(&self) -> Option<i64> {
+        self.parts.iter().filter_map(|part| part.valuation()).min()
+    }
+
+    pub(super) fn series(&self, order: i64) -> Option<Laurent> {
+        let Some(valuation) = self.valuation() else {
+            return Some(Laurent {
+                valuation: 0,
+                coefficients: Vec::new(),
+            });
+        };
+        if let [part] = self.parts.as_slice() {
+            return part.series(order);
+        }
+        let length = usize::try_from(order.checked_sub(valuation)?.checked_add(1)?.max(0)).ok()?;
+        let mut coefficients = vec![Atom::Zero; length];
+        for part in &self.parts {
+            let series = part.series(order)?;
+            for (i, coefficient) in series.coefficients.iter().enumerate() {
+                let at = series.valuation + i as i64 - valuation;
+                if let Ok(at) = usize::try_from(at)
+                    && at < length
+                {
+                    coefficients[at] = &coefficients[at] + coefficient;
+                }
+            }
+        }
+        Some(Laurent {
+            valuation,
+            coefficients: coefficients.into_iter().map(|c| c.expand()).collect(),
+        })
+    }
+}
+
+/// One exact rational series (module documentation).
+pub(super) struct RationalPart {
     numerator: Vec<Polynomial>,
     denominator: Vec<Rational>,
     prefactor: Atom,
@@ -489,7 +608,7 @@ pub(super) struct RationalSeries {
     numerator_start: usize,
 }
 
-impl RationalSeries {
+impl RationalPart {
     /// Check original spectator coordinates and inverse bases before rational
     /// conversion can enlarge the variable map or cancel denominator factors.
     fn validate_spectators(expression: &Atom, epsilon: Symbol) -> Option<()> {
@@ -901,5 +1020,82 @@ mod spectator_support_tests {
                 "{expression}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod decline_probe {
+    use super::*;
+
+    /// Diagnostics (ignored): the stages of [`RationalSeries::new`] on a
+    /// declined input dumped by `VAKINT_SERIES_DECLINE_LOG` (path in
+    /// `VAKINT_RATIONAL_PROBE`).
+    #[test]
+    #[ignore]
+    fn probe_a_declined_input() {
+        crate::Vakint::initialize_vakint_symbols();
+        let path = std::env::var("VAKINT_RATIONAL_PROBE").unwrap();
+        let text = std::fs::read_to_string(path).unwrap();
+        let line = text.lines().find(|l| l.starts_with("expression=")).unwrap();
+        let expression = symbolica::try_parse!(&line["expression=".len()..]).unwrap();
+        let epsilon = symbolica::symbol!("gammalooprs::ε");
+        let mut nodes = 0;
+        eprintln!("PROBE scan: {}", scan(expression.as_view(), epsilon, &mut nodes, 0).is_some());
+        eprintln!("PROBE scan nodes {nodes}");
+        let mut univariate = UnivariateScan::new(epsilon);
+        let shape = univariate.scan(expression.as_view(), 0);
+        eprintln!(
+            "PROBE univariate: {} memo {} visits {}",
+            shape.is_some(),
+            univariate.memo.len(),
+            univariate.visits
+        );
+        if let AtomView::Mul(product) = expression.as_view() {
+            for factor in product.iter() {
+                let mut u = UnivariateScan::new(epsilon);
+                let s = u.scan(factor, 0);
+                eprintln!(
+                    "PROBE factor bytes {} ok {} memo {} {}",
+                    factor.get_byte_size(),
+                    s.is_some(),
+                    u.memo.len(),
+                    s.map(|s| format!(
+                        "support {} keys {:?} numdeg {} specdeg {} dendeg {}",
+                        s.spectator_support,
+                        s.spectator_keys.as_ref().map(|k| k.len()),
+                        s.numerator_degree,
+                        s.spectator_degree,
+                        s.denominator.degree(0)
+                    ))
+                    .unwrap_or_default()
+                );
+                if let AtomView::Add(sum) = factor {
+                    eprintln!("PROBE  sum terms {}", sum.get_nargs());
+                    let mut u = UnivariateScan::new(epsilon);
+                    let mut acc: Option<UnivariateShape> = None;
+                    for (i, term) in sum.iter().enumerate() {
+                        let Some(t) = u.scan(term, 1) else {
+                            eprintln!("PROBE  term {i} declined alone (memo {})", u.memo.len());
+                            break;
+                        };
+                        acc = match acc {
+                            None => Some(t),
+                            Some(a) => match a.clone().add(t.clone()) {
+                                Some(x) => Some(x),
+                                None => {
+                                    eprintln!(
+                                        "PROBE  add declined at term {i}: acc support {} numdeg {} dendeg {}; term support {} numdeg {} dendeg {}",
+                                        a.spectator_support, a.numerator_degree, a.denominator.degree(0),
+                                        t.spectator_support, t.numerator_degree, t.denominator.degree(0)
+                                    );
+                                    break;
+                                }
+                            },
+                        };
+                    }
+                }
+            }
+        }
+        eprintln!("PROBE validate: {:?}", RationalSeries::validate_spectators(&expression, epsilon).is_some());
     }
 }
