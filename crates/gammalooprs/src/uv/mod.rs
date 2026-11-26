@@ -83,6 +83,14 @@ impl Integrands {
         &self.numerators
     }
 
+    /// Every root expression followed by every shared numerator body. Scalar
+    /// bodies are omitted: they hold only arithmetic in formal variables.
+    pub(crate) fn expressions(&self) -> impl Iterator<Item = &Atom> {
+        self.atoms
+            .values()
+            .chain(self.numerators.iter().map(|entry| &entry.rhs))
+    }
+
     pub(crate) fn scalar_symbol() -> Symbol {
         symbol!("gammalooprs::uv::scalar_coefficient"; Scalar)
     }

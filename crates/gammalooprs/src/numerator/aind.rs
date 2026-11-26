@@ -1,15 +1,18 @@
+use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use linnet::half_edge::{
     NodeIndex,
     involution::{EdgeIndex, Hedge},
 };
+use spenso::structure::abstract_index::AbstractIndex;
 use spenso::{
     structure::slot::{AbsInd, DummyAind, ParseableAind, SlotError},
     utils::{to_subscript, to_superscript},
 };
+use symbolica::id::Replacement;
 use symbolica::{
-    atom::{Atom, AtomView, Symbol, representation::FunView},
+    atom::{Atom, AtomCore, AtomView, Symbol, representation::FunView},
     coefficient::CoefficientView,
     function, symbol,
 };
@@ -85,6 +88,163 @@ impl DummyAind for Aind {
 
     fn new_dummy_at(i: usize) -> Self {
         Aind::Dummy(i)
+    }
+}
+
+/// A contracted index name that one derivation allocates for itself.
+///
+/// Each allocator restarts its numbering for every expression it produces, so
+/// independently derived expressions reuse these names. None of them ever
+/// connects an expression to the rest of the graph.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum PrivateIndex {
+    /// Integrated-UV tensor-reduction index, keyed only by topology order.
+    UvTerm(u16, u16),
+    /// GammaLoop dummy, numbered from one offset by every tensor-network parse.
+    Dummy(usize),
+    /// Spenso dummy `d_n`, numbered from zero by the color simplifier.
+    Spenso(usize),
+}
+
+impl PrivateIndex {
+    /// The private index that `view` names, if any. `spenso_namespace` is the
+    /// namespace of Spenso's dummy variables.
+    fn from_view(view: AtomView<'_>, spenso_namespace: &str) -> Option<Self> {
+        match view {
+            AtomView::Fun(function)
+                if function.get_symbol() == GS.dummyaind || function.get_symbol() == GS.uvaind =>
+            {
+                // A malformed index is not a slot name that a product could
+                // contract, so only valid indices are renamed.
+                match Aind::try_from(view).ok()? {
+                    Aind::Dummy(number) => Some(Self::Dummy(number)),
+                    Aind::UVTerm(order, local) => Some(Self::UvTerm(order, local)),
+                    _ => None,
+                }
+            }
+            AtomView::Var(variable) => {
+                let symbol = variable.get_symbol();
+                if symbol.get_namespace() != spenso_namespace {
+                    return None;
+                }
+                let number = symbol
+                    .get_stripped_name()
+                    .strip_prefix("d_")?
+                    .parse()
+                    .ok()?;
+                let index = Self::Spenso(number);
+                // A name with leading zeros is a different variable.
+                (index.to_atom().as_view() == view).then_some(index)
+            }
+            _ => None,
+        }
+    }
+
+    fn to_atom(self) -> Atom {
+        match self {
+            Self::UvTerm(order, local) => Aind::UVTerm(order, local).into(),
+            Self::Dummy(number) => Aind::Dummy(number).into(),
+            Self::Spenso(number) => AbstractIndex::Dummy(number).into(),
+        }
+    }
+}
+
+impl Aind {
+    /// Renamings that keep the private indices of independently derived factors
+    /// apart before the factors are multiplied.
+    ///
+    /// Each item of `factors` lists the expressions of one factor. Private
+    /// indices are the dummies of tensor-network parses and of the color
+    /// simplifier, and integrated-UV tensor-reduction indices: a derivation
+    /// allocates them only for contractions inside its own expression. Every
+    /// allocator restarts its numbering per expression, so separately derived
+    /// factors reuse these names. Their unchanged product would contract
+    /// unrelated slots of different factors with each other.
+    ///
+    /// The first factor to use a name keeps it. Later factors receive fresh
+    /// names, renamed consistently across all of a factor's expressions: Spenso
+    /// dummies beyond every Spenso dummy, and other private indices as dummies
+    /// beyond every dummy of every factor. Open graph indices are never renamed.
+    /// The result has one, possibly empty, replacement list per factor.
+    pub(crate) fn disjoint_private_renamings<'a, F>(
+        factors: impl IntoIterator<Item = F>,
+    ) -> Vec<Vec<Replacement>>
+    where
+        F: IntoIterator<Item = AtomView<'a>>,
+    {
+        let spenso_namespace = Atom::from(AbstractIndex::Dummy(0))
+            .get_symbol()
+            .expect("Spenso names its dummies with variables")
+            .get_namespace();
+        let private_indices = factors
+            .into_iter()
+            .map(|atoms| {
+                let mut indices = BTreeSet::new();
+                for atom in atoms {
+                    atom.visitor(&mut |view| {
+                        let Some(index) = PrivateIndex::from_view(view, spenso_namespace) else {
+                            return true;
+                        };
+                        indices.insert(index);
+                        false
+                    });
+                }
+                indices
+            })
+            .collect::<Vec<_>>();
+
+        let (mut next_dummy, mut next_spenso) = (0, 0);
+        for index in private_indices.iter().flatten() {
+            match *index {
+                PrivateIndex::Dummy(number) => next_dummy = next_dummy.max(number + 1),
+                PrivateIndex::Spenso(number) => next_spenso = next_spenso.max(number + 1),
+                PrivateIndex::UvTerm(..) => {}
+            }
+        }
+        let mut used = BTreeSet::new();
+        private_indices
+            .into_iter()
+            .map(|indices| {
+                indices
+                    .into_iter()
+                    .filter(|index| !used.insert(*index))
+                    .map(|index| {
+                        // Keep color dummies in the form the color simplifier parses.
+                        let fresh = match index {
+                            PrivateIndex::Spenso(_) => {
+                                next_spenso += 1;
+                                PrivateIndex::Spenso(next_spenso - 1)
+                            }
+                            PrivateIndex::UvTerm(..) | PrivateIndex::Dummy(_) => {
+                                next_dummy += 1;
+                                PrivateIndex::Dummy(next_dummy - 1)
+                            }
+                        };
+                        Replacement::new(index.to_atom().to_pattern(), fresh.to_atom())
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
+    /// `atom` with its private indices renamed apart from those of `others`.
+    ///
+    /// Use this before multiplying `atom` with expressions derived
+    /// independently of it; see [`Self::disjoint_private_renamings`].
+    pub(crate) fn private_indices_apart<'a>(
+        atom: Atom,
+        others: impl IntoIterator<Item = AtomView<'a>>,
+    ) -> Atom {
+        let mut renamings = Self::disjoint_private_renamings([
+            others.into_iter().collect::<Vec<_>>(),
+            vec![atom.as_view()],
+        ]);
+        let renaming = renamings.pop().expect("one renaming list per factor");
+        if renaming.is_empty() {
+            atom
+        } else {
+            atom.replace_multiple(&renaming)
+        }
     }
 }
 
@@ -377,13 +537,73 @@ mod tests {
         structure::TensorStructure,
     };
     use symbolica::{
-        atom::{Atom, AtomCore},
+        atom::{Atom, AtomCore, FunctionBuilder},
         function, parse_lit, symbol,
     };
 
     use crate::initialisation::initialise;
 
     use super::*;
+
+    #[test]
+    fn disjoint_private_renamings_rename_only_reused_private_indices() {
+        initialise().unwrap();
+
+        let mink = |index: Atom| function!(symbol!("spenso::mink"), 4i64, index);
+        let coad = |index: Atom| function!(symbol!("spenso::coad"), 8i64, index);
+        let tensor = |name: &str, slots: &[Atom]| {
+            let mut tensor = FunctionBuilder::new(symbol!(name));
+            for slot in slots {
+                tensor = tensor.add_arg(slot.as_view());
+            }
+            tensor.finish()
+        };
+        let dummy = |number| mink(Aind::Dummy(number).into());
+        let color = |number| coad(AbstractIndex::Dummy(number).into());
+        let open = mink(Aind::Hedge(3, 0).into());
+        let first = tensor(
+            "first",
+            &[
+                dummy(1_000_000),
+                mink(Aind::UVTerm(1, 1).into()),
+                color(0),
+                open.clone(),
+            ],
+        );
+        // The shared open index belongs to the product; the private names only
+        // coincide because both factors were derived separately.
+        let second = tensor(
+            "second",
+            &[
+                dummy(1_000_000),
+                mink(Aind::UVTerm(1, 1).into()),
+                dummy(1_000_003),
+                color(0),
+                color(2),
+                open.clone(),
+            ],
+        );
+        let separated = tensor(
+            "second",
+            &[
+                dummy(1_000_005),
+                dummy(1_000_004),
+                dummy(1_000_003),
+                color(3),
+                color(2),
+                open,
+            ],
+        );
+
+        let renamings = Aind::disjoint_private_renamings([[first.as_view()], [second.as_view()]]);
+
+        assert!(renamings[0].is_empty());
+        assert_eq!(second.replace_multiple(&renamings[1]), separated);
+        assert_eq!(
+            Aind::private_indices_apart(second, [first.as_view()]),
+            separated
+        );
+    }
 
     #[test]
     fn parses_gammaloop_owned_aind_symbols() {

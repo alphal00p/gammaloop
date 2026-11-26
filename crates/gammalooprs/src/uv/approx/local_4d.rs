@@ -1,3 +1,4 @@
+use std::iter;
 use std::{
     collections::{BTreeMap, BTreeSet},
     time::{Duration, Instant},
@@ -18,6 +19,7 @@ use linnet::half_edge::{
     subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps},
 };
 use serde::{Deserialize, Serialize};
+use symbolica::id::Replacement;
 use symbolica::{
     atom::{AtomCore, AtomView},
     prelude::*,
@@ -28,7 +30,7 @@ use crate::{
     debug_tags,
     graph::{FourDDenominator, Graph, LMBext, LoopMomentumBasis},
     momentum::sample::LoopIndex,
-    numerator::{symbolica_ext::NumeratorAtomExt, ufo::UFO},
+    numerator::{aind::Aind, symbolica_ext::NumeratorAtomExt, ufo::UFO},
     utils::{GS, W_},
     uv::{
         ApproximationType, UltravioletGraph,
@@ -937,6 +939,26 @@ impl FourDSectors {
     fn all(&self) -> impl Iterator<Item = &FourDSector> {
         self.active.iter().chain(&self.recursive_completion)
     }
+
+    /// The combined expression followed by every sector expression.
+    fn atoms(&self) -> impl Iterator<Item = &Atom> {
+        iter::once(&self.atom).chain(self.all().map(|sector| &sector.atom))
+    }
+
+    /// Apply one index renaming consistently to every expression.
+    fn rename_indices(&mut self, renaming: &[Replacement]) {
+        if renaming.is_empty() {
+            return;
+        }
+        for atom in iter::once(&mut self.atom).chain(
+            self.active
+                .iter_mut()
+                .chain(&mut self.recursive_completion)
+                .map(|sector| &mut sector.atom),
+        ) {
+            *atom = atom.replace_multiple(renaming);
+        }
+    }
 }
 
 impl Full4dCts {
@@ -1096,6 +1118,17 @@ impl Local4dCts {
     }
 
     pub(crate) fn from_full_product(factors: impl IntoIterator<Item = Full4dCts>) -> Self {
+        let mut factors = factors.into_iter().collect::<Vec<_>>();
+        // Components carry separately integrated recursive completions, which
+        // reuse the same private contraction indices.
+        let renamings = Aind::disjoint_private_renamings(
+            factors
+                .iter()
+                .map(|factor| factor.0.atoms().map(|atom| atom.as_view())),
+        );
+        for (factor, renaming) in factors.iter_mut().zip(renamings) {
+            factor.0.rename_indices(&renaming);
+        }
         let mut products = vec![(FourDSector::new(Atom::one(), Vec::new(), Vec::new()), false)];
         let mut atom = Atom::one();
         let mut has_soft_ancestry = false;
@@ -2687,12 +2720,13 @@ mod tests {
         graph::{GraphThreeDSource, parse::IntoGraph},
         initialisation::test_initialise,
         model::InputParamCard,
-        numerator::{aind::Aind, energy_degree::EnergyPowerAnalyzer},
+        numerator::energy_degree::EnergyPowerAnalyzer,
         uv::approx::projected_4d::Local4dProjectionContext,
         uv::{Spinney, UVgenerationSettings, hedge_poset::OwnedForestNode, uv_graph::UVE},
     };
     use gammaloop_tracing_filter::LogMessage;
     use idenso::{
+        IndexTooling,
         color::ColorSimplifier,
         dirac::GammaSimplifier,
         representations::{Bispinor, ColorAdjoint},
@@ -9826,6 +9860,58 @@ mod tests {
             &((&local_a + &finite_a) * (&local_b + &finite_b))
         );
         Ok(())
+    }
+
+    #[test]
+    fn factorized_product_keeps_completed_contractions_private() {
+        test_initialise().unwrap();
+
+        // Each component completes with its own integrated quark self-energy,
+        // whose slashed-momentum contraction the parser named dummy(1000000).
+        let bis = Bispinor {}.new_rep(4);
+        let slashed = |dummy, edge: usize, (incoming, outgoing): (u16, u16)| {
+            let mu = Minkowski {}
+                .new_rep(4)
+                .to_symbolic([Atom::from(Aind::Dummy(dummy))]);
+            function!(GS.emr_mom, edge, &mu)
+                * function!(
+                    AGS.gamma,
+                    bis.to_symbolic([Atom::from(Aind::Hedge(incoming, 0))]),
+                    bis.to_symbolic([Atom::from(Aind::Hedge(outgoing, 0))]),
+                    &mu
+                )
+        };
+        let coefficient_a = Atom::var(symbol!("local_4d_test::private_local_a"));
+        let coefficient_b = Atom::var(symbol!("local_4d_test::private_local_b"));
+        // The still-local parts share the components' open spin slots.
+        let local_a = |dummy| &coefficient_a * slashed(dummy, 20, (10, 1));
+        let local_b = |dummy| &coefficient_b * slashed(dummy, 21, (0, 11));
+        let component = |local: Atom, finite: Atom| {
+            Full4dCts(FourDSectors::new(
+                vec![FourDSector::new(local, Vec::new(), Vec::new())],
+                vec![FourDSector::new(finite, Vec::new(), Vec::new())],
+            ))
+        };
+
+        let product = Local4dCts::from_full_product([
+            component(local_a(1_000_000), slashed(1_000_000, 10, (10, 1))),
+            component(local_b(1_000_000), slashed(1_000_000, 0, (0, 11))),
+        ]);
+
+        let canonical = |atom: &Atom| atom.expand().canonize(Aind::Dummy).unwrap();
+        let finite_a = slashed(0, 10, (10, 1));
+        let finite_b = slashed(1, 0, (0, 11));
+        let [completed] = product.recursive_completion() else {
+            panic!("both completed components form one completed sector");
+        };
+        assert_eq!(
+            canonical(&completed.atom),
+            canonical(&(&finite_a * &finite_b))
+        );
+        assert_eq!(
+            canonical(product.atom()),
+            canonical(&((local_a(0) + finite_a) * (local_b(1) + finite_b)))
+        );
     }
 
     #[test]

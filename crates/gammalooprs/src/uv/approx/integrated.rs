@@ -81,18 +81,38 @@ impl IntegratedCts {
         factors: impl IntoIterator<Item = &'a Self>,
         depth: usize,
     ) -> Result<Self> {
-        let mut factors = factors.into_iter();
-        let first = factors
+        let factors = factors.into_iter().collect::<Vec<_>>();
+        // Each component was integrated separately, so their coefficients
+        // reuse the same private contraction indices.
+        let renamings = Aind::disjoint_private_renamings(factors.iter().map(|factor| {
+            factor
+                .expansion
+                .terms()
+                .map(|(_, coefficient)| coefficient.as_view())
+        }));
+        let mut factors = factors
+            .into_iter()
+            .zip(renamings)
+            .map(|(factor, renaming)| {
+                let project = |finite| {
+                    let projected = truncate(&factor.expansion, finite);
+                    if renaming.is_empty() {
+                        projected
+                    } else {
+                        projected.replace_multiple(&renaming)
+                    }
+                };
+                (project(false), project(true), factor.scale_power)
+            });
+        let (mut pole, finite, mut scale_power) = factors
             .next()
             .ok_or_else(|| eyre!("a factorized integrated counterterm cannot be empty"))?;
-        let mut pole = truncate(&first.expansion, false);
-        let mut finite_counterterm = -truncate(&first.expansion, true);
-        let mut scale_power = first.scale_power;
+        let mut finite_counterterm = -finite;
 
-        for factor in factors {
-            pole *= truncate(&factor.expansion, false);
-            finite_counterterm *= -truncate(&factor.expansion, true);
-            scale_power += factor.scale_power;
+        for (factor_pole, factor_finite, factor_scale_power) in factors {
+            pole *= factor_pole;
+            finite_counterterm *= -factor_finite;
+            scale_power += factor_scale_power;
         }
 
         Ok(Self {
@@ -1989,6 +2009,7 @@ impl VakintMomentumSolution {
 #[cfg(test)]
 mod tests {
     use crate::{initialisation::test_initialise, utils::symbolica_ext::Q_I};
+    use idenso::IndexTooling;
 
     use super::*;
 
@@ -2524,6 +2545,51 @@ mod tests {
         let product = IntegratedCts::factorized_product(&factors, 1).unwrap();
         assert_eq!(product.physical_pole_atom(), epsilon.pow(-3));
         assert_eq!(product.physical_finite_counterterm_atom(), Atom::num(-30));
+    }
+
+    #[test]
+    fn factorized_product_keeps_component_contractions_private() {
+        test_initialise().unwrap();
+
+        // Two separately integrated quark self-energies, as in a fermion loop
+        // with two self-energy insertions. Each coefficient is proportional to
+        // a slashed momentum whose contraction the parser named dummy(1000000).
+        let bis = Bispinor {}.new_rep(4);
+        let slashed = |dummy, edge: usize, (incoming, outgoing): (u16, u16)| {
+            let mu = Minkowski {}
+                .new_rep(4)
+                .to_symbolic([Aind::Dummy(dummy).to_atom()]);
+            function!(GS.emr_mom, edge, &mu)
+                * function!(
+                    AGS.gamma,
+                    bis.to_symbolic([Aind::Hedge(incoming, 0).to_atom()]),
+                    bis.to_symbolic([Aind::Hedge(outgoing, 0).to_atom()]),
+                    &mu
+                )
+        };
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let factors =
+            [(2, 10, (10, 1)), (3, 0, (0, 11))].map(|(finite, edge, hedges)| IntegratedCts {
+                expansion: series(
+                    &((epsilon.pow(-1) + Atom::num(finite)) * slashed(1_000_000, edge, hedges)),
+                    1,
+                )
+                .unwrap(),
+                scale_power: 0,
+            });
+        let product = IntegratedCts::factorized_product(&factors, 1).unwrap();
+
+        // Independent contractions give p̸₁₀ ⊗ p̸₀, not p₁₀·p₀ γ^μ ⊗ γ_μ.
+        let independent = slashed(0, 10, (10, 1)) * slashed(1, 0, (0, 11));
+        let canonical = |atom: Atom| atom.expand().canonize(Aind::Dummy).unwrap();
+        assert_eq!(
+            canonical(product.physical_pole_atom()),
+            canonical(epsilon.pow(-2) * &independent)
+        );
+        assert_eq!(
+            canonical(product.physical_finite_counterterm_atom()),
+            canonical(Atom::num(6) * independent)
+        );
     }
 
     // #[test]

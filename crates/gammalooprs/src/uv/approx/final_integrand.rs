@@ -6,7 +6,7 @@ use crate::{
     debug_tags,
     graph::Graph,
     integrands::process::param_builder::FnMapEntry,
-    numerator::symbolica_ext::NumeratorAtomExt,
+    numerator::{aind::Aind, symbolica_ext::NumeratorAtomExt},
     utils::{GS, W_},
     uv::{
         Integrands, UVgenerationSettings, UltravioletGraph,
@@ -171,25 +171,6 @@ impl<'a> FinalIntegrandBuilder<'a> {
             "Computed global numerator"
         );
 
-        // Resolve the cograph's color algebra before residue mapping repeats its
-        // momentum numerator. The final pass still closes attached UV/projector
-        // color indices that remain open at this boundary.
-        let resnum = graph
-            .numerator(&reduced, current.subgraph())
-            .get_single_atom()
-            .expect("graph numerator should be available")
-            .simplify_color_with(ColorSimplifySettings {
-                simplify_non_color: false,
-                ..Default::default()
-            })
-            * global_num;
-        debug_tags!(#generation, #profile, #uv, #numerator, #dump;
-            stage = "final_cograph_numerator_ready",
-            graph = %graph.name,
-            numerator_bytes = resnum.as_view().get_byte_size(),
-            file.atom = %resnum.to_canonical_string(),
-            "Cograph numerator before residue mapping"
-        );
         let localized_integrated = self
             .localizer
             .localize(
@@ -203,14 +184,22 @@ impl<'a> FinalIntegrandBuilder<'a> {
         let localized_local = local_terms
             .branches()?
             .map(|atom| self.marker.prefix(&full_graph, current.subgraph(), atom));
-        let final_branches = localized_integrated
-            .zip_add(&localized_local)?
-            .multiply_key_mapped(
-                self.localizer.orientation,
-                graph,
-                &resnum,
-                DirectResidueBranches::numerator_scope(),
-            )?;
+        let counterterms = localized_integrated.zip_add(&localized_local)?;
+        let resnum = Self::cograph_numerator(
+            graph,
+            &reduced,
+            current.subgraph(),
+            global_num,
+            counterterms
+                .iter_keys()
+                .flat_map(|(_, integrands)| integrands.expressions()),
+        );
+        let final_branches = counterterms.multiply_key_mapped(
+            self.localizer.orientation,
+            graph,
+            &resnum,
+            DirectResidueBranches::numerator_scope(),
+        )?;
 
         // Normalize complete mapped branches before their orientation sum grows
         // the scalar coefficients seen by color collection. Keep each branch's
@@ -263,23 +252,24 @@ impl<'a> FinalIntegrandBuilder<'a> {
             global_num = %global_num.log_display(),
             "Computed global numerator"
         );
-        let resnum = graph
-            .numerator(&reduced, current.subgraph())
-            .get_single_atom()
-            .expect("graph numerator should be available")
-            .simplify_color_with(ColorSimplifySettings {
-                simplify_non_color: false,
-                ..Default::default()
-            })
-            * global_num;
-        let localizer = self.localizer.with_independent_source_sum();
-        debug_tags!(#generation, #profile, #uv, #numerator, #dump;
-            stage = "final_cograph_numerator_ready",
-            graph = %graph.name,
-            numerator_bytes = resnum.as_view().get_byte_size(),
-            file.atom = %resnum.to_canonical_string(),
-            "Cograph numerator before residue mapping"
+        let integrated_counterterm = integrated.physical_finite_counterterm_atom();
+        let resnum = Self::cograph_numerator(
+            graph,
+            &reduced,
+            current.subgraph(),
+            global_num,
+            local_terms
+                .sectors()
+                .iter()
+                .flat_map(|sector| {
+                    sector
+                        .coefficient
+                        .expressions()
+                        .chain([&sector.frozen_factor])
+                })
+                .chain([&integrated_counterterm]),
         );
+        let localizer = self.localizer.with_independent_source_sum();
         // Only the projected local-4D route reaches this assembly boundary.
         // Its child Taylor coefficient deliberately omits the untouched
         // cograph; choose its outer CFF per independent sector here, converting
@@ -486,11 +476,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
         // source map even when no compatible physical-prefix host survives.
         let localized_integrated = self
             .localizer
-            .localize(
-                &integrated.physical_finite_counterterm_atom(),
-                graph,
-                current,
-            )?
+            .localize(&integrated_counterterm, graph, current)?
             .combine()?;
         // An empty integrated zero contributes no source map. The typed local
         // zero above already retains the allowed cut shape; do not invent an
@@ -528,6 +514,44 @@ impl<'a> FinalIntegrandBuilder<'a> {
             representation,
         }))?;
         Self::simplify_final(graph, &reduced, summed.integrands, representation)
+    }
+
+    /// The numerator outside `current`, including the global numerator, ready
+    /// to multiply `counterterms`.
+    ///
+    /// Resolve the cograph's color algebra before residue mapping repeats its
+    /// momentum numerator. The final pass still closes attached UV/projector
+    /// color indices that remain open at this boundary. The cograph numerator
+    /// and the counterterms were simplified separately, so their private
+    /// contraction indices are renamed apart before the product forms.
+    fn cograph_numerator<'c>(
+        graph: &Graph,
+        reduced: &SuBitGraph,
+        current: &SuBitGraph,
+        global_num: Atom,
+        counterterms: impl IntoIterator<Item = &'c Atom>,
+    ) -> Atom {
+        let resnum = graph
+            .numerator(reduced, current)
+            .get_single_atom()
+            .expect("graph numerator should be available")
+            .simplify_color_with(ColorSimplifySettings {
+                simplify_non_color: false,
+                ..Default::default()
+            })
+            * global_num;
+        let resnum = Aind::private_indices_apart(
+            resnum,
+            counterterms.into_iter().map(|atom| atom.as_view()),
+        );
+        debug_tags!(#generation, #profile, #uv, #numerator, #dump;
+            stage = "final_cograph_numerator_ready",
+            graph = %graph.name,
+            numerator_bytes = resnum.as_view().get_byte_size(),
+            file.atom = %resnum.to_canonical_string(),
+            "Cograph numerator before residue mapping"
+        );
+        resnum
     }
 
     fn simplify_final(
@@ -641,6 +665,7 @@ mod tests {
             hedge_poset::OwnedForestNode,
         },
     };
+    use idenso::{IndexTooling, dirac::AGS, representations::Bispinor};
     use linnet::half_edge::{involution::EdgeIndex, subgraph::InternalSubGraph};
     use spenso::{
         network::tags::SPENSO_TAG,
@@ -1139,6 +1164,53 @@ mod tests {
             )
             .expect_err("absent sectors are different from a deliberate typed zero");
         assert!(error.to_string().contains("no active UV sectors"));
+        Ok(())
+    }
+
+    #[test]
+    fn cograph_numerator_keeps_its_contractions_apart_from_counterterms() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph cograph_private_indices {
+            edge [num=1 mass=1];
+            node [num=1];
+            a -> b [id=0 lmb_id=0];
+            a -> b [id=1];
+        })?;
+        let mink = |dummy| {
+            Minkowski {}
+                .new_rep(4)
+                .to_symbolic([Atom::from(Aind::Dummy(dummy))])
+        };
+        let bis = |hedge| {
+            Bispinor {}
+                .new_rep(4)
+                .to_symbolic([Atom::from(Aind::Hedge(hedge, 0))])
+        };
+        // The cograph's q₀·q₁ and the counterterm's q̸₁ were simplified
+        // separately, so the parser named both contractions dummy(1000000).
+        let cograph =
+            |dummy| function!(GS.emr_mom, 0, mink(dummy)) * function!(GS.emr_mom, 1, mink(dummy));
+        let counterterm = |dummy| {
+            function!(GS.emr_mom, 1, mink(dummy))
+                * function!(AGS.gamma, bis(0), bis(1), mink(dummy))
+        };
+        graph.global_prefactor.num = cograph(1_000_000);
+        let current = graph.empty_subgraph::<SuBitGraph>();
+        let reduced = graph.full_filter();
+
+        let resnum = FinalIntegrandBuilder::cograph_numerator(
+            &graph,
+            &reduced,
+            &current,
+            graph.global_atom(),
+            [&counterterm(1_000_000)],
+        );
+
+        let canonical = |atom: Atom| atom.expand().canonize(Aind::Dummy).unwrap();
+        assert_eq!(
+            canonical(resnum * counterterm(1_000_000)),
+            canonical(cograph(0) * counterterm(1))
+        );
         Ok(())
     }
 
