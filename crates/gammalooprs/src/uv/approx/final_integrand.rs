@@ -1,38 +1,28 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::collections::BTreeMap;
+use std::sync::Arc;
 
 #[cfg(test)]
 use crate::cff::CutCFFIndex;
-use crate::{
-    debug_tags,
-    graph::Graph,
-    integrands::process::param_builder::FnMapEntry,
-    numerator::{aind::Aind, symbolica_ext::NumeratorAtomExt},
-    utils::{GS, W_},
-    uv::{
-        Integrands, UVgenerationSettings, UltravioletGraph,
-        approx::{
-            ForestNodeLike,
-            direct_3d::{Direct3dCts, DirectResidueBranches},
-            integrated::IntegratedCts,
-            local_3d::{LOCAL_3D_MASS_SCOPE, Localizer},
-            projected_4d::Projected4dCts,
-        },
-        marker::UvMarker,
-    },
-};
+use crate::debug_tags;
+use crate::graph::Graph;
+use crate::integrands::process::param_builder::FnMapEntry;
+use crate::numerator::symbolica_ext::NumeratorAtomExt;
+use crate::utils::{GS, W_};
+use crate::uv::approx::ForestNodeLike;
+use crate::uv::approx::direct_3d::{Direct3dCts, DirectResidueBranches};
+use crate::uv::approx::integrated::IntegratedCts;
+use crate::uv::approx::local_3d::{LOCAL_3D_MASS_SCOPE, Localizer};
+use crate::uv::approx::projected_4d::Projected4dCts;
+use crate::uv::marker::UvMarker;
+use crate::uv::{Integrands, PrivateIndexOwner, UVgenerationSettings, UltravioletGraph};
 use color_eyre::Result;
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
-use idenso::{
-    color::{ColorSimplifier, ColorSimplifySettings},
-    shorthands::metric::MetricSimplifier,
-};
+use idenso::color::{ColorSimplifier, ColorSimplifySettings};
+use idenso::shorthands::metric::MetricSimplifier;
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Indeterminate},
-    function,
-    id::Replacement,
-    symbol,
-};
+use symbolica::atom::{Atom, AtomCore, AtomView, Indeterminate};
+use symbolica::id::Replacement;
+use symbolica::{function, symbol};
 use three_dimensional_reps::{CffGenerationContext, RepresentationMode};
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct FinalIntegrands {
@@ -185,15 +175,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
             .branches()?
             .map(|atom| self.marker.prefix(&full_graph, current.subgraph(), atom));
         let counterterms = localized_integrated.zip_add(&localized_local)?;
-        let resnum = Self::cograph_numerator(
-            graph,
-            &reduced,
-            current.subgraph(),
-            global_num,
-            counterterms
-                .iter_keys()
-                .flat_map(|(_, integrands)| integrands.expressions()),
-        );
+        let resnum = Self::cograph_numerator(graph, &reduced, current.subgraph(), global_num);
         let final_branches = counterterms.multiply_key_mapped(
             self.localizer.orientation,
             graph,
@@ -252,23 +234,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
             global_num = %global_num.log_display(),
             "Computed global numerator"
         );
-        let integrated_counterterm = integrated.physical_finite_counterterm_atom();
-        let resnum = Self::cograph_numerator(
-            graph,
-            &reduced,
-            current.subgraph(),
-            global_num,
-            local_terms
-                .sectors()
-                .iter()
-                .flat_map(|sector| {
-                    sector
-                        .coefficient
-                        .expressions()
-                        .chain([&sector.frozen_factor])
-                })
-                .chain([&integrated_counterterm]),
-        );
+        let resnum = Self::cograph_numerator(graph, &reduced, current.subgraph(), global_num);
         let localizer = self.localizer.with_independent_source_sum();
         // Only the projected local-4D route reaches this assembly boundary.
         // Its child Taylor coefficient deliberately omits the untouched
@@ -476,7 +442,11 @@ impl<'a> FinalIntegrandBuilder<'a> {
         // source map even when no compatible physical-prefix host survives.
         let localized_integrated = self
             .localizer
-            .localize(&integrated_counterterm, graph, current)?
+            .localize(
+                &integrated.physical_finite_counterterm_atom(),
+                graph,
+                current,
+            )?
             .combine()?;
         // An empty integrated zero contributes no source map. The typed local
         // zero above already retains the allowed cut shape; do not invent an
@@ -516,34 +486,33 @@ impl<'a> FinalIntegrandBuilder<'a> {
         Self::simplify_final(graph, &reduced, summed.integrands, representation)
     }
 
-    /// The numerator outside `current`, including the global numerator, ready
-    /// to multiply `counterterms`.
+    /// The numerator outside `current`, including the global numerator.
     ///
     /// Resolve the cograph's color algebra before residue mapping repeats its
     /// momentum numerator. The final pass still closes attached UV/projector
     /// color indices that remain open at this boundary. The cograph numerator
-    /// and the counterterms were simplified separately, so their private
-    /// contraction indices are renamed apart before the product forms.
-    fn cograph_numerator<'c>(
+    /// owns its private contraction indices, so they stay apart from those of
+    /// the counterterms and the global numerator it multiplies.
+    fn cograph_numerator(
         graph: &Graph,
         reduced: &SuBitGraph,
         current: &SuBitGraph,
         global_num: Atom,
-        counterterms: impl IntoIterator<Item = &'c Atom>,
     ) -> Atom {
-        let resnum = graph
+        let cograph = graph
             .numerator(reduced, current)
             .get_single_atom()
             .expect("graph numerator should be available")
             .simplify_color_with(ColorSimplifySettings {
                 simplify_non_color: false,
                 ..Default::default()
-            })
+            });
+        let resnum = PrivateIndexOwner::Numerator {
+            reduced,
+            without: current,
+        }
+        .own(cograph)
             * global_num;
-        let resnum = Aind::private_indices_apart(
-            resnum,
-            counterterms.into_iter().map(|atom| atom.as_view()),
-        );
         debug_tags!(#generation, #profile, #uv, #numerator, #dump;
             stage = "final_cograph_numerator_ready",
             graph = %graph.name,
@@ -649,29 +618,28 @@ impl<'a> FinalIntegrandBuilder<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        cff::{esurface::RaisedEsurfaceGroup, expression::OrientationID},
-        dot,
-        graph::{cuts::CutSet, parse::IntoGraph},
-        initialisation::test_initialise,
-        settings::global::OrientationPattern,
-        uv::{
-            ApproximationType, Spinney,
-            approx::{
-                OrientationProjection, Rooted, UVCtx,
-                local_4d::{Full4dCts, Local4dCts, uv_limit},
-                projected_4d::{Projected4dApproximation, Projected4dSector},
-            },
-            hedge_poset::OwnedForestNode,
-        },
-    };
-    use idenso::{IndexTooling, dirac::AGS, representations::Bispinor};
-    use linnet::half_edge::{involution::EdgeIndex, subgraph::InternalSubGraph};
-    use spenso::{
-        network::tags::SPENSO_TAG,
-        structure::representation::{Minkowski, RepName},
-    };
-    use symbolica::{atom::AtomView, parse, symbol};
+    use crate::cff::esurface::RaisedEsurfaceGroup;
+    use crate::cff::expression::OrientationID;
+    use crate::dot;
+    use crate::graph::cuts::CutSet;
+    use crate::graph::parse::IntoGraph;
+    use crate::initialisation::test_initialise;
+    use crate::numerator::aind::Aind;
+    use crate::settings::global::OrientationPattern;
+    use crate::uv::approx::local_4d::{Full4dCts, Local4dCts, uv_limit};
+    use crate::uv::approx::projected_4d::{Projected4dApproximation, Projected4dSector};
+    use crate::uv::approx::{OrientationProjection, Rooted, UVCtx};
+    use crate::uv::hedge_poset::OwnedForestNode;
+    use crate::uv::{ApproximationType, Spinney};
+    use idenso::IndexTooling;
+    use idenso::dirac::AGS;
+    use idenso::representations::Bispinor;
+    use linnet::half_edge::involution::EdgeIndex;
+    use linnet::half_edge::subgraph::InternalSubGraph;
+    use spenso::network::tags::SPENSO_TAG;
+    use spenso::structure::representation::{Minkowski, RepName};
+    use symbolica::atom::AtomView;
+    use symbolica::{parse, symbol};
 
     #[test]
     fn final_energy_copy_coalesces_owners_and_even_powers_after_taylor() -> Result<()> {
@@ -861,16 +829,12 @@ mod tests {
 
     #[test]
     fn final_factor_collection_preserves_inactive_singular_branches() -> Result<()> {
-        use crate::{
-            cff::expression::OrientationID,
-            integrands::process::{
-                evaluators::{EvaluatorStack, GenericEvaluatorFloat},
-                param_builder::{ParamBuilder, ParamValuePairs},
-            },
-            processes::EvaluatorSettings,
-            settings::global::{CompilationOptimizationLevel, CompilationOptionsSnapshot},
-            utils::F,
-        };
+        use crate::cff::expression::OrientationID;
+        use crate::integrands::process::evaluators::{EvaluatorStack, GenericEvaluatorFloat};
+        use crate::integrands::process::param_builder::{ParamBuilder, ParamValuePairs};
+        use crate::processes::EvaluatorSettings;
+        use crate::settings::global::{CompilationOptimizationLevel, CompilationOptionsSnapshot};
+        use crate::utils::F;
         use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
         use spenso::algebra::complex::Complex;
 
@@ -953,16 +917,12 @@ mod tests {
 
     #[test]
     fn final_factor_collection_preserves_closed_tensor_pairs() -> Result<()> {
-        use crate::{
-            cff::expression::OrientationID,
-            integrands::process::{
-                evaluators::{EvaluatorStack, GenericEvaluatorFloat},
-                param_builder::{ParamBuilder, ParamValuePairs},
-            },
-            processes::EvaluatorSettings,
-            settings::global::{CompilationOptimizationLevel, CompilationOptionsSnapshot},
-            utils::F,
-        };
+        use crate::cff::expression::OrientationID;
+        use crate::integrands::process::evaluators::{EvaluatorStack, GenericEvaluatorFloat};
+        use crate::integrands::process::param_builder::{ParamBuilder, ParamValuePairs};
+        use crate::processes::EvaluatorSettings;
+        use crate::settings::global::{CompilationOptimizationLevel, CompilationOptionsSnapshot};
+        use crate::utils::F;
         use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
         use spenso::algebra::complex::Complex;
         use symbolica::parse_lit;
@@ -1170,7 +1130,12 @@ mod tests {
     #[test]
     fn cograph_numerator_keeps_its_contractions_apart_from_counterterms() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph cograph_private_indices {
+        // The global numerator's q₀·q₁, the projector's q₁² and the
+        // counterterm's q̸₁ were derived separately, so each names its
+        // contraction dummy(1000000).
+        let graph: Graph = dot!(digraph cograph_private_indices {
+            num = "Q(0,spenso::mink(4,dummy(1000000)))*Q(1,spenso::mink(4,dummy(1000000)))"
+            projector = "Q(1,spenso::mink(4,dummy(1000000)))*Q(1,spenso::mink(4,dummy(1000000)))"
             edge [num=1 mass=1];
             node [num=1];
             a -> b [id=0 lmb_id=0];
@@ -1186,30 +1151,34 @@ mod tests {
                 .new_rep(4)
                 .to_symbolic([Atom::from(Aind::Hedge(hedge, 0))])
         };
-        // The cograph's q₀·q₁ and the counterterm's q̸₁ were simplified
-        // separately, so the parser named both contractions dummy(1000000).
-        let cograph =
+        let global_num =
             |dummy| function!(GS.emr_mom, 0, mink(dummy)) * function!(GS.emr_mom, 1, mink(dummy));
+        let projector =
+            |dummy| function!(GS.emr_mom, 1, mink(dummy)) * function!(GS.emr_mom, 1, mink(dummy));
         let counterterm = |dummy| {
             function!(GS.emr_mom, 1, mink(dummy))
                 * function!(AGS.gamma, bis(0), bis(1), mink(dummy))
         };
-        graph.global_prefactor.num = cograph(1_000_000);
         let current = graph.empty_subgraph::<SuBitGraph>();
         let reduced = graph.full_filter();
+        // The counterterm's producer owns its contraction, as integration does.
+        let counterterm_atom = PrivateIndexOwner::Integration {
+            current: &reduced,
+            given: &current,
+        }
+        .own(counterterm(1_000_000));
 
         let resnum = FinalIntegrandBuilder::cograph_numerator(
             &graph,
             &reduced,
             &current,
             graph.global_atom(),
-            [&counterterm(1_000_000)],
         );
 
         let canonical = |atom: Atom| atom.expand().canonize(Aind::Dummy).unwrap();
         assert_eq!(
-            canonical(resnum * counterterm(1_000_000)),
-            canonical(cograph(0) * counterterm(1))
+            canonical(resnum * counterterm_atom),
+            canonical(global_num(0) * projector(1) * counterterm(2))
         );
         Ok(())
     }

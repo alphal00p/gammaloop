@@ -7,6 +7,10 @@ use symbolica::{
     utils::Settable,
 };
 
+mod interned;
+
+pub use interned::InternedAtomId;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TypstMode {
     Math,

@@ -25,7 +25,7 @@ use crate::{
     },
     processes::DotExportSettings,
     utils::{GS, symbolica_ext::DOD},
-    uv::{UltravioletGraph, uv_graph::UVE},
+    uv::uv_graph::UVE,
 };
 use ahash::{AHashMap, AHashSet};
 use idenso::{
@@ -838,13 +838,7 @@ impl Graph {
 
     fn validate_spatial_momentum_convention(&self) -> Result<()> {
         let n_edges = self.underlying.n_edges();
-        let full_num = self
-            .numerator(&self.full_filter(), &self.empty_subgraph())
-            .get_single_atom()
-            .unwrap()
-            * &self.global_prefactor.num
-            * &self.global_prefactor.projector
-            * &self.overall_factor;
+        let full_num = self.full_numerator_atom();
         let mut invalid_q3 = None;
         full_num.visitor(&mut |view| {
             if invalid_q3.is_none()
@@ -952,13 +946,7 @@ impl Graph {
 
     pub(crate) fn validate_full_numerator_tensor_network(&self) -> Result<()> {
         self.validate_spatial_momentum_convention()?;
-        let full_num = self
-            .numerator(&self.full_filter(), &self.empty_subgraph())
-            .get_single_atom()
-            .unwrap()
-            * &self.global_prefactor.num
-            * &self.global_prefactor.projector
-            * &self.overall_factor;
+        let full_num = self.full_numerator_atom();
         let color_simplified = full_num
             .as_view()
             .simplify_color_with(ColorSimplifySettings::default().with_cof_dimension_invariants());

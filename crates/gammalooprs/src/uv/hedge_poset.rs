@@ -1596,10 +1596,7 @@ impl Forests {
                 key=%key,
                expr = % atom.expand_num().log_print(None),"Term before simplification"
             );
-            let atom = (&atom
-                * &graph.global_prefactor.projector
-                * &graph.global_prefactor.num
-                * &graph.overall_factor)
+            let atom = (&atom * graph.global_prefactor.to_atom() * &graph.overall_factor)
                 .simplify_color()
                 .expand_num()
                 .to_dots();
@@ -2919,6 +2916,92 @@ mod tests {
             .expression;
         assert_eq!(actual.expand(), expected.expand());
 
+        Ok(())
+    }
+
+    #[test]
+    fn disjoint_quark_self_energies_keep_their_contractions_apart() -> Result<()> {
+        initialisation::test_initialise()?;
+        // Two one-loop quark self-energies on one open quark line. Each
+        // integrated counterterm is proportional to a slashed momentum whose
+        // Lorentz contraction its own integration allocates.
+        let graph: Graph = dot!(
+            digraph two_quark_self_energies {
+                num = "1/3*spenso::g(spenso::dind(spenso::cof(3,gammalooprs::hedge(0))),spenso::cof(3,gammalooprs::hedge(11)))"
+                ext [style=invis]
+                ext -> v1 [particle=d]
+                v1 -> v2 [particle=d]
+                v1 -> v2 [particle=g]
+                v2 -> v3 [particle=d]
+                v3 -> v4 [particle=d]
+                v3 -> v4 [particle=g]
+                v4 -> ext [particle=d]
+            },
+            "sm"
+        )?;
+        let settings = GenerationSettings {
+            uv: UVgenerationSettings {
+                generate_integrated: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut forests = Wood::new(CutStructure::empty(&graph), &graph, &settings)?.unfold();
+        forests.integrate(&graph, utils::vakint()?, &settings.uv)?;
+
+        let terminal = forests
+            .graph
+            .iter_nodes()
+            .find_map(|(node, mut crown, _)| {
+                (!crown.any(|hedge| forests.graph.flow(hedge).is_source())
+                    && forests.graph.is_disjoint_union(node))
+                .then_some(node)
+            })
+            .expect("both self-energies form a disjoint terminal");
+        let components = forests.disconnected_component_nodes(terminal)?;
+        assert_eq!(components.len(), 2);
+        let projections = components
+            .iter()
+            .map(|&component| -> Result<Atom> {
+                let key = &forests.graph[component];
+                Ok(forests
+                    .compute_store
+                    .require(key)?
+                    .integrated(key)?
+                    .physical_finite_counterterm_atom())
+            })
+            .collect::<Result<Vec<_>>>()?;
+        for projection in &projections {
+            assert!(
+                !Aind::private_indices_are_disjoint([
+                    [projection.as_view()],
+                    [projection.as_view()]
+                ]),
+                "each self-energy contracts a private index: {projection}"
+            );
+        }
+        assert!(Aind::private_indices_are_disjoint(
+            projections.iter().map(|projection| [projection.as_view()])
+        ));
+
+        // The terminal product contracts each slashed momentum within its
+        // own self-energy, as the separately scoped projections do.
+        let expected = (&projections[0] * &projections[1] * graph.global_atom())
+            .simplify_color()
+            .expand_num()
+            .to_dots();
+        let wild = Atom::var(W_.x___);
+        let replacements =
+            graph.integrand_replacement(&graph.full_filter(), &graph.loop_momentum_basis, &[wild]);
+        let expected = expected
+            .replace_multiple(&replacements)
+            .replace(GS.m_uv_expansion)
+            .with(GS.m_uv_vacuum);
+        let actual = forests
+            .renormalization_part_of_ends(&graph, &settings.uv)?
+            .expression;
+        let canonical = |atom: Atom| atom.expand().canonize(Aind::Dummy);
+        assert_eq!(canonical(actual)?, canonical(expected)?);
         Ok(())
     }
 

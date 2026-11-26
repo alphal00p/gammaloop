@@ -31,8 +31,6 @@ use symbolica::{
     graph::{Graph, HiddenData},
 };
 
-use crate::{CookSettings, Cookable};
-
 use super::{SymbolicNet, SymbolicNetParse, SymbolicTensor};
 
 const CYCLE_SYMMETRY_MARKER: usize = usize::MAX - 2;
@@ -72,60 +70,67 @@ type SlotsByHedge<Aind> = BTreeMap<Hedge, SlotCopies<Aind>>;
 /// Remove Spenso tensor monomials that are fixed by a negative automorphism.
 ///
 /// Recurse through sums, products and positive powers without distributing
-/// them. Sums inside functions stay opaque. If parsing fails or no term
-/// vanishes, the original expression and its factorization are preserved.
+/// them. Sums inside functions stay opaque. Only products, powers and tensors
+/// that still contain an antisymmetric head are parsed, each once after its
+/// children were pruned. If parsing fails or no term vanishes, the original
+/// expression and its factorization are preserved.
 pub(crate) fn remove_antisymmetric_zero_terms<Aind: AbsInd + DummyAind + ParseableAind>(
     expression: AtomView<'_>,
 ) -> Atom {
-    // The parser accepts atomic indices and dimensions. Cook a probe for
-    // structured indices and dimensions such as Nc^2-1; retain the original
-    // expression and distinguish unequal dimension expressions exactly.
-    let prepare_probe = |expression: AtomView<'_>| {
-        CookSettings::reversible().try_cook_dimensions(expression.cook_indices().as_view())
-    };
-    let Ok(cooked) = prepare_probe(expression) else {
-        return expression.to_owned();
-    };
-    let Ok(network) = cooked
-        .as_view()
-        .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
-    else {
-        return expression.to_owned();
-    };
-    if !contains_antisymmetric_tensor(&network) {
+    if !contains_antisymmetric_head(expression) {
         return expression.to_owned();
     }
-
+    // A tensor factor vanishes with its product, which is checked below.
+    let prune = |child: AtomView<'_>| match child {
+        AtomView::Fun(_) => child.to_owned(),
+        _ => remove_antisymmetric_zero_terms::<Aind>(child),
+    };
     let candidate = match expression {
-        AtomView::Add(add) => add
-            .iter()
-            .map(remove_antisymmetric_zero_terms::<Aind>)
-            .sum(),
+        // A sum is opaque to the incidence graph, so only its terms can vanish.
+        AtomView::Add(add) => {
+            return add
+                .iter()
+                .map(remove_antisymmetric_zero_terms::<Aind>)
+                .sum();
+        }
         AtomView::Mul(product) => product
             .iter()
-            .map(remove_antisymmetric_zero_terms::<Aind>)
+            .map(prune)
             .fold(Atom::one(), |product, factor| product * factor),
         AtomView::Pow(power) => {
             let (base, exponent) = power.get_base_exp();
             if i64::try_from(exponent).is_ok_and(|power| power > 0) {
-                remove_antisymmetric_zero_terms::<Aind>(base).pow(exponent)
+                prune(base).pow(exponent)
             } else {
-                expression.to_owned()
+                return expression.to_owned();
             }
         }
         _ => expression.to_owned(),
     };
-    let vanishes = if candidate.as_view() == expression {
-        has_odd_automorphism(&network)
+    if contains_antisymmetric_head(candidate.as_view())
+        && candidate
+            .as_view()
+            .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
+            .is_ok_and(|network| has_odd_automorphism(&network))
+    {
+        Atom::zero()
     } else {
-        prepare_probe(candidate.as_view()).is_ok_and(|cooked| {
-            cooked
-                .as_view()
-                .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
-                .is_ok_and(|network| has_odd_automorphism(&network))
-        })
-    };
-    if vanishes { Atom::zero() } else { candidate }
+        candidate
+    }
+}
+
+/// Whether any function head in `expression` is antisymmetric.
+fn contains_antisymmetric_head(expression: AtomView<'_>) -> bool {
+    let mut found = false;
+    expression.visitor(&mut |view| {
+        if let AtomView::Fun(function) = view
+            && function.get_symbol().is_antisymmetric()
+        {
+            found = true;
+        }
+        !found
+    });
+    found
 }
 
 fn contains_antisymmetric_tensor<Aind: AbsInd>(network: &SymbolicNet<Aind>) -> bool {

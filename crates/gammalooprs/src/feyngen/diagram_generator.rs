@@ -4153,7 +4153,7 @@ impl ProcessDefinition {
 
 
                             // TODO Check if we include overall factor in main
-                            numerator.state.expr *=&bare_graph.global_prefactor.num * &bare_graph.global_prefactor.projector;// * &bare_graph.overall_factor;
+                            numerator.state.expr *= bare_graph.global_prefactor.to_atom();// * &bare_graph.overall_factor;
                             numerator.state.expr = numerator.state.expr.replace_multiple(&cpl_reps);
 
                             debug!(num = %numerator.state.expr.to_ordered_simple(),"Initial numerator",);

@@ -1099,7 +1099,7 @@ fn gl_11_vs_gl_12() {
     }
 
     let mut numerator_11 = gl_11.numerator(&gl_11.no_dummy(), &gl_11.empty_subgraph());
-    numerator_11.state.expr *= &gl_11.global_prefactor.num * &gl_11.global_prefactor.projector; // * &bare_graph.overall_factor;
+    numerator_11.state.expr *= gl_11.global_prefactor.to_atom(); // * &bare_graph.overall_factor;
     numerator_11.state.expr = numerator_11.state.expr.replace_multiple(&cpl_reps);
 
     let numerator_color_simplified_11 = numerator_11
@@ -1120,7 +1120,7 @@ fn gl_11_vs_gl_12() {
     // .with(parse_lit!(spenso::g(w__)));
 
     let mut numerator_12 = gl_12.numerator(&gl_12.no_dummy(), &gl_12.empty_subgraph());
-    numerator_12.state.expr *= &gl_12.global_prefactor.num * &gl_12.global_prefactor.projector; // * &bare_graph.overall_factor;
+    numerator_12.state.expr *= gl_12.global_prefactor.to_atom(); // * &bare_graph.overall_factor;
     numerator_12.state.expr = numerator_12.state.expr.replace_multiple(&cpl_reps);
 
     let numerator_color_simplified_12 = numerator_12

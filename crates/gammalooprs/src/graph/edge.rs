@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::{
     fmt::Display,
     sync::{Arc, Mutex},
@@ -310,6 +311,15 @@ impl UVE for Edge {
 }
 
 impl Edge {
+    /// The numerator of the edge `edge`, owning its private indices; see
+    /// [`Vertex::scoped_num`](super::vertex::Vertex::scoped_num).
+    #[must_use]
+    pub(crate) fn scoped_num(&self, edge: EdgeIndex) -> Cow<'_, Atom> {
+        Aind::scope_private_indices_cow(&self.num.value, || {
+            symbol!(&format!("gammalooprs::edge_{}", edge.0))
+        })
+    }
+
     pub fn random_helicity(&self, seed: u64) -> Helicity {
         if let PossibleParticle::Particle(p) = &self.particle {
             p.random_helicity(seed)

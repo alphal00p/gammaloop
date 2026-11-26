@@ -1153,7 +1153,7 @@ mod tests {
             let mut numerator = g.numerator(&g.no_dummy(), &g.empty_subgraph());
 
             // TODO Check if we include overall factor in main
-            numerator.state.expr *= &g.global_prefactor.num * &g.global_prefactor.projector; // * &gl5.overall_factor;
+            numerator.state.expr *= g.global_prefactor.to_atom(); // * &gl5.overall_factor;
             // numerator.state.expr = numerator.state.expr.replace_multiple(&cpl_reps);
 
             let numerator_color_simplified = numerator

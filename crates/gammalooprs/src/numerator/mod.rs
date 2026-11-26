@@ -21,6 +21,7 @@ use spenso::tensors::parametric::atomcore::TensorAtomMaps;
 
 use spenso::tensors::parametric::ParamTensor;
 use spenso::tensors::parametric::TensorSet;
+use std::borrow::Cow;
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
@@ -351,11 +352,38 @@ pub struct GlobalPrefactor {
     pub num: Atom,
 }
 
+impl GlobalPrefactor {
+    /// The numerator, owning its private indices.
+    ///
+    /// The numerator and the projector are derived independently of each
+    /// other and of every vertex, edge, and subgraph numerator, so their
+    /// private contractions are scoped apart before any product forms; see
+    /// [`Aind::scope_private_indices`].
+    #[must_use]
+    pub(crate) fn scoped_num(&self) -> Cow<'_, Atom> {
+        Aind::scope_private_indices_cow(&self.num, || symbol!("gammalooprs::global_prefactor_num"))
+    }
+
+    /// The projector, owning its private indices; see
+    /// [`GlobalPrefactor::scoped_num`].
+    #[must_use]
+    pub(crate) fn scoped_projector(&self) -> Cow<'_, Atom> {
+        Aind::scope_private_indices_cow(&self.projector, || {
+            symbol!("gammalooprs::global_prefactor_projector")
+        })
+    }
+
+    /// The numerator times the projector, each owning its private indices.
+    pub(crate) fn to_atom(&self) -> Atom {
+        self.scoped_num().as_ref() * self.scoped_projector().as_ref()
+    }
+}
+
 impl JsonSchema for GlobalPrefactor {
     fn json_schema(generated: &mut schemars::SchemaGenerator) -> schemars::Schema {
         generated.subschema_for::<_GlobalPrefactorAny>()
     }
-    fn schema_name() -> std::borrow::Cow<'static, str> {
+    fn schema_name() -> Cow<'static, str> {
         "GlobalPrefactor".into()
     }
 }
@@ -363,7 +391,7 @@ impl JsonSchema for GlobalPrefactor {
 impl GlobalPrefactor {
     pub fn polarizations(&self) -> Vec<(PolDef, Atom)> {
         let mut pols = Vec::new();
-        let full_prefactor = &self.projector * &self.num;
+        let full_prefactor = self.to_atom();
         let pat = function!(GS.epsilon, W_.e_, W_.i_).to_pattern();
         for m in full_prefactor.pattern_match(&pat, None, None) {
             let Some(e) = m.get(&W_.e_) else {

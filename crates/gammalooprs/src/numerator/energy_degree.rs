@@ -2115,8 +2115,7 @@ impl Graph {
         self.numerator(&self.full_filter(), &self.empty_subgraph())
             .get_single_atom()
             .expect("Graph numerator should be available")
-            * &self.global_prefactor.num
-            * &self.global_prefactor.projector
+            * self.global_prefactor.to_atom()
             * &self.overall_factor
     }
 

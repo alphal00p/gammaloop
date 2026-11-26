@@ -3,12 +3,11 @@ use linnet::half_edge::subgraph::{SubSetLike, SubSetOps};
 use symbolica::atom::Atom;
 use three_dimensional_reps::CffGenerationContext;
 
-use crate::{
-    debug_tags,
-    graph::Graph,
-    utils::GS,
-    uv::{UltravioletGraph, approx::ForestNodeLike},
-};
+use crate::debug_tags;
+use crate::graph::Graph;
+use crate::utils::GS;
+use crate::uv::approx::ForestNodeLike;
+use crate::uv::{PrivateIndexOwner, UltravioletGraph};
 
 use super::{FrozenActiveCt, Localizer, OrientationIntegrands};
 
@@ -56,11 +55,16 @@ impl Localizer<'_> {
             .full_filter()
             .subtract(to_contract)
             .subtract(&graph.initial_state_cut);
-        let outside_numerator = graph
-            .numerator(&reduced, to_contract)
-            .get_single_atom()
-            .expect("Graph numerator should be available")
-            * graph.global_atom();
+        let outside_numerator = PrivateIndexOwner::Numerator {
+            reduced: &reduced,
+            without: to_contract,
+        }
+        .own(
+            graph
+                .numerator(&reduced, to_contract)
+                .get_single_atom()
+                .expect("Graph numerator should be available"),
+        ) * graph.global_atom();
         let analysis_numerator = expr * &outside_numerator;
 
         let localizing_integrand = GS.localizing_integrand(integrated_node.lmb());

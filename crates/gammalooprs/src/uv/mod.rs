@@ -27,6 +27,7 @@ use symbolica::{
 };
 
 use linnet::half_edge::involution::HedgePair;
+use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 
 // use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
@@ -41,6 +42,45 @@ pub(crate) fn spenso_lor(
 
 pub(crate) fn spenso_lor_atom(tag: i32, ind: impl Into<Aind>, dim: impl Into<Dimension>) -> Atom {
     spenso_lor(tag, ind, dim).to_symbolic(None).unwrap()
+}
+
+/// A UV producer whose output is multiplied with other pieces of the graph.
+///
+/// Every factor of a forest term derives from a disjoint piece of the graph,
+/// so naming the producer of each factor keeps their private contraction
+/// indices apart; see [`Aind::scope_private_indices`].
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum PrivateIndexOwner<'a> {
+    /// The numerator of `reduced`, without the numerator of `without`.
+    Numerator {
+        reduced: &'a SuBitGraph,
+        without: &'a SuBitGraph,
+    },
+    /// The analytic integration of `current`, with `given` contracted.
+    Integration {
+        current: &'a SuBitGraph,
+        given: &'a SuBitGraph,
+    },
+}
+
+impl PrivateIndexOwner<'_> {
+    /// The scope symbol naming this producer.
+    pub(crate) fn scope(self) -> Symbol {
+        let (producer, first, second) = match self {
+            Self::Numerator { reduced, without } => ("numerator", reduced, without),
+            Self::Integration { current, given } => ("integration", current, given),
+        };
+        symbol!(&format!(
+            "gammalooprs::uv_{producer}_{}_{}",
+            first.string_label(),
+            second.string_label()
+        ))
+    }
+
+    /// `atom` with its unscoped private indices owned by this producer.
+    pub(crate) fn own(self, atom: Atom) -> Atom {
+        Aind::scope_private_indices(atom, || self.scope())
+    }
 }
 
 /// Cut-indexed factorized integrands. UV markers and final tensor replacements
@@ -81,14 +121,6 @@ impl Integrands {
 
     pub(crate) fn numerators(&self) -> &[Arc<FnMapEntry>] {
         &self.numerators
-    }
-
-    /// Every root expression followed by every shared numerator body. Scalar
-    /// bodies are omitted: they hold only arithmetic in formal variables.
-    pub(crate) fn expressions(&self) -> impl Iterator<Item = &Atom> {
-        self.atoms
-            .values()
-            .chain(self.numerators.iter().map(|entry| &entry.rhs))
     }
 
     pub(crate) fn scalar_symbol() -> Symbol {

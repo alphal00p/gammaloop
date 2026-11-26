@@ -2,22 +2,40 @@ use derive_more::Display;
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "symbolica")]
-use symbolica::{atom::AtomView, coefficient::CoefficientView};
+use symbolica::atom::{Atom, AtomView, Symbol};
+#[cfg(feature = "symbolica")]
+use symbolica::coefficient::CoefficientView;
+#[cfg(feature = "symbolica")]
+use symbolica_utils::{InternedAtomId, SerializableSymbol};
 use thiserror::Error;
 
-#[cfg(feature = "symbolica")]
-use symbolica::atom::{Atom, Symbol};
-
-#[cfg(feature = "symbolica")]
-use symbolica_utils::SerializableSymbol;
-
-/// A Dimension
+/// The dimension of a representation.
+///
+/// Variants are ordered `Concrete < Symbolic < Expr`, comparing payloads
+/// within a variant, which gives a total order consistent with equality.
+///
+/// ```
+/// # #[cfg(feature = "symbolica")]
+/// # {
+/// use spenso::structure::dimension::Dimension;
+/// use symbolica::parse;
+///
+/// let adjoint = parse!("dimension_doc::nc^2 - 1");
+/// let dimension = Dimension::try_from(adjoint.as_view()).unwrap();
+///
+/// assert!(matches!(dimension, Dimension::Expr(_)));
+/// assert_eq!(dimension.to_symbolic(), adjoint);
+/// assert!(Dimension::Concrete(4) < dimension);
+/// # }
+/// ```
 #[derive(
     Debug,
     Copy,
     Clone,
     Eq,
     PartialEq,
+    Ord,
+    PartialOrd,
     Hash,
     Display,
     Serialize,
@@ -34,6 +52,9 @@ pub enum Dimension {
     Concrete(usize),
     #[cfg(feature = "symbolica")]
     Symbolic(SerializableSymbol),
+    /// A composite symbolic dimension such as `Nc^2 - 1` or `4 - 2*eps`.
+    #[cfg(feature = "symbolica")]
+    Expr(InternedAtomId),
 }
 
 impl Dimension {
@@ -46,23 +67,8 @@ impl Dimension {
         match self {
             Self::Concrete(c) => Atom::num(*c as i64),
             Self::Symbolic(s) => Atom::var((*s).into()),
+            Self::Expr(expression) => expression.to_atom(),
         }
-    }
-}
-
-impl Ord for Dimension {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        match (self, other) {
-            (Dimension::Concrete(s), Dimension::Concrete(o)) => s.cmp(o),
-            #[cfg(feature = "symbolica")]
-            _ => std::cmp::Ordering::Equal,
-        }
-    }
-}
-
-impl PartialOrd for Dimension {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
     }
 }
 
@@ -78,7 +84,7 @@ pub enum DimensionError {
     NotNatural,
 
     #[cfg(feature = "symbolica")]
-    #[error("Dimension is not a var or int: {0}")]
+    #[error("Dimension is not a natural number, variable or composite expression: {0}")]
     NotVarOrInt(Atom),
 }
 
@@ -126,11 +132,12 @@ impl<'a> TryFrom<AtomView<'a>> for Dimension {
                     Err(DimensionError::NotVarOrInt(err))
                 }
             },
-            _ => {
-                let mut err = Atom::new();
-                err.set_from_view(&value);
-                Err(DimensionError::NotVarOrInt(err))
+            AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_) => {
+                Ok(Dimension::Expr(InternedAtomId::intern(value)))
             }
+            // A function argument in the dimension position marks a wrapped
+            // representation instead, such as `dind(cof(3, i))`.
+            AtomView::Fun(_) => Err(DimensionError::NotVarOrInt(value.to_owned())),
         }
     }
 }
@@ -158,7 +165,11 @@ impl PartialEq<Dimension> for usize {
 #[cfg(test)]
 #[cfg(feature = "symbolica")]
 mod shadowing_tests {
-    use symbolica::{atom::Atom, function, symbol};
+    use std::cmp::Ordering;
+    use std::collections::BTreeSet;
+
+    use symbolica::atom::Atom;
+    use symbolica::{function, parse, symbol};
 
     use super::Dimension;
 
@@ -181,5 +192,39 @@ mod shadowing_tests {
         assert!(dimd.is_err());
         let dime = Dimension::try_from(e.as_view());
         assert!(dime.is_err());
+    }
+
+    #[test]
+    fn composite_dimensions_round_trip() {
+        let adjoint = parse!("dimension_test::nc^2 - 1");
+        let regulated = parse!("4 - 2*dimension_test::eps");
+
+        let dimension = Dimension::try_from(adjoint.as_view()).unwrap();
+        assert!(matches!(dimension, Dimension::Expr(_)));
+        assert_eq!(dimension.to_symbolic(), adjoint);
+        assert_eq!(dimension, Dimension::try_from(adjoint.as_view()).unwrap());
+        assert_ne!(dimension, Dimension::try_from(regulated.as_view()).unwrap());
+    }
+
+    #[test]
+    fn ordering_is_total_and_consistent_with_equality() {
+        let dimensions = [
+            Dimension::Concrete(3),
+            Dimension::Concrete(4),
+            Dimension::Symbolic(symbol!("dimension_test::a").into()),
+            Dimension::Symbolic(symbol!("dimension_test::b").into()),
+            Dimension::try_from(parse!("dimension_test::nc^2 - 1").as_view()).unwrap(),
+            Dimension::try_from(parse!("4 - 2*dimension_test::eps").as_view()).unwrap(),
+        ];
+
+        for left in &dimensions {
+            for right in &dimensions {
+                assert_eq!(left.cmp(right) == Ordering::Equal, left == right);
+                assert_eq!(left.cmp(right), right.cmp(left).reverse());
+            }
+        }
+        assert!(dimensions[1] < dimensions[2]);
+        assert!(dimensions[3] < dimensions[4]);
+        assert_eq!(BTreeSet::from(dimensions).len(), dimensions.len());
     }
 }

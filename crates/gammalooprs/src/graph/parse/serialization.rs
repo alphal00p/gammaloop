@@ -18,7 +18,6 @@ use crate::{
     graph::Graph,
     processes::DotExportSettings,
     utils::{GS, W_},
-    uv::UltravioletGraph,
 };
 
 use super::{ParseGraph, string_utils::ToQuoted};
@@ -32,14 +31,7 @@ impl Graph {
         };
 
         if settings.output_full_numerator {
-            let mut num = (self
-                .numerator(&self.full_filter(), &self.empty_subgraph())
-                .get_single_atom()
-                .unwrap()
-                * &self.global_prefactor.num
-                * &self.global_prefactor.projector
-                * &self.overall_factor)
-                .simplify_metrics();
+            let mut num = self.full_numerator_atom().simplify_metrics();
 
             if settings.do_color_algebra {
                 num = num.simplify_color_with(

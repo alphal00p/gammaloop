@@ -1,43 +1,33 @@
-use std::iter;
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    time::{Duration, Instant},
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::time::{Duration, Instant};
 
 use color_eyre::Result;
 use eyre::{WrapErr, eyre};
 use gammaloop_tracing_filter::debug_instrument;
-use idenso::{
-    dirac::AGS,
-    shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
-};
+use idenso::dirac::AGS;
+use idenso::shorthands::metric::MetricSimplifier;
+use idenso::shorthands::schoonschip::Schoonschip;
 
+use linnet::half_edge::involution::EdgeIndex;
 #[cfg(test)]
 use linnet::half_edge::subgraph::SubGraphLike;
-use linnet::half_edge::{
-    involution::EdgeIndex,
-    subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps},
-};
+use linnet::half_edge::subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps};
 use serde::{Deserialize, Serialize};
-use symbolica::id::Replacement;
-use symbolica::{
-    atom::{AtomCore, AtomView},
-    prelude::*,
-};
+use symbolica::atom::{AtomCore, AtomView};
+use symbolica::prelude::*;
 
+use crate::debug_tags;
+use crate::graph::{FourDDenominator, Graph, LMBext, LoopMomentumBasis};
+use crate::momentum::sample::LoopIndex;
+use crate::numerator::aind::Aind;
+use crate::numerator::symbolica_ext::NumeratorAtomExt;
+use crate::numerator::ufo::UFO;
 use crate::utils::symbols::{UvDenominatorClassId, UvMomentumProvenanceRole};
-use crate::{
-    debug_tags,
-    graph::{FourDDenominator, Graph, LMBext, LoopMomentumBasis},
-    momentum::sample::LoopIndex,
-    numerator::{aind::Aind, symbolica_ext::NumeratorAtomExt, ufo::UFO},
-    utils::{GS, W_},
-    uv::{
-        ApproximationType, UltravioletGraph,
-        approx::{ForestNodeLike, Rooted, UVCtx, integrated::IntegratedCts},
-        marker::{UvMarker, UvOperation},
-    },
-};
+use crate::utils::{GS, W_};
+use crate::uv::approx::integrated::IntegratedCts;
+use crate::uv::approx::{ForestNodeLike, Rooted, UVCtx};
+use crate::uv::marker::{UvMarker, UvOperation};
+use crate::uv::{ApproximationType, PrivateIndexOwner, UltravioletGraph};
 use three_dimensional_reps::MomentumSignature;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -939,26 +929,6 @@ impl FourDSectors {
     fn all(&self) -> impl Iterator<Item = &FourDSector> {
         self.active.iter().chain(&self.recursive_completion)
     }
-
-    /// The combined expression followed by every sector expression.
-    fn atoms(&self) -> impl Iterator<Item = &Atom> {
-        iter::once(&self.atom).chain(self.all().map(|sector| &sector.atom))
-    }
-
-    /// Apply one index renaming consistently to every expression.
-    fn rename_indices(&mut self, renaming: &[Replacement]) {
-        if renaming.is_empty() {
-            return;
-        }
-        for atom in iter::once(&mut self.atom).chain(
-            self.active
-                .iter_mut()
-                .chain(&mut self.recursive_completion)
-                .map(|sector| &mut sector.atom),
-        ) {
-            *atom = atom.replace_multiple(renaming);
-        }
-    }
 }
 
 impl Full4dCts {
@@ -1118,17 +1088,20 @@ impl Local4dCts {
     }
 
     pub(crate) fn from_full_product(factors: impl IntoIterator<Item = Full4dCts>) -> Self {
-        let mut factors = factors.into_iter().collect::<Vec<_>>();
-        // Components carry separately integrated recursive completions, which
-        // reuse the same private contraction indices.
-        let renamings = Aind::disjoint_private_renamings(
-            factors
-                .iter()
-                .map(|factor| factor.0.atoms().map(|atom| atom.as_view())),
+        let factors = factors.into_iter().collect::<Vec<_>>();
+        // Every component grows from its own scoped numerators and integrations.
+        // Its sectors are checked as well, since cancellations in the summed
+        // atom could hide an index that two components share.
+        debug_assert!(
+            Aind::private_indices_are_disjoint(factors.iter().map(|factor| {
+                factor
+                    .0
+                    .all()
+                    .map(|sector| sector.atom.as_view())
+                    .chain([factor.0.atom.as_view()])
+            })),
+            "full 4D counterterm components must not share private indices"
         );
-        for (factor, renaming) in factors.iter_mut().zip(renamings) {
-            factor.0.rename_indices(&renaming);
-        }
         let mut products = vec![(FourDSector::new(Atom::one(), Vec::new(), Vec::new()), false)];
         let mut atom = Atom::one();
         let mut has_soft_ancestry = false;
@@ -1839,13 +1812,18 @@ fn grow_factor<S: super::ForestNodeLike>(ctx: &UVCtx<'_>, current: &S, given: &S
     let reduced = current.reduced_subgraph(given);
     let graph = ctx.graph;
 
-    let mut t_arg = ctx
+    let numerator = ctx
         .graph
         .numerator(&reduced, given.subgraph())
         .to_d_dim(GS.dim)
         .color_simplify()
         .get_single_atom()
         .unwrap();
+    let mut t_arg = PrivateIndexOwner::Numerator {
+        reduced: &reduced,
+        without: given.subgraph(),
+    }
+    .own(numerator);
 
     t_arg /= graph.denominator(&reduced, |_| 1);
     Ok(t_arg)
@@ -2713,38 +2691,32 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils;
+    use crate::graph::GraphThreeDSource;
+    use crate::graph::parse::IntoGraph;
+    use crate::initialisation::test_initialise;
+    use crate::model::InputParamCard;
+    use crate::numerator::energy_degree::EnergyPowerAnalyzer;
     use crate::uv::approx::integrated::Integrated;
-    use crate::{
-        dot,
-        graph::{GraphThreeDSource, parse::IntoGraph},
-        initialisation::test_initialise,
-        model::InputParamCard,
-        numerator::energy_degree::EnergyPowerAnalyzer,
-        uv::approx::projected_4d::Local4dProjectionContext,
-        uv::{Spinney, UVgenerationSettings, hedge_poset::OwnedForestNode, uv_graph::UVE},
-    };
+    use crate::uv::approx::projected_4d::Local4dProjectionContext;
+    use crate::uv::hedge_poset::OwnedForestNode;
+    use crate::uv::uv_graph::UVE;
+    use crate::uv::{Spinney, UVgenerationSettings};
+    use crate::{dot, utils};
     use gammaloop_tracing_filter::LogMessage;
-    use idenso::{
-        IndexTooling,
-        color::ColorSimplifier,
-        dirac::GammaSimplifier,
-        representations::{Bispinor, ColorAdjoint},
-    };
-    use linnet::half_edge::{
-        involution::Hedge,
-        subgraph::{InternalSubGraph, ModifySubSet, SubSetOps},
-    };
-    use spenso::{
-        network::{
-            parsing::{AtomStructureExt, StrictTensorFilter},
-            tags::SPENSO_TAG,
-        },
-        shadowing::{IntoAtom, symbolica_utils::LogPrint},
-        structure::representation::{LibraryRep, Minkowski, RepName},
-    };
+    use idenso::IndexTooling;
+    use idenso::color::ColorSimplifier;
+    use idenso::dirac::GammaSimplifier;
+    use idenso::representations::{Bispinor, ColorAdjoint};
+    use linnet::half_edge::involution::Hedge;
+    use linnet::half_edge::subgraph::{InternalSubGraph, ModifySubSet, SubSetOps};
+    use spenso::network::parsing::{AtomStructureExt, StrictTensorFilter};
+    use spenso::network::tags::SPENSO_TAG;
+    use spenso::shadowing::IntoAtom;
+    use spenso::shadowing::symbolica_utils::LogPrint;
+    use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
     use std::collections::{BTreeMap, BTreeSet};
-    use symbolica::{domains::rational::Rational, function, symbol};
+    use symbolica::domains::rational::Rational;
+    use symbolica::{function, symbol};
 
     struct TestNode {
         subgraph: SuBitGraph,
@@ -8605,16 +8577,14 @@ mod tests {
 
     #[test]
     fn cancelling_projection_sectors_preserve_final_cut_orders_without_energy_maps() -> Result<()> {
-        use crate::{
-            cff::esurface::RaisedEsurfaceGroup,
-            graph::cuts::CutSet,
-            settings::global::OrientationPattern,
-            uv::approx::{
-                OrientationProjection, final_integrand::FinalIntegrandBuilder,
-                integrated::IntegratedCts, local_3d::Localizer,
-                projected_4d::Projected4dApproximation,
-            },
-        };
+        use crate::cff::esurface::RaisedEsurfaceGroup;
+        use crate::graph::cuts::CutSet;
+        use crate::settings::global::OrientationPattern;
+        use crate::uv::approx::OrientationProjection;
+        use crate::uv::approx::final_integrand::FinalIntegrandBuilder;
+        use crate::uv::approx::integrated::IntegratedCts;
+        use crate::uv::approx::local_3d::Localizer;
+        use crate::uv::approx::projected_4d::Projected4dApproximation;
 
         test_initialise()?;
         let mut graph: Graph = dot!(digraph cancelling_projection_sectors {
@@ -9868,6 +9838,8 @@ mod tests {
 
         // Each component completes with its own integrated quark self-energy,
         // whose slashed-momentum contraction the parser named dummy(1000000).
+        // As in production, a component's numerator and integration each own
+        // their contractions.
         let bis = Bispinor {}.new_rep(4);
         let slashed = |dummy, edge: usize, (incoming, outgoing): (u16, u16)| {
             let mu = Minkowski {}
@@ -9886,7 +9858,19 @@ mod tests {
         // The still-local parts share the components' open spin slots.
         let local_a = |dummy| &coefficient_a * slashed(dummy, 20, (10, 1));
         let local_b = |dummy| &coefficient_b * slashed(dummy, 21, (0, 11));
-        let component = |local: Atom, finite: Atom| {
+        let given = SuBitGraph::empty(4);
+        let component = |label: &str, local: Atom, finite: Atom| {
+            let current = SuBitGraph::from_base62(label, 4).unwrap();
+            let local = PrivateIndexOwner::Numerator {
+                reduced: &current,
+                without: &given,
+            }
+            .own(local);
+            let finite = PrivateIndexOwner::Integration {
+                current: &current,
+                given: &given,
+            }
+            .own(finite);
             Full4dCts(FourDSectors::new(
                 vec![FourDSector::new(local, Vec::new(), Vec::new())],
                 vec![FourDSector::new(finite, Vec::new(), Vec::new())],
@@ -9894,8 +9878,8 @@ mod tests {
         };
 
         let product = Local4dCts::from_full_product([
-            component(local_a(1_000_000), slashed(1_000_000, 10, (10, 1))),
-            component(local_b(1_000_000), slashed(1_000_000, 0, (0, 11))),
+            component("1", local_a(1_000_000), slashed(1_000_000, 10, (10, 1))),
+            component("2", local_b(1_000_000), slashed(1_000_000, 0, (0, 11))),
         ]);
 
         let canonical = |atom: &Atom| atom.expand().canonize(Aind::Dummy).unwrap();

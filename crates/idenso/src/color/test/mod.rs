@@ -1070,7 +1070,7 @@ fn antisymmetric_chain_commutator_reduces_to_structure_constant() {
         antisym!(color_t!(slot!(r.coad_da, a)), color_t!(slot!(r.coad_da, b))),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,x),in,out))*f(coad(dA,a),coad(dA,b),coad(dA,x))*𝑖/2");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"chain(cof(Nc,i),dind(cof(Nc,j)),t(coad(dA,d_0),in,out))*f(coad(dA,a),coad(dA,b),coad(dA,d_0))*𝑖/2");
 }
 
 #[test]

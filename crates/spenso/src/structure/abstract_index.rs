@@ -32,7 +32,7 @@ use crate::shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings}
 use crate::structure::slot::ParseableAind;
 use crate::utils::{to_subscript, to_superscript};
 #[cfg(feature = "symbolica")]
-use symbolica_utils::SerializableSymbol;
+use symbolica_utils::{InternedAtomId, SerializableSymbol};
 
 use thiserror::Error;
 
@@ -66,9 +66,14 @@ pub struct AindSymbols {
 mod test {
     use std::collections::{BTreeSet, HashSet};
 
-    use symbolica::{atom::AtomCore, function, id::Replacement};
+    use symbolica::atom::AtomCore;
+    use symbolica::id::Replacement;
+    use symbolica::{function, parse_lit};
 
     use crate::shadowing::symbolica_utils::SpensoPrintSettings;
+    use crate::structure::dimension::Dimension;
+    use crate::structure::representation::{LibraryRep, Minkowski, RepName};
+    use crate::structure::slot::{IsAbstractSlot, Slot};
 
     use super::*;
 
@@ -190,6 +195,54 @@ mod test {
     }
 
     #[test]
+    fn structured_index_functions_round_trip() {
+        let hedge = function!(symbol!("abstract_index_test::hedge"), Atom::num(4));
+        let edge = function!(
+            symbol!("abstract_index_test::edge"),
+            Atom::num(1),
+            Atom::num(2)
+        );
+
+        let index = AbstractIndex::try_from(hedge.as_view()).unwrap();
+        assert!(matches!(index, AbstractIndex::Structured(_)));
+        assert_eq!(index.to_atom(), hedge);
+        assert_eq!(index, AbstractIndex::try_from(hedge.as_view()).unwrap());
+        assert_ne!(index, AbstractIndex::try_from(edge.as_view()).unwrap());
+        assert!(!index.is_dummy());
+
+        let slot = Minkowski {}.new_rep(4).to_symbolic([edge.clone()]);
+        let parsed: Slot<LibraryRep> = Slot::try_from(slot.as_view()).unwrap();
+        assert_eq!(parsed.to_atom(), slot);
+    }
+
+    #[test]
+    fn wrapped_slots_parse_composite_dimensions_and_structured_indices() {
+        LibraryRep::new_dual("cof").unwrap();
+        let wrapped = parse_lit!(
+            dind(cof(Nc ^ 2 - 1, hedge(0))),
+            default_namespace = "spenso"
+        );
+
+        let parsed: Slot<LibraryRep> = Slot::try_from(wrapped.as_view()).unwrap();
+        assert!(matches!(parsed.rep.dim, Dimension::Expr(_)));
+        assert!(matches!(parsed.aind, AbstractIndex::Structured(_)));
+        assert_eq!(parsed.to_atom(), wrapped);
+
+        // A function in the dimension position is not a dimension.
+        let functional = parse_lit!(cof(D(x), i), default_namespace = "spenso");
+        assert!(Slot::<LibraryRep>::try_from(functional.as_view()).is_err());
+    }
+
+    #[test]
+    fn index_wrappers_are_not_structured_indices() {
+        let wrapped = AIND_SYMBOLS.dual(Atom::var(symbol!("abstract_index_test::i")));
+        let concrete = function!(AIND_SYMBOLS.cind, Atom::num(1));
+
+        assert!(AbstractIndex::try_from(wrapped.as_view()).is_err());
+        assert!(AbstractIndex::try_from(concrete.as_view()).is_err());
+    }
+
+    #[test]
     fn malformed_open_index_atom_is_rejected() {
         let atom = function!(AIND_SYMBOLS.openind, Atom::num(1));
 
@@ -204,6 +257,20 @@ mod test {
 impl AindSymbols {
     pub fn dual<'a, A: Into<AtomOrView<'a>>>(&self, arg: A) -> Atom {
         symbolica::function!(self.dind, arg.into().as_view())
+    }
+
+    /// Whether `symbol` heads one of Spenso's slot or concrete-index
+    /// wrappers, which never name an abstract index themselves.
+    fn is_index_wrapper(&self, symbol: Symbol) -> bool {
+        [
+            self.aind,
+            self.uind,
+            self.dind,
+            self.selfdualind,
+            self.cind,
+            self.find,
+        ]
+        .contains(&symbol)
     }
 }
 #[cfg(feature = "symbolica")]
@@ -409,6 +476,12 @@ pub enum AbstractIndex {
     Added(usize),
     #[cfg(feature = "symbolica")]
     Symbol(SerializableSymbol),
+    /// A structured index function such as `hedge(4)` or `edge(1, 2)`.
+    ///
+    /// Spenso's own index wrappers and `open_index` keep their dedicated
+    /// meanings; every other function in the index position is opaque.
+    #[cfg(feature = "symbolica")]
+    Structured(InternedAtomId),
     /// An unresolved concrete storage port.
     ///
     /// `owner` separates tensor occurrences, while `axis` identifies a port within an
@@ -459,6 +532,8 @@ impl std::ops::Add<AbstractIndex> for AbstractIndex {
                 AbstractIndex::Double(_, _) => panic!("cannot add double"),
                 #[cfg(feature = "symbolica")]
                 AbstractIndex::Symbol(r) => AbstractIndex::Added(l + r.get_id() as usize),
+                #[cfg(feature = "symbolica")]
+                AbstractIndex::Structured(_) => panic!("cannot add structured index"),
                 AbstractIndex::Open { .. } => panic!("cannot add open index"),
             },
             AbstractIndex::Dualize(l) => match rhs {
@@ -469,6 +544,8 @@ impl std::ops::Add<AbstractIndex> for AbstractIndex {
                 AbstractIndex::Double(_, _) => panic!("cannot add double"),
                 #[cfg(feature = "symbolica")]
                 AbstractIndex::Symbol(r) => AbstractIndex::Added(l + r.get_id() as usize),
+                #[cfg(feature = "symbolica")]
+                AbstractIndex::Structured(_) => panic!("cannot add structured index"),
                 AbstractIndex::Open { .. } => panic!("cannot add open index"),
             },
             AbstractIndex::Added(l) => match rhs {
@@ -479,6 +556,8 @@ impl std::ops::Add<AbstractIndex> for AbstractIndex {
                 AbstractIndex::Double(_, _) => panic!("cannot add double"),
                 #[cfg(feature = "symbolica")]
                 AbstractIndex::Symbol(r) => AbstractIndex::Added(l + r.get_id() as usize),
+                #[cfg(feature = "symbolica")]
+                AbstractIndex::Structured(_) => panic!("cannot add structured index"),
                 AbstractIndex::Open { .. } => panic!("cannot add open index"),
             },
             AbstractIndex::Dummy(l) => match rhs {
@@ -489,6 +568,8 @@ impl std::ops::Add<AbstractIndex> for AbstractIndex {
                 AbstractIndex::Double(_, _) => panic!("cannot add double"),
                 #[cfg(feature = "symbolica")]
                 AbstractIndex::Symbol(r) => AbstractIndex::Added(l + r.get_id() as usize),
+                #[cfg(feature = "symbolica")]
+                AbstractIndex::Structured(_) => panic!("cannot add structured index"),
                 AbstractIndex::Open { .. } => panic!("cannot add open index"),
             },
             AbstractIndex::Double(_, _) => panic!("cannot add double"),
@@ -503,8 +584,11 @@ impl std::ops::Add<AbstractIndex> for AbstractIndex {
                 AbstractIndex::Symbol(r) => {
                     AbstractIndex::Added(l.get_id() as usize + r.get_id() as usize)
                 }
+                AbstractIndex::Structured(_) => panic!("cannot add structured index"),
                 AbstractIndex::Open { .. } => panic!("cannot add open index"),
             },
+            #[cfg(feature = "symbolica")]
+            AbstractIndex::Structured(_) => panic!("cannot add structured index"),
             AbstractIndex::Open { .. } => panic!("cannot add open index"),
         }
     }
@@ -576,6 +660,8 @@ impl std::fmt::Display for AbstractIndex {
                     write!(f, "{}", v)
                 }
             }
+            #[cfg(feature = "symbolica")]
+            AbstractIndex::Structured(index) => write!(f, "{index}"),
             AbstractIndex::Open { owner, axis } => write!(f, "open({owner},{axis})"),
         }
     }
@@ -597,6 +683,7 @@ impl From<AbstractIndex> for Atom {
             AbstractIndex::Added(v) => Atom::num(v as i64),
             AbstractIndex::Dummy(v) => Atom::var(symbol!(format!("d_{}", v))),
             AbstractIndex::Symbol(v) => Atom::var(v.into()),
+            AbstractIndex::Structured(index) => index.to_atom(),
             AbstractIndex::Open { owner, axis } => {
                 symbolica::function!(AIND_SYMBOLS.openind, Atom::num(owner), Atom::num(axis))
             }
@@ -633,6 +720,8 @@ impl From<AbstractIndex> for usize {
             AbstractIndex::Dummy(v) => v,
             #[cfg(feature = "symbolica")]
             AbstractIndex::Symbol(v) => v.get_id() as usize,
+            #[cfg(feature = "symbolica")]
+            AbstractIndex::Structured(index) => index.get_id() as usize,
             AbstractIndex::Open { axis, .. } => axis,
         }
     }
@@ -693,6 +782,9 @@ impl TryFrom<AtomView<'_>> for AbstractIndex {
                     axis: usize::try_from(*axis)
                         .map_err(|_| AbstractIndexError::NotIndex(view.to_string()))?,
                 })
+            }
+            AtomView::Fun(function) if !AIND_SYMBOLS.is_index_wrapper(function.get_symbol()) => {
+                Ok(AbstractIndex::Structured(InternedAtomId::intern(view)))
             }
             _ => Err(AbstractIndexError::NotIndex(view.to_string())),
         }

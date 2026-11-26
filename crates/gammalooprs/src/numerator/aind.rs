@@ -1,21 +1,16 @@
-use std::collections::BTreeSet;
+use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use linnet::half_edge::{
-    NodeIndex,
-    involution::{EdgeIndex, Hedge},
-};
+use linnet::half_edge::NodeIndex;
+use linnet::half_edge::involution::{EdgeIndex, Hedge};
 use spenso::structure::abstract_index::AbstractIndex;
-use spenso::{
-    structure::slot::{AbsInd, DummyAind, ParseableAind, SlotError},
-    utils::{to_subscript, to_superscript},
-};
-use symbolica::id::Replacement;
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Symbol, representation::FunView},
-    coefficient::CoefficientView,
-    function, symbol,
-};
+use spenso::structure::slot::{AbsInd, DummyAind, ParseableAind, SlotError};
+use spenso::utils::{to_subscript, to_superscript};
+use symbolica::atom::representation::FunView;
+use symbolica::atom::{Atom, AtomCore, AtomOrView, AtomView, Symbol};
+use symbolica::coefficient::CoefficientView;
+use symbolica::{function, symbol};
 use thiserror::Error;
 
 use crate::utils::GS;
@@ -42,9 +37,12 @@ pub enum Aind {
     Hedge(u16, u16),
     Edge(u16, u16),
     Vertex(u16, u16),
-    UVTerm(u16, u16),
     Symbol(Symbol),
     Dummy(usize),
+    /// A private dummy owned by the producer that `Symbol` names.
+    ///
+    /// See [`Aind::scope_private_indices`].
+    ScopedDummy(Symbol, usize),
 }
 
 pub trait NewAind {
@@ -70,20 +68,33 @@ impl NewAind for Hedge {
 
 impl AbsInd for Aind {}
 
+fn allocate_dummy_from(counter: &AtomicUsize) -> Aind {
+    let index = counter
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+            i64::try_from(current).ok()?;
+            current.checked_add(1)
+        })
+        .expect("dummy index counter exhausted representable range");
+    crate::debug_tags!(#generation, #inspect;
+        aind_dummy = true,
+        stage = "aind_new_dummy",
+        dummy_index = index,
+        "Aind dummy allocated"
+    );
+    Aind::Dummy(index)
+}
+
+fn record_parsed_dummy(counter: &AtomicUsize, index: usize) {
+    counter.fetch_max(index.saturating_add(1), Ordering::Relaxed);
+}
+
 impl DummyAind for Aind {
     fn new_dummy() -> Self {
-        let index = DUMMYCOUNTER.fetch_add(1, Ordering::Relaxed);
-        crate::debug_tags!(#generation, #inspect;
-            aind_dummy = true,
-            stage = "aind_new_dummy",
-            dummy_index = index,
-            "Aind dummy allocated"
-        );
-        Aind::Dummy(index)
+        allocate_dummy_from(&DUMMYCOUNTER)
     }
 
     fn is_dummy(&self) -> bool {
-        matches!(self, Aind::Dummy(_))
+        matches!(self, Aind::Dummy(_) | Aind::ScopedDummy(..))
     }
 
     fn new_dummy_at(i: usize) -> Self {
@@ -91,160 +102,150 @@ impl DummyAind for Aind {
     }
 }
 
-/// A contracted index name that one derivation allocates for itself.
-///
-/// Each allocator restarts its numbering for every expression it produces, so
-/// independently derived expressions reuse these names. None of them ever
-/// connects an expression to the rest of the graph.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum PrivateIndex {
-    /// Integrated-UV tensor-reduction index, keyed only by topology order.
-    UvTerm(u16, u16),
-    /// GammaLoop dummy, numbered from one offset by every tensor-network parse.
-    Dummy(usize),
-    /// Spenso dummy `d_n`, numbered from zero by the color simplifier.
-    Spenso(usize),
-}
-
-impl PrivateIndex {
-    /// The private index that `view` names, if any. `spenso_namespace` is the
-    /// namespace of Spenso's dummy variables.
-    fn from_view(view: AtomView<'_>, spenso_namespace: &str) -> Option<Self> {
-        match view {
-            AtomView::Fun(function)
-                if function.get_symbol() == GS.dummyaind || function.get_symbol() == GS.uvaind =>
-            {
-                // A malformed index is not a slot name that a product could
-                // contract, so only valid indices are renamed.
-                match Aind::try_from(view).ok()? {
-                    Aind::Dummy(number) => Some(Self::Dummy(number)),
-                    Aind::UVTerm(order, local) => Some(Self::UvTerm(order, local)),
-                    _ => None,
-                }
-            }
-            AtomView::Var(variable) => {
-                let symbol = variable.get_symbol();
-                if symbol.get_namespace() != spenso_namespace {
-                    return None;
-                }
-                let number = symbol
-                    .get_stripped_name()
-                    .strip_prefix("d_")?
-                    .parse()
-                    .ok()?;
-                let index = Self::Spenso(number);
-                // A name with leading zeros is a different variable.
-                (index.to_atom().as_view() == view).then_some(index)
-            }
-            _ => None,
-        }
-    }
-
-    fn to_atom(self) -> Atom {
-        match self {
-            Self::UvTerm(order, local) => Aind::UVTerm(order, local).into(),
-            Self::Dummy(number) => Aind::Dummy(number).into(),
-            Self::Spenso(number) => AbstractIndex::Dummy(number).into(),
-        }
-    }
-}
-
 impl Aind {
-    /// Renamings that keep the private indices of independently derived factors
-    /// apart before the factors are multiplied.
+    /// `atom` with every unscoped private index owned by `scope`.
     ///
-    /// Each item of `factors` lists the expressions of one factor. Private
-    /// indices are the dummies of tensor-network parses and of the color
-    /// simplifier, and integrated-UV tensor-reduction indices: a derivation
-    /// allocates them only for contractions inside its own expression. Every
-    /// allocator restarts its numbering per expression, so separately derived
-    /// factors reuse these names. Their unchanged product would contract
-    /// unrelated slots of different factors with each other.
+    /// Private indices are contractions that one derivation allocates inside
+    /// its own expression: GammaLoop dummies, renumbered by every
+    /// tensor-network parse, and Spenso dummies `d_n` of the color simplifier.
+    /// Each allocator restarts its numbering, so independently derived
+    /// expressions reuse these names, and multiplying them would contract
+    /// unrelated slots. A producer whose output is multiplied with other
+    /// graph pieces stamps it once with a scope symbol naming that producer:
+    /// the indices become [`Aind::ScopedDummy`] values numbered in first
+    /// occurrence order, skipping the numbers that `atom` already uses in
+    /// `scope`. Indices already scoped, and open graph indices, are kept;
+    /// `atom` is moved back unchanged and `scope` is not evaluated when `atom`
+    /// has no unscoped private index.
+    pub(crate) fn scope_private_indices(atom: Atom, scope: impl FnOnce() -> Symbol) -> Atom {
+        match Self::scope_private_indices_cow(&atom, scope) {
+            Cow::Owned(scoped) => scoped,
+            Cow::Borrowed(_) => atom,
+        }
+    }
+
+    /// Borrowing form of [`Aind::scope_private_indices`], which borrows
+    /// `atom` without allocating or evaluating `scope` when `atom` has no
+    /// unscoped private index.
+    #[must_use]
+    pub(crate) fn scope_private_indices_cow(
+        atom: &Atom,
+        scope: impl FnOnce() -> Symbol,
+    ) -> Cow<'_, Atom> {
+        let mut first_occurrences: Vec<Atom> = Vec::new();
+        atom.visitor(&mut |view| {
+            if is_unscoped_private_index(view) {
+                if first_occurrences
+                    .iter()
+                    .all(|index| index.as_view() != view)
+                {
+                    first_occurrences.push(view.to_owned());
+                }
+                return false;
+            }
+            !(matches!(view, AtomView::Fun(function) if function.get_symbol() == GS.dummyaind))
+        });
+        if first_occurrences.is_empty() {
+            return Cow::Borrowed(atom);
+        }
+        let scope = scope();
+        let mut occupied = BTreeSet::new();
+        atom.visitor(&mut |view| {
+            let AtomView::Fun(function) = view else {
+                return true;
+            };
+            if function.get_symbol() != GS.dummyaind {
+                return true;
+            }
+            if let Ok(Aind::ScopedDummy(owner, number)) = peek_dummy_aind(function)
+                && owner == scope
+            {
+                occupied.insert(number);
+            }
+            false
+        });
+        let free = (0..).filter(|number| !occupied.contains(number));
+        let renaming: BTreeMap<Atom, Atom> = first_occurrences
+            .into_iter()
+            .zip(free)
+            .map(|(index, number)| (index, Aind::ScopedDummy(scope, number).to_atom()))
+            .collect();
+        Cow::Owned(atom.replace_map(|view, _, out| {
+            if is_unscoped_private_index(view)
+                && let Some(scoped) = renaming.get(&view.to_owned())
+            {
+                **out = scoped.clone();
+            }
+        }))
+    }
+
+    /// Whether no private index, scoped or not, occurs in two of `factors`.
     ///
-    /// The first factor to use a name keeps it. Later factors receive fresh
-    /// names, renamed consistently across all of a factor's expressions: Spenso
-    /// dummies beyond every Spenso dummy, and other private indices as dummies
-    /// beyond every dummy of every factor. Open graph indices are never renamed.
-    /// The result has one, possibly empty, replacement list per factor.
-    pub(crate) fn disjoint_private_renamings<'a, F>(
-        factors: impl IntoIterator<Item = F>,
-    ) -> Vec<Vec<Replacement>>
+    /// Each factor lists its expressions. Products of independently derived
+    /// factors rely on this; it holds when each producer scoped its output.
+    pub(crate) fn private_indices_are_disjoint<'a, F>(factors: impl IntoIterator<Item = F>) -> bool
     where
         F: IntoIterator<Item = AtomView<'a>>,
     {
-        let spenso_namespace = Atom::from(AbstractIndex::Dummy(0))
-            .get_symbol()
-            .expect("Spenso names its dummies with variables")
-            .get_namespace();
-        let private_indices = factors
-            .into_iter()
-            .map(|atoms| {
-                let mut indices = BTreeSet::new();
-                for atom in atoms {
-                    atom.visitor(&mut |view| {
-                        let Some(index) = PrivateIndex::from_view(view, spenso_namespace) else {
-                            return true;
-                        };
-                        indices.insert(index);
-                        false
-                    });
-                }
-                indices
-            })
-            .collect::<Vec<_>>();
-
-        let (mut next_dummy, mut next_spenso) = (0, 0);
-        for index in private_indices.iter().flatten() {
-            match *index {
-                PrivateIndex::Dummy(number) => next_dummy = next_dummy.max(number + 1),
-                PrivateIndex::Spenso(number) => next_spenso = next_spenso.max(number + 1),
-                PrivateIndex::UvTerm(..) => {}
+        let mut seen = BTreeSet::new();
+        factors.into_iter().all(|factor| {
+            let mut indices = BTreeSet::new();
+            for atom in factor {
+                atom.visitor(&mut |view| {
+                    let private = match view {
+                        AtomView::Fun(function) if function.get_symbol() == GS.dummyaind => {
+                            peek_dummy_aind(function).is_ok_and(|index| index.is_dummy())
+                        }
+                        _ => is_unscoped_private_index(view),
+                    };
+                    if private {
+                        indices.insert(view.to_owned());
+                    }
+                    !private
+                });
             }
-        }
-        let mut used = BTreeSet::new();
-        private_indices
-            .into_iter()
-            .map(|indices| {
-                indices
-                    .into_iter()
-                    .filter(|index| !used.insert(*index))
-                    .map(|index| {
-                        // Keep color dummies in the form the color simplifier parses.
-                        let fresh = match index {
-                            PrivateIndex::Spenso(_) => {
-                                next_spenso += 1;
-                                PrivateIndex::Spenso(next_spenso - 1)
-                            }
-                            PrivateIndex::UvTerm(..) | PrivateIndex::Dummy(_) => {
-                                next_dummy += 1;
-                                PrivateIndex::Dummy(next_dummy - 1)
-                            }
-                        };
-                        Replacement::new(index.to_atom().to_pattern(), fresh.to_atom())
-                    })
-                    .collect()
-            })
-            .collect()
+            indices.into_iter().all(|index| seen.insert(index))
+        })
     }
 
-    /// `atom` with its private indices renamed apart from those of `others`.
+    /// One past the largest unscoped dummy number in `atom`, or zero if none
+    /// occurs.
     ///
-    /// Use this before multiplying `atom` with expressions derived
-    /// independently of it; see [`Self::disjoint_private_renamings`].
-    pub(crate) fn private_indices_apart<'a>(
-        atom: Atom,
-        others: impl IntoIterator<Item = AtomView<'a>>,
-    ) -> Atom {
-        let mut renamings = Self::disjoint_private_renamings([
-            others.into_iter().collect::<Vec<_>>(),
-            vec![atom.as_view()],
-        ]);
-        let renaming = renamings.pop().expect("one renaming list per factor");
-        if renaming.is_empty() {
-            atom
-        } else {
-            atom.replace_multiple(&renaming)
+    /// Every number from the result upwards is free, so callers may offset it
+    /// by any natural number. Inspection does not advance the process-wide
+    /// dummy counter.
+    pub(crate) fn next_free_dummy(atom: &Atom) -> usize {
+        let mut next = 0;
+        atom.visitor(&mut |view| {
+            if let AtomView::Fun(function) = view
+                && function.get_symbol() == GS.dummyaind
+                && let Ok(Aind::Dummy(number)) = peek_dummy_aind(function)
+            {
+                next = next.max(number + 1);
+            }
+            true
+        });
+        next
+    }
+}
+
+/// Whether `view` names a private index that no producer has scoped yet,
+/// without advancing the process-wide dummy counter.
+fn is_unscoped_private_index(view: AtomView<'_>) -> bool {
+    match view {
+        AtomView::Fun(function) if function.get_symbol() == GS.dummyaind => {
+            // A malformed index is not a slot name that a product could
+            // contract, so only valid dummies are scoped.
+            matches!(peek_dummy_aind(function), Ok(Aind::Dummy(_)))
         }
+        AtomView::Var(variable) => variable
+            .get_symbol()
+            .get_stripped_name()
+            .strip_prefix("d_")
+            .and_then(|number| number.parse().ok())
+            // A name with leading zeros, or outside Spenso, is another variable.
+            .is_some_and(|number| Atom::from(AbstractIndex::Dummy(number)).as_view() == view),
+        _ => false,
     }
 }
 
@@ -348,23 +349,13 @@ impl std::fmt::Display for Aind {
                     write!(f, "d{}", v)
                 }
             }
-            Aind::UVTerm(i, j) => {
+            Aind::ScopedDummy(scope, i) => {
                 if f.sign_minus() {
-                    write!(
-                        f,
-                        "u{}.{}",
-                        to_subscript(*i as isize),
-                        to_subscript(*j as isize)
-                    )
+                    write!(f, "d{scope}{}", to_subscript(*i as isize))
                 } else if f.sign_plus() {
-                    write!(
-                        f,
-                        "u{}'{}",
-                        to_superscript(*i as isize),
-                        to_superscript(*j as isize)
-                    )
+                    write!(f, "d{scope}{}", to_superscript(*i as isize))
                 } else {
-                    write!(f, "u{}-{}", i, j)
+                    write!(f, "d{scope}-{i}")
                 }
             }
         }
@@ -383,13 +374,7 @@ impl From<Aind> for Atom {
             Aind::Symbol(s) => Atom::var(s),
             Aind::Dummy(i) => function!(GS.dummyaind, i as i64),
             Aind::Normal(i) => Atom::num(i as i64),
-            Aind::UVTerm(i, j) => {
-                if j != 0 {
-                    function!(GS.uvaind, i as i64, j as i64)
-                } else {
-                    function!(GS.uvaind, i as i64)
-                }
-            }
+            Aind::ScopedDummy(scope, i) => function!(GS.dummyaind, Atom::var(scope), i as i64),
             Aind::Edge(i, j) => {
                 if j != 0 {
                     function!(GS.edgeaind, i as i64, j as i64)
@@ -414,9 +399,9 @@ impl From<Aind> for Atom {
         }
     }
 }
-impl<'a> From<Aind> for symbolica::atom::AtomOrView<'a> {
+impl<'a> From<Aind> for AtomOrView<'a> {
     fn from(value: Aind) -> Self {
-        symbolica::atom::AtomOrView::Atom(Atom::from(value))
+        AtomOrView::Atom(Atom::from(value))
     }
 }
 
@@ -446,24 +431,39 @@ fn parse_natural_i64(arg: AtomView<'_>) -> Result<i64, AindError> {
     }
 }
 
-fn parse_dummy_aind(f: FunView<'_>) -> Result<Aind, AindError> {
-    if f.get_nargs() != 1 {
-        return Err(AindError::ParsingError(format!(
-            "Incorrect number of arguments to dummy:{}",
-            f.as_view()
-        )));
-    }
+/// Parse a `dummy(...)` index view without updating [`DUMMYCOUNTER`].
+fn peek_dummy_aind(f: FunView<'_>) -> Result<Aind, AindError> {
+    let mut args = f.iter();
+    let (scope, index) = match (args.next(), args.next(), args.next()) {
+        (Some(index), None, _) => (None, index),
+        (Some(AtomView::Var(scope)), Some(index), None) => (Some(scope.get_symbol()), index),
+        _ => {
+            return Err(AindError::ParsingError(format!(
+                "Incorrect number of arguments to dummy:{}",
+                f.as_view()
+            )));
+        }
+    };
+    let i = usize::try_from(parse_natural_i64(index)?)
+        .map_err(|e| AindError::NotIndex(e.to_string()))?;
+    Ok(match scope {
+        Some(scope) => Aind::ScopedDummy(scope, i),
+        None => Aind::Dummy(i),
+    })
+}
 
-    let i = parse_natural_i64(f.iter().next().unwrap())?;
-    let i = usize::try_from(i).map_err(|e| AindError::NotIndex(e.to_string()))?;
-    DUMMYCOUNTER.fetch_max(i + 1, Ordering::Relaxed);
-    crate::debug_tags!(#generation, #inspect;
-        aind_dummy = true,
-        stage = "aind_parse_dummy",
-        dummy_index = i,
-        "Aind dummy parsed"
-    );
-    Ok(Aind::Dummy(i))
+fn parse_dummy_aind(f: FunView<'_>) -> Result<Aind, AindError> {
+    let parsed = peek_dummy_aind(f)?;
+    if let Aind::Dummy(i) = parsed {
+        record_parsed_dummy(&DUMMYCOUNTER, i);
+        crate::debug_tags!(#generation, #inspect;
+            aind_dummy = true,
+            stage = "aind_parse_dummy",
+            dummy_index = i,
+            "Aind dummy parsed"
+        );
+    }
+    Ok(parsed)
 }
 
 fn parse_u16_aind_pair(f: FunView<'_>, name: &str) -> Result<(u16, u16), AindError> {
@@ -509,9 +509,6 @@ impl TryFrom<AtomView<'_>> for Aind {
                 } else if symbol == GS.vertexaind {
                     let (i, j) = parse_u16_aind_pair(f, "vertex")?;
                     Ok(Aind::Vertex(i, j))
-                } else if symbol == GS.uvaind {
-                    let (i, j) = parse_u16_aind_pair(f, "uv")?;
-                    Ok(Aind::UVTerm(i, j))
                 } else {
                     Err(AindError::NotIndex(format!(
                         "Invalid index {}",
@@ -527,81 +524,145 @@ impl TryFrom<AtomView<'_>> for Aind {
 
 #[cfg(test)]
 mod tests {
-    use idenso::{
-        dirac::AGS,
-        shorthands::metric::MetricSimplifier,
-        tensor::{SymbolicNetParse, SymbolicTensor},
-    };
-    use spenso::{
-        network::parsing::{ParseSettings, ShadowedStructure, StructureFromAtom},
-        structure::TensorStructure,
-    };
-    use symbolica::{
-        atom::{Atom, AtomCore, FunctionBuilder},
-        function, parse_lit, symbol,
-    };
+    use idenso::dirac::AGS;
+    use idenso::shorthands::metric::MetricSimplifier;
+    use idenso::tensor::{SymbolicNetParse, SymbolicTensor};
+    use spenso::network::parsing::{ParseSettings, ShadowedStructure, StructureFromAtom};
+    use spenso::structure::TensorStructure;
+    use symbolica::atom::{Atom, AtomCore};
+    use symbolica::{function, parse_lit, symbol};
+
+    use idenso::IndexTooling;
+    use idenso::representations::{Bispinor, ColorAdjoint};
+    use spenso::structure::representation::{Minkowski, RepName};
 
     use crate::initialisation::initialise;
 
     use super::*;
 
     #[test]
-    fn disjoint_private_renamings_rename_only_reused_private_indices() {
+    fn scope_private_indices_stamps_only_unscoped_private_indices() {
         initialise().unwrap();
 
-        let mink = |index: Atom| function!(symbol!("spenso::mink"), 4i64, index);
-        let coad = |index: Atom| function!(symbol!("spenso::coad"), 8i64, index);
-        let tensor = |name: &str, slots: &[Atom]| {
-            let mut tensor = FunctionBuilder::new(symbol!(name));
-            for slot in slots {
-                tensor = tensor.add_arg(slot.as_view());
-            }
-            tensor.finish()
+        let scope = symbol!("aind_test::producer");
+        let other = symbol!("aind_test::other_producer");
+        let mink = |index: Aind| Minkowski {}.new_rep(4).to_symbolic([index.to_atom()]);
+        let coad = |index: AbstractIndex| ColorAdjoint {}.new_rep(8).to_symbolic([index.into()]);
+        let open = mink(Aind::Hedge(3, 0));
+        let already_scoped = mink(Aind::ScopedDummy(other, 0));
+        let expression = |momentum: Atom, color: Atom| {
+            function!(
+                symbol!("aind_test::first"),
+                &momentum,
+                &color,
+                &already_scoped,
+                &open
+            ) * function!(symbol!("aind_test::second"), momentum, color)
         };
-        let dummy = |number| mink(Aind::Dummy(number).into());
-        let color = |number| coad(AbstractIndex::Dummy(number).into());
-        let open = mink(Aind::Hedge(3, 0).into());
-        let first = tensor(
-            "first",
-            &[
-                dummy(1_000_000),
-                mink(Aind::UVTerm(1, 1).into()),
-                color(0),
-                open.clone(),
-            ],
-        );
-        // The shared open index belongs to the product; the private names only
-        // coincide because both factors were derived separately.
-        let second = tensor(
-            "second",
-            &[
-                dummy(1_000_000),
-                mink(Aind::UVTerm(1, 1).into()),
-                dummy(1_000_003),
-                color(0),
-                color(2),
-                open.clone(),
-            ],
-        );
-        let separated = tensor(
-            "second",
-            &[
-                dummy(1_000_005),
-                dummy(1_000_004),
-                dummy(1_000_003),
-                color(3),
-                color(2),
-                open,
-            ],
-        );
+        let input = expression(mink(Aind::Dummy(1_000_000)), coad(AbstractIndex::Dummy(0)));
 
-        let renamings = Aind::disjoint_private_renamings([[first.as_view()], [second.as_view()]]);
+        let stamped = Aind::scope_private_indices(input, || scope);
 
-        assert!(renamings[0].is_empty());
-        assert_eq!(second.replace_multiple(&renamings[1]), separated);
+        let scoped = [0, 1].map(|index| mink(Aind::ScopedDummy(scope, index)));
+        let color_scoped = [0, 1].map(|index| {
+            ColorAdjoint {}
+                .new_rep(8)
+                .to_symbolic([Aind::ScopedDummy(scope, index).to_atom()])
+        });
+        // First-occurrence order fixes which private index is numbered first.
+        assert!(
+            [
+                expression(scoped[0].clone(), color_scoped[1].clone()),
+                expression(scoped[1].clone(), color_scoped[0].clone()),
+            ]
+            .contains(&stamped),
+            "{stamped}"
+        );
+        assert!(matches!(
+            Aind::scope_private_indices_cow(&stamped, || {
+                panic!("already-scoped expressions must not evaluate the scope builder")
+            }),
+            Cow::Borrowed(_)
+        ));
+        assert!(matches!(
+            Aind::scope_private_indices_cow(&open, || {
+                panic!("open indices must not evaluate the scope builder")
+            }),
+            Cow::Borrowed(_)
+        ));
+    }
+
+    #[test]
+    fn scope_private_indices_skips_numbers_the_scope_already_owns() {
+        initialise().unwrap();
+
+        let scope = symbol!("aind_test::occupied_producer");
+        let mink = |index: Aind| Minkowski {}.new_rep(4).to_symbolic([index.to_atom()]);
+        let coad = |index: Atom| ColorAdjoint {}.new_rep(8).to_symbolic([index]);
+        let contraction = |name: &str, slot: Atom| {
+            function!(symbol!(&format!("aind_test::{name}_left")), &slot)
+                * function!(symbol!(&format!("aind_test::{name}_right")), slot)
+        };
+        let input = contraction("owned", mink(Aind::ScopedDummy(scope, 0)))
+            * contraction("gammaloop", mink(Aind::Dummy(9)))
+            * contraction("spenso", coad(AbstractIndex::Dummy(0).into()));
+
+        let stamped = Aind::scope_private_indices(input, || scope);
+
+        let reference = |gammaloop: usize, spenso: usize| {
+            contraction("owned", mink(Aind::ScopedDummy(scope, 0)))
+                * contraction("gammaloop", mink(Aind::ScopedDummy(scope, gammaloop)))
+                * contraction("spenso", coad(Aind::ScopedDummy(scope, spenso).to_atom()))
+        };
+        // The two unscoped indices take the free numbers in first occurrence
+        // order, never the number the scope already owns.
+        assert!(
+            [reference(1, 2), reference(2, 1)].contains(&stamped),
+            "{stamped}"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "dummy index counter exhausted representable range")]
+    fn parsed_maximum_dummy_exhausts_counter_instead_of_reusing_it() {
+        let counter = AtomicUsize::new(0);
+        let penultimate = (i64::MAX - 1) as usize;
+        let maximum = i64::MAX as usize;
+        record_parsed_dummy(&counter, penultimate);
+        record_parsed_dummy(&counter, maximum);
+        let _ = allocate_dummy_from(&counter);
+    }
+
+    #[test]
+    fn scoped_dummies_round_trip_and_canonize_as_dummies() {
+        initialise().unwrap();
+
+        let scoped = Aind::ScopedDummy(symbol!("aind_test::round_trip"), 3);
+        assert!(scoped.is_dummy());
+        assert_eq!(Aind::try_from(scoped.to_atom().as_view()).unwrap(), scoped);
         assert_eq!(
-            Aind::private_indices_apart(second, [first.as_view()]),
-            separated
+            scoped,
+            Aind::ScopedDummy(symbol!("aind_test::round_trip"), 3)
+        );
+        assert_ne!(scoped, Aind::ScopedDummy(symbol!("aind_test::other"), 3));
+
+        let slashed = |index: Aind| {
+            let mu = Minkowski {}.new_rep(4).to_symbolic([index.to_atom()]);
+            function!(GS.emr_mom, 1, &mu)
+                * function!(
+                    AGS.gamma,
+                    Bispinor {}
+                        .new_rep(4)
+                        .to_symbolic([Aind::Hedge(0, 0).to_atom()]),
+                    Bispinor {}
+                        .new_rep(4)
+                        .to_symbolic([Aind::Hedge(1, 0).to_atom()]),
+                    mu
+                )
+        };
+        assert_eq!(
+            slashed(scoped).canonize(Aind::Dummy).unwrap(),
+            slashed(Aind::Dummy(5)).canonize(Aind::Dummy).unwrap()
         );
     }
 
@@ -617,8 +678,10 @@ mod tests {
             (Aind::Hedge(3, 4), function!(GS.hedgeaind, 3i64, 4i64)),
             (Aind::Vertex(5, 0), function!(GS.vertexaind, 5i64)),
             (Aind::Vertex(5, 6), function!(GS.vertexaind, 5i64, 6i64)),
-            (Aind::UVTerm(7, 0), function!(GS.uvaind, 7i64)),
-            (Aind::UVTerm(7, 8), function!(GS.uvaind, 7i64, 8i64)),
+            (
+                Aind::ScopedDummy(symbol!("aind_test::scope"), 8),
+                function!(GS.dummyaind, symbol!("aind_test::scope"), 8i64),
+            ),
         ];
 
         for (expected, atom) in cases {
