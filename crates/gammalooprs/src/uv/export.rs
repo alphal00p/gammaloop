@@ -689,8 +689,10 @@ mod tests {
 
         let exported = node_expression_to_dot(&graph, "uv_typst", term).unwrap();
 
-        assert!(exported.dot.contains(r#"full_num = "op(\"Tr\")(1)";"#));
-        assert!(!exported.dot.contains("gammalooprs::Truncate"));
+        let parsed: DotGraph = DotGraph::from_string(&exported.dot).unwrap();
+        let full_num = &parsed.global_data.statements["full_num"];
+        assert_eq!(full_num, r#"op("Tr")(1)"#);
+        assert!(!full_num.contains("gammalooprs::Truncate"));
         assert!(!exported.dot.contains("forest_provenance"));
     }
 
