@@ -6,6 +6,9 @@ use kurbo::{flatten, BezPath, Line, ParamCurveNearest, PathEl, Point, Rect, Shap
 
 type Sample = (i64, i64);
 
+pub(super) const RESOLUTION_ERROR: &str =
+    "hull is too thin for its drawing extent; increase hull_radius or select a smaller region";
+
 // Every marching-square crossing is indexed by the doubled integer position
 // of its grid-edge midpoint. Adjacent cells therefore join exactly.
 pub(super) fn union(
@@ -14,8 +17,6 @@ pub(super) fn union(
     radius: f64,
 ) -> Result<BezPath, String> {
     const MAX_CELLS_PER_SIDE: f64 = 768.0;
-    const RESOLUTION_ERROR: &str =
-        "hull is too thin for its drawing extent; increase hull_radius or select a smaller region";
     let mut bounds = vertices
         .iter()
         .copied()
@@ -39,7 +40,7 @@ pub(super) fn union(
         .into_iter()
         .map(f64::abs)
         .fold(0.0, f64::max);
-    if !bounds.is_finite() || !step.is_finite() || max_coordinate / step >= (i64::MAX / 4) as f64 {
+    if !bounds.is_finite() || !step.is_finite() || max_coordinate / step >= (1_i64 << 49) as f64 {
         return Err(RESOLUTION_ERROR.into());
     }
     let left = (bounds.x0 / step).floor() as i64 - 1;
@@ -154,20 +155,16 @@ pub(super) fn union(
             }
         }
         if at == start && samples.len() >= 3 {
-            // Soften the grid staircase before simplifying the closed path.
+            // Soften the grid staircase. The SVG writer can omit collinear
+            // vertices once it knows the rounded canvas coordinates.
             let count = samples.len();
-            let softened: Vec<_> = (0..count)
-                .map(|i| samples[i].midpoint(samples[(i + 1) % count]))
-                .collect();
-            let simplified = simplify(&softened, (radius / 12.0).min(0.03));
-            let contour = if simplified.len() < 3 {
-                &softened
-            } else {
-                &simplified
-            };
-            result.move_to(contour[0]);
-            for &point in &contour[1..] {
-                result.line_to(point);
+            for (index, point) in samples.iter().enumerate() {
+                let softened = point.midpoint(samples[(index + 1) % count]);
+                if index == 0 {
+                    result.move_to(softened);
+                } else {
+                    result.line_to(softened);
+                }
             }
             result.close_path();
         }
@@ -178,47 +175,11 @@ pub(super) fn union(
     Ok(result)
 }
 
-/// Ramer–Douglas–Peucker on both halves of a closed contour. The tolerance
-/// removes collinear samples as well as deviations below 0.4 pt.
-fn simplify(points: &[Point], tolerance: f64) -> Vec<Point> {
-    let mut keep = vec![false; points.len() + 1];
-    let middle = points.len() / 2;
-    let mut spans = vec![(0, middle), (middle, points.len())];
-    keep[0] = true;
-    keep[middle] = true;
-    let limit = tolerance * tolerance;
-    while let Some((start, end)) = spans.pop() {
-        let a = points[start];
-        let b = points[end % points.len()];
-        let chord = Line::new(a, b);
-        let mut furthest = None;
-        let mut max_distance = limit;
-        for (index, &point) in points.iter().enumerate().take(end).skip(start + 1) {
-            let distance = if a == b {
-                a.distance_squared(point)
-            } else {
-                chord.nearest(point, tolerance).distance_sq
-            };
-            if distance > max_distance {
-                max_distance = distance;
-                furthest = Some(index);
-            }
-        }
-        if let Some(index) = furthest {
-            keep[index] = true;
-            spans.extend([(start, index), (index, end)]);
-        }
-    }
-    points
-        .iter()
-        .zip(keep)
-        .filter_map(|(&point, keep)| keep.then_some(point))
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
-    use kurbo::{Circle, PathEl};
+    use kurbo::{Circle, ParamCurveNearest, PathEl, PathSeg, Vec2};
+
+    use super::super::UNIT;
 
     use super::*;
 
@@ -235,6 +196,59 @@ mod tests {
         );
         assert!(region.bounding_box().contains(Point::new(2.35, 0.0)));
     }
+    #[test]
+    fn hull_island_inside_a_tube_preserves_the_hole() {
+        let center = Point::new(0.003, 0.005);
+        let tube = Circle::new(center, 2.0).to_path(0.0001);
+        let radius = 4.2 / UNIT;
+        let angle = 39_f64.to_radians();
+        let island = center + Vec2::new(angle.cos(), angle.sin()) * (2.0 - 2.0 * radius - 0.018);
+        let hull = union(&[&tube], &[island], radius).unwrap();
+        let mut rings = Vec::new();
+        let mut ring = BezPath::new();
+        for element in hull {
+            ring.push(element);
+            if element == PathEl::ClosePath {
+                rings.push(ring);
+                ring = BezPath::new();
+            }
+        }
+        assert_eq!(rings.len(), 3);
+        for (index, a) in rings.iter().enumerate() {
+            for b in &rings[..index] {
+                for segment in a.segments() {
+                    let PathSeg::Line(line) = segment else {
+                        panic!("hulls use line segments");
+                    };
+                    assert!(b
+                        .segments()
+                        .all(|segment| segment.intersect_line(line).is_empty()));
+                }
+            }
+        }
+        let witness = Point::new(16.90222058823529 / UNIT, 14.943926470588238 / UNIT);
+        assert_eq!(
+            rings.iter().filter(|ring| ring.contains(witness)).count(),
+            2
+        );
+    }
+
+    #[test]
+    fn hull_outline_preserves_clearance_from_nonmember_ink() {
+        let tube = Circle::new((0.003, 0.005), 2.0).to_path(0.0001);
+        let hull = union(&[&tube], &[Point::new(4.0, 1.0)], 4.2 / UNIT).unwrap();
+        let center = Point::new(-18.67131753365224 / UNIT, 10.65687952542826 / UNIT);
+        let distance = hull
+            .segments()
+            .map(|segment| segment.nearest(center, 1e-9).distance_sq)
+            .fold(f64::INFINITY, f64::min)
+            .sqrt()
+            * UNIT;
+        assert!((distance - 1.2796154531954695).abs() < 1e-9, "{distance}");
+        // Even the ends of the 0.1 pt non-member segment clear both strokes.
+        assert!(distance - 0.05 > (1.1 + 1.0) / 2.0);
+    }
+
     #[test]
     fn hull_diagonal_tubes_stay_connected_or_report_the_resolution_limit() {
         for (length, radius, resolvable) in [

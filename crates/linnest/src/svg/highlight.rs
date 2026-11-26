@@ -353,12 +353,12 @@ impl HullOptions {
     /// Validate the base radius and nesting step before resolving highlights.
     ///
     /// # Errors
-    /// Returns a message if the base radius is outside (0, 1000] points or
+    /// Returns a message if the base radius is outside [0.001, 1000] points or
     /// the nesting step is negative or non-finite.
     pub fn validate(self) -> Result<(), &'static str> {
         if !valid_radius(self.radius) || !self.step.is_finite() || self.step < 0.0 {
             return Err(
-                "hull_radius must be in (0, 1000] pt and hull_step must be finite and nonnegative",
+                "hull_radius must be in [0.001, 1000] pt and hull_step must be finite and nonnegative",
             );
         }
         Ok(())
@@ -366,7 +366,7 @@ impl HullOptions {
 }
 
 fn valid_radius(radius: f64) -> bool {
-    radius > 0.0 && radius <= 1000.0
+    (0.001..=1000.0).contains(&radius)
 }
 
 impl HullRegion {
@@ -564,7 +564,7 @@ impl Scene {
     /// Check effective radii, including nesting and the extra counterterm radius.
     ///
     /// # Errors
-    /// Returns a message when a resolved radius is outside (0, 1000] points.
+    /// Returns a message when a resolved radius is outside [0.001, 1000] points.
     pub fn validate_hull_radii(&self) -> Result<(), &'static str> {
         if self
             .highlights
@@ -572,7 +572,7 @@ impl Scene {
             .iter()
             .any(|region| !valid_radius(region.radius))
         {
-            return Err("effective hull radius must be in (0, 1000] pt after nesting and counterterm padding; reduce hull_radius or hull_step");
+            return Err("effective hull radius must be in [0.001, 1000] pt after nesting and counterterm padding; reduce hull_radius or hull_step");
         }
         Ok(())
     }

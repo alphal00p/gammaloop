@@ -324,11 +324,11 @@ impl Scene {
             }
         }
         let Some(mut run) = run else {
-            return Ok(Drawing::new(self, typeset, &laid.unwrap())?.svg(typeset));
+            return Drawing::new(self, typeset, &laid.unwrap())?.svg(typeset);
         };
         let drawing = Drawing::new(self, typeset, &Laid::new(&run)?)?;
         if !self.label_feedback {
-            return Ok(drawing.svg(typeset));
+            return drawing.svg(typeset);
         }
         // Keep the least-overlapping drawing; later passes may not improve it.
         // A rejected pass still supplies the next pass's pinned labels.
@@ -356,7 +356,7 @@ impl Scene {
                 rejected = Some(drawing);
             }
         }
-        Ok(best.svg(typeset))
+        best.svg(typeset)
     }
 }
 
@@ -530,7 +530,7 @@ struct Drawing {
 
 impl Drawing {
     /// Serialize only the selected feedback pass, preserving painting order.
-    fn svg(&self, typeset: &Typeset) -> String {
+    fn svg(&self, typeset: &Typeset) -> Result<String, String> {
         output::svg(typeset, &self.layers, &self.targets, self.recolour_stamp)
     }
 
@@ -1575,6 +1575,48 @@ mod tests {
     }
 
     #[test]
+    fn recolour_stamp_bounds_enclose_scaled_circles_and_rectangles() {
+        let mut scene = bubble(false);
+        scene.nodes[1].rectangular = true;
+        let mut labels = typeset(&scene);
+        labels.title.as_mut().unwrap().metrics.width = 3200.0;
+        let region = HighlightRegion::new([].into(), [0].into(), HighlightStyle::Treated);
+        scene.apply_highlights_with_overlap(
+            &[region],
+            &HighlightPalette::new("#ffd166"),
+            true,
+            HighlightOverlap::Recolour,
+        );
+        let svg = scene.render(&labels).unwrap();
+        let doc = Document::parse(&svg).unwrap();
+        let canvas: Vec<f64> = doc
+            .root_element()
+            .attribute("viewBox")
+            .unwrap()
+            .split_whitespace()
+            .map(|value| value.parse().unwrap())
+            .collect();
+        let nodes: Vec<_> = doc
+            .descendants()
+            .filter(|node| node.has_attribute("data-linnet-node"))
+            .collect();
+        assert_eq!(nodes.len(), 2);
+        for node in nodes {
+            let value = |key| node.attribute(key).unwrap().parse::<f64>().unwrap();
+            let half_stroke = value("stroke-width") / 2.0;
+            let (left, top, right, bottom) = if node.has_tag_name("circle") {
+                let (x, y, r) = (value("cx"), value("cy"), value("r"));
+                (x - r, y - r, x + r, y + r)
+            } else {
+                let (x, y) = (value("x"), value("y"));
+                (x, y, x + value("width"), y + value("height"))
+            };
+            assert!(left >= half_stroke && top >= half_stroke);
+            assert!(right + half_stroke <= canvas[2] && bottom + half_stroke <= canvas[3]);
+        }
+    }
+
+    #[test]
     fn highlight_defaults_and_reset_restore_the_unstyled_scene() {
         let mut scene = bubble(false);
         let labels = typeset(&scene);
@@ -2277,7 +2319,7 @@ mod tests {
             let mut run = ImpredRun::seeded(graph, &Value::Object(scene.layout.clone())).unwrap();
             let mut drawing = Drawing::new(scene, typeset, &Laid::new(&run).unwrap()).unwrap();
             let mut scores = vec![drawing.score()];
-            let (mut best, mut svg) = (drawing.score(), drawing.svg(typeset));
+            let (mut best, mut svg) = (drawing.score(), drawing.svg(typeset).unwrap());
             for _ in 0..FEEDBACK_PASSES {
                 if drawing.overlaps.0 == 0 {
                     break;
@@ -2292,7 +2334,7 @@ mod tests {
                     })
                     .unwrap();
                 drawing = Drawing::new(scene, typeset, &Laid::new(&run).unwrap()).unwrap();
-                let rendered = drawing.svg(typeset);
+                let rendered = drawing.svg(typeset).unwrap();
                 scores.push(drawing.score());
                 if drawing.score() < best {
                     best = drawing.score();

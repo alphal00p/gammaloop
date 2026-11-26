@@ -121,7 +121,7 @@ impl PyDiagramStyle {
     /// miniature : bool, optional
     ///     Default to recolouring and increase ghost visibility for small stamps.
     /// hull_radius : float or None, optional
-    ///     Innermost hull radius in points, in (0, 1000]. Defaults to 4.2.
+    ///     Innermost hull radius in points, in [0.001, 1000]. Defaults to 4.2.
     ///     Effective radii including nesting and counterterm padding must
     ///     also be in this range. Thin hulls on long regions may require a larger radius.
     /// hull_step : float or None, optional

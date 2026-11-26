@@ -729,21 +729,20 @@ for radius, step, layers_to_draw in (
             style=fk.DiagramStyle(hull_radius=radius, hull_step=step),
         )
     except ValueError as error:
-        assert "(0, 1000] pt" in str(error)
+        assert "[0.001, 1000] pt" in str(error)
     else:
         raise AssertionError("invalid effective radius must fail before SVG generation")
-for radius in (0.01, 0.000001):
-    view = basketball.render(
-        highlight=(inner, "treated"),
-        overlap="hulls",
-        style=fk.DiagramStyle(hull_radius=radius, show_particle=False),
-    )
-    try:
-        paths = ET.fromstring(view.to_svg()).findall(".//*[@data-linnet-hull]/{*}path")
-    except RuntimeError as error:
-        assert "increase hull_radius or select a smaller region" in str(error)
-    else:
-        assert len(paths) == 1 and paths[0].get("d").count("M") == 1
+view = basketball.render(
+    highlight=(inner, "treated"),
+    overlap="hulls",
+    style=fk.DiagramStyle(hull_radius=0.01, show_particle=False),
+)
+try:
+    paths = ET.fromstring(view.to_svg()).findall(".//*[@data-linnet-hull]/{*}path")
+except RuntimeError as error:
+    assert "increase hull_radius or select a smaller region" in str(error)
+else:
+    assert len(paths) == 1 and paths[0].get("d").count("M") == 1
 assert (
     ET.fromstring(
         basketball.render(
@@ -763,3 +762,15 @@ for owner, selections in owners:
     else:
         raise AssertionError("a contracted layer must use the treated paint")
 print("installed highlight review regressions passed")
+
+# A vertex-only layer could previously survive layout but round to zero area.
+try:
+    basketball.render(
+        highlight=(basketball.subgraph(nodes=[0]), "treated"),
+        overlap="hulls",
+        style=fk.DiagramStyle(hull_radius=0.000001),
+    )
+except ValueError as error:
+    assert "[0.001, 1000] pt" in str(error)
+else:
+    raise AssertionError("an unserializable vertex-only hull must be rejected")
