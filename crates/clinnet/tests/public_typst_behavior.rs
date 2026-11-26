@@ -199,6 +199,23 @@ fn compiled_linnest_bands_have_distinct_carriers_and_segmented_rings() {
     );
 }
 
+#[test]
+fn compiled_linnest_hull_counterterm_retains_the_filled_region_and_ink() {
+    let (base, renderer) = staged(&[]);
+    let source = include_str!("resources/feynkit-hull-counterterm.typ");
+    let svg = render(&base, &renderer, "feynkit-hull-counterterm.typ", source);
+    // Typst embeds the computed vector image; no browser mask or recomputed
+    // layer geometry is involved. The source fixture carries the filled
+    // even-odd contour, normal ink, ghost opacity and vector circled cross.
+    assert!(source.contains("fill-rule=\\\"evenodd"));
+    assert!(source.contains("fill-opacity=\\\"0.22"));
+    assert!(source.contains("opacity=\\\"0.35"));
+    assert!(source.contains(r#"data-scheme=\"on-shell"#));
+    assert!(source.contains("data-linnet-paper="));
+    assert!(source.contains("data-linnet-counterterm="));
+    assert!(svg.contains("<image") && svg.contains("image/svg+xml"));
+}
+
 fn translation(value: &str) -> (f64, f64) {
     let mut coordinates = value
         .strip_prefix("translate(")

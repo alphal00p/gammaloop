@@ -314,7 +314,7 @@ def stroke_stacks(svg):
 
 
 basketball_svg = basketball.render(
-    highlight=layers, style=fk.DiagramStyle(show_particle=False)
+    highlight=layers, style=fk.DiagramStyle(show_particle=False), overlap="casings"
 ).to_svg()
 stacks = [stack for stack in stroke_stacks(basketball_svg) if len(stack) == 3]
 assert stacks
@@ -383,7 +383,7 @@ if has_linnet:
 for owner, selections in owners:
 
     def svg(highlight):
-        return owner.render(highlight=highlight).to_svg()
+        return owner.render(highlight=highlight, overlap="casings").to_svg()
 
     assert svg((selections[-1], "treated")) == svg([(selections[-1], "treated")])
     assert svg([selections[-1]]) == svg(selections[-1])
@@ -502,3 +502,97 @@ if has_linnet:
     svg = generic.to_svg(highlight=[generic_inner] * 2, overlap="bands")
     assert len(svg_paths_at_width(svg, "2.4")) == 4
 print("installed parallel band checks passed")
+
+# Reading size chooses H1; a stamp chooses plain recolouring.
+hulls_svg = basketball.render(highlight=layers, style=legacy_style).to_svg()
+assert len(ET.fromstring(hulls_svg).findall(".//*[@data-linnet-hull='true']")) == 3
+stamp = basketball.render(
+    highlight=layers, style=fk.DiagramStyle(show_particle=False, miniature=True)
+).to_svg()
+assert "data-linnet-hull" not in stamp
+assert any(
+    element.get("stroke") == "#e4504f" for element in ET.fromstring(stamp).iter()
+)
+assert (
+    len(
+        ET.fromstring(basketball.render(highlight=[outer] * 5).to_svg()).findall(
+            ".//*[@data-linnet-hull='true']"
+        )
+    )
+    == 5
+)
+
+label = 'γ₂ & "scheme" <local>'
+description = "MS-bar & on-shell"
+ct_layers = [
+    (outer, "acted-on"),
+    (
+        inner,
+        {
+            "contracted": True,
+            "label": label,
+            "description": description,
+        },
+    ),
+]
+ct = basketball.render(highlight=ct_layers, style=legacy_style).to_svg()
+root = ET.fromstring(ct)
+for key in ("hull", "counterterm"):
+    tagged = root.find(f".//*[@data-linnet-{key}='true'][@data-description]")
+    if key == "hull":
+        tagged = root.find(".//*[@data-linnet-hull='true'][@data-contracted='true']")
+    assert tagged.get("data-label") == label
+    assert tagged.get("data-description") == description
+    assert tagged.find("{*}title").text == f"{label} — {description}"
+assert root.find(".//*[@data-linnet-ghost='true']").get("opacity") == "0.35"
+ct_stamp = basketball.render(
+    highlight=ct_layers, style=fk.DiagramStyle(show_particle=False, miniature=True)
+).to_svg()
+assert (
+    ET.fromstring(ct_stamp).find(".//*[@data-linnet-ghost='true']").get("opacity")
+    == "0.62"
+)
+assert fixture_linnest(basketball, highlight=ct_layers).count("fill-rule") >= 2
+print("installed H1 hull and CT2 counterterm checks passed")
+
+mixed = fk.FeynmanDiagram.from_dot(
+    fk.Model.qcd(),
+    """digraph qse3 {
+        i [style=invis]; o [style=invis];
+        i -> a [particle="d"]; a -> b [particle="d"]; b -> o [particle="d"];
+        a -> c [particle="g"]; c -> d [particle="ghG"]; d -> c [particle="ghG"];
+        d -> e [particle="g"]; e -> f [particle="u"]; f -> e [particle="u"];
+        f -> b [particle="g"];
+    }""",
+)
+ms_bar = mixed.filter(edge=lambda edge: edge.particle_name == "ghG")
+on_shell = mixed.filter(edge=lambda edge: edge.particle_name == "u")
+mixed_layers = [
+    (ms_bar, {"contracted": True, "scheme": "MS-bar", "label": "γ₁"}),
+    (on_shell, {"contracted": True, "scheme": "on-shell", "label": "γ₂"}),
+]
+for miniature in (False, True):
+    source = mixed.render(
+        highlight=mixed_layers,
+        style=fk.DiagramStyle(show_particle=False, miniature=miniature),
+    ).to_svg()
+    root = ET.fromstring(source)
+    for scheme, fill, cross in (
+        ("MS-bar", "#ffffff", "#e4504f"),
+        ("on-shell", "#e4504f", "#ffffff"),
+    ):
+        glyph = root.find(
+            f".//*[@data-linnet-counterterm='true'][@data-scheme='{scheme}']"
+        )
+        assert glyph.find("{*}circle").get("fill") == fill
+        assert glyph.find("{*}path").get("stroke") == cross
+        assert glyph.find("{*}title").text.endswith(scheme)
+        hull = root.find(f".//*[@data-linnet-hull='true'][@data-scheme='{scheme}']")
+        assert hull.find("{*}title").text.endswith(scheme)
+try:
+    mixed.render(highlight=(on_shell, {"contracted": True, "scheme": "wrong"}))
+except ValueError as error:
+    assert "counterterm scheme" in str(error)
+else:
+    raise AssertionError("unknown counterterm scheme must fail")
+print("installed mixed CT2f scheme checks passed")

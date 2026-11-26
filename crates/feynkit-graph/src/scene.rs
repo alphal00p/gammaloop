@@ -4,8 +4,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use feynkit_model::{LineKind, Model, Particle, ParticleId};
 use linnest::svg::{
-    Config, Dash, Details, EdgeDrawing, HighlightOverlap, HighlightPalette, HighlightRegion,
-    HighlightStyle, LabelSource, NodeDrawing, Pattern, Scene, Stroke,
+    Config, Dash, Details, EdgeDrawing, HighlightDetails, HighlightOverlap, HighlightPalette,
+    HighlightRegion, HighlightStyle, HullOptions, LabelSource, NodeDrawing, Pattern, Scene, Stroke,
 };
 use linnest::{TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstNodeSpec};
 use linnet::half_edge::EdgeAccessors;
@@ -22,7 +22,7 @@ const ACCENT: &str = "#6f4d85";
 const EXTERNAL_SPACING: f64 = 10.0;
 
 /// One highlighted physics region. See [`FeynmanDiagram::to_scene_with_highlights`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct HighlightLayer<'a> {
     /// Original half-edges. Either half selects the entire drawn edge.
@@ -31,6 +31,8 @@ pub struct HighlightLayer<'a> {
     pub isolated: &'a BTreeSet<usize>,
     /// Paint and node treatment.
     pub style: HighlightStyle,
+    /// Optional hover details and counterterm treatment.
+    pub details: HighlightDetails,
 }
 
 impl<'a> HighlightLayer<'a> {
@@ -44,6 +46,7 @@ impl<'a> HighlightLayer<'a> {
             hedges,
             isolated,
             style,
+            details: HighlightDetails::default(),
         }
     }
 }
@@ -67,6 +70,8 @@ pub struct SceneOptions {
     pub mute_outside: bool,
     /// Overlap geometry for highlighted regions.
     pub overlap: HighlightOverlap,
+    /// Hull radius and nesting step.
+    pub hulls: HullOptions,
     /// Refine the layout around drawn labels in short warm passes.
     pub label_feedback: bool,
     /// Explicit `impred-*` layout options.
@@ -84,7 +89,8 @@ impl Default for SceneOptions {
             show_node_index: false,
             split_initial_state: true,
             mute_outside: true,
-            overlap: HighlightOverlap::Casings,
+            overlap: HighlightOverlap::Hulls,
+            hulls: HullOptions::default(),
             label_feedback: false,
             layout: Map::new(),
         }
@@ -125,6 +131,7 @@ impl FeynmanDiagram {
             hedges,
             isolated,
             style: HighlightStyle::Amber,
+            details: HighlightDetails::default(),
         });
         self.to_scene_with_highlights(layers.as_slice(), lmb, options)
     }
@@ -499,7 +506,7 @@ impl FeynmanDiagram {
                     selected_edges.insert(self.graph[&hedge].0);
                 }
                 // Both drawn halves of a sewn initial-state edge retain its paint.
-                HighlightRegion::new(
+                let mut region = HighlightRegion::new(
                     edges
                         .iter()
                         .enumerate()
@@ -516,7 +523,9 @@ impl FeynmanDiagram {
                         }))
                         .collect(),
                     layer.style,
-                )
+                );
+                region.details = layer.details.clone();
+                region
             })
             .collect();
         for (index, (edge, _)) in edges.iter_mut().enumerate() {
@@ -536,6 +545,9 @@ impl FeynmanDiagram {
         }
         let (edge_specs, edge_drawings) = edges.into_iter().unzip();
         let mut scene = Scene {
+            hulls: Vec::new(),
+            counterterm_opacity: 0.35,
+            recolour_stamp: false,
             graph: TypstGraphSpec {
                 name: Some(self.name().to_owned()),
                 data: None,
@@ -556,11 +568,12 @@ impl FeynmanDiagram {
             layout_edges: None,
             label_feedback: options.label_feedback,
         };
-        scene.apply_highlights_with_overlap(
+        scene.apply_highlights_with_hulls(
             &regions,
             &HighlightPalette::new(AMBER_HIGHLIGHT_PAINT),
             options.mute_outside,
             options.overlap,
+            options.hulls,
         );
         Ok(scene)
     }
@@ -660,6 +673,9 @@ impl SceneOptions {
             ]),
         };
         let mut scene = Scene {
+            hulls: Vec::new(),
+            counterterm_opacity: 0.35,
+            recolour_stamp: false,
             graph: TypstGraphSpec {
                 name: None,
                 data: None,
@@ -800,7 +816,7 @@ mod tests {
     use std::collections::BTreeSet;
     use symbolica::atom::Atom;
 
-    use linnest::svg::{Dash, HighlightPalette, HighlightStyle};
+    use linnest::svg::{Dash, HighlightOverlap, HighlightPalette, HighlightStyle};
     use linnet::half_edge::involution::Hedge;
     use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph};
 
@@ -915,7 +931,14 @@ mod tests {
             HighlightLayer::new(&second, &extra, HighlightStyle::Amber),
         ];
         let scene = diagram
-            .to_scene_with_highlights(&layers, None, &SceneOptions::default())
+            .to_scene_with_highlights(
+                &layers,
+                None,
+                &SceneOptions {
+                    overlap: HighlightOverlap::Casings,
+                    ..SceneOptions::default()
+                },
+            )
             .unwrap();
         assert_eq!(scene.edges.len(), 2);
         let external = &scene.edges[0].highlight_strokes[0];

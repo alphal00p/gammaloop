@@ -7,6 +7,7 @@ use kurbo::{BezPath, PathEl, Rect, Shape};
 use serde_json::Value;
 
 use super::{arrow_stroke, labels::Bounds, marks, Dash, Element, Stroke, Target, Typeset, UNIT};
+use super::{CountertermScheme, HighlightDetails};
 use crate::{TypstDotEdge, TypstDotEndpoint, TypstDotNode};
 
 /// Canvas padding in drawing units; margin (2mm) and title gutter (1em) in points.
@@ -88,6 +89,43 @@ pub(super) fn xml_escape(text: &str) -> String {
         .replace('"', "&quot;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
+}
+
+fn hover_details(details: &HighlightDetails) -> (String, String, String, String) {
+    let escape = |text: &str| {
+        let clean: String = text
+            .chars()
+            .map(|ch| match ch {
+                '\u{0}'..='\u{8}'
+                | '\u{b}'..='\u{c}'
+                | '\u{e}'..='\u{1f}'
+                | '\u{fffe}'
+                | '\u{ffff}' => '\u{fffd}',
+                _ => ch,
+            })
+            .collect();
+        xml_escape(&clean)
+            .replace('\t', "&#9;")
+            .replace('\r', "&#13;")
+            .replace('\n', "&#10;")
+    };
+    let label = escape(&details.label);
+    let description = escape(&details.description);
+    let mut title = match (label.is_empty(), description.is_empty()) {
+        (true, _) => description.clone(),
+        (_, true) => label.clone(),
+        _ => format!("{label} — {description}"),
+    };
+    let scheme_attribute = if let Some(scheme) = details.scheme.name() {
+        if !title.is_empty() {
+            title.push_str(" — ");
+        }
+        title.push_str(scheme);
+        format!(r#" data-scheme="{scheme}""#)
+    } else {
+        String::new()
+    };
+    (label, description, title, scheme_attribute)
 }
 
 /// Links of an edge: its four hover regions (source half-edge, source edge,
@@ -205,7 +243,12 @@ fn number(value: f64) -> String {
 }
 
 /// The page: an optional centered title above the padded drawing canvas.
-pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> String {
+pub(super) fn svg(
+    typeset: &Typeset,
+    layers: &[Element],
+    targets: &[Target],
+    recolour_stamp: bool,
+) -> String {
     let mut bounds = Rect::new(
         f64::INFINITY,
         f64::INFINITY,
@@ -215,7 +258,13 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
     let mut include = |rect: Rect| bounds = bounds.union(rect);
     for element in layers {
         match element {
-            Element::Carrier { .. } => {}
+            Element::Carrier { .. } | Element::BeginGhost(_) | Element::EndGhost => {}
+            Element::Hull { path, .. } | Element::HullOutline { path, .. } => {
+                include(path.bounding_box())
+            }
+            Element::Counterterm { center, .. } => {
+                include(Rect::from_points(*center, *center).inflate(5.2 / UNIT, 5.2 / UNIT));
+            }
             Element::Path {
                 path,
                 stroke,
@@ -262,6 +311,13 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
         column + 2.0 * MARGIN,
         title_height + canvas_height + 2.0 * MARGIN,
     );
+    // Normalize visual weight to an 80-point drawing before it is scaled to
+    // a 52px or 28px stamp. Positions and the hull geometry stay in scene units.
+    let ink_scale = if recolour_stamp {
+        (width / 80.0).max(1.0)
+    } else {
+        1.0
+    };
     let ox = MARGIN + (column - canvas_width) / 2.0;
     let oy = MARGIN + title_height;
     let x = |u: f64| number(ox + (u - bounds.x0 + PAD) * UNIT);
@@ -310,7 +366,7 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
         let mut attributes = format!(
             r#"stroke="{}" stroke-width="{}""#,
             xml_escape(&stroke.paint),
-            number(stroke.width)
+            number(stroke.width * ink_scale)
         );
         if stroke.round_cap {
             attributes.push_str(r#" stroke-linecap="round""#);
@@ -379,6 +435,57 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
                 }
                 svg.push_str("</a>");
             }
+            Element::BeginGhost(opacity) => {
+                let _ = write!(svg, r#"<g data-linnet-ghost="true" opacity="{opacity}">"#);
+            }
+            Element::EndGhost => svg.push_str("</g>"),
+            Element::Hull {
+                path,
+                paint,
+                details,
+            } => {
+                let opacity = if details.contracted { 0.22 } else { 0.16 };
+                let paint = xml_escape(paint);
+                let d = path_data(path);
+                let (label, description, title, scheme_attribute) = hover_details(details);
+                let _ = write!(
+                    svg,
+                    r#"<g data-linnet-hull="true" data-label="{label}" data-description="{description}" data-contracted="{}"{scheme_attribute}><title>{title}</title><path d="{d}" fill="{paint}" fill-rule="evenodd" fill-opacity="{opacity}" stroke="none"/></g>"#,
+                    details.contracted
+                );
+            }
+            Element::HullOutline { path, paint } => {
+                let paint = xml_escape(paint);
+                let d = path_data(path);
+                let _ = write!(
+                    svg,
+                    r#"<path data-linnet-hull-outline="true" pointer-events="none" d="{d}" fill="none" stroke="{paint}" stroke-width="1.1" stroke-linejoin="round"/>"#
+                );
+            }
+            Element::Counterterm {
+                center,
+                paint,
+                details,
+            } => {
+                let paint = xml_escape(paint);
+                let (label, description, title, scheme_attribute) = hover_details(details);
+                let cx = x(center.x);
+                let cy = y(center.y);
+                let stamp_scale = if recolour_stamp {
+                    format!(" scale({})", number(ink_scale))
+                } else {
+                    String::new()
+                };
+                let (disc, cross, paper) = if details.scheme == CountertermScheme::OnShell {
+                    (paint.as_str(), "#ffffff", r#" data-linnet-paper="true""#)
+                } else {
+                    ("#ffffff", paint.as_str(), "")
+                };
+                let _ = write!(
+                    svg,
+                    r##"<g data-linnet-counterterm="true" data-label="{label}" data-description="{description}"{scheme_attribute} transform="translate({cx} {cy}){stamp_scale}"><title>{title}</title><circle r="5.2" fill="{disc}" stroke="{paint}" stroke-width="1.45"/><path d="M-3.65 -3.65L3.65 3.65M-3.65 3.65L3.65 -3.65" fill="none" stroke="{cross}" stroke-width="1.45"{paper}/></g>"##
+                );
+            }
             Element::Triangle(points) => {
                 let _ = write!(
                     svg,
@@ -432,7 +539,7 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
                         r#"<circle data-linnet-node="{id}" cx="{}" cy="{}" r="{}" fill="{}" {}/>"#,
                         x(*nx),
                         y(*ny),
-                        number(w * UNIT),
+                        number(w * UNIT * ink_scale),
                         xml_escape(fill),
                         stroke_attributes(stroke)
                     );

@@ -4,8 +4,8 @@ use std::ffi::CString;
 use std::path::PathBuf;
 
 use feynkit_graph::{
-    DiagramEdge, DiagramVertex, FeynmanDiagram, HighlightLayer, HighlightOverlap, HighlightStyle,
-    NumeratorInterface,
+    CountertermScheme, DiagramEdge, DiagramVertex, FeynmanDiagram, HighlightDetails,
+    HighlightLayer, HighlightOverlap, HighlightStyle, NumeratorInterface,
 };
 use feynkit_model::Model;
 use feynkit_py::{FeynkitModule, PyFeynmanDiagram, PyModel};
@@ -280,7 +280,7 @@ fn linnest_overlap_sources_match_the_compiled_clinnet_fixtures() {
         HighlightLayer::new(inner, &empty, HighlightStyle::Treated),
     ];
     let source = diagram
-        .to_linnest_with_highlights(&layers, true, None, "(:)")
+        .to_linnest_with_overlap(&layers, true, None, "(:)", HighlightOverlap::Casings)
         .unwrap();
     assert_eq!(
         source,
@@ -292,6 +292,32 @@ fn linnest_overlap_sources_match_the_compiled_clinnet_fixtures() {
     assert_eq!(
         bands,
         include_str!("../../clinnet/tests/resources/feynkit-bands.typ")
+    );
+}
+
+#[test]
+fn native_counterterm_source_matches_the_compiled_clinnet_fixture() {
+    let diagram = FeynmanDiagram::from_dot(
+        Model::phi4(),
+        r#"digraph fixture { a -> a [particle="phi"]; a -> a [particle="phi"]; }"#,
+    )
+    .unwrap();
+    let empty = BTreeSet::new();
+    let mut region = diagram.underlying().empty_subgraph::<SuBitGraph>();
+    region.add(Hedge(0));
+    let mut layer = HighlightLayer::new(&region, &empty, HighlightStyle::Treated);
+    layer.details = HighlightDetails {
+        label: "γ₂ & <local>".into(),
+        description: "integrated".into(),
+        contracted: true,
+        scheme: CountertermScheme::OnShell,
+    };
+    let source = diagram
+        .to_linnest_with_overlap(&[layer], true, None, "(:)", HighlightOverlap::Hulls)
+        .unwrap();
+    assert_eq!(
+        source,
+        include_str!("../../clinnet/tests/resources/feynkit-hull-counterterm.typ")
     );
 }
 

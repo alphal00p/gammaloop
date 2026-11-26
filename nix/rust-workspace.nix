@@ -556,6 +556,7 @@
       "crates/feynkit-py/tests/installed_graph_highlighting.py"
       "crates/clinnet/tests/resources/feynkit-casings.typ"
       "crates/clinnet/tests/resources/feynkit-bands.typ"
+      "crates/clinnet/tests/resources/feynkit-hull-counterterm.typ"
       "crates/feynkit-py/tests/native_forwarding.py"
       "crates/spynso3/tests/installed_tensor_network_display.py"
       "crates/linnet-py/tests/test_community_rendering.py"

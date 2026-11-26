@@ -2304,7 +2304,37 @@ class DiagramStyle:
         >>> hep.DiagramStyle(debug=True).debug
         True
         """
-    def __new__(cls, *, show_particle: typing.Optional[builtins.bool] = None, show_momentum: typing.Optional[builtins.bool] = None, show_edge_index: typing.Optional[builtins.bool] = None, show_node_index: typing.Optional[builtins.bool] = None, momentum_arrows: typing.Optional[builtins.bool] = None, split_initial_state: typing.Optional[builtins.bool] = None, debug: typing.Optional[builtins.bool] = None) -> DiagramStyle:
+    @property
+    def miniature(self) -> builtins.bool:
+        r"""
+        Use stamp recolouring by default.
+
+        Examples
+        --------
+        >>> hep.DiagramStyle(miniature=True).miniature
+        True
+        """
+    @property
+    def hull_radius(self) -> typing.Optional[builtins.float]:
+        r"""
+        Innermost hull radius in points, or the default.
+
+        Examples
+        --------
+        >>> hep.DiagramStyle(hull_radius=4.2).hull_radius
+        4.2
+        """
+    @property
+    def hull_step(self) -> typing.Optional[builtins.float]:
+        r"""
+        Additional hull radius per nesting level, in points.
+
+        Examples
+        --------
+        >>> hep.DiagramStyle(hull_step=2.6).hull_step
+        2.6
+        """
+    def __new__(cls, *, show_particle: typing.Optional[builtins.bool] = None, show_momentum: typing.Optional[builtins.bool] = None, show_edge_index: typing.Optional[builtins.bool] = None, show_node_index: typing.Optional[builtins.bool] = None, momentum_arrows: typing.Optional[builtins.bool] = None, split_initial_state: typing.Optional[builtins.bool] = None, debug: typing.Optional[builtins.bool] = None, miniature: builtins.bool = False, hull_radius: typing.Optional[builtins.float] = None, hull_step: typing.Optional[builtins.float] = None) -> DiagramStyle:
         r"""
         Select physics presentation without changing graph layout or drawing settings.
 
@@ -2328,6 +2358,12 @@ class DiagramStyle:
             Separate the incoming states of a cross-section drawing.
         debug : bool or None, optional
             Show both vertex and edge indices unless individually overridden.
+        miniature : bool, optional
+            Default to recolouring and increase ghost visibility for small stamps.
+        hull_radius : float or None, optional
+            Innermost hull radius in points; defaults to 4.2.
+        hull_step : float or None, optional
+            Radius increment per inclusion level; defaults to 2.6 points.
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -3850,7 +3886,7 @@ class FeynmanDiagram:
         >>> restored = hep.FeynmanDiagram.from_dot(model, dot)
         >>> restored.validate()
         """
-    def to_linnest(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['casings', 'bands', 'bands-miniature'] = "casings") -> builtins.str:
+    def to_linnest(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature'] | None = None) -> builtins.str:
         r"""
         Export a self-contained Typst document embedding an outlined SVG.
 
@@ -3880,11 +3916,12 @@ class FeynmanDiagram:
             A selection or ordered sequence of selections and (selection, style)
             tuples, as in ``render``.
         mute_outside : bool, optional
-            Fade edges and nodes outside all supplied selections.
-        overlap : {"casings", "bands", "bands-miniature"}, optional
+            Mute unselected drawing elements in legacy and stroke modes.
+            H1 hulls keep all particle lines in normal ink.
+        overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature"} or None, optional
             Highlight geometry and automatic palette, as in ``render``.
         """
-    def render(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['casings', 'bands', 'bands-miniature'] = "casings") -> DiagramView:
+    def render(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature'] | None = None) -> DiagramView:
         r"""
         Prepare a browser-measured view using the shared physics renderer.
 
@@ -3907,6 +3944,11 @@ class FeynmanDiagram:
         >>> outer = diagram.subgraph(edges=[0, 1])
         >>> inner = diagram.subgraph(edges=[1])
         >>> drawing = diagram.render(highlight=[(outer, "acted-on"), (inner, "treated")])
+        >>> ghost = diagram.render(highlight=[
+        ...     (outer, "acted-on"),
+        ...     (inner, {"contracted": True, "label": "γ₂", "scheme": "MS-bar", "description": "local"}),
+        ... ])
+        >>> stamp = diagram.render(highlight=[outer, inner], style=hep.DiagramStyle(miniature=True))
 
         Parameters
         ----------
@@ -3926,22 +3968,27 @@ class FeynmanDiagram:
         highlight : Subgraph or sequence, optional
             A selection or ordered sequence of selections and (selection, style)
             tuples from this diagram. Styles are "amber" (the default), "acted-on" (blue),
-            "middle" (violet), and "treated" (red). Later strokes sit inside
-            earlier strokes on shared edges. A Subgraph highlights its own
+            "middle" (violet), and "treated" (red). A Subgraph highlights its own
             region by default. Either half-edge highlights its whole edge;
             Linnet Graph highlights instead require both halves. A styled
             pair can be passed directly. Defaults depend on the count of
             unstyled entries regardless of where styled pairs appear. One,
             two, or three get amber, blue/red, or blue/violet/red respectively.
-            An empty sequence clears highlighting.
+            An empty sequence clears highlighting. A pair can use a dictionary
+            with style, label, description, contracted, and scheme fields. Contracted
+            selections show a treated hull and a ghost counterterm glyph.
+            Set scheme to "MS-bar" for an open glyph or "on-shell" for a
+            filled glyph. None or "unspecified" uses the plain open CT2 glyph.
         mute_outside : bool, optional
-            Fade edges and nodes outside all supplied selections.
-        overlap : {"casings", "bands", "bands-miniature"}, optional
-            Use nested strokes, or parallel carrier bands and membership rings.
-            The miniature mode spaces the bands further apart. Unstyled entries
-            in either band mode use automatic palette slots.
+            Mute unselected drawing elements in legacy and stroke modes.
+            H1 hulls keep all particle lines in normal ink.
+        overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature"} or None, optional
+            Defaults to H1 hulls at reading size and recolouring for
+            DiagramStyle(miniature=True). Casings and bands remain available.
+            Bands use palette slots; casings require explicit styles after
+            three unstyled layers.
         """
-    def to_html(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated']]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['casings', 'bands', 'bands-miniature'] = "casings", browser: typing.Optional[builtins.str] = None) -> builtins.str:
+    def to_html(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature'] | None = None, browser: typing.Optional[builtins.str] = None) -> builtins.str:
         r"""
         Export a complete static HTML figure with the same options as ``render``.
 
@@ -3971,11 +4018,13 @@ class FeynmanDiagram:
             MathML label sizes. For exact notebook measurements, use
             ``render().measured().to_html()`` on the displayed view instead.
         mute_outside : bool, optional
-            Fade edges and nodes outside all supplied selections.
-        overlap : {"casings", "bands", "bands-miniature"}, optional
-            Use nested strokes, or parallel carrier bands and membership rings.
-            The miniature mode spaces the bands further apart. Unstyled entries
-            in either band mode use automatic palette slots.
+            Mute unselected drawing elements in legacy and stroke modes.
+            H1 hulls keep all particle lines in normal ink.
+        overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature"} or None, optional
+            Defaults to H1 hulls at reading size and recolouring for
+            DiagramStyle(miniature=True). Casings and bands remain available.
+            Bands use palette slots; casings require explicit styles after
+            three unstyled layers.
         """
     def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
         r"""

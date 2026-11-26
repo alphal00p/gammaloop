@@ -9,7 +9,7 @@ use symbolica::atom::AtomCore;
 
 use crate::{DiagramError, FeynmanDiagram, LoopMomentumBasis};
 #[cfg(feature = "svg")]
-use crate::{HighlightLayer, HighlightOverlap, HighlightStyle};
+use crate::{HighlightLayer, HighlightOverlap, HighlightStyle, SceneOptions};
 
 pub(crate) fn typst_string(value: &str) -> String {
     let mut output = String::with_capacity(value.len() + 2);
@@ -124,7 +124,7 @@ impl FeynmanDiagram {
         self.to_linnest_document(lmb, config, layer.as_slice(), true, None)
     }
 
-    /// Emit a Linnest document with ordered subgraph casings on shared edges.
+    /// Emit a reading-size Typst document with highlight hulls.
     /// See [`Self::to_scene_with_highlights`] for an example of specifying layers.
     /// The standalone Typst document uses the light palette.
     ///
@@ -141,10 +141,14 @@ impl FeynmanDiagram {
         lmb: Option<&LoopMomentumBasis>,
         config: &str,
     ) -> Result<String, DiagramError> {
-        self.to_linnest_with_overlap(layers, mute_outside, lmb, config, HighlightOverlap::Casings)
+        self.to_linnest_with_overlap(layers, mute_outside, lmb, config, HighlightOverlap::Hulls)
     }
 
     /// Emit a standalone light-palette source with the chosen highlight geometry.
+    /// Hull and recolour exports with highlight layers embed the native scene
+    /// without labels and accept the default configuration `(:)`. To set native
+    /// layout options or include outlined labels, prepare a scene and call
+    /// `Scene::render_typst` with its label pages.
     /// See [`Self::to_scene_with_highlights`] for an example of building layers.
     ///
     /// # Errors
@@ -161,6 +165,31 @@ impl FeynmanDiagram {
         config: &str,
         overlap: HighlightOverlap,
     ) -> Result<String, DiagramError> {
+        let native = !layers.is_empty()
+            && (layers.iter().any(|layer| layer.details.contracted)
+                || matches!(
+                    overlap,
+                    HighlightOverlap::Hulls | HighlightOverlap::Recolour
+                ) && !matches!(layers, [layer] if layer.style == HighlightStyle::Amber
+                    && layer.details.label.is_empty() && layer.details.description.is_empty()));
+        if native {
+            if config.trim() != "(:)" {
+                return Err(DiagramError::Drawing(
+                    "native hull and recolour exports use SceneOptions; prepare a scene and call render_typst".into(),
+                ));
+            }
+            let options = SceneOptions {
+                overlap,
+                mute_outside,
+                show_particle: false,
+                ..SceneOptions::default()
+            };
+            let scene = self.to_scene_with_highlights(layers, lmb, &options)?;
+            let labels = scene
+                .typeset_mathml(&[])
+                .map_err(|error| DiagramError::Drawing(error.to_string()))?;
+            return scene.render_typst(&labels).map_err(DiagramError::Drawing);
+        }
         let band_mode = overlap
             .band_spacing()
             .filter(|_| !matches!(layers, [layer] if layer.style == HighlightStyle::Amber))
@@ -545,7 +574,7 @@ pub(crate) mod tests {
 
     use crate::{DiagramEdge, DiagramVertex, ExternalLeg, ExternalState, FeynmanDiagram};
     #[cfg(feature = "svg")]
-    use crate::{HighlightLayer, HighlightStyle};
+    use crate::{HighlightLayer, HighlightOverlap, HighlightStyle};
     use feynkit_model::Model;
 
     fn display_model() -> Arc<Model> {
@@ -691,14 +720,10 @@ pub(crate) mod tests {
         let mut selected = diagram.graph.empty_subgraph::<SuBitGraph>();
         selected.add(Hedge(1));
         let isolated = BTreeSet::new();
-        let layers =
-            [HighlightStyle::ActedOn, HighlightStyle::Treated].map(|style| HighlightLayer {
-                hedges: &selected,
-                isolated: &isolated,
-                style,
-            });
+        let layers = [HighlightStyle::ActedOn, HighlightStyle::Treated]
+            .map(|style| HighlightLayer::new(&selected, &isolated, style));
         let source = diagram
-            .to_linnest_with_highlights(&layers, true, None, "(:)")
+            .to_linnest_with_overlap(&layers, true, None, "(:)", HighlightOverlap::Casings)
             .unwrap();
         assert!(source.contains("subgraph-edge-underlay: \"casings\""));
         assert!(source.contains("let highlight-0 = subgraph.select(raw, edges: (1, ))"));

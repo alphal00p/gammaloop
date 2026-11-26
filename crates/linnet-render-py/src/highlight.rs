@@ -1,11 +1,13 @@
 use std::fmt::Write;
 
 use linnest::svg::{
-    HighlightOverlap, HighlightStyle, SlotPaint, UnknownHighlightOverlap, UnknownHighlightStyle,
+    CountertermScheme, HighlightDetails, HighlightOverlap, HighlightStyle, SlotPaint,
+    UnknownCountertermScheme, UnknownHighlightOverlap, UnknownHighlightStyle,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::types::{
-    PyAny, PyAnyMethods, PySequence, PySequenceMethods, PyString, PyTuple, PyTupleMethods,
+    PyAny, PyAnyMethods, PyDict, PyDictMethods, PySequence, PySequenceMethods, PyString, PyTuple,
+    PyTupleMethods,
 };
 use pyo3::{Bound, PyResult};
 use HighlightStyle::{ActedOn, Amber, Middle, Treated};
@@ -17,6 +19,8 @@ pub struct SelectedHighlight<T> {
     pub selection: T,
     /// Explicit or inferred style.
     pub style: HighlightStyle,
+    /// Hover text and counterterm treatment.
+    pub details: HighlightDetails,
 }
 
 /// Parse a Python overlap keyword. See [`extract_highlights`].
@@ -44,18 +48,63 @@ pub fn extract_highlights<'py, T>(
         let Ok(pair) = entry.cast::<PyTuple>() else {
             return Ok(None);
         };
-        if pair.len() == 2 && pair.get_item(1)?.is_instance_of::<PyString>() {
-            let role: String = pair.get_item(1)?.extract()?;
-            let style = role
-                .parse()
-                .map_err(|error: UnknownHighlightStyle| PyValueError::new_err(error.to_string()))?;
-            Ok(Some((pair.get_item(0)?, style)))
-        } else {
-            Ok(None)
+        if pair.len() != 2 {
+            return Ok(None);
         }
+        let options = pair.get_item(1)?;
+        let mut details = HighlightDetails::default();
+        let role = if options.is_instance_of::<PyString>() {
+            Some(options.extract::<String>()?)
+        } else if let Ok(fields) = options.cast::<PyDict>() {
+            for (key, value) in fields.iter() {
+                match key.extract::<String>()?.as_str() {
+                    "style" => {}
+                    "label" => details.label = value.extract()?,
+                    "description" => details.description = value.extract()?,
+                    "contracted" => details.contracted = value.extract()?,
+                    "scheme" => {
+                        if let Some(name) = value.extract::<Option<String>>()? {
+                            details.scheme =
+                                name.parse().map_err(|error: UnknownCountertermScheme| {
+                                    PyValueError::new_err(error.to_string())
+                                })?;
+                        }
+                    }
+                    key => {
+                        return Err(PyValueError::new_err(format!(
+                            "unknown highlight field {key:?}"
+                        )))
+                    }
+                }
+            }
+            fields
+                .get_item("style")?
+                .map(|value| value.extract::<String>())
+                .transpose()?
+        } else {
+            return Ok(None);
+        };
+        let style = role
+            .map(|role| {
+                role.parse().map_err(|error: UnknownHighlightStyle| {
+                    PyValueError::new_err(error.to_string())
+                })
+            })
+            .transpose()?;
+        if !details.contracted && details.scheme != CountertermScheme::Unspecified {
+            return Err(PyValueError::new_err(
+                "scheme requires a contracted highlight layer",
+            ));
+        }
+        let style = if details.contracted {
+            Some(Treated)
+        } else {
+            style
+        };
+        Ok(Some((pair.get_item(0)?, style, details)))
     };
-    let entries = if let Some((entry, style)) = pair(highlight)? {
-        vec![(entry, Some(style))]
+    let entries = if let Some(entry) = pair(highlight)? {
+        vec![entry]
     } else if let Some(sequence) = highlight
         .cast::<PySequence>()
         .ok()
@@ -65,22 +114,26 @@ pub fn extract_highlights<'py, T>(
             .map(|index| {
                 let entry = sequence.get_item(index)?;
                 Ok(match pair(&entry)? {
-                    Some((entry, style)) => (entry, Some(style)),
-                    None => (entry, None),
+                    Some(entry) => entry,
+                    None => (entry, None, HighlightDetails::default()),
                 })
             })
             .collect::<PyResult<Vec<_>>>()?
     } else {
-        vec![(highlight.clone(), None)]
+        vec![(highlight.clone(), None, HighlightDetails::default())]
     };
     let defaults: &[HighlightStyle] = match (
         overlap.band_spacing(),
-        entries.iter().filter(|(_, style)| style.is_none()).count(),
+        entries
+            .iter()
+            .filter(|(_, style, _)| style.is_none())
+            .count(),
     ) {
         (Some(_), _) | (None, 0) => &[],
         (None, 1) => &[Amber],
         (None, 2) => &[ActedOn, Treated],
         (None, 3) => &[ActedOn, Middle, Treated],
+        _ if overlap != HighlightOverlap::Casings => &[],
         _ => {
             return Err(PyValueError::new_err(
                 "provide explicit highlight styles for all but at most three layers",
@@ -91,16 +144,12 @@ pub fn extract_highlights<'py, T>(
     entries
         .into_iter()
         .enumerate()
-        .map(|(index, (entry, style))| {
+        .map(|(index, (entry, style, details))| {
             Ok(SelectedHighlight {
                 selection: selection(&entry)?,
-                style: style.unwrap_or_else(|| {
-                    if overlap == HighlightOverlap::Casings {
-                        defaults.next().expect("one default per unstyled entry")
-                    } else {
-                        HighlightStyle::Slot(index + 1)
-                    }
-                }),
+                details,
+                style: style
+                    .unwrap_or_else(|| defaults.next().unwrap_or(HighlightStyle::Slot(index + 1))),
             })
         })
         .collect()
@@ -187,6 +236,16 @@ pub fn theme_svg(
             };
             write!(rules, ".{class} [{attribute}=\"{}\"]{gap}{{{gap}{attribute}:{gap}{value};{gap}}}{separator}", paint.light).expect("writing a string");
         }
+    }
+    if svg.contains("data-linnet-counterterm=") {
+        let paper = format!("--{prefix}-counterterm-paper");
+        write!(light, "{paper}:#ffffff;{gap}").expect("writing a string");
+        write!(dark, "{paper}:#1b1d23;{gap}").expect("writing a string");
+        write!(
+            rules,
+            ".{class} [data-linnet-counterterm]:not([data-scheme=on-shell]) > circle{{fill:var({paper},#ffffff);}}.{class} [data-linnet-paper]{{stroke:var({paper},#ffffff);}}{separator}"
+        )
+        .expect("writing a string");
     }
     if !linnet {
         styles.push_str(&rules);

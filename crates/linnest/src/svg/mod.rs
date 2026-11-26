@@ -7,16 +7,18 @@ mod config;
 mod curves;
 pub use config::Config;
 pub use highlight::{
-    HighlightOverlap, HighlightPalette, HighlightRegion, HighlightStroke, HighlightStyle,
-    SlotPaint, UnknownHighlightOverlap, UnknownHighlightStyle,
+    CountertermScheme, HighlightDetails, HighlightOverlap, HighlightPalette, HighlightRegion,
+    HighlightStroke, HighlightStyle, HullOptions, HullRegion, SlotPaint, UnknownCountertermScheme,
+    UnknownHighlightOverlap, UnknownHighlightStyle,
 };
 mod highlight;
+mod hulls;
 mod interactive;
 mod labels;
 mod marks;
 mod output;
 
-use kurbo::{Arc as CurveArc, BezPath, Point, Vec2};
+use kurbo::{Arc as CurveArc, BezPath, Point, Shape, Vec2};
 use linnet::half_edge::involution::EdgeIndex;
 use linnet::half_edge::layout::impred::{EdgeLabel, ImpredConfig};
 use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph};
@@ -39,6 +41,12 @@ const NODE_RADIUS: f64 = 0.16;
 /// A prepared graph with its paint and label sources, drawn by [`Scene::render`].
 /// See [`Self::typeset_mathml`] for a complete measured-label example.
 pub struct Scene {
+    /// Hull memberships resolved after layout.
+    pub hulls: Vec<HullRegion>,
+    /// Opacity of particle lines in a ghost counterterm.
+    pub counterterm_opacity: f64,
+    /// Scale the diagram ink for a recoloured stamp.
+    pub recolour_stamp: bool,
     /// Layout graph: sizes and pins as statements, in graph-spec form.
     pub graph: TypstGraphSpec,
     /// Drawing per node and edge, in spec order.
@@ -199,6 +207,7 @@ impl Scene {
     /// use serde_json;
     /// use std::error::Error;
     /// let scene = Scene {
+    ///     hulls: Vec::new(), counterterm_opacity: 0.35, recolour_stamp: false,
     ///     graph: serde_json::from_str(r#"{"nodes":[],"edges":[]}"#)?,
     ///     nodes: Vec::new(), edges: Vec::new(), preamble: String::new(),
     ///     title: Some(LabelSource::text("Measured title")), pages: Vec::new(),
@@ -254,6 +263,20 @@ impl Scene {
             });
         }
         Ok(typeset)
+    }
+
+    /// Embed this scene's computed SVG paths in a self-contained Typst document.
+    /// Supply outlined label pages via [`Self::typeset`] for vector text.
+    ///
+    /// # Errors
+    /// Returns a layout or geometry failure from [`Self::render`].
+    pub fn render_typst(&self, typeset: &Typeset) -> Result<String, String> {
+        self.render(typeset).map(|svg| Self::svg_typst_source(&svg))
+    }
+
+    /// Wrap a static SVG as a Typst image. See [`Self::render_typst`].
+    pub fn svg_typst_source(svg: &str) -> String {
+        format!("#set page(width: auto, height: auto, margin: 0pt)\n#image(bytes({svg:?}))")
     }
 
     /// Lay out and draw the scene with its typeset pages; one SVG document.
@@ -439,6 +462,22 @@ enum Element {
         path: BezPath,
     },
     Triangle([Point; 3]),
+    BeginGhost(f64),
+    EndGhost,
+    Hull {
+        path: BezPath,
+        paint: String,
+        details: HighlightDetails,
+    },
+    HullOutline {
+        path: BezPath,
+        paint: String,
+    },
+    Counterterm {
+        center: Point,
+        paint: String,
+        details: HighlightDetails,
+    },
     Label {
         page: usize,
         bounds: Bounds,
@@ -472,6 +511,7 @@ fn arrow_stroke() -> Stroke {
 }
 
 struct Drawing {
+    recolour_stamp: bool,
     layers: Vec<Element>,
     targets: Vec<Target>,
     placements: Vec<Placement>,
@@ -483,7 +523,7 @@ struct Drawing {
 impl Drawing {
     /// Serialize only the selected feedback pass, preserving painting order.
     fn svg(&self, typeset: &Typeset) -> String {
-        output::svg(typeset, &self.layers, &self.targets)
+        output::svg(typeset, &self.layers, &self.targets, self.recolour_stamp)
     }
 
     /// Overlapping labels first, then label pairs, then line hits.
@@ -522,6 +562,7 @@ impl Drawing {
         let mut placements = Vec::new();
         let mut fixed_arrows = Vec::new();
         let mut region_hrefs = Vec::new();
+        let mut hull_paths = BTreeMap::new();
         for (edge, carrier) in laid.edges.iter().zip(&laid.carriers) {
             let drawing = scene
                 .edges
@@ -530,6 +571,17 @@ impl Drawing {
             let hrefs = output::edge_hrefs(edge, &drawing.details);
             let anchor = edge.pos.as_ref().map_or([0.0; 2], |p| [p.x, p.y]);
             let (visible, parts) = Self::edge_paths(scene, typeset, laid, edge, carrier, anchor)?;
+            let member = scene
+                .hulls
+                .iter()
+                .any(|region| region.edges.contains(&edge.edge));
+            let contracted = scene
+                .hulls
+                .iter()
+                .any(|region| region.details.contracted && region.edges.contains(&edge.edge));
+            if member {
+                hull_paths.insert(edge.edge, visible.clone());
+            }
             let part_refs: Vec<&BezPath> = parts.iter().collect();
             for (region, points) in curves::region_samples(&part_refs, UNIT)? {
                 targets.extend(points.into_iter().map(|at| Target {
@@ -537,6 +589,9 @@ impl Drawing {
                     size: 8.0,
                     href: hrefs.regions[region].clone(),
                 }));
+            }
+            if contracted {
+                layers.push(Element::BeginGhost(scene.counterterm_opacity));
             }
             Self::paint_edge(
                 drawing,
@@ -547,6 +602,9 @@ impl Drawing {
                 &mut overlay_marks,
                 &mut strokes,
             )?;
+            if contracted {
+                layers.push(Element::EndGhost);
+            }
             for (index, path) in parts.iter().enumerate() {
                 layers.push(Element::Carrier {
                     path: path.clone(),
@@ -662,6 +720,58 @@ impl Drawing {
             layers.extend(highlight_elements);
         }
         layers.extend(overlay_marks);
+        let mut regions = Vec::new();
+        let mut outlines = Vec::new();
+        let mut counterterms = Vec::new();
+        for region in &scene.hulls {
+            if !region.radius.is_finite() || region.radius <= 0.0 || region.radius > 1000.0 {
+                return Err("hull radius must be finite and between 0 and 1000pt".into());
+            }
+            let paths: Vec<_> = region
+                .edges
+                .iter()
+                .filter_map(|index| hull_paths.get(index))
+                .filter(|path| !path.elements().is_empty())
+                .collect();
+            let vertices: Vec<_> = laid
+                .nodes
+                .iter()
+                .filter(|node| region.nodes.contains(&node.node))
+                .map(|node| {
+                    let [x, y] = laid.node(node.node);
+                    Point::new(x, y)
+                })
+                .collect();
+            let path = hulls::union(&paths, &vertices, region.radius / UNIT);
+            if path.elements().is_empty() {
+                continue;
+            }
+            if region.details.contracted {
+                let center = if vertices.is_empty() {
+                    path.bounding_box().center()
+                } else {
+                    let sum = vertices
+                        .iter()
+                        .fold(Vec2::ZERO, |sum, point| sum + point.to_vec2());
+                    (sum / vertices.len() as f64).to_point()
+                };
+                counterterms.push(Element::Counterterm {
+                    center,
+                    paint: region.paint.clone(),
+                    details: region.details.clone(),
+                });
+            }
+            outlines.push(Element::HullOutline {
+                path: path.clone(),
+                paint: region.paint.clone(),
+            });
+            regions.push(Element::Hull {
+                path,
+                paint: region.paint.clone(),
+                details: region.details.clone(),
+            });
+        }
+        layers.splice(..0, regions.into_iter().chain(outlines));
 
         let obstacles: Vec<Bounds> = laid
             .nodes
@@ -794,8 +904,10 @@ impl Drawing {
                 href: href.into(),
             });
         }
+        layers.extend(counterterms);
         let overlaps = labels::overlaps(&placements, &chosen, &searched.lines);
         Ok(Self {
+            recolour_stamp: scene.recolour_stamp,
             layers,
             targets,
             placements,
@@ -1235,6 +1347,9 @@ mod tests {
             longitudinal_scale: 1.4,
         };
         Scene {
+            hulls: Vec::new(),
+            counterterm_opacity: 0.35,
+            recolour_stamp: false,
             graph: TypstGraphSpec {
                 name: Some("bubble".to_owned()),
                 data: None,
@@ -1303,6 +1418,70 @@ mod tests {
                 label,
             ])
             .unwrap()
+    }
+
+    #[test]
+    fn hulls_cover_parallel_carriers_and_coil_with_escaped_counterterm_details() {
+        let mut scene = bubble(false);
+        let mut inner = HighlightRegion::new([1].into(), [0, 1].into(), HighlightStyle::Treated);
+        inner.details = HighlightDetails {
+            label: "γ₂ & <local>".into(),
+            description: "local \"subtraction\"".into(),
+            contracted: true,
+            scheme: CountertermScheme::OnShell,
+        };
+        let outer = HighlightRegion::new([1, 2].into(), [0, 1].into(), HighlightStyle::ActedOn);
+        scene.apply_highlights_with_overlap(
+            &[inner, outer],
+            &HighlightPalette::new("#ffd166"),
+            true,
+            HighlightOverlap::Hulls,
+        );
+        assert!(scene.hulls[0].radius > scene.hulls[1].radius);
+        let svg = scene.render(&typeset(&scene)).unwrap();
+        let doc = Document::parse(&svg).unwrap();
+        let regions: Vec<_> = doc
+            .descendants()
+            .filter(|node| node.attribute("data-linnet-hull") == Some("true"))
+            .collect();
+        assert_eq!(regions.len(), 2);
+        assert_eq!(
+            regions[0].last_element_child().unwrap().attribute("fill"),
+            Some("#3b82f6")
+        );
+        assert_eq!(
+            regions[1]
+                .last_element_child()
+                .unwrap()
+                .attribute("fill-opacity"),
+            Some("0.22")
+        );
+        assert_ne!(
+            regions[0].last_element_child().unwrap().attribute("d"),
+            regions[1].last_element_child().unwrap().attribute("d")
+        );
+        let marker = doc
+            .descendants()
+            .find(|node| node.attribute("data-linnet-counterterm") == Some("true"))
+            .unwrap();
+        assert_eq!(marker.attribute("data-scheme"), Some("on-shell"));
+        let disc = marker
+            .children()
+            .find(|node| node.has_tag_name("circle"))
+            .unwrap();
+        assert_eq!(disc.attribute("fill"), Some("#e4504f"));
+        assert_eq!(
+            marker.last_element_child().unwrap().attribute("stroke"),
+            Some("#ffffff")
+        );
+        assert_eq!(marker.attribute("data-label"), Some("γ₂ & <local>"));
+        assert_eq!(
+            marker.first_element_child().unwrap().text(),
+            Some("γ₂ & <local> — local \"subtraction\" — on-shell")
+        );
+        assert!(doc
+            .descendants()
+            .any(|node| node.attribute("opacity") == Some("0.35")));
     }
 
     #[test]
@@ -1391,20 +1570,23 @@ mod tests {
                 edges: [1, 2].into(),
                 nodes: [0, 1].into(),
                 style: HighlightStyle::ActedOn,
+                details: HighlightDetails::default(),
             },
             HighlightRegion {
                 edges: [1].into(),
                 nodes: [0, 1].into(),
                 style: HighlightStyle::Middle,
+                details: HighlightDetails::default(),
             },
             HighlightRegion {
                 edges: [1].into(),
                 nodes: [0, 1].into(),
                 style: HighlightStyle::Treated,
+                details: HighlightDetails::default(),
             },
         ];
         let palette = HighlightPalette::new("#ffd166");
-        scene.apply_highlights(&regions, &palette, false);
+        scene.apply_highlights_with_overlap(&regions, &palette, false, HighlightOverlap::Casings);
         let expected = [
             HighlightStyle::ActedOn,
             HighlightStyle::Middle,

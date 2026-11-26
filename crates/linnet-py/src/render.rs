@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use linnest::svg::{HighlightOverlap, HighlightPalette, HighlightRegion, HighlightStyle};
+use linnest::svg::{
+    HighlightDetails, HighlightOverlap, HighlightPalette, HighlightRegion, HighlightStyle,
+};
 use linnest::{
     encode_graph_spec_bytes, TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec,
     TypstGraphSpecEnvelope, TypstNodeSpec,
@@ -8,7 +10,9 @@ use linnest::{
 use linnet::half_edge::builder::{HedgeData, HedgeGraphBuilder};
 use linnet::half_edge::involution::{Flow, Hedge, HedgePair, Orientation};
 use linnet::half_edge::subgraph::{Inclusion, SubSetLike};
-use linnet_render_py::{extract_highlights, highlight_overlap, theme_svg, ThemeFormat, ThemePaint};
+use linnet_render_py::{
+    extract_highlights, highlight_overlap, theme_svg, SelectedHighlight, ThemeFormat, ThemePaint,
+};
 use pyo3::exceptions::{PyReferenceError, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::types::{PyAny, PyDict, PyDictMethods, PyList, PyListMethods};
 use pyo3::{Bound, Py, PyResult, Python};
@@ -327,7 +331,11 @@ pub(crate) fn render_with_highlights(
     })?;
     let layers: Vec<_> = selections
         .iter()
-        .map(|entry| (&*entry.selection, entry.style))
+        .map(|entry| SelectedHighlight {
+            selection: &*entry.selection,
+            style: entry.style,
+            details: entry.details.clone(),
+        })
         .collect();
     render_graph_with_overlap(py, graph, config, &layers, mute_outside, overlap)
 }
@@ -339,11 +347,19 @@ pub(crate) fn render_graph(
     highlights: &[(&PySubgraph, HighlightStyle)],
     mute_outside: bool,
 ) -> PyResult<PyDiagramView> {
+    let highlights: Vec<_> = highlights
+        .iter()
+        .map(|&(selection, style)| SelectedHighlight {
+            selection,
+            style,
+            details: HighlightDetails::default(),
+        })
+        .collect();
     render_graph_with_overlap(
         py,
         graph,
         config,
-        highlights,
+        &highlights,
         mute_outside,
         HighlightOverlap::Casings,
     )
@@ -353,13 +369,15 @@ fn render_graph_with_overlap(
     py: Python<'_>,
     graph: &Py<PyGraph>,
     config: Option<&Bound<'_, PyAny>>,
-    highlights: &[(&PySubgraph, HighlightStyle)],
+    highlights: &[SelectedHighlight<&PySubgraph>],
     mute_outside: bool,
     overlap: HighlightOverlap,
 ) -> PyResult<PyDiagramView> {
     // Validate before callbacks and again after preparation of the graph records.
-    for (subgraph, _) in highlights {
-        subgraph.selection_for(py, graph, graph.borrow(py).revision()?)?;
+    for layer in highlights {
+        layer
+            .selection
+            .selection_for(py, graph, graph.borrow(py).revision()?)?;
     }
     let (topology, transport) = request(py, graph, config, false)?;
     let envelope: TypstGraphSpecEnvelope = ciborium::from_reader(topology.as_slice())
@@ -367,8 +385,10 @@ fn render_graph_with_overlap(
     let mut scene = transport.native_scene(envelope.graph, None)?;
     let owner = graph.borrow(py);
     let mut regions = Vec::new();
-    for (subgraph, style) in highlights {
-        let (selected, isolated) = subgraph.selection_for(py, graph, owner.revision()?)?;
+    for layer in highlights {
+        let (selected, isolated) = layer
+            .selection
+            .selection_for(py, graph, owner.revision()?)?;
         let state = owner.state.borrow();
         let state = state.as_ref().expect("checked selection owner");
         let nodes = state
@@ -402,7 +422,9 @@ fn render_graph_with_overlap(
                 }
             }
         }
-        regions.push(HighlightRegion::new(edges, nodes, *style));
+        let mut region = HighlightRegion::new(edges, nodes, layer.style);
+        region.details = layer.details.clone();
+        regions.push(region);
     }
     let mut palette = HighlightPalette::new("#c58b13");
     palette.amber_solid_width = Some(1.2);
@@ -413,7 +435,16 @@ fn render_graph_with_overlap(
     if highlights.is_empty() {
         return Ok(view);
     }
-    let styles: Vec<_> = highlights.iter().map(|(_, style)| *style).collect();
+    let styles: Vec<_> = highlights
+        .iter()
+        .map(|layer| {
+            if layer.details.contracted {
+                HighlightStyle::Treated
+            } else {
+                layer.style
+            }
+        })
+        .collect();
     view.map_svg(move |svg| {
         theme_svg(
             svg,

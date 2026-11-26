@@ -27,7 +27,9 @@ pub use integrals::{
     IntegralFamily, IntegralFamilyError, IntegralMapping, PropagatorMapping, QuadraticMomentum,
 };
 #[cfg(feature = "svg")]
-pub use linnest::svg::{HighlightOverlap, HighlightStyle};
+pub use linnest::svg::{
+    CountertermScheme, HighlightDetails, HighlightOverlap, HighlightStyle, HullOptions,
+};
 pub use numerator_interface::NumeratorInterface;
 pub use power_counting::DOD;
 #[cfg(feature = "svg")]
@@ -436,6 +438,8 @@ impl LoopMomentumBasis {
 /// See [`NumeratorInterface`] for fallible source admission and a complete round trip.
 #[derive(Debug, Error)]
 pub enum DiagramError {
+    #[error("cannot render diagram: {0}")]
+    Drawing(String),
     #[error(transparent)]
     IntegralFamily(#[from] IntegralFamilyError),
     #[error("cannot expand UV counterterm: {0}")]
@@ -3028,7 +3032,7 @@ mod tests {
     use serde_json::Value;
 
     #[cfg(feature = "svg")]
-    use crate::{HighlightLayer, HighlightStyle, SceneOptions};
+    use crate::{HighlightLayer, HighlightOverlap, HighlightStyle, SceneOptions};
 
     use super::*;
     use spenso::structure::representation::Euclidean;
@@ -3418,6 +3422,7 @@ mod tests {
                     None,
                     &SceneOptions {
                         split_initial_state,
+                        overlap: HighlightOverlap::Casings,
                         ..Default::default()
                     },
                 )

@@ -1,6 +1,7 @@
 //! Ordered highlights resolved against the drawing's node and edge order.
 
 use std::borrow::Cow;
+use std::cmp::Reverse;
 use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::str::FromStr;
@@ -14,8 +15,12 @@ use super::{Dash, NodeDrawing, Scene, Stroke};
 #[non_exhaustive]
 pub enum HighlightOverlap {
     /// Nested strokes, with the last layer on the centerline.
-    #[default]
     Casings,
+    /// Translucent unions of selected edge tubes and vertex discs.
+    #[default]
+    Hulls,
+    /// Recolour edges by the last matching layer.
+    Recolour,
     /// Parallel 2.4pt strokes on 3pt centers and segmented vertex rings.
     Bands,
     /// Parallel strokes on 4pt centers for small diagrams.
@@ -28,6 +33,8 @@ impl HighlightOverlap {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Casings => "casings",
+            Self::Hulls => "hulls",
+            Self::Recolour => "recolour",
             Self::Bands => "bands",
             Self::BandsMiniature => "bands-miniature",
         }
@@ -37,7 +44,7 @@ impl HighlightOverlap {
     /// See [`Scene::apply_highlights_with_overlap`].
     pub fn band_spacing(self) -> Option<f64> {
         match self {
-            Self::Casings => None,
+            Self::Casings | Self::Hulls | Self::Recolour => None,
             Self::Bands => Some(3.0),
             Self::BandsMiniature => Some(4.0),
         }
@@ -48,16 +55,22 @@ impl FromStr for HighlightOverlap {
     type Err = UnknownHighlightOverlap;
 
     fn from_str(mode: &str) -> Result<Self, Self::Err> {
-        [Self::Casings, Self::Bands, Self::BandsMiniature]
-            .into_iter()
-            .find(|candidate| candidate.as_str() == mode)
-            .ok_or(UnknownHighlightOverlap)
+        [
+            Self::Casings,
+            Self::Bands,
+            Self::BandsMiniature,
+            Self::Hulls,
+            Self::Recolour,
+        ]
+        .into_iter()
+        .find(|candidate| candidate.as_str() == mode)
+        .ok_or(UnknownHighlightOverlap)
     }
 }
 
 /// An unknown overlap mode. See [`Scene::apply_highlights_with_overlap`].
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
-#[error("overlap must be 'casings', 'bands', or 'bands-miniature'")]
+#[error("overlap must be 'hulls', 'recolour', 'casings', 'bands', or 'bands-miniature'")]
 pub struct UnknownHighlightOverlap;
 
 /// Theme paints for an automatic palette slot.
@@ -218,6 +231,147 @@ impl Display for HighlightStyle {
     }
 }
 
+/// Subtraction scheme cue on a ghost counterterm. See [`HighlightDetails`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum CountertermScheme {
+    /// Plain open circled cross, with no scheme in the hover text.
+    #[default]
+    Unspecified,
+    /// Open circled cross.
+    MsBar,
+    /// Solid disc with a paper-coloured cross.
+    OnShell,
+}
+
+impl CountertermScheme {
+    /// The scheme as it appears on hover, if specified.
+    /// See [`HighlightDetails`].
+    pub fn name(self) -> Option<&'static str> {
+        match self {
+            Self::Unspecified => None,
+            Self::MsBar => Some("MS-bar"),
+            Self::OnShell => Some("on-shell"),
+        }
+    }
+}
+
+/// Unrecognized scheme keyword. See [`CountertermScheme`].
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
+#[error("counterterm scheme must be 'MS-bar', 'on-shell', or 'unspecified'")]
+pub struct UnknownCountertermScheme;
+
+impl FromStr for CountertermScheme {
+    type Err = UnknownCountertermScheme;
+
+    fn from_str(name: &str) -> Result<Self, Self::Err> {
+        if name.eq_ignore_ascii_case("ms-bar") {
+            Ok(Self::MsBar)
+        } else if name.eq_ignore_ascii_case("on-shell") {
+            Ok(Self::OnShell)
+        } else if name.eq_ignore_ascii_case("unspecified") {
+            Ok(Self::Unspecified)
+        } else {
+            Err(UnknownCountertermScheme)
+        }
+    }
+}
+
+/// Region hover text and ghost-in-place treatment.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct HighlightDetails {
+    /// Short name shown on hover.
+    pub label: String,
+    /// Longer description shown on hover.
+    pub description: String,
+    /// Show a ghost counterterm.
+    pub contracted: bool,
+    /// Optional subtraction scheme cue.
+    pub scheme: CountertermScheme,
+}
+
+/// Hull radius and increment per inclusion level, in points.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HullOptions {
+    /// Radius for an innermost region.
+    pub radius: f64,
+    /// Extra radius per nesting level.
+    pub step: f64,
+}
+
+impl Default for HullOptions {
+    fn default() -> Self {
+        Self {
+            radius: 4.2,
+            step: 2.6,
+        }
+    }
+}
+
+/// Region inputs to resolve after layout.
+#[derive(Clone, Debug)]
+pub struct HullRegion {
+    pub(super) edges: BTreeSet<usize>,
+    pub(super) nodes: BTreeSet<usize>,
+    pub(super) paint: String,
+    pub(super) radius: f64,
+    pub(super) details: HighlightDetails,
+}
+
+impl HullRegion {
+    fn resolve(
+        regions: &[HighlightRegion],
+        palette: &HighlightPalette<'_>,
+        overlap: HighlightOverlap,
+        hulls: HullOptions,
+    ) -> Vec<Self> {
+        let mut heights = vec![0_u32; regions.len()];
+        let mut order: Vec<_> = (0..regions.len()).collect();
+        order.sort_by_key(|&index| regions[index].edges.len() + regions[index].nodes.len());
+        for (position, &outer) in order.iter().enumerate() {
+            let region = &regions[outer];
+            heights[outer] = order[..position]
+                .iter()
+                .filter_map(|&inner| {
+                    let child = &regions[inner];
+                    (child.edges.is_subset(&region.edges)
+                        && child.nodes.is_subset(&region.nodes)
+                        && (child.edges != region.edges || child.nodes != region.nodes))
+                        .then_some(heights[inner] + 1)
+                })
+                .max()
+                .unwrap_or(0);
+        }
+        order.sort_by_key(|&index| (Reverse(heights[index]), index));
+        order
+            .into_iter()
+            .filter_map(|index| {
+                let region = &regions[index];
+                if (overlap == HighlightOverlap::Recolour && !region.details.contracted)
+                    || (region.nodes.is_empty() && region.edges.is_empty())
+                {
+                    return None;
+                }
+                let style = if region.details.contracted {
+                    HighlightStyle::Treated
+                } else {
+                    region.style
+                };
+                let radius = hulls.radius
+                    + hulls.step * f64::from(heights[index])
+                    + if region.details.contracted { 1.0 } else { 0.0 };
+                Some(HullRegion {
+                    edges: region.edges.clone(),
+                    nodes: region.nodes.clone(),
+                    paint: style.paint(&palette.amber_paint).into_owned(),
+                    radius,
+                    details: region.details.clone(),
+                })
+            })
+            .collect()
+    }
+}
+
 /// One styled region, indexed in scene order. See [`Scene::apply_highlights`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -228,6 +382,8 @@ pub struct HighlightRegion {
     pub nodes: BTreeSet<usize>,
     /// Treatment of this region.
     pub style: HighlightStyle,
+    /// Optional hover text and counterterm treatment.
+    pub details: HighlightDetails,
 }
 
 impl HighlightRegion {
@@ -237,6 +393,7 @@ impl HighlightRegion {
             edges,
             nodes,
             style,
+            details: HighlightDetails::default(),
         }
     }
 }
@@ -307,11 +464,8 @@ impl Scene {
     /// See [`Self::apply_highlights`].
     pub const CASING_WIDTH_STEP: f64 = 1.1;
 
-    /// Paint regions in input order. The innermost stroke keeps its requested
-    /// width and earlier strokes grow only as needed to remain visible.
-    /// Named layer styles keep the particle's dash and base node appearance. Amber uses the
-    /// owner's treatment. Outside paint applies only when at least one region
-    /// is supplied and `mute_outside` is true.
+    /// Draw reading-size hulls. A single plain amber selection uses its owner’s
+    /// original paint and complement treatment.
     ///
     /// ```
     /// use linnest::svg::{HighlightPalette, HighlightRegion, HighlightStyle, Scene};
@@ -327,12 +481,7 @@ impl Scene {
         palette: &HighlightPalette<'_>,
         mute_outside: bool,
     ) {
-        self.apply_highlights_with_overlap(
-            regions,
-            palette,
-            mute_outside,
-            HighlightOverlap::Casings,
-        );
+        self.apply_highlights_with_overlap(regions, palette, mute_outside, HighlightOverlap::Hulls);
     }
 
     /// Paint the selected regions using the requested overlap geometry.
@@ -345,7 +494,75 @@ impl Scene {
         mute_outside: bool,
         overlap: HighlightOverlap,
     ) {
+        self.apply_highlights_with_hulls(
+            regions,
+            palette,
+            mute_outside,
+            overlap,
+            HullOptions::default(),
+        );
+    }
+
+    /// Resolve highlight geometry with configurable hull dimensions.
+    /// See [`Self::apply_highlights`] for a selection example.
+    pub fn apply_highlights_with_hulls(
+        &mut self,
+        regions: &[HighlightRegion],
+        palette: &HighlightPalette<'_>,
+        mute_outside: bool,
+        overlap: HighlightOverlap,
+        hulls: HullOptions,
+    ) {
         if regions.is_empty() {
+            return;
+        }
+        self.hulls.clear();
+        let legacy = matches!(regions, [region] if region.style == HighlightStyle::Amber && !region.details.contracted && region.details.label.is_empty() && region.details.description.is_empty());
+        self.counterterm_opacity = if overlap == HighlightOverlap::Recolour {
+            0.62
+        } else {
+            0.35
+        };
+        if !legacy
+            && (overlap == HighlightOverlap::Hulls
+                || regions.iter().any(|region| region.details.contracted))
+        {
+            self.hulls = HullRegion::resolve(regions, palette, overlap, hulls);
+        }
+
+        if !legacy && overlap == HighlightOverlap::Hulls {
+            return;
+        }
+        self.recolour_stamp = !legacy && overlap == HighlightOverlap::Recolour;
+        let has_counterterm = regions.iter().any(|region| region.details.contracted);
+        if self.recolour_stamp {
+            // At stamp sizes double lines, coils and dashes merge with the
+            // coloured membership. Use one plain carrier per particle.
+            for edge in &mut self.edges {
+                edge.pattern = None;
+                edge.flow = None;
+                edge.stroke.dash = Dash::Solid;
+            }
+            for (index, edge) in self.edges.iter_mut().enumerate() {
+                if regions
+                    .iter()
+                    .any(|region| region.details.contracted && region.edges.contains(&index))
+                {
+                    continue;
+                }
+                if let Some(region) = regions.iter().rfind(|region| region.edges.contains(&index)) {
+                    edge.stroke.paint = region.style.paint(&palette.amber_paint).into_owned();
+                    edge.stroke.width = edge.stroke.width.max(2.2);
+                } else if mute_outside && !has_counterterm {
+                    edge.stroke.paint = HighlightPalette::OUTSIDE_PAINT.into();
+                    edge.stroke.width = 1.0;
+                }
+            }
+            return;
+        }
+        if has_counterterm {
+            // CT2 keeps the ink, geometry and visibility of the interior lines.
+            // Other selections remain visible as hulls at reading size.
             return;
         }
         if let Some(spacing) = overlap
