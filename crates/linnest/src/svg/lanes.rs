@@ -5,7 +5,7 @@ use std::f64::consts::TAU;
 
 use kurbo::{BezPath, Point, Vec2};
 
-use super::curves::{Frame, ACCURACY};
+use super::curves::Frame;
 use super::{curves, Element, LaneRegion, UNIT};
 
 const PITCH: f64 = 3.0 / UNIT;
@@ -133,8 +133,12 @@ fn orient(size: usize, constraints: &[Constraint]) -> Vec<bool> {
                 .iter()
                 .map(|c| {
                     (
-                        component.binary_search(&c.a).unwrap(),
-                        component.binary_search(&c.b).unwrap(),
+                        component
+                            .binary_search(&c.a)
+                            .expect("constraint was selected by its first endpoint"),
+                        component
+                            .binary_search(&c.b)
+                            .expect("both endpoints of a constraint are in the same component"),
                         c.different,
                     )
                 })
@@ -190,7 +194,7 @@ pub(super) fn draw(
     let mut angles = BTreeMap::new();
     for (&edge, carrier) in carriers {
         let length = curves::length(&carrier.path);
-        if length <= ACCURACY {
+        if length == 0.0 {
             continue;
         }
         lengths.insert(edge, length);
@@ -233,15 +237,13 @@ pub(super) fn draw(
         let Some(&length) = lengths.get(&edge) else {
             continue;
         };
-        let outsets = carrier
-            .nodes
-            .map(|node| (cut(node) - stations[node].radius).min(length / 2.0));
-        let shared = length - outsets[0] - outsets[1] <= ACCURACY;
-        let window = if shared {
-            None
-        } else {
-            Some(curves::trim(&carrier.path, outsets[0], outsets[1])?)
-        };
+        let outsets = carrier.nodes.map(|node| cut(node) - stations[node].radius);
+        let requested = outsets.iter().sum::<f64>();
+        // Save up to a point of carrier even where the nominal cuts meet.
+        // The shorter fraction also protects very small but nonzero carriers.
+        let reserve = (1.0 / UNIT).min(length / 4.0);
+        let scale = ((length - reserve) / requested).min(1.0);
+        let window = curves::trim(&carrier.path, outsets[0] * scale, outsets[1] * scale)?;
         for (slot, region) in regions.iter().enumerate() {
             if !region.edges.contains(&edge) {
                 continue;
@@ -249,23 +251,16 @@ pub(super) fn draw(
             let offset = (slot as f64 - (regions.len() - 1) as f64 / 2.0)
                 * PITCH
                 * if flips[edge] { -1.0 } else { 1.0 };
-            if let Some(window) = &window {
-                let lane = if offset == 0.0 {
-                    window.clone()
-                } else {
-                    curves::parallel(window, offset)?
-                };
-                let frames = curves::frames(&lane, vec![0.0, curves::length(&lane)])?;
-                for (side, frame) in frames.into_iter().enumerate() {
-                    endpoints.insert((slot, End { edge, side }), point(frame, side, 0.0));
-                }
-                result.push(draw_path(slot, lane));
+            let lane = if offset == 0.0 {
+                window.clone()
             } else {
-                let frames = curves::frames(&carrier.path, vec![length / 2.0])?;
-                for (side, frame) in (0..2).zip(frames.into_iter().cycle()) {
-                    endpoints.insert((slot, End { edge, side }), point(frame, side, offset));
-                }
+                curves::parallel(&window, offset)?
+            };
+            let frames = curves::frames(&lane, vec![0.0, curves::length(&lane)])?;
+            for (side, frame) in frames.into_iter().enumerate() {
+                endpoints.insert((slot, End { edge, side }), point(frame, side, 0.0));
             }
+            result.push(draw_path(slot, lane));
         }
     }
     for turn in joins {
@@ -273,12 +268,18 @@ pub(super) fn draw(
             endpoints.get(&(turn.slot, turn.a)),
             endpoints.get(&(turn.slot, turn.b)),
         ) {
-            let handle = cut(carriers[&turn.a.edge].nodes[turn.a.side]) * 0.62;
+            let handle = |end: End| {
+                let node = carriers[&end.edge].nodes[end.side];
+                let radius = stations[node].radius;
+                let length = lengths[&end.edge];
+                let reserve = (1.0 / UNIT).min(length / 4.0);
+                (cut(node).min(radius + (length - reserve) / 2.0)) * 0.62
+            };
             let mut path = BezPath::new();
             path.move_to(a.point);
             path.curve_to(
-                a.point + a.toward * handle,
-                b.point + b.toward * handle,
+                a.point + a.toward * handle(turn.a),
+                b.point + b.toward * handle(turn.b),
                 b.point,
             );
             result.push(draw_path(turn.slot, path));
@@ -326,6 +327,50 @@ mod tests {
                 case.case
             );
         }
+    }
+
+    #[test]
+    fn crowded_terminal_lanes_keep_a_carrier_in_every_slot() {
+        let stations = [
+            Station {
+                center: Point::ORIGIN,
+                radius: 0.1,
+            },
+            Station {
+                center: Point::new(0.3, 0.0),
+                radius: 0.1,
+            },
+        ];
+        let mut path = BezPath::new();
+        path.move_to((0.1, 0.0));
+        path.line_to((0.2, 0.0));
+        let carriers = BTreeMap::from([(
+            0,
+            Carrier {
+                nodes: [0, 1],
+                path,
+            },
+        )]);
+        let regions = vec![
+            LaneRegion {
+                edges: [0].into(),
+                paint: String::new(),
+                details: Default::default(),
+            };
+            128
+        ];
+        let elements = draw(&regions, &carriers, &stations, 1).unwrap();
+        let slots: Vec<_> = elements
+            .iter()
+            .filter_map(|element| match element {
+                Element::Lane { slot, path, .. } => {
+                    assert!(curves::length(path) > 0.0);
+                    Some(*slot)
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(slots, (0..128).collect::<Vec<_>>());
     }
 
     #[test]

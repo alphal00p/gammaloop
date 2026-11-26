@@ -121,9 +121,11 @@ impl PyDiagramStyle {
     /// miniature : bool, optional
     ///     Default to recolouring and increase ghost visibility for small stamps.
     /// hull_radius : float or None, optional
-    ///     Innermost hull radius in points; defaults to 4.2.
+    ///     Innermost hull radius in points, in (0, 1000]. Defaults to 4.2.
+    ///     Effective radii including nesting and counterterm padding must
+    ///     also be in this range. Thin hulls on long regions may require a larger radius.
     /// hull_step : float or None, optional
-    ///     Radius increment per inclusion level; defaults to 2.6 points.
+    ///     Finite nonnegative radius increment per inclusion level. Defaults to 2.6 points.
     #[new]
     #[pyo3(signature=(*,show_particle=None,show_momentum=None,show_edge_index=None,show_node_index=None,momentum_arrows=None,split_initial_state=None,debug=None,miniature=false,hull_radius=None,hull_step=None))]
     #[allow(clippy::too_many_arguments)]

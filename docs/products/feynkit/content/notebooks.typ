@@ -183,7 +183,8 @@ from rendering and requires that package only when explicitly used.
 
 == Nested highlights and counterterms
 
-Pass an ordered list of regions to `highlight`. At reading size, the renderer draws
+Pass an ordered list of regions to `highlight`. At reading size, a single ordinary layer uses the original stroke treatment.
+For multiple layers, the renderer draws
 translucent hulls around member edges and vertices. It increases the radius of enclosing
 regions, then draws the original particle lines over the hulls. Use
 `DiagramStyle(miniature=True)` for stamps. The last matching layer supplies the
@@ -195,8 +196,8 @@ At reading size, `overlap="lanes"` assigns each layer a fixed slot along its
 internal edges. Cubic turns connect the slots at vertices while the particle
 lines retain their original styling. Some selections require crossings where
 the same edges belong to incompatible turns. A layer's label and description
-are available on its SVG strokes. Contracted selections keep the counterterm
-hull treatment.
+are available on its SVG strokes. Each contracted selection uses the counterterm hull treatment. Its sibling
+layers retain their selected overlap mode.
 
 // docs-example: compile
 ```python
@@ -214,7 +215,7 @@ view
 ```
 
 A contracted layer keeps the original layout, fades its particle lines, and draws
-a treated hull with a circled cross. Use `scheme="MS-bar"` for an open circle or
+a treated hull with a circled cross. Scheme names are case-insensitive. Use `scheme="MS-bar"` for an open circle or
 `scheme="on-shell"` for a filled circle with a paper-coloured cross. The open
 circle also applies when the scheme is unspecified. The SVG exposes the label,
 description and any specified scheme on hover. Typst embeds the same native vector geometry for printing.

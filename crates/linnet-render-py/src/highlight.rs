@@ -97,6 +97,11 @@ pub fn extract_highlights<'py, T>(
             ));
         }
         let style = if details.contracted {
+            if style.is_some_and(|style| style != Treated) {
+                return Err(PyValueError::new_err(
+                    "a contracted highlight layer requires style 'treated'",
+                ));
+            }
             Some(Treated)
         } else {
             style

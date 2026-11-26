@@ -315,9 +315,12 @@ pub(crate) fn render_with_highlights(
     config: Option<&Bound<'_, PyAny>>,
     highlight: Option<&Bound<'_, PyAny>>,
     mute_outside: bool,
-    overlap: &str,
+    overlap: Option<&str>,
 ) -> PyResult<PyDiagramView> {
-    let overlap = highlight_overlap(overlap)?;
+    let overlap = overlap
+        .map(highlight_overlap)
+        .transpose()?
+        .unwrap_or_default();
     let Some(highlight) = highlight else {
         return render_graph_with_overlap(py, graph, config, &[], mute_outside, overlap);
     };
@@ -431,6 +434,7 @@ fn render_graph_with_overlap(
     palette.amber_node_fill = Some("#ffd16659".into());
     palette.outside_node_fill = Some("#77777726".into());
     scene.apply_highlights_with_overlap(&regions, &palette, mute_outside, overlap);
+    scene.validate_hull_radii().map_err(PyValueError::new_err)?;
     let view = PyDiagramView::from_scene(py, scene, None)?;
     if highlights.is_empty() {
         return Ok(view);

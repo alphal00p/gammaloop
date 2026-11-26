@@ -279,6 +279,13 @@ fn linnest_overlap_sources_match_the_compiled_clinnet_fixtures() {
         HighlightLayer::new(middle, &empty, HighlightStyle::Middle),
         HighlightLayer::new(inner, &empty, HighlightStyle::Treated),
     ];
+    let config = "(layout: (layout-algo: \"dot\"))";
+    let configured = diagram
+        .to_linnest_with_highlights(&layers, true, None, config)
+        .unwrap();
+    assert!(configured.contains(config));
+    assert!(configured.contains("subgraph-edge-underlay: \"casings\""));
+    assert!(!configured.contains("#image(bytes("));
     let source = diagram
         .to_linnest_with_overlap(&layers, true, None, "(:)", HighlightOverlap::Casings)
         .unwrap();

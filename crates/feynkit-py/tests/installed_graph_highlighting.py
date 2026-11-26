@@ -404,21 +404,40 @@ for owner, selections in owners:
     else:
         raise AssertionError("four unstyled layers must require explicit styles")
 
+for owner, selections in owners:
+    selected = (selections[-1], "treated")
+    styled = owner.render(highlight=selected).to_svg()
+    assert styled == owner.render(highlight=selected, overlap="casings").to_svg()
+    assert "data-linnet-hull" not in styled
+    assert "#77777773" in styled and "#e4504f" in styled
+    assert not any(
+        node.get("stroke") == "#77777773"
+        for node in ET.fromstring(
+            owner.render(highlight=selected, mute_outside=False).to_svg()
+        ).iter()
+    )
+
 if has_linnet:
     generic_svg = generic.to_svg(
         highlight=[generic_outer, generic_middle, generic_inner]
     )
     check_palette(generic_svg, "linnet", "linnet-subgraph")
-    disjoint = generic.to_svg(
-        highlight=[generic.subgraph(edges=[0, 1]), generic.subgraph(edges=[2, 3])]
+    disjoint_regions = [generic.subgraph(edges=[0, 1]), generic.subgraph(edges=[2, 3])]
+    disjoint = stroke_stacks(
+        generic.to_svg(highlight=disjoint_regions, overlap="casings")
     )
-    assert all(len(stack) == 1 for stack in stroke_stacks(disjoint))
-    assert all(
-        len(stack) == 1
-        for stack in stroke_stacks(
-            generic.to_svg(highlight=[generic.empty_subgraph(), generic_inner])
+    assert disjoint and all(len(stack) == 1 for stack in disjoint)
+    partly_empty = stroke_stacks(
+        generic.to_svg(
+            highlight=[generic.empty_subgraph(), generic_inner], overlap="casings"
         )
     )
+    assert partly_empty and all(len(stack) == 1 for stack in partly_empty)
+    default_hulls = ET.fromstring(generic.to_svg(highlight=disjoint_regions)).findall(
+        ".//*[@data-linnet-hull='true']/{*}path"
+    )
+    assert {p.get("fill") for p in default_hulls} == {"#3b82f6", "#e4504f"}
+    assert len({p.get("d") for p in default_hulls}) == len(default_hulls) == 2
     half_edge = generic.subgraph(half_edges=[generic.edge(0).source.index])
     for selection in (half_edge, (half_edge, "treated"), [half_edge, generic_inner]):
         try:
@@ -619,7 +638,10 @@ metro = basketball.render(
 root = ET.fromstring(metro)
 lanes = root.findall(".//*[@data-linnet-lane]")
 assert {lane.get("data-linnet-lane") for lane in lanes} == {"0", "1"}
-assert root.find(".//*[@data-linnet-lane-crossings]").get("data-linnet-lane-crossings") == "0"
+assert (
+    root.find(".//*[@data-linnet-lane-crossings]").get("data-linnet-lane-crossings")
+    == "0"
+)
 assert len(root.findall(".//*[@data-linnet-paper]")) == 2
 assert "stroke-dasharray" in metro
 for lane in lanes:
@@ -648,10 +670,96 @@ loop_lanes = tadpole.render(
 loop_root = ET.fromstring(loop_lanes)
 for slot in ("0", "1"):
     assert len(loop_root.findall(f".//*[@data-linnet-lane='{slot}']")) == 2
-assert "data-linnet-lane" in fixture_linnest(basketball, highlight=layers, overlap="lanes")
+assert "data-linnet-lane" in fixture_linnest(
+    basketball, highlight=layers, overlap="lanes"
+)
 
 if has_linnet:
-    generic_lanes = generic.to_svg(highlight=[generic_outer, generic_inner], overlap="lanes")
+    generic_lanes = generic.to_svg(
+        highlight=[generic_outer, generic_inner], overlap="lanes"
+    )
     assert ET.fromstring(generic_lanes).find(".//*[@data-linnet-lane]") is not None
     assert "[data-linnet-paper]" in generic_lanes
 print("installed transit corner lane checks passed")
+
+for mode in ("hulls", "recolour", "casings", "bands", "bands-miniature", "lanes"):
+    drawing = basketball.render(
+        highlight=ct_layers, overlap=mode, style=legacy_style
+    ).to_svg()
+    svg = ET.fromstring(drawing)
+    hulls = svg.findall(".//*[@data-linnet-hull='true']")
+    assert len(hulls) == (2 if mode == "hulls" else 1), mode
+    assert svg.find(".//*[@data-linnet-counterterm='true']") is not None, mode
+    if mode == "lanes":
+        assert (
+            svg.find(".//*[@data-linnet-lane='0']/{*}path[@stroke='#3b82f6']")
+            is not None
+        )
+    elif mode != "hulls":
+        assert svg.find(".//{*}path[@stroke='#3b82f6']") is not None, mode
+
+
+def hull_path(layers):
+    svg = basketball.render(
+        highlight=layers, overlap="hulls", style=legacy_style
+    ).to_svg()
+    paths = ET.fromstring(svg).findall(".//*[@data-linnet-hull='true']/{*}path")
+    assert len(paths) == 1
+    return paths[0].get("d")
+
+
+assert hull_path([(inner, "treated")]) == hull_path(
+    [(inner, "treated"), (basketball.subgraph(), "middle")]
+)
+crowded = basketball.render(
+    highlight=[basketball.subgraph(edges=[0])] * 128,
+    overlap="lanes",
+    style=legacy_style,
+).to_svg()
+assert len(ET.fromstring(crowded).findall(".//*[@data-linnet-lane]/{*}path")) == 128
+
+for radius, step, layers_to_draw in (
+    (1001, 0, [outer, inner]),
+    (999, 2, [outer, inner]),
+    (1000, 0, [(inner, {"contracted": True})]),
+):
+    try:
+        basketball.render(
+            highlight=layers_to_draw,
+            style=fk.DiagramStyle(hull_radius=radius, hull_step=step),
+        )
+    except ValueError as error:
+        assert "(0, 1000] pt" in str(error)
+    else:
+        raise AssertionError("invalid effective radius must fail before SVG generation")
+for radius in (0.01, 0.000001):
+    view = basketball.render(
+        highlight=(inner, "treated"),
+        overlap="hulls",
+        style=fk.DiagramStyle(hull_radius=radius, show_particle=False),
+    )
+    try:
+        paths = ET.fromstring(view.to_svg()).findall(".//*[@data-linnet-hull]/{*}path")
+    except RuntimeError as error:
+        assert "increase hull_radius or select a smaller region" in str(error)
+    else:
+        assert len(paths) == 1 and paths[0].get("d").count("M") == 1
+assert (
+    ET.fromstring(
+        basketball.render(
+            highlight=(inner, {"contracted": True, "scheme": "oN-sHeLl"}),
+            style=legacy_style,
+        ).to_svg()
+    ).find(".//*[@data-linnet-counterterm='true'][@data-scheme='on-shell']")
+    is not None
+)
+for owner, selections in owners:
+    try:
+        owner.render(
+            highlight=(selections[-1], {"contracted": True, "style": "acted-on"})
+        )
+    except ValueError as error:
+        assert "requires style 'treated'" in str(error)
+    else:
+        raise AssertionError("a contracted layer must use the treated paint")
+print("installed highlight review regressions passed")

@@ -466,10 +466,7 @@ config = graph.RenderSettings(
                 details: Details::default(),
             };
             let scene = Scene {
-                lanes: Vec::new(),
-                hulls: Vec::new(),
-                counterterm_opacity: 0.35,
-                recolour_stamp: false,
+                highlights: Default::default(),
                 graph: serde_json::from_value(json!({
                     "nodes": [{"index": 0}, {"index": 1}],
                     "edges": [{"id": 0, "source": {"node": 0, "id": 0}, "sink": {"node": 1, "id": 1}}],

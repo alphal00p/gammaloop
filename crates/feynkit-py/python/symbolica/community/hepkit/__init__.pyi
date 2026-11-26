@@ -2361,9 +2361,11 @@ class DiagramStyle:
         miniature : bool, optional
             Default to recolouring and increase ghost visibility for small stamps.
         hull_radius : float or None, optional
-            Innermost hull radius in points; defaults to 4.2.
+            Innermost hull radius in points, in (0, 1000]. Defaults to 4.2.
+            Effective radii including nesting and counterterm padding must
+            also be in this range. Thin hulls on long regions may require a larger radius.
         hull_step : float or None, optional
-            Radius increment per inclusion level; defaults to 2.6 points.
+            Finite nonnegative radius increment per inclusion level. Defaults to 2.6 points.
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -3976,15 +3978,16 @@ class FeynmanDiagram:
             two, or three get amber, blue/red, or blue/violet/red respectively.
             An empty sequence clears highlighting. A pair can use a dictionary
             with style, label, description, contracted, and scheme fields. Contracted
-            selections show a treated hull and a ghost counterterm glyph.
-            Set scheme to "MS-bar" for an open glyph or "on-shell" for a
+            selections use the treated style and show a hull and a ghost counterterm glyph.
+            Scheme names are case-insensitive. Use "MS-bar" for an open glyph or "on-shell" for a
             filled glyph. None or "unspecified" uses the plain open CT2 glyph.
         mute_outside : bool, optional
             Mute unselected drawing elements in legacy and stroke modes.
             Hulls and lanes keep all particle lines in normal ink.
         overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature", "lanes"} or None, optional
-            Defaults to H1 hulls at reading size and recolouring for
-            DiagramStyle(miniature=True). Use "lanes" for global colour slots
+            At reading size, one ordinary layer uses strokes and multiple
+            layers use hulls. DiagramStyle(miniature=True) defaults to recolouring.
+            Use "lanes" for global colour slots
             joined by cubic turns at vertices. Lanes and bands can assign
             distinct palette slots to unstyled layers. Casings require
             explicit styles after three unstyled layers.
@@ -4022,8 +4025,9 @@ class FeynmanDiagram:
             Mute unselected drawing elements in legacy and stroke modes.
             Hulls and lanes keep all particle lines in normal ink.
         overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature", "lanes"} or None, optional
-            Defaults to H1 hulls at reading size and recolouring for
-            DiagramStyle(miniature=True). Use "lanes" for global colour slots
+            At reading size, one ordinary layer uses strokes and multiple
+            layers use hulls. DiagramStyle(miniature=True) defaults to recolouring.
+            Use "lanes" for global colour slots
             joined by cubic turns at vertices. Lanes and bands can assign
             distinct palette slots to unstyled layers. Casings require
             explicit styles after three unstyled layers.

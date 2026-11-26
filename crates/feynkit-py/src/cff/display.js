@@ -56,7 +56,7 @@
         used = new Set();
       for (const id of new Set(term)) {
         const slot = state.palette[id];
-        if (Number.isInteger(slot) && slot > 0 && !used.has(slot)) {
+        if (Number.isInteger(slot) && slot > 0 && slot <= data.slot_colors.length && !used.has(slot)) {
           palette[id] = slot;
           used.add(slot);
         }

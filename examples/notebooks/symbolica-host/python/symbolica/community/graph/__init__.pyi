@@ -713,7 +713,7 @@ class Graph:
     @classmethod
     def from_dot_file(cls, path: builtins.str | os.PathLike[builtins.str], codec: DotCodec, *, node_store: NodeStore = NodeStore.Vec) -> Graph: ...
     def to_dot(self, codec: typing.Optional[DotCodec] = None) -> builtins.str: ...
-    def render(self, *, config: RenderSettings | None = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature', 'lanes'] = "hulls") -> DiagramView:
+    def render(self, *, config: RenderSettings | None = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature', 'lanes'] | None = None) -> DiagramView:
         r"""
         Snapshot a drawing, using native SVG geometry for ordinary graph settings.
 
@@ -734,14 +734,16 @@ class Graph:
             Further layers get palette slots, except in casings mode. Bands
             and multi-layer lanes assign slots to all unstyled layers.
             A style dictionary accepts style, label, description, contracted, and scheme.
+            Contracted selections use the treated style and accept case-insensitive scheme names.
         mute_outside : bool, optional
             Fade edges and nodes outside the selected regions in applicable modes.
             Hulls and lanes keep all particle lines in normal ink.
-        overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature", "lanes"}, optional
-            Use hulls by default. Lanes place layers in global colour slots
+        overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature", "lanes"} or None, optional
+            One ordinary layer defaults to strokes and multiple layers default
+            to hulls. Lanes place layers in global colour slots
             joined by cubic turns at vertices.
         """
-    def to_svg(self, *, config: RenderSettings | None = None, browser: typing.Optional[builtins.str] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature', 'lanes'] = "hulls") -> builtins.str:
+    def to_svg(self, *, config: RenderSettings | None = None, browser: typing.Optional[builtins.str] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature', 'lanes'] | None = None) -> builtins.str:
         r"""
         Export SVG with the same highlights as ``render``.
 
@@ -760,8 +762,9 @@ class Graph:
         mute_outside : bool, optional
             Fade edges and nodes outside the selected regions in applicable modes.
             Hulls and lanes keep all particle lines in normal ink.
-        overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature", "lanes"}, optional
-            Use hulls by default. Lanes place layers in global colour slots
+        overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature", "lanes"} or None, optional
+            One ordinary layer defaults to strokes and multiple layers default
+            to hulls. Lanes place layers in global colour slots
             joined by cubic turns at vertices.
         """
     def _mime_(self) -> typing.Any: ...

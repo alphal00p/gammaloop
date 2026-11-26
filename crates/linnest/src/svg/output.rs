@@ -3,7 +3,7 @@
 use std::fmt::Write as _;
 use std::sync::Arc;
 
-use kurbo::{BezPath, PathEl, Rect, Shape};
+use kurbo::{BezPath, PathEl, Point, Rect, Shape};
 use serde_json::Value;
 
 use super::{arrow_stroke, labels::Bounds, marks, Dash, Element, Stroke, Target, Typeset, UNIT};
@@ -260,9 +260,7 @@ pub(super) fn svg(
         match element {
             Element::Carrier { .. } | Element::BeginGhost(_) | Element::EndGhost => {}
             Element::LaneCrossings(_) => {}
-            Element::Hull { path, .. }
-            | Element::HullOutline { path, .. }
-            | Element::Lane { path, .. } => include(path.bounding_box()),
+            Element::Hull { path, .. } | Element::Lane { path, .. } => include(path.bounding_box()),
             Element::LaneHalo { center, radius } => {
                 let radius = radius + 1.6 / UNIT;
                 include(Rect::from_points(*center, *center).inflate(radius, radius));
@@ -307,22 +305,44 @@ pub(super) fn svg(
     if !bounds.is_finite() {
         bounds = Rect::ZERO;
     }
-    let canvas_width = (bounds.width() + 2.0 * PAD) * UNIT;
-    let canvas_height = (bounds.height() + 2.0 * PAD) * UNIT;
     let title = typeset.title.as_ref();
-    let column = title.map_or(canvas_width, |title| canvas_width.max(title.metrics.width));
+    let title_width = title.map_or(0.0, |title| title.metrics.width);
     let title_height = title.map_or(0.0, |title| title.metrics.height + GUTTER);
-    let (width, height) = (
-        column + 2.0 * MARGIN,
-        title_height + canvas_height + 2.0 * MARGIN,
-    );
-    // Normalize visual weight to an 80-point drawing before it is scaled to
-    // a 52px or 28px stamp. Positions and the hull geometry stay in scene units.
+    let width = ((bounds.width() + 2.0 * PAD) * UNIT).max(title_width) + 2.0 * MARGIN;
+    // The nominal canvas sets ink weight before any bounds expansion.
     let ink_scale = if recolour_stamp {
         (width / 80.0).max(1.0)
     } else {
         1.0
     };
+    if recolour_stamp {
+        for element in layers {
+            let disc = match element {
+                Element::Node {
+                    at: [x, y],
+                    size: (r, _),
+                    rectangular: false,
+                    stroke,
+                    ..
+                } => Some((
+                    Point::new(*x, *y),
+                    r * ink_scale + stroke.width / (2.0 * UNIT),
+                )),
+                Element::Counterterm { center, .. } => Some((*center, 5.925 * ink_scale / UNIT)),
+                _ => None,
+            };
+            if let Some((center, radius)) = disc {
+                bounds = bounds.union(Rect::from_points(center, center).inflate(radius, radius));
+            }
+        }
+    }
+    let canvas_width = (bounds.width() + 2.0 * PAD) * UNIT;
+    let canvas_height = (bounds.height() + 2.0 * PAD) * UNIT;
+    let column = canvas_width.max(title_width);
+    let (width, height) = (
+        column + 2.0 * MARGIN,
+        title_height + canvas_height + 2.0 * MARGIN,
+    );
     let ox = MARGIN + (column - canvas_width) / 2.0;
     let oy = MARGIN + title_height;
     let x = |u: f64| number(ox + (u - bounds.x0 + PAD) * UNIT);
@@ -472,16 +492,8 @@ pub(super) fn svg(
                 let (label, description, title, scheme_attribute) = hover_details(details);
                 let _ = write!(
                     svg,
-                    r#"<g data-linnet-hull="true" data-label="{label}" data-description="{description}" data-contracted="{}"{scheme_attribute}><title>{title}</title><path d="{d}" fill="{paint}" fill-rule="evenodd" fill-opacity="{opacity}" stroke="none"/></g>"#,
+                    r#"<g data-linnet-hull="true" data-label="{label}" data-description="{description}" data-contracted="{}"{scheme_attribute}><title>{title}</title><path d="{d}" fill="{paint}" fill-rule="evenodd" fill-opacity="{opacity}" stroke="{paint}" stroke-width="1.1" stroke-linejoin="round"/></g>"#,
                     details.contracted
-                );
-            }
-            Element::HullOutline { path, paint } => {
-                let paint = xml_escape(paint);
-                let d = path_data(path);
-                let _ = write!(
-                    svg,
-                    r#"<path data-linnet-hull-outline="true" pointer-events="none" d="{d}" fill="none" stroke="{paint}" stroke-width="1.1" stroke-linejoin="round"/>"#
                 );
             }
             Element::Lane {

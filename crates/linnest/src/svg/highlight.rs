@@ -4,20 +4,23 @@ use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::mem;
 use std::str::FromStr;
 
 use thiserror::Error;
 
-use super::{Dash, NodeDrawing, Scene, Stroke};
+use super::{Dash, EdgeDrawing, NodeDrawing, Scene, Stroke};
 
 /// Geometry used where several highlight regions meet. See [`Scene::apply_highlights_with_overlap`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum HighlightOverlap {
+    /// Use the original stroke treatment for one layer and hulls for several.
+    #[default]
+    Auto,
     /// Nested strokes, with the last layer on the centerline.
     Casings,
     /// Translucent unions of selected edge tubes and vertex discs.
-    #[default]
     Hulls,
     /// Recolour edges by the last matching layer.
     Recolour,
@@ -30,10 +33,11 @@ pub enum HighlightOverlap {
 }
 
 impl HighlightOverlap {
-    /// Name used by the Python and Typst rendering options.
+    /// Mode name. Python selects `Auto` by omitting the option.
     /// See [`Scene::apply_highlights_with_overlap`].
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::Auto => "auto",
             Self::Casings => "casings",
             Self::Hulls => "hulls",
             Self::Recolour => "recolour",
@@ -47,7 +51,7 @@ impl HighlightOverlap {
     /// See [`Scene::apply_highlights_with_overlap`].
     pub fn band_spacing(self) -> Option<f64> {
         match self {
-            Self::Casings | Self::Hulls | Self::Recolour | Self::Lanes => None,
+            Self::Auto | Self::Casings | Self::Hulls | Self::Recolour | Self::Lanes => None,
             Self::Bands => Some(3.0),
             Self::BandsMiniature => Some(4.0),
         }
@@ -330,6 +334,41 @@ pub struct LaneRegion {
     pub(super) details: HighlightDetails,
 }
 
+/// Derived highlight geometry and the paint it temporarily replaces.
+/// Initialize with `HighlightDrawing::default()` when constructing a scene.
+#[derive(Default)]
+pub struct HighlightDrawing {
+    pub(super) hulls: Vec<HullRegion>,
+    pub(super) lanes: Vec<LaneRegion>,
+    pub(super) recolour_stamp: bool,
+    original: Option<OriginalPaint>,
+}
+
+struct OriginalPaint {
+    nodes: Vec<NodeDrawing>,
+    edges: Vec<EdgeDrawing>,
+}
+
+impl HullOptions {
+    /// Validate the base radius and nesting step before resolving highlights.
+    ///
+    /// # Errors
+    /// Returns a message if the base radius is outside (0, 1000] points or
+    /// the nesting step is negative or non-finite.
+    pub fn validate(self) -> Result<(), &'static str> {
+        if !valid_radius(self.radius) || !self.step.is_finite() || self.step < 0.0 {
+            return Err(
+                "hull_radius must be in (0, 1000] pt and hull_step must be finite and nonnegative",
+            );
+        }
+        Ok(())
+    }
+}
+
+fn valid_radius(radius: f64) -> bool {
+    radius > 0.0 && radius <= 1000.0
+}
+
 impl HullRegion {
     fn resolve(
         regions: &[HighlightRegion],
@@ -338,7 +377,12 @@ impl HullRegion {
         hulls: HullOptions,
     ) -> Vec<Self> {
         let mut heights = vec![0_u32; regions.len()];
-        let mut order: Vec<_> = (0..regions.len()).collect();
+        let mut order: Vec<_> = regions
+            .iter()
+            .enumerate()
+            .filter(|(_, region)| !region.edges.is_empty() || !region.nodes.is_empty())
+            .map(|(index, _)| index)
+            .collect();
         order.sort_by_key(|&index| regions[index].edges.len() + regions[index].nodes.len());
         for (position, &outer) in order.iter().enumerate() {
             let region = &regions[outer];
@@ -354,14 +398,16 @@ impl HullRegion {
                 .max()
                 .unwrap_or(0);
         }
+        order.extend(regions.iter().enumerate().filter_map(|(index, region)| {
+            (region.details.contracted && region.edges.is_empty() && region.nodes.is_empty())
+                .then_some(index)
+        }));
         order.sort_by_key(|&index| (Reverse(heights[index]), index));
         order
             .into_iter()
             .filter_map(|index| {
                 let region = &regions[index];
-                if (overlap == HighlightOverlap::Recolour && !region.details.contracted)
-                    || (region.nodes.is_empty() && region.edges.is_empty())
-                {
+                if overlap != HighlightOverlap::Hulls && !region.details.contracted {
                     return None;
                 }
                 let style = if region.details.contracted {
@@ -476,8 +522,8 @@ impl Scene {
     /// See [`Self::apply_highlights`].
     pub const CASING_WIDTH_STEP: f64 = 1.1;
 
-    /// Draw reading-size hulls. A single plain amber selection uses its owner’s
-    /// original paint and complement treatment.
+    /// Draw one ordinary layer with strokes, or several with reading-size hulls.
+    /// A contracted layer uses a hull and a counterterm glyph.
     ///
     /// ```
     /// use linnest::svg::{HighlightPalette, HighlightRegion, HighlightStyle, Scene};
@@ -493,7 +539,7 @@ impl Scene {
         palette: &HighlightPalette<'_>,
         mute_outside: bool,
     ) {
-        self.apply_highlights_with_overlap(regions, palette, mute_outside, HighlightOverlap::Hulls);
+        self.apply_highlights_with_overlap(regions, palette, mute_outside, HighlightOverlap::Auto);
     }
 
     /// Paint the selected regions using the requested overlap geometry.
@@ -515,6 +561,22 @@ impl Scene {
         );
     }
 
+    /// Check effective radii, including nesting and the extra counterterm radius.
+    ///
+    /// # Errors
+    /// Returns a message when a resolved radius is outside (0, 1000] points.
+    pub fn validate_hull_radii(&self) -> Result<(), &'static str> {
+        if self
+            .highlights
+            .hulls
+            .iter()
+            .any(|region| !valid_radius(region.radius))
+        {
+            return Err("effective hull radius must be in (0, 1000] pt after nesting and counterterm padding; reduce hull_radius or hull_step");
+        }
+        Ok(())
+    }
+
     /// Resolve highlight geometry with configurable hull dimensions.
     /// See [`Self::apply_highlights`] for a selection example.
     pub fn apply_highlights_with_hulls(
@@ -525,30 +587,67 @@ impl Scene {
         overlap: HighlightOverlap,
         hulls: HullOptions,
     ) {
+        if let Some(original) = mem::take(&mut self.highlights).original {
+            self.nodes = original.nodes;
+            self.edges = original.edges;
+        }
         if regions.is_empty() {
             return;
         }
-        self.hulls.clear();
-        self.lanes.clear();
-        let legacy = matches!(regions, [region] if region.style == HighlightStyle::Amber && !region.details.contracted && region.details.label.is_empty() && region.details.description.is_empty());
-        self.counterterm_opacity = if overlap == HighlightOverlap::Recolour {
-            0.62
-        } else {
-            0.35
+        let overlap = match overlap {
+            HighlightOverlap::Auto if regions.len() < 2 => HighlightOverlap::Casings,
+            HighlightOverlap::Auto => HighlightOverlap::Hulls,
+            overlap => overlap,
         };
-        if !legacy
-            && (overlap == HighlightOverlap::Hulls
-                || regions.iter().any(|region| region.details.contracted))
-        {
-            self.hulls = HullRegion::resolve(regions, palette, overlap, hulls);
+        let legacy = matches!(regions, [region] if region.style == HighlightStyle::Amber && !region.details.contracted && region.details.label.is_empty() && region.details.description.is_empty());
+        let has_counterterm = regions.iter().any(|region| region.details.contracted);
+        if !legacy && (overlap == HighlightOverlap::Hulls || has_counterterm) {
+            self.highlights.hulls = HullRegion::resolve(regions, palette, overlap, hulls);
         }
-
         if !legacy && overlap == HighlightOverlap::Hulls {
             return;
         }
-        self.recolour_stamp = !legacy && overlap == HighlightOverlap::Recolour;
-        let has_counterterm = regions.iter().any(|region| region.details.contracted);
-        if self.recolour_stamp {
+        let contracted_edges: BTreeSet<_> = regions
+            .iter()
+            .filter(|region| region.details.contracted)
+            .flat_map(|region| region.edges.iter().copied())
+            .collect();
+        let contracted_nodes: BTreeSet<_> = regions
+            .iter()
+            .filter(|region| region.details.contracted)
+            .flat_map(|region| region.nodes.iter().copied())
+            .collect();
+        let ordinary;
+        let regions = if has_counterterm {
+            ordinary = regions
+                .iter()
+                .filter(|region| !region.details.contracted)
+                .cloned()
+                .collect::<Vec<_>>();
+            ordinary.as_slice()
+        } else {
+            regions
+        };
+        self.highlights.recolour_stamp = !legacy && overlap == HighlightOverlap::Recolour;
+        if regions.is_empty() && !self.highlights.recolour_stamp {
+            return;
+        }
+        if overlap == HighlightOverlap::Lanes && !legacy {
+            self.highlights.lanes = regions
+                .iter()
+                .map(|region| LaneRegion {
+                    edges: region.edges.clone(),
+                    paint: region.style.paint(&palette.amber_paint).into_owned(),
+                    details: region.details.clone(),
+                })
+                .collect();
+            return;
+        }
+        self.highlights.original = Some(OriginalPaint {
+            nodes: self.nodes.clone(),
+            edges: self.edges.clone(),
+        });
+        if self.highlights.recolour_stamp {
             // At stamp sizes double lines, coils and dashes merge with the
             // coloured membership. Use one plain carrier per particle.
             for edge in &mut self.edges {
@@ -557,10 +656,7 @@ impl Scene {
                 edge.stroke.dash = Dash::Solid;
             }
             for (index, edge) in self.edges.iter_mut().enumerate() {
-                if regions
-                    .iter()
-                    .any(|region| region.details.contracted && region.edges.contains(&index))
-                {
+                if contracted_edges.contains(&index) {
                     continue;
                 }
                 if let Some(region) = regions.iter().rfind(|region| region.edges.contains(&index)) {
@@ -573,27 +669,19 @@ impl Scene {
             }
             return;
         }
-        if has_counterterm {
-            // CT2 keeps the ink, geometry and visibility of the interior lines.
-            // Other selections remain visible as hulls at reading size.
-            return;
-        }
-        if overlap == HighlightOverlap::Lanes && !legacy {
-            self.lanes = regions
-                .iter()
-                .map(|region| LaneRegion {
-                    edges: region.edges.clone(),
-                    paint: region.style.paint(&palette.amber_paint).into_owned(),
-                    details: region.details.clone(),
-                })
-                .collect();
-            return;
-        }
-        if let Some(spacing) = overlap
-            .band_spacing()
-            .filter(|_| !matches!(regions, [region] if region.style == HighlightStyle::Amber))
-        {
-            self.apply_bands(regions, palette, mute_outside, spacing);
+        if let Some(spacing) = overlap.band_spacing().filter(|_| {
+            !legacy
+                && (has_counterterm
+                    || !matches!(regions, [region] if region.style == HighlightStyle::Amber))
+        }) {
+            self.apply_bands(
+                regions,
+                palette,
+                mute_outside,
+                spacing,
+                &contracted_edges,
+                &contracted_nodes,
+            );
             return;
         }
         for (index, node) in self.nodes.iter_mut().enumerate() {
@@ -610,7 +698,9 @@ impl Scene {
                         node.fill = fill.as_ref().into();
                     }
                 }
-                None if mute_outside => palette.paint_outside_node(node),
+                None if mute_outside && !contracted_nodes.contains(&index) => {
+                    palette.paint_outside_node(node)
+                }
                 _ => {}
             }
         }
@@ -645,7 +735,7 @@ impl Scene {
                 });
             edge.highlight_strokes.clear();
             if let Some(top) = strokes.next() {
-                if regions.len() > 1 {
+                if regions.len() > 1 || contracted_edges.contains(&index) {
                     let mut width = top.stroke.width;
                     edge.highlight_strokes.push(top);
                     for mut casing in strokes {
@@ -658,7 +748,7 @@ impl Scene {
                 } else {
                     edge.stroke = top.stroke;
                 }
-            } else if mute_outside {
+            } else if mute_outside && !contracted_edges.contains(&index) {
                 edge.stroke = HighlightPalette::outside_stroke();
             }
         }
@@ -669,6 +759,8 @@ impl Scene {
         palette: &HighlightPalette<'_>,
         mute_outside: bool,
         spacing: f64,
+        contracted_edges: &BTreeSet<usize>,
+        contracted_nodes: &BTreeSet<usize>,
     ) {
         let colors: Vec<_> = regions
             .iter()
@@ -681,7 +773,8 @@ impl Scene {
                 .filter(|(region, _)| region.nodes.contains(&index))
                 .map(|(_, paint)| paint.to_string())
                 .collect();
-            if node.highlight_ring.is_empty() && mute_outside {
+            if node.highlight_ring.is_empty() && mute_outside && !contracted_nodes.contains(&index)
+            {
                 palette.paint_outside_node(node);
             }
         }
@@ -707,7 +800,10 @@ impl Scene {
                     },
                 })
                 .collect();
-            if edge.highlight_strokes.is_empty() && mute_outside {
+            if edge.highlight_strokes.is_empty()
+                && mute_outside
+                && !contracted_edges.contains(&index)
+            {
                 edge.stroke = HighlightPalette::outside_stroke();
             }
         }

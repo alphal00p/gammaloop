@@ -4555,15 +4555,16 @@ impl PyFeynmanDiagram {
     ///     two, or three get amber, blue/red, or blue/violet/red respectively.
     ///     An empty sequence clears highlighting. A pair can use a dictionary
     ///     with style, label, description, contracted, and scheme fields. Contracted
-    ///     selections show a treated hull and a ghost counterterm glyph.
-    ///     Set scheme to "MS-bar" for an open glyph or "on-shell" for a
+    ///     selections use the treated style and show a hull and a ghost counterterm glyph.
+    ///     Scheme names are case-insensitive. Use "MS-bar" for an open glyph or "on-shell" for a
     ///     filled glyph. None or "unspecified" uses the plain open CT2 glyph.
     /// mute_outside : bool, optional
     ///     Mute unselected drawing elements in legacy and stroke modes.
     ///     Hulls and lanes keep all particle lines in normal ink.
     /// overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature", "lanes"} or None, optional
-    ///     Defaults to H1 hulls at reading size and recolouring for
-    ///     DiagramStyle(miniature=True). Use "lanes" for global colour slots
+    ///     At reading size, one ordinary layer uses strokes and multiple
+    ///     layers use hulls. DiagramStyle(miniature=True) defaults to recolouring.
+    ///     Use "lanes" for global colour slots
     ///     joined by cubic turns at vertices. Lanes and bands can assign
     ///     distinct palette slots to unstyled layers. Casings require
     ///     explicit styles after three unstyled layers.
@@ -4627,8 +4628,9 @@ impl PyFeynmanDiagram {
     ///     Mute unselected drawing elements in legacy and stroke modes.
     ///     Hulls and lanes keep all particle lines in normal ink.
     /// overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature", "lanes"} or None, optional
-    ///     Defaults to H1 hulls at reading size and recolouring for
-    ///     DiagramStyle(miniature=True). Use "lanes" for global colour slots
+    ///     At reading size, one ordinary layer uses strokes and multiple
+    ///     layers use hulls. DiagramStyle(miniature=True) defaults to recolouring.
+    ///     Use "lanes" for global colour slots
     ///     joined by cubic turns at vertices. Lanes and bands can assign
     ///     distinct palette slots to unstyled layers. Casings require
     ///     explicit styles after three unstyled layers.
@@ -5133,15 +5135,7 @@ impl PyFeynmanDiagram {
         if let Some(overlap) = overlap {
             options.overlap = highlight_overlap(overlap)?;
         }
-        if !options.hulls.radius.is_finite()
-            || options.hulls.radius <= 0.0
-            || !options.hulls.step.is_finite()
-            || options.hulls.step < 0.0
-        {
-            return Err(PyValueError::new_err(
-                "hull_radius must be positive and hull_step nonnegative, both finite",
-            ));
-        }
+        options.hulls.validate().map_err(PyValueError::new_err)?;
         let regions = if let Some(highlight) = highlight {
             extract_highlights(highlight, options.overlap, |selection| {
                 self.region_argument(py, selection)
@@ -5173,6 +5167,7 @@ impl PyFeynmanDiagram {
             .inner
             .to_scene_with_highlights(&layers, lmb.map(|basis| &basis.inner), &options)
             .map_err(error::diagram)?;
+        scene.validate_hull_radii().map_err(PyValueError::new_err)?;
         let styles: Vec<_> = layers
             .iter()
             .map(|layer| {

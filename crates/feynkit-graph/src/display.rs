@@ -124,7 +124,9 @@ impl FeynmanDiagram {
         self.to_linnest_document(lmb, config, layer.as_slice(), true, None)
     }
 
-    /// Emit a reading-size Typst document with highlight hulls.
+    /// Emit a Linnest Typst document with layered stroke casings, particle
+    /// labels and the supplied Linnest configuration. Contracted layers use
+    /// the embedded SVG export described in [`Self::to_linnest_with_overlap`].
     /// See [`Self::to_scene_with_highlights`] for an example of specifying layers.
     /// The standalone Typst document uses the light palette.
     ///
@@ -141,11 +143,11 @@ impl FeynmanDiagram {
         lmb: Option<&LoopMomentumBasis>,
         config: &str,
     ) -> Result<String, DiagramError> {
-        self.to_linnest_with_overlap(layers, mute_outside, lmb, config, HighlightOverlap::Hulls)
+        self.to_linnest_with_overlap(layers, mute_outside, lmb, config, HighlightOverlap::Casings)
     }
 
     /// Emit a standalone light-palette source with the chosen highlight geometry.
-    /// Hull, lane and recolour exports with highlight layers embed the native scene
+    /// Hull, lane and recolour exports, and exports with any contracted layer, embed the native scene
     /// without labels and accept the default configuration `(:)`. To set native
     /// layout options or include outlined labels, prepare a scene and call
     /// `Scene::render_typst` with its label pages.
@@ -165,6 +167,11 @@ impl FeynmanDiagram {
         config: &str,
         overlap: HighlightOverlap,
     ) -> Result<String, DiagramError> {
+        let overlap = match overlap {
+            HighlightOverlap::Auto if layers.len() < 2 => HighlightOverlap::Casings,
+            HighlightOverlap::Auto => HighlightOverlap::Hulls,
+            overlap => overlap,
+        };
         let native = !layers.is_empty()
             && (layers.iter().any(|layer| layer.details.contracted)
                 || matches!(
@@ -175,7 +182,7 @@ impl FeynmanDiagram {
         if native {
             if config.trim() != "(:)" {
                 return Err(DiagramError::Drawing(
-                    "native hull, lane and recolour exports use SceneOptions; prepare a scene and call render_typst".into(),
+                    "embedded SVG exports require config (:); for other layout or label options, prepare a Scene and call render_typst".into(),
                 ));
             }
             let options = SceneOptions {

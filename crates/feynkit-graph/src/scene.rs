@@ -89,7 +89,7 @@ impl Default for SceneOptions {
             show_node_index: false,
             split_initial_state: true,
             mute_outside: true,
-            overlap: HighlightOverlap::Hulls,
+            overlap: HighlightOverlap::Auto,
             hulls: HullOptions::default(),
             label_feedback: false,
             layout: Map::new(),
@@ -545,10 +545,7 @@ impl FeynmanDiagram {
         }
         let (edge_specs, edge_drawings) = edges.into_iter().unzip();
         let mut scene = Scene {
-            lanes: Vec::new(),
-            hulls: Vec::new(),
-            counterterm_opacity: 0.35,
-            recolour_stamp: false,
+            highlights: Default::default(),
             graph: TypstGraphSpec {
                 name: Some(self.name().to_owned()),
                 data: None,
@@ -674,10 +671,7 @@ impl SceneOptions {
             ]),
         };
         let mut scene = Scene {
-            lanes: Vec::new(),
-            hulls: Vec::new(),
-            counterterm_opacity: 0.35,
-            recolour_stamp: false,
+            highlights: Default::default(),
             graph: TypstGraphSpec {
                 name: None,
                 data: None,

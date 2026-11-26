@@ -35,10 +35,7 @@ fn fixture_scene(marker: &str) -> Scene {
         ("<msub><mi>ℓ</mi><mn>0</mn></msub>", "$ell_0$"),
     ];
     Scene {
-        lanes: Vec::new(),
-        hulls: Vec::new(),
-        counterterm_opacity: 0.35,
-        recolour_stamp: false,
+        highlights: Default::default(),
         graph: serde_json::from_value(json!({
             "name": format!("mathml-{marker}"),
             "nodes": [node(0), node(1), node(2)],
