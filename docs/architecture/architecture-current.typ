@@ -184,6 +184,10 @@ rather than through GammaLoop's application state:
     [`feynkit-tensor`], [Spenso-native vacuum tensor reduction,
     contraction-orbit compression, and exact orthogonal-Weingarten
     coefficient tables],
+    [`feynkit-uv`], [UV spinney enumeration and classification against the
+    `UvGraph` trait, renormalization-scheme settings, the hedge-poset wood
+    and its unfolded forests; per-forest counterterm values stay with the
+    application],
     [`feynkit`], [Feature-gated, zero-logic Rust facade; core generation
     is enabled by default and raw UFO loading uses the opt-in `ufo`
     feature],
@@ -203,6 +207,7 @@ feynkit-graph ------> feynkit-amplitude, feynkit-generator, feynkit-cff
 feynkit-amplitude -> feynkit-generator
 feynkit-graph,
 spenso, idenso ------> feynkit-tensor
+feynkit-graph ------> feynkit-uv
 
 focused crates -> feynkit / feynkit-py
 ```

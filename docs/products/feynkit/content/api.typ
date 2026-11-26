@@ -4,7 +4,7 @@
 = Rust and Python interfaces
 
 #catalog-contract(
-  rust-scope: "feynkit, feynkit-model, feynkit-ufo, feynkit-kinematics, feynkit-graph, feynkit-amplitude, feynkit-generator, feynkit-cff, feynkit-tensor",
+  rust-scope: "feynkit, feynkit-model, feynkit-ufo, feynkit-kinematics, feynkit-graph, feynkit-amplitude, feynkit-generator, feynkit-cff, feynkit-tensor, feynkit-uv",
   python-scope: "symbolica.community.hepkit",
 )
 
@@ -27,9 +27,12 @@
   orientations, residues, and topology conversion.
 - #link("reference/rust/feynkit_tensor/")[`feynkit-tensor`] owns covariant tensor reduction, contraction
   orbits, and exact coefficient tables.
+- #link("reference/rust/feynkit_uv/")[`feynkit-uv`], re-exported as `feynkit::uv`, owns UV spinney
+  enumeration and classification, renormalization-scheme settings, the inclusion wood, and its
+  unfolded forests.
 
-The facade's default features are `amplitude`, `cff`, `generator`, `graph`, `kinematics`, `model`, and
-`tensor`. `ufo` is opt-in. Native Rustdoc for this product includes that optional interface;
+The facade's default features are `amplitude`, `cff`, `generator`, `graph`, `kinematics`, `model`,
+`tensor`, and `uv`. `ufo` is opt-in. Native Rustdoc for this product includes that optional interface;
 applications choose their features explicitly. When using `feynkit-model` in isolation, enable
 its `native` feature to select the GMP integer and MPFR floating-point backends. The kinematics crate selects those backends through its default `native` feature;
 use `default-features = false` and `wasm` for the portable backends.

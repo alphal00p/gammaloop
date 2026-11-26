@@ -1,3 +1,5 @@
+use std::fmt::{self, Display, Formatter};
+
 use super::super::branches::{DirectResidueBranches, DirectResidueKey};
 use super::*;
 use crate::cff::expression::OrientationID;
@@ -20,7 +22,6 @@ use crate::{
         },
     },
 };
-use gammaloop_tracing_filter::LogMessage;
 use idenso::{CookMode, CookSettings, tensor::SymbolicTensor};
 use linnet::half_edge::{
     involution::EdgeIndex,
@@ -33,8 +34,8 @@ use spenso::{
 use symbolica::{function, symbol};
 
 // #[debug_instrument(
-//     current = %current.log_display(),
-//     given = %given.log_display(),
+//     current = %current,
+//     given = %given,
 //     reduced,
 // )]
 #[cfg(test)]
@@ -67,9 +68,9 @@ struct TestNode {
     scheme: ApproximationType,
 }
 
-impl LogMessage for TestNode {
-    fn log_display(&self) -> String {
-        "local-3d test node".to_owned()
+impl Display for TestNode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("local-3d test node")
     }
 }
 

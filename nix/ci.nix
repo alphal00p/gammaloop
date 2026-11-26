@@ -20,7 +20,7 @@
     {
       name = "feynkit";
       runtimeRenderData = true;
-      packages = ["feynkit" "feynkit-amplitude" "feynkit-cff" "feynkit-generator" "feynkit-graph" "feynkit-kinematics" "feynkit-model" "feynkit-py" "feynkit-tensor" "feynkit-ufo"];
+      packages = ["feynkit" "feynkit-amplitude" "feynkit-cff" "feynkit-generator" "feynkit-graph" "feynkit-kinematics" "feynkit-model" "feynkit-py" "feynkit-tensor" "feynkit-ufo" "feynkit-uv"];
     }
     {
       name = "core";

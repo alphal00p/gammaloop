@@ -1060,6 +1060,7 @@ fn spinney_partial_cmp_is_equal_for_identical_subgraphs() {
 
     let subgraph = graph
         .spinneys(&uv_subgraph)
+        .unwrap()
         .into_iter()
         .next()
         .expect("expected at least one UV spinney");
@@ -2095,6 +2096,7 @@ fn loop_energy_dod_replaces_four_dimensional_measure_by_one_power_per_loop() {
     let graph: Graph = source.into_finalized_runtime_graph(&model).unwrap();
     let cycle = graph
         .spinneys(&graph.no_dummy())
+        .unwrap()
         .into_iter()
         .find(|cycle| !cycle.is_empty())
         .expect("the scalar bubble has one loop-active cycle union")
@@ -2117,6 +2119,7 @@ fn loop_energy_dod_replaces_four_dimensional_measure_by_one_power_per_loop() {
         .unwrap();
     let marginal_cycle = marginal
         .spinneys(&marginal.no_dummy())
+        .unwrap()
         .into_iter()
         .find(|cycle| !cycle.is_empty())
         .expect("the marginal scalar bubble has one loop-active cycle union")
@@ -2438,8 +2441,9 @@ fn ct_identifier_flips_outgoing_boundary_pdgs() {
     let expected_internal_pdg_set = pdg_set([6, 21]);
     let identifiers = graph
         .spinneys(&graph.full_filter())
+        .unwrap()
         .into_iter()
-        .map(|spinney| graph.ct_identifier(&spinney.filter, &graph.model))
+        .map(|spinney| graph.ct_identifier(&spinney.filter, &graph.model).unwrap())
         .collect::<Vec<_>>();
     let identifier = identifiers
         .iter()
@@ -2569,8 +2573,9 @@ mod failing {
         let expected_internal_pdg_set = pdg_set([6, 21]);
         let identifiers = graph
             .spinneys(&graph.full_filter())
+            .unwrap()
             .into_iter()
-            .map(|spinney| graph.ct_identifier(&spinney.filter, &model))
+            .map(|spinney| graph.ct_identifier(&spinney.filter, &model).unwrap())
             .collect::<Vec<_>>();
         let identifier = identifiers
             .iter()
@@ -2622,11 +2627,14 @@ mod failing {
         let spinney = spinneys
             .iter()
             .find(|spinney| {
-                spinney.dod > 0 && graph.has_massive_boundary_external(spinney.filter(), &model)
+                spinney.dod() > 0
+                    && graph
+                        .has_massive_boundary_external(spinney.filter(), &model)
+                        .unwrap()
             })
             .unwrap_or_else(|| panic!("dod2 bubble should have a massive power-divergent spinney"));
 
-        assert_eq!(spinney.renormalization_scheme, ApproximationType::OS);
+        assert_eq!(spinney.renormalization_scheme(), ApproximationType::OS);
     }
 
     pub(super) fn disconnected_spinney_classification_is_factorwise() {
@@ -2646,14 +2654,15 @@ mod failing {
         .unwrap();
         let union = graph
             .spinneys(&graph.full_filter())
+            .unwrap()
             .into_iter()
             .find(|spinney| graph.underlying.connected_components(spinney).len() > 1)
             .expect("spectacles should contain a disconnected spinney");
         let components = graph.underlying.connected_components(&union);
-        let union_identifier = graph.ct_identifier(&union, &graph.model);
+        let union_identifier = graph.ct_identifier(&union, &graph.model).unwrap();
         let component_identifiers = components
             .iter()
-            .map(|component| graph.ct_identifier(component, &graph.model))
+            .map(|component| graph.ct_identifier(component, &graph.model).unwrap())
             .collect::<Vec<_>>();
         assert!(
             component_identifiers
@@ -2685,10 +2694,10 @@ mod failing {
             .unwrap();
         let classified_union = classified
             .iter()
-            .find(|spinney| spinney.subgraph == union)
+            .find(|spinney| *spinney.subgraph() == union)
             .expect("retained components should retain their disconnected union");
         assert_eq!(
-            classified_union.renormalization_scheme,
+            classified_union.renormalization_scheme(),
             ApproximationType::MUV
         );
         for component in &components {
@@ -2696,7 +2705,7 @@ mod failing {
                 .iter()
                 .find(|spinney| spinney.filter() == component)
                 .expect("each component factor should be retained");
-            assert_eq!(factor.renormalization_scheme, ApproximationType::OS);
+            assert_eq!(factor.renormalization_scheme(), ApproximationType::OS);
         }
 
         let component_override = UVgenerationSettings {
@@ -2715,7 +2724,9 @@ mod failing {
             )
             .unwrap();
         assert!(
-            classified.iter().all(|spinney| spinney.subgraph != union),
+            classified
+                .iter()
+                .all(|spinney| *spinney.subgraph() != union),
             "suppressing a component must also suppress its disconnected union"
         );
     }

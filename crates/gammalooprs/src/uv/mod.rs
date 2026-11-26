@@ -8,6 +8,7 @@ use std::{
 use crate::{
     GammaLoopContext,
     cff::CutCFFIndex,
+    graph::LoopMomentumBasis,
     integrands::process::param_builder::{FnMapEntry, NumeratorDefinition},
     uv::approx::Rooted,
 };
@@ -16,6 +17,7 @@ use crate::{numerator::aind::Aind, utils::GS};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::eyre;
+use feynkit_uv::Spinney as UvSpinney;
 use idenso::tensor::SymbolicTensor;
 use itertools::{EitherOrBoth, Itertools};
 use spenso::structure::IndexedStructure;
@@ -519,10 +521,11 @@ pub use settings::{
     UVOrchestrator, UVgenerationSettings,
 };
 pub mod uv_graph;
+pub use feynkit_uv::UvGraph;
 pub use uv_graph::UltravioletGraph;
 
-pub mod spinney;
-pub use spinney::Spinney;
+/// A UV spinney routed in GammaLoop's loop-momentum basis.
+pub type Spinney = UvSpinney<LoopMomentumBasis>;
 
 pub mod poset;
 pub use poset::Poset;
@@ -540,5 +543,7 @@ pub use forest::Forest;
 pub mod profile;
 pub use profile::{UVProfile, UVProfileAnalysis, UVProfilePassFail};
 
+#[cfg(test)]
+mod feynkit_parity_tests;
 #[cfg(test)]
 mod tests;

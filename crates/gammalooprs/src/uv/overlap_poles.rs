@@ -89,11 +89,11 @@ impl PhysicalOverlapInput {
             return Err(eyre!("the overlap fixture must have one empty cut"));
         };
         let cutset = cutset.clone();
-        let order = forests.compatible_topological_order(compatible)?;
+        let order = forests.forests().compatible_topological_order(compatible)?;
         let mut histogram = BTreeMap::<usize, usize>::new();
         let mut inventory = Vec::new();
         for &node in &order {
-            let operation = &forests.graph[node];
+            let operation = &forests.graph()[node];
             let steps = operation
                 .key
                 .iter_levels_top_down()
@@ -102,7 +102,7 @@ impl PhysicalOverlapInput {
                     operations.iter_leaf_ops().map(move |op| (level, op))
                 })
                 .map(|(level, op)| {
-                    let (current, given) = forests.wood.current_given_pair(op.data, level);
+                    let (current, given) = forests.forests().current_given_pair(op.data, level);
                     let edges = |subgraph: &SuBitGraph| {
                         graph
                             .iter_edges_of(subgraph)
@@ -182,7 +182,7 @@ impl PhysicalOverlapInput {
         drop(context);
         let mut nodes = Vec::with_capacity(inventory.len());
         for (node, steps, forest_sign) in inventory {
-            let operation = &forests.graph[node];
+            let operation = &forests.graph()[node];
             let computed = forests
                 .compute_store
                 .require(operation)?

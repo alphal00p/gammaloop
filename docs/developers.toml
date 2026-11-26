@@ -450,7 +450,12 @@ anchor = "impl Graph {"
 # supplied settings, eliminating the duplicate orchestrator selector while
 # retaining the explicit model, validation order and first-orientation shared
 # preparation described in uv-renormalization.typ.
-digest = "0741873ddfb2ba0410fdbf95eced9a21b6f95bcd"
+# No-impact attestation 2026-11-25: only the scope's tests changed, importing
+# feynkit-uv's UvGraph and passing the moved prescription settings explicitly;
+# dispatch, validation order and shared preparation are unchanged.
+# No-impact attestation 2026-11-25: the scope's tests unwrap the now fallible
+# particle queries; production code in the scope is unchanged.
+digest = "ca752d15185092b4d6bcefd766d684b3d08153dc"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/approx/integrated.rs"
@@ -581,7 +586,10 @@ anchor = "impl Localizer<'_> {"
 # outside/global products; the retained integrated coefficient is cloned explicitly.
 # Coefficient interfaces, localization, routing and numerical assertions are unchanged.
 # Reviewed 2026-11-17: UV note records CFF allowed-key localization and LTD actual source-order localization, with model-aware tree denominators.
-digest = "c1fa5732e2d762c373645be01fed09616ad63996"
+# No-impact attestation 2026-11-25: n_loops now comes from feynkit-uv's UvGraph and
+# the localization log prints the integrated forest node through Display; the
+# localization itself is unchanged.
+digest = "5d08869b59cb52d7d4955936fe979f8079ae94b6"
 
 [[section.note]]
 id = "spenso-parsing-flow"
@@ -2149,7 +2157,9 @@ end_anchor = "\nin\n{\n  inherit"
 # matching supported publication.
 # This supplies the shared editor/timing configuration; all readiness, timing,
 # scientific assertions, producer ownership and publication policy stay intact.
-digest = "87987f73ace1c5bb4203846d9b3b702cde6710f4"
+# No-impact attestation 2026-11-25: the publication check also requires the new
+# feynkit_uv Rustdoc component page; producers and cache reuse are unchanged.
+digest = "dd1976eb301ce55857cfac5b914e1fe9e43020f8"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"

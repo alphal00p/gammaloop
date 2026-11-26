@@ -17,9 +17,10 @@ feynkit-kinematics = { version = "0.1.0", path = "../feynkit-kinematics", option
 feynkit-model = { version = "0.1.0", path = "../feynkit-model", optional = true }
 feynkit-tensor = { version = "0.1.0", path = "../feynkit-tensor", optional = true }
 feynkit-ufo = { version = "0.1.0", path = "../feynkit-ufo", optional = true }
+feynkit-uv = { version = "0.1.0", path = "../feynkit-uv", optional = true }
 
 [features]
-default = ["amplitude", "cff", "generator", "graph", "kinematics", "model", "tensor"]
+default = ["amplitude", "cff", "generator", "graph", "kinematics", "model", "tensor", "uv"]
 amplitude = ["graph", "dep:feynkit-amplitude"]
 cff = ["graph", "dep:feynkit-cff"]
 generator = ["graph", "model", "dep:feynkit-generator"]
@@ -28,3 +29,4 @@ kinematics = ["dep:feynkit-kinematics"]
 model = ["dep:feynkit-model"]
 tensor = ["graph", "dep:feynkit-tensor"]
 ufo = ["model", "dep:feynkit-ufo"]
+uv = ["graph", "model", "dep:feynkit-uv"]

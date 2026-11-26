@@ -1,0 +1,35 @@
+[package]
+name = "feynkit-uv"
+version = "0.1.0"
+edition.workspace = true
+description = "Ultraviolet spinney, wood and forest combinatorics for Feynman graphs"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/alphal00p/gammaloop"
+keywords = ["feynman", "renormalization", "physics"]
+categories = ["science"]
+
+[dependencies]
+ahash = { workspace = true }
+bincode = { workspace = true, features = ["serde"] }
+bincode-trait-derive = { workspace = true }
+feynkit-graph = { version = "0.1.0", path = "../feynkit-graph" }
+feynkit-model = { version = "0.1.0", path = "../feynkit-model" }
+itertools = { workspace = true }
+linnet = { version = "0.17.0", path = "../linnet", default-features = false, features = ["serde"] }
+pyo3 = { workspace = true, optional = true }
+schemars = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+feynkit-generator = { version = "0.1.0", path = "../feynkit-generator" }
+serde_json = { workspace = true }
+symbolica = { workspace = true, default-features = false }
+toml = { workspace = true }
+
+[features]
+default = []
+# Expose the renormalization-scheme settings as Python classes for hosts
+# that embed them in their own Python settings objects.
+python = ["dep:pyo3"]

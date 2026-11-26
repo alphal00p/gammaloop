@@ -1,16 +1,12 @@
 use feynkit_graph::DOD;
-use std::{cell::RefCell, collections::BTreeSet, ops::Deref};
+use std::ops::Deref;
 
-use ahash::{AHashMap, AHashSet};
 use color_eyre::Result;
 use eyre::eyre;
 use linnet::half_edge::{
     HedgeGraph, PowersetIterator,
-    involution::{Flow, Hedge},
-    subgraph::{
-        Cycle, InternalSubGraph, ModifySubSet, PairwiseSubSetOps, SuBitGraph, SubGraphLike,
-        SubGraphOps, SubSetLike, SubSetOps, subset::SubSet,
-    },
+    involution::EdgeIndex,
+    subgraph::{InternalSubGraph, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps, subset::SubSet},
 };
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
@@ -21,32 +17,22 @@ use symbolica::{
 use tracing::debug;
 
 use crate::{
-    graph::{Edge, FeynmanGraph, Graph, HedgeData, LMBext, LoopMomentumBasis, Vertex},
+    graph::{Edge, FeynmanGraph, Graph, HedgeData, LMBext, LmbError, LoopMomentumBasis, Vertex},
     integrands::process::param_builder::ParamBuilderGraph,
     model::Model,
     momentum::sample::LoopIndex,
     numerator::{AppliedFeynmanRule, Numerator},
     settings::global::MediumSettings,
     utils::{GS, W_},
-    uv::{ApproximationType, UVgenerationSettings, settings::CTIdentifier},
+    uv::{UVgenerationSettings, UvGraph},
 };
 
 use super::{Spinney, Wood};
 
-pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
-    fn n_loops<S: SubGraphLike, E, V, H>(&self, subgraph: &S) -> usize
-    where
-        Self: AsRef<HedgeGraph<E, V, H>>,
-    {
-        self.as_ref().cyclotomatic_number(subgraph)
-    }
-
-    // fn concretize_spinney<S: SubGraphLike<Base = SuBitGraph>>(&self, subgraph: &S) -> Graph;
-
-    fn dummy_less_full_crown<S: SubGraphLike>(&self, subgraph: &S) -> S::Base
-    where
-        S::Base: ModifySubSet<Hedge> + SubGraphOps;
-
+/// GammaLoop's UV operations on a graph, beyond the combinatorics of [`UvGraph`].
+pub trait UltravioletGraph:
+    UvGraph<Basis = LoopMomentumBasis> + LMBext + FeynmanGraph + ParamBuilderGraph
+{
     ///Get the numerator of the graph.
     /// If multiply_prefactor is true, the numerator is multiplied by the global  prefactor. (just num not projector)
     fn numerator<S: SubGraphLike + SubSetOps>(
@@ -61,178 +47,22 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         edge_powers: T,
     ) -> Atom;
 
-    fn boundary_pdg_set<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
-        &self,
-        subgraph: &S,
-        model: &Model,
-    ) -> BTreeSet<isize>
-    where
-        Self: AsRef<HedgeGraph<E, V, H>>,
-    {
-        let graph = self.as_ref();
-        graph
-            .full_crown(subgraph)
-            .included_iter()
-            .filter_map(|hedge| {
-                let edge_id = graph[&hedge];
-                graph[edge_id].particle_pdg_code(model).map(|pdg| {
-                    if graph.flow(hedge) == Flow::Source {
-                        -pdg
-                    } else {
-                        pdg
-                    }
-                })
-            })
-            .collect()
-    }
-
-    fn internal_pdg_set<E: UVE, V, H, S: SubGraphLike>(
-        &self,
-        subgraph: &S,
-        model: &Model,
-    ) -> BTreeSet<isize>
-    where
-        Self: AsRef<HedgeGraph<E, V, H>>,
-    {
-        self.as_ref()
-            .iter_edges_of(subgraph)
-            .filter_map(|(pair, edge_id, _)| {
-                pair.is_paired()
-                    .then(|| self.as_ref()[edge_id].particle_pdg_code(model))
-                    .flatten()
-            })
-            .collect()
-    }
-
-    fn has_massive_boundary_external<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
-        &self,
-        subgraph: &S,
-        model: &Model,
-    ) -> bool
-    where
-        Self: AsRef<HedgeGraph<E, V, H>>,
-    {
-        let graph = self.as_ref();
-        graph.full_crown(subgraph).included_iter().any(|hedge| {
-            let edge_id = graph[&hedge];
-            graph[edge_id].is_massive(model)
-        })
-    }
-
-    fn ct_identifier<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
-        &self,
-        subgraph: &S,
-        model: &Model,
-    ) -> CTIdentifier
-    where
-        Self: AsRef<HedgeGraph<E, V, H>>,
-    {
-        CTIdentifier::new(
-            self.boundary_pdg_set(subgraph, model),
-            Some(self.internal_pdg_set(subgraph, model)),
-        )
-    }
-
-    fn approximation_scheme<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
-        &self,
-        subgraph: &S,
-        model: &Model,
-        settings: &UVgenerationSettings,
-        dod: i32,
-    ) -> ApproximationType
-    where
-        Self: AsRef<HedgeGraph<E, V, H>>,
-    {
-        settings.approximation_scheme_for(
-            &self.ct_identifier(subgraph, model),
-            dod,
-            self.has_massive_boundary_external(subgraph, model),
-        )
-    }
-
-    fn classify_spinney<E: UVE, V, H>(
-        &self,
-        spinney: InternalSubGraph,
-        model: &Model,
-        settings: &UVgenerationSettings,
-        lmb: &LoopMomentumBasis,
-    ) -> Result<Option<Spinney>>
-    where
-        Self: AsRef<HedgeGraph<E, V, H>>,
-    {
-        let dod = self.compute_dod(&spinney.filter);
-        if dod < 0 {
-            return Ok(None);
-        }
-
-        let renormalization_scheme =
-            self.approximation_scheme(&spinney.filter, model, settings, dod);
-
-        if renormalization_scheme != ApproximationType::Unsubtracted {
-            Spinney::with_scheme(spinney, self, lmb, renormalization_scheme, dod)
-        } else {
-            Ok(None)
-        }
-    }
-
-    fn classified_spinneys<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
+    /// The classified spinneys of `subgraph`, or only the empty spinney when UV
+    /// subtraction is disabled.
+    fn classified_spinneys<S: SubGraphLike<Base = SuBitGraph>>(
         &self,
         subgraph: &S,
         model: &Model,
         settings: &UVgenerationSettings,
         lmb: &LoopMomentumBasis,
-    ) -> Result<Vec<Spinney>>
-    where
-        Self: AsRef<HedgeGraph<E, V, H>>,
-    {
+    ) -> Result<Vec<Spinney>> {
         if !settings.subtract_uv {
             return Ok(vec![Spinney::empty(self)]);
         }
-
-        let graph = self.as_ref();
-        let (connected, disconnected): (Vec<_>, Vec<_>) = self
-            .spinneys(subgraph)
-            .into_iter()
-            .partition(|spinney| graph.connected_components(spinney).len() <= 1);
-
-        let mut classified: Vec<_> = connected
-            .into_iter()
-            .filter_map(|spinney| {
-                self.classify_spinney(spinney, model, settings, lmb)
-                    .transpose()
-            })
-            .collect::<Result<_>>()?;
-        let retained_factors: AHashSet<_> = classified
-            .iter()
-            .map(|spinney| spinney.filter().clone())
-            .collect();
-
-        for spinney in disconnected {
-            let components = graph.connected_components(&spinney);
-            if !components.into_iter().all(|component| {
-                let factor = InternalSubGraph::cleaned_filter_optimist(component, graph);
-                retained_factors.contains(&factor.filter)
-            }) {
-                continue;
-            }
-
-            let dod = self.compute_dod(&spinney.filter);
-            if let Some(spinney) =
-                Spinney::with_scheme(spinney, self, lmb, ApproximationType::MUV, dod)?
-            {
-                classified.push(spinney);
-            }
-        }
-        Ok(classified)
+        Ok(self.classify_spinneys(subgraph, model, &settings.renormalization_prescription, lmb)?)
     }
 
-    fn remove_full_observable_spinney<E, V, H>(
-        &self,
-        spinneys: &mut Vec<Spinney>,
-        medium: &MediumSettings,
-    ) where
-        Self: AsRef<HedgeGraph<E, V, H>>,
-    {
+    fn remove_full_observable_spinney(&self, spinneys: &mut Vec<Spinney>, medium: &MediumSettings) {
         if !medium.vacuum_subtraction {
             return;
         }
@@ -240,32 +70,14 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         // Completed thermal weights already carry (1 - V). An operation covering
         // all loops leaves no medium dependence, even when tree edges survive.
         // Omit it before either 4D or 3D computation; spinneys contain no bridges.
-        let graph = self.as_ref();
+        let graph = self.hedge_graph();
         let full_observable =
             InternalSubGraph::cleaned_filter_pessimist(graph.non_bridges(), graph);
-        spinneys
-            .retain(|spinney| spinney.subgraph.is_empty() || spinney.subgraph != full_observable);
+        spinneys.retain(|spinney| {
+            spinney.subgraph().is_empty() || *spinney.subgraph() != full_observable
+        });
     }
 
-    fn all_cycle_unions<E, V, H, S: SubGraphLike<Base = SuBitGraph>>(
-        &self,
-        subgraph: &S,
-    ) -> AHashSet<InternalSubGraph>
-    where
-        Self: AsRef<HedgeGraph<E, V, H>>,
-    {
-        let ref_graph = self.as_ref();
-        let _init_node = ref_graph.iter_nodes_of(subgraph).next().unwrap().0;
-        let all_subcycles: Vec<_> =
-            Cycle::all_sum_powerset_filter_map(&ref_graph.cycle_basis_of(subgraph).0, &Some)
-                .map(|a| a.into_iter().map(|c| c.internal_graph(ref_graph)).collect())
-                .unwrap();
-
-        // println!("{}", self.base_dot());
-        let spinneys: AHashSet<_> = InternalSubGraph::all_unions_iterative(&all_subcycles);
-
-        spinneys
-    }
     fn all_limits<E, V, H, S: SubGraphLike>(
         &self,
         model: &crate::model::Model,
@@ -372,57 +184,6 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     {
         self.compute_dod(subgraph) - 3 * self.n_loops(subgraph) as i32
     }
-
-    fn local_dod<S: SubGraphLike>(&self, subgraph: &S) -> i32;
-
-    fn spinneys<E, V, H, S: SubGraphLike<Base = SuBitGraph>>(
-        &self,
-        subgraph: &S,
-    ) -> AHashSet<InternalSubGraph>
-    where
-        Self: AsRef<HedgeGraph<E, V, H>>,
-    {
-        let ref_graph: &HedgeGraph<E, V, H> = self.as_ref();
-        debug!(subgraph=%ref_graph.dot(subgraph),"Spinneys of subgraph");
-        let _b: SuBitGraph = ref_graph.empty_subgraph();
-
-        if subgraph.is_empty() {
-            let mut spinneys = AHashSet::new();
-            spinneys.insert(ref_graph.empty_subgraph());
-            return spinneys;
-        }
-
-        let cycles = ref_graph.cycle_basis_of(subgraph).0;
-
-        let _init_node = ref_graph.iter_nodes_of(subgraph).next().unwrap().0;
-        let all_subcycles: Vec<_> = Cycle::all_sum_powerset_filter_map(&cycles, &Some)
-            .map(|a| a.into_iter().map(|c| c.internal_graph(ref_graph)).collect())
-            .unwrap();
-
-        let dod_cache = RefCell::new(AHashMap::new());
-
-        let mut spinneys: AHashSet<_> = InternalSubGraph::all_ops_iterative_filter_map(
-            &all_subcycles,
-            &|a, b| a.union(b),
-            &|union| {
-                // println!("{}", self.as_ref().dot(&union));
-                let cached_dod = dod_cache.borrow().get(&union).copied();
-                let keep = match cached_dod {
-                    Some(keep) => keep,
-                    None => {
-                        let keep = self.local_dod(&union) >= 0;
-                        dod_cache.borrow_mut().insert(union.clone(), keep);
-                        keep
-                    }
-                };
-                if keep { Some(union) } else { None }
-            },
-        );
-
-        spinneys.insert(ref_graph.empty_subgraph());
-
-        spinneys
-    }
 }
 
 impl AsRef<HedgeGraph<Edge, Vertex, HedgeData>> for Graph {
@@ -489,40 +250,103 @@ impl Graph {
     }
 }
 
-impl UltravioletGraph for Graph {
-    fn dummy_less_full_crown<S: SubGraphLike>(&self, subgraph: &S) -> S::Base
-    where
-        S::Base: ModifySubSet<Hedge>,
-    {
-        let a = self.full_crown(subgraph);
-        let mut ac = a.clone();
+/// GammaLoop's reference adapter. It keeps the behaviour of the UV code before the
+/// move: the requested subgraph is the domain, particles resolve in the caller's
+/// model and dummy edges count in particle queries, stored edge and vertex degrees
+/// prune, and `compute_dod` classifies with owner-tagged hard momenta.
+///
+/// The `Result`s are only for the basis query. Particle and power-counting queries
+/// never return `Err`; they panic on broken invariants instead, as before the move:
+/// particle identifiers must resolve in the caller's model (the graph's canonical
+/// model or one sharing its particle table), and the graph numerator must have a
+/// valid tensor interface with an integral leading UV power.
+impl UvGraph for Graph {
+    type Edge = Edge;
+    type Vertex = Vertex;
+    type HedgeData = HedgeData;
+    type Basis = LoopMomentumBasis;
+    type Error = LmbError;
 
-        a.included_iter().for_each(|a| {
-            if self[self[&a]].is_dummy {
-                ac.sub(a);
-            }
-        });
-
-        ac
+    fn hedge_graph(&self) -> &HedgeGraph<Edge, Vertex, HedgeData> {
+        &self.underlying
     }
 
-    // fn concretize_spinney<S: SubGraphLike<Base = SuBitGraph>>(&self, s: &S) -> Graph {
-    //     let mut underlying = self.underlying.clone();
-    //     let dod = self.dod(s);
-    //     let cc = underlying.connected_components(s);
+    /// The requested subgraph itself: GammaLoop selects its UV domain (cuts,
+    /// initial states and dummy edges) before enumeration.
+    fn uv_domain(&self, subgraph: &SuBitGraph) -> SuBitGraph {
+        subgraph.clone()
+    }
 
-    //     for c in cc{
+    fn is_dummy_edge(&self, edge: EdgeIndex) -> bool {
+        self.underlying[edge].is_dummy
+    }
 
-    //     let v = Vertex {
+    /// Resolves the particle in the caller's model, dummy edges included.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the edge's particle is not in `model`.
+    fn edge_pdg_code(&self, edge: EdgeIndex, model: &Model) -> Result<Option<isize>, LmbError> {
+        Ok(self.underlying[edge].particle_pdg_code(model))
+    }
 
-    //     }
-    //     underlying.identify_nodes_without_self_edges(s, node_data_merge);
-    //     };
-    //     }
+    /// Whether the edge's particle is massive in the caller's model, dummy edges
+    /// included.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the edge's particle is not in `model`.
+    fn is_massive_edge(&self, edge: EdgeIndex, model: &Model) -> Result<bool, LmbError> {
+        Ok(self.underlying[edge].is_massive(model))
+    }
 
-    //     self.clone()
-    // }
+    /// Four powers per loop plus the stored edge and vertex degrees.
+    fn local_degree_of_divergence(&self, subgraph: &SuBitGraph) -> Result<i32, LmbError> {
+        let mut dod: i32 = 4 * self.n_loops(subgraph) as i32;
+        for (p, _, e) in self.underlying.iter_edges_of(subgraph) {
+            if p.is_paired() {
+                dod += e.data.dod.deref();
+            }
+        }
 
+        for (_, _, n) in self.underlying.iter_nodes_of(subgraph) {
+            dod += n.dod.deref();
+        }
+
+        Ok(dod)
+    }
+
+    /// The numerator-based power counting of [`UltravioletGraph::compute_dod`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if the numerator has no valid tensor interface or its leading UV
+    /// power is not an integer.
+    fn degree_of_divergence(&self, subgraph: &SuBitGraph) -> Result<i32, LmbError> {
+        Ok(self.compute_dod(subgraph))
+    }
+
+    fn empty_basis(&self) -> LoopMomentumBasis {
+        self.empty_lmb()
+    }
+
+    fn compatible_sub_basis(
+        &self,
+        subgraph: &InternalSubGraph,
+        parent: &LoopMomentumBasis,
+    ) -> Result<LoopMomentumBasis, LmbError> {
+        let lmb =
+            self.try_compatible_sub_lmb(subgraph, self.dummy_less_full_crown(subgraph), parent)?;
+        debug!(
+            graph = %self.dot_lmb_of(subgraph, &lmb),
+            string_label = %subgraph.string_label(),
+            "Routed spinney subgraph"
+        );
+        Ok(lmb)
+    }
+}
+
+impl UltravioletGraph for Graph {
     fn denominator<S: SubGraphLike, T: Fn(&Edge) -> isize>(
         &self,
         subgraph: &S,
@@ -590,21 +414,6 @@ impl UltravioletGraph for Graph {
         self.uv_rescaled(subgraph.included(), nloops, &lmb, &lmb, &integrand)
             .trailing_exponent(GS.rescale)
             .expect("UV momentum power counting failed")
-    }
-
-    fn local_dod<S: SubGraphLike>(&self, subgraph: &S) -> i32 {
-        let mut dod: i32 = 4 * self.n_loops(subgraph) as i32;
-        for (p, _, e) in self.underlying.iter_edges_of(subgraph) {
-            if p.is_paired() {
-                dod += e.data.dod.deref();
-            }
-        }
-
-        for (_, _, n) in self.underlying.iter_nodes_of(subgraph) {
-            dod += n.dod.deref();
-        }
-
-        dod
     }
 }
 
