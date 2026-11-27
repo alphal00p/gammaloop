@@ -571,6 +571,7 @@ impl Drawing {
         let mut fixed_arrows = Vec::new();
         let mut region_hrefs = Vec::new();
         let mut hull_paths = BTreeMap::new();
+        let mut drawn_lines = Vec::new();
         let mut lane_paths = BTreeMap::new();
         for (edge, carrier) in laid.edges.iter().zip(&laid.carriers) {
             let drawing = scene
@@ -593,6 +594,7 @@ impl Drawing {
             if member {
                 hull_paths.insert(edge.edge, visible.clone());
             }
+            drawn_lines.push(visible.clone());
             if let (Some(source), Some(sink)) = (&edge.source, &edge.sink) {
                 if scene
                     .highlights
@@ -776,8 +778,7 @@ impl Drawing {
                 )?,
             );
         }
-        let mut regions = Vec::new();
-        let mut counterterms = Vec::new();
+        let mut built = Vec::new();
         for region in &scene.highlights.hulls {
             let paths: Vec<_> = region
                 .edges
@@ -795,6 +796,35 @@ impl Drawing {
                 })
                 .collect();
             let path = hulls::union(&paths, &vertices, region.radius / UNIT)?;
+            built.push((region, path, vertices));
+        }
+        // A counterterm glyph keeps clear of every drawn line, including the
+        // outlines of all hulls (holes and nested levels), not only edges.
+        let mut obstacle_lines: Vec<&BezPath> = drawn_lines.iter().collect();
+        obstacle_lines.extend(built.iter().map(|(_, path, _)| path));
+        let all_vertices: Vec<_> = laid
+            .nodes
+            .iter()
+            .map(|node| {
+                let [x, y] = laid.node(node.node);
+                Point::new(x, y)
+            })
+            .collect();
+        // The glyph's drawn radius: miniatures scale it with their canvas.
+        let content = obstacle_lines
+            .iter()
+            .map(|path| path.bounding_box())
+            .chain(
+                all_vertices
+                    .iter()
+                    .map(|point| Rect::from_points(*point, *point)),
+            )
+            .reduce(|bounds, rect| bounds.union(rect))
+            .unwrap_or(Rect::ZERO);
+        let glyph_radius = output::glyph_radius(content.width(), scene.highlights.recolour_stamp);
+        let mut regions = Vec::new();
+        let mut counterterms = Vec::new();
+        for (region, path, vertices) in &built {
             if region.details.contracted {
                 let center = if vertices.is_empty() {
                     // For a fully trimmed or empty selection, retain the glyph
@@ -831,7 +861,15 @@ impl Drawing {
                     let sum = vertices
                         .iter()
                         .fold(Vec2::ZERO, |sum, point| sum + point.to_vec2());
-                    (sum / vertices.len() as f64).to_point()
+                    let centroid = (sum / vertices.len() as f64).to_point();
+                    hulls::glyph_point(
+                        path,
+                        &obstacle_lines,
+                        &all_vertices,
+                        NODE_RADIUS,
+                        glyph_radius,
+                        centroid,
+                    )
                 };
                 counterterms.push(Element::Counterterm {
                     center,
@@ -841,7 +879,7 @@ impl Drawing {
             }
             if !path.elements().is_empty() {
                 regions.push(Element::Hull {
-                    path,
+                    path: path.clone(),
                     paint: region.paint.clone(),
                     details: region.details.clone(),
                 });

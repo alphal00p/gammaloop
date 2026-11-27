@@ -307,7 +307,10 @@ anchor = "pub struct FeynmanDiagram {"
 # No-impact attestation 2026-11-26: the display stack adds renderer exports,
 # a drawing error and display regressions. Graph construction, routing,
 # retained tensors and persistence use the existing ownership boundaries.
-digest = "e4f1f7c745c0dfde27a2c4bb18e9e60647ac894a"
+# No-impact attestation 2026-11-27: the crate root re-exports the miniature
+# stamp weight constant of the scene options. Graph construction, routing,
+# retained tensors and persistence are unchanged.
+digest = "be09809cf2a1f6f2ded86772e18080f262edd2f0"
 
 [[section.note.scope]]
 path = "crates/feynkit-tensor/src/lib.rs"

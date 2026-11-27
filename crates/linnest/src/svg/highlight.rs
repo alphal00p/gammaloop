@@ -243,7 +243,7 @@ impl Display for HighlightStyle {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum CountertermScheme {
-    /// Plain open circled cross, with no scheme in the hover text.
+    /// Circled cross in a dashed ring, with no scheme in the hover text.
     #[default]
     Unspecified,
     /// Open circled cross.
@@ -407,7 +407,21 @@ impl HullRegion {
             .into_iter()
             .filter_map(|index| {
                 let region = &regions[index];
-                if overlap != HighlightOverlap::Hulls && !region.details.contracted {
+                // Other geometries draw only contracted hulls, and the levels
+                // nested in them, which the ghost of the contraction would
+                // otherwise hide: one colour per level, as hulls draw them.
+                let nested_in_contraction = || {
+                    regions.iter().any(|outer| {
+                        outer.details.contracted
+                            && !outer.edges.is_empty()
+                            && region.edges.is_subset(&outer.edges)
+                            && region.nodes.is_subset(&outer.nodes)
+                    })
+                };
+                if overlap != HighlightOverlap::Hulls
+                    && !region.details.contracted
+                    && !nested_in_contraction()
+                {
                     return None;
                 }
                 let style = if region.details.contracted {

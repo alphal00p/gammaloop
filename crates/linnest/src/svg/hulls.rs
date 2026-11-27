@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use kurbo::{flatten, BezPath, Line, ParamCurveNearest, PathEl, Point, Rect, Shape};
+use kurbo::{flatten, BezPath, Line, ParamCurveNearest, PathEl, Point, Rect, Shape, Vec2};
 
 type Sample = (i64, i64);
 
@@ -175,9 +175,172 @@ pub(super) fn union(
     Ok(result)
 }
 
+/// Whether `point` lies in the painted (even-odd) region of `hull`, as the
+/// SVG draws it: inside the outer contour and outside every hole.
+#[cfg(test)]
+fn hull_contains(hull: &BezPath, point: Point) -> bool {
+    hull.winding(point).rem_euclid(2) == 1
+}
+
+/// Where to draw a counterterm glyph of radius `glyph_radius` for a contracted
+/// region with hull `hull`. The centre lies in the hull's painted region, never
+/// in one of its holes; among such sampled points it keeps the largest share of
+/// the glyph's ring inside that region, then stays farthest from every drawn
+/// line in `lines` and every vertex, then nearest `fallback`. The glyph may
+/// cover its own region's lines. Returns `fallback` when no sample lies in the
+/// painted region.
+pub(super) fn glyph_point(
+    hull: &BezPath,
+    lines: &[&BezPath],
+    vertices: &[Point],
+    vertex_radius: f64,
+    glyph_radius: f64,
+    fallback: Point,
+) -> Point {
+    const RING: usize = 24;
+    /// Candidates whose clearance is compared, at most.
+    const CLEARANCE_CANDIDATES: usize = 64;
+    let bounds = hull.bounding_box();
+    if !(bounds.width() > 0.0 && bounds.height() > 0.0) {
+        return fallback;
+    }
+    let polyline = |path: &BezPath| {
+        let mut segments = Vec::new();
+        let (mut start, mut last) = (Point::ORIGIN, Point::ORIGIN);
+        flatten(path, 1e-3, |element| match element {
+            PathEl::MoveTo(point) => (start, last) = (point, point),
+            PathEl::LineTo(point) => {
+                segments.push(Line::new(last, point));
+                last = point;
+            }
+            PathEl::ClosePath => {
+                segments.push(Line::new(last, start));
+                last = start;
+            }
+            _ => {}
+        });
+        segments
+    };
+    let edges = polyline(hull);
+    let obstacles: Vec<Line> = lines.iter().flat_map(|path| polyline(path)).collect();
+    let clearance = |point: Point| {
+        let line = obstacles
+            .iter()
+            .map(|segment| segment.nearest(point, 1e-6).distance_sq.sqrt())
+            .fold(f64::INFINITY, f64::min);
+        let vertex = vertices
+            .iter()
+            .map(|vertex| vertex.distance(point) - vertex_radius)
+            .fold(f64::INFINITY, f64::min);
+        line.min(vertex)
+    };
+    // Rasterize the painted region once; a finer raster only when the coarse
+    // one misses a thin region.
+    for cells in [120_usize, 480] {
+        let step = bounds.width().max(bounds.height()) / cells as f64;
+        let (columns, rows) = (
+            (bounds.width() / step).ceil() as usize + 1,
+            (bounds.height() / step).ceil() as usize + 1,
+        );
+        let at = |i: usize, j: usize| {
+            Point::new(bounds.x0 + step * i as f64, bounds.y0 + step * j as f64)
+        };
+        // Even-odd scanlines: a cell is painted when an odd number of hull
+        // edges cross its row to the left of it.
+        let mut painted = vec![false; rows * columns];
+        let mut crossings = Vec::new();
+        for j in 0..rows {
+            let y = bounds.y0 + step * j as f64;
+            crossings.clear();
+            for edge in &edges {
+                let (a, b) = (edge.p0, edge.p1);
+                if (a.y > y) != (b.y > y) {
+                    crossings.push(a.x + (y - a.y) * (b.x - a.x) / (b.y - a.y));
+                }
+            }
+            crossings.sort_by(f64::total_cmp);
+            for [enter, leave] in crossings.as_chunks::<2>().0 {
+                let first = ((enter - bounds.x0) / step).ceil().max(0.0);
+                let last = ((leave - bounds.x0) / step)
+                    .floor()
+                    .min((columns - 1) as f64);
+                if first <= last {
+                    for i in first as usize..=last as usize {
+                        painted[j * columns + i] = true;
+                    }
+                }
+            }
+        }
+        let painted_at = |point: Point| {
+            let (u, v) = (
+                ((point.x - bounds.x0) / step).round(),
+                ((point.y - bounds.y0) / step).round(),
+            );
+            u >= 0.0
+                && v >= 0.0
+                && (u as usize) < columns
+                && (v as usize) < rows
+                && painted[v as usize * columns + u as usize]
+        };
+        let coverage = |center: Point| {
+            (0..RING)
+                .filter(|index| {
+                    let angle = std::f64::consts::TAU * *index as f64 / RING as f64;
+                    painted_at(center + glyph_radius * Vec2::new(angle.cos(), angle.sin()))
+                })
+                .count()
+        };
+        let mut best_coverage = 0;
+        let mut candidates = Vec::new();
+        for j in 0..rows {
+            for i in 0..columns {
+                if !painted[j * columns + i] {
+                    continue;
+                }
+                let point = at(i, j);
+                let inside = coverage(point);
+                if inside > best_coverage {
+                    best_coverage = inside;
+                    candidates.clear();
+                }
+                if inside == best_coverage {
+                    candidates.push(point);
+                }
+            }
+        }
+        if candidates.is_empty() {
+            continue;
+        }
+        // Among the best covered, prefer clear of lines, then near the fallback.
+        let stride = candidates.len().div_ceil(CLEARANCE_CANDIDATES);
+        return candidates
+            .into_iter()
+            .step_by(stride)
+            .map(|point| (clearance(point) - 0.05 * point.distance(fallback), point))
+            .max_by(|(a, _), (b, _)| a.total_cmp(b))
+            .map_or(fallback, |(_, point)| point);
+    }
+    fallback
+}
+
 #[cfg(test)]
 mod tests {
     use kurbo::{Circle, ParamCurveNearest, PathEl, PathSeg, Vec2};
+
+    #[test]
+    fn counterterm_glyphs_sit_in_the_painted_band_of_a_ring_hull() {
+        // A ring hull: the centroid of its vertices falls in the hole.
+        let mut ring = BezPath::new();
+        ring.extend(Circle::new((0.0, 0.0), 3.0).path_elements(1e-3));
+        ring.extend(Circle::new((0.0, 0.0), 2.0).path_elements(1e-3));
+        let centroid = Point::ORIGIN;
+        assert!(!super::hull_contains(&ring, centroid));
+        let point = super::glyph_point(&ring, &[], &[], 0.0, 0.4, centroid);
+        assert!(super::hull_contains(&ring, point), "{point:?}");
+        // The glyph sits in the middle of the band, wholly inside it.
+        let distance = point.distance(centroid);
+        assert!((2.4..=2.6).contains(&distance), "{distance}");
+    }
 
     use super::super::UNIT;
 

@@ -33,7 +33,7 @@ pub use linnest::svg::{
 pub use numerator_interface::NumeratorInterface;
 pub use power_counting::DOD;
 #[cfg(feature = "svg")]
-pub use scene::{HighlightLayer, SceneOptions};
+pub use scene::{HighlightLayer, MINIATURE_STAMP_WEIGHT, SceneOptions};
 
 // Symbolica does not permit adding tags after a bare symbol with the same name
 // has been registered. Claim momentum, index and Lorentz heads during global state

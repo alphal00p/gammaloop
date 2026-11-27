@@ -19,6 +19,28 @@ const GUTTER: f64 = 9.0;
 pub(super) const INK: &str = "#3d2645";
 pub(super) const MARK_STROKE: f64 = 0.3;
 const HULL_STROKE: f64 = 1.1;
+
+/// The ink weight of a drawing whose nominal canvas is `width` points wide:
+/// recoloured stamps are drawn at reading size and scaled down, so their ink
+/// grows with the canvas. The nominal canvas sets it before any bounds expansion.
+fn ink_scale(width: f64, recolour_stamp: bool) -> f64 {
+    if recolour_stamp {
+        (width / 80.0).max(1.0)
+    } else {
+        1.0
+    }
+}
+
+/// Outer radius of a counterterm glyph, in drawing units, on a drawing whose
+/// nominal content is `content_width` drawing units wide.
+pub(super) fn glyph_radius(content_width: f64, recolour_stamp: bool) -> f64 {
+    let width = (content_width + 2.0 * PAD) * UNIT + 2.0 * MARGIN;
+    GLYPH_EXTENT * ink_scale(width, recolour_stamp) / UNIT
+}
+
+/// Disc radius plus half its stroke, in points.
+const GLYPH_EXTENT: f64 = 5.925;
+
 // SVG's default miter limit is four times the stroke half-width.
 const MITER_EXTENT: f64 = 2.0;
 
@@ -384,12 +406,7 @@ pub(super) fn svg(
     let title_width = title.map_or(0.0, |title| title.metrics.width);
     let title_height = title.map_or(0.0, |title| title.metrics.height + GUTTER);
     let width = ((bounds.width() + 2.0 * PAD) * UNIT).max(title_width) + 2.0 * MARGIN;
-    // The nominal canvas sets ink weight before any bounds expansion.
-    let ink_scale = if recolour_stamp {
-        (width / 80.0).max(1.0)
-    } else {
-        1.0
-    };
+    let ink_scale = ink_scale(width, recolour_stamp);
     if recolour_stamp {
         let inflate = |rect: Rect, width: f64| rect.inflate(width / UNIT, width / UNIT);
         for element in layers {
@@ -406,9 +423,10 @@ pub(super) fn svg(
                         Rect::new(x - w * scale, y - h * scale, x + w * scale, y + h * scale);
                     inflate(rect, stroke.width * ink_scale / 2.0)
                 }
-                Element::Counterterm { center, .. } => {
-                    inflate(Rect::from_points(*center, *center), 5.925 * ink_scale)
-                }
+                Element::Counterterm { center, .. } => inflate(
+                    Rect::from_points(*center, *center),
+                    GLYPH_EXTENT * ink_scale,
+                ),
                 Element::Path { path, stroke, .. } => {
                     inflate(path.bounding_box(), MITER_EXTENT * stroke.width * ink_scale)
                 }
@@ -648,14 +666,26 @@ pub(super) fn svg(
                 } else {
                     String::new()
                 };
-                let (disc, cross, paper) = if details.scheme == CountertermScheme::OnShell {
-                    (paint.as_str(), "#ffffff", r#" data-linnet-paper="true""#)
-                } else {
-                    ("#ffffff", paint.as_str(), "")
+                // Filled on shell, open for MS-bar, and a dashed ring while the
+                // scheme is unspecified.
+                let (disc, cross, paper, ring) = match details.scheme {
+                    CountertermScheme::OnShell => (
+                        paint.as_str(),
+                        "#ffffff",
+                        r#" data-linnet-paper="true""#,
+                        "",
+                    ),
+                    CountertermScheme::MsBar => ("#ffffff", paint.as_str(), "", ""),
+                    CountertermScheme::Unspecified => (
+                        "#ffffff",
+                        paint.as_str(),
+                        "",
+                        r#" stroke-dasharray="2.2 1.6""#,
+                    ),
                 };
                 let _ = write!(
                     svg,
-                    r##"<g data-linnet-counterterm="true" data-label="{label}" data-description="{description}"{scheme_attribute} transform="translate({cx} {cy}){stamp_scale}"><title>{title}</title><circle r="5.2" fill="{disc}" stroke="{paint}" stroke-width="1.45"/><path d="M-3.65 -3.65L3.65 3.65M-3.65 3.65L3.65 -3.65" fill="none" stroke="{cross}" stroke-width="1.45"{paper}/></g>"##
+                    r##"<g data-linnet-counterterm="true" data-label="{label}" data-description="{description}"{scheme_attribute} transform="translate({cx} {cy}){stamp_scale}"><title>{title}</title><circle r="5.2" fill="{disc}" stroke="{paint}" stroke-width="1.45"{ring}/><path d="M-3.65 -3.65L3.65 3.65M-3.65 3.65L3.65 -3.65" fill="none" stroke="{cross}" stroke-width="1.45"{paper}/></g>"##
                 );
             }
             Element::Triangle(points) => {
