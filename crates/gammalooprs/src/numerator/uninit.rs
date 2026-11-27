@@ -49,15 +49,15 @@ impl Numerator<UnInit> {
                 let source_n = graph.node_id(source);
                 if !seen[source_n] {
                     seen.add(source_n);
-                    num *= graph[source_n].get_num();
+                    num *= graph[source_n].scoped_num(source_n).as_ref();
                 }
                 let sink_n = graph.node_id(sink);
                 if !seen[sink_n] {
                     seen.add(sink_n);
-                    num *= graph[sink_n].get_num();
+                    num *= graph[sink_n].scoped_num(sink_n).as_ref();
                 }
 
-                num *= &e.data.num.value //.kill_color();
+                num *= e.data.scoped_num(eid).as_ref();
             }
         }
 
@@ -69,7 +69,7 @@ impl Numerator<UnInit> {
                 .iter_crown(node_id)
                 .all(|h| subgraph.includes(&h) || graph[graph[&h]].is_dummy)
             {
-                num *= graph[node_id].get_num()
+                num *= graph[node_id].scoped_num(node_id).as_ref();
             }
         }
 
@@ -99,20 +99,20 @@ impl Numerator<UnInit> {
         }
         let not_ignored = subgraph.subtract(ignore);
 
-        for (p, _eid, e) in graph.underlying.iter_edges_of(&not_ignored) {
+        for (p, eid, e) in graph.underlying.iter_edges_of(&not_ignored) {
             if let HedgePair::Paired { source, sink } = p {
                 let source_n = graph.node_id(source);
                 if !seen[source_n] {
                     seen.add(source_n);
-                    num *= graph[source_n].get_num();
+                    num *= graph[source_n].scoped_num(source_n).as_ref();
                 }
                 let sink_n = graph.node_id(sink);
                 if !seen[sink_n] {
                     seen.add(sink_n);
-                    num *= graph[sink_n].get_num();
+                    num *= graph[sink_n].scoped_num(sink_n).as_ref();
                 }
 
-                num *= &e.data.num.value //.kill_color();
+                num *= e.data.scoped_num(eid).as_ref();
             }
         }
 
@@ -124,7 +124,7 @@ impl Numerator<UnInit> {
                 .iter_crown(node_id)
                 .all(|h| subgraph.includes(&h) || graph[graph[&h]].is_dummy)
             {
-                num *= graph[node_id].get_num()
+                num *= graph[node_id].scoped_num(node_id).as_ref();
             }
         }
 

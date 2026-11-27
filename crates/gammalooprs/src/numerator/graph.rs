@@ -694,8 +694,7 @@ mod test {
                 .numerator(&graph.full_filter(), &graph.empty_subgraph())
                 .state
                 .expr
-                * &graph.global_prefactor.projector
-                * &graph.global_prefactor.num
+                * graph.global_prefactor.to_atom()
                 * &graph.overall_factor)
                 .simplify_color();
             if let Some(expected) = &expected {
@@ -810,8 +809,7 @@ mod test {
                 .numerator(&g.full_filter(), &g.empty_subgraph())
                 .state
                 .expr
-                * &g.global_prefactor.projector
-                * &g.global_prefactor.num
+                * g.global_prefactor.to_atom()
                 * &g.overall_factor)
                 .simplify_color();
             println!("New:{new_a}");

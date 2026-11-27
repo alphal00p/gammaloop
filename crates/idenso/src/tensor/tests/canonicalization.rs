@@ -1,16 +1,14 @@
-use crate::{
-    Cookable, IndexTooling,
-    color::CS,
-    representations::{ColorAdjoint, ColorFundamental},
-    test_support::test_initialize,
-};
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::representation::RepName;
 use spenso::{antisym, bracket, broadcast_symbol, cyclic, dind, euc, lor, mink, sym, tensor};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView},
-    function, parse_lit, symbol,
-};
+use symbolica::atom::{Atom, AtomCore, AtomView};
+use symbolica::{function, parse_lit, symbol};
 
-use spenso::structure::{abstract_index::AbstractIndex, representation::RepName};
+use crate::color::CS;
+use crate::representations::{ColorAdjoint, ColorFundamental};
+use crate::tensor as idenso_tensor;
+use crate::test_support::test_initialize;
+use crate::{Cookable, IndexTooling};
 
 fn canonicalize(expression: &Atom) -> Atom {
     expression
@@ -339,4 +337,57 @@ fn cyclic_symmetry_preserves_only_rotations() {
 
     // A four-cycle is odd. Reflections are not part of cyclic symmetry.
     assert!(canonicalize(&rank_four).is_zero());
+}
+
+fn composite_odd_cycle() -> Atom {
+    let adjoint_dimension = Atom::var(CS.nc).pow(2) - Atom::one();
+    let [a, b, c] = [0, 1, 2].map(|hedge| {
+        ColorAdjoint {}.to_symbolic([
+            adjoint_dimension.clone(),
+            function!(symbol!("composite_cycle_hedge"), hedge),
+        ])
+    });
+    antisym!(a.clone(), b.clone()) * antisym!(b.clone(), c.clone()) * antisym!(c, a)
+}
+
+#[test]
+fn antisymmetric_pruning_leaves_symmetric_expressions_untouched() {
+    test_initialize();
+    // A triple index is no valid network; without an antisymmetric head the
+    // pruning pass must return before parsing it.
+    let i = mink!(4, untouched_i);
+    let expression = (tensor!(untouched_a, i.clone()) + tensor!(untouched_b, i.clone()))
+        * tensor!(untouched_c, i.clone())
+        * sym!(i.clone(), i);
+
+    assert_eq!(
+        idenso_tensor::remove_antisymmetric_zero_terms::<AbstractIndex>(expression.as_view()),
+        expression
+    );
+}
+
+#[test]
+fn antisymmetric_pruning_handles_composite_dimensions_and_structured_indices() {
+    test_initialize();
+    let scalar = tensor!(composite_nested_scalar);
+    let spectator = tensor!(composite_spectator_a) + tensor!(composite_spectator_b);
+    let expression = &scalar * &spectator * (Atom::one() + composite_odd_cycle());
+
+    assert_eq!(
+        idenso_tensor::remove_antisymmetric_zero_terms::<AbstractIndex>(expression.as_view()),
+        &scalar * &spectator
+    );
+    // An even cycle has no odd automorphism and survives.
+    let adjoint_dimension = Atom::var(CS.nc).pow(2) - Atom::one();
+    let [a, b] = [0, 1].map(|hedge| {
+        ColorAdjoint {}.to_symbolic([
+            adjoint_dimension.clone(),
+            function!(symbol!("composite_cycle_hedge"), hedge),
+        ])
+    });
+    let even = antisym!(a.clone(), b.clone()) * antisym!(b, a);
+    assert_eq!(
+        idenso_tensor::remove_antisymmetric_zero_terms::<AbstractIndex>(even.as_view()),
+        even
+    );
 }

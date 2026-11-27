@@ -11,6 +11,7 @@ use symbolica::{
 use crate::{
     cff::{CutCFFIndex, expression::OrientationID},
     graph::Graph,
+    numerator::aind::Aind,
     utils::{GS, W_},
     uv::{
         Integrands, UVgenerationSettings, UltravioletGraph,
@@ -465,6 +466,15 @@ impl<'a> Direct3dApproximation<'a> {
         marker_current: &M,
         marker_given: &M,
     ) -> Result<Direct3dCts> {
+        // Every component was integrated by its own scoped producer.
+        debug_assert!(
+            Aind::private_indices_are_disjoint(
+                finite_counterterms
+                    .iter()
+                    .map(|(coefficient, _)| [coefficient.as_view()])
+            ),
+            "finite counterterm components must not share private indices"
+        );
         // Each finite effective vertex retains its connected source owner.
         // Equal masses in disjoint integrated prefixes must remain distinct
         // until an enclosing operation contains their respective components.

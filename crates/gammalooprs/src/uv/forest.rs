@@ -364,10 +364,7 @@ impl Forest {
                 "Term before simplification"
             );
 
-            let atom = &atom
-                * &graph.global_prefactor.projector
-                * &graph.global_prefactor.num
-                * &graph.overall_factor;
+            let atom = &atom * graph.global_prefactor.to_atom() * &graph.overall_factor;
             debug_tags!(#generation, #uv, #inspect, #dump;
                 log.expression = atom,
                 dod = n.data.spinney.dod,

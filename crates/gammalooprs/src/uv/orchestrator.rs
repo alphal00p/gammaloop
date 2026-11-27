@@ -521,7 +521,13 @@ mod tests {
         crate::initialisation::test_initialise().unwrap();
         let spectator = symbolica::parse!("2*(compare_a+compare_b)*(compare_c+compare_d)");
         let expression = |topology| {
-            let contracted = mink!(4, Atom::from(Aind::UVTerm(topology, 2)));
+            let contracted = mink!(
+                4,
+                Atom::from(Aind::ScopedDummy(
+                    symbol!(&format!("orchestrator_test::topology_{topology}")),
+                    2
+                ))
+            );
             let fixed = mink!(4, Atom::from(Aind::Edge(2, 1)));
             let start = bis!(4, Atom::from(Aind::Hedge(0, 0)));
             let end = bis!(4, Atom::from(Aind::Hedge(1, 0)));

@@ -1,7 +1,13 @@
+use std::collections::BTreeSet;
+
 use super::*;
-use crate::shorthands::{UndoShorthands, chain::Chain};
+use crate::shorthands::UndoShorthands;
+use crate::shorthands::chain::Chain;
 use insta::assert_snapshot;
-use spenso::{antisym, g, mink, shadowing::IntoAtom, structure::representation::RepName};
+use spenso::shadowing::IntoAtom;
+use spenso::structure::representation::RepName;
+use spenso::structure::slot::IsAbstractSlot;
+use spenso::{antisym, g, mink};
 use symbolica::{function, symbol};
 
 macro_rules! fco {
@@ -165,7 +171,7 @@ fn equivariant_open_fundamental_chain_keeps_its_adjoint_generator() {
         // The preserved free index must not be captured by a trace dummy,
         // including when the input already reserves the first dummy labels.
         for index in [
-            Atom::var(CS.trace_dummy),
+            Atom::var(symbol!("x")),
             Atom::from(AbstractIndex::Dummy(0)),
             // This is a literal tensor label, although Symbolica patterns
             // interpret its trailing underscore as a wildcard.
@@ -293,7 +299,7 @@ fn cubic_trace_contraction_preserves_two_open_color_lines() {
                 input,
             );
             for index in [
-                Atom::var(CS.trace_dummy),
+                Atom::var(symbol!("x")),
                 Atom::from(AbstractIndex::Dummy(0)),
                 Atom::var(symbol!("boundary_adjoint_")),
             ] {
@@ -895,7 +901,161 @@ fn four_generator_trace_terminal() {
         color_t!(slot!(r.coad_da, d)),
     );
 
-    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/6*f(coad(dA,a),coad(dA,c),coad(dA,x))*f(coad(dA,b),coad(dA,d),coad(dA,x))*idx(2,cof(Nc))+1/3*f(coad(dA,a),coad(dA,d),coad(dA,x))*f(coad(dA,b),coad(dA,c),coad(dA,x))*idx(2,cof(Nc))+f(coad(dA,a),coad(dA,b),coad(dA,x))*trace(cof(Nc),sym(t(coad(dA,c),in,out),t(coad(dA,d),in,out),t(coad(dA,x),in,out)))*𝑖/2+f(coad(dA,c),coad(dA,d),coad(dA,x))*trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,x),in,out)))*𝑖/2+trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,c),in,out),t(coad(dA,d),in,out)))");
+    assert_snapshot!(expr.simplify_color().to_bare_ordered_string(), @"-1/6*f(coad(dA,a),coad(dA,c),coad(dA,d_0))*f(coad(dA,b),coad(dA,d),coad(dA,d_0))*idx(2,cof(Nc))+1/3*f(coad(dA,a),coad(dA,d),coad(dA,d_0))*f(coad(dA,b),coad(dA,c),coad(dA,d_0))*idx(2,cof(Nc))+f(coad(dA,a),coad(dA,b),coad(dA,d_0))*trace(cof(Nc),sym(t(coad(dA,c),in,out),t(coad(dA,d),in,out),t(coad(dA,d_0),in,out)))*𝑖/2+f(coad(dA,c),coad(dA,d),coad(dA,d_0))*trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,d_0),in,out)))*𝑖/2+trace(cof(Nc),sym(t(coad(dA,a),in,out),t(coad(dA,b),in,out),t(coad(dA,c),in,out),t(coad(dA,d),in,out)))");
+}
+
+#[test]
+fn separate_four_generator_traces_close_on_distinct_dummies() {
+    test_initialize();
+    let r = TestReps::new();
+    let four_trace = |indices: [&str; 4]| {
+        trace!(
+            &r.cof_nc;
+            indices.map(|index| color_t!(slot!(r.coad_da, AbstractIndex::from(symbol!(index)))))
+        )
+    };
+    let product = four_trace(["a", "b", "c", "d"]) * four_trace(["e", "f", "g", "h"]);
+    let free = BTreeSet::from_iter(product.list_dangling::<AbstractIndex>().unwrap());
+
+    let simplified = product.simplify_color().expand();
+    let AtomView::Add(terms) = simplified.as_view() else {
+        panic!("two decomposed traces give a sum: {simplified}");
+    };
+    // A reused trace dummy would label four slots of the doubly decomposed
+    // monomials instead of two contracted pairs.
+    let dummy_slots = [0, 1].map(|index| {
+        r.coad_da
+            .slot::<AbstractIndex, _>(AbstractIndex::Dummy(index))
+            .to_atom()
+    });
+    let mut doubly_decomposed = 0;
+    for term in terms.iter() {
+        let dangling = term.list_dangling::<AbstractIndex>().unwrap();
+        assert_eq!(BTreeSet::from_iter(dangling), free, "{term}");
+        let counts = dummy_slots.each_ref().map(|slot| {
+            let mut count = 0;
+            term.visitor(&mut |view| {
+                count += usize::from(view == slot.as_view());
+                true
+            });
+            count
+        });
+        assert!(counts.iter().all(|count| [0, 2].contains(count)), "{term}");
+        doubly_decomposed += usize::from(counts == [2, 2]);
+    }
+    assert!(doubly_decomposed > 0, "{simplified}");
+}
+
+#[test]
+fn structured_function_indices_simplify_like_symbols() {
+    test_initialize();
+    let r = TestReps::new();
+    let scoped = |scope: &str, index: i64| {
+        AbstractIndex::try_from(
+            function!(
+                symbol!("color_test::dummy"),
+                Atom::var(symbol!(scope)),
+                Atom::num(index)
+            )
+            .as_view(),
+        )
+        .unwrap()
+    };
+    let expression = |left: AbstractIndex, right: AbstractIndex| {
+        chain!(
+            slot!(r.cof_nc, i),
+            slot!(r.cof_nc.dual(), j),
+            color_t!(r.coad_da.slot::<AbstractIndex, _>(left)),
+            color_t!(r.coad_da.slot::<AbstractIndex, _>(left)),
+        ) * trace!(
+            &r.cof_nc,
+            color_t!(r.coad_da.slot::<AbstractIndex, _>(right)),
+            color_t!(r.coad_da.slot::<AbstractIndex, _>(right)),
+        )
+    };
+
+    // Two producers each contract their own dummy(scope, 0).
+    let structured = expression(scoped("color_scope_a", 0), scoped("color_scope_b", 0));
+    let symbolic = expression(
+        AbstractIndex::from(symbol!("structured_left")),
+        AbstractIndex::from(symbol!("structured_right")),
+    );
+
+    assert_eq!(structured.simplify_color(), symbolic.simplify_color());
+}
+
+fn adjoint_slot(r: &TestReps, index: AbstractIndex) -> Atom {
+    r.coad_da.slot::<AbstractIndex, _>(index).to_atom()
+}
+
+fn named_trace(r: &TestReps, indices: &[&str]) -> Atom {
+    trace!(
+        &r.cof_nc;
+        indices
+            .iter()
+            .map(|index| color_t!(adjoint_slot(r, AbstractIndex::from(symbol!(index)))))
+            .collect::<Vec<_>>()
+    )
+}
+
+#[test]
+fn powered_four_generator_traces_draw_fresh_dummies_per_copy() {
+    test_initialize();
+    let r = TestReps::new();
+    let trace_abcd = named_trace(&r, &["a", "b", "c", "d"]);
+    // Two copies of the decomposition sharing the generators but closing on
+    // their own dummies.
+    let decomp_0 = trace_abcd.simplify_color();
+    let [d_0, d_1] = [0, 1].map(|index| Atom::from(AbstractIndex::Dummy(index)));
+    assert!(
+        decomp_0.contains(&d_0) && !decomp_0.contains(&d_1),
+        "{decomp_0}"
+    );
+    let decomp_1 = decomp_0.replace(d_0.to_pattern()).with(d_1.to_pattern());
+
+    // Both sides relabel their surviving dummies independently. The terms of
+    // 1 + Tr carry different free indices, so each term is canonized alone.
+    let canonical = |atom: Atom| {
+        let expanded = atom.expand();
+        let AtomView::Add(terms) = expanded.as_view() else {
+            return expanded.canonize(AbstractIndex::Dummy).unwrap();
+        };
+        terms
+            .iter()
+            .map(|term| term.canonize(AbstractIndex::Dummy).unwrap())
+            .fold(Atom::Zero, |sum, term| sum + term)
+    };
+    assert_eq!(
+        canonical(trace_abcd.pow(2).simplify_color()),
+        canonical((&decomp_0 * &decomp_1).simplify_color()),
+    );
+    assert_eq!(
+        canonical((Atom::one() + &trace_abcd).pow(2).simplify_color()),
+        canonical(((Atom::one() + &decomp_0) * (Atom::one() + &decomp_1)).simplify_color()),
+    );
+}
+
+#[test]
+fn trace_decomposition_skips_dummies_the_term_already_uses() {
+    test_initialize();
+    let r = TestReps::new();
+    let slot = |index: &str| adjoint_slot(&r, AbstractIndex::from(symbol!(index)));
+    let d_0 = adjoint_slot(&r, AbstractIndex::Dummy(0));
+    // The spectator contraction over d_0 does not simplify, so the trace
+    // decomposes while d_0 is already summed in the same term.
+    let product = color_f!(slot("e"), slot("g"), d_0.clone())
+        * color_f!(slot("h"), slot("k"), d_0)
+        * named_trace(&r, &["a", "b", "c", "d"]);
+    let free = BTreeSet::from_iter(product.list_dangling::<AbstractIndex>().unwrap());
+
+    let simplified = product.simplify_color().expand();
+    let AtomView::Add(terms) = simplified.as_view() else {
+        panic!("the decomposed trace gives a sum: {simplified}");
+    };
+    for term in terms.iter() {
+        let dangling = term.list_dangling::<AbstractIndex>().unwrap();
+        assert_eq!(BTreeSet::from_iter(dangling), free, "{term}");
+    }
 }
 
 // FORM's repository includes a valgrind-oriented size-5 port of color.h's

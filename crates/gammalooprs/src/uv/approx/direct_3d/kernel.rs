@@ -18,7 +18,7 @@ use crate::{
     numerator::symbolica_ext::NumeratorAtomExt,
     utils::{GS, W_},
     uv::{
-        ApproximationType, UltravioletGraph,
+        ApproximationType, PrivateIndexOwner, UltravioletGraph,
         approx::{ForestNodeLike, OrientationProjection, UVCtx},
         uv_graph::UVE,
     },
@@ -348,15 +348,20 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
         .as_ref()
         .map(|active| active.intersection(current.subgraph()));
     let reduced = current.reduced_subgraph(given);
-    let mut numerator = ctx
-        .graph
-        .numerator(&reduced, given.subgraph())
-        .get_single_atom()
-        .expect("graph numerator should be available")
-        .simplify_color_with(ColorSimplifySettings {
-            simplify_non_color: false,
-            ..Default::default()
-        });
+    let mut numerator = PrivateIndexOwner::Numerator {
+        reduced: &reduced,
+        without: given.subgraph(),
+    }
+    .own(
+        ctx.graph
+            .numerator(&reduced, given.subgraph())
+            .get_single_atom()
+            .expect("graph numerator should be available")
+            .simplify_color_with(ColorSimplifySettings {
+                simplify_non_color: false,
+                ..Default::default()
+            }),
+    );
     let lmb_id = lmb
         .loop_edges
         .first()

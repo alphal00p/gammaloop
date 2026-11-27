@@ -144,9 +144,7 @@ impl Graph {
     }
 
     pub(crate) fn global_atom(&self) -> Atom {
-        &self.global_prefactor.num
-            * &self.global_prefactor.projector
-            * evaluate_overall_factor(self.overall_factor.as_view())
+        self.global_prefactor.to_atom() * evaluate_overall_factor(self.overall_factor.as_view())
     }
 
     pub(crate) fn production_numerator_atom_for_full_3d_expression(&self) -> Atom {

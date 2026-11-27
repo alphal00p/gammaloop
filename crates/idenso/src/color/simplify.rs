@@ -1,33 +1,26 @@
+use std::cell::{Cell, OnceCell};
+use std::collections::BTreeSet;
 use std::sync::LazyLock;
 
 use itertools::Itertools;
-use spenso::{
-    chain,
-    network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
-    rep_,
-    shadowing::{self, Collectable, TensorCollectExt, TensorCollectFilter},
-    structure::{
-        abstract_index::{AIND_SYMBOLS, AbstractIndex},
-        representation::RepName,
-        slot::DummyAind,
-    },
-    trace, trace_sym,
-};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Symbol},
-    coefficient::CoefficientView,
-    function,
-    id::{Context, Pattern, Replacement},
-    utils::Settable,
-};
+use spenso::network::library::symbolic::ETS;
+use spenso::network::tags::SPENSO_TAG as T;
+use spenso::shadowing::{self, Collectable, TensorCollectExt, TensorCollectFilter};
+use spenso::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
+use spenso::structure::representation::RepName;
+use spenso::structure::slot::DummyAind;
+use spenso::{chain, rep_, trace, trace_sym};
+use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
+use symbolica::coefficient::CoefficientView;
+use symbolica::function;
+use symbolica::id::{Context, Pattern, Replacement};
+use symbolica::utils::Settable;
 use symbolica_utils::PatternReplacement;
 
-use crate::{
-    CookSettings, Cookable, IndexTooling, W_, color_f, color_t,
-    representations::{ColorAdjoint, ColorFundamental, ColorSextet},
-    shorthands::{chain::Chain, metric::MetricSimplifier},
-    tensor::remove_antisymmetric_zero_terms,
-};
+use crate::representations::{ColorAdjoint, ColorFundamental, ColorSextet};
+use crate::shorthands::chain::Chain;
+use crate::shorthands::metric::MetricSimplifier;
+use crate::{IndexTooling, W_, color_f, color_t, tensor};
 
 use super::{CS, ColorSimplifier, ColorSimplifySettings};
 
@@ -77,11 +70,19 @@ impl ColorAlgebraSimplifier {
         }
         // Isolate complete color networks once. Fixed-point chain rewrites must
         // not repeatedly traverse the factorized momentum coefficients that
-        // accompany each collected color payload.
+        // accompany each collected color payload. Keep non-natural powers of
+        // color nodes wrapped as a single unit so `map_collects` never strips
+        // the exponent and introduces dummies inside a reciprocal or symbolic
+        // power base.
         let simplified = current
-            .collect_with_map(
-                |atom| matches!(atom, AtomView::Fun(_) if atom_contains_color_node(atom)),
-            )
+            .collect_with_map(|atom| match atom {
+                AtomView::Fun(_) => atom_contains_color_node(atom),
+                AtomView::Pow(pow) => {
+                    positive_integer(pow.get_base_exp().1).is_none()
+                        && atom_contains_color_node(atom)
+                }
+                _ => false,
+            })
             .map_collects(|factor, _context, out| {
                 let AtomView::Fun(collected) = factor else {
                     return;
@@ -148,7 +149,8 @@ impl ColorAlgebraSimplifier {
                         let Some(color) = collected.iter().next() else {
                             return;
                         };
-                        let reduced = remove_antisymmetric_zero_terms::<AbstractIndex>(color);
+                        let reduced =
+                            tensor::remove_antisymmetric_zero_terms::<AbstractIndex>(color);
                         pruned |= reduced.as_view() != color;
                         **out = reduced;
                     });
@@ -178,7 +180,10 @@ impl ColorAlgebraSimplifier {
                 .fold(Atom::Zero, |sum, term| sum + term);
         }
 
-        if let Some(rewritten) = self.rewrite_node(expr) {
+        // Every rewrite of this term draws its contracted slots from one pool,
+        // so separately rewritten nodes cannot share a dummy label.
+        let dummies = FreshDummies::new(expr);
+        if let Some(rewritten) = self.rewrite_node(expr, &dummies) {
             // Contract newly distributed color terms before collection can
             // refactor them into the unchanged input and stop the fixed point.
             return if matches!(rewritten.as_view(), AtomView::Add(_)) {
@@ -188,13 +193,62 @@ impl ColorAlgebraSimplifier {
             };
         }
 
-        // Try product-level rewrites first so trace*f contractions can fire before the
-        // trace terminal expands into symmetric trace and f terms.
-        expr.to_owned().replace_map(|arg, _context, out| {
-            if let Some(rewritten) = self.rewrite_node(arg) {
-                **out = rewritten;
-            }
-        })
+        self.rewrite_children(expr, &dummies)
+            .unwrap_or_else(|| expr.to_owned())
+    }
+
+    /// `view` with its outermost rewritable nodes rewritten, or `None` if no
+    /// node of `view` rewrites.
+    ///
+    /// A node is tried before its children, so product-level rewrites such as
+    /// trace*f contractions fire before the trace terminal expands into
+    /// symmetric trace and f terms.
+    fn rewrite_subtrees(&self, view: AtomView<'_>, dummies: &FreshDummies) -> Option<Atom> {
+        self.rewrite_node(view, dummies)
+            .or_else(|| self.rewrite_children(view, dummies))
+    }
+
+    /// `view` with the outermost rewritable nodes below it rewritten, or
+    /// `None` if none rewrites.
+    ///
+    /// Powers rewrite only as nodes, through [`Self::simplify_power`], which
+    /// keeps every summed dummy of the base inside a single copy.
+    fn rewrite_children(&self, view: AtomView<'_>, dummies: &FreshDummies) -> Option<Atom> {
+        let rewrite_all = |children: &mut dyn Iterator<Item = AtomView<'_>>| {
+            let mut changed = false;
+            let children = children
+                .map(|child| match self.rewrite_subtrees(child, dummies) {
+                    Some(rewritten) => {
+                        changed = true;
+                        rewritten
+                    }
+                    None => child.to_owned(),
+                })
+                .collect_vec();
+            changed.then_some(children)
+        };
+        match view {
+            AtomView::Add(add) => Some(
+                rewrite_all(&mut add.iter())?
+                    .into_iter()
+                    .fold(Atom::Zero, |sum, term| sum + term),
+            ),
+            AtomView::Mul(mul) => Some(
+                rewrite_all(&mut mul.iter())?
+                    .into_iter()
+                    .fold(Atom::one(), |product, factor| product * factor),
+            ),
+            AtomView::Fun(function) => Some(
+                rewrite_all(&mut function.iter())?
+                    .into_iter()
+                    .fold(
+                        FunctionBuilder::new(function.get_symbol()),
+                        |builder, arg| builder.add_arg(arg),
+                    )
+                    .finish(),
+            ),
+            AtomView::Pow(_) | AtomView::Num(_) | AtomView::Var(_) => None,
+        }
     }
 
     fn collect_lines(&self, expr: AtomView<'_>) -> Atom {
@@ -235,19 +289,19 @@ impl ColorAlgebraSimplifier {
         }
     }
 
-    fn rewrite_node(&self, arg: AtomView<'_>) -> Option<Atom> {
-        self.simplify_product(arg)
-            .or_else(|| Self::simplify_chain_node(arg))
+    fn rewrite_node(&self, arg: AtomView<'_>, dummies: &FreshDummies) -> Option<Atom> {
+        self.simplify_product(arg, dummies)
+            .or_else(|| Self::simplify_chain_node(arg, dummies))
             .or_else(|| {
                 self.settings
                     .evaluate_traces
-                    .then(|| Self::simplify_trace_node(arg))
+                    .then(|| Self::simplify_trace_node(arg, dummies))
                     .flatten()
             })
-            .or_else(|| self.simplify_power(arg))
+            .or_else(|| self.simplify_power(arg, dummies))
     }
 
-    fn simplify_chain_node(chain: AtomView) -> Option<Atom> {
+    fn simplify_chain_node(chain: AtomView, dummies: &FreshDummies) -> Option<Atom> {
         let (start, end, factors) = chain_parts(chain)?;
         if factors.is_empty()
             || factors
@@ -269,7 +323,7 @@ impl ColorAlgebraSimplifier {
         }
 
         if let Some(rewritten) =
-            Self::simplify_antisymmetric_chain_projector(&start, &end, &factors)
+            Self::simplify_antisymmetric_chain_projector(&start, &end, &factors, dummies)
         {
             return Some(rewritten);
         }
@@ -300,7 +354,7 @@ impl ColorAlgebraSimplifier {
         None
     }
 
-    fn simplify_trace_node(trace: AtomView) -> Option<Atom> {
+    fn simplify_trace_node(trace: AtomView, dummies: &FreshDummies) -> Option<Atom> {
         let (rep, factors) = trace_parts(trace)?;
 
         if factors.is_empty()
@@ -325,7 +379,9 @@ impl ColorAlgebraSimplifier {
             ));
         }
 
-        if let Some(rewritten) = Self::simplify_antisymmetric_trace_projector(&rep, &factors) {
+        if let Some(rewritten) =
+            Self::simplify_antisymmetric_trace_projector(&rep, &factors, dummies)
+        {
             return Some(rewritten);
         }
 
@@ -363,7 +419,9 @@ impl ColorAlgebraSimplifier {
                         * quadratic_index(rep.clone())
                         * color_f!(a.clone(), b.clone(), c.clone()),
             ),
-            [a, b, c, d] => Self::simplify_four_generator_trace_terminal(&rep, a, b, c, d),
+            [a, b, c, d] => {
+                Self::simplify_four_generator_trace_terminal(&rep, [a, b, c, d], dummies)
+            }
             _ => None,
         }
     }
@@ -395,6 +453,7 @@ impl ColorAlgebraSimplifier {
         start: &Atom,
         end: &Atom,
         factors: &[Atom],
+        dummies: &FreshDummies,
     ) -> Option<Atom> {
         // `antisym(T^a,T^b)` is the normalized commutator: i/2 f^{abx} T^x.
         for (position, factor) in factors.iter().enumerate() {
@@ -405,7 +464,7 @@ impl ColorAlgebraSimplifier {
             let [a, b] = args.as_slice() else {
                 continue;
             };
-            let x = color_adjoint_dummy_for_pair(a, b)?;
+            let x = dummies.adjoint_for_pair(a, b)?;
 
             let mut replacement_factors = factors.to_vec();
             replacement_factors[position] = color_t!(x.clone());
@@ -419,7 +478,11 @@ impl ColorAlgebraSimplifier {
         None
     }
 
-    fn simplify_antisymmetric_trace_projector(rep: &Atom, factors: &[Atom]) -> Option<Atom> {
+    fn simplify_antisymmetric_trace_projector(
+        rep: &Atom,
+        factors: &[Atom],
+        dummies: &FreshDummies,
+    ) -> Option<Atom> {
         if let [factor] = factors {
             let (prefactor, args) = color_antisymmetric_generator_args(factor.as_view())?;
             return match args.as_slice() {
@@ -445,7 +508,7 @@ impl ColorAlgebraSimplifier {
             let [a, b] = args.as_slice() else {
                 continue;
             };
-            let x = color_adjoint_dummy_for_pair(a, b)?;
+            let x = dummies.adjoint_for_pair(a, b)?;
 
             let mut replacement_factors = factors.to_vec();
             replacement_factors[position] = color_t!(x.clone());
@@ -568,12 +631,10 @@ impl ColorAlgebraSimplifier {
 
     fn simplify_four_generator_trace_terminal(
         rep: &Atom,
-        a: &Atom,
-        b: &Atom,
-        c: &Atom,
-        d: &Atom,
+        [a, b, c, d]: [&Atom; 4],
+        dummies: &FreshDummies,
     ) -> Option<Atom> {
-        let x = color_adjoint_dummy_like(a)?;
+        let x = dummies.adjoint(color_adjoint_dimension(a)?);
 
         // Four-generator terminal decomposition:
         // Tr(T^a T^b T^c T^d) is split into a fully symmetric trace, two
@@ -595,7 +656,7 @@ impl ColorAlgebraSimplifier {
         )
     }
 
-    fn simplify_product(&self, product: AtomView) -> Option<Atom> {
+    fn simplify_product(&self, product: AtomView, dummies: &FreshDummies) -> Option<Atom> {
         let product = ProductView::parse(product);
         if self.settings.evaluate_traces
             && let Some(zero) = Self::simplify_cubic_trace_contraction(&product)
@@ -620,7 +681,7 @@ impl ColorAlgebraSimplifier {
             .or_else(|| self.simplify_two_f_loop_product(&product))
             .or_else(|| self.simplify_three_f_loop_product(&product))
             .or_else(|| Self::simplify_symmetric_invariant_product(&product))
-            .or_else(|| self.simplify_embedded_color_node(&product))
+            .or_else(|| self.simplify_embedded_color_node(&product, dummies))
             .or_else(|| {
                 self.settings
                     .expand_cross_chain_fierz
@@ -735,11 +796,9 @@ impl ColorAlgebraSimplifier {
             closed
         };
         // Spenso validates all remaining slots, including trace contractions.
-        // Composite dimension labels are only encoded in this parsing probe.
-        let probe = CookSettings::reversible()
-            .try_cook_dimensions(closed.cook_indices().as_view())
-            .ok()?;
-        if !probe.list_dangling::<AbstractIndex>().ok()?.is_empty() {
+        // It parses composite dimensions such as Nc^2-1 and structured index
+        // functions natively.
+        if !closed.list_dangling::<AbstractIndex>().ok()?.is_empty() {
             return None;
         }
         // Schur's lemma gives 1 Tr(S)/Nc for the singlet. With one adjoint,
@@ -842,16 +901,20 @@ impl ColorAlgebraSimplifier {
         None
     }
 
-    fn simplify_embedded_color_node(&self, product: &ProductView) -> Option<Atom> {
+    fn simplify_embedded_color_node(
+        &self,
+        product: &ProductView,
+        dummies: &FreshDummies,
+    ) -> Option<Atom> {
         for (index, factor) in product.factors.iter().enumerate() {
-            let rewritten = Self::simplify_chain_node(factor.atom)
+            let rewritten = Self::simplify_chain_node(factor.atom, dummies)
                 .or_else(|| {
                     self.settings
                         .evaluate_traces
-                        .then(|| Self::simplify_trace_node(factor.atom))
+                        .then(|| Self::simplify_trace_node(factor.atom, dummies))
                         .flatten()
                 })
-                .or_else(|| self.simplify_power(factor.atom));
+                .or_else(|| self.simplify_power(factor.atom, dummies));
             let Some(rewritten) = rewritten else {
                 continue;
             };
@@ -943,28 +1006,52 @@ impl ColorAlgebraSimplifier {
         None
     }
 
-    fn simplify_power(&self, power: AtomView) -> Option<Atom> {
+    /// `power` with its color base rewritten, or `None` if the base does not
+    /// rewrite.
+    ///
+    /// Squared invariants and structure constants close directly. Otherwise
+    /// the base is rewritten once; a rewrite without summed dummies keeps the
+    /// power factorized. A rewrite that introduces summed dummies must not be
+    /// raised to a power, since expanding it would share the dummies between
+    /// the copies: a positive integer power becomes a product of separately
+    /// rewritten copies with fresh dummies, and any other power is left alone.
+    fn simplify_power(&self, power: AtomView, dummies: &FreshDummies) -> Option<Atom> {
         let AtomView::Pow(pow) = power else {
             return None;
         };
         let (base, exponent) = pow.get_base_exp();
-        if positive_integer(exponent)? != 2 {
+        if positive_integer(exponent) == Some(2) {
+            if let Some(invariant) = color_symmetric_invariant(base)
+                && invariant.args.len() >= 3
+            {
+                return Some(color_symmetric_product(
+                    invariant.args.len(),
+                    invariant.rep.clone(),
+                    invariant.rep,
+                ));
+            }
+            if let Some(args) = structure_constant_args(base)
+                && let Some(dimension) = color_structure_dimension(&args)
+            {
+                return Some(adjoint_casimir_for_dimension(dimension.clone()) * dimension);
+            }
+        }
+
+        let cursor = dummies.cursor();
+        let first_copy = self.rewrite_subtrees(base, dummies)?;
+        if dummies.cursor() == cursor {
+            return Some(first_copy.pow(exponent));
+        }
+        let Some(copies) = positive_integer(exponent) else {
+            dummies.rewind(cursor);
             return None;
-        }
-
-        if let Some(invariant) = color_symmetric_invariant(base)
-            && invariant.args.len() >= 3
-        {
-            return Some(color_symmetric_product(
-                invariant.args.len(),
-                invariant.rep.clone(),
-                invariant.rep,
-            ));
-        }
-
-        let args = structure_constant_args(base)?;
-        let dimension = color_structure_dimension(&args)?;
-        Some(adjoint_casimir_for_dimension(dimension.clone()) * dimension)
+        };
+        Some((1..copies).fold(first_copy, |product, _| {
+            product
+                * self
+                    .rewrite_subtrees(base, dummies)
+                    .expect("the base rewrote on its first copy")
+        }))
     }
 
     fn simplify_trace_structure_product(&self, product: &ProductView) -> Option<Atom> {
@@ -1874,16 +1961,69 @@ fn color_structure_dimension(args: &[Atom; 3]) -> Option<Atom> {
         .then_some(dimension)
 }
 
-fn color_adjoint_dummy_like(slot: &Atom) -> Option<Atom> {
-    let dimension = color_adjoint_dimension(slot)?;
-    Some(ColorAdjoint {}.to_symbolic([dimension, Atom::var(CS.trace_dummy)]))
+/// Contracted adjoint slots that are fresh within one rewritten term.
+///
+/// Rewrites that decompose a node introduce a summed adjoint slot. Every node
+/// of a term draws from the same pool, so two traces of one monomial never
+/// close their decompositions on the same label. The term is scanned for the
+/// dummies it already uses at most once, when the first slot is drawn.
+struct FreshDummies<'a> {
+    term: AtomView<'a>,
+    occupied: OnceCell<BTreeSet<usize>>,
+    next: Cell<usize>,
 }
 
-fn color_adjoint_dummy_for_pair(left: &Atom, right: &Atom) -> Option<Atom> {
-    let left_dimension = color_adjoint_dimension(left)?;
-    let right_dimension = color_adjoint_dimension(right)?;
-    (left_dimension == right_dimension)
-        .then(|| ColorAdjoint {}.to_symbolic([left_dimension, Atom::var(CS.trace_dummy)]))
+impl<'a> FreshDummies<'a> {
+    fn new(term: AtomView<'a>) -> Self {
+        Self {
+            term,
+            occupied: OnceCell::new(),
+            next: Cell::new(0),
+        }
+    }
+
+    /// A summed adjoint slot of `dimension` unused anywhere in the term and
+    /// by every slot drawn before.
+    fn adjoint(&self, dimension: Atom) -> Atom {
+        let occupied = self.occupied.get_or_init(|| {
+            let mut occupied = BTreeSet::new();
+            self.term.visitor(&mut |view| {
+                if let AtomView::Var(variable) = view
+                    && let Some(number) = variable
+                        .get_symbol()
+                        .get_stripped_name()
+                        .strip_prefix("d_")
+                        .and_then(|number| number.parse().ok())
+                    && Atom::from(AbstractIndex::new_dummy_at(number)).as_view() == view
+                {
+                    occupied.insert(number);
+                }
+                true
+            });
+            occupied
+        });
+        let index = (self.next.get()..)
+            .find(|index| !occupied.contains(index))
+            .expect("a term contains finitely many dummy labels");
+        self.next.set(index + 1);
+        ColorAdjoint {}.to_symbolic([dimension, Atom::from(AbstractIndex::new_dummy_at(index))])
+    }
+
+    /// A summed adjoint slot contracting two adjoints of equal dimension.
+    fn adjoint_for_pair(&self, left: &Atom, right: &Atom) -> Option<Atom> {
+        let left_dimension = color_adjoint_dimension(left)?;
+        (left_dimension == color_adjoint_dimension(right)?).then(|| self.adjoint(left_dimension))
+    }
+
+    /// The allocation state, which advances whenever a slot is drawn.
+    fn cursor(&self) -> usize {
+        self.next.get()
+    }
+
+    /// Returns the slots drawn since `cursor` to the pool.
+    fn rewind(&self, cursor: usize) {
+        self.next.set(cursor);
+    }
 }
 
 fn representation_slot(slot: AtomView, symbol: Symbol) -> Option<(Atom, Atom)> {
@@ -2237,19 +2377,72 @@ fn positive_integer(expr: AtomView) -> Option<i64> {
 
 #[cfg(test)]
 mod tests {
+    use spenso::structure::slot::IsAbstractSlot;
+    use symbolica::symbol;
+
     use super::*;
+    use crate::test_support::{TestReps, test_initialize};
 
     #[test]
     fn trace_fierz_rejects_generator_repeated_more_than_twice() {
-        crate::test_support::test_initialize();
+        test_initialize();
         let n = Atom::var(CS.nc);
         let adjoint = ColorAdjoint {}.to_symbolic([
             n.clone().pow(2) - Atom::num(1),
-            Atom::var(symbolica::symbol!("repeated_adjoint")),
+            Atom::var(symbol!("repeated_adjoint")),
         ]);
         let factors = vec![color_t!(adjoint); 4];
         assert!(
             ColorAlgebraSimplifier::simplify_trace_fierz(&fundamental_rep(n), &factors,).is_none()
+        );
+    }
+
+    fn named_trace(indices: &[&str]) -> Atom {
+        let r = TestReps::new();
+        trace!(
+            &r.cof_nc;
+            indices
+                .iter()
+                .map(|index| {
+                    color_t!(
+                        r.coad_da
+                            .slot::<AbstractIndex, _>(AbstractIndex::from(symbol!(index)))
+                            .to_atom()
+                    )
+                })
+                .collect::<Vec<_>>()
+        )
+    }
+
+    #[test]
+    fn powers_of_dummy_free_rewrites_stay_factorized() {
+        test_initialize();
+        let simplifier = ColorAlgebraSimplifier {
+            settings: ColorSimplifySettings::default(),
+        };
+        let trace_ab = named_trace(&["a", "b"]);
+
+        assert_eq!(
+            simplifier.rewrite_terms((Atom::one() + &trace_ab).pow(5).as_view()),
+            (Atom::one() + simplifier.rewrite_terms(trace_ab.as_view())).pow(5),
+        );
+    }
+
+    #[test]
+    fn non_natural_powers_keep_dummy_introducing_bases() {
+        test_initialize();
+        let trace_abcd = named_trace(&["a", "b", "c", "d"]);
+        let reciprocal = trace_abcd.pow(-1);
+        let inverse_square = trace_abcd.pow(-2);
+
+        assert_eq!(reciprocal.simplify_color(), reciprocal);
+        assert_eq!(inverse_square.simplify_color(), inverse_square);
+
+        // Dummy-free bases inside non-natural powers still simplify cleanly.
+        let trace_ab = named_trace(&["a", "b"]);
+        assert_eq!(
+            trace_ab.pow(-1).simplify_color(),
+            trace_ab.simplify_color().pow(-1),
         );
     }
 }

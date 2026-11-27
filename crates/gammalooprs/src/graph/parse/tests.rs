@@ -1,46 +1,37 @@
+use idenso::IndexTooling;
+use idenso::color::{ColorSimplifier, ColorSimplifySettings};
+use idenso::shorthands::metric::MetricSimplifier;
 use idenso::tensor::SymbolicTensor;
 use insta::assert_snapshot;
-use linnet::half_edge::{
-    NodeIndex,
-    involution::{EdgeIndex, Hedge, HedgePair},
-};
-use spenso::{
-    network::{
-        Network,
-        library::DummyLibrary,
-        parsing::{ParseSettings, ShadowedStructure, StructureFromAtom},
-        store::NetworkStore,
-        tags::SPENSO_TAG,
-    },
-    structure::{
-        HasName,
-        abstract_index::AIND_SYMBOLS,
-        representation::{Minkowski, RepName},
-    },
-};
-use symbolica::{
-    atom::{Atom, AtomCore, FunctionBuilder, Symbol},
-    symbol,
-};
+use linnet::half_edge::NodeIndex;
+use linnet::half_edge::involution::{EdgeIndex, Hedge, HedgePair};
+use spenso::network::Network;
+use spenso::network::library::DummyLibrary;
+use spenso::network::parsing::{ParseSettings, ShadowedStructure, StructureFromAtom};
+use spenso::network::store::NetworkStore;
+use spenso::network::tags::SPENSO_TAG;
+use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
+use spenso::structure::HasName;
+use spenso::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
+use spenso::structure::representation::{Minkowski, RepName};
+use symbolica::atom::{Atom, AtomCore, FunctionBuilder, Symbol};
+use symbolica::symbol;
 use symbolica_utils::AtomPrintExt;
 use tracing::info;
 use typed_index_collections::ti_vec;
 
 use super::Graph;
-use crate::{
-    dot,
-    graph::{
-        GraphGroup, LMBext,
-        parse::{IntoGraph, complete_group_parsing},
-    },
-    initialisation::test_initialise,
-    model::InputParamCard,
-    momentum::sample::LoopIndex,
-    numerator::{Numerator, UnInit, aind::Aind},
-    processes::DotExportSettings,
-    utils::{GS, load_generic_model},
-    uv::uv_graph::UVE,
-};
+use crate::dot;
+use crate::graph::parse::{IntoGraph, complete_group_parsing};
+use crate::graph::{GraphGroup, LMBext};
+use crate::initialisation::test_initialise;
+use crate::model::InputParamCard;
+use crate::momentum::sample::LoopIndex;
+use crate::numerator::aind::Aind;
+use crate::numerator::{GlobalPrefactor, Numerator, UnInit};
+use crate::processes::DotExportSettings;
+use crate::utils::{GS, load_generic_model};
+use crate::uv::uv_graph::UVE;
 
 // Preserve the parser fixtures' massless light-quark propagators and full CKM sector.
 const LIGHT_QUARKS_MASSLESS_RESTRICTION: &str = include_str!(concat!(
@@ -576,6 +567,96 @@ fn parse() {
     // let num = num.gamma_simplify();
 
     // println!("{}", num.state.expr);
+}
+
+#[test]
+fn graph_pieces_keep_their_private_contractions_apart() {
+    test_initialise().unwrap();
+    // Each vertex, the edge, the global numerator and the projector close
+    // their own contraction on the same private index names.
+    let graph: Graph = dot!(digraph private_contractions {
+        num = "Q(0,spenso::mink(4,spenso::d_0))*Q(1,spenso::mink(4,spenso::d_0))"
+        projector = "Q(1,spenso::mink(4,dummy(0)))*Q(1,spenso::mink(4,dummy(0)))"
+        edge [num=1 mass=1]
+        a [num="Q(0,spenso::mink(4,dummy(0)))*Q(1,spenso::mink(4,dummy(0)))"]
+        b [num="Q(0,spenso::mink(4,spenso::d_0))*Q(0,spenso::mink(4,spenso::d_0))"]
+        a -> b [id=0 lmb_id=0 num="Q(1,spenso::mink(4,dummy(0)))*Q(1,spenso::mink(4,dummy(0)))"]
+        a -> b [id=1]
+    })
+    .unwrap();
+
+    let q = |edge: i64, index: Aind| {
+        FunctionBuilder::new(GS.emr_mom)
+            .add_arg(Atom::num(edge))
+            .add_arg(Minkowski {}.new_rep(4).to_symbolic([Atom::from(index)]))
+            .finish()
+    };
+    let dot = |left: i64, right: i64, index: Aind| q(left, index) * q(right, index);
+    let owned = |owner: &str| Aind::ScopedDummy(symbol!(&format!("gammalooprs::{owner}")), 0);
+    // Every piece owns its contraction under its own scope.
+    let separate = dot(0, 1, owned("vertex_0"))
+        * dot(0, 0, owned("vertex_1"))
+        * dot(1, 1, owned("edge_0"))
+        * dot(0, 1, owned("global_prefactor_num"))
+        * dot(1, 1, owned("global_prefactor_projector"));
+    let canonical = |atom: Atom| atom.expand().canonize(Aind::Dummy).unwrap();
+    let renamed = [0, 1, 2, 3, 4].map(Aind::Dummy);
+    let hand_renamed = dot(0, 1, renamed[0])
+        * dot(0, 0, renamed[1])
+        * dot(1, 1, renamed[2])
+        * dot(0, 1, renamed[3])
+        * dot(1, 1, renamed[4]);
+    assert_eq!(canonical(separate.clone()), canonical(hand_renamed));
+
+    assert_eq!(graph.full_numerator_atom(), separate);
+    assert_eq!(
+        graph.production_numerator_atom_for_full_3d_expression(),
+        separate
+    );
+    // The raw fields keep the contractions as written.
+    assert!(
+        graph
+            .global_prefactor
+            .num
+            .contains(Atom::from(AbstractIndex::Dummy(0)))
+    );
+
+    let exported = graph.to_dot_graph_with_settings(&DotExportSettings {
+        output_full_numerator: true,
+        ..DotExportSettings::default()
+    });
+    let expected = separate
+        .simplify_metrics()
+        .simplify_color_with(ColorSimplifySettings::default().with_cof_dimension_invariants())
+        .printer(SpensoPrintSettings::typst_options())
+        .to_string();
+    assert_eq!(exported.global_data.statements["full_num"], expected);
+
+    // Polarization discovery inspects the same scoped prefactor as full
+    // numerator assembly.
+    let slot = |index: Aind| Minkowski {}.new_rep(4).to_symbolic([Atom::from(index)]);
+    let pol = |symbol: Symbol, edge: i64, index: Aind| {
+        FunctionBuilder::new(symbol)
+            .add_arg(Atom::num(edge))
+            .add_arg(slot(index))
+            .finish()
+    };
+    let prefactor = GlobalPrefactor {
+        projector: pol(GS.epsilon, 0, Aind::Dummy(0)) * q(0, Aind::Dummy(0)),
+        num: pol(GS.epsilonbar, 1, Aind::Dummy(0)) * q(1, Aind::Dummy(0)),
+    };
+    let discovered: Vec<Atom> = prefactor
+        .polarizations()
+        .into_iter()
+        .map(|(_, atom)| atom)
+        .collect();
+    assert_eq!(
+        discovered,
+        vec![
+            pol(GS.epsilon, 0, owned("global_prefactor_projector")),
+            pol(GS.epsilonbar, 1, owned("global_prefactor_num")),
+        ]
+    );
 }
 
 #[test]
@@ -1971,6 +2052,9 @@ fn massive_gluon() {
 }
 
 mod failing {
+    use itertools::Itertools;
+    use symbolica::parse;
+
     use super::*;
 
     #[test]
@@ -2021,10 +2105,6 @@ mod failing {
 
     #[test]
     fn vertex_rules() {
-        use idenso::IndexTooling;
-        use itertools::Itertools;
-        use symbolica::{atom::AtomCore, parse};
-
         test_initialise().unwrap();
         let gs: Vec<Graph> = dot!(
             digraph g1{
@@ -2121,7 +2201,7 @@ mod failing {
             let actual = graph
                 .underlying
                 .iter_nodes()
-                .map(|(_, _, vertex)| vertex.get_num())
+                .map(|(_, _, vertex)| &vertex.num.value)
                 .exactly_one()
                 .unwrap_or_else(|_| panic!("input contains one physical vertex"))
                 .canonize(Aind::Dummy)
@@ -2155,7 +2235,7 @@ mod failing {
         let actual = gs[0]
             .underlying
             .iter_nodes()
-            .map(|(_, _, vertex)| vertex.get_num())
+            .map(|(_, _, vertex)| &vertex.num.value)
             .exactly_one()
             .unwrap_or_else(|_| panic!("input contains one physical vertex"))
             .canonize(Aind::Dummy)

@@ -164,7 +164,6 @@ pub struct GammaloopSymbols {
     pub linearize: Symbol,
     pub loop_mom: Symbol,
     pub edgeid: Symbol,
-    pub uvaind: Symbol,
     pub edgeaind: Symbol,
     pub dummyaind: Symbol,
     pub hedgeaind: Symbol,
@@ -686,36 +685,6 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     ),
 
     localizing_integrand: symbol!("int_loc"),
-    uvaind: symbol!(
-        "uvind",
-        print = |a, opt, _state| {
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(_i)) => {
-                    let AtomView::Fun(f) = a else {
-                        return None;
-                    };
-
-                    let mut out = "ᵘ".to_string();
-                    let mut first = true;
-                    for arg in f.iter() {
-                        let Ok(i) = isize::try_from(arg) else {
-                            return None;
-                        };
-
-                        if !first {
-                            out.push('.');
-                        } else {
-                            first = false;
-                        }
-                        out.push_str(&to_superscript(i));
-                    }
-                    Some(out)
-                }
-                _ => None,
-            }
-        },
-        tags = [SPENSO_TAG.index.clone()]
-    ),
     edgeaind: symbol!(
         "edge",
         print = |a, opt, _state| {

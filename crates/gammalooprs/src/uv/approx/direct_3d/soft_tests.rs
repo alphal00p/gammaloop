@@ -1,35 +1,28 @@
 use super::super::branches::{DirectResidueBranches, DirectResidueKey};
 use super::*;
 use crate::cff::expression::OrientationID;
-use crate::{
-    dot,
-    graph::parse::IntoGraph,
-    graph::{FeynmanGraph, Graph, cuts::CutSet},
-    initialisation::test_initialise,
-    settings::global::OrientationPattern,
-    utils::GS,
-    uv::{
-        Integrands, UVgenerationSettings,
-        approx::{
-            OrientationProjection, Rooted,
-            direct_3d::{Direct3dCts, DirectSector},
-            local_3d::{
-                Local3DConceptualBranch, Local3DMaterialization, Local3DProjectionPath,
-                Local3DSignedBranch, Localizer,
-            },
-        },
-    },
+use crate::dot;
+use crate::graph::cuts::CutSet;
+use crate::graph::parse::IntoGraph;
+use crate::graph::{FeynmanGraph, Graph};
+use crate::initialisation::test_initialise;
+use crate::numerator::aind::Aind;
+use crate::settings::global::OrientationPattern;
+use crate::utils::GS;
+use crate::uv::approx::direct_3d::{Direct3dCts, DirectSector};
+use crate::uv::approx::local_3d::{
+    Local3DConceptualBranch, Local3DMaterialization, Local3DProjectionPath, Local3DSignedBranch,
+    Localizer,
 };
+use crate::uv::approx::{OrientationProjection, Rooted};
+use crate::uv::{Integrands, PrivateIndexOwner, UVgenerationSettings};
 use gammaloop_tracing_filter::LogMessage;
+use idenso::IndexTooling;
 use idenso::shorthands::metric::MetricSimplifier;
-use linnet::half_edge::{
-    involution::EdgeIndex,
-    subgraph::{ModifySubSet, SubSetOps},
-};
-use spenso::{
-    network::tags::SPENSO_TAG,
-    structure::representation::{Minkowski, RepName},
-};
+use linnet::half_edge::involution::EdgeIndex;
+use linnet::half_edge::subgraph::{ModifySubSet, SubSetOps};
+use spenso::network::tags::SPENSO_TAG;
+use spenso::structure::representation::{Minkowski, RepName};
 use symbolica::{function, symbol};
 
 // #[debug_instrument(
@@ -706,6 +699,106 @@ fn disconnected_finite_mass_vertex_keeps_its_sibling_mass_inert() -> Result<()> 
         residual.is_zero(),
         "the disjoint finite vertex's equal physical mass must remain a scalar spectator: {residual}"
     );
+    Ok(())
+}
+
+#[test]
+fn disconnected_finite_counterterms_keep_their_contractions_apart() -> Result<()> {
+    test_initialise()?;
+    // Two integrated tadpoles as finite effective vertices of one prefix.
+    // Each coefficient contracts a Lorentz index that its own integration
+    // named dummy(1000000) before scoping it.
+    let mut graph: Graph = dot!(
+        digraph disconnected_finite_contractions {
+            edge [particle="H" num=1];
+            node [num=1];
+            ext [style=invis];
+            ext -> A:0 [id=0];
+            C:1 -> ext [id=1];
+            A -> B [id=2 lmb_index=0];
+            A -> B [id=3];
+            A -> A [id=4 lmb_index=1];
+            C -> C [id=5 lmb_index=2];
+            B -> C [id=6];
+        }
+    )?;
+    let node = |edges: &[usize], dod, scheme| {
+        let mut subgraph = graph.empty_subgraph::<SuBitGraph>();
+        for &edge in edges {
+            subgraph.add(graph[&EdgeIndex(edge)].1);
+        }
+        TestNode {
+            lmb: graph.lmb_of(&subgraph),
+            subgraph,
+            dod,
+            scheme,
+        }
+    };
+    let inside = node(&[4], 1, ApproximationType::IR);
+    let outside = node(&[5], 2, ApproximationType::IR);
+    let current = node(&[2, 3, 4], 1, ApproximationType::IR);
+    let prefix = node(&[4, 5], 0, ApproximationType::MUV);
+    let dot_product = |left: usize, right: usize, dummy: Aind| {
+        let mu = Minkowski {}.new_rep(4).to_symbolic([Atom::from(dummy)]);
+        function!(GS.emr_mom, left, &mu) * function!(GS.emr_mom, right, &mu)
+    };
+    let given = graph.empty_subgraph::<SuBitGraph>();
+    let integrated = |component: &TestNode, coefficient: Atom| {
+        PrivateIndexOwner::Integration {
+            current: &component.subgraph,
+            given: &given,
+        }
+        .own(coefficient)
+    };
+    let scoped = [
+        integrated(&inside, dot_product(0, 1, Aind::Dummy(1_000_000))),
+        integrated(&outside, dot_product(0, 0, Aind::Dummy(1_000_000))),
+    ];
+    let separate = [
+        dot_product(0, 1, Aind::Dummy(1)),
+        dot_product(0, 0, Aind::Dummy(2)),
+    ];
+    let settings = UVgenerationSettings {
+        add_marker: false,
+        ..Default::default()
+    };
+    let orientation_pattern = OrientationPattern::default();
+    let cutset = CutSet::empty(3);
+    let options = graph.denominator_only_cff_3d_expression_options();
+    let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+    let contract_edges = graph.paired_edges(&graph.tree_edges.subtract(&graph.initial_state_cut));
+    let one = Atom::one();
+    let production = graph.generate_3d_expression_for_integrand(
+        &contract_edges,
+        &canonization,
+        &options,
+        Some(&one),
+    )?;
+    let orientation =
+        OrientationProjection::exact_expression(&production, &options, &orientation_pattern, false);
+    let localizer = Localizer::new(&cutset, orientation);
+    let mut run = |[first, second]: &[Atom; 2]| -> Result<Atom> {
+        let cts = Direct3dApproximation::new(localizer, &mut graph, &settings).run_integrated(
+            &[(first, &inside), (second, &outside)],
+            &prefix,
+            &current,
+            &inside,
+            &current,
+            &inside,
+        )?;
+        let [sector] = cts.sectors()? else {
+            panic!("one disconnected finite prefix must retain one active/frozen sector")
+        };
+        Ok(sector
+            .active
+            .factorized_sum()
+            .expand()
+            .canonize(Aind::Dummy)?)
+    };
+
+    let actual = run(&scoped)?;
+    assert!(!actual.is_zero());
+    assert_eq!(actual, run(&separate)?);
     Ok(())
 }
 

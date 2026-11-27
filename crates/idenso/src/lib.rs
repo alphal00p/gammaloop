@@ -39,7 +39,7 @@ use crate::{
     rep_symbols::RS,
     representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, SpinFundamental},
     shorthands::metric::{MS, MetricSimplifier},
-    tensor::{SymbolicNetExt, SymbolicNetParse, remove_antisymmetric_zero_terms},
+    tensor::{SymbolicNetExt, SymbolicNetParse},
 };
 
 initialize!(|| {
@@ -380,16 +380,10 @@ impl IndexTooling for AtomView<'_> {
         &self,
         mut new_dummy: impl FnMut(usize) -> Aind,
     ) -> Result<Atom, CanonicalizationError> {
-        let filtered = remove_antisymmetric_zero_terms::<Aind>(*self);
-        // Composite dimensions such as Nc^2-1 must remain distinct while
-        // Spenso recognizes their slots and Symbolica relabels contractions.
-        let dimensions = CookSettings::reversible();
-        let prepared = dimensions
-            .try_cook_dimensions(filtered.as_view())
-            .map_err(|error| CanonicalizationError::Prepare {
-                reason: format!("cannot encode representation dimensions: {error:?}"),
-            })?;
-        let mut net = prepared
+        // Spenso parses composite dimensions such as Nc^2-1 natively, and
+        // Symbolica relabels contractions of slots with any dimension atom.
+        let filtered = tensor::remove_antisymmetric_zero_terms::<Aind>(*self);
+        let mut net = filtered
             .as_view()
             .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
             .map_err(|error| NetworkToolingError::Parse {
@@ -493,7 +487,7 @@ impl IndexTooling for AtomView<'_> {
             .canonical_form
             .replace_multiple(&reps)
             .replace_multiple(&redual_reps);
-        Ok(dimensions.uncook_dimensions(canonical.as_view()))
+        Ok(canonical)
     }
     fn spenso_conj(&self) -> Atom {
         self.conj()

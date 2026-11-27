@@ -1342,7 +1342,7 @@ impl AmplitudeGraph {
             .graph
             .numerator(component, &self.graph.empty_subgraph());
         if config.include_global_numerator {
-            num.state.expr *= &self.graph.global_prefactor.num;
+            num.state.expr *= self.graph.global_prefactor.scoped_num().as_ref();
         }
 
         let before_gamma = num.to_d_dim(GS.dim).get_single_atom().unwrap();
