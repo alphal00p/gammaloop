@@ -523,14 +523,20 @@ impl RationalSeries {
     /// The input as a sum over its spectator monomials `s`: `Σ_s s·R_s(ε)`,
     /// every `R_s` a univariate rational function of ε (its own denominators),
     /// each prepared as one [`RationalPart`] with every guard of the single
-    /// path (a group the part refuses refuses the whole). Admitted only when
-    /// the whole input passes the spectator-coordinate and semantic-zero
-    /// checks ([`RationalPart::validate_spectators`]). The valuation is the
+    /// path (a group the part refuses refuses the whole), including the
+    /// spectator-coordinate and semantic-zero checks
+    /// ([`RationalPart::validate_spectators`]) on the part's whole expression
+    /// (its key, phase and coefficients: every denominator and coordinate of
+    /// the input is in some part). No check of the whole input first: its
+    /// node walk is capped at `MAX_WORK` visits, which a large input exceeds
+    /// although every part passes (lane-rows2 refusal A, Q L4 1621 and c 328 /
+    /// q 326 rows at depth 7: 28,762 summands in 470 spectator groups, every
+    /// group admitted; the whole refused, so the exact plan was missing and
+    /// strict mode refused the record). The valuation is the
     /// least of the parts' valuations: a lower bound of the sum's (spectator
     /// monomials may still be related, `ζ(2)³` and `ζ(6)`), so a caller that
     /// expands its other factors that much deeper stays exact.
     fn grouped(expression: &Atom, epsilon: Symbol) -> Option<Self> {
-        RationalPart::validate_spectators(expression, epsilon)?;
         // an overall numeric (complex) phase stays a factor of every group
         let factors = match expression.as_view() {
             AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
