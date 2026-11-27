@@ -108,13 +108,16 @@ const PACKAGE: &str = "VAKINT_TEST_P_LIBRARY_1_5";
 // The package, its catalogue and the engine (loaded once)
 // ---------------------------------------------------------------------------------------------
 
+/// A catalogue row: `[(master or None for a constant term, coefficient text)]`.
+type CatalogueRow = Vec<(Option<String>, String)>;
+
 struct Fixture {
     library: Arc<PLibrary>,
     engine: Vakint,
     /// Canonical graph key bytes -> presentations of that DAG node.
     nodes: HashMap<Vec<u8>, Vec<PresentationId>>,
     /// `(node, key)` -> `[(master or None, coefficient text)]`.
-    rows: HashMap<(String, Vec<i64>), Vec<(Option<String>, String)>>,
+    rows: HashMap<(String, Vec<i64>), CatalogueRow>,
     dimension: Atom,
 }
 
