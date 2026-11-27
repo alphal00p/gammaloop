@@ -535,6 +535,8 @@ fn arrow_stroke() -> Stroke {
 
 struct Drawing {
     recolour_stamp: bool,
+    /// Ink weight of every stroke and glyph; see [`output::drawing_ink_scale`].
+    ink_scale: f64,
     layers: Vec<Element>,
     targets: Vec<Target>,
     placements: Vec<Placement>,
@@ -551,6 +553,7 @@ impl Drawing {
             &self.layers,
             &self.targets,
             self.recolour_stamp,
+            self.ink_scale,
             inspection,
         )
     }
@@ -593,6 +596,7 @@ impl Drawing {
         let mut region_hrefs = Vec::new();
         let mut hull_paths = BTreeMap::new();
         let mut drawn_lines = Vec::new();
+        let mut drawn_edges = Vec::new();
         let mut lane_paths = BTreeMap::new();
         for (edge, carrier) in laid.edges.iter().zip(&laid.carriers) {
             let drawing = scene
@@ -616,6 +620,7 @@ impl Drawing {
                 hull_paths.insert(edge.edge, visible.clone());
             }
             drawn_lines.push(visible.clone());
+            drawn_edges.push(edge.edge);
             if let (Some(source), Some(sink)) = (&edge.source, &edge.sink) {
                 if scene
                     .highlights
@@ -831,73 +836,8 @@ impl Drawing {
                 Point::new(x, y)
             })
             .collect();
-        // The glyph's drawn radius: miniatures scale it with their canvas.
-        let content = obstacle_lines
-            .iter()
-            .map(|path| path.bounding_box())
-            .chain(
-                all_vertices
-                    .iter()
-                    .map(|point| Rect::from_points(*point, *point)),
-            )
-            .reduce(|bounds, rect| bounds.union(rect))
-            .unwrap_or(Rect::ZERO);
-        let glyph_radius = output::glyph_radius(content.width(), scene.highlights.recolour_stamp);
         let mut regions = Vec::new();
-        let mut counterterms = Vec::new();
-        for (region, path, vertices) in &built {
-            if region.details.contracted {
-                let center = if vertices.is_empty() {
-                    // For a fully trimmed or empty selection, retain the glyph
-                    // at the selected edge anchors, or at the layout centre.
-                    if path.elements().is_empty() {
-                        let anchors: Vec<_> = laid
-                            .edges
-                            .iter()
-                            .filter(|edge| region.edges.contains(&edge.edge))
-                            .filter_map(|edge| edge.pos.as_ref().map(|p| Point::new(p.x, p.y)))
-                            .collect();
-                        let positions = if anchors.is_empty() {
-                            laid.nodes
-                                .iter()
-                                .filter_map(|node| node.pos.as_ref().map(|p| Point::new(p.x, p.y)))
-                                .collect()
-                        } else {
-                            anchors
-                        };
-                        positions
-                            .split_first()
-                            .map_or(Point::ORIGIN, |(&first, others)| {
-                                others
-                                    .iter()
-                                    .fold(Rect::from_points(first, first), |bounds, &p| {
-                                        bounds.union_pt(p)
-                                    })
-                                    .center()
-                            })
-                    } else {
-                        path.bounding_box().center()
-                    }
-                } else {
-                    let sum = vertices
-                        .iter()
-                        .fold(Vec2::ZERO, |sum, point| sum + point.to_vec2());
-                    let centroid = (sum / vertices.len() as f64).to_point();
-                    hulls::glyph_point(
-                        path,
-                        &obstacle_lines,
-                        &all_vertices,
-                        NODE_RADIUS,
-                        glyph_radius,
-                        centroid,
-                    )
-                };
-                counterterms.push(Element::Counterterm {
-                    center,
-                    paint: region.paint.clone(),
-                    details: region.details.clone(),
-                });
-            }
+        for (region, path, _) in &built {
             if !path.elements().is_empty() {
                 regions.push(Element::Hull {
                     path: path.clone(),
@@ -930,6 +870,7 @@ impl Drawing {
             .collect();
         let searched = labels::search(&placements, &obstacles, &strokes, &fixed_arrows)?;
         let mut chosen = Vec::new();
+        let mut label_boxes: Vec<Rect> = Vec::new();
         for (placement, &choice) in placements.iter().zip(&searched.choices) {
             let candidate = &placement.candidates[choice];
             if let Some(carriers) = &placement.arrow_carriers {
@@ -961,6 +902,7 @@ impl Drawing {
                 bounds: candidate.bounds,
                 href: Some(placement.href.clone()),
             });
+            label_boxes.push(Rect::from(candidate.bounds));
             chosen.push(candidate.bounds);
         }
         for (node, drawing) in laid.nodes.iter().zip(&scene.nodes) {
@@ -1029,14 +971,16 @@ impl Drawing {
             }
             if let Some(page) = drawing.label {
                 let label = &typeset.pages[page];
+                let bounds = Bounds {
+                    left: at[0] - label.metrics.width / UNIT / 2.0,
+                    right: at[0] + label.metrics.width / UNIT / 2.0,
+                    bottom: at[1] - label.metrics.height / UNIT / 2.0,
+                    top: at[1] + label.metrics.height / UNIT / 2.0,
+                };
+                label_boxes.push(Rect::from(bounds));
                 layers.push(Element::Label {
                     page,
-                    bounds: Bounds {
-                        left: at[0] - label.metrics.width / UNIT / 2.0,
-                        right: at[0] + label.metrics.width / UNIT / 2.0,
-                        bottom: at[1] - label.metrics.height / UNIT / 2.0,
-                        top: at[1] + label.metrics.height / UNIT / 2.0,
-                    },
+                    bounds,
                     href: None,
                 });
             }
@@ -1053,10 +997,118 @@ impl Drawing {
                 href: href.into(),
             });
         }
+        // Place the counterterm glyphs once every label is placed, so they can
+        // keep clear of the labels. The ink scale fixed here also draws them, so
+        // placement and drawing use the same ring.
+        let ink_scale =
+            output::drawing_ink_scale(typeset, &layers, scene.highlights.recolour_stamp);
+        let glyph_radius = output::glyph_radius(ink_scale);
+        // The widest drawn line's half ink width.
+        let line_half_width = scene
+            .edges
+            .iter()
+            .map(|edge| edge.stroke.width)
+            .fold(0.0, f64::max)
+            * ink_scale
+            / UNIT
+            / 2.0;
+        let mut counterterms = Vec::new();
+        for (region, path, vertices) in &built {
+            if region.details.contracted {
+                let center = if vertices.is_empty() {
+                    // For a fully trimmed or empty selection, retain the glyph
+                    // at the selected edge anchors, or at the layout centre.
+                    if path.elements().is_empty() {
+                        let anchors: Vec<_> = laid
+                            .edges
+                            .iter()
+                            .filter(|edge| region.edges.contains(&edge.edge))
+                            .filter_map(|edge| edge.pos.as_ref().map(|p| Point::new(p.x, p.y)))
+                            .collect();
+                        let positions = if anchors.is_empty() {
+                            laid.nodes
+                                .iter()
+                                .filter_map(|node| node.pos.as_ref().map(|p| Point::new(p.x, p.y)))
+                                .collect()
+                        } else {
+                            anchors
+                        };
+                        positions
+                            .split_first()
+                            .map_or(Point::ORIGIN, |(&first, others)| {
+                                others
+                                    .iter()
+                                    .fold(Rect::from_points(first, first), |bounds, &p| {
+                                        bounds.union_pt(p)
+                                    })
+                                    .center()
+                            })
+                    } else {
+                        path.bounding_box().center()
+                    }
+                } else {
+                    let sum = vertices
+                        .iter()
+                        .fold(Vec2::ZERO, |sum, point| sum + point.to_vec2());
+                    let centroid = (sum / vertices.len() as f64).to_point();
+                    // Prefer the largest face enclosed by the region's own lines;
+                    // otherwise stay on its painted hull.
+                    let lines = |own: bool| -> Vec<&BezPath> {
+                        drawn_lines
+                            .iter()
+                            .zip(&drawn_edges)
+                            .filter(|(_, edge)| region.edges.contains(edge) == own)
+                            .map(|(path, _)| path)
+                            .collect()
+                    };
+                    let points = |own: bool| -> Vec<Point> {
+                        laid.nodes
+                            .iter()
+                            .filter(|node| region.nodes.contains(&node.node) == own)
+                            .map(|node| {
+                                let [x, y] = laid.node(node.node);
+                                Point::new(x, y)
+                            })
+                            .collect()
+                    };
+                    let (own, foreign) = (lines(true), lines(false));
+                    let (own_vertices, foreign_vertices) = (points(true), points(false));
+                    let found = hulls::face_point(
+                        &hulls::FaceWalls {
+                            own: &own,
+                            foreign: &foreign,
+                            own_vertices: &own_vertices,
+                            foreign_vertices: &foreign_vertices,
+                        },
+                        &label_boxes,
+                        NODE_RADIUS,
+                        line_half_width,
+                        glyph_radius,
+                    );
+                    found.map(hulls::FacePlacement::point).unwrap_or_else(|| {
+                        hulls::glyph_point(
+                            path,
+                            &obstacle_lines,
+                            &all_vertices,
+                            &label_boxes,
+                            NODE_RADIUS,
+                            glyph_radius,
+                            centroid,
+                        )
+                    })
+                };
+                counterterms.push(Element::Counterterm {
+                    center,
+                    paint: region.paint.clone(),
+                    details: region.details.clone(),
+                });
+            }
+        }
         layers.extend(counterterms);
         let overlaps = labels::overlaps(&placements, &chosen, &searched.lines);
         Ok(Self {
             recolour_stamp: scene.highlights.recolour_stamp,
+            ink_scale,
             layers,
             targets,
             placements,

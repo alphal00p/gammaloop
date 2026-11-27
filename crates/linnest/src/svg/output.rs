@@ -35,15 +35,14 @@ fn ink_scale(width: f64, recolour_stamp: bool) -> f64 {
     }
 }
 
-/// Outer radius of a counterterm glyph, in drawing units, on a drawing whose
-/// nominal content is `content_width` drawing units wide.
-pub(super) fn glyph_radius(content_width: f64, recolour_stamp: bool) -> f64 {
-    let width = (content_width + 2.0 * PAD) * UNIT + 2.0 * MARGIN;
-    GLYPH_EXTENT * ink_scale(width, recolour_stamp) / UNIT
+/// Outer radius of a counterterm glyph drawn at `ink_scale`, in drawing units:
+/// its disc plus half its stroke, as [`svg`] draws it.
+pub(super) fn glyph_radius(ink_scale: f64) -> f64 {
+    GLYPH_EXTENT * ink_scale / UNIT
 }
 
 /// Disc radius plus half its stroke, in points.
-const GLYPH_EXTENT: f64 = 5.925;
+pub(super) const GLYPH_EXTENT: f64 = 5.925;
 
 // SVG's default miter limit is four times the stroke half-width.
 const MITER_EXTENT: f64 = 2.0;
@@ -350,16 +349,9 @@ pub(super) enum Inspection {
     Static,
 }
 
-/// The page: an optional centered title above the padded drawing canvas.
-pub(super) fn svg(
-    typeset: &Typeset,
-    layers: &[Element],
-    targets: &[Target],
-    recolour_stamp: bool,
-    inspection: Inspection,
-) -> Result<String, String> {
-    let linked = inspection == Inspection::Linked;
-    let targets = if linked { targets } else { &[] };
+/// The drawing's nominal bounds, in drawing units, before recoloured stamps
+/// expand them for their scaled ink.
+fn nominal_bounds(layers: &[Element]) -> Rect {
     let mut bounds = Rect::new(
         f64::INFINITY,
         f64::INFINITY,
@@ -416,11 +408,41 @@ pub(super) fn svg(
     if !bounds.is_finite() {
         bounds = Rect::ZERO;
     }
+    bounds
+}
+
+/// The ink weight of a drawing of `layers` titled by `typeset`'s title: the
+/// one value that scales every stroke, node and counterterm glyph of a
+/// recoloured stamp, and 1 otherwise.
+pub(super) fn drawing_ink_scale(
+    typeset: &Typeset,
+    layers: &[Element],
+    recolour_stamp: bool,
+) -> f64 {
+    let bounds = nominal_bounds(layers);
+    let title_width = typeset
+        .title
+        .as_ref()
+        .map_or(0.0, |title| title.metrics.width);
+    let width = ((bounds.width() + 2.0 * PAD) * UNIT).max(title_width) + 2.0 * MARGIN;
+    ink_scale(width, recolour_stamp)
+}
+
+/// The page: an optional centered title above the padded drawing canvas.
+pub(super) fn svg(
+    typeset: &Typeset,
+    layers: &[Element],
+    targets: &[Target],
+    recolour_stamp: bool,
+    ink_scale: f64,
+    inspection: Inspection,
+) -> Result<String, String> {
+    let linked = inspection == Inspection::Linked;
+    let targets = if linked { targets } else { &[] };
+    let mut bounds = nominal_bounds(layers);
     let title = typeset.title.as_ref();
     let title_width = title.map_or(0.0, |title| title.metrics.width);
     let title_height = title.map_or(0.0, |title| title.metrics.height + GUTTER);
-    let width = ((bounds.width() + 2.0 * PAD) * UNIT).max(title_width) + 2.0 * MARGIN;
-    let ink_scale = ink_scale(width, recolour_stamp);
     if recolour_stamp {
         let inflate = |rect: Rect, width: f64| rect.inflate(width / UNIT, width / UNIT);
         for element in layers {
@@ -676,6 +698,7 @@ pub(super) fn svg(
                 center,
                 paint,
                 details,
+                ..
             } => {
                 let paint = xml_escape(paint);
                 let (label, description, title, scheme_attribute) = hover_details(details);

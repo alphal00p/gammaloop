@@ -572,7 +572,22 @@ def glyph_placements(svg):
             painted(rings, cx + radius * math.cos(t), cy + radius * math.sin(t))
             for t in (2 * math.pi * i / 48 for i in range(48))
         )
-        yield painted(rings, cx, cy), ring / 48
+        outer = max(
+            rings,
+            key=lambda ring: (
+                (max(x for x, _ in ring) - min(x for x, _ in ring))
+                * (max(y for _, y in ring) - min(y for _, y in ring))
+            ),
+        )
+        # On the painted band, in a face its own lines enclose (a hole of its
+        # hull), or outside the spinney.
+        if painted(rings, cx, cy):
+            where = "band"
+        elif painted([outer], cx, cy):
+            where = "face"
+        else:
+            where = "outside"
+        yield where, ring / 48
 
 
 placements = []
@@ -602,12 +617,98 @@ for diagram in (
                     counterterm.render(style=style).to_svg()
                 )
             ]
-assert placements and all(centre for _, centre, _ in placements), placements
+assert placements and all(where != "outside" for _, where, _ in placements), placements
 # The placement keeps the largest share of the ring inside. At reading size at
 # least a quarter of it stays in the hull; a full-size cross on a miniature
 # tadpole is larger than the tadpole's whole hull.
-reading = [ring for full_size, _, ring in placements if full_size]
+reading = [
+    ring for full_size, where, ring in placements if full_size and where == "band"
+]
 assert min(reading) >= 0.25, min(reading)
+
+# The largest face enclosed by the spinney's own lines holds the cross: the
+# bubble's sits in its loop, not on its band.
+bubble_diagram = phi4(
+    "digraph bubble { edge [particle=phi]; ext [style=invis]; ext -> a; ext -> a; a -> b; a -> b; b -> ext; b -> ext; }"
+)
+bubble_ct = fk.Wood(bubble_diagram)[0].counterterm("MS-bar")
+assert [where for where, _ in glyph_placements(bubble_ct.render().to_svg())] == ["face"]
+assert all(where in ("face", "band") for _, where, _ in placements)
+
+
+# A loop too small for the ring, such as a tadpole or a miniature bubble, still
+# takes the cross at its centre: the centre of its faded (ghost) lines.
+def ghost_offsets(svg):
+    root = ET.fromstring(svg)
+    ghost = next(g for g in root.iter() if g.get("data-linnet-ghost") == "true")
+    numbers = [
+        float(n)
+        for path in ghost.iter(f"{SVG}path")
+        for n in re.findall(r"-?[\d.]+", path.get("d"))
+    ]
+    xs, ys = numbers[0::2], numbers[1::2]
+    centre = ((max(xs) + min(xs)) / 2, (max(ys) + min(ys)) / 2)
+    size = max(max(xs) - min(xs), max(ys) - min(ys))
+    for glyph in root.iter():
+        if glyph.get("data-linnet-counterterm") == "true":
+            match = re.match(
+                r"translate\(([-\d.]+) ([-\d.]+)\)", glyph.get("transform")
+            )
+            yield math.dist((float(match[1]), float(match[2])), centre) / size
+
+
+def label_overlaps(svg):
+    """Crosses whose drawn disc, stroke included, covers a label box."""
+    boxes = [
+        tuple(map(float, box))
+        for box in re.findall(
+            r'<g transform="translate\(([-\d.]+) ([-\d.]+)\)"><foreignObject x="0" y="0" '
+            r'width="([\d.]+)" height="([\d.]+)"',
+            svg,
+        )
+    ]
+    count = 0
+    for x, y, scale in re.findall(
+        r'data-linnet-counterterm="true"[^>]*transform="translate\(([-\d.]+) ([-\d.]+)\)'
+        r"(?: scale\(([-\d.]+)\))?",
+        svg,
+    ):
+        cx, cy, radius = float(x), float(y), 5.925 * float(scale or 1)
+        count += any(
+            math.dist((cx, cy), (min(max(cx, bx), bx + w), min(max(cy, by), by + h)))
+            < radius
+            for bx, by, w, h in boxes
+        )
+    return count
+
+
+# Unlabelled, at reading size and in miniature, a tadpole's cross sits at its
+# loop centre even where its ring crosses the loop. With particle labels, a
+# miniature cross that would cover the loop's label keeps to the band.
+unlabelled = fk.DiagramStyle(miniature=True, show_particle=False)
+labelled = fk.DiagramStyle(miniature=True)
+for diagram in (chain3, spectacles):
+    for forest in fk.Wood(diagram).forests()[1:3]:
+        counterterm = forest.counterterm("MS-bar")
+        for style in (None, unlabelled):
+            svg = counterterm.render(style=style).to_svg()
+            assert all(offset < 0.1 for offset in ghost_offsets(svg)), list(
+                ghost_offsets(svg)
+            )
+        for style in (None, unlabelled):
+            assert label_overlaps(counterterm.render(style=style).to_svg()) == 0
+# Where the band leaves room, a labelled miniature cross avoids the labels too.
+# (A cross larger than a chain tadpole's whole hull cannot.)
+for forest in fk.Wood(spectacles).forests()[1:]:
+    svg = forest.counterterm("MS-bar").render(style=labelled).to_svg()
+    assert label_overlaps(svg) == 0
+for style in (None, unlabelled, labelled):
+    svg = bubble_ct.render(style=style).to_svg()
+    assert label_overlaps(svg) == 0
+    if style is not labelled:
+        assert all(offset < 0.15 for offset in ghost_offsets(svg)), list(
+            ghost_offsets(svg)
+        )
 
 # Nested contracted levels stay visible in miniatures, one hull per level.
 deepest = max(basket.forests(), key=lambda forest: forest.depth)
