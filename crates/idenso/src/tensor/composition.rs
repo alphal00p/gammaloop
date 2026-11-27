@@ -43,6 +43,8 @@ mod chain;
 mod expansion;
 mod product;
 
+pub(super) use expansion::{FreshDummies, ScopeRenaming};
+
 #[cfg(test)]
 thread_local! {
     pub(crate) static DUMMY_RESERVATION_WALKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };

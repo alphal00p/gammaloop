@@ -2,13 +2,36 @@
 use super::ExplicitIndexOccurrences;
 use crate::tensor::SymbolicTensor;
 use crate::tensor::inference::InterfaceInference;
+use crate::tensor::network::RenamedLeafPorts;
 use spenso::structure::abstract_index::AbstractIndex;
 use spenso::structure::partial::PartialStructure;
 use spenso::structure::representation::LibraryRep;
 use spenso::structure::slot::{IsAbstractSlot, Slot, SlotMatcher};
 use std::collections::{HashMap, HashSet};
-use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder};
+use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
 use symbolica::coefficient::CoefficientView;
+
+/// One dummy renaming, keyed by the base orientation of the renamed slots.
+pub(in crate::tensor) type ScopeRenaming = HashMap<Slot<LibraryRep, AbstractIndex>, AbstractIndex>;
+
+/// Fresh dummy names for scope separation. Each renamed leaf occurrence
+/// carries the raw ports which its syntax cannot reproduce, so a producer can
+/// publish them for exactly the leaves that the renamings rebuilt.
+pub(in crate::tensor) struct FreshDummies<'a, F> {
+    next: F,
+    leaves: RenamedLeafPorts<'a>,
+}
+
+impl<'a, F: FnMut() -> AbstractIndex> FreshDummies<'a, F> {
+    pub(in crate::tensor) fn new(next: F, leaves: RenamedLeafPorts<'a>) -> Self {
+        Self { next, leaves }
+    }
+
+    /// The facts carried by the renamed leaves so far.
+    pub(in crate::tensor) fn into_leaf_ports(self) -> RenamedLeafPorts<'a> {
+        self.leaves
+    }
+}
 
 impl ExplicitIndexOccurrences {
     /// Keep each closed scope which an expansion distributes in its own factors.
@@ -20,22 +43,22 @@ impl ExplicitIndexOccurrences {
     /// distributes are rewritten, following the backend's rules: with `var`,
     /// subexpressions without it stay untouched, and only integer powers whose
     /// magnitude fits in `u32` are expanded. A colliding closed pair of a
-    /// distributed sum is renamed with `fresh`. A distributed power of a closed
-    /// scalar sum keeps the names of its terms disjoint and raises each closed
-    /// term as one bracketed scalar, so the multinomial expansion keeps every
-    /// pair inside its own power scope. Returns `None` when nothing can
-    /// collide.
-    pub(crate) fn separate_expansion_scopes(
+    /// distributed sum is renamed with fresh `dummies`, which carry the raw
+    /// ports of each renamed leaf. A distributed power of a closed scalar sum
+    /// keeps the terms' names disjoint and brackets each closed term, so the
+    /// multinomial expansion keeps every pair inside its own power scope.
+    /// Returns `None` when nothing can collide.
+    pub(in crate::tensor) fn separate_expansion_scopes(
         value: AtomView<'_>,
         var: Option<AtomView<'_>>,
         via_poly: bool,
-        fresh: &mut impl FnMut() -> AbstractIndex,
+        dummies: &mut FreshDummies<'_, impl FnMut() -> AbstractIndex>,
     ) -> Option<Atom> {
         let mut slots = SlotMatcher::default();
         if via_poly {
-            Self::separate_polynomial_scopes(value, var, &mut slots, fresh)
+            Self::separate_polynomial_scopes(value, var, &mut slots, dummies)
         } else {
-            Self::separate_scopes(value, var, var, &mut slots, fresh)
+            Self::separate_scopes(value, var, var, &mut slots, dummies)
         }
     }
 
@@ -45,18 +68,18 @@ impl ExplicitIndexOccurrences {
         value: AtomView<'_>,
         var: Option<AtomView<'_>>,
         slots: &mut SlotMatcher,
-        fresh: &mut impl FnMut() -> AbstractIndex,
+        dummies: &mut FreshDummies<'_, impl FnMut() -> AbstractIndex>,
     ) -> Option<Atom> {
         if let AtomView::Add(sum) = value {
             return Self::separate_terms(sum.iter(), |term| {
-                Self::separate_polynomial_scopes(term, var, slots, fresh)
+                Self::separate_polynomial_scopes(term, var, slots, dummies)
             });
         }
         if AtomCore::is_expanded(&value, var) || !Self::expands_in(value, var) {
             return None;
         }
         // Coefficients of a selected variable may still be multiplied out.
-        Self::separate_scopes(value, None, var, slots, fresh)
+        Self::separate_scopes(value, None, var, slots, dummies)
     }
 
     fn separate_terms<'a>(
@@ -116,20 +139,20 @@ impl ExplicitIndexOccurrences {
         var: Option<AtomView<'_>>,
         preserve: Option<AtomView<'_>>,
         slots: &mut SlotMatcher,
-        fresh: &mut impl FnMut() -> AbstractIndex,
+        dummies: &mut FreshDummies<'_, impl FnMut() -> AbstractIndex>,
     ) -> Option<Atom> {
         if !Self::expands_in(value, var) {
             return None;
         }
         match value {
             AtomView::Add(sum) => Self::separate_terms(sum.iter(), |term| {
-                Self::separate_scopes(term, var, preserve, slots, fresh)
+                Self::separate_scopes(term, var, preserve, slots, dummies)
             }),
             AtomView::Pow(power) => {
                 let (base, exponent) = power.get_base_exp();
-                let separated_base = Self::separate_scopes(base, var, preserve, slots, fresh);
+                let separated_base = Self::separate_scopes(base, var, preserve, slots, dummies);
                 let separated_exponent =
-                    Self::separate_scopes(exponent, var, preserve, slots, fresh);
+                    Self::separate_scopes(exponent, var, preserve, slots, dummies);
                 let base_view = separated_base.as_ref().map_or(base, Atom::as_view);
                 let exponent_view = separated_exponent.as_ref().map_or(exponent, Atom::as_view);
                 // An admitted square has exactly two copies. Freshen only
@@ -140,8 +163,8 @@ impl ExplicitIndexOccurrences {
                 {
                     let closed = Self::closed_slots(base_view, slots);
                     if !closed.is_empty() && closed != Self::written_slots(base_view, slots) {
-                        let left = Self::renamed(base_view, &closed, slots, fresh);
-                        let right = Self::renamed(base_view, &closed, slots, fresh);
+                        let left = Self::renamed(base_view, &closed, slots, dummies);
+                        let right = Self::renamed(base_view, &closed, slots, dummies);
                         return Some(Atom::mul_many([left, right]));
                     }
                 }
@@ -153,7 +176,7 @@ impl ExplicitIndexOccurrences {
                             var,
                             preserve,
                             slots,
-                            fresh,
+                            dummies,
                         )
                     }
                     _ => None,
@@ -172,7 +195,7 @@ impl ExplicitIndexOccurrences {
                 let mut changed = false;
                 let mut factors = Vec::new();
                 for factor in product.iter() {
-                    match Self::separate_scopes(factor, var, preserve, slots, fresh) {
+                    match Self::separate_scopes(factor, var, preserve, slots, dummies) {
                         Some(separated) => {
                             changed = true;
                             factors.push(separated);
@@ -211,7 +234,7 @@ impl ExplicitIndexOccurrences {
                             continue;
                         }
                         factors[position] =
-                            Self::renamed(factors[position].as_view(), &shared, slots, fresh);
+                            Self::renamed(factors[position].as_view(), &shared, slots, dummies);
                         written[position] = Self::written_slots(factors[position].as_view(), slots);
                         changed = true;
                     }
@@ -233,7 +256,7 @@ impl ExplicitIndexOccurrences {
         var: Option<AtomView<'_>>,
         preserve: Option<AtomView<'_>>,
         slots: &mut SlotMatcher,
-        fresh: &mut impl FnMut() -> AbstractIndex,
+        dummies: &mut FreshDummies<'_, impl FnMut() -> AbstractIndex>,
     ) -> Option<Atom> {
         let closed = Self::closed_slots(base, slots);
         if closed.is_empty() || closed != Self::written_slots(base, slots) {
@@ -257,10 +280,11 @@ impl ExplicitIndexOccurrences {
                 continue;
             }
             let shared = written.intersection(&used).copied().collect::<HashSet<_>>();
-            let renamed = (!shared.is_empty()).then(|| Self::renamed(term, &shared, slots, fresh));
+            let renamed =
+                (!shared.is_empty()).then(|| Self::renamed(term, &shared, slots, dummies));
             let term = renamed.as_ref().map_or(term, Atom::as_view);
             used.extend(Self::written_slots(term, slots));
-            let scalar = Self::raised_scalar_expression(term, preserve, slots, fresh);
+            let scalar = Self::raised_scalar_expression(term, preserve, slots, dummies);
             changed |= renamed.is_some() || scalar.as_view() != term;
             terms.push(scalar);
         }
@@ -275,15 +299,19 @@ impl ExplicitIndexOccurrences {
         term: AtomView<'_>,
         preserve: Option<AtomView<'_>>,
         slots: &mut SlotMatcher,
-        fresh: &mut impl FnMut() -> AbstractIndex,
+        dummies: &mut FreshDummies<'_, impl FnMut() -> AbstractIndex>,
     ) -> Atom {
         if let (AtomView::Mul(product), Some(selected)) = (term, preserve) {
             let mut coefficients = Vec::new();
             let mut indexed = Vec::new();
             for factor in product.iter() {
                 let written = Self::written_slots(factor, slots);
-                let closed = written.is_empty() || Self::closed_slots(factor, slots) == written;
-                if closed && Self::expands_in(factor, Some(selected)) {
+                if Self::expands_in(factor, Some(selected))
+                    && (written.is_empty()
+                        || Self::closed_slots(factor, slots) == written
+                        || (matches!(factor, AtomView::Fun(_))
+                            && dummies.leaves.is_closed_leaf(factor)))
+                {
                     // This closed sum is raised with its term, not as the base
                     // of a power, so the backend does not keep its terms
                     // without the selector together: bracket each indexed term.
@@ -294,10 +322,15 @@ impl ExplicitIndexOccurrences {
                             None,
                             preserve,
                             slots,
-                            fresh,
+                            dummies,
                         )
-                    } else {
+                    } else if written.is_empty() {
                         None
+                    } else {
+                        Some(SymbolicTensor::<PartialStructure>::scalar_power_expression(
+                            factor.to_owned(),
+                            Some(true),
+                        ))
                     };
                     coefficients.push(prepared.unwrap_or_else(|| factor.to_owned()));
                 } else {
@@ -385,61 +418,91 @@ impl ExplicitIndexOccurrences {
         value: AtomView<'_>,
         closed: &HashSet<Slot<LibraryRep, AbstractIndex>>,
         slots: &mut SlotMatcher,
-        fresh: &mut impl FnMut() -> AbstractIndex,
+        dummies: &mut FreshDummies<'_, impl FnMut() -> AbstractIndex>,
     ) -> Atom {
         let renaming = closed
             .iter()
-            .map(|slot| (*slot, fresh()))
-            .collect::<HashMap<_, _>>();
-        Self::rename_index_arguments(value, &renaming, slots).unwrap_or_else(|| value.to_owned())
+            .map(|slot| (*slot, (dummies.next)()))
+            .collect::<ScopeRenaming>();
+        Self::rename_index_arguments(
+            value,
+            &renaming,
+            slots,
+            &mut dummies.leaves,
+            InterfaceInference::explicit_index_argument,
+        )
+        .unwrap_or_else(|| value.to_owned())
     }
 
-    /// Rename the explicit indices of `value` which inference reads as such,
-    /// leaving opaque functions unchanged. Only changed ancestors are rebuilt.
-    fn rename_index_arguments(
+    /// Rename explicit indices and carry proofs when rebuilding a leaf.
+    /// `indexed` selects which function arguments participate in the rewrite.
+    pub(in crate::tensor) fn rename_index_arguments(
         value: AtomView<'_>,
-        renaming: &HashMap<Slot<LibraryRep, AbstractIndex>, AbstractIndex>,
+        renaming: &ScopeRenaming,
         slots: &mut SlotMatcher,
+        leaves: &mut RenamedLeafPorts<'_>,
+        indexed: fn(Symbol, AtomView<'_>, &mut SlotMatcher) -> bool,
     ) -> Option<Atom> {
+        if value.get_symbol().is_some_and(|symbol| symbol.is_scalar()) {
+            return None;
+        }
         if let Ok(mut slot) = slots.parse::<LibraryRep, AbstractIndex>(value) {
             slot.aind = *renaming.get(&slot.rep().base().slot(slot.aind()))?;
             return Some(slot.to_atom());
         }
-        let mut children =
-            |children: Vec<AtomView<'_>>,
-             indexed: &dyn Fn(AtomView<'_>, &mut SlotMatcher) -> bool| {
-                let renamed = children
-                    .iter()
-                    .map(|&child| {
-                        indexed(child, slots)
-                            .then(|| Self::rename_index_arguments(child, renaming, slots))
-                            .flatten()
-                    })
-                    .collect::<Vec<_>>();
-                renamed.iter().any(Option::is_some).then(|| {
-                    children
-                        .into_iter()
-                        .zip(renamed)
-                        .map(|(child, renamed)| renamed.unwrap_or_else(|| child.to_owned()))
-                        .collect::<Vec<_>>()
-                })
-            };
-        let all = |_: AtomView<'_>, _: &mut SlotMatcher| true;
+        let rename = |child| Self::rename_index_arguments(child, renaming, slots, leaves, indexed);
         match value {
             AtomView::Fun(function) => {
                 let symbol = function.get_symbol();
-                children(function.iter().collect(), &|argument, slots| {
-                    InterfaceInference::explicit_index_argument(symbol, argument, slots)
-                })
-                .map(|arguments| FunctionBuilder::new(symbol).add_args(&arguments).finish())
+                let arguments = Self::renamed_children(function.iter(), |argument| {
+                    if indexed(symbol, argument, slots) {
+                        Self::rename_index_arguments(argument, renaming, slots, leaves, indexed)
+                    } else {
+                        None
+                    }
+                })?;
+                let rebuilt = FunctionBuilder::new(symbol).add_args(&arguments).finish();
+                leaves.observe(function, &arguments, rebuilt.as_view(), |port| {
+                    let mut slot = slots.parse::<LibraryRep, AbstractIndex>(port).ok()?;
+                    slot.aind = *renaming.get(&slot.rep().base().slot(slot.aind()))?;
+                    Some(slot.to_atom())
+                });
+                Some(rebuilt)
             }
-            AtomView::Add(sum) => children(sum.iter().collect(), &all).map(Atom::add_many),
-            AtomView::Mul(product) => children(product.iter().collect(), &all).map(Atom::mul_many),
+            AtomView::Add(sum) => Self::renamed_children(sum.iter(), rename).map(Atom::add_many),
+            AtomView::Mul(product) => {
+                Self::renamed_children(product.iter(), rename).map(Atom::mul_many)
+            }
             AtomView::Pow(power) => {
                 let (base, exponent) = power.get_base_exp();
-                children(vec![base, exponent], &all).map(|parts| parts[0].pow(&parts[1]))
+                Self::renamed_children([base, exponent].into_iter(), rename)
+                    .map(|parts| parts[0].pow(&parts[1]))
             }
             _ => None,
         }
+    }
+
+    /// Only allocate a rebuilt argument list after the first change.
+    fn renamed_children<'a>(
+        children: impl Iterator<Item = AtomView<'a>> + Clone,
+        mut rename: impl FnMut(AtomView<'a>) -> Option<Atom>,
+    ) -> Option<Vec<Atom>> {
+        let mut output = None;
+        for (position, child) in children.clone().enumerate() {
+            match rename(child) {
+                Some(renamed) => output
+                    .get_or_insert_with(|| {
+                        children
+                            .clone()
+                            .take(position)
+                            .map(|node| node.to_owned())
+                            .collect::<Vec<_>>()
+                    })
+                    .push(renamed),
+                None if let Some(output) = &mut output => output.push(child.to_owned()),
+                None => {}
+            }
+        }
+        output
     }
 }

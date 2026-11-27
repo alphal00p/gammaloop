@@ -1401,7 +1401,10 @@ session in a process, and part of the serialized data model.
   Independent re-inference is permitted in debug assertions, and its results
   must never supply production metadata. Operations allocating or renaming dummy
   indices must also update conservative index history; occurrence accounting
-  does not authorize re-inferring the free interface.
+  does not authorize re-inferring the free interface. Without a retained
+  raw-port fact, admitted parsing and regional lookup read direct non-self-loop
+  tensor constructors from their written arguments, while retained facts take
+  precedence for declared orders and self-loops.
 
 ==== Notation and display
 

@@ -39,6 +39,7 @@ pub(crate) type CollectedPolynomial = MultivariatePolynomial<RationalField, u32>
 pub(crate) struct CollectedOutput<'a> {
     source: &'a DomainObservations,
     proofs: TensorProofs,
+    metric_operands: HashMap<Atom, PartialStructure>,
     atoms: [HashMap<Atom, CollectedPolynomial>; 2],
     opaque: Vec<Atom>,
     imaginary_unit: Option<PolyVariable>,
@@ -61,6 +62,7 @@ impl<'a> CollectedOutput<'a> {
         Self {
             source: source.reduction_observations(),
             proofs: source.proofs.clone(),
+            metric_operands: HashMap::new(),
             atoms: Default::default(),
             opaque: Vec::new(),
             imaginary_unit: None,
@@ -113,9 +115,29 @@ impl<'a> CollectedOutput<'a> {
         }
         let interface = self
             .proofs
-            .metric_interface(endpoints)
+            .metric_interface_in::<true>(endpoints, |argument| {
+                self.metric_operands
+                    .get(argument.get_data())
+                    .cloned()
+                    .or_else(|| self.proofs.admitted_interface(argument))
+            })
             .expect("admitted trace endpoints establish their generated metric boundary");
         self.polynomial_with_interface(metric, &interface)
+    }
+
+    /// Use the typed boundaries of temporary metric operands during a recurrence.
+    pub(crate) fn with_metric_operands<'b, T>(
+        &mut self,
+        operands: impl Iterator<Item = &'b SymbolicTensor<PartialStructure>>,
+        evaluate: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        let scoped = operands
+            .map(|operand| (operand.expression.clone(), operand.structure.clone()))
+            .collect();
+        let previous = mem::replace(&mut self.metric_operands, scoped);
+        let result = evaluate(self);
+        self.metric_operands = previous;
+        result
     }
 
     // Selected exterior coefficients can be collected across trace sectors.

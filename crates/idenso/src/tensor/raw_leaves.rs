@@ -55,6 +55,7 @@ enum Ports<'a> {
 
 /// Written order is independent of the leaf's free boundary and includes
 /// repeated slots. A projected mask borrows the constructor's own arguments.
+#[derive(Clone)]
 pub(super) enum WrittenPorts<'a> {
     Supplied(Iter<'a, Atom>),
     Arguments {

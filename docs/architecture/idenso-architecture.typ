@@ -720,6 +720,21 @@ admission and dummy-reservation walks; only newly selected boundaries need
 interface discovery. Callback-sensitive rewrites discard invalidated interface
 facts and retain checked result boundaries.
 
+Admitted parsing and regional interface lookup read retained raw ports first,
+preserving declared port order. Without a fact, a non-scalar tensor-tagged
+head can supply ports from its written arguments when it has at least one
+slot, bare representation, or fixed component, with no nested index or bundle
+syntax and no repeated or dual-paired slot. Slots must parse in the requested
+`Aind` grammar. Spenso's syntactic readers leave bare representations
+unmaterialized, while Idenso's admitted parser assigns them fresh indices.
+Expansion and collection carry a self-loop's retained fact through renaming
+and symmetry normalization. Canonicalization matches relabelled symmetric,
+antisymmetric, and cyclic leaves. A retained fact in written order follows
+the normalized arguments, including repeated slots such as in `S(i,i,k,k)`.
+For a different declared order, canonicalization rejects ambiguity across
+dummy substitutions or matching source leaves. A power of a closed indexed
+leaf brackets the contraction so that the copy has its own scope.
+
 Callers can read cached facts through `is_certified_closed_scalar()` and
 `is_certified_terminal_polynomial()` on both partial and fully indexed tensors.
 A missing observation gives `false` without starting a scan. A scalar boundary

@@ -30,7 +30,9 @@ use spenso::structure::slot::{
 use spenso::structure::{HasName, OrderedStructure, TensorStructure};
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{Hash, Hasher};
+use std::ops::ControlFlow;
 use std::sync::Arc;
+use symbolica::atom::representation::FunView;
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use symbolica::graph::{Graph, HiddenData};
 use symbolica::id::{AliasedAtom, Pattern, Replacement};
@@ -270,9 +272,28 @@ impl SymbolicTensor<PartialStructure> {
         if let Some((interface, proofs)) = &mut admission {
             proofs.publish_interfaces(expr.as_view(), interface.clone(), mapped.iter());
         }
+        // Sum branches have paired graph edges even for genuine external
+        // slots. Symbolica validates their incidence, and template binding
+        // keeps their identities fixed.
+        let mut reserved = external
+            .into_iter()
+            .map(|slot| {
+                let base = if slot.rep_name().is_dual() {
+                    slot.dual()
+                } else {
+                    slot
+                };
+                base.to_atom()
+            })
+            .collect::<BTreeSet<_>>();
         let mut templates = admission
             .as_ref()
-            .map(|(_, proofs)| CanonicalLeafTemplates::new(proofs, dummies.keys()))
+            .map(|(_, proofs)| {
+                CanonicalLeafTemplates::new(
+                    proofs,
+                    dummies.keys().filter(|slot| !reserved.contains(*slot)),
+                )
+            })
             .transpose()?;
         // Spenso supplies validated incidence and external slots. Symbolica
         // canonizes the reconstructed expression, including dummy pairs inside
@@ -288,19 +309,6 @@ impl SymbolicTensor<PartialStructure> {
                 .as_ref()
                 .expect("admitted canonicalization has leaf templates")
                 .retain_output(&canonical.canonical_form, interface, proofs)?;
-        }
-
-        // Sum branches also have paired copies of genuinely external slots.
-        // Preserve those labels after Symbolica has validated their incidence.
-        let mut reserved = BTreeSet::new();
-        for slot in external {
-            let slot = if slot.rep_name().is_dual() {
-                slot.dual()
-            } else {
-                slot
-            };
-            let slot = slot.to_atom();
-            reserved.insert(slot);
         }
 
         let mut reps = vec![];
@@ -412,11 +420,57 @@ impl SymbolicTensor<PartialStructure> {
 
 /// Source leaves may only change the dummy slots supplied to the canonicalizer.
 /// Keep the immutable source cache alive while publishing a separate output cache;
-/// matching never rebuilds a function or discovers a port from output syntax.
+/// matching never rebuilds a function and uses written order only when the
+/// source fact establishes it.
 struct CanonicalLeafTemplates {
     source: LeafInterfaceCache,
     pool: AHashMap<Atom, Representation<LibraryRep>>,
     user_normalizers: bool,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum PortMatch {
+    Unmatched,
+    Matched(Vec<Atom>),
+    Ambiguous,
+}
+
+#[derive(Default)]
+struct LeafBinding<'a, 'b> {
+    mapped: AHashMap<&'a [u8], AtomView<'b>>,
+    used: AHashSet<&'b [u8]>,
+    inserted: Vec<(&'a [u8], &'b [u8])>,
+}
+
+impl<'a, 'b> LeafBinding<'a, 'b> {
+    fn bind_slot(&mut self, source: AtomView<'a>, target: AtomView<'b>) -> bool {
+        let source = source.get_data();
+        if let Some(previous) = self.mapped.get(source) {
+            return *previous == target;
+        }
+        if !self.used.insert(target.get_data()) {
+            return false;
+        }
+        self.mapped.insert(source, target);
+        self.inserted.push((source, target.get_data()));
+        true
+    }
+
+    fn rollback(&mut self, checkpoint: usize) {
+        for (source, target) in self.inserted.drain(checkpoint..) {
+            self.mapped.remove(source);
+            self.used.remove(target);
+        }
+    }
+
+    fn mapped_ports<'c>(&'c self, ports: &'c [Atom]) -> impl Iterator<Item = AtomView<'c>> {
+        ports.iter().map(|port| {
+            self.mapped
+                .get(port.as_view().get_data())
+                .copied()
+                .unwrap_or_else(|| port.as_view())
+        })
+    }
 }
 
 impl CanonicalLeafTemplates {
@@ -508,21 +562,11 @@ impl CanonicalLeafTemplates {
         &self,
         source: AtomView<'a>,
         target: AtomView<'b>,
-        mapping: &mut AHashMap<&'a [u8], AtomView<'b>>,
-        used: &mut AHashSet<&'b [u8]>,
+        binding: &mut LeafBinding<'a, 'b>,
     ) -> bool {
         if let Some(rep) = self.pool.get(source.get_data()) {
-            if self.pool.get(target.get_data()) != Some(rep) {
-                return false;
-            }
-            if let Some(previous) = mapping.get(source.get_data()) {
-                return *previous == target;
-            }
-            if !used.insert(target.get_data()) {
-                return false;
-            }
-            mapping.insert(source.get_data(), target);
-            return true;
+            return self.pool.get(target.get_data()) == Some(rep)
+                && binding.bind_slot(source, target);
         }
         let same_kind = match (source, target) {
             (AtomView::Fun(left), AtomView::Fun(right)) => left.get_symbol() == right.get_symbol(),
@@ -538,7 +582,7 @@ impl CanonicalLeafTemplates {
             && left
                 .into_iter()
                 .zip(right)
-                .all(|(left, right)| self.bind(left, right, mapping, used))
+                .all(|(left, right)| self.bind(left, right, binding))
     }
 
     fn retain_output(
@@ -572,73 +616,283 @@ impl CanonicalLeafTemplates {
         proofs: &TensorProofs,
         require_all: bool,
     ) -> Result<(), TensorInferenceError> {
-        let source = self
-            .source
-            .lock()
-            .expect("leaf interface cache is not poisoned");
+        let source_entries = {
+            let source = self
+                .source
+                .lock()
+                .expect("leaf interface cache is not poisoned");
+            source
+                .iter()
+                .filter(|(_, (tensorial, _))| *tensorial)
+                .map(|(atom, (_, ports))| (atom.clone(), ports.clone()))
+                .collect::<Vec<_>>()
+        };
         let mut candidates = AHashMap::<_, Vec<_>>::new();
-        for (atom, (tensorial, ports)) in source.iter() {
-            if *tensorial && matches!(atom.as_view(), AtomView::Fun(_)) {
+        let mut permutable = AHashMap::<_, Vec<_>>::new();
+        for (atom, ports) in &source_entries {
+            let AtomView::Fun(function) = atom.as_view() else {
+                continue;
+            };
+            let head = function.get_symbol();
+            if Self::has_argument_symmetry(head) {
+                // Normalization can move a dummy across fixed arguments and
+                // change the positional fingerprint.
+                permutable.entry(head).or_default().push((function, ports));
+            } else {
                 candidates
                     .entry(self.fingerprint(atom.as_view()))
                     .or_default()
-                    .push((atom, ports));
+                    .push((function, ports));
             }
         }
         let target = proofs.parser_leaf_interfaces();
+        let mut slots = SlotMatcher::default();
+        let mut non_written = AHashMap::new();
+        let mut underivable = AHashMap::new();
         let mut pending = vec![expression.as_view()];
         while let Some(value) = pending.pop() {
             let AtomView::Fun(function) = value else {
                 pending.extend(Self::children(value));
                 continue;
             };
-            if target
+            let head = function.get_symbol();
+            let permutes = Self::has_argument_symmetry(head);
+            let retained = target
                 .lock()
                 .expect("leaf interface cache is not poisoned")
                 .get(value.get_data())
-                .is_some_and(|(tensorial, _)| *tensorial)
-            {
-                continue;
-            }
-            let mut matched = false;
-            for (template, ports) in candidates
-                .get(&self.fingerprint(value))
-                .into_iter()
-                .flatten()
-            {
-                let mut mapping = AHashMap::new();
-                if self.bind(
-                    template.as_view(),
-                    value,
-                    &mut mapping,
-                    &mut AHashSet::new(),
-                ) {
-                    proofs.retain_leaf_ports(
-                        value,
-                        ports
-                            .iter()
-                            .map(|port| {
-                                mapping
-                                    .get(port.as_view().get_data())
-                                    .map_or_else(|| port.clone(), |value| (*value).to_owned())
-                            })
-                            .collect(),
-                    )?;
-                    matched = true;
-                    break;
+                .and_then(|(tensorial, ports)| tensorial.then(|| ports.clone()));
+            let mut matched = if let Some(ports) = &retained {
+                // Equal bytes do not pin movable dummies or rule out another
+                // summand whose template maps to the same canonical bytes with
+                // a conflicting non-written port order.
+                let has_non_written = *non_written.entry(head).or_insert_with(|| {
+                    source_entries.iter().any(|(atom, ports)| {
+                        matches!(atom.as_view(), AtomView::Fun(template)
+                            if template.get_symbol() == head
+                                && !Self::follows_written_order(template, ports, &mut slots))
+                    })
+                });
+                if !self.has_movable_port(ports) || !has_non_written {
+                    continue;
+                }
+                self.bind_ports(function, function, ports, &mut slots)
+            } else {
+                PortMatch::Unmatched
+            };
+            if matched != PortMatch::Ambiguous {
+                let templates = if permutes {
+                    permutable.get(&head)
+                } else {
+                    candidates.get(&self.fingerprint(value))
+                };
+                for &(template, ports) in templates.into_iter().flatten() {
+                    if template.get_symbol() != head {
+                        continue;
+                    }
+                    match self.bind_ports(template, function, ports, &mut slots) {
+                        PortMatch::Unmatched => {}
+                        PortMatch::Matched(ports) => {
+                            if let PortMatch::Matched(previous) = &matched
+                                && previous != &ports
+                            {
+                                matched = PortMatch::Ambiguous;
+                                break;
+                            }
+                            matched = PortMatch::Matched(ports);
+                        }
+                        PortMatch::Ambiguous => {
+                            matched = PortMatch::Ambiguous;
+                            break;
+                        }
+                    }
                 }
             }
-            if matched {
-                continue;
-            }
-            if require_all && composition::is_tensor_leaf_head(function.get_symbol()) {
-                return Err(TensorInferenceError::invalid(
-                    "canonicalizer output has no retained source leaf template",
-                ));
+            match matched {
+                PortMatch::Matched(ports) => {
+                    if retained.as_ref() != Some(&ports) {
+                        proofs.retain_leaf_ports(value, ports)?;
+                    }
+                    continue;
+                }
+                PortMatch::Ambiguous if require_all => {
+                    return Err(TensorInferenceError::invalid(format!(
+                        "constructor {value} has a declared port order ambiguous across canonicalized dummies"
+                    )));
+                }
+                PortMatch::Unmatched => {
+                    if slots.is_direct_constructor::<AbstractIndex>(function)
+                        && !*underivable.entry(head).or_insert_with(|| {
+                            source_entries.iter().any(|(atom, ports)| {
+                                matches!(atom.as_view(), AtomView::Fun(template)
+                                    if template.get_symbol() == head
+                                        && !Self::is_syntactically_derivable(template, ports, &mut slots))
+                            })
+                        })
+                    {
+                        continue;
+                    }
+                    if require_all && composition::is_tensor_leaf_head(head) {
+                        return Err(TensorInferenceError::invalid(
+                            "canonicalizer output has no retained source leaf template",
+                        ));
+                    }
+                }
+                PortMatch::Ambiguous => {}
             }
             pending.extend(function.iter());
         }
         Ok(())
+    }
+
+    fn has_argument_symmetry(head: Symbol) -> bool {
+        head.is_symmetric() || head.is_antisymmetric() || head.is_cyclesymmetric()
+    }
+
+    fn is_syntactically_derivable(
+        function: FunView<'_>,
+        ports: &[Atom],
+        slots: &mut SlotMatcher,
+    ) -> bool {
+        slots
+            .direct_constructor_ports::<AbstractIndex>(function)
+            .is_some_and(|written| written.into_iter().eq(ports.iter().map(Atom::as_view)))
+    }
+
+    fn written_ports<'a>(
+        function: FunView<'a>,
+        slots: &mut SlotMatcher,
+    ) -> impl Iterator<Item = AtomView<'a>> {
+        function.iter().filter(move |&argument| {
+            InterfaceInference::is_constructor_port::<AbstractIndex>(argument, slots)
+        })
+    }
+
+    fn follows_written_order(
+        function: FunView<'_>,
+        ports: &[Atom],
+        slots: &mut SlotMatcher,
+    ) -> bool {
+        Self::written_ports(function, slots).eq(ports.iter().map(Atom::as_view))
+    }
+
+    fn has_movable_port(&self, ports: &[Atom]) -> bool {
+        ports.iter().any(|port| self.pool.contains_key(port))
+    }
+
+    /// Match one template. Check every symmetry-valid substitution when
+    /// movable declared ports differ from the written order.
+    fn bind_ports(
+        &self,
+        source: FunView<'_>,
+        target: FunView<'_>,
+        ports: &[Atom],
+        slots: &mut SlotMatcher,
+    ) -> PortMatch {
+        if source.get_nargs() != target.get_nargs() {
+            return PortMatch::Unmatched;
+        }
+        let permutes = Self::has_argument_symmetry(source.get_symbol());
+        let written_order = permutes && Self::follows_written_order(source, ports, slots);
+        let check_agreement = permutes && !written_order && self.has_movable_port(ports);
+        let mut result: Option<Vec<Atom>> = None;
+        let mut observe = |binding: &LeafBinding<'_, '_>| {
+            if written_order {
+                // Normalization can permute the arguments after relabelling.
+                let ports = Self::written_ports(target, slots).map(|port| port.to_owned());
+                return ControlFlow::Break(PortMatch::Matched(ports.collect()));
+            }
+            let mapped = binding.mapped_ports(ports);
+            if !check_agreement {
+                return ControlFlow::Break(PortMatch::Matched(
+                    mapped.map(|port| port.to_owned()).collect(),
+                ));
+            }
+            if let Some(previous) = &result {
+                if mapped.ne(previous.iter().map(Atom::as_view)) {
+                    return ControlFlow::Break(PortMatch::Ambiguous);
+                }
+            } else {
+                result = Some(mapped.map(|port| port.to_owned()).collect());
+            }
+            ControlFlow::Continue(())
+        };
+        match self.visit_bindings(source, target, &mut observe) {
+            ControlFlow::Break(matched) => matched,
+            ControlFlow::Continue(()) => result.map_or(PortMatch::Unmatched, PortMatch::Matched),
+        }
+    }
+
+    fn visit_bindings<'a, 'b>(
+        &self,
+        source: FunView<'a>,
+        target: FunView<'b>,
+        observe: &mut impl FnMut(&LeafBinding<'a, 'b>) -> ControlFlow<PortMatch>,
+    ) -> ControlFlow<PortMatch> {
+        let mut binding = LeafBinding::default();
+        if self.bind(source.as_view(), target.as_view(), &mut binding) {
+            observe(&binding)?;
+        }
+        binding.rollback(0);
+        let head = source.get_symbol();
+        if head.is_cyclesymmetric() {
+            let targets = target.iter().collect::<Vec<_>>();
+            for shift in 1..targets.len() {
+                let rotated = targets[shift..].iter().chain(&targets[..shift]).copied();
+                if source
+                    .iter()
+                    .zip(rotated)
+                    .all(|(left, right)| self.bind(left, right, &mut binding))
+                {
+                    observe(&binding)?;
+                }
+                binding.rollback(0);
+            }
+        } else if head.is_symmetric() || head.is_antisymmetric() {
+            let sources = source.iter().collect::<Vec<_>>();
+            let targets = target.iter().collect::<Vec<_>>();
+            self.bind_arguments(
+                &sources,
+                &targets,
+                &mut vec![false; targets.len()],
+                &mut binding,
+                observe,
+            )?;
+        }
+        ControlFlow::Continue(())
+    }
+
+    /// Bind each source argument to a distinct target argument, rolling back
+    /// only the slot assignments introduced by the current branch.
+    fn bind_arguments<'a, 'b>(
+        &self,
+        sources: &[AtomView<'a>],
+        targets: &[AtomView<'b>],
+        taken: &mut [bool],
+        binding: &mut LeafBinding<'a, 'b>,
+        observe: &mut impl FnMut(&LeafBinding<'a, 'b>) -> ControlFlow<PortMatch>,
+    ) -> ControlFlow<PortMatch> {
+        let Some((source, rest)) = sources.split_first() else {
+            return observe(binding);
+        };
+        for (position, target) in targets.iter().enumerate() {
+            if taken[position]
+                || targets[..position]
+                    .iter()
+                    .zip(&taken[..position])
+                    .any(|(earlier, taken)| !taken && earlier == target)
+            {
+                continue;
+            }
+            let checkpoint = binding.inserted.len();
+            if self.bind(*source, *target, binding) {
+                taken[position] = true;
+                self.bind_arguments(rest, targets, taken, binding, observe)?;
+                taken[position] = false;
+            }
+            binding.rollback(checkpoint);
+        }
+        ControlFlow::Continue(())
     }
 }
 

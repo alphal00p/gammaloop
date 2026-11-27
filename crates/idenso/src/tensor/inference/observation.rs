@@ -19,10 +19,12 @@ use spenso::network::parsing::{AtomStructureExt, ChainNestingError, StrictTensor
 use spenso::network::tags::SPENSO_TAG;
 use spenso::shadowing::{ANTISYM, CYCLIC, SYM};
 use spenso::structure::TensorStructure;
-use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
 use spenso::structure::partial::{PartialIndex, PartialStructure, PartialStructureExt};
 use spenso::structure::representation::{LibraryRep, RepName, Representation};
-use spenso::structure::slot::{IsAbstractSlot, SlotMatch, SlotMatcher};
+use spenso::structure::slot::{
+    AbsInd, DualSlotTo, IsAbstractSlot, ParseableAind, SlotMatch, SlotMatcher,
+};
 #[cfg(test)]
 use std::cell::Cell;
 use std::cell::OnceCell;
@@ -221,9 +223,20 @@ impl InterfaceInference {
             })
     }
 
+    /// A fixed-basis delta uses its first component marker as a selector.
+    pub(super) fn is_delta_selector_prefix(
+        head: Symbol,
+        arity: usize,
+        argument: AtomView<'_>,
+    ) -> bool {
+        head == ETS.delta
+            && arity == 2
+            && matches!(argument, AtomView::Fun(marker) if marker.get_symbol() == AIND_SYMBOLS.cind)
+    }
+
     /// Constructor signatures establish which arguments are raw graph ports.
     /// This also supplies the ports for a newly emitted factor in a Dirac word.
-    pub(in crate::tensor) fn constructor_ports(
+    pub(in crate::tensor) fn constructor_ports<Aind: AbsInd + ParseableAind>(
         function: FunView<'_>,
         slots: &mut SlotMatcher,
         admit_direct_ports: bool,
@@ -231,6 +244,19 @@ impl InterfaceInference {
         let head = function.get_symbol();
         if head.has_tag(&SPENSO_TAG.rank1) {
             let port = slots.vector_argument(function)?;
+            if function
+                .iter()
+                .take(function.get_nargs() - 1)
+                .any(|argument| match slots.concrete_component(argument) {
+                    Some(component) => {
+                        !Self::is_delta_selector_prefix(head, function.get_nargs(), argument)
+                            || component.is_err()
+                    }
+                    None => slots.contains_index_syntax(argument),
+                })
+            {
+                return None;
+            }
             // A selected concrete component has no external port. Momentum
             // labels and other scalar metadata are never parser incidences.
             if slots
@@ -239,10 +265,7 @@ impl InterfaceInference {
             {
                 return Some(Vec::new());
             }
-            return (Self::is_chain_placeholder(port)
-                || slots.parse::<LibraryRep, AbstractIndex>(port).is_ok()
-                || slots.parse_representation::<LibraryRep>(port).is_ok())
-            .then(|| vec![port.to_owned()]);
+            return Self::is_constructor_port::<Aind>(port, slots).then(|| vec![port.to_owned()]);
         }
         if Self::is_compound_metric(function, slots) {
             // A metric of compound operands consumes just one axis from each.
@@ -252,13 +275,18 @@ impl InterfaceInference {
         if head == CS.d {
             // The symmetric invariant d_R(R, a, b, ...) declares its group
             // representation first. The three-index d(a, b, c) has no prefix.
-            return Some(
-                function
-                    .iter()
-                    .skip(usize::from(function.get_nargs() >= 4))
-                    .map(|port| port.to_owned())
-                    .collect(),
-            );
+            let mut arguments = function.iter();
+            if function.get_nargs() >= 4 {
+                slots
+                    .parse_representation::<LibraryRep>(arguments.next()?)
+                    .ok()?;
+            }
+            return arguments
+                .map(|port| {
+                    (admit_direct_ports || Self::is_constructor_port::<Aind>(port, slots))
+                        .then(|| port.to_owned())
+                })
+                .collect();
         }
         (head == AGS.gamma0
             || Self::is_builtin_tensor(head)
@@ -266,14 +294,61 @@ impl InterfaceInference {
         .then(|| {
             function
                 .iter()
-                .filter(|&port| {
-                    Self::is_chain_placeholder(port)
-                        || slots.parse::<LibraryRep, AbstractIndex>(port).is_ok()
-                        || slots.parse_representation::<LibraryRep>(port).is_ok()
-                })
+                .filter(|&port| Self::is_constructor_port::<Aind>(port, slots))
                 .map(|port| port.to_owned())
                 .collect()
         })
+    }
+
+    pub(in crate::tensor) fn is_constructor_port<Aind: AbsInd + ParseableAind>(
+        port: AtomView<'_>,
+        slots: &mut SlotMatcher,
+    ) -> bool {
+        Self::is_chain_placeholder(port)
+            || slots.parse::<LibraryRep, Aind>(port).is_ok()
+            || slots.parse_representation::<LibraryRep>(port).is_ok()
+    }
+
+    /// These signatures distinguish metadata from ports. If one rejects the
+    /// arguments, a generic reader must not reinterpret them.
+    pub(in crate::tensor) fn has_special_port_signature(head: Symbol) -> bool {
+        head.has_tag(&SPENSO_TAG.rank1) || head == CS.d
+    }
+
+    /// Recover a built-in constructor boundary without inventing raw ports
+    /// for a self-loop. A producer with a loop must retain its incidences.
+    pub(in crate::tensor) fn unretained_constructor_ports<Aind: AbsInd + ParseableAind>(
+        function: FunView<'_>,
+        slots: &mut SlotMatcher,
+    ) -> Option<Vec<Atom>> {
+        let ports = Self::constructor_ports::<Aind>(function, slots, false)?;
+        let head = function.get_symbol();
+        // Producers can certify consumed tensor operands. Without a fact, only
+        // valid component markers and index-free metadata can be ignored.
+        if !Self::has_special_port_signature(head)
+            && function.iter().any(|argument| {
+                !Self::is_constructor_port::<Aind>(argument, slots)
+                    && match slots.concrete_component(argument) {
+                        Some(component) => component.is_err(),
+                        None => slots.contains_index_syntax(argument),
+                    }
+            })
+        {
+            return None;
+        }
+        let mut explicit = Vec::new();
+        for port in &ports {
+            if let Ok(slot) = slots.parse::<LibraryRep, Aind>(port.as_view()) {
+                if explicit
+                    .iter()
+                    .any(|previous| previous == &slot || slot.matches(previous))
+                {
+                    return None;
+                }
+                explicit.push(slot);
+            }
+        }
+        Some(ports)
     }
 
     /// Account for emitted indices using the producer's retained interfaces.
@@ -648,8 +723,11 @@ impl InterfaceInference {
                     // boundary cannot establish hidden or ordered raw ports.
                     let recorded = proofs.current().leaf_interfaces.contains(value);
                     if !recorded
-                        && let Some(ports) =
-                            Self::constructor_ports(function, slots, scope.admit_direct_ports)
+                        && let Some(ports) = Self::constructor_ports::<AbstractIndex>(
+                            function,
+                            slots,
+                            scope.admit_direct_ports,
+                        )
                     {
                         // Only publish the constructor boundary when it is
                         // not already the producer's authoritative root.
@@ -903,7 +981,10 @@ mod tests {
         let mu = mink!(4, 99463);
         let a = function!(tensor_symbol!("producer_missing_a"), &mu);
         let source = SymbolicTensor::infer(a.clone()).unwrap();
-        let unknown = a + function!(tensor_symbol!("producer_missing_b"), &mu);
+        // A direct leaf can supply its own ports. The second branch has the
+        // same free slot but needs a retained fact for its internal pair.
+        let nu = mink!(4, 99465);
+        let unknown = a + function!(tensor_symbol!("producer_missing_b"), &mu, &nu, &nu);
         SCOPED_INTERFACE_INFERENCES.with(|count| count.set(0));
         INFERENCE_CALLS.with(|count| count.set(0));
         INFERENCE_VISITS.with(|count| count.set(0));

@@ -5,6 +5,7 @@ use super::composition;
 use super::inference::{InterfaceInference, TensorInferenceError};
 use super::{SymbolicNet, SymbolicNetParse, SymbolicTensor};
 use crate::CookSettings;
+use ahash::AHashMap;
 use spenso::network::library::{DummyKey, DummyLibrary, FunctionLibrary};
 use spenso::network::parsing::{
     LeafInterfaceCache, ParseSettings, StrictTensorFilter, StructureFromAtom, TensorFromExpression,
@@ -26,7 +27,8 @@ use spenso::structure::{
 use spenso::tensors::data::SparseTensor;
 use std::fmt::{Debug, Display};
 use std::sync::Arc;
-use symbolica::atom::{Atom, AtomView, Symbol};
+use symbolica::atom::representation::FunView;
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 
 impl TensorProofs {
     pub(crate) fn parser_leaf_interfaces(&self) -> LeafInterfaceCache {
@@ -143,6 +145,120 @@ impl TensorProofs {
         InterfaceInference::merge_explicit_interface_sequence(&[
             PartialStructure::from_logical_slots(interface),
         ])
+    }
+}
+
+/// Raw ports carried at each rebuilt occurrence. A subsequent renaming looks
+/// up the intermediate leaf here before consulting the original admission.
+#[derive(Default)]
+pub(crate) struct RenamedLeafPorts<'a> {
+    source: Option<&'a TensorProofs>,
+    renamed: AHashMap<Atom, (Vec<Atom>, bool)>,
+}
+
+impl<'a> RenamedLeafPorts<'a> {
+    pub(crate) fn new(source: &'a TensorProofs) -> Self {
+        Self {
+            source: Some(source),
+            ..Self::default()
+        }
+    }
+
+    /// Carry a fact through the exact rebuild, including a normalized argument
+    /// permutation and its possible sign. Declared ports keep their own order.
+    pub(crate) fn observe(
+        &mut self,
+        original: FunView<'_>,
+        supplied: &[Atom],
+        rebuilt: AtomView<'_>,
+        mut rename: impl FnMut(AtomView<'_>) -> Option<Atom>,
+    ) {
+        let original_view = original.as_view();
+        let (renamed, written_order) = if let Some((ports, written_order)) =
+            self.renamed.get(original_view.get_data())
+        {
+            (
+                ports
+                    .iter()
+                    .map(|port| rename(port.as_view()).unwrap_or_else(|| port.clone()))
+                    .collect(),
+                *written_order,
+            )
+        } else {
+            let Some(Some(fact)) = self.source.and_then(|source| {
+                source
+                    .leaf_interfaces
+                    .with_fact(original_view, |positive, ports| {
+                        if !positive
+                            || SlotMatcher::default()
+                                .direct_constructor_ports::<AbstractIndex>(original)
+                                .is_some_and(|direct| direct.into_iter().eq(ports.clone()))
+                        {
+                            return None;
+                        }
+                        let mut args = original.iter();
+                        let written_order = ports.clone().all(|port| args.any(|arg| arg == port));
+                        Some((
+                            ports.map(|port| port.to_owned()).collect::<Vec<_>>(),
+                            written_order,
+                        ))
+                    })
+            }) else {
+                return;
+            };
+            let (ports, written_order) = fact;
+            let renamed: Vec<_> = ports
+                .into_iter()
+                .map(|port| rename(port.as_view()).unwrap_or(port))
+                .collect();
+            (renamed, written_order)
+        };
+        let supplied = supplied.iter().map(Atom::as_view).collect::<Vec<_>>();
+        let written = if written_order {
+            renamed.as_slice()
+        } else {
+            &[]
+        };
+        if let Some((leaf, ports)) =
+            TensorProofs::raw_ports_after_argument_permutation(&supplied, rebuilt, written)
+            && leaf.get_symbol() == original.get_symbol()
+        {
+            let ports = if written_order { ports } else { renamed };
+            self.renamed
+                .insert(leaf.as_view().to_owned(), (ports, written_order));
+        }
+    }
+
+    /// Check whether this leaf owns all its incidences, including self-loops
+    /// whose slots remain visible to the syntactic occurrence counter.
+    pub(crate) fn is_closed_leaf(&self, leaf: AtomView<'_>) -> bool {
+        let interface = if let Some((ports, _)) = self.renamed.get(leaf.get_data()) {
+            TensorProofs::boundary_from_leaf_ports(ports.iter().map(Atom::as_view)).ok()
+        } else {
+            self.source
+                .and_then(|source| source.inspect_interface(leaf))
+        };
+        interface.is_some_and(|interface| interface.canonical().is_scalar())
+    }
+
+    pub(crate) fn retain(
+        mut self,
+        expression: AtomView<'_>,
+        output: &TensorProofs,
+    ) -> Result<(), TensorInferenceError> {
+        if self.renamed.is_empty() {
+            return Ok(());
+        }
+        let mut result = Ok(());
+        expression.visitor(&mut |value| {
+            if result.is_ok()
+                && let Some((ports, _)) = self.renamed.remove(value.get_data())
+            {
+                result = output.retain_leaf_ports(value, ports);
+            }
+            result.is_ok() && !self.renamed.is_empty()
+        });
+        result
     }
 }
 

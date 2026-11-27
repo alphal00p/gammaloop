@@ -446,54 +446,168 @@ impl SlotMatcher {
         kind
     }
 
-    /// Whether a tensor constructor is index-free shorthand, whose ports follow
-    /// from its arguments and need no retained fact. Every argument is a slot,
-    /// a bare representation, a fixed component such as `cind(0)`, or scalar
-    /// data without index syntax, and either
-    /// - at least one is a bare representation (an automatic port such as
-    ///   `v(euc(2))`), with no repeated explicit slot, or
-    /// - none is a slot but one is a fixed component: a component such as
-    ///   `p(0, cind(0))` is a scalar.
+    /// Return the ports of a non-scalar, tensor-tagged constructor whose
+    /// arguments determine its interface. Explicit slots use the `Aind`
+    /// grammar. Bare representations denote independent automatic ports.
+    /// Both are returned in written order. Fixed components and scalar data
+    /// supply no port, and at least one argument must be a slot, representation
+    /// or component.
     ///
-    /// The ports are the slots and bare representations, in order. Each
-    /// automatic port is its own axis; this never pairs automatic ports of
-    /// different factors. Fully explicit constructors and self-loops still
-    /// require their retained raw ports.
-    pub fn is_direct_constructor(&mut self, function: FunView<'_>) -> bool {
+    /// Repeated or dual-paired slots, malformed slots or components, and
+    /// nested index syntax (including bundles) require a retained fact and
+    /// return `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use spenso::structure::abstract_index::AbstractIndex;
+    /// use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
+    /// use spenso::structure::slot::{IsAbstractSlot, SlotMatcher};
+    /// use spenso::tensor_symbol;
+    /// use symbolica::atom::{AtomCore, AtomView};
+    /// use symbolica::function;
+    ///
+    /// let mink = LibraryRep::from(Minkowski {}).new_rep(4);
+    /// let [i, j] = [1, 2].map(|index| mink.slot::<AbstractIndex, _>(index).to_atom());
+    /// let head = tensor_symbol!("slot_matcher_doc::direct_constructor");
+    /// let mut matcher = SlotMatcher::default();
+    ///
+    /// // Written slots are the ports, in written order.
+    /// let tensor = function!(head, &j, &i);
+    /// let AtomView::Fun(function) = tensor.as_view() else {
+    ///     unreachable!("a tensor constructor is a function")
+    /// };
+    /// assert_eq!(
+    ///     matcher.direct_constructor_ports::<AbstractIndex>(function),
+    ///     Some(vec![j.as_view(), i.as_view()])
+    /// );
+    ///
+    /// // A self-loop cannot be read from syntax: it needs retained ports.
+    /// let trace = function!(head, &i, &i);
+    /// let AtomView::Fun(function) = trace.as_view() else {
+    ///     unreachable!("a tensor constructor is a function")
+    /// };
+    /// assert_eq!(matcher.direct_constructor_ports::<AbstractIndex>(function), None);
+    /// assert!(!matcher.is_direct_constructor::<AbstractIndex>(function));
+    /// ```
+    pub fn direct_constructor_ports<'a, Aind: AbsInd + ParseableAind>(
+        &mut self,
+        function: FunView<'a>,
+    ) -> Option<Vec<AtomView<'a>>> {
+        let mut ports = Vec::new();
+        self.visit_direct_constructor::<Aind>(function, |port| ports.push(port))
+            .then_some(ports)
+    }
+
+    /// Whether `function` is a direct tensor constructor, without collecting
+    /// its ports; see [`Self::direct_constructor_ports`] for the rule and an
+    /// example.
+    pub fn is_direct_constructor<Aind: AbsInd + ParseableAind>(
+        &mut self,
+        function: FunView<'_>,
+    ) -> bool {
+        self.visit_direct_constructor::<Aind>(function, |_| {})
+    }
+
+    /// Validate a direct constructor, reporting each port in written order.
+    /// A self-loop is found by re-reading the earlier arguments, so the check
+    /// keeps no list of slots.
+    fn visit_direct_constructor<'a, Aind: AbsInd + ParseableAind>(
+        &mut self,
+        function: FunView<'a>,
+        mut port: impl FnMut(AtomView<'a>),
+    ) -> bool {
         let symbol = function.get_symbol();
         if !symbol.has_tag(&self.tags.tensor) || symbol.is_scalar() {
             return false;
         }
-        let mut automatic = false;
-        let mut component = false;
-        let mut explicit = Vec::new();
-        for argument in function.iter() {
-            if let Ok(slot) = self.parse::<LibraryRep, AbstractIndex>(argument) {
-                if explicit.contains(&slot) {
-                    return false;
+        let mut indexed = false;
+        for (position, argument) in function.iter().enumerate() {
+            match self.concrete_component(argument) {
+                Some(Ok(_)) => {
+                    indexed = true;
+                    continue;
                 }
-                explicit.push(slot);
-            } else if self.parse_representation::<LibraryRep>(argument).is_ok() {
-                automatic = true;
-            } else if self
-                .concrete_component(argument)
-                .is_some_and(|component| component.is_ok())
-            {
-                component = true;
-            } else if self.contains_index_syntax(argument) {
-                return false;
+                Some(Err(_)) => return false,
+                None => {}
             }
+            let recognized = self.classify(argument);
+            match recognized {
+                SlotMatch::Explicit(slot) => {
+                    if let Some(component) = self.concrete_component(slot.index()) {
+                        if component.is_err()
+                            || self.representation(slot).is_err()
+                            || Dimension::try_from(slot.dimension()).is_err()
+                        {
+                            return false;
+                        }
+                    } else {
+                        let Ok(parsed) = recognized.parse::<LibraryRep, Aind>(argument, self)
+                        else {
+                            return false;
+                        };
+                        if self.closes_earlier_slot(function, position, parsed) {
+                            return false;
+                        }
+                        port(argument);
+                    }
+                }
+                SlotMatch::Opaque => {
+                    if self.parse_representation::<LibraryRep>(argument).is_err() {
+                        return false;
+                    }
+                    port(argument);
+                }
+                SlotMatch::Other => {
+                    if self.contains_index_syntax(argument) {
+                        return false;
+                    }
+                    continue;
+                }
+            }
+            indexed = true;
         }
-        automatic || (component && explicit.is_empty())
+        indexed
     }
 
-    /// Whether any node of `value` is a slot or a representation.
-    fn contains_index_syntax(&mut self, value: AtomView<'_>) -> bool {
+    /// Whether `slot`, written at `position`, repeats or contracts with an
+    /// explicit slot written before it.
+    fn closes_earlier_slot<Aind: AbsInd + ParseableAind>(
+        &mut self,
+        function: FunView<'_>,
+        position: usize,
+        slot: Slot<LibraryRep, Aind>,
+    ) -> bool {
+        function.iter().take(position).any(|previous| {
+            self.parse::<LibraryRep, Aind>(previous)
+                .is_ok_and(|previous| previous == slot || previous.matches(&slot))
+        })
+    }
+
+    /// Whether any node of `value` is index or representation syntax: a slot,
+    /// a representation, a variance wrapper, an index bundle, a component
+    /// marker or an index-tagged symbol, also when it is malformed.
+    ///
+    /// See [`Self::direct_constructor_ports`] for a constructor that accepts
+    /// index-free scalar metadata alongside its ports.
+    pub fn contains_index_syntax(&mut self, value: AtomView<'_>) -> bool {
         let mut found = false;
         value.visitor(&mut |node| {
             found = found
-                || self.parse::<LibraryRep, AbstractIndex>(node).is_ok()
-                || self.parse_representation::<LibraryRep>(node).is_ok();
+                || match node {
+                    AtomView::Fun(function) => {
+                        let head = function.get_symbol();
+                        head.has_attributes_of(self.tags.rep_)
+                            || head.has_tag(&self.tags.index)
+                            || [self.aind, AIND_SYMBOLS.cind, AIND_SYMBOLS.find].contains(&head)
+                            || !matches!(self.classify_head(function), SlotHead::Other)
+                    }
+                    AtomView::Var(variable) => {
+                        let symbol = variable.get_symbol();
+                        symbol.has_attributes_of(self.tags.rep_) || symbol.has_tag(&self.tags.index)
+                    }
+                    _ => false,
+                };
             !found
         });
         found
@@ -1007,7 +1121,9 @@ mod shadowing_tests {
     use std::fmt::{Display, Formatter, Result as FmtResult};
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use symbolica::atom::{Atom, AtomCore, AtomView, NamespacedSymbol, SymbolBuilder};
+    use symbolica::atom::{
+        Atom, AtomCore, AtomView, FunctionBuilder, NamespacedSymbol, SymbolBuilder,
+    };
     use symbolica::{function, parse, symbol};
     use symbolica_notation::IndexDisplay;
 
@@ -1790,5 +1906,93 @@ mod shadowing_tests {
         assert_eq!(indexed, original);
         // The query only borrows syntax: it never converts/materializes the
         // compound index payload or invokes a dummy-index constructor.
+    }
+
+    #[test]
+    fn direct_constructors_read_written_ports_and_refuse_self_loops() {
+        let lorentz = LibraryRep::from(Lorentz {}).new_rep(4);
+        let minkowski = LibraryRep::from(Minkowski {}).new_rep(4);
+        let up = lorentz.slot::<AbstractIndex, _>(7);
+        let [up, down, other, next] = [
+            up.to_atom(),
+            up.dual().to_atom(),
+            minkowski.slot::<AbstractIndex, _>(7).to_atom(),
+            lorentz.slot::<AbstractIndex, _>(8).to_atom(),
+        ];
+        let bare = minkowski.to_symbolic([]);
+        let component = function!(AIND_SYMBOLS.cind, 0);
+        let data = symbol!("slot_match_tests::direct_data");
+        let head = tensor_symbol!("slot_match_tests::direct_constructor");
+        let minkowski_head = LibraryRep::from(Minkowski {}).symbol();
+        let mut matcher = SlotMatcher::default();
+        let mut ports = |arguments: &[&Atom]| {
+            let value = arguments
+                .iter()
+                .fold(FunctionBuilder::new(head), |value, argument| {
+                    value.add_arg(*argument)
+                })
+                .finish();
+            let AtomView::Fun(function) = value.as_view() else {
+                unreachable!("a tensor constructor is a function")
+            };
+            let ports = matcher
+                .direct_constructor_ports::<AbstractIndex>(function)
+                .map(|ports| ports.iter().map(AtomView::to_owned).collect::<Vec<_>>());
+            assert_eq!(
+                matcher.is_direct_constructor::<AbstractIndex>(function),
+                ports.is_some()
+            );
+            ports
+        };
+        // Written slots and bare representations are ports, in order; fixed
+        // components and index-free data are not.
+        assert_eq!(ports(&[&up]), Some(vec![up.clone()]));
+        assert_eq!(ports(&[&bare]), Some(vec![bare.clone()]));
+        assert_eq!(
+            ports(&[&bare, &Atom::var(data), &up]),
+            Some(vec![bare.clone(), up.clone()])
+        );
+        assert_eq!(ports(&[&Atom::num(0), &component]), Some(vec![]));
+        assert_eq!(ports(&[&up, &component]), Some(vec![up.clone()]));
+        assert_eq!(
+            ports(&[&down, &next]),
+            Some(vec![down.clone(), next.clone()])
+        );
+        // Distinct representations may share an index label.
+        assert_eq!(ports(&[&up, &other]), Some(vec![up.clone(), other.clone()]));
+        // A fixed component of a slot selects an axis value; it is not a port.
+        let fixed = function!(minkowski_head, 4, &component);
+        assert_eq!(ports(&[&up, &fixed]), Some(vec![up.clone()]));
+        // A repeated slot or a dual pair is a self-loop, also beside an
+        // automatic port; nested index syntax and port-free calls are not direct.
+        for refused in [
+            vec![&up, &up],
+            vec![&other, &other],
+            vec![&up, &down],
+            vec![&down, &up],
+            vec![&bare, &up, &next, &down],
+            vec![&function!(data, &up)],
+            vec![&function!(data, &bare)],
+            vec![],
+        ] {
+            assert_eq!(ports(&refused), None, "{refused:?}");
+        }
+        // Malformed index syntax is never scalar data, so no axis is dropped:
+        // an invalid slot, representation or component, or an index bundle.
+        for malformed in [
+            function!(minkowski_head, -1, 9),
+            function!(minkowski_head, -1),
+            function!(minkowski_head, 4, function!(AIND_SYMBOLS.cind, -1)),
+            function!(AIND_SYMBOLS.aind, 1),
+            function!(AIND_SYMBOLS.cind, -1),
+            function!(data, function!(AIND_SYMBOLS.cind, 0)),
+        ] {
+            assert_eq!(ports(&[&other, &malformed]), None, "{malformed}");
+        }
+        let scalar = function!(symbol!("slot_match_tests::direct_untagged"), &up);
+        let AtomView::Fun(untagged) = scalar.as_view() else {
+            unreachable!("an untagged call is a function")
+        };
+        assert!(!matcher.is_direct_constructor::<AbstractIndex>(untagged));
     }
 }

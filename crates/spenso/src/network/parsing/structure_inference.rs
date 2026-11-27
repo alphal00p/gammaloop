@@ -426,11 +426,12 @@ impl<Aind: AbsInd + DummyAind + ParseableAind> StructureFromAtom
         let chain_like = matches!(value, AtomView::Fun(function)
             if function.get_symbol() == matcher.tags().chain
                 || function.get_symbol() == matcher.tags().trace);
-        // Index-free shorthand: a constructor whose arguments are all slots or
-        // bare representations has syntactically determined ports.
+        // A direct tensor constructor without a retained fact has syntactically
+        // determined ports (`SlotMatcher::direct_constructor_ports`); any other
+        // admitted leaf needs its retained raw ports.
         if state.require_admitted_interfaces
             && !chain_like
-            && !matches!(value, AtomView::Fun(function) if matcher.is_direct_constructor(function))
+            && !matches!(value, AtomView::Fun(function) if matcher.is_direct_constructor::<Aind>(function))
         {
             return Err(StructureError::ParsingError(format!(
                 "admitted tensor is missing its raw parser ports for {value}"
@@ -534,7 +535,9 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     /// establish compatible additive branches and account for unresolved ports;
     /// this does not validate placeholder scopes or materialize compact ports.
     /// A matcher carrying admitted interfaces composes those facts instead of
-    /// observing tensor payloads; missing tensor leaf facts are errors.
+    /// observing tensor payloads. Without a fact, a direct tensor constructor
+    /// ([`SlotMatcher::direct_constructor_ports`]) reads its written slots, and
+    /// any other tensor constructor is an error.
     /// General input should use [`StructureFromAtom::structure_from_atom`].
     pub fn syntactic_structure_from_atom(
         value: AtomView<'_>,
@@ -572,9 +575,10 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
                 ),
                 AtomView::Mul(product) => Self::from_product_atom(product, matcher),
                 AtomView::Pow(power) => Self::from_power_atom(power, matcher),
-                // Index-free shorthand: a constructor's written slots and bare
-                // representations are its ports, so they need no retained fact.
-                AtomView::Fun(function) if matcher.is_direct_constructor(function) => {
+                // A direct tensor constructor's written ports need no retained
+                // fact. As for a retained fact, this syntactic boundary exposes
+                // only explicit slots; bare representations stay unmaterialized.
+                AtomView::Fun(function) if matcher.is_direct_constructor::<Aind>(function) => {
                     Self::from_function_atom(function, matcher)
                 }
                 AtomView::Fun(function)
@@ -1069,11 +1073,13 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::network::parsing::LeafInterfaceCache;
+    use crate::network::parsing::{
+        LeafInterfaceCache, NetworkParse, ParseSettings, ShorthandParsing,
+    };
     use crate::structure::TensorStructure;
     use crate::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
     use crate::structure::representation::{Euclidean, Lorentz, Minkowski, RepName};
-    use crate::structure::slot::IsAbstractSlot;
+    use crate::structure::slot::{DualSlotTo, IsAbstractSlot};
     use crate::{bracket, chain, slot, tensor_symbol, trace, vector};
     use std::iter;
     use std::sync::Arc;
@@ -1083,7 +1089,6 @@ mod tests {
     // Independent oracle: execute the existing parser's shorthand lowering,
     // then read the graph incidence instead of invoking syntax inference again.
     fn expanded_graph_structure(expression: &Atom) -> Canonicalized<OrderedStructure> {
-        use crate::network::parsing::{NetworkParse, ParseSettings};
         let network = expression
             .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
             .unwrap();
@@ -1128,11 +1133,22 @@ mod tests {
         let compact = rep.to_symbolic([]);
         let vector = vector!(retained_compact_vector, &compact);
         let weighted = &left * &right * &vector;
+        // A retained fact wins over syntax, including a declared port order.
+        let declared_ports = [637, 635].map(|index| rep.slot::<AbstractIndex, _>(index));
+        let declared = function!(
+            tensor_symbol!("retained_compact_declared"),
+            declared_ports[1].to_atom(),
+            declared_ports[0].to_atom()
+        );
         let cache = LeafInterfaceCache::default();
         for (expression, ports) in [
             (left, vec![port.clone()]),
             (right, vec![port]),
             (vector, vec![compact]),
+            (
+                declared.clone(),
+                declared_ports.iter().map(|slot| slot.to_atom()).collect(),
+            ),
         ] {
             cache.lock().unwrap().insert(expression, (true, ports));
         }
@@ -1145,18 +1161,144 @@ mod tests {
             .compact_vector_sequence::<AbstractIndex>(product.iter().enumerate(), false)
             .unwrap();
         assert_eq!(actual, rep);
-        let missing = function!(
-            tensor_symbol!("retained_compact_missing"),
-            rep.slot::<AbstractIndex, _>(633).to_atom()
-        );
-        assert!(
+        let structure = |value: &Atom, matcher: &mut SlotMatcher| {
             OrderedStructure::<LibraryRep, AbstractIndex>::syntactic_structure_from_atom(
-                missing.as_view(),
+                value.as_view(),
+                matcher,
+            )
+            .map(|structure| {
+                structure
+                    .layout()
+                    .canonical_to_logical(&structure.canonical().structure)
+            })
+        };
+        assert_eq!(structure(&declared, &mut matcher).unwrap(), declared_ports);
+        assert_eq!(SYNTACTIC_INFERENCE_NODES.with(|count| count.get()), 0);
+        // An unrecorded direct constructor reads its written slots.
+        let written = rep.slot::<AbstractIndex, _>(633);
+        let unrecorded = function!(
+            tensor_symbol!("retained_compact_missing"),
+            written.to_atom()
+        );
+        assert_eq!(structure(&unrecorded, &mut matcher).unwrap(), [written]);
+        // Other unrecorded tensor constructors still need their facts: a
+        // self-loop, also through a dual slot, and nested index syntax.
+        let lorentz = Lorentz {}.new_rep(4).to_lib().slot::<AbstractIndex, _>(639);
+        for refused in [
+            function!(
+                tensor_symbol!("retained_compact_loop"),
+                written.to_atom(),
+                written.to_atom()
+            ),
+            function!(
+                tensor_symbol!("retained_compact_dual_loop"),
+                rep.to_symbolic([]),
+                lorentz.to_atom(),
+                lorentz.dual().to_atom()
+            ),
+            function!(
+                tensor_symbol!("retained_compact_nested"),
+                function!(symbol!("retained_compact_data"), written.to_atom())
+            ),
+        ] {
+            assert!(structure(&refused, &mut matcher).is_err(), "{refused}");
+        }
+        assert_eq!(SYNTACTIC_INFERENCE_NODES.with(|count| count.get()), 0);
+    }
+
+    /// Every structure reader agrees on a direct tensor constructor without a
+    /// retained fact, as unadmitted parsing reads it. Spenso's syntactic
+    /// structure leaves bare representations unmaterialized.
+    #[test]
+    fn direct_constructors_agree_across_admitted_and_unadmitted_readers() {
+        let mink = Minkowski {}.new_rep(4).to_lib();
+        let lorentz = Lorentz {}
+            .new_rep(4)
+            .to_lib()
+            .slot::<AbstractIndex, _>(71003);
+        let [i, j] = [71001, 71002].map(|index| mink.slot::<AbstractIndex, _>(index));
+        let compact = Euclidean {}.new_rep(2).to_lib().to_symbolic([]);
+        let component = function!(AIND_SYMBOLS.cind, 0);
+        let head = tensor_symbol!("direct_constructor_readers");
+        let parser = |value: &Atom, admitted: bool| {
+            let state = if admitted {
+                let cache = LeafInterfaceCache::default();
+                ParseState::<AbstractIndex>::admitted(
+                    value.as_view(),
+                    &ParseSettings {
+                        shorthand_parsing: ShorthandParsing::Opaque,
+                        depth_limit: Some(1),
+                        ..ParseSettings::default()
+                    },
+                    cache,
+                )
+            } else {
+                ParseState::<AbstractIndex>::default()
+            }
+            .with_view(value.as_view());
+            match OrderedStructure::<LibraryRep, AbstractIndex>::structure_from_parser(&state) {
+                Ok(structure) => Ok(structure
+                    .layout()
+                    .canonical_to_logical(&structure.canonical().external_structure())),
+                Err(StructureError::EmptyStructure(_)) => Ok(Vec::new()),
+                Err(error) => Err(error),
+            }
+        };
+        let syntactic = |value: &Atom, mut matcher: SlotMatcher| {
+            OrderedStructure::<LibraryRep, AbstractIndex>::syntactic_structure_from_atom(
+                value.as_view(),
                 &mut matcher,
             )
-            .is_err()
-        );
-        assert_eq!(SYNTACTIC_INFERENCE_NODES.with(|count| count.get()), 0);
+            .map(|structure| {
+                structure
+                    .layout()
+                    .canonical_to_logical(&structure.canonical().external_structure())
+            })
+        };
+        let admitted_matcher =
+            || SlotMatcher::with_leaf_interfaces([LeafInterfaceCache::default()]);
+        for (arguments, expected) in [
+            (vec![i.to_atom()], vec![i]),
+            (vec![compact.clone()], vec![]),
+            (vec![compact.clone(), i.to_atom()], vec![i]),
+            (vec![Atom::num(0), component.clone()], vec![]),
+            (vec![i.to_atom(), component], vec![i]),
+            (vec![i.to_atom(), j.to_atom()], vec![i, j]),
+            (vec![lorentz.to_atom(), i.to_atom()], vec![lorentz, i]),
+        ] {
+            let value = FunctionBuilder::new(head).add_args(&arguments).finish();
+            let sorted = |mut slots: Vec<Slot<LibraryRep, AbstractIndex>>| {
+                slots.sort();
+                slots
+            };
+            assert_eq!(
+                syntactic(&value, SlotMatcher::default()).unwrap(),
+                expected,
+                "{value}"
+            );
+            assert_eq!(syntactic(&value, admitted_matcher()).unwrap(), expected);
+            assert_eq!(parser(&value, false).unwrap(), expected, "{value}");
+            assert_eq!(parser(&value, true).unwrap(), expected, "{value}");
+            let network = value
+                .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+                .unwrap();
+            assert_eq!(
+                sorted(network.graph.dangling_indices()),
+                sorted(expected),
+                "{value}"
+            );
+        }
+        // Self-loops, also through a dual slot, still need retained ports.
+        for arguments in [
+            vec![i.to_atom(), i.to_atom()],
+            vec![lorentz.to_atom(), lorentz.dual().to_atom()],
+            vec![compact, lorentz.dual().to_atom(), lorentz.to_atom()],
+        ] {
+            let value = FunctionBuilder::new(head).add_args(&arguments).finish();
+            assert!(syntactic(&value, admitted_matcher()).is_err(), "{value}");
+            assert!(parser(&value, true).is_err(), "{value}");
+            assert!(parser(&value, false).is_ok(), "{value}");
+        }
     }
 
     #[test]
@@ -1671,6 +1813,44 @@ mod tests {
             ordered.canonical().external_structure()
         );
         assert!(value.infer_structure::<OrderedStructure>().is_err());
+        // Admitted readers without a retained fact read the direct slot with
+        // the same requested grammar.
+        let state = ParseState::<PayloadIndex>::admitted(
+            value.as_view(),
+            &ParseSettings {
+                shorthand_parsing: ShorthandParsing::Opaque,
+                depth_limit: Some(1),
+                ..ParseSettings::default()
+            },
+            LeafInterfaceCache::default(),
+        )
+        .with_view(value.as_view());
+        let parsed =
+            OrderedStructure::<LibraryRep, PayloadIndex>::structure_from_parser(&state).unwrap();
+        assert_eq!(
+            parsed.canonical().external_structure(),
+            ordered.canonical().external_structure()
+        );
+        let admitted_matcher =
+            || SlotMatcher::with_leaf_interfaces([LeafInterfaceCache::default()]);
+        let syntactic =
+            OrderedStructure::<LibraryRep, PayloadIndex>::syntactic_structure_from_atom(
+                value.as_view(),
+                &mut admitted_matcher(),
+            )
+            .unwrap();
+        assert_eq!(
+            syntactic.canonical().external_structure(),
+            ordered.canonical().external_structure()
+        );
+        // Another grammar cannot read the slot, so it is no direct port.
+        assert!(
+            OrderedStructure::<LibraryRep, AbstractIndex>::syntactic_structure_from_atom(
+                value.as_view(),
+                &mut admitted_matcher(),
+            )
+            .is_err()
+        );
     }
 
     #[test]

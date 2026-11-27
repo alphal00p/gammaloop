@@ -29,8 +29,9 @@ use spenso::structure::concrete_index::{ExpandedIndex, FlatIndex};
 use spenso::structure::dimension::Dimension;
 use spenso::structure::partial::{PartialIndex, PartialStructure, PartialStructureExt};
 use spenso::structure::representation::{LibraryRep, LibrarySlot, Representation};
-use spenso::structure::slot::SlotError;
-use spenso::structure::slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind, SlotMatcher};
+use spenso::structure::slot::{
+    AbsInd, DummyAind, IsAbstractSlot, ParseableAind, SlotError, SlotMatch, SlotMatcher,
+};
 use spenso::structure::{
     ApplyPendingIndexPermutation, CanonicalLayout, Canonicalized, HasName, HasStructure,
     IndexedStructure, MergeInfo, NamedStructure, OrderedStructure, PendingIndexPermutation,
@@ -350,6 +351,24 @@ impl TensorProofs {
         self.occurrences.get().is_some()
     }
 
+    fn parse_constructor_port<Aind: AbsInd + ParseableAind>(
+        port: AtomView<'_>,
+        matcher: &mut SlotMatcher,
+        next_index: &mut impl FnMut() -> Aind,
+    ) -> Result<LibrarySlot<Aind>, SlotError> {
+        matcher.parse::<LibraryRep, Aind>(port).or_else(|_| {
+            matcher
+                .parse_representation::<LibraryRep>(port)
+                .map(|representation| representation.slot(next_index()))
+        })
+    }
+
+    /// The parser boundary of one admitted leaf. A retained raw-port fact is
+    /// read first, so an unchanged leaf never re-derives its ports and keeps a
+    /// declared order that differs from its syntax. Without a fact, a direct
+    /// tensor constructor ([`SlotMatcher::direct_constructor_ports`]) reads its
+    /// written ports; any other tensor constructor is an error. Composites use
+    /// their retained regional interface.
     fn parser_structure<Aind: AbsInd + ParseableAind>(
         &self,
         expression: AtomView<'_>,
@@ -367,11 +386,7 @@ impl TensorProofs {
                     tensorial.then(|| {
                         ports
                             .map(|port| {
-                                matcher.parse::<LibraryRep, Aind>(port).or_else(|_| {
-                                    matcher
-                                        .parse_representation::<LibraryRep>(port)
-                                        .map(|representation| representation.slot(next_index()))
-                                })
+                                Self::parse_constructor_port(port, matcher, &mut next_index)
                             })
                             .collect::<Result<Vec<_>, _>>()
                     })
@@ -380,35 +395,34 @@ impl TensorProofs {
         {
             return Ok(OrderedStructure::new(slots?));
         }
-        // Index-free shorthand: a constructor's written slots and bare
-        // representations are its ports, in order; an automatic port takes a
-        // fresh parser index exactly as a retained representation port does.
+        // A direct tensor constructor without a retained fact: its written
+        // slots and bare representations are its ports, in order; an automatic
+        // port takes a fresh parser index exactly as a retained representation
+        // port does. Fixed components such as `cind(0)` and scalar data are not
+        // ports. Self-loops and nested index syntax still need retained ports.
         if let AtomView::Fun(function) = expression
             && !compact_metric
-            && matcher.is_direct_constructor(function)
         {
-            // Only slots and bare representations are ports; fixed components
-            // such as `cind(0)` and scalar data are not.
-            let ports = function
-                .iter()
-                .filter(|argument| {
-                    matcher.parse::<LibraryRep, Aind>(*argument).is_ok()
-                        || matcher
-                            .parse_representation::<LibraryRep>(*argument)
-                            .is_ok()
-                })
-                .collect::<Vec<_>>();
-            let slots = ports
-                .into_iter()
-                .map(|port| {
-                    matcher.parse::<LibraryRep, Aind>(port).or_else(|_| {
-                        matcher
-                            .parse_representation::<LibraryRep>(port)
-                            .map(|representation| representation.slot(next_index()))
+            if let Some(ports) =
+                InterfaceInference::unretained_constructor_ports::<Aind>(function, matcher)
+            {
+                let slots = ports
+                    .iter()
+                    .map(|port| {
+                        Self::parse_constructor_port(port.as_view(), matcher, &mut next_index)
                     })
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            return Ok(OrderedStructure::new(slots));
+                    .collect::<Result<Vec<_>, _>>()?;
+                return Ok(OrderedStructure::new(slots));
+            }
+            if !InterfaceInference::has_special_port_signature(function.get_symbol())
+                && let Some(ports) = matcher.direct_constructor_ports::<Aind>(function)
+            {
+                let slots = ports
+                    .into_iter()
+                    .map(|port| Self::parse_constructor_port(port, matcher, &mut next_index))
+                    .collect::<Result<Vec<_>, _>>()?;
+                return Ok(OrderedStructure::new(slots));
+            }
         }
         if let AtomView::Fun(function) = expression
             && !composition::is_composite_head(function.get_symbol(), &SPENSO_TAG)
@@ -545,7 +559,7 @@ impl TensorProofs {
                 continue;
             }
             let ports = if let Some(ports) =
-                InterfaceInference::constructor_ports(function, &mut matcher, true)
+                InterfaceInference::constructor_ports::<AbstractIndex>(function, &mut matcher, true)
             {
                 ports
             } else {
@@ -777,10 +791,7 @@ impl<S, E: AtomCore + From<E::Output>> SymbolicTensor<S, E> {
     /// Admitted callers provide their index metadata. Only legacy raw network
     /// storage without that metadata needs to discover its written scope.
     pub(super) fn scalar_power_expression(expression: E, indexed: Option<bool>) -> E {
-        let indexed_product = matches!(
-            expression.as_atom_view(),
-            AtomView::Mul(_) | AtomView::Pow(_)
-        ) && indexed.unwrap_or_else(|| {
+        let written_slots = || {
             let mut indexed_product = false;
             expression.visitor(&mut |value| {
                 if let AtomView::Fun(fun) = value {
@@ -794,7 +805,24 @@ impl<S, E: AtomCore + From<E::Output>> SymbolicTensor<S, E> {
                 !indexed_product
             });
             indexed_product
-        });
+        };
+        let indexed_product = match expression.as_atom_view() {
+            AtomView::Mul(_) | AtomView::Pow(_) => indexed.unwrap_or_else(written_slots),
+            // A closed leaf such as the self-loop `L(i, i)` is one contraction
+            // as well. Closed shorthand heads are already atomic.
+            AtomView::Fun(function) => {
+                let symbol = function.get_symbol();
+                let mut slots = SlotMatcher::default();
+                composition::is_tensor_leaf_head(symbol)
+                    && !symbol.is_scalar()
+                    && indexed != Some(false)
+                    && function.iter().any(|argument| {
+                        matches!(slots.classify(argument),
+                            SlotMatch::Explicit(slot) if !slot.is_concrete_index())
+                    })
+            }
+            _ => false,
+        };
         // Keep implicit index sums atomic when scalar arithmetic takes powers.
         if indexed_product {
             expression

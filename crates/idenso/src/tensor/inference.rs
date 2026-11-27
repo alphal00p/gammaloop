@@ -3,7 +3,8 @@
 //! Cached interfaces retain raw logical ports. Only enclosing algebra contracts
 //! explicit pairs; unresolved port identities are canonicalized per occurrence.
 //! See the [admission example](SymbolicTensor).
-use super::composition::{ExplicitIndexOccurrences, TensorCompositionError};
+use super::composition::{ExplicitIndexOccurrences, FreshDummies, TensorCompositionError};
+use super::network::RenamedLeafPorts;
 use super::raw_leaves::RawLeafInterfaces;
 use super::regions::AdmittedInterfaces;
 use super::simplification::observation::DomainObservations;
@@ -2035,16 +2036,20 @@ impl SymbolicTensor<PartialStructure> {
         } else {
             (None, None)
         };
-        let dummies = OnceCell::new();
+        let reserved = OnceCell::new();
+        let mut dummies = FreshDummies::new(
+            || {
+                reserved
+                    .get_or_init(|| Self::reserved_dummies([self]))
+                    .fresh_index()
+            },
+            RenamedLeafPorts::new(&self.proofs),
+        );
         let separated = ExplicitIndexOccurrences::separate_expansion_scopes(
             marked.as_ref().unwrap_or(&self.expression).as_view(),
             marker.as_ref().map(Atom::as_view).or(var),
             via_poly,
-            &mut || {
-                dummies
-                    .get_or_init(|| Self::reserved_dummies([self]))
-                    .fresh_index()
-            },
+            &mut dummies,
         );
         // If no scope changed, retain the backend's exact original input and
         // selector, including its usual coefficient factorization.
@@ -2091,9 +2096,9 @@ impl SymbolicTensor<PartialStructure> {
                 // before cancellation, and emitted only its normalized original.
                 // This is the same successful scalar-algebra interface proof.
                 let result = self.with_produced_expression(expression)?;
-                if separated.is_some() {
-                    self.retain_renamed_leaf_ports(&result)?;
-                }
+                dummies
+                    .into_leaf_ports()
+                    .retain(result.expression.as_view(), &result.proofs)?;
                 return Ok(result);
             }
             source.expand()
@@ -2116,10 +2121,9 @@ impl SymbolicTensor<PartialStructure> {
             |proofs| self.borrowed_with_proofs(proofs),
         );
         let result = self.expansion_result(parts, expression)?;
-        // Scope separation gives the leaves of closed scopes fresh dummies.
-        if separated.is_some() {
-            self.retain_renamed_leaf_ports(&result)?;
-        }
+        dummies
+            .into_leaf_ports()
+            .retain(result.expression.as_view(), &result.proofs)?;
         Ok(result)
     }
 
@@ -2144,30 +2148,6 @@ impl SymbolicTensor<PartialStructure> {
             return Ok(result);
         }
         parts.with_algebra_result(expression)
-    }
-
-    /// Publish the raw ports of leaves whose dummies a producer renamed, from
-    /// the source's own leaf templates. The rename is not recorded as a slot
-    /// map, so every explicit slot of the source or the result may be one of
-    /// its dummies; a template binds such slots only to slots of the same
-    /// representation, one to one.
-    pub(super) fn retain_renamed_leaf_ports(&self, result: &Self) -> InferenceResult<()> {
-        // Fresh dummies have no explicit-occurrence entry, so collect every
-        // written slot, including those inside opaque data, which no
-        // template binds.
-        let mut slots = SlotMatcher::default();
-        let mut pool = HashSet::new();
-        for value in [self.expression.as_view(), result.expression.as_view()] {
-            value.visitor(&mut |node| {
-                let Ok(slot) = slots.parse::<LibraryRep, AbstractIndex>(node) else {
-                    return true;
-                };
-                pool.insert(slot.to_atom());
-                false
-            });
-        }
-        self.proofs
-            .retain_permuted_leaf_ports(&result.expression, &pool, &result.proofs)
     }
 
     /// Publish known scalar algebra which treats tensor leaves as opaque.
@@ -4126,11 +4106,8 @@ impl InterfaceInference {
                             // δ(cind(k), port) is a basis vector. Its first
                             // concrete marker selects the component; only the
                             // final argument is a tensor port.
-                            if symbol == ETS.delta
-                                && *position == 0
-                                && arguments.len() == 2
-                                && matches!(**argument, AtomView::Fun(marker)
-                                    if marker.get_symbol() == AIND_SYMBOLS.cind)
+                            if *position == 0
+                                && Self::is_delta_selector_prefix(symbol, arguments.len(), **argument)
                             {
                                 return false;
                             }
@@ -7811,10 +7788,13 @@ pub(crate) mod tests {
                 source.expression.as_view(),
                 Some(q.as_view()),
                 via_poly,
-                &mut || {
-                    allocations += 1;
-                    AbstractIndex::Normal(0)
-                },
+                &mut FreshDummies::new(
+                    || {
+                        allocations += 1;
+                        AbstractIndex::Normal(0)
+                    },
+                    RenamedLeafPorts::default(),
+                ),
             );
             assert!(separated.is_none());
             assert_eq!(allocations, 0);

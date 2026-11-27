@@ -1218,91 +1218,99 @@ impl<'settings> DiracSimplifier<'settings> {
         let mut terminal_pairs = true;
         let mut failure = None;
         let mut collected = collected.map(|output| output.borrow_mut());
-        let result = trace_kernel::evaluate_generic_with_metrics(
-            &argument_views,
-            trace_unit.as_view(),
-            true,
-            self.output,
-            collected.as_deref_mut(),
-            |left, right| {
-                let mut bound = Vec::new();
-                let mut original = [left, right];
-                for (side, argument) in [left, right].into_iter().enumerate() {
-                    if let Some(&(_, target, position)) = bound_arguments
-                        .iter()
-                        .find(|(key, _, position)| *key == argument && !bound.contains(position))
-                    {
-                        original[side] = target;
-                        bound.push(position);
-                    } else if bound_arguments.iter().any(|(key, _, _)| *key == argument) {
-                        // A diagonal vector value needs two original copies.
-                        // Refuse if the recurrence ever requests an absent one.
-                        return None;
-                    }
+        let build_metric = |left, right| {
+            let mut bound = Vec::new();
+            let mut original = [left, right];
+            for (side, argument) in [left, right].into_iter().enumerate() {
+                if let Some(&(_, target, position)) = bound_arguments
+                    .iter()
+                    .find(|(key, _, position)| *key == argument && !bound.contains(position))
+                {
+                    original[side] = target;
+                    bound.push(position);
+                } else if bound_arguments.iter().any(|(key, _, _)| *key == argument) {
+                    // A diagonal vector value needs two original copies.
+                    // Refuse if the recurrence ever requests an absent one.
+                    return None;
                 }
-                let metric = ETS.metric_literal(original[0], original[1]);
-                if bound.is_empty() {
-                    return Some(metric);
-                }
-                let body = Atom::mul_many(
-                    std::iter::once(&metric)
-                        .chain(bound.iter().map(|&position| &factors[position].expression)),
-                );
-                if let Some(result) = paired.get(&body) {
-                    terminal_pairs &= result
-                        .reduction_observations()
-                        .excludes_internal_connections()
-                        && result.reduction_observations().identity_candidates() == 0;
-                    return Some(result.expression.clone());
-                }
-                let contract = (|| {
-                    let metric_interface = selected.proofs.metric_interface(original)?;
-                    let mut occurrences =
-                        ExplicitIndexOccurrences::from_interface(&metric_interface);
-                    let mut interfaces = vec![metric_interface];
-                    for &position in &bound {
-                        occurrences.append(factors[position].explicit_index_occurrences()?);
-                    }
-                    occurrences.validate()?;
-                    interfaces.extend(
-                        bound
-                            .iter()
-                            .map(|&position| factors[position].structure.clone()),
-                    );
-                    let interface =
-                        InterfaceInference::merge_explicit_interface_sequence(&interfaces)?;
-                    let mut input = SymbolicTensor::from_validated_parts(
-                        body.clone(),
-                        interface,
-                        Arc::new(occurrences),
-                    );
-                    input.proofs.inherit_interfaces(
-                        bound.iter().map(|&position| &factors[position].proofs),
-                    );
-                    input.observe_replacement(coefficient);
-                    input.contract_parts(ContractSettings {
-                        collect_chains: false,
-                        collect_traces: false,
-                        ..Default::default()
-                    })
-                })();
-                let result = match contract {
-                    Ok(result) if result.status == ReductionStatus::Complete => result.root,
-                    Ok(_) => return None,
-                    Err(error) => {
-                        failure = Some(error);
-                        return None;
-                    }
-                };
+            }
+            let metric = ETS.metric_literal(original[0], original[1]);
+            if bound.is_empty() {
+                return Some(metric);
+            }
+            let body = Atom::mul_many(
+                std::iter::once(&metric)
+                    .chain(bound.iter().map(|&position| &factors[position].expression)),
+            );
+            if let Some(result) = paired.get(&body) {
                 terminal_pairs &= result
                     .reduction_observations()
                     .excludes_internal_connections()
                     && result.reduction_observations().identity_candidates() == 0;
-                let expression = result.expression.clone();
-                paired.insert(body, result);
-                Some(expression)
-            },
-        );
+                return Some(result.expression.clone());
+            }
+            let contract = (|| {
+                let metric_interface = selected.proofs.metric_interface(original)?;
+                let mut occurrences = ExplicitIndexOccurrences::from_interface(&metric_interface);
+                let mut interfaces = vec![metric_interface];
+                for &position in &bound {
+                    occurrences.append(factors[position].explicit_index_occurrences()?);
+                }
+                occurrences.validate()?;
+                interfaces.extend(
+                    bound
+                        .iter()
+                        .map(|&position| factors[position].structure.clone()),
+                );
+                let interface = InterfaceInference::merge_explicit_interface_sequence(&interfaces)?;
+                let mut input = SymbolicTensor::from_validated_parts(
+                    body.clone(),
+                    interface,
+                    Arc::new(occurrences),
+                );
+                input
+                    .proofs
+                    .inherit_interfaces(bound.iter().map(|&position| &factors[position].proofs));
+                input.observe_replacement(coefficient);
+                input.contract_parts(ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
+            })();
+            let result = match contract {
+                Ok(result) if result.status == ReductionStatus::Complete => result.root,
+                Ok(_) => return None,
+                Err(error) => {
+                    failure = Some(error);
+                    return None;
+                }
+            };
+            terminal_pairs &= result
+                .reduction_observations()
+                .excludes_internal_connections()
+                && result.reduction_observations().identity_candidates() == 0;
+            let expression = result.expression.clone();
+            paired.insert(body, result);
+            Some(expression)
+        };
+        let evaluate = |collected: Option<&mut CollectedOutput<'_>>| {
+            trace_kernel::evaluate_generic_with_metrics(
+                &argument_views,
+                trace_unit.as_view(),
+                true,
+                self.output,
+                collected,
+                build_metric,
+            )
+        };
+        // The comparison keys were reindexed above. Supply their existing
+        // interfaces while the collector uses them as pairing endpoints.
+        let result = if let Some(output) = collected.as_deref_mut() {
+            output.with_metric_operands(arguments.iter().flatten(), |output| evaluate(Some(output)))
+        } else {
+            evaluate(None)
+        };
         if let Some(error) = failure {
             return Err(error);
         }

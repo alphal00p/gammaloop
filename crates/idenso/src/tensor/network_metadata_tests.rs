@@ -1,7 +1,7 @@
 //! Network execution must preserve the admission owner's scalar metadata.
 
 use super::*;
-use crate::representations::ColorFundamental;
+use crate::representations::{Bispinor, ColorFundamental};
 use crate::tensor::inference::tests::{
     INFERENCE_CALLS, INFERENCE_VISITS, OCCURRENCE_FUNCTION_VISITS,
 };
@@ -535,22 +535,66 @@ fn opaque_public_parser_observes_missing_leaf_ports_and_enforces_its_settings() 
 }
 
 #[test]
-fn admitted_parser_rejects_missing_facts_without_inference() {
+fn admitted_parser_reads_direct_ports_and_rejects_other_missing_facts_without_inference() {
     test_support::test_initialize();
-    let expression = function!(tensor_symbol!("network_metadata_missing"), mink!(4, 99785));
+    let colour = ColorFundamental {}
+        .new_rep(3)
+        .slot::<AbstractIndex, _>(99786);
+    let bispinor = Bispinor {}.new_rep(4);
+    let head = tensor_symbol!("network_metadata_missing");
     let library = DummyLibrary::<SymbolicTensor>::new();
-    INFERENCE_CALLS.with(|count| count.set(0));
-    INFERENCE_VISITS.with(|count| count.set(0));
-    let error =
+    let parse = |expression: &Atom, admission: &TensorProofs| {
         SymbolicNet::<AbstractIndex>::try_from_admitted_view_with_context::<OrderedStructure, _>(
             expression.as_view(),
             &library,
             &ParseSettings::default(),
             LeafInterfaceCache::default(),
-            Some(&TensorProofs::default()),
+            Some(admission),
         )
-        .unwrap_err();
-    assert!(error.to_string().contains("missing its raw parser ports"));
+    };
+    // A retained fact is read first, also for a self-loop which syntax alone
+    // cannot admit.
+    let self_loop = function!(head, colour.to_atom(), colour.dual().to_atom());
+    let cached = SymbolicTensor::infer(self_loop.clone()).unwrap();
+    INFERENCE_CALLS.with(|count| count.set(0));
+    INFERENCE_VISITS.with(|count| count.set(0));
+    let network = parse(&self_loop, &cached.proofs).unwrap();
+    assert_eq!(network.store.tensors[0].structure.order(), 2);
+    assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
+    // An unrecorded direct constructor reads its written ports, including
+    // distinct representations which share an index label.
+    for (expression, order) in [
+        (function!(head, mink!(4, 99785)), 1),
+        (
+            function!(
+                head,
+                bispinor.slot::<AbstractIndex, _>(1).to_atom(),
+                bispinor.slot::<AbstractIndex, _>(2).to_atom(),
+                mink!(4, 1)
+            ),
+            3,
+        ),
+    ] {
+        let network = parse(&expression, &TensorProofs::default()).unwrap();
+        assert_eq!(network.store.tensors[0].structure.order(), order);
+    }
+    // Other unrecorded tensor constructors still need retained facts: a dual
+    // self-loop, also beside an automatic port, or nested index syntax.
+    for expression in [
+        self_loop,
+        function!(head, mink!(4), colour.to_atom(), colour.dual().to_atom()),
+        function!(
+            head,
+            function!(symbol!("network_metadata_nested"), mink!(4, 99785))
+        ),
+    ] {
+        let error = parse(&expression, &TensorProofs::default()).unwrap_err();
+        assert!(
+            error.to_string().contains("missing its raw parser ports"),
+            "{expression}: {error}"
+        );
+    }
     assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
     assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
 }

@@ -26,8 +26,9 @@ use symbolica::atom::{AddView, Atom, AtomCore, AtomOrView, AtomView};
 use symbolica::domains::rational::Rational;
 use symbolica::id::ConditionResult;
 
-use super::composition::{self, ExplicitIndexOccurrences};
+use super::composition::{self, ExplicitIndexOccurrences, ScopeRenaming};
 use super::inference::{InterfaceInference, LeafInference, TensorInferenceError};
+use super::network::RenamedLeafPorts;
 use super::planning::{self, EnclosingLeaf, PlanningLeafSources, PlanningNetwork, PlanningSource};
 use super::simplification::observation::DomainObservations;
 use super::{SymbolicTensor, TensorProofs};
@@ -2018,9 +2019,6 @@ impl SymbolicTensor<PartialStructure> {
             root.work.set_observations(facts);
         }
         root.work.get_mut().frontier = frontier;
-        // Collection gives the leaves of closed scopes and colliding pairs fresh
-        // dummies; publish their raw ports from the source templates.
-        self.retain_renamed_leaf_ports(&root)?;
         Ok(root)
     }
 
@@ -2031,7 +2029,7 @@ impl SymbolicTensor<PartialStructure> {
         &self,
         neighbours: &[&ExplicitIndexOccurrences],
         state: &ParseState<AbstractIndex>,
-    ) -> Result<HashMap<LibrarySlot<AbstractIndex>, AbstractIndex>> {
+    ) -> Result<ScopeRenaming> {
         let boundary = ExplicitIndexOccurrences::from_interface(&self.structure);
         Ok(self
             .explicit_index_occurrences()?
@@ -2053,24 +2051,36 @@ impl SymbolicTensor<PartialStructure> {
 
     /// Rename closed identities in the payload and its history together.
     /// The renamed pairs are internal, so the logical interface is unchanged.
-    fn with_fresh_dummies(
-        &self,
-        renaming: &HashMap<LibrarySlot<AbstractIndex>, AbstractIndex>,
-    ) -> Result<Self> {
-        let rename = |slot: &LibrarySlot<AbstractIndex>| {
-            renaming
-                .get(&slot.rep().base().slot::<AbstractIndex, _>(slot.aind()))
-                .copied()
-        };
-        let expression =
-            SlotMatcher::default().map_expression_indices(self.expression.as_view(), rename);
+    /// Keep this term's unchanged facts and carry raw ports through each
+    /// rebuilt leaf whose syntax cannot reproduce them.
+    fn with_fresh_dummies(&self, renaming: &ScopeRenaming) -> Result<Self> {
+        let mut leaves = RenamedLeafPorts::new(&self.proofs);
+        let expression = ExplicitIndexOccurrences::rename_index_arguments(
+            self.expression.as_view(),
+            renaming,
+            &mut SlotMatcher::default(),
+            &mut leaves,
+            |_, _, _| true,
+        )
+        .unwrap_or_else(|| self.expression.clone());
         let history = self.explicit_index_occurrences()?.mapped(|slot| {
+            let key = slot.rep().base().slot(slot.aind());
             Ok::<_, TensorInferenceError>(
-                rename(&slot).map_or(slot, |index| slot.rep().slot(index)),
+                renaming
+                    .get(&key)
+                    .map_or(slot, |&index| slot.rep().slot(index)),
             )
         })?;
-        let value =
-            Self::from_validated_parts(expression, self.structure.clone(), Arc::new(history));
+        let mut proofs = TensorProofs::default();
+        proofs.publish_renamed_interfaces(expression.as_view(), self);
+        leaves.retain(expression.as_view(), &proofs)?;
+        let value = Self::from_published_parts(
+            expression,
+            self.structure.clone(),
+            Arc::new(history),
+            proofs.admitted_interfaces,
+            proofs.leaf_interfaces,
+        );
         let _ = value.work.intrinsic.set(true);
         Ok(value)
     }
@@ -2258,6 +2268,7 @@ mod tests {
     use super::*;
     use crate::dirac::AGS;
     use crate::epsilon::EPSILON_SYMBOL;
+    use crate::representations::ColorFundamental;
     use crate::tensor::composition::TensorCompositionError;
     use crate::tensor::inference::tests::{INFERENCE_CALLS, INFERENCE_VISITS};
     use crate::tensor::simplification::ReductionStatus;
@@ -2270,6 +2281,7 @@ mod tests {
     use spenso::network::tags::SPENSO_TAG;
     use spenso::shadowing::SYM;
     use spenso::structure::representation::{Euclidean, Minkowski, RepName};
+    use spenso::structure::slot::DualSlotTo;
     use std::slice;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use symbolica::atom::{FunctionBuilder, Symbol};
@@ -4878,6 +4890,139 @@ mod tests {
             canonical_payload(&root.expression),
             canonical_payload(&((&scope.c + &scope.d) * colour_pair(nu) * &spectator))
         );
+    }
+
+    /// A collected term freshens a colliding closed pair, also inside a
+    /// self-loop leaf. Its syntax cannot reproduce its ports, so the exact
+    /// renaming carries its raw ports, and the result parses without inference.
+    #[test]
+    fn collected_self_loops_keep_raw_ports_through_fresh_dummies() {
+        let scope = ClosedScope::new();
+        let trace = SPENSO_TAG.tensor_symbol("collect_scope_loop");
+        let colour = ColorFundamental {}
+            .new_rep(3)
+            .slot::<AbstractIndex, _>(AbstractIndex::Normal(97411));
+        let euclidean = LibraryRep::from(Euclidean {}).new_rep(3);
+        let open = euclidean
+            .slot::<AbstractIndex, _>(AbstractIndex::Normal(97412))
+            .to_atom();
+        let check = |source: &Atom, root: &SymbolicTensor<PartialStructure>, renamed: bool| {
+            let mut loops = Vec::new();
+            root.expression.as_view().visitor(&mut |node| {
+                let found = node.get_symbol() == Some(trace);
+                if found {
+                    loops.push(node.to_owned());
+                }
+                !found
+            });
+            assert!(!loops.is_empty(), "{source}");
+            for leaf in &loops {
+                assert_eq!(
+                    !source.contains(leaf.as_view()),
+                    renamed,
+                    "{source} -> {leaf}"
+                );
+                assert!(root.proofs.leaf_interfaces.fact(leaf.as_view()).is_some());
+            }
+            INFERENCE_CALLS.with(|count| count.set(0));
+            INFERENCE_VISITS.with(|count| count.set(0));
+            root.parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+                .unwrap();
+            assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+            assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
+            assert_eq!(
+                canonical_payload(&root.expression),
+                canonical_payload(source)
+            );
+        };
+        let selector = |value: AtomView<'_>| value.get_symbol() == Some(trace);
+        for (self_loop, port) in [
+            (
+                tensor(trace, &[scope.mu.clone(), scope.mu.clone()]),
+                &scope.mu,
+            ),
+            (
+                tensor(trace, &[colour.to_atom(), colour.dual().to_atom()]),
+                &colour.to_atom(),
+            ),
+        ] {
+            // The spectator reuses the name which the selected sum closes.
+            let source =
+                (&scope.c * &self_loop + &scope.d * &self_loop) * ClosedScope::one(scope.s, port);
+            let typed = SymbolicTensor::infer(source.clone()).unwrap();
+            for mode in [CollectionMode::Monomials, CollectionMode::Factored] {
+                let root = typed
+                    .collect_with_map(mode, None, selector, keep_selected)
+                    .unwrap();
+                assert_eq!(root.structure, typed.structure);
+                check(&source, &root, mode == CollectionMode::Monomials);
+            }
+        }
+        // Public collection by representation leaves the spectator unselected.
+        let self_loop = tensor(trace, &[scope.mu.clone(), scope.mu.clone(), open]);
+        let source =
+            (&scope.c * &self_loop + &scope.d * &self_loop) * ClosedScope::one(scope.s, &scope.mu);
+        let typed = SymbolicTensor::infer(source.clone()).unwrap();
+        let root = typed
+            .collect(TensorCollectFilter::Reps([LibraryRep::from(Euclidean {})]))
+            .unwrap();
+        assert_eq!(root.structure, typed.structure);
+        check(&source, &root, true);
+    }
+
+    /// A row callback may replace the selected leaf by a newly admitted
+    /// self-loop. Its fact belongs to the collected term rather than to the
+    /// source, and it follows the fresh dummies of that term.
+    #[test]
+    fn replaced_self_loops_keep_raw_ports_through_fresh_dummies() {
+        let scope = ClosedScope::new();
+        let trace = SPENSO_TAG.tensor_symbol("collect_replaced_loop");
+        let replacement = SPENSO_TAG.tensor_symbol("collect_replacement_loop");
+        let self_loop = tensor(trace, &[scope.mu.clone(), scope.mu.clone()]);
+        let replaced = tensor(replacement, &[scope.mu.clone(), scope.mu.clone()]);
+        let admitted = SymbolicTensor::infer(replaced.clone()).unwrap();
+        // The spectator reuses the name which the selected sum closes.
+        let source =
+            (&scope.c * &self_loop + &scope.d * &self_loop) * ClosedScope::one(scope.s, &scope.mu);
+        let typed = SymbolicTensor::infer(source).unwrap();
+        assert!(
+            typed
+                .proofs
+                .leaf_interfaces
+                .fact(replaced.as_view())
+                .is_none()
+        );
+        let root = typed
+            .collect_with_map(
+                CollectionMode::Monomials,
+                None,
+                |value| value.get_symbol() == Some(trace),
+                |_, _, _| Ok(admitted.clone()),
+            )
+            .unwrap();
+        assert_eq!(root.structure, typed.structure);
+        let mut loops = Vec::new();
+        root.expression.as_view().visitor(&mut |node| {
+            let found = node.get_symbol() == Some(replacement);
+            if found {
+                loops.push(node.to_owned());
+            }
+            !found
+        });
+        assert!(!loops.is_empty(), "{}", root.expression);
+        for leaf in &loops {
+            assert_ne!(*leaf, replaced);
+            assert!(
+                root.proofs.leaf_interfaces.fact(leaf.as_view()).is_some(),
+                "{leaf}"
+            );
+        }
+        INFERENCE_CALLS.with(|count| count.set(0));
+        INFERENCE_VISITS.with(|count| count.set(0));
+        root.parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+        assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+        assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
     }
 
     #[test]

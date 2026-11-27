@@ -28,6 +28,7 @@ use super::raw_leaves::RawLeafInterfaces;
 use super::simplification::observation::DomainObservations;
 use super::{SymbolicTensor, TensorProofs};
 use crate::color::simplify::ColorAlgebraSimplifier;
+use crate::dirac::AGS;
 
 #[cfg(test)]
 thread_local! {
@@ -337,11 +338,20 @@ impl<F, G> RegionMapping<'_, '_, F, G> {
                         .expect("leaf interface cache is not poisoned")
                         .insert(target.as_view().to_owned(), (tensorial, raw));
                 }
-                if let MappingOrder::VectorComponents(head) = self.order
-                    && source.get_symbol() == crate::dirac::AGS.gamma
+                if matches!(
+                    self.order,
+                    MappingOrder::VectorComponents(_) | MappingOrder::AfterChildren
+                ) && source.get_symbol() == AGS.gamma
                     && let Some(arguments) = &mapped_arguments
+                    && let Some(interface) = self.interfaces.get(result.as_view())
                 {
-                    self.carry_routed_gamma(head, source, arguments, &mapped, result.as_view());
+                    self.carry_routed_gamma(
+                        source,
+                        arguments,
+                        &mapped,
+                        result.as_view(),
+                        &interface,
+                    );
                 }
                 let mut matcher = SlotMatcher::default();
                 let component = match mapped.as_slice() {
@@ -395,11 +405,11 @@ impl<F, G> RegionMapping<'_, '_, F, G> {
     /// supplied spinor operands before carrying its written incidences.
     fn carry_routed_gamma(
         &mut self,
-        vector_head: Symbol,
         source: FunView<'_>,
         arguments: &[AtomOrView<'_>],
         ports: &[Atom],
         result: AtomView<'_>,
+        interface: &PartialStructure,
     ) {
         fn visit_factors(value: AtomView<'_>, visit: &mut impl FnMut(FunView<'_>)) {
             match value {
@@ -413,24 +423,27 @@ impl<F, G> RegionMapping<'_, '_, F, G> {
             }
         }
 
+        let routes_vector = |head: Symbol| match self.order {
+            MappingOrder::VectorComponents(vector_head) => head == vector_head,
+            MappingOrder::AfterChildren => head.has_tag(&SPENSO_TAG.rank1),
+            _ => false,
+        };
         let mut matcher = SlotMatcher::default();
         let Some((position, old_port)) = source.iter().enumerate().find_map(|(index, argument)| {
             let AtomView::Fun(vector) = argument else {
                 return None;
             };
             let port = matcher.vector_argument(vector)?;
-            (vector.get_symbol() == vector_head
+            (routes_vector(vector.get_symbol())
+                && arguments[index].as_view() != argument
                 && matcher.parse_representation::<LibraryRep>(port).is_ok())
             .then_some((index, port))
         }) else {
             return;
         };
-        let Some(interface) = self.source.admitted_interface(source.as_view()) else {
-            return;
-        };
         let mut vectors = AHashSet::new();
         visit_factors(arguments[position].as_view(), &mut |vector| {
-            if vector.get_symbol() == vector_head
+            if routes_vector(vector.get_symbol())
                 && matcher.vector_argument(vector) == Some(old_port)
             {
                 vectors.insert(vector.as_view().to_owned());
@@ -463,8 +476,10 @@ impl<F, G> RegionMapping<'_, '_, F, G> {
 
 impl TensorProofs {
     /// Symmetry normalization may permute the constructor's known arguments and
-    /// factor out a numerical sign. Match its surviving leaf exactly and reorder
-    /// only the supplied direct ports; the caller verifies the constructor head.
+    /// factor out a numerical sign. Match the surviving leaf exactly. Each
+    /// port must correspond to a distinct supplied argument. Written ports
+    /// follow the permutation while a separate declared order is preserved.
+    /// The caller verifies the constructor head.
     pub(crate) fn raw_ports_after_argument_permutation<'a>(
         supplied: &[AtomView<'_>],
         target: AtomView<'a>,
@@ -483,7 +498,11 @@ impl TensorProofs {
             }
             _ => return None,
         };
-        if target.iter().eq(supplied.iter().copied()) {
+        let mut arguments = supplied.iter();
+        let written_order = ports
+            .iter()
+            .all(|port| arguments.any(|argument| *argument == port.as_view()));
+        if written_order && target.iter().eq(supplied.iter().copied()) {
             return Some((target, ports.to_vec()));
         }
         let mut remaining = supplied.to_vec();
@@ -494,14 +513,22 @@ impl TensorProofs {
         if !remaining.is_empty() {
             return None;
         }
-        let mut remaining = ports.to_vec();
+        let mut remaining = ports.iter().collect::<Vec<_>>();
         let mut reordered = Vec::with_capacity(ports.len());
         for argument in target.iter() {
             if let Some(position) = remaining.iter().position(|port| port.as_view() == argument) {
-                reordered.push(remaining.remove(position));
+                reordered.push(remaining.swap_remove(position));
             }
         }
-        remaining.is_empty().then_some((target, reordered))
+        if !remaining.is_empty() {
+            return None;
+        }
+        let ports = if written_order {
+            reordered.into_iter().cloned().collect()
+        } else {
+            ports.to_vec()
+        };
+        Some((target, ports))
     }
 }
 
@@ -831,7 +858,23 @@ impl TensorProofs {
         interface: impl Into<Option<PartialStructure>>,
         sources: impl IntoIterator<Item = &'a Self>,
     ) {
-        self.project_interfaces(Some((value, interface.into())), sources);
+        self.project_interfaces(Some((value, interface.into().map(Arc::new))), sources);
+    }
+
+    /// A dummy renaming changes the root bytes while keeping its boundary.
+    pub(super) fn publish_renamed_interfaces(
+        &mut self,
+        value: AtomView<'_>,
+        source: &SymbolicTensor<PartialStructure>,
+    ) {
+        let boundary = source
+            .proofs
+            .admitted_interfaces
+            .get()
+            .and_then(|owner| owner.observed(source.expression.as_view().get_data()))
+            .filter(|boundary| boundary.as_ref() == &source.structure)
+            .map_or_else(|| Arc::new(source.structure.clone()), Arc::clone);
+        self.project_interfaces(Some((value, Some(boundary))), [&source.proofs]);
     }
 
     /// An operation on typed axes may change the declaration while preserving
@@ -959,13 +1002,13 @@ impl TensorProofs {
         &self,
         arguments: [AtomView<'_>; 2],
     ) -> Result<PartialStructure, TensorInferenceError> {
-        self.metric_interface_in::<true>(arguments, None)
+        self.metric_interface_in::<true>(arguments, |argument| self.admitted_interface(argument))
     }
 
-    fn metric_interface_in<const RECORD: bool>(
+    pub(super) fn metric_interface_in<'a, const RECORD: bool>(
         &self,
-        arguments: [AtomView<'_>; 2],
-        observations: Option<&DomainObservations>,
+        arguments: [AtomView<'a>; 2],
+        operand_interface: impl Fn(AtomView<'a>) -> Option<PartialStructure>,
     ) -> Result<PartialStructure, TensorInferenceError> {
         let mut matcher = SlotMatcher::default();
         let mut logical = Vec::new();
@@ -979,27 +1022,26 @@ impl TensorProofs {
                 && matcher.concrete_component(argument).is_none()
                 && !matches!(argument, AtomView::Fun(operand) if operand.get_symbol().has_tag(&SPENSO_TAG.rank1))
             {
-                let interface =
-                    if let Some(interface) = self.interface_in::<RECORD>(argument, observations) {
-                        interface
-                    } else if let AtomView::Fun(operand) = argument
-                        && composition::is_tensor_leaf_head(operand.get_symbol())
-                        && operand.get_nargs() == 1
-                        && let Some(port) = operand.iter().next()
-                        && matcher.parse_representation::<LibraryRep>(port).is_ok()
-                    {
-                        // A gamma pairing may expose a generic one-port vector
-                        // formerly consumed inside the word. The metric supplies
-                        // its single compact endpoint and consumes this entire axis.
-                        if RECORD {
-                            self.retain_leaf_ports(argument, vec![port.to_owned()])?;
-                        }
-                        continue;
-                    } else {
-                        return Err(TensorInferenceError::invalid(format!(
-                            "metric operand has no retained spectator interface for {argument}"
-                        )));
-                    };
+                let interface = if let Some(interface) = operand_interface(argument) {
+                    interface
+                } else if let AtomView::Fun(operand) = argument
+                    && composition::is_tensor_leaf_head(operand.get_symbol())
+                    && operand.get_nargs() == 1
+                    && let Some(port) = operand.iter().next()
+                    && matcher.parse_representation::<LibraryRep>(port).is_ok()
+                {
+                    // A gamma pairing may expose a generic one-port vector
+                    // formerly consumed inside the word. The metric supplies
+                    // its single compact endpoint and consumes this entire axis.
+                    if RECORD {
+                        self.retain_leaf_ports(argument, vec![port.to_owned()])?;
+                    }
+                    continue;
+                } else {
+                    return Err(TensorInferenceError::invalid(format!(
+                        "metric operand has no retained spectator interface for {argument}"
+                    )));
+                };
                 let (_, spectators) =
                     InterfaceInference::consume_inner_product_axis(&interface, None)?;
                 logical.extend(spectators.logical_slots());
@@ -1016,7 +1058,7 @@ impl TensorProofs {
 
     fn project_interfaces<'a>(
         &mut self,
-        output: Option<(AtomView<'_>, Option<PartialStructure>)>,
+        output: Option<(AtomView<'_>, Option<Arc<PartialStructure>>)>,
         sources: impl IntoIterator<Item = &'a Self>,
     ) {
         let mut leaves = Vec::new();
@@ -1061,8 +1103,8 @@ impl TensorProofs {
                     ..Default::default()
                 },
             );
-            if let Some(interface) = interface {
-                result.insert(value, interface);
+            if !value.is_zero() {
+                result.interface = interface;
             }
             result
         } else if let Some(first) = predecessors.first() {
@@ -1084,8 +1126,8 @@ impl TensorProofs {
         self.leaf_interfaces = retained;
     }
 
-    /// Look up an admitted region, or compose arithmetic from admitted children.
-    /// Unknown function syntax is never inspected to rediscover its ports.
+    /// Look up an admitted region, read a direct constructor, or compose
+    /// arithmetic from the established boundaries of its children.
     pub(crate) fn admitted_interface(&self, value: AtomView<'_>) -> Option<PartialStructure> {
         self.interface_in::<true>(value, None)
     }
@@ -1167,11 +1209,8 @@ impl TensorProofs {
                     let mut factors = Vec::new();
                     if function.get_symbol() == SPENSO_TAG.chain {
                         factors.push(
-                            self.metric_interface_in::<RECORD>(
-                                [header, args.next()?],
-                                observations,
-                            )
-                            .ok()?,
+                            self.metric_interface_in::<RECORD>([header, args.next()?], child)
+                                .ok()?,
                         );
                     }
                     for factor in args {
@@ -1214,22 +1253,33 @@ impl TensorProofs {
                     let mut arguments = function.iter();
                     self.metric_interface_in::<RECORD>(
                         [arguments.next()?, arguments.next()?],
-                        observations,
+                        child,
                     )
                     .ok()
                 }
                 AtomView::Fun(function) => {
-                    if let Some(ports) = InterfaceInference::constructor_ports(
-                        function,
-                        &mut SlotMatcher::default(),
-                        false,
-                    ) {
+                    let mut slots = SlotMatcher::default();
+                    if let Some(ports) = InterfaceInference::unretained_constructor_ports::<
+                        AbstractIndex,
+                    >(function, &mut slots)
+                    {
                         if RECORD {
                             self.retain_leaf_ports(value, ports).ok()?;
                             self.retained_interface(value)
                         } else {
                             Self::boundary_from_leaf_ports(ports.iter().map(Atom::as_view)).ok()
                         }
+                    } else if InterfaceInference::has_special_port_signature(function.get_symbol())
+                    {
+                        None
+                    } else if let Some(ports) =
+                        slots.direct_constructor_ports::<AbstractIndex>(function)
+                    {
+                        // Without a retained fact, admitted parsing reads a
+                        // direct constructor's written ports, such as those of
+                        // a leaf renamed by expansion. Only its regional
+                        // boundary is recorded, so no raw-port fact changes.
+                        Self::boundary_from_leaf_ports(ports).ok()
                     } else {
                         ColorAlgebraSimplifier::produced_interface(value)
                     }
@@ -1432,19 +1482,136 @@ impl SymbolicTensor<PartialStructure> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::color::CS;
+    use crate::representations::{ColorAdjoint, ColorFundamental};
     use crate::tensor::SymbolicNetParse;
     use crate::tensor::inference::tests::{INFERENCE_CALLS, INFERENCE_VISITS, SCOPE_VALIDATIONS};
     use crate::tensor::regions;
     use crate::test_support;
     use spenso::network::parsing::ParseSettings;
     use spenso::shadowing::Concretize;
-    use spenso::structure::representation::LibrarySlot;
+    use spenso::structure::abstract_index::AIND_SYMBOLS;
+    use spenso::structure::representation::{LibrarySlot, Minkowski, RepName};
     use spenso::structure::{Canonicalized, NamedStructure, OrderedStructure, TensorStructure};
     use spenso::{g, mink, tensor_symbol, vector_symbol};
     use std::hash::BuildHasherDefault;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use symbolica::atom::FunctionBuilder;
     use symbolica::{function, symbol};
+
+    #[test]
+    fn argument_permutation_rejects_unrelated_ports_and_unwraps_a_sign() {
+        let head = tensor_symbol!("argument_permutation"; Antisymmetric);
+        let i = mink!(4, 1);
+        let j = mink!(4, 2);
+        let unrelated = mink!(4, 3);
+        let supplied = [j.as_view(), i.as_view()];
+        let target = function!(head, &j, &i);
+        assert!(matches!(target.as_view(), AtomView::Mul(_)));
+        let (leaf, ports) = TensorProofs::raw_ports_after_argument_permutation(
+            &supplied,
+            target.as_view(),
+            &[j.clone(), i.clone()],
+        )
+        .unwrap();
+        assert_eq!(leaf.get_symbol(), head);
+        assert_eq!(ports, [i.clone(), j.clone()]);
+        for supplied in [supplied, [i.as_view(), j.as_view()]] {
+            for invalid in [vec![unrelated.clone()], vec![i.clone(), i.clone()]] {
+                assert!(
+                    TensorProofs::raw_ports_after_argument_permutation(
+                        &supplied,
+                        target.as_view(),
+                        &invalid,
+                    )
+                    .is_none()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn unretained_builtin_port_readers_agree_on_constructor_prefixes() {
+        test_support::test_initialize();
+        let adjoint = LibraryRep::from(ColorAdjoint {}).new_rep(8);
+        let [i, j, k] = [1, 2, 3].map(|index| adjoint.slot::<AbstractIndex, _>(index).to_atom());
+        let group = ColorFundamental {}.new_rep(3).to_symbolic([]);
+        let rank1 = vector_symbol!("bad_rank1_prefix");
+        let mink = LibraryRep::from(Minkowski {}).symbol();
+        let invariant = function!(CS.d, &group, &i, &j, &k);
+        let selector = function!(AIND_SYMBOLS.cind, 0);
+        let selected_slot = mink!(4, 1);
+        let delta = function!(ETS.delta, &selector, &selected_slot);
+        let spatial = vector_symbol!("spatial_component");
+        let coefficient = symbol!("basis_selector_coefficient"; Scalar);
+        let affine_vector = function!(rank1, 0, &selector) * &delta * function!(coefficient, 0, 0)
+            + function!(spatial, 0, &selected_slot);
+        let malformed = [
+            function!(rank1, function!(AIND_SYMBOLS.cind, -1), mink!(4, 1)),
+            function!(rank1, function!(mink, -1, 2), mink!(4, 1)),
+            function!(AGS.sigma, mink!(4, 1), function!(AIND_SYMBOLS.cind, -1)),
+            function!(AGS.sigma, mink!(4, 1), function!(mink, -1, 2)),
+            function!(CS.d, 3, &i, &j, &k),
+            function!(CS.d, &group, &i, &j, function!(AIND_SYMBOLS.cind, -1)),
+            function!(CS.d, &group, &i, &i, &k),
+            function!(ETS.delta, function!(AIND_SYMBOLS.cind, -1), &selected_slot),
+        ];
+        let cases = [
+            (invariant, Some(vec![i, j, k])),
+            (
+                function!(rank1, 0, &selected_slot),
+                Some(vec![selected_slot.clone()]),
+            ),
+            (delta, Some(vec![selected_slot.clone()])),
+            (affine_vector, Some(vec![selected_slot])),
+        ]
+        .into_iter()
+        .chain(malformed.into_iter().map(|expression| (expression, None)))
+        .collect::<Vec<_>>();
+        for regional_first in [false, true] {
+            for (expression, expected) in &cases {
+                let value = expression.as_view();
+                let proofs = TensorProofs::default();
+                assert!(proofs.leaf_interfaces.fact(value).is_none());
+                let regional = || {
+                    let inspected = proofs.inspect_interface(value);
+                    assert_eq!(inspected, proofs.admitted_interface(value), "{value}");
+                    inspected.map(|interface| {
+                        interface
+                            .logical_slots()
+                            .iter()
+                            .map(|slot| composition::port_atom(*slot))
+                            .collect::<Vec<_>>()
+                    })
+                };
+                let parser = || {
+                    proofs
+                        .parser_structure::<AbstractIndex>(
+                            value,
+                            &mut SlotMatcher::default(),
+                            || panic!("no automatic port in {value}"),
+                        )
+                        .ok()
+                        .map(|structure| {
+                            structure
+                                .layout()
+                                .canonical_to_logical(&structure.canonical().external_structure())
+                                .iter()
+                                .map(|slot| slot.to_atom())
+                                .collect::<Vec<_>>()
+                        })
+                };
+                let (parsed, inspected) = if regional_first {
+                    let inspected = regional();
+                    (parser(), inspected)
+                } else {
+                    (parser(), regional())
+                };
+                assert_eq!(parsed, inspected, "{value}");
+                assert_eq!(&parsed, expected, "{value}");
+            }
+        }
+    }
 
     #[derive(Debug)]
     struct KeyStorage {
