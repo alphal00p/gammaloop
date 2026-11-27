@@ -1994,6 +1994,7 @@ dependencies = [
  "feynkit-model",
  "feynkit-tensor",
  "feynkit-ufo",
+ "feynkit-uv",
  "idenso",
  "linnest",
  "linnet",

@@ -1,5 +1,6 @@
 //! Physics presentation options, independent of generic graph rendering.
-use feynkit_graph::{HighlightOverlap, HullOptions, SceneOptions};
+use feynkit_graph::{HighlightOverlap, HullOptions, MINIATURE_STAMP_WEIGHT, SceneOptions};
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
@@ -92,6 +93,13 @@ pub struct PyDiagramStyle {
     /// >>> hep.DiagramStyle(hull_step=2.6).hull_step
     /// 2.6
     hull_step: Option<f64>,
+    /// Line weight multiplier of recoloured miniatures, or the default.
+    ///
+    /// Examples
+    /// --------
+    /// >>> hep.DiagramStyle(miniature=True, stamp_weight=1.6).stamp_weight
+    /// 1.6
+    stamp_weight: Option<f64>,
 }
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
@@ -126,8 +134,11 @@ impl PyDiagramStyle {
     ///     also be in this range. Thin hulls on long regions may require a larger radius.
     /// hull_step : float or None, optional
     ///     Finite nonnegative radius increment per inclusion level. Defaults to 2.6 points.
+    /// stamp_weight : float or None, optional
+    ///     Positive line weight multiplier of recoloured miniatures. Defaults to
+    ///     1.35, which keeps lines legible at about 28 points.
     #[new]
-    #[pyo3(signature=(*,show_particle=None,show_momentum=None,show_edge_index=None,show_node_index=None,momentum_arrows=None,split_initial_state=None,debug=None,miniature=false,hull_radius=None,hull_step=None))]
+    #[pyo3(signature=(*,show_particle=None,show_momentum=None,show_edge_index=None,show_node_index=None,momentum_arrows=None,split_initial_state=None,debug=None,miniature=false,hull_radius=None,hull_step=None,stamp_weight=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         show_particle: Option<bool>,
@@ -140,8 +151,14 @@ impl PyDiagramStyle {
         miniature: bool,
         hull_radius: Option<f64>,
         hull_step: Option<f64>,
-    ) -> Self {
-        Self {
+        stamp_weight: Option<f64>,
+    ) -> PyResult<Self> {
+        if stamp_weight.is_some_and(|weight| !(weight.is_finite() && weight > 0.0)) {
+            return Err(PyValueError::new_err(
+                "stamp_weight must be positive and finite",
+            ));
+        }
+        Ok(Self {
             show_particle,
             show_momentum,
             show_edge_index,
@@ -152,7 +169,8 @@ impl PyDiagramStyle {
             miniature,
             hull_radius,
             hull_step,
-        }
+            stamp_weight,
+        })
     }
     /// Summarize the explicitly selected physics options.
     ///
@@ -181,6 +199,7 @@ impl PyDiagramStyle {
         for (name, value) in [
             ("hull_radius", self.hull_radius),
             ("hull_step", self.hull_step),
+            ("stamp_weight", self.stamp_weight),
         ] {
             if let Some(value) = value {
                 fields.push(format!("{name}={value:?}"));
@@ -218,6 +237,11 @@ impl PyDiagramStyle {
                 radius: s.hull_radius.unwrap_or(defaults.hulls.radius),
                 step: s.hull_step.unwrap_or(defaults.hulls.step),
             },
+            stamp_weight: s.stamp_weight.unwrap_or(if s.miniature {
+                MINIATURE_STAMP_WEIGHT
+            } else {
+                defaults.stamp_weight
+            }),
             ..defaults
         }
     }
