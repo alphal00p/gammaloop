@@ -33,8 +33,8 @@ use crate::{ImpredRun, TypstDotEdge, TypstDotEndpoint, TypstDotNode, TypstGraph,
 use labels::{Anchor, Bounds, Placement, Stroke as CollisionStroke};
 pub use labels::{LabelError, LabelMetrics, LabelPage, LabelSource, Typeset};
 use lanes::{Carrier as LaneCarrier, Station as LaneStation};
-pub use output::Details;
-use output::INK;
+pub use output::{Details, CANVAS_INSET};
+use output::{Inspection, INK};
 
 /// Drawing unit in points: Linnest's default 1.5em at 9pt text.
 const UNIT: f64 = 13.5;
@@ -280,6 +280,21 @@ impl Scene {
 
     /// Lay out and draw the scene with its typeset pages; one SVG document.
     pub fn render(&self, typeset: &Typeset) -> Result<String, String> {
+        self.draw(typeset, Inspection::Linked)
+    }
+
+    /// [`Self::render`] without inspection links: no hover targets, hidden
+    /// carriers or label and momentum links. Region titles remain. Use it for
+    /// small static stamps embedded in another figure, where the links of every
+    /// copy would dominate the document.
+    ///
+    /// # Errors
+    /// Returns the same layout or geometry failures as [`Self::render`].
+    pub fn render_static(&self, typeset: &Typeset) -> Result<String, String> {
+        self.draw(typeset, Inspection::Static)
+    }
+
+    fn draw(&self, typeset: &Typeset, inspection: Inspection) -> Result<String, String> {
         self.validate_hull_radii()?;
         let mut spec = self.graph.clone();
         for (node, drawing) in spec.nodes.iter_mut().zip(&self.nodes) {
@@ -324,11 +339,11 @@ impl Scene {
             }
         }
         let Some(mut run) = run else {
-            return Drawing::new(self, typeset, &laid.unwrap())?.svg(typeset);
+            return Drawing::new(self, typeset, &laid.unwrap())?.svg(typeset, inspection);
         };
         let drawing = Drawing::new(self, typeset, &Laid::new(&run)?)?;
         if !self.label_feedback {
-            return drawing.svg(typeset);
+            return drawing.svg(typeset, inspection);
         }
         // Keep the least-overlapping drawing; later passes may not improve it.
         // A rejected pass still supplies the next pass's pinned labels.
@@ -356,7 +371,7 @@ impl Scene {
                 rejected = Some(drawing);
             }
         }
-        best.svg(typeset)
+        best.svg(typeset, inspection)
     }
 }
 
@@ -530,8 +545,14 @@ struct Drawing {
 
 impl Drawing {
     /// Serialize only the selected feedback pass, preserving painting order.
-    fn svg(&self, typeset: &Typeset) -> Result<String, String> {
-        output::svg(typeset, &self.layers, &self.targets, self.recolour_stamp)
+    fn svg(&self, typeset: &Typeset, inspection: Inspection) -> Result<String, String> {
+        output::svg(
+            typeset,
+            &self.layers,
+            &self.targets,
+            self.recolour_stamp,
+            inspection,
+        )
     }
 
     /// Overlapping labels first, then label pairs, then line hits.
@@ -2165,6 +2186,24 @@ mod tests {
     }
 
     #[test]
+    fn static_render_draws_the_same_ink_without_links() {
+        let scene = bubble(true);
+        let typeset = typeset(&scene);
+        let linked = scene.render(&typeset).unwrap();
+        let fixed = scene.render_static(&typeset).unwrap();
+        assert!(linked.contains("<a "));
+        assert!(!fixed.contains("<a ") && !fixed.contains("#linnet-"));
+        // Momentum arrows and their chevrons stay, grouped instead of linked.
+        assert_eq!(
+            fixed.matches("data-linnet-momentum").count(),
+            linked.matches("data-linnet-momentum").count()
+        );
+        let ink = |svg: &str| svg.matches("<path fill=\"none\" stroke=").count();
+        assert_eq!(ink(&fixed), ink(&linked));
+        assert!(roxmltree::Document::parse(&fixed).is_ok());
+    }
+
+    #[test]
     fn node_labels_share_one_click_target_with_their_node() {
         let mut scene = bubble(false);
         scene.nodes[0].label = Some(0);
@@ -2357,7 +2396,10 @@ mod tests {
             let mut run = ImpredRun::seeded(graph, &Value::Object(scene.layout.clone())).unwrap();
             let mut drawing = Drawing::new(scene, typeset, &Laid::new(&run).unwrap()).unwrap();
             let mut scores = vec![drawing.score()];
-            let (mut best, mut svg) = (drawing.score(), drawing.svg(typeset).unwrap());
+            let (mut best, mut svg) = (
+                drawing.score(),
+                drawing.svg(typeset, Inspection::Linked).unwrap(),
+            );
             for _ in 0..FEEDBACK_PASSES {
                 if drawing.overlaps.0 == 0 {
                     break;
@@ -2372,7 +2414,7 @@ mod tests {
                     })
                     .unwrap();
                 drawing = Drawing::new(scene, typeset, &Laid::new(&run).unwrap()).unwrap();
-                let rendered = drawing.svg(typeset).unwrap();
+                let rendered = drawing.svg(typeset, Inspection::Linked).unwrap();
                 scores.push(drawing.score());
                 if drawing.score() < best {
                     best = drawing.score();

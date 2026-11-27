@@ -2045,6 +2045,7 @@ dependencies = [
  "feynkit-graph",
  "feynkit-model",
  "itertools 0.14.0",
+ "linnest",
  "linnet",
  "pyo3",
  "schemars",

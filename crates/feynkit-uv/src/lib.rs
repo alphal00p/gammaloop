@@ -38,6 +38,9 @@
 
 mod counterterm;
 mod diagram;
+#[cfg(feature = "svg")]
+mod display;
+mod expansion;
 mod forests;
 mod graph;
 mod scheme;
@@ -45,6 +48,9 @@ mod spinney;
 mod wood;
 
 pub use counterterm::{Counterterm, CountertermError, CountertermScheme, UnknownCountertermScheme};
+#[cfg(feature = "svg")]
+pub use display::{FULL_FILL, ROOT_FILL, STAMP_SIZE, StampOptions, UvDisplayError, UvRegion};
+pub use expansion::{Expansion, ForestTerm, RenameError, TermFactor, WHOLE_GRAPH};
 pub use forests::{
     ForestEdge, ForestError, Forests, Operation, OperationNode, OperationSpinneyError,
     UnionReplayState,

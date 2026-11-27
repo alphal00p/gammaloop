@@ -15,6 +15,10 @@ use crate::{TypstDotEdge, TypstDotEndpoint, TypstDotNode};
 const PAD: f64 = 0.4;
 const MARGIN: f64 = 5.669291339;
 const GUTTER: f64 = 9.0;
+/// Blank border, in points, between an untitled drawing's viewBox and its
+/// painted bounds: the margin plus the canvas padding. Cropping it off lets
+/// embedded stamps sit tight against their neighbours.
+pub const CANVAS_INSET: f64 = MARGIN + PAD * UNIT;
 /// Arrowhead paint and the particle-flow triangle's outline width in points.
 pub(super) const INK: &str = "#3d2645";
 pub(super) const MARK_STROKE: f64 = 0.3;
@@ -339,13 +343,23 @@ fn write_hull_ring(data: &mut String, ring: &[HullVertex]) -> Result<(), &'stati
     Ok(())
 }
 
+/// Whether a drawing carries the links the interactive viewer decorates.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Inspection {
+    Linked,
+    Static,
+}
+
 /// The page: an optional centered title above the padded drawing canvas.
 pub(super) fn svg(
     typeset: &Typeset,
     layers: &[Element],
     targets: &[Target],
     recolour_stamp: bool,
+    inspection: Inspection,
 ) -> Result<String, String> {
+    let linked = inspection == Inspection::Linked;
+    let targets = if linked { targets } else { &[] };
     let mut bounds = Rect::new(
         f64::INFINITY,
         f64::INFINITY,
@@ -572,6 +586,7 @@ pub(super) fn svg(
     }
     for element in layers {
         match element {
+            Element::Carrier { .. } if !linked => {}
             Element::Carrier { path, href } => {
                 let _ = write!(
                     svg,
@@ -588,9 +603,14 @@ pub(super) fn svg(
                 );
             }
             Element::Momentum { path, href } => {
+                let (open, close) = if linked {
+                    (format!(r#"<a href="{href}" "#), "</a>")
+                } else {
+                    ("<g ".to_owned(), "</g>")
+                };
                 let _ = write!(
                     svg,
-                    r#"<a href="{href}" data-linnet-momentum="true"><path fill="none" {} d="{}"/>"#,
+                    r#"{open}data-linnet-momentum="true"><path fill="none" {} d="{}"/>"#,
                     stroke_attributes(&arrow_stroke()),
                     path_data(path)
                 );
@@ -601,7 +621,7 @@ pub(super) fn svg(
                         polyline(&points)
                     );
                 }
-                svg.push_str("</a>");
+                svg.push_str(close);
             }
             Element::BeginGhost(opacity) => {
                 let _ = write!(svg, r#"<g data-linnet-ghost="true" opacity="{opacity}">"#);
@@ -707,7 +727,7 @@ pub(super) fn svg(
                     r#"<g transform="translate({lx} {ly})">{body}</g>"#,
                     body = page.body,
                 );
-                if let Some(href) = href {
+                if let Some(href) = href.as_ref().filter(|_| linked) {
                     let _ = write!(
                         svg,
                         r#"<a href="{href}" transform="translate({lx} {ly})"><rect width="{w}" height="{h}" fill="transparent" stroke="none"/></a>"#,
