@@ -372,3 +372,180 @@ fn nonzero_analytic_denominator_factors_may_still_cancel() {
     assert!((actual - expected).check_zero().is_true());
     compare(&input, epsilon, 3);
 }
+
+// Depth-dependent declines of the exact plan (Q L4 entry 1621 at depth 7).
+//
+// The declined input of that entry is not readable here, so the factors
+// below are production-SHAPED stand-ins: the rational factor (prefactor x
+// reduction coefficient) of one master monomial of a four-loop R* remainder
+// is a sum over colour x tensor structures of rational functions of
+// ε = (4-d)/2 with IBP denominators, times a lower-loop factor that the
+// caller truncates at its own depth. Both the number of spectator monomials
+// and the numerator degree therefore grow with the depth, while the master
+// monomial and the requested order of the term only set the work bound.
+
+/// Structures of the stand-in for the Q L4 1621 factor: one whole exact part
+/// admits it at depths 4 to 6 (894 to 1,639 summands) and declines it from
+/// depth 7 on (2,086 summands, 1,120 spectator monomials), as reported for
+/// that entry (passes at depth 4, declines at depth 7).
+const STAND_IN_STRUCTURES: usize = 80;
+
+/// The master monomial of Q L4 entry 1621 (two-point row, depth 7).
+const Q_L4_1621_MONOMIAL: [(i64, i64); 5] = [(3, 1), (-2, 3), (1, -3), (-1, -2), (-4, -1)];
+
+/// `Π PGamma(m)^p` (Gamma tags).
+fn gamma_tags(tags: &[(i64, i64)]) -> Atom {
+    Atom::mul_many(
+        tags.iter()
+            .map(|(m, p)| super::super::p_gamma_symbol().call(*m).pow(Atom::num(*p)))
+            .collect::<Vec<_>>()
+            .iter(),
+    )
+}
+
+/// ε-linear factors `a + bε` of reductions to d = 4 - 2ε (d-3, d-1, 3d-10,
+/// 2d-7, up to content), shared by the terms of one reduction.
+const IBP_FACTORS: [(i64, i64); 4] = [(1, -2), (3, -2), (1, -3), (1, -4)];
+
+/// A small deterministic generator for the stand-ins.
+struct Lcg(u64);
+
+impl Lcg {
+    fn below(&mut self, n: u64) -> u64 {
+        self.0 = self
+            .0
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        (self.0 >> 33) % n
+    }
+}
+
+/// Products of π², ζ(3), ζ(5), ζ(7) and ζ(9) of total weight `weight`.
+fn zeta_monomials(weight: i64) -> Vec<Atom> {
+    fn walk(weight: i64, from: usize, out: &mut Vec<Atom>, current: Atom) {
+        if weight == 0 {
+            out.push(current);
+            return;
+        }
+        for (i, w) in [2i64, 3, 5, 7, 9].into_iter().enumerate().skip(from) {
+            if w <= weight {
+                let factor = if w == 2 {
+                    Atom::var(Symbol::PI).pow(Atom::num(2))
+                } else {
+                    symbolica::transcendental::zeta().call(w)
+                };
+                walk(weight - w, i, out, &current * factor);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(weight, 0, &mut out, Atom::one());
+    out
+}
+
+/// The stand-in rational factor at caller depth `depth` (comment above):
+/// `structures` colour x tensor x coupling structures (ca^a cf^b nf^c with
+/// a+b+c = 3, `transverse` or `longitudinal`, a power product of `gs2_i` and
+/// `gs_minus`), each with one IBP term `(c0 + c1 ε) ε^-k / Π (a + bε)^p`,
+/// times the lower-loop factor `Σ_(w=0)^(depth+1) ε^w Σ c_z z` over the zeta
+/// monomials z of weight w, expanded, with the phase and normalisation of a
+/// remainder.
+fn r_star_like_factor(depth: i64, structures: usize, seed: u64) -> Atom {
+    let epsilon = vk_symbol!("ε");
+    let e = Atom::var(epsilon);
+    let mut rng = Lcg(seed);
+    let symbol = |name: &str| Atom::var(vk_symbol!(name));
+    let (ca, cf, nf) = (symbol("ca"), symbol("cf"), symbol("nf"));
+    let tensors = [symbol("transverse"), symbol("longitudinal")];
+    let (g2, gm) = (symbol("gs2_i"), symbol("gs_minus"));
+    let couplings = [
+        Atom::one(),
+        g2.clone(),
+        g2.pow(Atom::num(2)),
+        gm.pow(Atom::num(2)),
+        &g2 * gm.pow(Atom::num(2)),
+    ];
+    let mut colours = Vec::new();
+    for a in 0..=3i64 {
+        for b in 0..=3 - a {
+            colours.push(ca.pow(Atom::num(a)) * cf.pow(Atom::num(b)) * nf.pow(Atom::num(3 - a - b)));
+        }
+    }
+    let mut base = Vec::new();
+    for s in 0..structures {
+        let structure = &colours[s % colours.len()]
+            * &tensors[(s / colours.len()) % tensors.len()]
+            * &couplings[(s / (colours.len() * tensors.len())) % couplings.len()];
+        let pole = rng.below(4) as i64;
+        let numerator =
+            Atom::num(1 + rng.below(7) as i64) + Atom::num(rng.below(9) as i64 - 4) * &e;
+        let mut denominator = Atom::one();
+        for (a, b) in IBP_FACTORS {
+            let power = rng.below(3) as i64;
+            denominator *= (Atom::num(a) + Atom::num(b) * &e).pow(Atom::num(power));
+        }
+        base.push(structure * numerator * e.pow(Atom::num(-pole)) / denominator);
+    }
+    let lower = Atom::add_many(
+        (0..=depth + 1)
+            .flat_map(|w| {
+                zeta_monomials(w)
+                    .into_iter()
+                    .map(|z| Atom::num(1 + rng.below(5) as i64) * z * e.pow(Atom::num(w)))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>()
+            .iter(),
+    );
+    let normalisation = vk_parse!("-𝑖*𝜋^(-8)/4096").unwrap();
+    (normalisation * Atom::add_many(base.iter()) * lower).expand()
+}
+
+/// The term of one master monomial as the production route computes it,
+/// with the counts of exact and generic rational series.
+fn master_term(
+    coefficient: &Atom,
+    monomial: &Atom,
+    order: i64,
+) -> (Option<Laurent>, super::SeriesCounts) {
+    let epsilon = vk_symbol!("ε");
+    let mut counts = super::SeriesCounts::default();
+    let term = super::monomial_term(
+        &Atom::one(),
+        monomial,
+        coefficient,
+        &super::master_symbols(),
+        epsilon,
+        order,
+        &mut counts,
+        &super::masters::p_master_expansion,
+    )
+    .unwrap();
+    (term, counts)
+}
+
+/// Order of an N-loop result at requester depth D: through ε^(D-N-1).
+fn four_loop_order(depth: i64) -> i64 {
+    depth - 5
+}
+
+/// Q L4 entry 1621 (two-point row): its master monomial with an R*-shaped
+/// factor takes the exact series at depth 4, and at depth 7, where the whole
+/// factor exceeds one exact part's support bound and origin/p_integral fell
+/// back to the generic series (`relative_valuation`, exact plan available:
+/// false).
+#[test]
+fn q_l4_1621_master_monomial_takes_the_exact_series_at_depth_4_and_7() {
+    crate::Vakint::initialize_vakint_symbols();
+    let monomial = gamma_tags(&Q_L4_1621_MONOMIAL);
+    for depth in [4, 7] {
+        let coefficient = r_star_like_factor(depth, STAND_IN_STRUCTURES, 1621);
+        let (term, counts) = master_term(&coefficient, &monomial, four_loop_order(depth));
+        assert!(term.is_some(), "depth {depth}: the term vanished");
+        assert_eq!(
+            (counts.exact, counts.generic),
+            (1, 0),
+            "depth {depth}: the rational factor took the generic series"
+        );
+    }
+}
