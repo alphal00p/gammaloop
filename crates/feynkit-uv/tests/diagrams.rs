@@ -10,8 +10,9 @@ use feynkit_graph::{
 };
 use feynkit_model::Model;
 use feynkit_uv::{
-    ApproximationType, ForeignReason, ForestError, Forests, OperationSpinneyError,
-    RenormalizationPrescriptionSettings, Spinney, UvGraph, UvGraphError, Wood,
+    ApproximationType, Counterterm, CountertermError, CountertermScheme, ForeignReason,
+    ForestError, Forests, OperationSpinneyError, RenormalizationPrescriptionSettings, Spinney,
+    SpinneyRelation, UvGraph, UvGraphError, Wood,
 };
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeIndex;
@@ -1023,4 +1024,440 @@ fn contraction_only_zeros() -> Result<(), Box<dyn Error>> {
         assert_eq!(kept, retained, "{label}");
     }
     Ok(())
+}
+
+#[test]
+fn spinney_relations_classify_nesting_disjointness_and_overlap() {
+    let sunrise = diagram(
+        Model::phi4(),
+        r#"digraph sunrise { edge [particle="phi"]; ext [style=invis];
+            ext -> a; a -> b; a -> b; a -> b; b -> ext; }"#,
+    );
+    let sorted = spinneys(&sunrise)
+        .into_iter()
+        .filter(|spinney| !spinney.is_empty())
+        .sorted_by_key(|spinney| (spinney.loop_count(), spinney.edges(&sunrise)))
+        .collect::<Vec<_>>();
+    let [bubble, other, _, full] = &sorted[..] else {
+        panic!("the sunrise has three bubbles and the full graph");
+    };
+    assert_eq!(
+        bubble.relation(full, &sunrise),
+        SpinneyRelation::ContainedIn
+    );
+    assert_eq!(full.relation(bubble, &sunrise), SpinneyRelation::Contains);
+    assert_eq!(bubble.relation(bubble, &sunrise), SpinneyRelation::Equal);
+    assert_eq!(
+        bubble.relation(other, &sunrise),
+        SpinneyRelation::Overlapping
+    );
+
+    let spectacles = diagram(
+        Model::phi3(),
+        r#"digraph { a -> a [particle="phi"]; a -> b [particle="phi"]; b -> b [particle="phi"]; }"#,
+    );
+    let tadpoles = spinneys(&spectacles)
+        .into_iter()
+        .filter(|spinney| spinney.n_components() == 1 && !spinney.is_empty())
+        .collect::<Vec<_>>();
+    let relation = tadpoles[0].relation(&tadpoles[1], &spectacles);
+    assert_eq!(relation, SpinneyRelation::Disjoint);
+    assert!(relation.is_compatible());
+}
+
+#[test]
+fn bubbles_sharing_a_vertex_touch_and_form_no_product_forest() {
+    // The s-channel chain of two quartic bubbles: they share vertex b but no
+    // line. Disjoint subgraphs of the forest formula share no vertex, so the
+    // bubbles only nest into the full graph and never multiply.
+    let chain = diagram(
+        Model::phi4(),
+        r#"digraph chain { edge [particle="phi"]; ext [style=invis]; ext -> a; ext -> a;
+            a -> b; a -> b; b -> c; b -> c; c -> ext; c -> ext; }"#,
+    );
+    let all = spinneys(&chain);
+    let bubbles = all
+        .iter()
+        .filter(|spinney| spinney.loop_count() == 1)
+        .collect::<Vec<_>>();
+    assert_eq!(bubbles.len(), 2);
+    let relation = bubbles[0].relation(bubbles[1], &chain);
+    assert_eq!(relation, SpinneyRelation::Touching);
+    assert!(!relation.is_compatible());
+    assert!(matches!(
+        Counterterm::new(
+            bubbles.iter().map(|spinney| (*spinney).clone()),
+            CountertermScheme::MsBar,
+            &chain,
+            chain.loop_momentum_basis(),
+        ),
+        Err(CountertermError::Incompatible {
+            relation: SpinneyRelation::Touching,
+            ..
+        })
+    ));
+    // ∅, the two bubbles, the full graph and each bubble nested in it.
+    let forests = forests(&chain);
+    assert_eq!(forests.n_forests(), 6);
+    assert!(
+        forests
+            .operations()
+            .all(|(_, forest)| forest.levels().iter().all(|level| level.len() == 1))
+    );
+}
+
+#[test]
+fn forest_transitions_chain_their_spinneys() {
+    let basketball = diagram(
+        Model::phi4(),
+        r#"digraph basketball { edge [particle="phi"]; a -> b; a -> b; a -> b; a -> b; }"#,
+    );
+    let forests = forests(&basketball);
+    let wood = forests.wood();
+    for (node, forest) in forests.operations() {
+        let transitions = forest.transitions(wood);
+        assert_eq!(transitions.len(), forest.levels().len());
+        let elements = forests.forest_spinneys(node);
+        assert_eq!(elements.len(), forest.depth());
+        let mut treated = vec![wood.root()];
+        for (level, transition) in transitions.iter().flatten().enumerate() {
+            // Each operation approximates a larger spinney after one already treated.
+            assert!(treated.contains(&transition.smaller), "level {level}");
+            assert_eq!(wood.spinney(transition.larger), elements[level]);
+            assert!(wood.spinney(transition.smaller) < wood.spinney(transition.larger));
+            treated.push(transition.larger);
+        }
+        // Forest elements are pairwise compatible.
+        for (a, b) in elements.iter().tuple_combinations() {
+            assert!(a.relation(*b, &basketball).is_compatible());
+        }
+    }
+    let sorted = wood.nodes_by_edges(&basketball);
+    assert_eq!(sorted[0], wood.root());
+    assert_eq!(sorted.len(), wood.n_spinneys());
+}
+
+#[test]
+fn counterterms_contract_compatible_spinneys_outermost_first() {
+    let sunrise = diagram(
+        Model::phi4(),
+        r#"digraph sunrise { edge [particle="phi"]; ext [style=invis];
+            ext -> a; a -> b; a -> b; a -> b; b -> ext; }"#,
+    );
+    let mut sorted = spinneys(&sunrise);
+    sorted.sort_by_key(|spinney| (spinney.loop_count(), spinney.edges(&sunrise)));
+    let (empty, bubble, other, full) = (
+        sorted[0].clone(),
+        sorted[1].clone(),
+        sorted[2].clone(),
+        sorted[4].clone(),
+    );
+    assert!(empty.is_empty());
+    let counterterm = Counterterm::new(
+        [bubble.clone(), empty.clone(), full.clone()],
+        CountertermScheme::OnShell,
+        &sunrise,
+        sunrise.loop_momentum_basis(),
+    )
+    .unwrap();
+    // A spinney selected twice is no forest.
+    assert!(matches!(
+        Counterterm::new(
+            [bubble.clone(), full.clone(), bubble.clone()],
+            CountertermScheme::OnShell,
+            &sunrise,
+            sunrise.loop_momentum_basis(),
+        ),
+        Err(CountertermError::Duplicate { spinney }) if spinney == "γ{0,1}"
+    ));
+    assert_eq!(counterterm.contracted(), [full.clone(), bubble.clone()]);
+    assert_eq!(counterterm.scheme(), CountertermScheme::OnShell);
+    assert_eq!(
+        counterterm.with_scheme(CountertermScheme::MsBar).scheme(),
+        CountertermScheme::MsBar
+    );
+    let basis = sunrise.loop_momentum_basis();
+    assert!(matches!(
+        Counterterm::new([empty], CountertermScheme::Unspecified, &sunrise, basis),
+        Err(CountertermError::Empty)
+    ));
+    let incompatible = Counterterm::new([bubble, other], CountertermScheme::MsBar, &sunrise, basis);
+    assert!(matches!(
+        incompatible,
+        Err(CountertermError::Incompatible {
+            relation: SpinneyRelation::Overlapping,
+            ..
+        })
+    ));
+    // Errors name spinneys by their edges.
+    assert_eq!(
+        incompatible.unwrap_err().to_string(),
+        "spinneys γ{0,1} and γ{0,2} are overlapping and cannot be contracted together"
+    );
+
+    let forests = forests(&sunrise);
+    assert!(matches!(
+        Counterterm::of_forest::<DiagramError>(&forests, forests.root(), CountertermScheme::MsBar),
+        Err(CountertermError::Empty)
+    ));
+    for (node, forest) in forests
+        .operations()
+        .filter(|(_, forest)| forest.depth() > 0)
+    {
+        let counterterm =
+            Counterterm::of_forest::<DiagramError>(&forests, node, CountertermScheme::MsBar)
+                .unwrap();
+        assert_eq!(counterterm.contracted().len(), forest.depth());
+    }
+    for name in ["MS-bar", "on-SHELL", "unspecified"] {
+        let scheme: CountertermScheme = name.parse().unwrap();
+        assert!(scheme.to_string().eq_ignore_ascii_case(name));
+    }
+}
+
+/// The forests of `diagram` whose elements are a product of vertex-disjoint
+/// spinneys, with those elements as sorted edge lists per level.
+fn product_levels(diagram: &FeynmanDiagram) -> Vec<Vec<Vec<Vec<usize>>>> {
+    let forests = forests(diagram);
+    forests
+        .operations()
+        .filter(|(node, _)| forests.is_disjoint_union(*node))
+        .map(|(node, _)| {
+            forests
+                .forest_levels(node)
+                .into_iter()
+                .map(|level| {
+                    level
+                        .into_iter()
+                        .map(|spinney| edges(diagram, spinney.filter()))
+                        .sorted()
+                        .collect()
+                })
+                .collect()
+        })
+        .sorted()
+        .collect()
+}
+
+#[test]
+fn product_forests_list_each_disjoint_factor() {
+    // Cubic spectacles: the tadpoles 0 and 2 multiply in one commuting level.
+    let spectacles = diagram(
+        Model::phi3(),
+        r#"digraph { a -> a [id=0, particle="phi"]; a -> b [id=1, particle="phi"]; b -> b [id=2, particle="phi"]; }"#,
+    );
+    assert_eq!(product_levels(&spectacles), [[[vec![0], vec![2]]]]);
+
+    // Two quartic bubbles joined by a line, and three in a chain.
+    let pair = diagram(
+        Model::phi4(),
+        r#"digraph pair { edge [particle="phi"]; ext [style=invis];
+            a -> b [id=0]; a -> b [id=1]; b -> c [id=2]; c -> d [id=3]; c -> d [id=4];
+            ext -> a; ext -> a; b -> ext; c -> ext; d -> ext; d -> ext; }"#,
+    );
+    assert_eq!(product_levels(&pair), [[[vec![0, 1], vec![3, 4]]]]);
+    let triple = diagram(
+        Model::phi4(),
+        r#"digraph triple { edge [particle="phi"]; ext [style=invis];
+            a -> b [id=0]; a -> b [id=1]; b -> c [id=2]; c -> d [id=3]; c -> d [id=4];
+            d -> e [id=5]; e -> f [id=6]; e -> f [id=7];
+            ext -> a; ext -> a; b -> ext; c -> ext; d -> ext; e -> ext; f -> ext; f -> ext; }"#,
+    );
+    let products = product_levels(&triple);
+    assert_eq!(products.len(), 4);
+    assert!(products.contains(&vec![vec![vec![0, 1], vec![3, 4], vec![6, 7]]]));
+
+    for diagram in [&spectacles, &pair, &triple] {
+        let forests = forests(diagram);
+        let basis = diagram.loop_momentum_basis();
+        for (node, forest) in forests.operations().filter(|(_, f)| f.depth() > 0) {
+            let elements = forests.forest_spinneys(node);
+            // One connected element per operation, pairwise compatible.
+            assert_eq!(elements.len(), forest.depth());
+            assert!(elements.iter().all(|spinney| spinney.n_components() == 1));
+            for (a, b) in elements.iter().tuple_combinations() {
+                assert!(a.relation(*b, diagram).is_compatible());
+            }
+            // The forest's counterterm contracts what a hand-built one contracts.
+            let of_forest =
+                Counterterm::of_forest::<DiagramError>(&forests, node, CountertermScheme::MsBar)
+                    .unwrap();
+            let by_hand = Counterterm::new(
+                elements.into_iter().cloned(),
+                CountertermScheme::MsBar,
+                diagram,
+                basis,
+            )
+            .unwrap();
+            assert_eq!(of_forest.contracted(), by_hand.contracted());
+        }
+    }
+}
+
+#[test]
+fn counterterms_reject_spinneys_of_another_graph() {
+    let basketball = diagram(
+        Model::phi4(),
+        r#"digraph basketball { edge [particle="phi"]; a -> b; a -> b; a -> b; a -> b; }"#,
+    );
+    let bubble = diagram(
+        Model::phi4(),
+        r#"digraph bubble { edge [particle="phi"]; ext [style=invis];
+            ext -> a; ext -> a; a -> b; a -> b; b -> ext; b -> ext; }"#,
+    );
+    let full = spinneys(&basketball)
+        .into_iter()
+        .max_by_key(Spinney::loop_count)
+        .unwrap();
+    // Even a single spinney is checked against the destination graph. Both
+    // diagrams have eight half-edges; the basketball's lines are not the
+    // bubble's.
+    let foreign = Counterterm::new(
+        [full],
+        CountertermScheme::MsBar,
+        &bubble,
+        bubble.loop_momentum_basis(),
+    );
+    assert!(
+        matches!(foreign, Err(CountertermError::Foreign(_))),
+        "{:?}",
+        foreign.map(|counterterm| counterterm.contracted().len())
+    );
+    // A spinney of a smaller diagram has another width.
+    let tadpole = diagram(
+        Model::phi3(),
+        r#"digraph { a -> a [particle="phi"]; a -> b [particle="phi"]; b -> b [particle="phi"]; }"#,
+    );
+    let small = spinneys(&tadpole)
+        .into_iter()
+        .find(|spinney| !spinney.is_empty())
+        .unwrap();
+    assert!(matches!(
+        Counterterm::new(
+            [small],
+            CountertermScheme::MsBar,
+            &bubble,
+            bubble.loop_momentum_basis()
+        ),
+        Err(CountertermError::Foreign(UvGraphError::ForeignSpinney {
+            reason: ForeignReason::Width,
+            ..
+        }))
+    ));
+}
+
+#[test]
+fn disconnected_spinneys_contract_as_their_components() {
+    let spectacles = diagram(
+        Model::phi3(),
+        r#"digraph { a -> a [id=0, particle="phi"]; a -> b [id=1, particle="phi"]; b -> b [id=2, particle="phi"]; }"#,
+    );
+    let basis = spectacles.loop_momentum_basis();
+    let classified = spinneys(&spectacles);
+    let union = classified
+        .iter()
+        .find(|spinney| spinney.n_components() == 2)
+        .expect("the two tadpoles form a disconnected union")
+        .clone();
+    let left = classified
+        .iter()
+        .find(|spinney| edges(&spectacles, spinney.filter()) == [0])
+        .unwrap()
+        .clone();
+    // The union contracts as both tadpoles, as its product forest does.
+    let by_union = Counterterm::new(
+        [union.clone()],
+        CountertermScheme::MsBar,
+        &spectacles,
+        basis,
+    )
+    .unwrap();
+    let forests = forests(&spectacles);
+    let (product, _) = forests
+        .operations()
+        .find(|(node, _)| forests.is_disjoint_union(*node))
+        .unwrap();
+    let of_forest =
+        Counterterm::of_forest::<DiagramError>(&forests, product, CountertermScheme::MsBar)
+            .unwrap();
+    let labels = |counterterm: &Counterterm<LoopMomentumBasis>| {
+        counterterm
+            .contracted()
+            .iter()
+            .map(|spinney| edges(&spectacles, spinney.filter()))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(labels(&by_union), labels(&of_forest));
+    assert_eq!(by_union.contracted().len(), 2);
+    // A tadpole together with the union holding it selects the tadpole twice.
+    assert!(matches!(
+        Counterterm::new([left, union], CountertermScheme::MsBar, &spectacles, basis),
+        Err(CountertermError::Duplicate { .. })
+    ));
+}
+
+#[test]
+fn disjoint_products_close_disconnected_and_repeated_inputs() {
+    // Three quartic tadpoles in a chain a–b–c; loops 0, 1 and 2 share no vertex.
+    let chain = diagram(
+        Model::phi4(),
+        r#"digraph { edge [particle="phi"]; ext [style=invis];
+            a -> a [id=0]; b -> b [id=1]; c -> c [id=2]; a -> b [id=3]; b -> c [id=4];
+            ext -> a; c -> ext; }"#,
+    );
+    let basis = chain.loop_momentum_basis();
+    let classified = spinneys(&chain);
+    let classified_forests = Wood::from_spinneys(classified.clone(), &chain, basis)
+        .unwrap()
+        .unfold()
+        .n_forests();
+    assert_eq!(classified_forests, 8);
+    let find = |wanted: &[usize]| {
+        classified
+            .iter()
+            .find(|spinney| edges(&chain, spinney.filter()) == wanted)
+            .unwrap()
+            .clone()
+    };
+    // The single tadpoles close to the classified wood.
+    let mut singles = vec![find(&[0]), find(&[1]), find(&[2])];
+    let products = Wood::disjoint_products(&singles, &chain, basis).unwrap();
+    assert_eq!(products.len(), 4);
+    singles.extend(products);
+    let closed = Wood::from_spinneys(singles, &chain, basis)
+        .unwrap()
+        .unfold();
+    assert_eq!(closed.n_forests(), classified_forests);
+    // A disconnected input X = {0, 1} multiplies with Y = {2}: ∅, X, Y and X·Y.
+    let mut given = vec![find(&[0, 1]), find(&[2])];
+    let products = Wood::disjoint_products(&given, &chain, basis).unwrap();
+    assert_eq!(
+        products
+            .iter()
+            .map(|spinney| edges(&chain, spinney.filter()))
+            .collect::<Vec<_>>(),
+        [vec![0, 1, 2]]
+    );
+    given.extend(products);
+    let forests = Wood::from_spinneys(given, &chain, basis).unwrap().unfold();
+    assert_eq!(forests.n_forests(), 4);
+    // The product forest multiplies the two given factors with a positive sign.
+    let (product, operation) = forests
+        .operations()
+        .find(|(node, _)| forests.is_disjoint_union(*node))
+        .expect("X and Y multiply");
+    assert_eq!(operation.sign(), 1);
+    let elements: Vec<_> = forests
+        .forest_spinneys(product)
+        .into_iter()
+        .map(|spinney| edges(&chain, spinney.filter()))
+        .sorted()
+        .collect();
+    assert_eq!(elements, [vec![0, 1], vec![2]]);
+    // Repeated inputs build each union once.
+    let repeated: Vec<_> = std::iter::repeat_n(find(&[0]), 50)
+        .chain(std::iter::repeat_n(find(&[2]), 50))
+        .collect();
+    let products = Wood::disjoint_products(&repeated, &chain, basis).unwrap();
+    assert_eq!(products.len(), 1);
 }

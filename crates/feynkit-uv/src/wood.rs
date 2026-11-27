@@ -6,10 +6,12 @@ use std::fmt::{self, Display, Formatter};
 use linnet::half_edge::algorithms::trace_unfold::{HiddenData, Independence, TraceUnfold};
 use linnet::half_edge::involution::{EdgeIndex, Flow, HedgePair};
 use linnet::half_edge::nodestore::{NodeStorageOps, NodeStorageVec};
-use linnet::half_edge::subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps};
+use linnet::half_edge::subgraph::{
+    Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps,
+};
 use linnet::half_edge::{HedgeGraph, NoData, NodeIndex};
 
-use crate::{Forests, Spinney, UvGraph, UvGraphError};
+use crate::{ApproximationType, Forests, Spinney, UvGraph, UvGraphError};
 
 /// Spinneys ordered by inclusion, rooted at the empty spinney.
 ///
@@ -227,6 +229,9 @@ impl<B> Wood<B> {
         // complement remains available from the edge's source/sink nodes, while using it as
         // the trace order would incorrectly make a collective operation commute with its
         // nested prefix and could coalesce distinct forests into a false factorized join.
+        // A user-given disconnected spinney is itself a product: a target also
+        // factorizes when the maximal supplied factors, each a union of the
+        // target's components with no convergent component, partition it.
         for u in unions {
             let collective_scope = poset[u].subgraph().filter.clone();
             let comps: BTreeSet<_> = hedge_graph
@@ -246,9 +251,65 @@ impl<B> Wood<B> {
             let independently_classified = comps
                 .iter()
                 .all(|component| classified_filters.contains(component));
+            let partition = if independently_classified && supplied == comps {
+                None
+            } else {
+                let mut candidates = Vec::new();
+                // Each incoming edge's scope is the factor its source leaves.
+                for c in &incoming {
+                    let factor = &poset[poset[c]];
+                    let own: BTreeSet<_> = hedge_graph
+                        .connected_components(factor)
+                        .into_iter()
+                        .collect();
+                    if factor.is_empty() || factor == &collective_scope || !own.is_subset(&comps) {
+                        continue;
+                    }
+                    let mut divergent = true;
+                    for component in &own {
+                        let degree = graph.degree_of_divergence(component).map_err(|source| {
+                            UvGraphError::DegreeOfDivergence {
+                                subgraph: component.string_label(),
+                                source,
+                            }
+                        })?;
+                        divergent &= degree >= 0;
+                    }
+                    if divergent {
+                        candidates.push((factor.clone(), own));
+                    }
+                }
+                let maximal: Vec<_> = candidates
+                    .iter()
+                    .filter(|(factor, _)| {
+                        !candidates
+                            .iter()
+                            .any(|(other, _)| other != factor && other.includes(factor))
+                    })
+                    .collect();
+                let covered: Vec<_> = maximal.iter().flat_map(|(_, own)| own).collect();
+                let distinct: BTreeSet<_> = covered.iter().collect();
+                (maximal.len() > 1
+                    && covered.len() == distinct.len()
+                    && distinct.len() == comps.len())
+                .then(|| {
+                    maximal
+                        .iter()
+                        .map(|(factor, _)| factor.clone())
+                        .collect::<BTreeSet<_>>()
+                })
+            };
             if independently_classified && supplied == comps {
                 for c in incoming {
                     if comps.contains(&poset[poset[&c]]) {
+                        continue;
+                    }
+                    to_remove.add(c);
+                    to_remove.add(poset.inv(c));
+                }
+            } else if let Some(factors) = partition {
+                for c in incoming {
+                    if factors.contains(&poset[poset[&c]]) {
                         continue;
                     }
                     to_remove.add(c);
@@ -270,6 +331,101 @@ impl<B> Wood<B> {
             .expect("the empty spinney was inserted");
 
         Ok(Wood { graph: poset, root })
+    }
+
+    /// The unions of two or more pairwise vertex-disjoint spinneys of
+    /// `spinneys` that are missing from it, built as classification builds
+    /// them: the neutral `MUV` scheme and the union's own degree. A spinney may
+    /// itself be disconnected; equal selections count once and each missing
+    /// union is built once.
+    ///
+    /// [`Self::from_spinneys`] builds the given spinneys only, as hosts that
+    /// deliberately prune unions need. Add these first to give user-given
+    /// vertex-disjoint spinneys the product forests that a classified wood has.
+    ///
+    /// # Errors
+    ///
+    /// Fails when a union cannot be power counted or routed.
+    ///
+    /// ```
+    /// use feynkit_graph::FeynmanDiagram;
+    /// use feynkit_model::Model;
+    /// use feynkit_uv::{RenormalizationPrescriptionSettings, UvGraph, Wood};
+    ///
+    /// let spectacles = FeynmanDiagram::from_dot(
+    ///     Model::phi3(),
+    ///     "digraph spectacles { edge [particle=phi]; a -> a; a -> b; b -> b; }",
+    /// )?;
+    /// let basis = spectacles.loop_momentum_basis();
+    /// let mut tadpoles = spectacles.classify_spinneys(
+    ///     &spectacles.hedge_graph().full_filter(),
+    ///     spectacles.model(),
+    ///     &RenormalizationPrescriptionSettings::default(),
+    ///     basis,
+    /// )?;
+    /// tadpoles.retain(|spinney| spinney.n_components() == 1 && !spinney.is_empty());
+    /// let literal = Wood::from_spinneys(tadpoles.clone(), &spectacles, basis)?;
+    /// assert_eq!(literal.unfold().n_forests(), 3);
+    /// let products = Wood::disjoint_products(&tadpoles, &spectacles, basis)?;
+    /// tadpoles.extend(products);
+    /// let closed = Wood::from_spinneys(tadpoles, &spectacles, basis)?;
+    /// assert_eq!(closed.unfold().n_forests(), 4);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn disjoint_products<G>(
+        spinneys: &[Spinney<B>],
+        graph: &G,
+        parent_basis: &B,
+    ) -> Result<Vec<Spinney<B>>, UvGraphError<G::Error>>
+    where
+        G: UvGraph<Basis = B> + ?Sized,
+    {
+        let hedge_graph = graph.hedge_graph();
+        let present: BTreeSet<&SuBitGraph> = spinneys.iter().map(Spinney::filter).collect();
+        // Equal selections would only repeat the same families.
+        let mut seen = BTreeSet::new();
+        let distinct: Vec<&Spinney<B>> = spinneys
+            .iter()
+            .filter(|spinney| !spinney.is_empty() && seen.insert(spinney.filter()))
+            .collect();
+        let mut built: BTreeSet<SuBitGraph> = BTreeSet::new();
+        // Grow families by later spinneys that share no vertex with the family.
+        let mut families: Vec<(InternalSubGraph, usize, usize)> = distinct
+            .iter()
+            .enumerate()
+            .map(|(index, spinney)| (spinney.subgraph().clone(), index, 1))
+            .collect();
+        let mut products = Vec::new();
+        while let Some((union, last, size)) = families.pop() {
+            if size > 1 && !present.contains(&union.filter) && built.insert(union.filter.clone()) {
+                let dod = graph
+                    .degree_of_divergence(&union.filter)
+                    .map_err(|source| UvGraphError::DegreeOfDivergence {
+                        subgraph: union.string_label(),
+                        source,
+                    })?;
+                if let Some(product) = Spinney::with_scheme(
+                    union.clone(),
+                    graph,
+                    parent_basis,
+                    ApproximationType::MUV,
+                    dod,
+                )? {
+                    products.push(product);
+                }
+            }
+            let crown = hedge_graph.full_crown(&union);
+            for (index, candidate) in distinct.iter().enumerate().skip(last + 1) {
+                if !crown.intersects(candidate.filter())
+                    && !union.filter.intersects(candidate.filter())
+                {
+                    let mut grown = union.clone();
+                    grown.union_with(candidate.subgraph());
+                    families.push((grown, index, size + 1));
+                }
+            }
+        }
+        Ok(products)
     }
 
     /// The underlying poset graph.
@@ -328,6 +484,108 @@ impl<B> Wood<B> {
                 }),
                 _ => None,
             })
+    }
+
+    /// The transition of wood edge `edge`, or `None` when it is not a paired
+    /// edge of this wood.
+    ///
+    /// ```
+    /// use feynkit_graph::FeynmanDiagram;
+    /// use feynkit_model::Model;
+    /// use feynkit_uv::{RenormalizationPrescriptionSettings, UvGraph, Wood};
+    ///
+    /// let diagram = FeynmanDiagram::from_dot(
+    ///     Model::phi4(),
+    ///     "digraph basketball { edge [particle=phi]; a -> b; a -> b; a -> b; a -> b; }",
+    /// )?;
+    /// let spinneys = diagram.classify_spinneys(
+    ///     &diagram.hedge_graph().full_filter(),
+    ///     diagram.model(),
+    ///     &RenormalizationPrescriptionSettings::default(),
+    ///     diagram.loop_momentum_basis(),
+    /// )?;
+    /// let wood = Wood::from_spinneys(spinneys, &diagram, diagram.loop_momentum_basis())?;
+    /// for inclusion in wood.inclusions() {
+    ///     assert_eq!(wood.inclusion(inclusion.edge), Some(inclusion));
+    /// }
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn inclusion(&self, edge: EdgeIndex) -> Option<WoodInclusion<'_>> {
+        if edge.0 >= self.graph.n_edges() {
+            return None;
+        }
+        let (scope, pair) = &self.graph[&edge];
+        match *pair {
+            HedgePair::Paired { source, sink } => Some(WoodInclusion {
+                edge,
+                smaller: self.graph.node_id(source),
+                larger: self.graph.node_id(sink),
+                scope,
+            }),
+            _ => None,
+        }
+    }
+
+    /// The forest elements that `transition` adds: its larger spinney, or, for
+    /// the step of a factorized product, the factors its scope selects.
+    ///
+    /// A disconnected union `A∪B` of classified spinneys is reached as `∅ → A`
+    /// then `A → A∪B`, and the second step acts on `B` only: its Zimmermann
+    /// element is `B`, not the union. A factor given as a disconnected spinney
+    /// itself, such as a user-given `B = B₁∪B₂`, stays one element.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `transition` is not a transition of this wood.
+    ///
+    /// ```
+    /// use feynkit_graph::FeynmanDiagram;
+    /// use feynkit_model::Model;
+    /// use feynkit_uv::{RenormalizationPrescriptionSettings, UvGraph, Wood};
+    ///
+    /// let spectacles = FeynmanDiagram::from_dot(
+    ///     Model::phi3(),
+    ///     "digraph spectacles { edge [particle=phi]; a -> a; a -> b; b -> b; }",
+    /// )?;
+    /// let spinneys = spectacles.classify_spinneys(
+    ///     &spectacles.hedge_graph().full_filter(),
+    ///     spectacles.model(),
+    ///     &RenormalizationPrescriptionSettings::default(),
+    ///     spectacles.loop_momentum_basis(),
+    /// )?;
+    /// let wood = Wood::from_spinneys(spinneys, &spectacles, spectacles.loop_momentum_basis())?;
+    /// for transition in wood.inclusions() {
+    ///     // Every element is one connected tadpole, never their union.
+    ///     for element in wood.transition_elements(&transition) {
+    ///         assert_eq!(element.n_components(), 1);
+    ///         assert_eq!(element.filter(), transition.scope);
+    ///     }
+    /// }
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn transition_elements(&self, transition: &WoodInclusion<'_>) -> Vec<&Spinney<B>> {
+        let larger = self.spinney(transition.larger);
+        if transition.scope == larger.filter() {
+            return vec![larger];
+        }
+        // A given disconnected factor is one element, as given.
+        if let Some((_, factor)) = self
+            .spinneys()
+            .find(|(_, spinney)| spinney.filter() == transition.scope)
+        {
+            return vec![factor];
+        }
+        larger
+            .components()
+            .iter()
+            .filter(|component| transition.scope.includes(*component))
+            .map(|component| {
+                self.spinneys()
+                    .map(|(_, spinney)| spinney)
+                    .find(|spinney| spinney.filter() == component)
+                    .expect("the factors of a factorized product are classified spinneys")
+            })
+            .collect()
     }
 
     /// The cover relation of spinney inclusion (its Hasse diagram): the pairs

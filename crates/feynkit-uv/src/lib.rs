@@ -36,6 +36,7 @@
 
 #![forbid(unsafe_code)]
 
+mod counterterm;
 mod diagram;
 mod forests;
 mod graph;
@@ -43,6 +44,7 @@ mod scheme;
 mod spinney;
 mod wood;
 
+pub use counterterm::{Counterterm, CountertermError, CountertermScheme, UnknownCountertermScheme};
 pub use forests::{
     ForestEdge, ForestError, Forests, Operation, OperationNode, OperationSpinneyError,
     UnionReplayState,
@@ -51,5 +53,5 @@ pub use graph::{ForeignReason, UvGraph, UvGraphError};
 pub use scheme::{
     ApproximationType, CTIdentifier, CTRenormalizationRule, RenormalizationPrescriptionSettings,
 };
-pub use spinney::Spinney;
+pub use spinney::{Spinney, SpinneyRelation};
 pub use wood::{ForestNode, OwnedForestNode, Wood, WoodInclusion};

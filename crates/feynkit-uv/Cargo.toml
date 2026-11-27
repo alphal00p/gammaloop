@@ -12,7 +12,7 @@ categories = ["science"]
 ahash = { workspace = true }
 bincode = { workspace = true, features = ["serde"] }
 bincode-trait-derive = { workspace = true }
-feynkit-graph = { version = "0.1.0", path = "../feynkit-graph" }
+feynkit-graph = { version = "0.1.0", path = "../feynkit-graph", default-features = false }
 feynkit-model = { version = "0.1.0", path = "../feynkit-model" }
 itertools = { workspace = true }
 linnet = { version = "0.17.0", path = "../linnet", default-features = false, features = ["serde"] }
@@ -29,7 +29,9 @@ symbolica = { workspace = true, default-features = false }
 toml = { workspace = true }
 
 [features]
-default = []
+default = ["native"]
+native = ["feynkit-graph/native"]
+wasm = ["feynkit-graph/wasm"]
 # Expose the renormalization-scheme settings as Python classes for hosts
 # that embed them in their own Python settings objects.
 python = ["dep:pyo3"]

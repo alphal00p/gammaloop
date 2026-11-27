@@ -9,7 +9,9 @@ use linnet::half_edge::involution::EdgeIndex;
 use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetOps};
 use linnet::half_edge::{HedgeGraph, NoData};
 
-use crate::UvGraph;
+use linnet::half_edge::NodeIndex;
+
+use crate::{Spinney, UvGraph, Wood};
 
 /// Spacetime dimension of FeynKit's UV power counting.
 const DIMENSION: i32 = 4;
@@ -105,6 +107,79 @@ impl UvGraph for FeynmanDiagram {
         parent: &LoopMomentumBasis,
     ) -> Result<LoopMomentumBasis, DiagramError> {
         self.compatible_momentum_basis_of(&subgraph.filter, parent)
+    }
+}
+
+impl Spinney<LoopMomentumBasis> {
+    /// The local superficial degree of divergence of this spinney in `diagram`,
+    /// in four dimensions: [`FeynmanDiagram::superficial_degree_of_divergence_of`]
+    /// on its half-edges. FeynKit prunes with the larger of this degree and the
+    /// classifying [`Self::dod`]; numerator factors carrying only external
+    /// momenta raise this degree but not the classifying one.
+    ///
+    /// `diagram` must be the diagram the spinney was built for; it is not checked.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the diagram cannot power count the spinney.
+    ///
+    /// ```
+    /// use feynkit_graph::FeynmanDiagram;
+    /// use feynkit_model::Model;
+    /// use feynkit_uv::{Spinney, UvGraph};
+    /// use linnet::half_edge::subgraph::InternalSubGraph;
+    ///
+    /// let sunrise = FeynmanDiagram::from_dot(
+    ///     Model::phi4(),
+    ///     "digraph sunrise { edge [particle=phi]; ext [style=invis]; \
+    ///          ext -> a; a -> b; a -> b; a -> b; b -> ext; }",
+    /// )?;
+    /// let loops = InternalSubGraph::cleaned_filter_optimist(sunrise.internal_subgraph(), sunrise.hedge_graph());
+    /// let spinney = Spinney::new(loops, &sunrise, sunrise.loop_momentum_basis())?
+    ///     .expect("the quartic sunrise is quadratically divergent");
+    /// assert_eq!(spinney.superficial_degree(&sunrise)?, 2);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn superficial_degree(&self, diagram: &FeynmanDiagram) -> Result<i32, DiagramError> {
+        diagram.superficial_degree_of_divergence_of(self.filter(), DIMENSION)
+    }
+}
+
+impl Wood<LoopMomentumBasis> {
+    /// Every node, the empty root first, then by loop count and internal edge
+    /// IDs of `diagram`: the order in which spinneys are listed and drawn.
+    ///
+    /// `diagram` must be the diagram the wood was built for; it is not checked.
+    ///
+    /// ```
+    /// use feynkit_graph::FeynmanDiagram;
+    /// use feynkit_model::Model;
+    /// use feynkit_uv::{RenormalizationPrescriptionSettings, UvGraph, Wood};
+    ///
+    /// let basketball = FeynmanDiagram::from_dot(
+    ///     Model::phi4(),
+    ///     "digraph basketball { edge [particle=phi]; a -> b; a -> b; a -> b; a -> b; }",
+    /// )?;
+    /// let spinneys = basketball.classify_spinneys(
+    ///     &basketball.hedge_graph().full_filter(),
+    ///     basketball.model(),
+    ///     &RenormalizationPrescriptionSettings::default(),
+    ///     basketball.loop_momentum_basis(),
+    /// )?;
+    /// let wood = Wood::from_spinneys(spinneys, &basketball, basketball.loop_momentum_basis())?;
+    /// let nodes = wood.nodes_by_edges(&basketball);
+    /// assert_eq!(nodes[0], wood.root());
+    /// let first = wood.spinney(nodes[1]).edges(&basketball);
+    /// assert_eq!(first.iter().map(|edge| edge.0).collect::<Vec<_>>(), [0, 1]);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn nodes_by_edges(&self, diagram: &FeynmanDiagram) -> Vec<NodeIndex> {
+        let mut nodes: Vec<NodeIndex> = self.spinneys().map(|(node, _)| node).collect();
+        nodes.sort_by_cached_key(|node| {
+            let spinney = self.spinney(*node);
+            (spinney.loop_count(), spinney.edges(diagram))
+        });
+        nodes
     }
 }
 
