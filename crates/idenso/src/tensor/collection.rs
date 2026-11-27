@@ -2018,6 +2018,9 @@ impl SymbolicTensor<PartialStructure> {
             root.work.set_observations(facts);
         }
         root.work.get_mut().frontier = frontier;
+        // Collection gives the leaves of closed scopes and colliding pairs fresh
+        // dummies; publish their raw ports from the source templates.
+        self.retain_renamed_leaf_ports(&root)?;
         Ok(root)
     }
 

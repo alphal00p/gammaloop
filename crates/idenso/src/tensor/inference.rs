@@ -730,6 +730,19 @@ impl<'a> BorrowedTensorParts<'a> {
                 .or_else(|raw_error| {
                     self.observe_coalesced_products(&expression)
                         .or(Err(raw_error))
+                })
+                .or_else(|raw_error| {
+                    // Admission reads tensor-free input as a scalar without an
+                    // interface walk, so its untagged calls stay opaque even
+                    // with index-shaped data. A scalar producer may emit such
+                    // a result, for example the expansion of an opaque power.
+                    if self.structure.logical_slots().is_empty()
+                        && !InterfaceInference::contains_tensor_symbol(expression.as_view())
+                    {
+                        Ok(ExplicitIndexOccurrences::default())
+                    } else {
+                        Err(raw_error)
+                    }
                 });
             assert!(
                 checked.is_ok(),
@@ -2077,19 +2090,35 @@ impl SymbolicTensor<PartialStructure> {
                 // Private intake proved every original leaf scalar and intrinsic,
                 // before cancellation, and emitted only its normalized original.
                 // This is the same successful scalar-algebra interface proof.
-                return self.with_produced_expression(expression);
+                let result = self.with_produced_expression(expression)?;
+                if separated.is_some() {
+                    self.retain_renamed_leaf_ports(&result)?;
+                }
+                return Ok(result);
             }
             source.expand()
         };
-        let mut result = self.expansion_result(self.borrowed_parts(), expression)?;
         // Cancellation can leave one term whose formerly closed pairs now
-        // belong to the outermost product.
-        if let Some(root) = ExplicitIndexOccurrences::root_product(result.expression.as_view())
-            && let Some(occurrences) = result.proofs.occurrences.get_mut()
-        {
-            let occurrences = Arc::make_mut(occurrences);
-            occurrences.branch_max(&root);
-            occurrences.validate()?;
+        // belong to the outermost product. Report them in the source history
+        // before the producer contract compares the result against it.
+        let widened = ExplicitIndexOccurrences::root_product(expression.as_view())
+            .map(|root| {
+                let mut proofs = self.proofs.clone();
+                let mut occurrences = self.explicit_index_occurrences()?.clone();
+                occurrences.branch_max(&root);
+                occurrences.validate()?;
+                proofs.occurrences = OnceLock::from(Arc::new(occurrences));
+                Ok::<_, TensorInferenceError>(proofs)
+            })
+            .transpose()?;
+        let parts = widened.as_ref().map_or_else(
+            || self.borrowed_parts(),
+            |proofs| self.borrowed_with_proofs(proofs),
+        );
+        let result = self.expansion_result(parts, expression)?;
+        // Scope separation gives the leaves of closed scopes fresh dummies.
+        if separated.is_some() {
+            self.retain_renamed_leaf_ports(&result)?;
         }
         Ok(result)
     }
@@ -2115,6 +2144,30 @@ impl SymbolicTensor<PartialStructure> {
             return Ok(result);
         }
         parts.with_algebra_result(expression)
+    }
+
+    /// Publish the raw ports of leaves whose dummies a producer renamed, from
+    /// the source's own leaf templates. The rename is not recorded as a slot
+    /// map, so every explicit slot of the source or the result may be one of
+    /// its dummies; a template binds such slots only to slots of the same
+    /// representation, one to one.
+    pub(super) fn retain_renamed_leaf_ports(&self, result: &Self) -> InferenceResult<()> {
+        // Fresh dummies have no explicit-occurrence entry, so collect every
+        // written slot, including those inside opaque data, which no
+        // template binds.
+        let mut slots = SlotMatcher::default();
+        let mut pool = HashSet::new();
+        for value in [self.expression.as_view(), result.expression.as_view()] {
+            value.visitor(&mut |node| {
+                let Ok(slot) = slots.parse::<LibraryRep, AbstractIndex>(node) else {
+                    return true;
+                };
+                pool.insert(slot.to_atom());
+                false
+            });
+        }
+        self.proofs
+            .retain_permuted_leaf_ports(&result.expression, &pool, &result.proofs)
     }
 
     /// Publish known scalar algebra which treats tensor leaves as opaque.
@@ -2502,18 +2555,44 @@ impl SymbolicTensor<PartialStructure> {
                 PartialIndex::Open(_) => None,
             })
             .collect::<HashSet<_>>();
-        let mut matcher = SlotMatcher::default();
-        let map_slot = |slot: Slot<LibraryRep, AbstractIndex>| {
-            if !matches!(slot.aind(), AbstractIndex::Open { .. })
-                && (!dummies_only || !external.contains(&slot))
-            {
+        // Each visited node may open a region with its own protected set: a sum
+        // or closed scalar power keeps protecting only the labels it still
+        // exports, so a pair it closes internally is scoped together, even
+        // under a protected name. Nodes without a region push `None`.
+        let regions = RefCell::new(Vec::<Option<HashSet<Slot<LibraryRep, AbstractIndex>>>>::new());
+        let root = if dummies_only {
+            external.clone()
+        } else {
+            HashSet::new()
+        };
+        let scoped = |slot: Slot<LibraryRep, AbstractIndex>| {
+            let regions = regions.borrow();
+            let protected = regions.iter().rev().flatten().next().unwrap_or(&root);
+            if !matches!(slot.aind(), AbstractIndex::Open { .. }) && !protected.contains(&slot) {
                 slot.rep().slot(slot.aind().scoped(scope))
             } else {
                 slot
             }
         };
-        let (expression, mapped) = self.map_admitted_expression(
+        let mut matcher = SlotMatcher::default();
+        let (expression, mapped) = self.map_admitted_indices_in_regions(
             |view| {
+                let region = {
+                    let regions = regions.borrow();
+                    let protected = regions.iter().rev().flatten().next().unwrap_or(&root);
+                    (!protected.is_empty()
+                        && (matches!(view, AtomView::Add(_))
+                            || Self::is_closed_scalar_power(view, &mut matcher)))
+                    .then(|| {
+                        let exported = ExplicitIndexOccurrences::from_atom(view, &mut matcher);
+                        protected
+                            .iter()
+                            .filter(|slot| exported.count(**slot) != 0)
+                            .copied()
+                            .collect::<HashSet<_>>()
+                    })
+                };
+                regions.borrow_mut().push(region);
                 if view.get_symbol().is_some_and(|symbol| symbol.is_scalar()) {
                     return Ok(Some(view.to_owned()));
                 }
@@ -2521,13 +2600,16 @@ impl SymbolicTensor<PartialStructure> {
                     .parse::<LibraryRep, AbstractIndex>(view)
                     .ok()
                     .map(|slot| {
-                        let mapped = map_slot(slot);
+                        let mapped = scoped(slot);
                         if mapped == slot {
                             view.to_owned()
                         } else {
                             mapped.to_atom()
                         }
                     }))
+            },
+            |_| {
+                regions.borrow_mut().pop();
             },
             |interface| {
                 Ok(PartialStructure::from_logical_slots(
@@ -2536,7 +2618,7 @@ impl SymbolicTensor<PartialStructure> {
                         .into_iter()
                         .map(|slot| match slot.aind {
                             PartialIndex::Explicit(index) => {
-                                let mapped = map_slot(slot.rep().slot(index));
+                                let mapped = scoped(slot.rep().slot(index));
                                 mapped.rep().slot(PartialIndex::Explicit(mapped.aind()))
                             }
                             PartialIndex::Open(_) => slot,
@@ -2564,77 +2646,6 @@ impl SymbolicTensor<PartialStructure> {
         let mut result = Self::from_validated_parts(expression, structure, Arc::new(occurrences));
         result.proofs.normalized_product = self.proofs.normalized_product.clone();
         self.finish_mapped_result("wrap_indices", result, mapped)
-    }
-
-    /// Carry the protected external boundary through sums and closed powers.
-    /// Only changed ancestors are reconstructed, so discovery never replays a
-    /// user normalizer before the actual slot transformation. Only arguments
-    /// which inference reads as indices are scoped: an untagged function is an
-    /// opaque scalar whose arguments are data, even when they look like slots.
-    fn wrap_unprotected_indices(
-        expression: AtomView<'_>,
-        scope: Symbol,
-        protected: &HashSet<Slot<LibraryRep, AbstractIndex>>,
-        slots: &mut SlotMatcher,
-    ) -> Option<Atom> {
-        if expression.get_symbol().is_some_and(|head| head.is_scalar()) {
-            return None;
-        }
-        if let Ok(slot) = slots.parse::<LibraryRep, AbstractIndex>(expression) {
-            if protected.contains(&slot) {
-                return None;
-            }
-            let wrapped = AbstractIndex::wrap_expression(expression, scope, |_| true);
-            return (wrapped.as_view() != expression).then_some(wrapped);
-        }
-        let boundary = (!protected.is_empty()
-            && (matches!(expression, AtomView::Add(_))
-                || Self::is_closed_scalar_power(expression, slots)))
-        .then(|| {
-            let exported = ExplicitIndexOccurrences::from_atom(expression, slots);
-            protected
-                .iter()
-                .filter(|slot| exported.count(**slot) != 0)
-                .copied()
-                .collect::<HashSet<_>>()
-        });
-        let protected = boundary.as_ref().unwrap_or(protected);
-        let mut children =
-            |children: Vec<AtomView<'_>>,
-             indexed: &dyn Fn(AtomView<'_>, &mut SlotMatcher) -> bool| {
-                let replaced = children
-                    .iter()
-                    .map(|&child| {
-                        indexed(child, slots)
-                            .then(|| Self::wrap_unprotected_indices(child, scope, protected, slots))
-                            .flatten()
-                    })
-                    .collect::<Vec<_>>();
-                replaced.iter().any(Option::is_some).then(|| {
-                    children
-                        .into_iter()
-                        .zip(replaced)
-                        .map(|(child, replaced)| replaced.unwrap_or_else(|| child.to_owned()))
-                        .collect::<Vec<_>>()
-                })
-            };
-        let all = |_: AtomView<'_>, _: &mut SlotMatcher| true;
-        match expression {
-            AtomView::Add(sum) => children(sum.iter().collect(), &all).map(Atom::add_many),
-            AtomView::Mul(product) => children(product.iter().collect(), &all).map(Atom::mul_many),
-            AtomView::Pow(power) => {
-                let (base, exponent) = power.get_base_exp();
-                children(vec![base, exponent], &all).map(|parts| parts[0].pow(&parts[1]))
-            }
-            AtomView::Fun(function) => {
-                let symbol = function.get_symbol();
-                children(function.iter().collect(), &|argument, slots| {
-                    InterfaceInference::explicit_index_argument(symbol, argument, slots)
-                })
-                .map(|arguments| FunctionBuilder::new(symbol).add_args(&arguments).finish())
-            }
-            _ => None,
-        }
     }
 
     /// Whether index observation closes this power's base, as it does for a
@@ -5118,7 +5129,7 @@ impl InterfaceInference {
 
     /// Scan all syntax, including scalar metadata and exponents. Tensor-free
     /// input is opaque at admission; other tags and callbacks do not exclude it.
-    fn contains_tensor_symbol(value: AtomView<'_>) -> bool {
+    pub(crate) fn contains_tensor_symbol(value: AtomView<'_>) -> bool {
         let mut found = false;
         value.visitor(&mut |node| {
             if !found {

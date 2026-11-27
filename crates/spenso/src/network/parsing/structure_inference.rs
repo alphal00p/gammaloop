@@ -421,7 +421,17 @@ impl<Aind: AbsInd + DummyAind + ParseableAind> StructureFromAtom
                 .collect::<Result<Vec<_>, _>>()?;
             return Ok(Self::new(slots));
         }
-        if state.require_admitted_interfaces {
+        // An opaque chain or trace that a producer rebuilt without facts takes
+        // its structure from its own syntax, explicit internal pairs included.
+        let chain_like = matches!(value, AtomView::Fun(function)
+            if function.get_symbol() == matcher.tags().chain
+                || function.get_symbol() == matcher.tags().trace);
+        // Index-free shorthand: a constructor whose arguments are all slots or
+        // bare representations has syntactically determined ports.
+        if state.require_admitted_interfaces
+            && !chain_like
+            && !matches!(value, AtomView::Fun(function) if matcher.is_direct_constructor(function))
+        {
             return Err(StructureError::ParsingError(format!(
                 "admitted tensor is missing its raw parser ports for {value}"
             )));
@@ -435,7 +445,11 @@ impl<Aind: AbsInd + DummyAind + ParseableAind> StructureFromAtom
                     Self::structure_from_atom(value, matcher)
                 }
             };
-            if state.leaf_interfaces.is_some() {
+            if chain_like && state.require_admitted_interfaces {
+                // Its words have no retained facts either, so observe them
+                // without the admitted caches, as unadmitted parsing does.
+                SlotMatcher::default().observe_slots(infer)
+            } else if state.leaf_interfaces.is_some() {
                 matcher.observe_slots(infer)
             } else {
                 (infer(&mut matcher), Vec::new())
@@ -558,6 +572,11 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
                 ),
                 AtomView::Mul(product) => Self::from_product_atom(product, matcher),
                 AtomView::Pow(power) => Self::from_power_atom(power, matcher),
+                // Index-free shorthand: a constructor's written slots and bare
+                // representations are its ports, so they need no retained fact.
+                AtomView::Fun(function) if matcher.is_direct_constructor(function) => {
+                    Self::from_function_atom(function, matcher)
+                }
                 AtomView::Fun(function)
                     if !function.get_symbol().is_scalar()
                         && function.get_symbol().has_tag(&SPENSO_TAG.tensor) =>

@@ -29,6 +29,7 @@ use symbolica::atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Sym
 use symbolica::id::MatchSettings;
 
 use linnet::half_edge::NodeIndex;
+use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 
 use super::construction::Construction;
@@ -1133,6 +1134,41 @@ impl<Aind: AbsInd + DummyAind + ParseableAind, View> ParseState<Aind, View> {
                             arguments,
                             (tensorial, ports),
                         );
+                    } else if self.require_admitted_interfaces
+                        && source.get_symbol().has_tag(&SPENSO_TAG.tensor)
+                    {
+                        // In admitted parsing, a word of a chain rebuilt without
+                        // facts takes its ports from its own syntax, in the
+                        // logical order that unadmitted parsing observes.
+                        let mut slots = SlotMatcher::default();
+                        let (structure, written) = slots.observe_slots(|slots| {
+                            OrderedStructure::<LibraryRep, Aind>::structure_from_atom(target, slots)
+                        });
+                        let written = written
+                            .into_iter()
+                            .filter_map(|atom| {
+                                slots
+                                    .parse::<LibraryRep, Aind>(atom.as_view())
+                                    .ok()
+                                    .map(|slot| (slot, atom))
+                            })
+                            .collect::<HashMap<_, _>>();
+                        if let Ok(structure) = structure
+                            && let Some(ports) = structure
+                                .canonical()
+                                .external_structure()
+                                .iter()
+                                .map(|slot| written.get(slot).cloned())
+                                .collect::<Option<Vec<_>>>()
+                        {
+                            cache
+                                .lock()
+                                .expect("leaf interface cache is not poisoned")
+                                .insert(
+                                    target.to_owned(),
+                                    (true, structure.layout().canonical_to_logical(&ports)),
+                                );
+                        }
                     }
                 }
                 observer(source, target);

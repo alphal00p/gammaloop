@@ -380,6 +380,36 @@ impl TensorProofs {
         {
             return Ok(OrderedStructure::new(slots?));
         }
+        // Index-free shorthand: a constructor's written slots and bare
+        // representations are its ports, in order; an automatic port takes a
+        // fresh parser index exactly as a retained representation port does.
+        if let AtomView::Fun(function) = expression
+            && !compact_metric
+            && matcher.is_direct_constructor(function)
+        {
+            // Only slots and bare representations are ports; fixed components
+            // such as `cind(0)` and scalar data are not.
+            let ports = function
+                .iter()
+                .filter(|argument| {
+                    matcher.parse::<LibraryRep, Aind>(*argument).is_ok()
+                        || matcher
+                            .parse_representation::<LibraryRep>(*argument)
+                            .is_ok()
+                })
+                .collect::<Vec<_>>();
+            let slots = ports
+                .into_iter()
+                .map(|port| {
+                    matcher.parse::<LibraryRep, Aind>(port).or_else(|_| {
+                        matcher
+                            .parse_representation::<LibraryRep>(port)
+                            .map(|representation| representation.slot(next_index()))
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            return Ok(OrderedStructure::new(slots));
+        }
         if let AtomView::Fun(function) = expression
             && !composition::is_composite_head(function.get_symbol(), &SPENSO_TAG)
             && function.get_symbol() != SPENSO_TAG.dot
@@ -388,6 +418,12 @@ impl TensorProofs {
             return Err(StructureError::ParsingError(format!(
                 "admitted tensor constructor is missing its raw parser ports for {expression}"
             )));
+        }
+        // Admission reads tensor-free input as a scalar without regional facts.
+        // A tensor-free composite, such as a coefficient a numerical sample
+        // produced, has the same empty boundary.
+        if !InterfaceInference::contains_tensor_symbol(expression) {
+            return Ok(OrderedStructure::new(Vec::new()));
         }
         let interface = self.inspect_interface(expression).ok_or_else(|| {
             StructureError::ParsingError(format!(

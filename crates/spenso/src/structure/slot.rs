@@ -446,6 +446,59 @@ impl SlotMatcher {
         kind
     }
 
+    /// Whether a tensor constructor is index-free shorthand, whose ports follow
+    /// from its arguments and need no retained fact. Every argument is a slot,
+    /// a bare representation, a fixed component such as `cind(0)`, or scalar
+    /// data without index syntax, and either
+    /// - at least one is a bare representation (an automatic port such as
+    ///   `v(euc(2))`), with no repeated explicit slot, or
+    /// - none is a slot but one is a fixed component: a component such as
+    ///   `p(0, cind(0))` is a scalar.
+    ///
+    /// The ports are the slots and bare representations, in order. Each
+    /// automatic port is its own axis; this never pairs automatic ports of
+    /// different factors. Fully explicit constructors and self-loops still
+    /// require their retained raw ports.
+    pub fn is_direct_constructor(&mut self, function: FunView<'_>) -> bool {
+        let symbol = function.get_symbol();
+        if !symbol.has_tag(&self.tags.tensor) || symbol.is_scalar() {
+            return false;
+        }
+        let mut automatic = false;
+        let mut component = false;
+        let mut explicit = Vec::new();
+        for argument in function.iter() {
+            if let Ok(slot) = self.parse::<LibraryRep, AbstractIndex>(argument) {
+                if explicit.contains(&slot) {
+                    return false;
+                }
+                explicit.push(slot);
+            } else if self.parse_representation::<LibraryRep>(argument).is_ok() {
+                automatic = true;
+            } else if self
+                .concrete_component(argument)
+                .is_some_and(|component| component.is_ok())
+            {
+                component = true;
+            } else if self.contains_index_syntax(argument) {
+                return false;
+            }
+        }
+        automatic || (component && explicit.is_empty())
+    }
+
+    /// Whether any node of `value` is a slot or a representation.
+    fn contains_index_syntax(&mut self, value: AtomView<'_>) -> bool {
+        let mut found = false;
+        value.visitor(&mut |node| {
+            found = found
+                || self.parse::<LibraryRep, AbstractIndex>(node).is_ok()
+                || self.parse_representation::<LibraryRep>(node).is_ok();
+            !found
+        });
+        found
+    }
+
     /// Identify a slot or an opaque slot payload in one classification pass.
     #[inline]
     pub fn classify<'a>(&mut self, value: AtomView<'a>) -> SlotMatch<'a> {

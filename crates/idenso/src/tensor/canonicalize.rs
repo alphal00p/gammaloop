@@ -4,7 +4,7 @@
 //! network parser. Graphica detects negative automorphisms of antisymmetric
 //! slots, and Symbolica owns dummy labeling and expression rebuilding. Typed
 //! callers carry source leaf facts through those known dummy substitutions.
-use super::composition;
+use super::composition::{self, ExplicitIndexOccurrences};
 use super::inference::{InterfaceInference, LeafInference, TensorInferenceError};
 use super::{SymbolicNet, SymbolicNetExt, SymbolicTensor, TensorProofs};
 use crate::{CanonicalizationError, IndexTooling, NetworkToolingError};
@@ -24,7 +24,9 @@ use spenso::network::store::{NetworkStoreAccess, TensorScalarStore};
 use spenso::structure::abstract_index::AbstractIndex;
 use spenso::structure::partial::{PartialIndex, PartialStructure, PartialStructureExt};
 use spenso::structure::representation::{LibraryRep, LibrarySlot, RepName, Representation};
-use spenso::structure::slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind, Slot};
+use spenso::structure::slot::{
+    AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind, Slot, SlotMatcher,
+};
 use spenso::structure::{HasName, OrderedStructure, TensorStructure};
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{Hash, Hasher};
@@ -52,8 +54,10 @@ impl SymbolicTensor<PartialStructure> {
             return Ok(self.clone());
         }
         let (proofs, leaves) = self.producer_context();
+        // Re-parse with the tagged grammar of typed admission: an untagged call
+        // is an opaque scalar whose index-shaped arguments are data.
         let settings =
-            ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps);
+            ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::Tagged);
         let network = SymbolicNet::<Aind>::try_from_admitted_view_with_context::<
             OrderedStructure<LibraryRep, Aind>,
             _,
@@ -122,18 +126,45 @@ impl SymbolicTensor<PartialStructure> {
         let root = net.graph.graph.node_id(net.graph.head());
         let expr = net
             .graph
-            .to_expression_at(&tree, root, &mut |_, node| match node {
-                NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
-                    Ok(Some(net.store.tensors[*index].expression.clone()))
-                }
-                NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => {
-                    Ok(Some(net.store.get_scalar_ref(*index).clone()))
-                }
-                NetworkNode::Op(_) => Ok(None),
-                _ => Err(TensorNetworkError::Other(eyre::eyre!(
-                    "canonicalization requires stored symbolic leaves"
-                ))),
-            })
+            .to_expression_at_with_operation(
+                &tree,
+                root,
+                &mut |_, node| match node {
+                    NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
+                        Ok(Some(net.store.tensors[*index].expression.clone()))
+                    }
+                    NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => {
+                        Ok(Some(net.store.get_scalar_ref(*index).clone()))
+                    }
+                    NetworkNode::Op(_) => Ok(None),
+                    _ => Err(TensorNetworkError::Other(eyre::eyre!(
+                        "canonicalization requires stored symbolic leaves"
+                    ))),
+                },
+                // Rebuilding a positive power of a closed product lets Symbolica
+                // distribute it into powers of its open factors. Keep that
+                // contraction atomic, so the alias boundary below finds it.
+                // A Power input has slot edges exactly when its base exposes
+                // indices; in particular, vector squares are not scalar bases.
+                &mut |node, operation, children| {
+                    let NetworkOp::Power(power @ 2..) = operation else {
+                        return Ok(None);
+                    };
+                    if net
+                        .graph
+                        .graph
+                        .iter_crown(node)
+                        .any(|hedge| matches!(net.graph.graph[[&hedge]], NetworkEdge::Slot(_)))
+                        || !dummies.keys().any(|index| children[0].contains(index))
+                    {
+                        return Ok(None);
+                    }
+                    Ok(Some(
+                        Self::scalar_power_expression(children[0].clone(), Some(true))
+                            .pow(Atom::num(*power)),
+                    ))
+                },
+            )
             .map_err(|error| CanonicalizationError::Prepare {
                 reason: error.to_string(),
             })?;
@@ -157,7 +188,24 @@ impl SymbolicTensor<PartialStructure> {
                 return None;
             };
             let (base, exponent) = power.get_base_exp();
-            if i64::try_from(exponent).is_ok_and(|n| n > 0) {
+            // A closed scalar is one contraction even when a positive power
+            // repeats it. Give those powers the same alias boundary as the
+            // nonpositive powers Symbolica cannot label directly; an open base,
+            // such as a vector square, keeps its ordinary incidence.
+            let closed_positive = i64::try_from(exponent).is_ok_and(|n| n > 0);
+            if closed_positive
+                && !(dummies.keys().any(|index| base.contains(index))
+                    && match &admission {
+                        Some((_, proofs)) => proofs
+                            .admitted_interface(base)
+                            .is_some_and(|interface| interface.logical_slots().is_empty()),
+                        None => {
+                            ExplicitIndexOccurrences::from_atom(base, &mut SlotMatcher::default())
+                                .entries()
+                                .all(|(_, count)| count != 1)
+                        }
+                    })
+            {
                 return None;
             }
             let result = if let Some((_, proofs)) = &admission {
@@ -177,6 +225,11 @@ impl SymbolicTensor<PartialStructure> {
                 base.canonize::<Aind>(&mut new_dummy as &mut dyn FnMut(usize) -> Aind)
             };
             let canonical = match result {
+                // Canonical reconstruction may remove an unpowered bracket. Keep
+                // the closed product atomic before exponentiation normalizes it.
+                Ok(canonical) if closed_positive => {
+                    Self::scalar_power_expression(canonical, Some(true)).pow(exponent)
+                }
                 Ok(canonical) => canonical.pow(exponent),
                 Err(error) => {
                     failure = Some(error);

@@ -174,7 +174,7 @@ enum MappingOrder {
     AfterChildren,
 }
 
-struct RegionMapping<'a, F, G> {
+struct RegionMapping<'a, 'e, F, G> {
     order: MappingOrder,
     source: &'a SymbolicTensor<PartialStructure>,
     leaf_map: F,
@@ -184,10 +184,27 @@ struct RegionMapping<'a, F, G> {
     leaves: LeafInterfaceCache,
     written_slots: AHashSet<Atom>,
     mapped_slots: AHashMap<Atom, Atom>,
+    /// Told when the mapping of a node, including its interface, is complete.
+    /// Together with the leaf map's entry call it brackets every visited node,
+    /// so a caller can keep context that a region sets for its descendants.
+    exit: Option<&'e mut dyn FnMut(AtomView<'_>)>,
 }
 
-impl<F, G> RegionMapping<'_, F, G> {
+impl<F, G> RegionMapping<'_, '_, F, G> {
     fn map<'a, E>(&mut self, value: AtomView<'a>) -> Result<AtomOrView<'a>, E>
+    where
+        F: for<'b> FnMut(AtomView<'b>) -> Result<Option<Atom>, E>,
+        G: FnMut(&PartialStructure) -> Result<PartialStructure, TensorInferenceError>,
+        E: From<TensorInferenceError>,
+    {
+        let result = self.map_node(value);
+        if let Some(exit) = self.exit.as_deref_mut() {
+            exit(value);
+        }
+        result
+    }
+
+    fn map_node<'a, E>(&mut self, value: AtomView<'a>) -> Result<AtomOrView<'a>, E>
     where
         F: for<'b> FnMut(AtomView<'b>) -> Result<Option<Atom>, E>,
         G: FnMut(&PartialStructure) -> Result<PartialStructure, TensorInferenceError>,
@@ -1267,6 +1284,7 @@ impl SymbolicTensor<PartialStructure> {
             leaf_map,
             interface_map,
             MappingOrder::BeforeChildren,
+            None,
         )
     }
 
@@ -1280,6 +1298,7 @@ impl SymbolicTensor<PartialStructure> {
             |node| Ok(route(node)),
             |interface| Ok(interface.clone()),
             MappingOrder::VectorComponents(head),
+            None,
         )
     }
 
@@ -1296,6 +1315,7 @@ impl SymbolicTensor<PartialStructure> {
             node_map,
             interface_map,
             MappingOrder::AfterChildren,
+            None,
         )
     }
 
@@ -1310,6 +1330,26 @@ impl SymbolicTensor<PartialStructure> {
             slot_map,
             interface_map,
             MappingOrder::TensorArguments,
+            None,
+        )
+    }
+
+    /// [`Self::map_admitted_indices`] with region context: `slot_map` sees
+    /// every visited node before its descendants and `exit` sees it after its
+    /// mapping, including its interface, is complete. A sum or power region can
+    /// thus decide the scope of the slots inside it.
+    pub(crate) fn map_admitted_indices_in_regions(
+        &self,
+        slot_map: impl for<'a> FnMut(AtomView<'a>) -> Result<Option<Atom>, TensorInferenceError>,
+        mut exit: impl FnMut(AtomView<'_>),
+        interface_map: impl FnMut(&PartialStructure) -> Result<PartialStructure, TensorInferenceError>,
+    ) -> Result<(Atom, TensorProofs), TensorInferenceError> {
+        self.map_expression(
+            self.expression.as_view(),
+            slot_map,
+            interface_map,
+            MappingOrder::TensorArguments,
+            Some(&mut exit),
         )
     }
 
@@ -1319,6 +1359,7 @@ impl SymbolicTensor<PartialStructure> {
         leaf_map: impl for<'a> FnMut(AtomView<'a>) -> Result<Option<Atom>, E>,
         interface_map: impl FnMut(&PartialStructure) -> Result<PartialStructure, TensorInferenceError>,
         order: MappingOrder,
+        exit: Option<&mut dyn FnMut(AtomView<'_>)>,
     ) -> Result<(Atom, TensorProofs), E>
     where
         E: From<TensorInferenceError>,
@@ -1341,6 +1382,7 @@ impl SymbolicTensor<PartialStructure> {
             leaves: LeafInterfaceCache::default(),
             written_slots,
             mapped_slots: AHashMap::new(),
+            exit,
         };
         let expression = mapping.map(expression)?.into_owned();
         // Keep the declared root order even when normalization returns an
