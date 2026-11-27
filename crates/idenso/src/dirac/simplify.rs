@@ -1,7 +1,7 @@
 #[cfg(test)]
 use crate::shorthands::schoonschip::Schoonschip;
-use crate::tensor::CollectedOutput;
 use crate::tensor::composition::ExplicitIndexOccurrences;
+use crate::tensor::{CollectedOutput, CollectionMode};
 #[cfg(test)]
 use spenso::g;
 use std::cell::RefCell;
@@ -38,7 +38,6 @@ use crate::{
     representations::Bispinor,
     shorthands::{
         bracket::BracketNormalizer,
-        chain::Chain,
         schoonschip::{SchoonschipSettings, SchoonschipWithSettings},
     },
     tensor::{
@@ -539,7 +538,7 @@ impl SymbolicTensor<PartialStructure> {
         let representation = Bispinor {}.into();
         let dummies = Self::reserved_dummies([self]);
         let mut paired_metrics = HashMap::new();
-        let collected = RefCell::new(CollectedOutput::new(self.reduction_observations()));
+        let collected = RefCell::new(CollectedOutput::new(self));
         let standalone_trace = matches!(self.expression.as_view(), AtomView::Fun(function)
             if function.get_symbol() == T.trace);
         let mut simplify = |selected: Self, complete: bool, coefficient: &mut Self| {
@@ -554,7 +553,7 @@ impl SymbolicTensor<PartialStructure> {
                 // Mass terms carry spinor identities, which chain collection
                 // deliberately leaves as metrics. Consume those connections
                 // once so the complete word can close before Clifford reduction.
-                let selected = if complete
+                let mut selected = if complete
                     && selected.normalization_is_intrinsic()
                     && selected.reduction_observations().candidates.symbols[17]
                 {
@@ -594,8 +593,9 @@ impl SymbolicTensor<PartialStructure> {
                 let output = trace_kernel::TraceOutput::Factored;
                 let prepared = DiracSimplifier::new(&settings)
                     .prepare(selected.expression.as_view(), &dummies);
-                let expression =
-                    BracketNormalizer::normalize(prepared.as_view()).join_chains(representation);
+                let normalized = BracketNormalizer::normalize(prepared.as_view());
+                let (expression, prepared_proofs) =
+                    selected.join_prepared_chains(normalized.as_view(), representation)?;
                 let expression = BracketNormalizer::normalize(expression.as_view());
                 // Finish joining the selected spinor factors before Clifford
                 // reduction can turn an open prefix into a sum of chains. Such
@@ -634,7 +634,7 @@ impl SymbolicTensor<PartialStructure> {
                         };
                         if let Some(status) = status {
                             let mut unfinished = selected;
-                            unfinished.proofs.frontier = status;
+                            unfinished.work.get_mut().frontier = status;
                             return Ok(unfinished);
                         }
                         // An uncontrolled normalizer may introduce literal
@@ -685,6 +685,10 @@ impl SymbolicTensor<PartialStructure> {
                         None => simplifier.rewrite_expression(expression, &dummies),
                     }
                 };
+                if expression != selected.expression {
+                    selected.proofs.admitted_interfaces = prepared_proofs.admitted_interfaces;
+                    selected.proofs.leaf_interfaces = prepared_proofs.leaf_interfaces;
+                }
                 let rewritten = selected.with_identity_result(expression, observations)?;
                 if settings.output != GammaOutput::Reduced || rewritten == selected {
                     return Ok(rewritten);
@@ -694,7 +698,7 @@ impl SymbolicTensor<PartialStructure> {
                     collect_traces: false,
                     ..Default::default()
                 })?;
-                contracted.root.proofs.frontier = contracted.status;
+                contracted.root.work.get_mut().frontier = contracted.status;
                 Ok(contracted.root)
             })
         };
@@ -713,14 +717,14 @@ impl SymbolicTensor<PartialStructure> {
                 ),
             )
         } else {
-            self.collect_with_map(
-                crate::tensor::CollectionMode::Monomials,
-                Some(&mut |states, _| {
+            self.collect_rows_with_map(
+                CollectionMode::Monomials,
+                &mut |states| {
                     if collect_coefficients {
                         collected.borrow_mut().collect(states)?;
                     }
                     Ok(())
-                }),
+                },
                 |atom| TensorCollectFilter::Reps([representation]).matches(atom),
                 simplify,
             )
@@ -840,41 +844,6 @@ impl<'settings> DiracSimplifier<'settings> {
                 scalar
             })
             .then_some(trace)
-    }
-
-    /// Borrow the admitted trace's cyclic wrapper and Minkowski arguments.
-    /// The tensor owner still checks callbacks, compact leaves and its declared interface.
-    pub(crate) fn terminal_trace_interface_inputs(
-        expr: AtomView<'_>,
-    ) -> Option<(Option<AtomView<'_>>, Vec<AtomView<'_>>)> {
-        // Retain the existing rejection of nested trace metadata even when the
-        // requested algebra operation leaves its result factored.
-        let settings = GammaSimplifySettings::default();
-        let simplifier = DiracSimplifier::new(&settings);
-        let trace = match expr {
-            AtomView::Fun(_) => expr,
-            // Exact spectators cannot change tensor ports. Their arithmetic
-            // emission still follows the evaluator's stricter contextual rules.
-            AtomView::Mul(_) => Self::scalar_trace_factor(expr, T.trace.get_id())?,
-            _ => return None,
-        };
-        let word = simplifier.parse_terminal_trace::<false>(trace)?;
-        // General trace evaluation also admits formal spin dimensions. That
-        // admission does not establish this stronger source-only interface proof.
-        if !has_four_dimensional_trace_rep(word.representation) {
-            return None;
-        }
-        let AtomView::Fun(function) = trace else {
-            unreachable!("terminal traces are functions");
-        };
-        let cyclic = if function.get_nargs() == 2 {
-            function.iter().nth(1).filter(|argument| {
-                matches!(argument, AtomView::Fun(wrapper) if wrapper.get_symbol() == *shadowing::CYCLIC)
-            })
-        } else {
-            None
-        };
-        Some((cyclic, word.indices))
     }
 
     fn parse_terminal_trace<'a, const SCALAR_CONTEXT: bool>(
@@ -1129,7 +1098,7 @@ impl<'settings> DiracSimplifier<'settings> {
         let mut factors = Vec::with_capacity(nodes.len());
         let mut bindings = Vec::new();
         for node in nodes {
-            let (body, interface, history) = match &network.graph.graph[node] {
+            let (body, interface, history, proofs) = match &network.graph.graph[node] {
                 NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
                     let tensor = &network.store.tensors[*index];
                     let external = tensor.structure.external_structure();
@@ -1143,13 +1112,8 @@ impl<'settings> DiracSimplifier<'settings> {
                             let port = external[position];
                             port.rep().slot(PartialIndex::Explicit(port.aind()))
                         })),
-                        Arc::clone(
-                            tensor
-                                .proofs
-                                .occurrences
-                                .get()
-                                .expect("parsed tensor history"),
-                        ),
+                        Arc::clone(&tensor.history),
+                        network.evidence(tensor),
                     )
                 }
                 NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => {
@@ -1158,6 +1122,7 @@ impl<'settings> DiracSimplifier<'settings> {
                         network.store.get_scalar_ref(*index),
                         PartialStructure::from_logical_slots([]),
                         Arc::new(ExplicitIndexOccurrences::default()),
+                        &coefficient.proofs,
                     )
                 }
                 // A coefficient which is itself a sum retains its complete
@@ -1172,6 +1137,7 @@ impl<'settings> DiracSimplifier<'settings> {
                             .get()
                             .expect("published index history"),
                     ),
+                    &coefficient.proofs,
                 ),
                 _ => return Ok(None),
             };
@@ -1185,7 +1151,8 @@ impl<'settings> DiracSimplifier<'settings> {
             {
                 bindings.push((argument, factors.len(), *port));
             }
-            let factor = SymbolicTensor::from_validated_parts(body.clone(), interface, history);
+            let mut factor = SymbolicTensor::from_validated_parts(body.clone(), interface, history);
+            factor.proofs.inherit_interfaces([proofs]);
             factor.observe_replacement(coefficient);
             factors.push(factor);
         }
@@ -1211,25 +1178,27 @@ impl<'settings> DiracSimplifier<'settings> {
                 .fresh_index();
         let mut arguments = Vec::with_capacity(word.indices.len());
         for &argument in &word.indices {
-            let key = if let Some(&(_, position, port)) = bindings
+            let key = if let Some(&(_, position, _)) = bindings
                 .iter()
                 .find(|(original, _, _)| *original == argument)
             {
-                crate::tensor::composition::rewrite_interface_ports(
-                    &factors[position],
-                    &HashMap::from([(
-                        0,
-                        port.rep().slot::<AbstractIndex, _>(common_index).to_atom(),
-                    )]),
-                    None,
+                Some(
+                    factors[position]
+                        .reindex_interface_ports(&HashMap::from([(0, common_index)]))?,
                 )
-                .map_err(|error| TensorInferenceError::Invalid(error.to_string()))?
             } else {
-                argument.to_owned()
+                None
             };
             arguments.push(key);
         }
-        let argument_views = arguments.iter().map(Atom::as_view).collect::<Vec<_>>();
+        let argument_views = arguments
+            .iter()
+            .zip(&word.indices)
+            .map(|(key, &original)| {
+                key.as_ref()
+                    .map_or(original, |key| key.expression.as_view())
+            })
+            .collect::<Vec<_>>();
         let bound_arguments = bindings
             .iter()
             .map(|&(original, position, _)| {
@@ -1249,91 +1218,99 @@ impl<'settings> DiracSimplifier<'settings> {
         let mut terminal_pairs = true;
         let mut failure = None;
         let mut collected = collected.map(|output| output.borrow_mut());
-        let result = trace_kernel::evaluate_generic_with_metrics(
-            &argument_views,
-            trace_unit.as_view(),
-            true,
-            self.output,
-            collected.as_deref_mut(),
-            |left, right| {
-                let mut bound = Vec::new();
-                let mut original = [left, right];
-                for (side, argument) in [left, right].into_iter().enumerate() {
-                    if let Some(&(_, target, position)) = bound_arguments
-                        .iter()
-                        .find(|(key, _, position)| *key == argument && !bound.contains(position))
-                    {
-                        original[side] = target;
-                        bound.push(position);
-                    } else if bound_arguments.iter().any(|(key, _, _)| *key == argument) {
-                        // A diagonal vector value needs two original copies.
-                        // Refuse if the recurrence ever requests an absent one.
-                        return None;
-                    }
+        let build_metric = |left, right| {
+            let mut bound = Vec::new();
+            let mut original = [left, right];
+            for (side, argument) in [left, right].into_iter().enumerate() {
+                if let Some(&(_, target, position)) = bound_arguments
+                    .iter()
+                    .find(|(key, _, position)| *key == argument && !bound.contains(position))
+                {
+                    original[side] = target;
+                    bound.push(position);
+                } else if bound_arguments.iter().any(|(key, _, _)| *key == argument) {
+                    // A diagonal vector value needs two original copies.
+                    // Refuse if the recurrence ever requests an absent one.
+                    return None;
                 }
-                let metric = ETS.metric_literal(original[0], original[1]);
-                if bound.is_empty() {
-                    return Some(metric);
-                }
-                let body = Atom::mul_many(
-                    std::iter::once(&metric)
-                        .chain(bound.iter().map(|&position| &factors[position].expression)),
-                );
-                if let Some(result) = paired.get(&body) {
-                    terminal_pairs &= result
-                        .reduction_observations()
-                        .excludes_internal_connections()
-                        && result.reduction_observations().identity_candidates() == 0;
-                    return Some(result.expression.clone());
-                }
-                let contract = (|| {
-                    // The metric is genuinely new syntax. Its small interface
-                    // combines with already established coefficient boundaries.
-                    let metric_interface =
-                        InterfaceInference::replacement_interface(metric.as_view())?;
-                    let mut occurrences =
-                        ExplicitIndexOccurrences::from_interface(&metric_interface);
-                    let mut interfaces = vec![metric_interface];
-                    for &position in &bound {
-                        occurrences.append(factors[position].explicit_index_occurrences()?);
-                    }
-                    occurrences.validate()?;
-                    interfaces.extend(
-                        bound
-                            .iter()
-                            .map(|&position| factors[position].structure.clone()),
-                    );
-                    let interface =
-                        InterfaceInference::merge_explicit_interface_sequence(&interfaces)?;
-                    let input = SymbolicTensor::from_validated_parts(
-                        body.clone(),
-                        interface,
-                        Arc::new(occurrences),
-                    );
-                    input.observe_replacement(coefficient);
-                    input.contract_parts(ContractSettings {
-                        collect_chains: false,
-                        collect_traces: false,
-                        ..Default::default()
-                    })
-                })();
-                let result = match contract {
-                    Ok(result) if result.status == ReductionStatus::Complete => result.root,
-                    Ok(_) => return None,
-                    Err(error) => {
-                        failure = Some(error);
-                        return None;
-                    }
-                };
+            }
+            let metric = ETS.metric_literal(original[0], original[1]);
+            if bound.is_empty() {
+                return Some(metric);
+            }
+            let body = Atom::mul_many(
+                std::iter::once(&metric)
+                    .chain(bound.iter().map(|&position| &factors[position].expression)),
+            );
+            if let Some(result) = paired.get(&body) {
                 terminal_pairs &= result
                     .reduction_observations()
                     .excludes_internal_connections()
                     && result.reduction_observations().identity_candidates() == 0;
-                let expression = result.expression.clone();
-                paired.insert(body, result);
-                Some(expression)
-            },
-        );
+                return Some(result.expression.clone());
+            }
+            let contract = (|| {
+                let metric_interface = selected.proofs.metric_interface(original)?;
+                let mut occurrences = ExplicitIndexOccurrences::from_interface(&metric_interface);
+                let mut interfaces = vec![metric_interface];
+                for &position in &bound {
+                    occurrences.append(factors[position].explicit_index_occurrences()?);
+                }
+                occurrences.validate()?;
+                interfaces.extend(
+                    bound
+                        .iter()
+                        .map(|&position| factors[position].structure.clone()),
+                );
+                let interface = InterfaceInference::merge_explicit_interface_sequence(&interfaces)?;
+                let mut input = SymbolicTensor::from_validated_parts(
+                    body.clone(),
+                    interface,
+                    Arc::new(occurrences),
+                );
+                input
+                    .proofs
+                    .inherit_interfaces(bound.iter().map(|&position| &factors[position].proofs));
+                input.observe_replacement(coefficient);
+                input.contract_parts(ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
+            })();
+            let result = match contract {
+                Ok(result) if result.status == ReductionStatus::Complete => result.root,
+                Ok(_) => return None,
+                Err(error) => {
+                    failure = Some(error);
+                    return None;
+                }
+            };
+            terminal_pairs &= result
+                .reduction_observations()
+                .excludes_internal_connections()
+                && result.reduction_observations().identity_candidates() == 0;
+            let expression = result.expression.clone();
+            paired.insert(body, result);
+            Some(expression)
+        };
+        let evaluate = |collected: Option<&mut CollectedOutput<'_>>| {
+            trace_kernel::evaluate_generic_with_metrics(
+                &argument_views,
+                trace_unit.as_view(),
+                true,
+                self.output,
+                collected,
+                build_metric,
+            )
+        };
+        // The comparison keys were reindexed above. Supply their existing
+        // interfaces while the collector uses them as pairing endpoints.
+        let result = if let Some(output) = collected.as_deref_mut() {
+            output.with_metric_operands(arguments.iter().flatten(), |output| evaluate(Some(output)))
+        } else {
+            evaluate(None)
+        };
         if let Some(error) = failure {
             return Err(error);
         }
@@ -1367,13 +1344,23 @@ impl<'settings> DiracSimplifier<'settings> {
         let mut sources = vec![selected];
         sources.extend(bindings.iter().map(|(_, position, _)| &factors[*position]));
         let occurrences = ExplicitIndexOccurrences::product(&sources)?;
-        let rewritten =
+        let mut rewritten =
             SymbolicTensor::from_validated_parts(expression, interface, Arc::new(occurrences));
-        let _ = rewritten.proofs.intrinsic.set(true);
+        rewritten.proofs.inherit_interfaces(
+            sources
+                .iter()
+                .map(|source| &source.proofs)
+                .chain(paired.values().map(|source| &source.proofs)),
+        );
+        let _ = rewritten.work.intrinsic.set(true);
         if terminal_pairs {
-            let _ = rewritten.proofs.observations.set(std::sync::Arc::new(
-                DomainObservations::terminal_polynomial(&rewritten.structure, true),
-            ));
+            let _ = rewritten
+                .work
+                .get_or_init()
+                .observations
+                .set(std::sync::Arc::new(
+                    DomainObservations::terminal_polynomial(&rewritten.structure, true),
+                ));
         }
         let remaining =
             Atom::mul_many(factors.iter().enumerate().filter_map(|(position, factor)| {
@@ -1398,12 +1385,15 @@ impl<'settings> DiracSimplifier<'settings> {
             })
             .collect::<Vec<_>>();
         let occurrences = ExplicitIndexOccurrences::product(&sources)?;
-        let remaining = SymbolicTensor::from_validated_parts(
+        let mut remaining = SymbolicTensor::from_validated_parts(
             remaining,
             remaining_interface,
             Arc::new(occurrences),
         );
-        let _ = remaining.proofs.intrinsic.set(true);
+        remaining
+            .proofs
+            .inherit_interfaces(sources.iter().map(|source| &source.proofs));
+        let _ = remaining.work.intrinsic.set(true);
         remaining.observe_replacement(coefficient);
         *coefficient = remaining;
         Ok(Some(rewritten))

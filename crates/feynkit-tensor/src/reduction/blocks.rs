@@ -4,6 +4,7 @@
 use super::external::ExternalProjector;
 use super::*;
 use idenso::shorthands::UndoShorthands;
+use spenso::structure::partial::PartialIndex;
 use spenso::{
     network::parsing::ParseState,
     structure::{abstract_index::AbstractIndex, partial::PartialStructure},
@@ -78,7 +79,8 @@ impl TensorReducer {
         if let Some(error) = admission_error.take() {
             return Err(error);
         }
-        let indexed = source.with_checked_expression(indexed)?;
+        let indexed =
+            source.with_materialized_expression("projector dot materialization", indexed)?;
         let rows = indexed
             .coefficient_list_with(|value| {
                 match self.indexed_vector(value) {
@@ -123,6 +125,11 @@ impl TensorReducer {
                 });
             }
             let indices = (0..rank).map(|_| state.fresh_index()).collect::<Vec<_>>();
+            let fresh_slots = slots
+                .iter()
+                .zip(&indices)
+                .map(|(slot, index)| slot.rep().slot(PartialIndex::Explicit(*index)))
+                .collect::<Vec<_>>();
             let fresh = slots
                 .iter()
                 .zip(&indices)
@@ -196,7 +203,7 @@ impl TensorReducer {
             for term in projected {
                 // Apply the existing projector to a general covariant block:
                 // every probe occurrence denotes one of its open tensor ports.
-                let projector = term.tensor.expression().replace_map(|value, _, out| {
+                let projector = term.tensor.replace_map(|value, _, out| {
                     let AtomView::Fun(function) = value else {
                         return;
                     };
@@ -235,7 +242,14 @@ impl TensorReducer {
                 });
                 // The probe recipe becomes a new tensor projector with these
                 // explicit boundary slots. Existing inside/outside bodies stay typed.
-                let projector = SymbolicTensor::infer(projector)?;
+                let projector_interface = PartialStructure::from_logical_slots(
+                    boundary
+                        .logical_slots()
+                        .into_iter()
+                        .chain(fresh_slots.iter().copied()),
+                );
+                let projector =
+                    SymbolicTensor::from_produced_parts(projector, projector_interface)?;
                 let tensor = renamed
                     .multiply(&outside)?
                     .multiply(&projector)?
@@ -246,7 +260,10 @@ impl TensorReducer {
                         ..Default::default()
                     })?
                     .to_dots()?;
-                let tensor = source.with_checked_expression(tensor.expression().clone())?;
+                let tensor = source.with_materialized_expression(
+                    "block projector contraction",
+                    tensor.into_expression(),
+                )?;
                 if !tensor.is_zero() {
                     terms.push(TensorReductionTerm {
                         coefficient: term.coefficient,
@@ -270,7 +287,7 @@ impl TensorReducer {
             .all(|slot| slot.rep().rep != LibraryRep::from(Minkowski {}));
         Ok(TensorReduction {
             terms,
-            zero: source.with_checked_expression(Atom::Zero)?,
+            zero: source.with_produced_expression(Atom::Zero)?,
             max_rank,
             fully_contracted,
         })

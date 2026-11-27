@@ -1,22 +1,26 @@
+use std::iter;
 use std::sync::LazyLock;
 
-use spenso::{
-    dot, dualizable_, g,
-    network::{library::symbolic::ETS, tags::SPENSO_TAG as T},
-    rank1_, self_dual_,
-    structure::{
-        abstract_index::AbstractIndex,
-        representation::RepName,
-        slot::{IsAbstractSlot, SlotMatch, SlotMatcher},
-    },
-};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, representation::FunView},
-    function,
-    id::Replacement,
-};
+use spenso::network::library::symbolic::ETS;
+use spenso::network::tags::SPENSO_TAG as T;
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::representation::{LibraryRep, RepName};
+use spenso::structure::slot::{IsAbstractSlot, SlotMatch, SlotMatcher};
+use spenso::{dot, dualizable_, g, rank1_, self_dual_};
+use symbolica::atom::representation::FunView;
+use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
+use symbolica::function;
+use symbolica::id::Replacement;
 
-use crate::{W_, rep_symbols::RS, shorthands::metric::not_slot};
+use crate::W_;
+#[cfg(feature = "reference-cases")]
+use crate::reference_cases::timing;
+#[cfg(feature = "reference-cases")]
+use crate::reference_cases::timing::Phase;
+use crate::rep_symbols::RS;
+use crate::shorthands::metric;
+use crate::tensor::ContractSettings;
+use crate::tensor::inference::InterfaceInference;
 
 static METRIC_DOT_PRODUCT: LazyLock<[Replacement; 2]> = LazyLock::new(|| {
     let self_dual_stripped1 = self_dual_!(0; W_.d_);
@@ -36,7 +40,7 @@ static METRIC_DOT_PRODUCT: LazyLock<[Replacement; 2]> = LazyLock::new(|| {
                 function!(RS.f_, RS.a___, self_dual_stripped2)
             ),
         )
-        .when(not_slot(RS.a___)),
+        .when(metric::not_slot(RS.a___)),
         Replacement::new(
             g!(
                 rank1_!(0; W_.d___, &dualizable_stripped1),
@@ -48,7 +52,7 @@ static METRIC_DOT_PRODUCT: LazyLock<[Replacement; 2]> = LazyLock::new(|| {
                 function!(RS.f_, RS.a___, dualizable_stripped2)
             ),
         )
-        .when(not_slot(RS.a___)),
+        .when(metric::not_slot(RS.a___)),
     ]
 });
 
@@ -65,7 +69,7 @@ pub(crate) struct DotNormalizer {
     exposes_product: bool,
     metrics: bool,
     rank_one_powers: bool,
-    representations: Option<Vec<spenso::structure::representation::LibraryRep>>,
+    representations: Option<Vec<LibraryRep>>,
     admission_only: bool,
 }
 
@@ -84,14 +88,15 @@ impl DotNormalizer {
 
     /// Convert compact scalar-product spelling only. Explicit indices and powers
     /// remain available for the structural contractor.
-    pub(crate) fn notation(view: AtomView<'_>) -> Atom {
-        let compact = Self::with_settings(
+    pub(crate) fn notation(view: AtomView<'_>, slots: SlotMatcher) -> Atom {
+        let compact = Self::with_matcher(
             view,
-            crate::tensor::ContractSettings {
+            ContractSettings {
                 metrics: false,
                 rank_one: false,
                 ..Default::default()
             },
+            slots,
         );
         Self::metric_shorthand_to_dot(compact.as_view())
     }
@@ -100,14 +105,20 @@ impl DotNormalizer {
     /// scalar powers can be read. Preserve every already explicit spelling;
     /// full admission still validates the result and its metadata.
     pub(crate) fn nested_vectors(view: AtomView<'_>) -> Atom {
-        Self::normalize_mode(view, Default::default(), true).expression
+        Self::normalize_mode(view, Default::default(), true, SlotMatcher::default()).expression
     }
 
-    pub(crate) fn with_settings(
-        view: AtomView<'_>,
-        settings: crate::tensor::ContractSettings<'_>,
-    ) -> Atom {
+    #[cfg(test)]
+    pub(crate) fn with_settings(view: AtomView<'_>, settings: ContractSettings<'_>) -> Atom {
         Self::normalize_with_settings(view, settings).expression
+    }
+
+    pub(crate) fn with_matcher(
+        view: AtomView<'_>,
+        settings: ContractSettings<'_>,
+        slots: SlotMatcher,
+    ) -> Atom {
+        Self::normalize_with_matcher(view, settings, slots).expression
     }
 
     #[cfg(any(test, feature = "reference-cases"))]
@@ -115,24 +126,32 @@ impl DotNormalizer {
         Self::normalize_with_settings(view, Default::default())
     }
 
+    #[cfg(any(test, feature = "reference-cases"))]
     pub(super) fn normalize_with_settings(
         view: AtomView<'_>,
-        settings: crate::tensor::ContractSettings<'_>,
+        settings: ContractSettings<'_>,
     ) -> DotNormalization {
-        Self::normalize_mode(view, settings, false)
+        Self::normalize_with_matcher(view, settings, SlotMatcher::default())
+    }
+
+    pub(super) fn normalize_with_matcher(
+        view: AtomView<'_>,
+        settings: ContractSettings<'_>,
+        slots: SlotMatcher,
+    ) -> DotNormalization {
+        Self::normalize_mode(view, settings, false, slots)
     }
 
     fn normalize_mode(
         view: AtomView<'_>,
-        settings: crate::tensor::ContractSettings<'_>,
+        settings: ContractSettings<'_>,
         admission_only: bool,
+        slots: SlotMatcher,
     ) -> DotNormalization {
         #[cfg(feature = "reference-cases")]
-        let _phase = crate::reference_cases::timing::scope(
-            crate::reference_cases::timing::Phase::OutputNormalization,
-        );
+        let _phase = timing::scope(Phase::OutputNormalization);
         let mut normalizer = Self {
-            slots: SlotMatcher::default(),
+            slots,
             rank_one: &T.rank1,
             metric: ETS.metric,
             exposes_product: false,
@@ -206,9 +225,7 @@ impl DotNormalizer {
         if self.admission_only
             && let AtomView::Fun(function) = atom
             && function.get_symbol() != ETS.delta
-            && !crate::tensor::inference::InterfaceInference::intrinsic_normalization_head(
-                function.get_symbol(),
-            )
+            && !InterfaceInference::intrinsic_normalization_head(function.get_symbol())
         {
             // Rewriting a child would rebuild this ancestor and replay its
             // callback before the established constructor/validation boundary.
@@ -304,7 +321,7 @@ impl DotNormalizer {
                 // only expose the contraction hidden in the outer vector.
                 let (_, representation) = self
                     .slots
-                    .compact_vector_sequence::<AbstractIndex>(std::iter::once((0, inner)), false)?;
+                    .compact_vector_sequence::<AbstractIndex>(iter::once((0, inner)), false)?;
                 representation.to_symbolic([])
             }
             _ => return None,
@@ -318,10 +335,7 @@ impl DotNormalizer {
             function.as_view().visitor(&mut |value| {
                 if let AtomView::Fun(function) = value {
                     let symbol = function.get_symbol();
-                    intrinsic &=
-                        crate::tensor::inference::InterfaceInference::intrinsic_normalization_head(
-                            symbol,
-                        );
+                    intrinsic &= InterfaceInference::intrinsic_normalization_head(symbol);
                 }
                 intrinsic
             });
@@ -423,13 +437,15 @@ impl DotNormalizer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use spenso::{dualizable_dual_, rep_, structure::abstract_index::AIND_SYMBOLS};
+    use crate::test_support;
+    use spenso::structure::abstract_index::AIND_SYMBOLS;
+    use spenso::{dualizable_dual_, rep_};
     use symbolica::{function, symbol};
     use symbolica_utils::PatternReplacement;
 
     #[test]
     fn weighted_dot_notation_extracts_only_scalar_coefficients() {
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let p = T.rank_one_tensor_symbol("weighted_dot_p");
         let q = T.rank_one_tensor_symbol("weighted_dot_q");
         let p = function!(p, spenso::mink!(4));
@@ -438,10 +454,19 @@ mod tests {
         let inner = dot!(&p, &q);
         let input = dot!(&scalar * &inner * &p, Atom::num(3) * &q);
         let expected = Atom::num(3) * &scalar * inner.pow(2);
-        assert_eq!(DotNormalizer::notation(input.as_view()), expected);
+        assert_eq!(
+            DotNormalizer::notation(input.as_view(), SlotMatcher::default()),
+            expected
+        );
         let metric = g!(&scalar * &inner * &p, Atom::num(3) * &q);
-        assert_eq!(DotNormalizer::notation(metric.as_view()), expected);
-        assert_eq!(DotNormalizer::notation(expected.as_view()), expected);
+        assert_eq!(
+            DotNormalizer::notation(metric.as_view(), SlotMatcher::default()),
+            expected
+        );
+        assert_eq!(
+            DotNormalizer::notation(expected.as_view(), SlotMatcher::default()),
+            expected
+        );
 
         // An explicit tensor factor is not a scalar coefficient, and notation
         // conversion must not contract it against a repeated index elsewhere.
@@ -456,14 +481,17 @@ mod tests {
         let coefficient = &indexed * &other;
         let input = dot!(&coefficient * &p, &q);
         assert_eq!(
-            DotNormalizer::notation(input.as_view()),
+            DotNormalizer::notation(input.as_view(), SlotMatcher::default()),
             &coefficient * dot!(&p, &q)
         );
         let input = dot!(&indexed * &p, &q) * &indexed;
-        assert_eq!(DotNormalizer::notation(input.as_view()), input);
+        assert_eq!(
+            DotNormalizer::notation(input.as_view(), SlotMatcher::default()),
+            input
+        );
         let partial_metric = g!(&indexed * &p, &q) * &indexed;
         assert_eq!(
-            DotNormalizer::notation(partial_metric.as_view()),
+            DotNormalizer::notation(partial_metric.as_view(), SlotMatcher::default()),
             partial_metric
         );
     }
@@ -472,7 +500,7 @@ mod tests {
     fn first_dot_rewrite_is_constructed_once_per_occurrence() {
         use std::sync::{Arc, Mutex};
 
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let calls = Arc::new(Mutex::new(Vec::new()));
         let observed = Arc::clone(&calls);
         let p = spenso::vector_symbol!(
@@ -516,7 +544,7 @@ mod tests {
 
     #[test]
     fn normalization_reports_new_product_sources() {
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let vector = T.rank_one_tensor_symbol("dot_pending_vector");
         let vector = function!(vector, spenso::mink!(4, 73219));
         let metric = g!(spenso::mink!(4, 73219), spenso::mink!(4, 73223));
@@ -549,7 +577,7 @@ mod tests {
                     rank1_!(0; W_.c___, &inner).to_pattern(),
                     g!(rank1_!(0; W_.c___, &stripped), inner,),
                 )
-                .when(not_slot(RS.a___))
+                .when(metric::not_slot(RS.a___))
                 .min_level(0)
                 .max_level(0)
                 .level_is_tree_depth(true),
@@ -685,7 +713,7 @@ mod tests {
 
     #[test]
     fn direct_dot_normalization_matches_canonical_pattern_oracle() {
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let (d, x, opaque) = symbol!("direct_dot_d", "direct_dot_x", "direct_dot_scope");
         let p = T.rank_one_tensor_symbol("direct_dot_p");
         let q = T.rank_one_tensor_symbol("direct_dot_q");
@@ -766,7 +794,7 @@ mod tests {
 
     #[test]
     fn dot_normalization_requires_canonical_vectors_and_preserves_payloads() {
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let (d, e, x) = symbol!("strict_dot_d", "strict_dot_e", "strict_dot_x");
         let p = T.rank_one_tensor_symbol("strict_dot_p");
         let q = T.rank_one_tensor_symbol("strict_dot_q");
@@ -845,7 +873,7 @@ mod tests {
             atomic::{AtomicBool, AtomicUsize, Ordering},
         };
 
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let calls = Arc::new(AtomicUsize::new(0));
         let enabled = Arc::new(AtomicBool::new(false));
         let observed = Arc::clone(&calls);

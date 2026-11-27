@@ -13,6 +13,28 @@ use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder};
 use symbolica::{function, parse_lit, symbol};
 
 #[test]
+fn admission_allocates_reduction_state_only_when_a_plan_is_requested() {
+    test_support::test_initialize();
+    let source = SymbolicTensor::infer(p!(mink!(4, 99502))).unwrap();
+    let copy = source.clone();
+    assert!(source.same_reduction_state(&copy));
+    assert_eq!(source.reduction_status(), ReductionStatus::Deferred);
+    assert!(source.work.state.get().is_none());
+    assert!(copy.work.state.get().is_none());
+
+    let graph = source.shallow_graph().unwrap();
+    let unchanged = source
+        .with_checked_expression(source.expression.clone())
+        .unwrap();
+    assert!(Arc::ptr_eq(&graph, &unchanged.shallow_graph().unwrap()));
+
+    let changed = source.with_checked_expression(Atom::Zero).unwrap();
+    assert_eq!(changed.structure(), source.structure());
+    assert!(changed.work.state.get().is_none());
+    assert!(Arc::ptr_eq(&graph, &source.shallow_graph().unwrap()));
+}
+
+#[test]
 fn alternating_completed_policies_reuse_the_shared_carrier_and_contraction_proof() {
     crate::test_support::test_initialize();
     let value =
@@ -40,7 +62,7 @@ fn alternating_completed_policies_reuse_the_shared_carrier_and_contraction_proof
 
     // A newly admitted expression does not inherit completion facts.
     let mapped = SymbolicTensor::infer(completed.expression.clone()).unwrap();
-    assert!(mapped.proofs.reduction.is_none());
+    assert!(mapped.work.record().is_none());
     assert!(!mapped.contraction_complete());
 }
 
@@ -64,9 +86,8 @@ fn expression_changes_invalidate_previously_completed_policies() {
     assert!(!reduced.contraction_complete());
     assert!(
         !reduced
-            .proofs
-            .reduction
-            .as_ref()
+            .work
+            .record()
             .unwrap()
             .completed
             .contains(&structural_policy)
@@ -98,10 +119,7 @@ fn capped_policy_is_revisited_without_losing_other_completion_facts() {
     assert_eq!(capped.reduction_status(), ReductionStatus::Capped);
     assert_eq!(repeated.reduction_status(), ReductionStatus::Capped);
     assert_eq!(repeated, completed);
-    assert_eq!(
-        repeated.proofs.reduction.as_ref().unwrap().completed.len(),
-        1
-    );
+    assert_eq!(repeated.work.record().unwrap().completed.len(), 1);
     let restored = repeated.simplify_algebra(&disabled).unwrap();
     assert_eq!(restored.reduction_status(), ReductionStatus::Complete);
     assert!(Arc::ptr_eq(
@@ -140,10 +158,7 @@ fn deferred_policy_is_revisited_without_losing_other_completion_facts() {
     assert_eq!(deferred.reduction_status(), ReductionStatus::Deferred);
     assert_eq!(repeated.reduction_status(), ReductionStatus::Deferred);
     assert_eq!(repeated.expression, expression);
-    assert_eq!(
-        repeated.proofs.reduction.as_ref().unwrap().completed.len(),
-        1
-    );
+    assert_eq!(repeated.work.record().unwrap().completed.len(), 1);
     let restored = repeated.simplify_algebra(&disabled).unwrap();
     assert_eq!(restored.reduction_status(), ReductionStatus::Complete);
     assert!(Arc::ptr_eq(

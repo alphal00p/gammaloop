@@ -1857,7 +1857,8 @@ const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // graphs to the state's model.json instead of embedding a model copy per graph.
 // It also keeps full finalized cuts beside selected cuts and maps compact integrand
 // terms to their stored source graphs. Older positional archives must be regenerated.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 23;
+// Version 24 stores regional tensor interfaces and raw leaf ports in tensor archive v2.
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 24;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -4494,7 +4495,7 @@ mod tests {
         }
         state.save(temp.path(), true, false).unwrap();
         let manifest = load_state_manifest(temp.path()).unwrap();
-        assert_eq!(manifest.version, 23);
+        assert_eq!(manifest.version, 24);
         assert!(manifest
             .ufo_print_symbols
             .contains(&"orphan_ufo_printer".to_owned()));
@@ -5823,7 +5824,7 @@ commands = ["quit -n"]
 
     #[test]
     fn state_load_rejects_previous_branch_layouts_before_deserialization() {
-        for version in [20, 21, 22] {
+        for version in [20, 21, 22, 23] {
             let temp = tempdir().unwrap();
             fs::write(
                 temp.path().join(STATE_MANIFEST_FILE),
@@ -5847,7 +5848,7 @@ commands = ["quit -n"]
             };
             let message = error.to_string();
             assert!(message.contains(&format!("State version {version}")));
-            assert!(message.contains("supported version 23"));
+            assert!(message.contains("supported version 24"));
             assert!(message.contains("regenerate the saved state"));
         }
     }
@@ -5863,7 +5864,7 @@ commands = ["quit -n"]
 
     #[test]
     fn state_save_rejects_legacy_target_before_writing() {
-        for version in [1, 20, 21, 22] {
+        for version in [1, 20, 21, 22, 23] {
             let temp = tempdir().unwrap();
             let symbolica_state = temp.path().join("symbolica_state.bin");
             fs::write(

@@ -1,25 +1,161 @@
+use std::cell::OnceCell;
+use std::sync::Arc;
 use std::sync::LazyLock;
 
-use spenso::{
-    chain, dualizable_, dualizable_dual_,
-    network::{library::symbolic::ETS, parsing::ParseState, tags::SPENSO_TAG as T},
-    self_dual_,
-    shadowing::{ANTISYM, CYCLIC, SYM},
-    structure::{
-        abstract_index::AbstractIndex,
-        representation::{LibraryRep, RepName},
-        slot::{SlotMatch, SlotMatcher},
-    },
-    trace,
-};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
-    function,
-    id::{Condition, Match, PatternRestriction, Replacement},
-};
+use spenso::network::library::symbolic::ETS;
+use spenso::network::parsing::{LeafInterfaceCache, ParseState};
+use spenso::network::tags::SPENSO_TAG as T;
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::representation::{LibraryRep, RepName};
+use spenso::structure::slot::{IsAbstractSlot, SlotMatch, SlotMatcher};
+use spenso::{chain, dualizable_, dualizable_dual_, self_dual_, trace};
+use symbolica::atom::representation::FunView;
+use symbolica::atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol};
+use symbolica::function;
+use symbolica::id::{Condition, Match, PatternRestriction, Replacement};
 use symbolica_utils::PatternReplacement;
 
 use crate::W_;
+use crate::tensor::inference::TensorInferenceError;
+use crate::tensor::{SymbolicTensor, TensorProofs};
+use spenso::structure::partial::PartialStructure;
+
+mod precheck;
+
+impl SymbolicTensor<PartialStructure> {
+    pub(crate) fn collect_chain_words(
+        &self,
+        representation: LibraryRep,
+        collect: bool,
+        traces: bool,
+    ) -> Result<Self, TensorInferenceError> {
+        let (proofs, leaves) = self.producer_context();
+        // A partially collected word can have temporary in/out placeholders,
+        // including on a singleton that will be restored to its original head.
+        // Publish the interface only after the complete collection.
+        let prepared = collect
+            .then(|| {
+                Self::chainify_admitted(self.expression.as_view(), representation, &proofs, &leaves)
+            })
+            .transpose()?;
+        let expression = collect_chain_words(
+            self.expression.as_view(),
+            prepared,
+            representation,
+            traces,
+            false,
+            Some(leaves),
+        );
+        if expression == self.expression {
+            return Ok(self.clone());
+        }
+        self.borrowed_with_proofs(&proofs)
+            .with_materialized_expression("collect_chains", expression)
+    }
+
+    pub(crate) fn chainified(
+        &self,
+        representation: LibraryRep,
+    ) -> Result<Self, TensorInferenceError> {
+        let (proofs, leaves) = self.producer_context();
+        let expression =
+            Self::chainify_admitted(self.expression.as_view(), representation, &proofs, &leaves)?;
+        self.borrowed_with_proofs(&proofs)
+            .with_materialized_expression("chainify", expression)
+    }
+
+    /// Join a prepared gamma word in one pass, carrying endpoint permutations
+    /// and newly formed templates until the complete algebra result is published.
+    pub(crate) fn join_prepared_chains(
+        &self,
+        value: AtomView<'_>,
+        representation: LibraryRep,
+    ) -> Result<(Atom, TensorProofs), TensorInferenceError> {
+        let (proofs, leaves) = self.producer_context();
+        let chainified = Self::chainify_admitted(value, representation, &proofs, &leaves)?;
+        let joined = collect_chain_words(
+            value,
+            Some(chainified),
+            representation,
+            true,
+            true,
+            Some(leaves),
+        );
+        Ok((joined.normalize_chains(), proofs))
+    }
+
+    fn chainify_admitted(
+        value: AtomView<'_>,
+        representation: LibraryRep,
+        proofs: &TensorProofs,
+        leaves: &LeafInterfaceCache,
+    ) -> Result<Atom, TensorInferenceError> {
+        let state = ParseState::<AbstractIndex>::default().with_leaf_interfaces(Arc::clone(leaves));
+        state.reserve_indices(value);
+        let mut failure = None;
+        let expression = chainify_with::<true>(
+            value,
+            representation,
+            Some(&state),
+            Some(leaves),
+            &mut |value, generated| {
+                if let Some(interface) = proofs.admitted_interface(value) {
+                    proofs.retain_interface(generated, interface);
+                }
+                if let (AtomView::Fun(source), AtomView::Fun(chain)) = (value, generated)
+                    && chain.get_symbol() == T.chain
+                    && let Some(AtomView::Fun(template)) = chain.iter().nth(2)
+                    && template.get_symbol() == source.get_symbol()
+                    && template.get_nargs() == source.get_nargs()
+                {
+                    let source_ports = leaves
+                        .lock()
+                        .expect("leaf interface cache is not poisoned")
+                        .get(value.get_data())
+                        .cloned();
+                    if let Some((true, source_ports)) = source_ports {
+                        let arguments = source.iter().zip(template.iter()).collect::<Vec<_>>();
+                        let endpoints = chain.iter().take(2).collect::<Vec<_>>();
+                        // A normalizer may change internal contractions. Only
+                        // the constructor's exact endpoint substitution certifies
+                        // a raw template; its free boundary alone is insufficient.
+                        let preserved = arguments.iter().all(|(old, new)| {
+                            old == new
+                                || *old == endpoints[0] && *new == Atom::var(T.chain_in).as_view()
+                                || *old == endpoints[1] && *new == Atom::var(T.chain_out).as_view()
+                        });
+                        let mut used = vec![false; arguments.len()];
+                        let ports = source_ports
+                            .iter()
+                            .map(|port| {
+                                arguments
+                                    .iter()
+                                    .enumerate()
+                                    .find(|(position, (old, _))| {
+                                        !used[*position] && *old == port.as_view()
+                                    })
+                                    .map(|(position, (_, new))| {
+                                        used[position] = true;
+                                        (*new).to_owned()
+                                    })
+                            })
+                            .collect::<Option<Vec<_>>>();
+                        if preserved
+                            && let Some(ports) = ports
+                            && let Err(error) = proofs.retain_leaf_ports(template.as_view(), ports)
+                        {
+                            failure = Some(error);
+                        }
+                    }
+                }
+            },
+        );
+        if let Some(error) = failure {
+            return Err(error);
+        }
+        Ok(expression)
+    }
+}
 #[cfg(test)]
 thread_local! {
     pub(crate) static CHAINIFY_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
@@ -168,317 +304,18 @@ impl<'a> Chain for AtomView<'a> {
         traces: bool,
         retain_singletons: bool,
     ) -> Atom {
-        // Match full slot compatibility, including dimensions and duality.
-        // Names alone never authorize a closure.
-        let closed = |node: AtomView<'_>, slots: &mut SlotMatcher| {
-            use spenso::structure::slot::IsAbstractSlot;
-            let AtomView::Fun(chain) = node else {
-                return None;
-            };
-            if chain.get_symbol() != T.chain || chain.get_nargs() < 2 {
-                return None;
-            }
-            let mut arguments = chain.iter();
-            let start = slots
-                .parse::<LibraryRep, AbstractIndex>(arguments.next().unwrap())
-                .ok()?;
-            let end = slots
-                .parse::<LibraryRep, AbstractIndex>(arguments.next().unwrap())
-                .ok()?;
-            if start.rep().rep != representation
-                || !start.rep().matches(&end.rep())
-                || start.aind != end.aind
-                || !(representation.is_self_dual()
-                    || representation.is_base() && end.rep().rep.is_dual())
-            {
-                return None;
-            }
-            Some(spenso::shadowing::trace(
-                start.rep().to_symbolic([]),
-                arguments,
-            ))
-        };
-        let normalize = |value: Atom| {
-            if !traces {
-                return value;
-            }
-            let mut slots = SlotMatcher::default();
-            let mut closes = false;
-            value.visitor(&mut |node| {
-                closes |= closed(node, &mut slots).is_some();
-                !closes
-            });
-            if !closes {
-                return value;
-            }
-            value.replace_map(|node, _, output| {
-                if let Some(trace) = closed(node, &mut slots) {
-                    **output = trace;
-                }
-            })
-        };
-        if !collect {
-            return normalize(self.to_owned());
-        }
-        let source = self.chainify(representation);
-        // Every local join requires a chain. The typed collector has already
-        // selected this monomial and retained unrelated factors outside it.
-        if !source.contains_symbol(T.chain) {
-            return source;
-        }
-
-        let in_index = Atom::var(W_.i_);
-        let dummy_out = representation.dual().to_symbolic([W_.d_, W_.j_]);
-        let dummy_in = representation.to_symbolic([W_.d_, W_.j_]);
-        let out_index = Atom::var(W_.k_);
-        let endpoints = W_.i_.filter_cmp(W_.d_, move |endpoint, dimension| {
-            let (Match::Single(endpoint), Match::Single(dimension)) = (endpoint, dimension) else {
-                return false;
-            };
-            SlotMatcher::default()
-                .port_representation(*endpoint)
-                .is_some_and(|(rep, dim)| rep == representation && dim == *dimension)
-        }) & W_.k_.filter_cmp(W_.d_, move |endpoint, dimension| {
-            let (Match::Single(endpoint), Match::Single(dimension)) = (endpoint, dimension) else {
-                return false;
-            };
-            SlotMatcher::default()
-                .port_representation(*endpoint)
-                .is_some_and(|(rep, dim)| rep == representation.dual() && dim == *dimension)
-        });
-
-        let mut joins = vec![(
-            chain!(&in_index, &dummy_out, W_.a___) * chain!(&dummy_in, &out_index, W_.b___),
-            false,
-            false,
-        )];
-        if representation.is_self_dual() {
-            // Common-end contractions need a transpose, not a conjugate:
-            // A(i,j) B(k,j) = (A B^T)(i,k), and similarly for common starts.
-            joins.extend([
-                (
-                    chain!(&in_index, &dummy_out, W_.a___) * chain!(&out_index, &dummy_in, W_.b___),
-                    false,
-                    true,
-                ),
-                (
-                    chain!(&dummy_out, &in_index, W_.a___) * chain!(&dummy_in, &out_index, W_.b___),
-                    true,
-                    false,
-                ),
-            ]);
-        }
-        // Joins match two chains of one product. Each product with two or
-        // more chains reaches its fixed point among its own chain factors,
-        // children first, instead of matching every product of the whole
-        // expression once per pass.
-        let mut joined = false;
-        let mut fixed_point = |mut result: Atom| loop {
-            let previous = result.clone();
-            for (product, transpose_left, transpose_right) in &joins {
-                let start = in_index.to_pattern();
-                let end = out_index.to_pattern();
-                let transpose_left = *transpose_left;
-                let transpose_right = *transpose_right;
-                result = result
-                    .replace(product.to_pattern())
-                    .when(endpoints.clone())
-                    .repeat()
-                    .with_map(move |matches| {
-                        let mut collected = FunctionBuilder::new(T.chain)
-                            .add_arg(start.replace_wildcards_with_matches(matches))
-                            .add_arg(end.replace_wildcards_with_matches(matches));
-                        for (sequence, transpose) in
-                            [(W_.a___, transpose_left), (W_.b___, transpose_right)]
-                        {
-                            let mut factors = match matches.get(sequence).unwrap() {
-                                Match::Single(factor) => vec![*factor],
-                                Match::Multiple(_, factors) => factors.to_vec(),
-                                Match::FunctionName(_) => {
-                                    unreachable!("a factor sequence is not a function name")
-                                }
-                            };
-                            if transpose {
-                                factors.reverse();
-                            }
-                            for factor in factors {
-                                let factor = if transpose {
-                                    transpose_chain_factor(factor)
-                                } else {
-                                    factor.to_owned()
-                                };
-                                collected = collected.add_arg(factor);
-                            }
-                        }
-                        collected.finish()
-                    });
-            }
-            joined |= result != previous;
-            result = normalize(result);
-            // Every join removes one chain; normalization may close it as a trace.
-            if result == previous {
-                return result;
-            }
-        };
-        let joined_products = joining_products(source.as_view(), &mut fixed_point);
-        // Close single chains outside joined products too.
-        let result = normalize(joined_products.unwrap_or_else(|| source.clone()));
-        if retain_singletons {
-            // The existing pass has already collected every matrix.
-            // Algebra kernels keep those words, so neither unfold them
-            // here nor run chainify again to reconstruct them afterward.
-            return result;
-        }
-        if !joined && (!traces || result == source) {
-            // No connection was joined or closed. Keep the original
-            // notation, including existing one-factor chains: unfolding
-            // them here competes with the algebra kernels' collection.
-            return self.to_owned();
-        }
-        // An isolated matrix has no product to collect. Retain its exact
-        // indexed form; a closed word must survive when traces are disabled.
-        result.replace_map(|node, _, output| {
-            let AtomView::Fun(chain) = node else {
-                return;
-            };
-            if chain.get_symbol() != T.chain || chain.get_nargs() != 3 {
-                return;
-            }
-            let mut arguments = chain.iter();
-            let start = arguments.next().unwrap();
-            let end = arguments.next().unwrap();
-            use spenso::structure::slot::{IsAbstractSlot, SlotMatcher};
-            let mut slots = SlotMatcher::default();
-            let Ok(start) = slots.parse::<LibraryRep, AbstractIndex>(start) else {
-                return;
-            };
-            let Ok(end) = slots.parse::<LibraryRep, AbstractIndex>(end) else {
-                return;
-            };
-            if start.rep().rep == representation && start.aind != end.aind {
-                **output = node.undo_single_length();
-            }
-        })
+        collect_chain_words(
+            *self,
+            collect.then(|| self.chainify(representation)),
+            representation,
+            traces,
+            retain_singletons,
+            None,
+        )
     }
 
     fn chainify(&self, representation: LibraryRep) -> Atom {
-        // Both endpoints must use this representation. Terminal metric/epsilon
-        // expressions often have no such slots; avoid building a replacement
-        // and invoking its matcher at every unrelated function in that case.
-        #[cfg(test)]
-        CHAINIFY_CALLS.with(|count| count.set(count.get() + 1));
-        if !self.contains_symbol(representation.symbol()) {
-            return self.to_owned();
-        }
-
-        let in_index = Atom::var(W_.i_);
-        let out_index = Atom::var(W_.j_);
-        let endpoints = chainify_endpoints(representation);
-        let replacement = chainify_rule(representation);
-        let opaque_heads = [T.chain, T.trace];
-        let existing_chain = chain!(&in_index, &out_index, W_.a___).to_pattern();
-        // An unchanged pruning assignment in replace_map rebuilds ancestors
-        // and invokes their normalizers. Keep borrowed children until this
-        // existing chain rule actually changes a node.
-        fn rewrite<'a>(
-            atom: AtomView<'a>,
-            slots: &mut SlotMatcher,
-            opaque_heads: &[Symbol],
-            apply: &impl Fn(AtomView<'_>) -> Atom,
-            open: &impl Fn(symbolica::atom::representation::FunView<'_>) -> Option<Atom>,
-        ) -> AtomOrView<'a> {
-            if !matches!(slots.classify(atom), SlotMatch::Other) {
-                return atom.into();
-            }
-            let children = match atom {
-                AtomView::Fun(function) => {
-                    if let Some(opened) = open(function) {
-                        return rewrite(opened.as_view(), slots, opaque_heads, apply, open)
-                            .into_owned()
-                            .into();
-                    }
-                    if opaque_heads.contains(&function.get_symbol()) {
-                        return atom.into();
-                    }
-                    let changed = apply(atom);
-                    if changed.as_view() != atom {
-                        return changed.into();
-                    }
-                    function.iter().collect::<Vec<_>>()
-                }
-                AtomView::Add(sum) => sum.iter().collect(),
-                AtomView::Mul(product) => product.iter().collect(),
-                AtomView::Pow(power) => {
-                    let (base, exponent) = power.get_base_exp();
-                    vec![base, exponent]
-                }
-                _ => return atom.into(),
-            };
-            let children = children
-                .into_iter()
-                .map(|child| rewrite(child, slots, opaque_heads, apply, open))
-                .collect::<Vec<_>>();
-            if children
-                .iter()
-                .all(|child| matches!(child, AtomOrView::View(_)))
-            {
-                return atom.into();
-            }
-            match atom {
-                AtomView::Fun(function) => {
-                    let mut output = FunctionBuilder::new(function.get_symbol());
-                    for child in children {
-                        output = output.add_arg(child);
-                    }
-                    output.finish().into()
-                }
-                AtomView::Add(_) => Atom::add_many(children).into(),
-                AtomView::Mul(_) => Atom::mul_many(children).into(),
-                AtomView::Pow(_) => children[0].as_view().pow(children[1].as_view()).into(),
-                _ => unreachable!("only compound expressions have children"),
-            }
-        }
-        let state = std::cell::OnceCell::new();
-        rewrite(
-            *self,
-            &mut SlotMatcher::default(),
-            &opaque_heads,
-            &|atom| match chainified_slot_function(atom, representation) {
-                Some(chained) => chained.unwrap_or_else(|| atom.to_owned()),
-                None => atom.replace_multiple([&replacement]),
-            },
-            &|function| {
-                if function.get_symbol() != T.dot && function.get_symbol() != ETS.metric {
-                    return None;
-                }
-                let (left, right, _, _) = spenso::structure::slot::SlotMatcher::default()
-                    .compact_inner_product_parts::<AbstractIndex>(function)?;
-                // Select with the existing endpoint rule, including its opaque-head
-                // and placeholder restrictions. Existing chains already own their
-                // endpoints.
-                // Either operand may carry the selected endpoints, as in gamma·p.
-                let selected = [left, right].into_iter().any(|operand| {
-                    operand
-                        .pattern_match(&replacement.pat, replacement.conditions.as_ref(), None)
-                        .next()
-                        .is_some()
-                        || operand
-                            .pattern_match(&existing_chain, Some(&endpoints), None)
-                            .next()
-                            .is_some()
-                });
-                if !selected {
-                    return None;
-                }
-                let state = state.get_or_init(|| {
-                    let state = ParseState::<AbstractIndex>::default();
-                    state.reserve_indices(*self);
-                    state
-                });
-                state.materialize_inner_product(function)
-            },
-        )
-        .into_owned()
+        chainify_with::<true>(*self, representation, None, None, &mut |_, _| {})
     }
 
     fn normalize_chains(&self) -> Atom {
@@ -525,6 +362,360 @@ impl<'a> Chain for AtomView<'a> {
                 .replace_multiple_repeat(SINGLE_LENGTH_NORM.as_ref())
         })
     }
+}
+
+/// Tests disable the prechecks to compare the original matcher and its
+/// generated-leaf observations on the same traversal.
+fn chainify_with<const PRECHECK: bool>(
+    value: AtomView<'_>,
+    representation: LibraryRep,
+    admitted_state: Option<&ParseState<AbstractIndex>>,
+    leaf_interfaces: Option<&LeafInterfaceCache>,
+    observer: &mut impl FnMut(AtomView<'_>, AtomView<'_>),
+) -> Atom {
+    // Both endpoints must use this representation. Terminal metric/epsilon
+    // expressions often have no such slots; avoid building a replacement
+    // and invoking its matcher at every unrelated function in that case.
+    #[cfg(test)]
+    CHAINIFY_CALLS.with(|count| count.set(count.get() + 1));
+    if !value.contains_symbol(representation.symbol()) {
+        return value.to_owned();
+    }
+
+    let in_index = Atom::var(W_.i_);
+    let out_index = Atom::var(W_.j_);
+    let endpoints = chainify_endpoints(representation);
+    let replacement = chainify_rule(representation);
+    let opaque_heads = [T.chain, T.trace];
+    let existing_chain = chain!(&in_index, &out_index, W_.a___).to_pattern();
+    // An unchanged pruning assignment in replace_map rebuilds ancestors
+    // and invokes their normalizers. Keep borrowed children until this
+    // existing chain rule actually changes a node.
+    fn rewrite<'a>(
+        atom: AtomView<'a>,
+        slots: &mut SlotMatcher,
+        opaque_heads: &[Symbol],
+        apply: &impl Fn(FunView<'_>, &mut SlotMatcher) -> Option<Atom>,
+        open: &impl Fn(FunView<'_>, &mut SlotMatcher) -> Option<Atom>,
+        observer: &mut impl FnMut(AtomView<'_>, AtomView<'_>),
+    ) -> AtomOrView<'a> {
+        if !matches!(slots.classify(atom), SlotMatch::Other) {
+            return atom.into();
+        }
+        let children = match atom {
+            AtomView::Fun(function) => {
+                if let Some(opened) = open(function, slots) {
+                    observer(atom, opened.as_view());
+                    return rewrite(opened.as_view(), slots, opaque_heads, apply, open, observer)
+                        .into_owned()
+                        .into();
+                }
+                if opaque_heads.contains(&function.get_symbol()) {
+                    return atom.into();
+                }
+                if let Some(changed) = apply(function, slots)
+                    && changed.as_view() != atom
+                {
+                    observer(atom, changed.as_view());
+                    return changed.into();
+                }
+                function.iter().collect::<Vec<_>>()
+            }
+            AtomView::Add(sum) => sum.iter().collect(),
+            AtomView::Mul(product) => product.iter().collect(),
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                vec![base, exponent]
+            }
+            _ => return atom.into(),
+        };
+        let children = children
+            .into_iter()
+            .map(|child| rewrite(child, slots, opaque_heads, apply, open, observer))
+            .collect::<Vec<_>>();
+        if children
+            .iter()
+            .all(|child| matches!(child, AtomOrView::View(_)))
+        {
+            return atom.into();
+        }
+        let result: Atom = match atom {
+            AtomView::Fun(function) => {
+                let mut output = FunctionBuilder::new(function.get_symbol());
+                for child in children {
+                    output = output.add_arg(child);
+                }
+                output.finish()
+            }
+            AtomView::Add(_) => Atom::add_many(children),
+            AtomView::Mul(_) => Atom::mul_many(children),
+            AtomView::Pow(_) => children[0].as_view().pow(children[1].as_view()),
+            _ => unreachable!("only compound expressions have children"),
+        };
+        observer(atom, result.as_view());
+        result.into()
+    }
+    let state = OnceCell::new();
+    let mut slots = leaf_interfaces.map_or_else(SlotMatcher::default, |cache| {
+        SlotMatcher::with_leaf_interfaces([Arc::clone(cache)])
+    });
+    rewrite(
+        value,
+        &mut slots,
+        &opaque_heads,
+        &|function, slots| {
+            let atom = function.as_view();
+            match chainified_slot_function(atom, representation, slots) {
+                Some(chained) => chained,
+                None if !PRECHECK || precheck::rule_may_match(function, representation, slots) => {
+                    Some(atom.replace_multiple([&replacement]))
+                }
+                None => None,
+            }
+        },
+        &|function, slots| {
+            if (function.get_symbol() != T.dot && function.get_symbol() != ETS.metric)
+                || (PRECHECK
+                    && !function
+                        .iter()
+                        .any(|arg| precheck::selection_may_match(arg, representation, slots)))
+            {
+                return None;
+            }
+            let (left, right, _, _) =
+                slots.compact_inner_product_parts::<AbstractIndex>(function)?;
+            // Select with the existing endpoint rule, including its opaque-head
+            // and placeholder restrictions. Existing chains already own their
+            // endpoints.
+            // Either operand may carry the selected endpoints, as in gamma·p.
+            let selected = [left, right].into_iter().any(|operand| {
+                operand
+                    .pattern_match(&replacement.pat, replacement.conditions.as_ref(), None)
+                    .next()
+                    .is_some()
+                    || operand
+                        .pattern_match(&existing_chain, Some(&endpoints), None)
+                        .next()
+                        .is_some()
+            });
+            if !selected {
+                return None;
+            }
+            let state = admitted_state.unwrap_or_else(|| {
+                state.get_or_init(|| {
+                    let state = ParseState::<AbstractIndex>::default();
+                    state.reserve_indices(value);
+                    state
+                })
+            });
+            state.materialize_inner_product(function)
+        },
+        observer,
+    )
+    .into_owned()
+}
+
+fn collect_chain_words(
+    original: AtomView<'_>,
+    chainified: Option<Atom>,
+    representation: LibraryRep,
+    traces: bool,
+    retain_singletons: bool,
+    leaf_interfaces: Option<LeafInterfaceCache>,
+) -> Atom {
+    // Match full slot compatibility, including dimensions and duality.
+    // Names alone never authorize a closure.
+    let closed = |node: AtomView<'_>, slots: &mut SlotMatcher| {
+        let AtomView::Fun(chain) = node else {
+            return None;
+        };
+        if chain.get_symbol() != T.chain || chain.get_nargs() < 2 {
+            return None;
+        }
+        let mut arguments = chain.iter();
+        let start = slots
+            .parse::<LibraryRep, AbstractIndex>(arguments.next().unwrap())
+            .ok()?;
+        let end = slots
+            .parse::<LibraryRep, AbstractIndex>(arguments.next().unwrap())
+            .ok()?;
+        if start.rep().rep != representation
+            || !start.rep().matches(&end.rep())
+            || start.aind != end.aind
+            || !(representation.is_self_dual()
+                || representation.is_base() && end.rep().rep.is_dual())
+        {
+            return None;
+        }
+        Some(spenso::shadowing::trace(
+            start.rep().to_symbolic([]),
+            arguments,
+        ))
+    };
+    let normalize = |value: Atom| {
+        if !traces {
+            return value;
+        }
+        let mut slots = SlotMatcher::default();
+        let mut closes = false;
+        value.visitor(&mut |node| {
+            closes |= closed(node, &mut slots).is_some();
+            !closes
+        });
+        if !closes {
+            return value;
+        }
+        value.replace_map(|node, _, output| {
+            if let Some(trace) = closed(node, &mut slots) {
+                **output = trace;
+            }
+        })
+    };
+    let Some(source) = chainified else {
+        return normalize(original.to_owned());
+    };
+    // Every local join requires a chain. The typed collector has already
+    // selected this monomial and retained unrelated factors outside it.
+    if !source.contains_symbol(T.chain) {
+        return source;
+    }
+
+    let in_index = Atom::var(W_.i_);
+    let dummy_out = representation.dual().to_symbolic([W_.d_, W_.j_]);
+    let dummy_in = representation.to_symbolic([W_.d_, W_.j_]);
+    let out_index = Atom::var(W_.k_);
+    let endpoints = W_.i_.filter_cmp(W_.d_, move |endpoint, dimension| {
+        let (Match::Single(endpoint), Match::Single(dimension)) = (endpoint, dimension) else {
+            return false;
+        };
+        SlotMatcher::default()
+            .port_representation(*endpoint)
+            .is_some_and(|(rep, dim)| rep == representation && dim == *dimension)
+    }) & W_.k_.filter_cmp(W_.d_, move |endpoint, dimension| {
+        let (Match::Single(endpoint), Match::Single(dimension)) = (endpoint, dimension) else {
+            return false;
+        };
+        SlotMatcher::default()
+            .port_representation(*endpoint)
+            .is_some_and(|(rep, dim)| rep == representation.dual() && dim == *dimension)
+    });
+
+    let mut joins = vec![(
+        chain!(&in_index, &dummy_out, W_.a___) * chain!(&dummy_in, &out_index, W_.b___),
+        false,
+        false,
+    )];
+    if representation.is_self_dual() {
+        // Common-end contractions need a transpose, not a conjugate:
+        // A(i,j) B(k,j) = (A B^T)(i,k), and similarly for common starts.
+        joins.extend([
+            (
+                chain!(&in_index, &dummy_out, W_.a___) * chain!(&out_index, &dummy_in, W_.b___),
+                false,
+                true,
+            ),
+            (
+                chain!(&dummy_out, &in_index, W_.a___) * chain!(&dummy_in, &out_index, W_.b___),
+                true,
+                false,
+            ),
+        ]);
+    }
+    // Joins match two chains of one product. Each product with two or
+    // more chains reaches its fixed point among its own chain factors,
+    // children first, instead of matching every product of the whole
+    // expression once per pass.
+    let mut joined = false;
+    let mut fixed_point = |mut result: Atom| loop {
+        let previous = result.clone();
+        for (product, transpose_left, transpose_right) in &joins {
+            let start = in_index.to_pattern();
+            let end = out_index.to_pattern();
+            let transpose_left = *transpose_left;
+            let transpose_right = *transpose_right;
+            let leaves = leaf_interfaces.clone();
+            result = result
+                .replace(product.to_pattern())
+                .when(endpoints.clone())
+                .repeat()
+                .with_map(move |matches| {
+                    let mut collected = FunctionBuilder::new(T.chain)
+                        .add_arg(start.replace_wildcards_with_matches(matches))
+                        .add_arg(end.replace_wildcards_with_matches(matches));
+                    for (sequence, transpose) in
+                        [(W_.a___, transpose_left), (W_.b___, transpose_right)]
+                    {
+                        let mut factors = match matches.get(sequence).unwrap() {
+                            Match::Single(factor) => vec![*factor],
+                            Match::Multiple(_, factors) => factors.to_vec(),
+                            Match::FunctionName(_) => {
+                                unreachable!("a factor sequence is not a function name")
+                            }
+                        };
+                        if transpose {
+                            factors.reverse();
+                        }
+                        for factor in factors {
+                            let factor = if transpose {
+                                let mut state = ParseState::<AbstractIndex>::default();
+                                if let Some(cache) = &leaves {
+                                    state = state.with_leaf_interfaces(Arc::clone(cache));
+                                }
+                                state.transpose_chain_factor(factor)
+                            } else {
+                                factor.to_owned()
+                            };
+                            collected = collected.add_arg(factor);
+                        }
+                    }
+                    collected.finish()
+                });
+        }
+        joined |= result != previous;
+        result = normalize(result);
+        // Every join removes one chain; normalization may close it as a trace.
+        if result == previous {
+            return result;
+        }
+    };
+    let joined_products = joining_products(source.as_view(), &mut fixed_point);
+    // Close single chains outside joined products too.
+    let result = normalize(joined_products.unwrap_or_else(|| source.clone()));
+    if retain_singletons {
+        // The existing pass has already collected every matrix.
+        // Algebra kernels keep those words, so neither unfold them
+        // here nor run chainify again to reconstruct them afterward.
+        return result;
+    }
+    if !joined && (!traces || result == source) {
+        // No connection was joined or closed. Keep the original
+        // notation, including existing one-factor chains: unfolding
+        // them here competes with the algebra kernels' collection.
+        return original.to_owned();
+    }
+    // An isolated matrix has no product to collect. Retain its exact
+    // indexed form; a closed word must survive when traces are disabled.
+    result.replace_map(|node, _, output| {
+        let AtomView::Fun(chain) = node else {
+            return;
+        };
+        if chain.get_symbol() != T.chain || chain.get_nargs() != 3 {
+            return;
+        }
+        let mut arguments = chain.iter();
+        let start = arguments.next().unwrap();
+        let end = arguments.next().unwrap();
+        let mut slots = SlotMatcher::default();
+        let Ok(start) = slots.parse::<LibraryRep, AbstractIndex>(start) else {
+            return;
+        };
+        let Ok(end) = slots.parse::<LibraryRep, AbstractIndex>(end) else {
+            return;
+        };
+        if start.rep().rep == representation && start.aind != end.aind {
+            **output = node.undo_single_length();
+        }
+    })
 }
 
 /// chainify's endpoints: a port of the representation and one of its dual,
@@ -588,11 +779,9 @@ fn chainify_rule(representation: LibraryRep) -> Replacement {
     )
     .when(
         chainify_endpoints(representation)
-            & W_.a_.filter_match(move |a| {
-                matches!(a, Match::FunctionName(a)
-                if *a != T.chain && *a != T.trace && *a != ETS.metric
-                    && !T.is_scalar_metadata(*a))
-            })
+            & W_.a_.filter_match(
+                |head| matches!(head, Match::FunctionName(head) if precheck::rule_head(*head)),
+            )
             & W_.a___.filter_match(no_ports)
             & W_.b___.filter_match(no_ports)
             & W_.c___.filter_match(no_ports),
@@ -608,6 +797,7 @@ fn chainify_rule(representation: LibraryRep) -> Replacement {
 fn chainified_slot_function(
     atom: AtomView<'_>,
     representation: LibraryRep,
+    slots: &mut SlotMatcher,
 ) -> Option<Option<Atom>> {
     let AtomView::Fun(function) = atom else {
         return None;
@@ -622,7 +812,6 @@ fn chainified_slot_function(
     {
         return None;
     }
-    let mut slots = SlotMatcher::default();
     let arguments = function.iter().collect::<Vec<_>>();
     if !arguments
         .iter()
@@ -717,49 +906,6 @@ fn undone_self_dual_single_length(chain: AtomView<'_>) -> Option<Atom> {
         };
     }
     Some(undone.finish())
-}
-
-/// Transpose one factor of a self-dual chain: exchange `in` and `out`, and
-/// reverse the ordered word of every factor projector, since
-/// `(A_1 ... A_n)^T = A_n^T ... A_1^T`. Projector heads then extract the
-/// permutation sign, `antisym(A,B)^T = antisym(B^T,A^T) = -antisym(A^T,B^T)`.
-/// Slots stay opaque, so marker names inside index labels are untouched.
-fn transpose_chain_factor(factor: AtomView<'_>) -> Atom {
-    let mut slots = SlotMatcher::default();
-    let mut opaque_level = None;
-    factor.replace_map(|atom, context, output| {
-        if opaque_level.is_some_and(|level| context.function_level > level) {
-            return;
-        }
-        opaque_level = None;
-        if !matches!(slots.classify(atom), SlotMatch::Other) {
-            opaque_level = Some(context.function_level);
-            return;
-        }
-        match atom {
-            AtomView::Var(symbol) if symbol.get_symbol() == T.chain_in => {
-                **output = Atom::var(T.chain_out);
-            }
-            AtomView::Var(symbol) if symbol.get_symbol() == T.chain_out => {
-                **output = Atom::var(T.chain_in);
-            }
-            AtomView::Fun(projector)
-                if [*SYM, *ANTISYM, *CYCLIC].contains(&projector.get_symbol()) =>
-            {
-                **output = projector
-                    .iter()
-                    .collect::<Vec<_>>()
-                    .into_iter()
-                    .rev()
-                    .fold(
-                        FunctionBuilder::new(projector.get_symbol()),
-                        |word, factor| word.add_arg(transpose_chain_factor(factor)),
-                    )
-                    .finish();
-            }
-            _ => {}
-        }
-    })
 }
 
 /// Rewrite every product with at least two chain factors, children first:
@@ -1500,9 +1646,13 @@ mod tests {
         let representation = LibraryRep::from(adjoint);
         let rule = chainify_rule(representation);
         for input in inputs {
-            let fast = chainified_slot_function(input.as_view(), representation)
-                .expect("explicit slots are decided")
-                .unwrap_or_else(|| input.clone());
+            let fast = chainified_slot_function(
+                input.as_view(),
+                representation,
+                &mut SlotMatcher::default(),
+            )
+            .expect("explicit slots are decided")
+            .unwrap_or_else(|| input.clone());
             assert_eq!(fast, input.replace_multiple([&rule]), "{input}");
             if let Some(undone) = undone_self_dual_single_length(fast.as_view()) {
                 assert_eq!(

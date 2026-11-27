@@ -88,9 +88,8 @@ impl TestReps {
 pub(crate) fn contracted_atom(
     expression: symbolica::atom::AtomView<'_>,
 ) -> Result<symbolica::atom::Atom, crate::tensor::inference::TensorInferenceError> {
-    use crate::tensor::{SymbolicTensor, inference::InterfaceInference};
-    let interface = InterfaceInference::replacement_interface(expression)?;
-    SymbolicTensor::from_produced_parts(expression.to_owned(), interface)?
+    use crate::tensor::SymbolicTensor;
+    SymbolicTensor::observe_raw_expression(expression.to_owned())?
         .contract(Default::default())
         .map(SymbolicTensor::into_expression)
 }

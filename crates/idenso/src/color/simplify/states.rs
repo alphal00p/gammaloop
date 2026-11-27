@@ -359,7 +359,9 @@ impl ColorAlgebraSimplifier {
             None => (monomial, slots),
         };
         slots.blocked.extend_from_slice(blocked);
-        let Some((relabelled, pool)) = labelled_by_first_occurrence(monomial, slots) else {
+        let Some((relabelled, pool)) =
+            labelled_by_first_occurrence(monomial, slots, &mut self.renamed_slots.borrow_mut())
+        else {
             return Some(monomial.clone());
         };
         // One dummy has only one labelling.
@@ -388,6 +390,7 @@ impl ColorAlgebraSimplifier {
 fn labelled_by_first_occurrence(
     monomial: &Atom,
     slots: MonomialSlots<'_>,
+    renamed_slots: &mut HashSet<Atom>,
 ) -> Option<(Atom, Vec<(Atom, Atom)>)> {
     let MonomialSlots {
         adjoint,
@@ -417,6 +420,8 @@ fn labelled_by_first_occurrence(
             let group = FunctionBuilder::new(CS.adjoint_rep)
                 .add_arg(dimension)
                 .finish();
+            renamed_slots.insert((*slot).to_owned());
+            renamed_slots.insert(target.clone());
             (*slot, target, group)
         })
         .collect::<Vec<_>>();

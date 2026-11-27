@@ -52,7 +52,8 @@ fn callback_contraction(
         structure,
         is_metric: false,
         is_composite: true,
-        proofs: contracted.proofs.algebra_result(),
+        work: Default::default(),
+        proofs: contracted.proofs.clone(),
     };
     value.validate_rewritten_interface(&value.expression)?;
     Ok(value)
@@ -72,7 +73,7 @@ fn scalar_field_intake_retains_internal_pairs_and_closes_power_scopes() {
     let expression = left * right;
     let scalar: SymbolicTensor = SymbolicTensor::new_scalar(expression);
     assert!(scalar.structure.is_scalar());
-    assert_eq!(scalar.proofs.validated.get(), Some(&true));
+    assert!(scalar.proofs.is_admitted());
     assert_eq!(scalar.proofs.occurrences.get().unwrap().count(slot), 2);
     let base = scalar.clone().scalar_power_base().unwrap();
     let powered: SymbolicTensor = SymbolicTensor::new_scalar(base.pow(2));
@@ -271,6 +272,7 @@ fn observed_network_interface_accepts_generic_index_storage() {
     let expression = FunctionBuilder::new(head).add_arg(&slot).finish();
     let port = LibrarySlot::<WrappedIndex>::try_from(slot.as_view()).unwrap();
     let value = SymbolicTensor {
+        work: Default::default(),
         proofs: Default::default(),
         structure: OrderedStructure::new(vec![port]).into_canonical(),
         expression,
@@ -320,6 +322,7 @@ fn observed_network_interface_keeps_distinct_open_owners() {
         .add_arg(second.to_atom())
         .finish();
     let value = SymbolicTensor {
+        work: Default::default(),
         proofs: Default::default(),
         structure: OrderedStructure::new(vec![first, second]).into_canonical(),
         expression,

@@ -13,6 +13,36 @@ use spenso::{
 use symbolica::function;
 
 #[test]
+fn materialized_root_and_leaves_keep_their_respective_open_ports() {
+    crate::test_support::test_initialize();
+    let representation = LibraryRep::from(Euclidean {}).new_rep(3);
+    let port = representation.to_symbolic([]);
+    let leaf = function!(tensor_symbol!("materialized_open_ports::leaf"), &port);
+    let source = SymbolicTensor::infer(leaf.clone()).unwrap();
+    let supplied = OrderedStructure::new(vec![representation.slot(PartialIndex::open(7))]);
+    let expression = Atom::num(2) * &leaf;
+    let result = source
+        .with_materialized_parts("open-port materializer", expression, supplied, |slot| slot)
+        .unwrap();
+    assert_eq!(result.structure, source.structure);
+    assert_eq!(
+        result
+            .proofs
+            .retained_interface(result.expression.as_view()),
+        Some(result.structure.clone()),
+    );
+    assert_eq!(
+        result
+            .proofs
+            .parser_leaf_interfaces()
+            .lock()
+            .unwrap()
+            .get(leaf.as_view().get_data()),
+        Some(&(true, vec![port])),
+    );
+}
+
+#[test]
 fn declared_parts_check_rank_and_open_order_without_replaying_callbacks() {
     use std::sync::{
         Arc,
@@ -37,7 +67,7 @@ fn declared_parts_check_rank_and_open_order_without_replaying_callbacks() {
         SymbolicTensor::from_declared_parts(expression.clone(), source.structure.clone()).unwrap();
     assert_eq!(admitted.expression(), &expression);
     assert_eq!(admitted.structure, source.structure);
-    assert_eq!(admitted.proofs.validated.get(), Some(&true));
+    assert!(admitted.proofs.is_admitted());
     let reversed =
         PartialStructure::from_logical_slots(source.structure.logical_slots().into_iter().rev());
     assert!(SymbolicTensor::from_declared_parts(expression.clone(), reversed).is_err());
@@ -66,7 +96,7 @@ fn declared_parts_check_rank_and_open_order_without_replaying_callbacks() {
     calls.store(0, Ordering::Relaxed);
     let admitted = SymbolicTensor::from_declared_parts(expression, structure).unwrap();
     assert_eq!(calls.load(Ordering::Relaxed), 0);
-    assert_eq!(admitted.proofs.validated.get(), Some(&true));
+    assert!(admitted.proofs.is_admitted());
 }
 
 #[test]
@@ -413,10 +443,20 @@ fn changed_auto_axis_order_cannot_relabel_asymmetric_components() {
     // The replacement vector has the same components, but its normalized factor
     // moves before the other vector. The encoded axes have not changed identity.
     let changed = function!(middle, slot(ends[0])) * function!(low, slot(ends[1]));
-    let (before, _) =
-        SymbolicTensor::observed_interface(&original, LeafInference::ObserveEncoded).unwrap();
-    let (after, _) =
-        SymbolicTensor::observed_interface(&changed, LeafInference::ObserveEncoded).unwrap();
+    let before = SymbolicTensor::observed_interface(
+        &original,
+        LeafInference::ObserveEncoded,
+        ObservationPurpose::Validate,
+    )
+    .unwrap()
+    .interface;
+    let after = SymbolicTensor::observed_interface(
+        &changed,
+        LeafInference::ObserveEncoded,
+        ObservationPurpose::Validate,
+    )
+    .unwrap()
+    .interface;
     assert_eq!(
         before
             .logical_slots()
@@ -453,12 +493,8 @@ fn changed_auto_axis_order_cannot_relabel_asymmetric_components() {
         component(positional.materialize_interface_ports(&bindings).unwrap()),
         Atom::num(15)
     );
-    assert!(source.with_rewritten_expression(changed.clone()).is_err());
-    assert!(source.with_algebra_result(changed.clone()).is_err());
     assert!(source.with_checked_expression(changed.clone()).is_err());
     let mixed = source.expression() + &changed;
-    assert!(source.with_rewritten_expression(mixed.clone()).is_err());
-    assert!(source.with_algebra_result(mixed.clone()).is_err());
     assert!(source.with_checked_expression(mixed).is_err());
 
     for finish in [
@@ -601,8 +637,12 @@ fn one_anonymous_axis_stays_unambiguous_across_explicit_port_movement() {
         let expression = doubled.materialize_interface_ports(&bindings).unwrap();
         assert_eq!(component(expression.clone(), [0, 1]), Atom::num(6));
         assert_eq!(component(expression, [1, 0]), Atom::num(10));
-        assert!(finish(&ambiguous, Atom::num(2) * &changed_head).is_err());
     }
+    assert!(
+        ambiguous
+            .with_checked_expression(Atom::num(2) * changed_head)
+            .is_err()
+    );
 }
 
 #[test]
@@ -677,7 +717,7 @@ fn unchanged_ordered_products_keep_raw_and_encoded_auto_ports() {
                     .collect::<Vec<_>>(),
                 [axes[1], axes[0]].map(PartialIndex::Explicit)
             );
-            assert!(source.with_rewritten_expression(reordered).is_err());
+            assert!(source.with_checked_expression(reordered).is_err());
         }
         for (positions, expected_component) in [(indices, 14), ([indices[1], indices[0]], 15)] {
             let bindings = HashMap::from([(0, positions[0]), (1, positions[1])]);

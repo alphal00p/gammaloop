@@ -2207,7 +2207,7 @@ impl<T, Sc, K: Clone + Display + Debug, FK: Clone + Display + Debug, Aind: AbsIn
     pub fn map_occurrences<U, V>(
         &self,
         scalar_map: impl FnMut(&Sc) -> Result<U, TensorNetworkError<K, FK>>,
-        mut tensor_map: impl FnMut(
+        tensor_map: impl FnMut(
             &T,
             &[(usize, LibrarySlot<Aind>, Option<&Sc>)],
             Option<&[usize]>,
@@ -2215,6 +2215,26 @@ impl<T, Sc, K: Clone + Display + Debug, FK: Clone + Display + Debug, Aind: AbsIn
     ) -> Result<Network<NetworkStore<V, U>, K, FK, Aind>, TensorNetworkError<K, FK>>
     where
         T: HasStructure<Structure: TensorStructure<Slot = LibrarySlot<Aind>>>,
+        V: HasStructure<Structure: TensorStructure<Slot = LibrarySlot<Aind>>>,
+    {
+        self.map_occurrences_with_structure(HasStructure::structure, scalar_map, tensor_map)
+    }
+
+    /// Map occurrences from a store of read-only planning descriptors.
+    /// The supplied structure describes the axes of the original occurrence.
+    #[allow(clippy::type_complexity, clippy::result_large_err)]
+    pub fn map_occurrences_with_structure<S, U, V>(
+        &self,
+        source_structure: impl Fn(&T) -> &S,
+        scalar_map: impl FnMut(&Sc) -> Result<U, TensorNetworkError<K, FK>>,
+        mut tensor_map: impl FnMut(
+            &T,
+            &[(usize, LibrarySlot<Aind>, Option<&Sc>)],
+            Option<&[usize]>,
+        ) -> Result<V, TensorNetworkError<K, FK>>,
+    ) -> Result<Network<NetworkStore<V, U>, K, FK, Aind>, TensorNetworkError<K, FK>>
+    where
+        S: TensorStructure<Slot = LibrarySlot<Aind>>,
         V: HasStructure<Structure: TensorStructure<Slot = LibrarySlot<Aind>>>,
     {
         let mut nodes = Vec::new();
@@ -2240,7 +2260,7 @@ impl<T, Sc, K: Clone + Display + Debug, FK: Clone + Display + Debug, Aind: AbsIn
                               ports: &[(usize, LibrarySlot<Aind>, Option<&Sc>)],
                               logical: Option<&[usize]>| {
             let source = &self.store.tensors[index];
-            let source_slots = source.structure().external_structure();
+            let source_slots = source_structure(source).external_structure();
             // Storage ordinals retain endpoint representation even when sewing
             // has merged a dual pair into one shared edge payload.
             let ports = ports
@@ -2264,8 +2284,7 @@ impl<T, Sc, K: Clone + Display + Debug, FK: Clone + Display + Debug, Aind: AbsIn
                 .filter_map(|(_, slot, bound)| bound.is_none().then_some(*slot))
                 .collect::<Vec<_>>();
             let reusable = ports.iter().all(|(_, _, value)| value.is_none())
-                && source
-                    .structure()
+                && source_structure(source)
                     .external_structure_iter()
                     .eq(ports.iter().map(|(_, slot, _)| *slot));
             if reusable
@@ -3958,6 +3977,13 @@ where
         + for<'a> AddAssign<<Store::Scalar as Ref>::Ref<'a>>
         + for<'a> MulAssign<<Store::Scalar as Ref>::Ref<'a>>,
 {
+    if Store::Tensor::PRESERVE_SCALAR_METADATA
+        && targets
+            .iter()
+            .any(|(_, leaf)| !matches!(leaf, NetworkLeaf::Scalar(_)))
+    {
+        return None;
+    }
     // Fully contracted tensors can retain lazy sum and coefficient wrappers.
     // Check every component before doing scalar algebra or modifying the store.
     if !targets.iter().all(|(_, leaf)| match leaf {
@@ -4006,6 +4032,7 @@ fn try_balanced_tensor_sum<K, FK, Aind, Store, LT, L>(
 where
     Store: NetworkStoreAccess,
     Store::Tensor: HasStructure
+        + ScalarTensor
         + TensorStructure
         + Clone
         + Ref
@@ -4014,7 +4041,7 @@ where
         + From<LT::WithIndices>
         + ScalarMul<Store::Scalar, Output = Store::Tensor>
         + for<'a> AddAssign<<Store::Tensor as Ref>::Ref<'a>>,
-    Store::Scalar: Clone + 'static,
+    Store::Scalar: Clone + Into<<Store::Tensor as HasStructure>::Scalar> + 'static,
     LT: LibraryTensor + Clone,
     L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = Canonicalized<LT>>,
     K: Display + Debug,
@@ -4027,7 +4054,13 @@ where
     let mut terms = Vec::with_capacity(targets.len());
     for (node_id, leaf) in targets {
         match leaf {
-            NetworkLeaf::Scalar(_) => return None,
+            NetworkLeaf::Scalar(index) => {
+                if !Store::Tensor::PRESERVE_SCALAR_METADATA {
+                    return None;
+                }
+                let scalar = Store::Tensor::new_scalar(store.scalar_ref(*index).clone().into());
+                terms.push(ScaledTensorRef::tensor(store.push_tensor(scalar)));
+            }
             NetworkLeaf::LocalTensor(index) => {
                 terms.push(ScaledTensorRef::tensor(*index));
             }
@@ -4194,6 +4227,13 @@ where
         + for<'a> MulAssign<<Store::Scalar as Ref>::Ref<'a>>
         + 'static,
 {
+    if Store::Tensor::PRESERVE_SCALAR_METADATA
+        && targets
+            .iter()
+            .any(|(_, leaf)| !matches!(leaf, NetworkLeaf::Scalar(_)))
+    {
+        return None;
+    }
     use std::{
         any::{Any, TypeId},
         fs::File,
@@ -6045,16 +6085,24 @@ where
                         return Ok(leaf.clone());
                     }
                     let tensor = Store::Tensor::new_scalar(self.scalar_ref(*si).clone().into());
-                    let base = Store::Scalar::from(tensor.scalar_power_base().unwrap());
-                    let mut s = base.ref_one();
-                    for _ in 0..n {
-                        s *= base.refer();
-                    }
-                    if pow < 0 {
-                        s = s.ref_one() / s;
-                    }
-                    let pos = self.push_scalar(s);
-                    return Ok(NetworkLeaf::Scalar(pos.into()));
+                    let power = |base| {
+                        let base = Store::Scalar::from(base);
+                        let mut result = base.ref_one();
+                        for _ in 0..n {
+                            result *= base.refer();
+                        }
+                        if pow < 0 {
+                            result = result.ref_one() / result;
+                        }
+                        result
+                    };
+                    return if Store::Tensor::PRESERVE_SCALAR_METADATA {
+                        let tensor = tensor.scalar_power(pow, |base| power(base).into());
+                        Ok(NetworkLeaf::LocalTensor(self.push_tensor(tensor)))
+                    } else {
+                        let result = power(tensor.scalar_power_base().unwrap());
+                        Ok(NetworkLeaf::Scalar(self.push_scalar(result).into()))
+                    };
                 }
 
                 let (mut t, original) = match leaf {
@@ -6105,9 +6153,8 @@ where
                     }
                     1 => Ok(original),
                     _ => {
-                        let (mut s, exponent) = if t.is_scalar() {
-                            // Preserve the scalar boundary before repeating a contraction.
-                            (Store::Scalar::from(t.scalar_power_base().unwrap()), n)
+                        let (scalar, exponent) = if t.is_scalar() {
+                            (t, pow)
                         } else {
                             let squares = n / 2;
                             let square = t.contract(&t)?;
@@ -6124,25 +6171,41 @@ where
                                         "".to_string(),
                                     ));
                                 }
-                                (Store::Scalar::from(t.scalar_power_base().unwrap()), 1)
+                                (t, -1)
                             } else {
-                                let scalar = if pow < 0 || squares > 1 {
-                                    square.scalar_power_base()
-                                } else {
-                                    square.scalar()
-                                };
-                                (Store::Scalar::from(scalar.unwrap()), squares)
+                                (
+                                    square,
+                                    if pow < 0 {
+                                        -(squares as i8)
+                                    } else {
+                                        squares as i8
+                                    },
+                                )
                             }
                         };
-                        let base = s.clone();
-                        for _ in 1..exponent {
-                            s *= base.refer();
+                        let power = |base| {
+                            let base = Store::Scalar::from(base);
+                            let mut result = base.clone();
+                            for _ in 1..exponent.unsigned_abs() {
+                                result *= base.refer();
+                            }
+                            if exponent < 0 {
+                                result = result.ref_one() / result;
+                            }
+                            result
+                        };
+                        if Store::Tensor::PRESERVE_SCALAR_METADATA {
+                            let tensor = scalar.scalar_power(exponent, |base| power(base).into());
+                            Ok(NetworkLeaf::LocalTensor(self.push_tensor(tensor)))
+                        } else {
+                            let base = if exponent == 1 {
+                                scalar.scalar()
+                            } else {
+                                scalar.scalar_power_base()
+                            };
+                            let result = power(base.unwrap());
+                            Ok(NetworkLeaf::Scalar(self.push_scalar(result).into()))
                         }
-                        if pow < 0 {
-                            s = s.ref_one() / s;
-                        }
-                        let pos = self.push_scalar(s);
-                        Ok(NetworkLeaf::Scalar(pos.into()))
                     }
                 }
             }

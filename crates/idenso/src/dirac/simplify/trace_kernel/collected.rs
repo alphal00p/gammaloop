@@ -1,5 +1,6 @@
 //! The trace recurrence uses the tensor-level exact coefficient collector.
 
+use spenso::structure::partial::{PartialStructure, PartialStructureExt};
 #[cfg(test)]
 use symbolica::atom::Atom;
 use symbolica::atom::AtomView;
@@ -12,7 +13,7 @@ impl TraceAlgebra for &mut CollectedOutput<'_> {
     type Value = CollectedPolynomial;
 
     fn unit(&mut self, trace_unit: AtomView<'_>) -> CollectedPolynomial {
-        self.polynomial(trace_unit, false)
+        self.polynomial_with_interface(trace_unit, &PartialStructure::from_logical_slots([]))
     }
 
     fn scale(&mut self, coefficient: i32, value: CollectedPolynomial) -> CollectedPolynomial {
@@ -22,10 +23,11 @@ impl TraceAlgebra for &mut CollectedOutput<'_> {
     fn metric_product(
         &mut self,
         metric: AtomView<'_>,
+        endpoints: [AtomView<'_>; 2],
         coefficient: i32,
         value: CollectedPolynomial,
     ) -> CollectedPolynomial {
-        let metric = self.polynomial(metric, false);
+        let metric = self.metric_polynomial(metric, endpoints);
         self.product(metric, value).mul_coeff(coefficient.into())
     }
 
@@ -36,7 +38,9 @@ impl TraceAlgebra for &mut CollectedOutput<'_> {
         linear: i32,
         value: CollectedPolynomial,
     ) -> CollectedPolynomial {
-        let dimension = self.polynomial(dimension, false).mul_coeff(linear.into());
+        let dimension = self
+            .polynomial_with_interface(dimension, &PartialStructure::from_logical_slots([]))
+            .mul_coeff(linear.into());
         self.product(
             dimension + CollectedPolynomial::new_one(&Q).mul_coeff(constant.into()),
             value,

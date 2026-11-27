@@ -3577,16 +3577,15 @@ impl PyFeynmanDiagram {
                         "momentum basis belongs to a different diagram",
                     ));
                 }
-                numerator
-                    .with_checked_expression(basis.inner.route_expression(numerator.expression()))
+                basis
+                    .inner
+                    .route_tensor(&numerator)
                     .map_err(|error| crate::error::DiagramError::new_err(error.to_string()))?
             }
-            None if in_lmb => numerator
-                .with_checked_expression(
-                    self.inner
-                        .loop_momentum_basis()
-                        .route_expression(numerator.expression()),
-                )
+            None if in_lmb => self
+                .inner
+                .loop_momentum_basis()
+                .route_tensor(&numerator)
                 .map_err(|error| crate::error::DiagramError::new_err(error.to_string()))?,
             None => numerator,
         };
@@ -3662,17 +3661,14 @@ impl PyFeynmanDiagram {
         };
         let expanded = self
             .inner
-            .uv_expansion_of(
+            .uv_expansion_tensor_of(
                 &selected,
                 &uv_mass.to_expression().expr,
                 dimension,
-                Some(numerator.expression()),
+                Some(&numerator),
                 &powers,
             )
             .map_err(error::diagram)?;
-        let expanded = numerator
-            .with_checked_expression(expanded)
-            .map_err(|error| crate::error::DiagramError::new_err(error.to_string()))?;
         TensorExpression::from_structured(py, expanded)
     }
 

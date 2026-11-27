@@ -1,18 +1,13 @@
-use spenso::structure::{
-    partial::{PartialStructure, PartialStructureExt},
-    representation::{LibraryRep, RepName},
-};
-use spenso::{
-    network::library::symbolic::ETS,
-    structure::slot::{DualSlotTo, IsAbstractSlot},
-};
+use spenso::network::library::symbolic::ETS;
+use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+use spenso::structure::representation::{LibraryRep, RepName};
+use spenso::structure::slot::{DualSlotTo, IsAbstractSlot, SlotMatcher};
 use std::sync::Arc;
 use symbolica::atom::{Atom, AtomCore, AtomView};
 
-use super::{
-    SymbolicTensor, inference::TensorInferenceError,
-    simplification::observation::DomainObservations,
-};
+use super::SymbolicTensor;
+use super::inference::TensorInferenceError;
+use super::simplification::observation::DomainObservations;
 use crate::shorthands::schoonschip::{
     DotNormalizer, ReductionStatus, SimplificationCandidates, SlotContraction,
 };
@@ -45,6 +40,14 @@ pub struct ContractSettings<'a> {
     /// False retains such products and powers, while allowing port substitutions
     /// through existing sums and contractions within their branches.
     pub expand: bool,
+    /// Expand composite scalar spectators with few terms (such as `d-2` or a
+    /// short closed trace) over their base variables while contracting, so
+    /// equal monomials merge. False keeps every scalar sum factored.
+    pub expand_scalar_spectators: bool,
+    /// Emit closed scalar products of factorized contractions in dot notation,
+    /// as [`crate::tensor::SymbolicTensor::to_dots`] would write them. Set by
+    /// algebra requests that end in dot notation; false keeps `g(p,q)`.
+    pub dot_notation: bool,
     /// Optional limit on successful planning rounds per domain. `None` is unlimited.
     pub max_passes: Option<usize>,
 }
@@ -59,6 +62,8 @@ impl Default for ContractSettings<'_> {
             collect_chains: true,
             collect_traces: true,
             expand: true,
+            expand_scalar_spectators: false,
+            dot_notation: false,
             max_passes: None,
         }
     }
@@ -96,7 +101,7 @@ impl SymbolicTensor<PartialStructure> {
     pub(crate) fn structural_work_permitted(&self, settings: ContractSettings<'_>) -> bool {
         let observed = self.reduction_observations();
         let candidates = &observed.candidates;
-        if (candidates.dots || (settings.metrics && candidates.symbols[5]))
+        if (candidates.brackets || candidates.dots || (settings.metrics && candidates.symbols[5]))
             && self.normalized_contract_notation(settings) != self.expression
         {
             return true;
@@ -146,12 +151,14 @@ impl SymbolicTensor<PartialStructure> {
                 // Reuse admission's graph; probing must not perform rewrites.
                 let contractor =
                     SlotContraction::configured(settings.metrics, settings.representations)
-                        .observed(observed);
+                        .expanding_scalars(settings.expand_scalar_spectators)
+                        .emitting_dots(settings.dot_notation)
+                        .admitted(self);
                 let contractor = match self.shallow_graph() {
                     Ok(graph) => contractor.planned(
-                        self.expression.clone(),
+                        self.expression.as_view(),
                         graph,
-                        self.proofs.leaf_interfaces.get().cloned(),
+                        self.proofs.leaf_interfaces.read_cache(),
                     ),
                     Err(_) => contractor,
                 };
@@ -189,7 +196,7 @@ impl SymbolicTensor<PartialStructure> {
             // The observer conservatively marks explicit vector leaves as dot
             // candidates. Only the existing normalizer can discharge that flag;
             // intrinsic observation above excludes user callbacks from this check.
-            && (!observed.dots || DotNormalizer::with_settings(self.expression.as_view(), settings) == self.expression)
+            && (!observed.dots || DotNormalizer::with_matcher(self.expression.as_view(), settings, SlotMatcher::with_leaf_interfaces([self.proofs.leaf_interfaces.read_cache().unwrap_or_default()])) == self.expression)
     }
 
     /// Contract compatible structural connections without evaluating identities
@@ -241,7 +248,6 @@ impl SymbolicTensor<PartialStructure> {
         allowed_vector: &dyn Fn(LibraryRep) -> bool,
     ) -> Result<crate::shorthands::schoonschip::FactorizedContraction<Self>, TensorInferenceError>
     {
-        use super::inference::InterfaceInference;
         use spenso::structure::TensorStructure;
         let observed = self.reduction_observations();
         if observed.excludes_contraction_sources(settings)
@@ -249,6 +255,7 @@ impl SymbolicTensor<PartialStructure> {
             || self.only_external_metric_sources(settings)
         {
             return Ok(crate::shorthands::schoonschip::FactorizedContraction {
+                proofs: Default::default(),
                 root: self.clone(),
                 status: ReductionStatus::Complete,
                 observations: None,
@@ -272,35 +279,34 @@ impl SymbolicTensor<PartialStructure> {
             AtomView::Pow(power) => needs_sources(power.get_base()) && selected(power.get_base()),
             _ => true,
         };
+        let mut produced = Vec::new();
         let mut visit = |value: AtomView<'_>,
                          interface: Option<PartialStructure>|
          -> Result<Atom, TensorInferenceError> {
             // Repeated indices in an algebraic word do not themselves permit
-            // structural work. Inspect retained regional facts before inferring
-            // a child interface or building another shallow graph.
+            // structural work. Reuse the child boundary retained at admission.
             if !needs_sources(value) || !selected(value) {
                 return Ok(value.to_owned());
             }
             let interface = match interface {
                 Some(interface) => interface,
-                None => InterfaceInference::replacement_interface(value)?,
+                None => self.admitted_interface(value).ok_or_else(|| {
+                    TensorInferenceError::invalid(
+                        "internal contraction region has no retained tensor interface",
+                    )
+                })?,
             };
             // This regional result returns only its payload to the enclosing
             // carrier, so retain the enclosing conservative history intact.
             self.explicit_index_occurrences()?;
-            let domain = Self::from_validated_parts(
-                value.to_owned(),
-                interface,
-                Arc::clone(
-                    self.proofs
-                        .occurrences
-                        .get()
-                        .expect("published index history"),
-                ),
-            );
+            let domain = self
+                .proofs
+                .region_with_interface(value, interface)
+                .expect("admitted source retains construction history");
             domain.observe_replacement(self);
             let nested = domain.contract_prerequisite_scopes(settings, selected, allowed_vector)?;
             result.status = result.status.max(nested.status);
+            produced.push(nested.root.proofs);
             Ok(nested.root.expression)
         };
         let expression = match self.expression.as_view() {
@@ -311,7 +317,11 @@ impl SymbolicTensor<PartialStructure> {
             ),
             AtomView::Pow(power) if power_selected => {
                 let (base, exponent) = power.get_base_exp();
-                let interface = InterfaceInference::replacement_interface(base)?;
+                let interface = self.admitted_interface(base).ok_or_else(|| {
+                    TensorInferenceError::invalid(
+                        "internal power base has no retained tensor interface",
+                    )
+                })?;
                 if interface.canonical().is_scalar() {
                     use symbolica::atom::AtomCore;
                     visit(base, Some(interface))?.pow(exponent)
@@ -337,7 +347,19 @@ impl SymbolicTensor<PartialStructure> {
             }
             _ => self.expression.clone(),
         };
-        result.root = self.with_identity_result(expression, None)?;
+        if expression != self.expression {
+            let mut proofs = self.proofs.clone();
+            proofs.publish_interfaces(
+                expression.as_view(),
+                self.structure.clone(),
+                produced.iter(),
+            );
+            result.root = self.with_published_materialization(
+                "scoped prerequisite contraction",
+                expression,
+                proofs,
+            )?;
+        }
         Ok(result)
     }
 
@@ -349,13 +371,16 @@ impl SymbolicTensor<PartialStructure> {
     ) -> Result<crate::shorthands::schoonschip::FactorizedContraction<Self>, TensorInferenceError>
     {
         let mut result = crate::shorthands::schoonschip::FactorizedContraction {
+            proofs: Default::default(),
             root: self.clone(),
             status: ReductionStatus::Complete,
             observations: None,
         };
         let contractor = SlotContraction::configured(settings.metrics, settings.representations)
+            .expanding_scalars(settings.expand_scalar_spectators)
+            .emitting_dots(settings.dot_notation)
             .expanding(settings.expand)
-            .observed(result.root.reduction_observations());
+            .admitted(&result.root);
         if self.reduction_observations().candidates.intrinsic
             && let Some(expression) = contractor.prerequisite_product(
                 self.expression.as_view(),
@@ -365,18 +390,22 @@ impl SymbolicTensor<PartialStructure> {
             )
         {
             let expression = if self.reduction_observations().candidates.dots {
-                DotNormalizer::with_settings(expression.as_view(), settings)
+                DotNormalizer::with_matcher(
+                    expression.as_view(),
+                    settings,
+                    contractor.normalization_matcher(),
+                )
             } else {
                 expression
             };
-            result.root = self.with_identity_result(expression, None)?;
+            result.root = contractor.finish_tensor(self, expression)?;
             return Ok(result);
         }
         let contractor = match result.root.shallow_graph() {
             Ok(graph) => contractor.planned(
-                result.root.expression.clone(),
+                result.root.expression.as_view(),
                 graph,
-                result.root.proofs.leaf_interfaces.get().cloned(),
+                result.root.proofs.leaf_interfaces.read_cache(),
             ),
             Err(_) => contractor,
         };
@@ -388,7 +417,7 @@ impl SymbolicTensor<PartialStructure> {
             return Ok(result);
         };
         self.explicit_index_occurrences()?;
-        let domain = Self::from_validated_parts(
+        let mut domain = Self::from_validated_parts(
             expression,
             interface,
             Arc::clone(
@@ -398,6 +427,7 @@ impl SymbolicTensor<PartialStructure> {
                     .expect("published index history"),
             ),
         );
+        domain.proofs.inherit_interfaces([&self.proofs]);
         domain.observe_replacement(self);
         let contracted = domain.contract_parts(ContractSettings {
             collect_chains: false,
@@ -407,7 +437,18 @@ impl SymbolicTensor<PartialStructure> {
         })?;
         result.status = result.status.max(contracted.status);
         spectators.push(contracted.root.expression);
-        result.root = self.with_identity_result(Atom::mul_many(spectators), None)?;
+        let expression = Atom::mul_many(spectators);
+        let mut proofs = self.proofs.clone();
+        proofs.publish_interfaces(
+            expression.as_view(),
+            self.structure.clone(),
+            [&contracted.root.proofs],
+        );
+        result.root = self.with_published_materialization(
+            "prerequisite boundary contraction",
+            expression,
+            proofs,
+        )?;
         Ok(result)
     }
 
@@ -443,19 +484,21 @@ impl SymbolicTensor<PartialStructure> {
         let mut result = self.contract_kernel(settings, observed)?;
         if result
             .root
-            .proofs
-            .observations
-            .get()
+            .work
+            .observations()
             .is_some_and(|observed| observed.excludes_internal_connections())
         {
             return Ok((result, false));
         }
         if settings.rank_one && observed.dots {
-            let expression =
+            let contractor =
                 SlotContraction::configured(settings.metrics, settings.representations)
+                    .expanding_scalars(settings.expand_scalar_spectators)
+                    .emitting_dots(settings.dot_notation)
                     .expanding(settings.expand)
-                    .contract_inner_products(result.root.expression.as_view());
-            result.root = result.root.with_identity_result(expression, None)?;
+                    .admitted(&result.root);
+            let expression = contractor.contract_inner_products(result.root.expression.as_view());
+            result.root = contractor.finish_tensor(&result.root, expression)?;
         }
         let uncontracted =
             result.status == ReductionStatus::Complete && result.root.expression == self.expression;
@@ -478,13 +521,15 @@ impl SymbolicTensor<PartialStructure> {
             }
             let contractor =
                 SlotContraction::configured(settings.metrics, settings.representations)
+                    .expanding_scalars(settings.expand_scalar_spectators)
+                    .emitting_dots(settings.dot_notation)
                     .expanding(settings.expand)
-                    .observed(updated);
+                    .admitted(&result.root);
             let contractor = match result.root.shallow_graph() {
                 Ok(graph) => contractor.planned(
-                    result.root.expression.clone(),
+                    result.root.expression.as_view(),
                     graph,
-                    result.root.proofs.leaf_interfaces.get().cloned(),
+                    result.root.proofs.leaf_interfaces.read_cache(),
                 ),
                 Err(_) => contractor,
             };
@@ -494,9 +539,9 @@ impl SymbolicTensor<PartialStructure> {
                     &representations,
                     settings.collect_chains,
                     settings.collect_traces,
-                )
+                )?
                 .unwrap_or_else(|| result.root.expression.clone());
-            result.root = result.root.with_identity_result(expression, None)?;
+            result.root = contractor.finish_tensor(&result.root, expression)?;
         }
         let notation_only = uncontracted && result.root.expression != self.expression;
         Ok((result, notation_only))
@@ -539,8 +584,12 @@ impl SymbolicTensor<PartialStructure> {
     }
 
     fn normalized_contract_notation(&self, settings: ContractSettings<'_>) -> Atom {
-        let mut source = self.expression.clone();
         let observations = self.reduction_observations();
+        let mut source = if observations.candidates.brackets {
+            Self::normalize_products(self.expression.as_view()).into_owned()
+        } else {
+            self.expression.clone()
+        };
         if settings.metrics && observations.candidates.symbols[5] {
             use crate::shorthands::chain::Chain;
             for representation in observations
@@ -553,7 +602,15 @@ impl SymbolicTensor<PartialStructure> {
             }
         }
         if observations.candidates.dots {
-            DotNormalizer::with_settings(source.as_view(), settings)
+            DotNormalizer::with_matcher(
+                source.as_view(),
+                settings,
+                SlotMatcher::with_leaf_interfaces([self
+                    .proofs
+                    .leaf_interfaces
+                    .read_cache()
+                    .unwrap_or_default()]),
+            )
         } else {
             source
         }
@@ -602,6 +659,7 @@ impl SymbolicTensor<PartialStructure> {
             // constructing its network; unknown and bracket regions still need
             // planning. Chain/trace collection remains in contract_parts.
             return Ok(crate::shorthands::schoonschip::FactorizedContraction {
+                proofs: Default::default(),
                 root: self.with_identity_result(
                     source,
                     terminal_polynomial.then(|| {
@@ -621,15 +679,19 @@ impl SymbolicTensor<PartialStructure> {
             && observations.candidates.intrinsic
             && SlotContraction::explicit_product(source.as_view()).is_some()
         {
-            let expression =
+            let contractor =
                 SlotContraction::configured(settings.metrics, settings.representations)
-                    .contract_ordered(
-                        source.as_view(),
-                        settings.rank_one,
-                        Some(&observations.candidates),
-                    );
+                    .expanding_scalars(settings.expand_scalar_spectators)
+                    .emitting_dots(settings.dot_notation)
+                    .admitted(self);
+            let expression = contractor.contract_ordered(
+                source.as_view(),
+                settings.rank_one,
+                Some(&observations.candidates),
+            );
             return Ok(crate::shorthands::schoonschip::FactorizedContraction {
-                root: self.with_identity_result(expression, None)?,
+                proofs: Default::default(),
+                root: contractor.finish_tensor(self, expression)?,
                 status: ReductionStatus::Complete,
                 observations: None,
             });
@@ -638,24 +700,22 @@ impl SymbolicTensor<PartialStructure> {
         // payload, regional observations and shallow graph on the same owner.
         let domain = self.with_identity_result(source, None)?;
         let contractor = SlotContraction::configured(settings.metrics, settings.representations)
+            .expanding_scalars(settings.expand_scalar_spectators)
+            .emitting_dots(settings.dot_notation)
             .expanding(settings.expand)
-            .observed(domain.reduction_observations());
+            .admitted(&domain);
         let contractor = match domain.shallow_graph() {
             Ok(graph) => contractor.planned(
-                domain.expression.clone(),
+                domain.expression.as_view(),
                 graph,
-                domain.proofs.leaf_interfaces.get().cloned(),
+                domain.proofs.leaf_interfaces.read_cache(),
             ),
             Err(_) => contractor,
         };
         if let Some(contracted) =
             contractor.contract_factorized(domain.expression.as_view(), order, settings.rank_one)
         {
-            return Ok(crate::shorthands::schoonschip::FactorizedContraction {
-                root: self.with_identity_result(contracted.root, contracted.observations)?,
-                status: contracted.status,
-                observations: None,
-            });
+            return contracted.into_tensor(self);
         }
         // Callback-sensitive leaves retain the existing ordered rewrite and
         // checked finisher. A changed result can expose intrinsic work (for
@@ -672,34 +732,31 @@ impl SymbolicTensor<PartialStructure> {
             settings.rank_one,
             Some(&domain.reduction_observations().candidates),
         );
-        let root = domain.with_identity_result(rewritten, None)?;
+        let root = contractor.finish_tensor(&domain, rewritten)?;
         if root.expression.is_zero() {
             // The ordered rewrite already annihilated the whole domain. Keep
             // its typed boundary without opening any now-irrelevant scopes.
             return Ok(crate::shorthands::schoonschip::FactorizedContraction {
+                proofs: Default::default(),
                 root,
                 status: ReductionStatus::Complete,
                 observations: None,
             });
         }
         if root.expression != domain.expression {
-            let contractor = contractor.observed(root.reduction_observations());
+            let contractor = contractor.admitted(&root);
             let contractor = match root.shallow_graph() {
                 Ok(graph) => contractor.planned(
-                    root.expression.clone(),
+                    root.expression.as_view(),
                     graph,
-                    root.proofs.leaf_interfaces.get().cloned(),
+                    root.proofs.leaf_interfaces.read_cache(),
                 ),
                 Err(_) => contractor,
             };
             if let Some(contracted) =
                 contractor.contract_factorized(root.expression.as_view(), None, settings.rank_one)
             {
-                return Ok(crate::shorthands::schoonschip::FactorizedContraction {
-                    root: root.with_identity_result(contracted.root, contracted.observations)?,
-                    status: contracted.status,
-                    observations: None,
-                });
+                return contracted.into_tensor(&root);
             }
         }
         // The ordered fallback supports spaces declined by the coefficient
@@ -715,6 +772,7 @@ impl SymbolicTensor<PartialStructure> {
             || (root.expression != self.expression && root.contraction_is_noop())
             || root.only_external_metric_sources(settings);
         Ok(crate::shorthands::schoonschip::FactorizedContraction {
+            proofs: Default::default(),
             root,
             observations: None,
             status: if complete {
@@ -1555,16 +1613,80 @@ mod completion_tests {
 #[cfg(test)]
 mod policy_tests {
     use super::*;
-    use spenso::{
-        g, mink,
-        network::tags::SPENSO_TAG,
-        structure::{
-            abstract_index::AbstractIndex,
-            representation::{Minkowski, RepName},
-            slot::IsAbstractSlot,
-        },
-    };
+    use crate::color::CS;
+    use crate::tensor::SymbolicNetParse;
+    use crate::tensor::collection::SHALLOW_BUILDS;
+    use crate::tensor::inference::tests::{INFERENCE_CALLS, INFERENCE_VISITS, SCOPE_VALIDATIONS};
+    use crate::test_support;
+    use crate::{color_f, color_t};
+    use spenso::network::parsing::ParseSettings;
+    use spenso::network::tags::SPENSO_TAG;
+    use spenso::structure::abstract_index::AbstractIndex;
+    use spenso::structure::representation::{Minkowski, RepName};
+    use spenso::structure::slot::IsAbstractSlot;
+    use spenso::{g, mink};
     use symbolica::atom::{AtomCore, FunctionBuilder};
+    use symbolica::function;
+
+    #[test]
+    fn prerequisite_generic_outputs_keep_facts_through_scoped_recomposition() {
+        test_support::test_initialize();
+        let selected = SPENSO_TAG.tensor_symbol("prerequisite_retained_selected");
+        let alternate = SPENSO_TAG.tensor_symbol("prerequisite_retained_alternate");
+        let spectator = SPENSO_TAG.tensor_symbol("prerequisite_retained_spectator");
+        let a = mink!(4, 71951);
+        let b = mink!(4, 71952);
+        let left = function!(selected, &a);
+        let right = function!(spectator, &b);
+        let metric = g!(&a, &b);
+        let body = &left * &metric * &right;
+        let contracted = function!(selected, &b) * &right;
+        let cases = [
+            (body.clone(), contracted.clone()),
+            (
+                (Atom::one() + body).pow(2),
+                (Atom::one() + contracted).pow(2),
+            ),
+            (
+                (left + function!(alternate, &a)) * metric * &right,
+                (function!(selected, &b) + function!(alternate, &b)) * right,
+            ),
+        ];
+        for (expression, expected) in cases {
+            let source = SymbolicTensor::infer(expression).unwrap();
+            INFERENCE_CALLS.with(|count| count.set(0));
+            INFERENCE_VISITS.with(|count| count.set(0));
+            let result = source
+                .contract_prerequisites(
+                    ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    },
+                    |value| value.contains_symbol(selected),
+                    |_| true,
+                )
+                .unwrap()
+                .root;
+            assert_eq!(result.expression.expand(), expected.expand());
+            assert!(
+                result
+                    .proofs
+                    .leaf_interfaces
+                    .get()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .contains_key(function!(selected, &b).as_view().get_data())
+            );
+            let network = result
+                .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+                .unwrap();
+            assert!(network.graph.dangling_indices().is_empty());
+            assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+            assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
+        }
+    }
 
     #[test]
     fn incompatible_repeated_ports_are_complete_without_spending_budget() {
@@ -1789,10 +1911,7 @@ mod policy_tests {
 
     #[test]
     fn prerequisites_reuse_source_free_factored_color_regions() {
-        use super::super::{collection::SHALLOW_BUILDS, inference::tests::SCOPE_VALIDATIONS};
-        use crate::{color_f, color_t, test_support::test_initialize};
-        use std::sync::Arc;
-        let reps = test_initialize();
+        let reps = test_support::test_initialize();
         let ports = [98521, 98522, 98523].map(|index| reps.coad_da.to_symbolic([Atom::num(index)]));
         let rep = reps.cof_nc.to_symbolic([] as [Atom; 0]);
         let word = spenso::trace!(&rep; ports.iter().map(|port| color_t!(port)));
@@ -1804,7 +1923,7 @@ mod policy_tests {
             collect_traces: false,
             ..Default::default()
         };
-        let selected = |value: AtomView<'_>| value.contains_symbol(crate::color::CS.t);
+        let selected = |value: AtomView<'_>| value.contains_symbol(CS.t);
         let observed = source.reduction_observations();
         assert!(observed.candidates.repeated_indices);
         SHALLOW_BUILDS.with(|count| count.set(0));
@@ -1887,10 +2006,10 @@ mod policy_tests {
         let head = spenso::tensor_symbol!("prerequisite_path_selected");
         let foreign = spenso::tensor_symbol!("prerequisite_path_foreign");
         let vector = spenso::vector_symbol!("prerequisite_path_vector");
-        let selected = |port: &Atom| symbolica::function!(head, port);
-        let spectator = g!(&d, &e) * symbolica::function!(vector, &d);
+        let selected = |port: &Atom| function!(head, port);
+        let spectator = g!(&d, &e) * function!(vector, &d);
         let source = SymbolicTensor::infer(
-            selected(&a) * g!(&a, &b) * g!(&b, &c) * symbolica::function!(foreign, &c) * &spectator,
+            selected(&a) * g!(&a, &b) * g!(&b, &c) * function!(foreign, &c) * &spectator,
         )
         .unwrap();
         let selects = |value: AtomView<'_>| matches!(value, AtomView::Fun(function) if function.get_symbol() == head);
@@ -1899,7 +2018,7 @@ mod policy_tests {
             .unwrap();
         assert_eq!(
             result.root.expression,
-            selected(&c) * symbolica::function!(foreign, &c) * spectator
+            selected(&c) * function!(foreign, &c) * spectator
         );
         assert_eq!(result.root.structure(), source.structure());
         assert_eq!(
@@ -1925,8 +2044,7 @@ mod policy_tests {
             source
         );
 
-        let source =
-            SymbolicTensor::infer(selected(&a) * symbolica::function!(vector, &a)).unwrap();
+        let source = SymbolicTensor::infer(selected(&a) * function!(vector, &a)).unwrap();
         assert_eq!(
             source
                 .contract_prerequisites(Default::default(), selects, |_| false)
@@ -1939,9 +2057,9 @@ mod policy_tests {
             .unwrap();
         assert_eq!(
             result.root.expression,
-            symbolica::function!(
+            function!(
                 head,
-                symbolica::function!(
+                function!(
                     vector,
                     LibraryRep::from(Minkowski {})
                         .new_rep(4)

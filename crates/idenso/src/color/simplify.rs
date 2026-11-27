@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use std::cell::{Cell, RefCell};
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::sync::{Arc, LazyLock};
 
 use spenso::{
@@ -9,7 +9,7 @@ use spenso::{
     rep_,
     shadowing::{self, ProjectorExpander, TensorCollectFilter},
     structure::{
-        OrderedStructure, TensorStructure,
+        TensorStructure,
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
         partial::{PartialStructure, PartialStructureExt},
         representation::{LibraryRep, RepName},
@@ -34,9 +34,14 @@ use crate::{
 };
 
 use super::{CS, ColorSimplifier, ColorSimplifySettings};
+use crate::tensor::TensorProofs;
+#[cfg(all(test, debug_assertions))]
+use crate::tensor::inference::DebugInference;
+use crate::tensor::inference::InterfaceInference;
 use crate::tensor::simplification::observation::{DomainObservations, SettledRegions};
 use crate::tensor::simplification::{COLOR, ReductionStatus};
 use crate::tensor::{CollectedOutput, CollectionMode, ContractSettings};
+use spenso::structure::partial::PartialIndex;
 
 mod states;
 mod trace;
@@ -59,6 +64,9 @@ pub(crate) struct ColorAlgebraSimplifier {
     /// Canonical forms of the states of this call, by first-occurrence
     /// labelling; see `states.rs`.
     canonical_cache: std::cell::RefCell<std::collections::HashMap<Atom, Atom>>,
+    admitted: RefCell<Option<TensorProofs>>,
+    /// Slots eligible for permutation while the current row canonicalizes dummies.
+    renamed_slots: RefCell<HashSet<Atom>>,
 }
 
 /// Bound on the nesting of the term-local repeat. Every local rule shortens a
@@ -223,7 +231,7 @@ impl SymbolicTensor<PartialStructure> {
         );
         let simplifier = ColorAlgebraSimplifier::new(settings, Self::reserved_dummies([self]));
         let collected = RefCell::new(
-            CollectedOutput::new(self.reduction_observations())
+            CollectedOutput::new(self)
                 // Preserve tensor decompositions, while metric-only sums remain
                 // polynomial arithmetic beside their Lorentz coefficients.
                 .with_preserved_sums(|value| {
@@ -288,12 +296,27 @@ impl SymbolicTensor<PartialStructure> {
                     (selected, ReductionStatus::Complete)
                 };
                 simplifier.certificate.fixed.set(certify);
+                *simplifier.admitted.borrow_mut() = Some(selected.proofs.clone());
+                simplifier.renamed_slots.borrow_mut().clear();
                 let expression =
                     simplifier.step_beside(selected.expression.as_view(), true, &foreign);
                 let expression = simplifier
                     .certificate
                     .unless_changed(expression, restore_explicit_su_n_generator_chains);
-                let rewritten = selected.with_identity_result(expression, None)?;
+                let rewritten = if expression != selected.expression
+                    && !simplifier.renamed_slots.borrow().is_empty()
+                {
+                    let mut proofs = selected.proofs.clone();
+                    proofs.publish_interfaces(expression.as_view(), selected.structure.clone(), []);
+                    selected.proofs.retain_permuted_leaf_ports(
+                        &expression,
+                        simplifier.renamed_slots.borrow().iter(),
+                        &proofs,
+                    )?;
+                    selected.with_published_materialization("color identity", expression, proofs)?
+                } else {
+                    selected.with_identity_result(expression, None)?
+                };
                 // A changed identity can consume its last seed and emit a
                 // metric into a foreign partner. Preserve that output closure.
                 // The identities emit no vectors. Rows without metrics, or
@@ -307,10 +330,10 @@ impl SymbolicTensor<PartialStructure> {
                 } else if simplifier.certificate.fixed.get() {
                     (rewritten, ReductionStatus::Complete)
                 } else {
-                    (rewritten, selected.proofs.frontier)
+                    (rewritten, selected.work.frontier())
                 };
                 let status = status.max(prerequisite_status);
-                root.proofs.frontier = status;
+                root.work.get_mut().frontier = status;
                 // An unchanged row is trivially a fixed point, and so is a
                 // row left with group invariants only. Otherwise its
                 // contraction acts only on certified decompositions.
@@ -332,11 +355,11 @@ impl SymbolicTensor<PartialStructure> {
             }
             if collect_coefficients
                 && row_fixed.get()
-                && root.proofs.frontier == ReductionStatus::Complete
+                && root.work.frontier() == ReductionStatus::Complete
                 && root.normalization_is_intrinsic()
             {
                 let shape = ColourShape::of(root.expression.as_view());
-                if let Some(expression) = collected.borrow_mut().collect_atom(&root.expression) {
+                if let Some(expression) = collected.borrow_mut().collect_tensor(&root) {
                     if atom_contains_color_port_or_work(expression.as_view())
                         && ColourShape::of(expression.as_view()) != shape
                     {
@@ -344,16 +367,18 @@ impl SymbolicTensor<PartialStructure> {
                     }
                     // This certificate is local to the enabled color policy.
                     // Restore ordinary observations before returning to the planner.
-                    let status = root.proofs.frontier;
+                    let status = root.work.frontier();
                     let history = Arc::clone(
                         root.proofs
                             .occurrences
                             .get()
                             .expect("published index history"),
                     );
+                    let before_collection = root.proofs;
                     root = Self::from_validated_parts(expression, root.structure, history);
-                    root.proofs.frontier = status;
-                    let _ = root.proofs.observations.set(Arc::new(
+                    root.proofs.inherit_interfaces([&before_collection]);
+                    root.work.get_mut().frontier = status;
+                    let _ = root.work.get_or_init().observations.set(Arc::new(
                         DomainObservations::terminal_polynomial(&root.structure, true),
                     ));
                 }
@@ -377,19 +402,25 @@ impl SymbolicTensor<PartialStructure> {
                     row(self.clone(), true)?
                 } else {
                     let root = row(self.with_identity_result(colour, None)?, true)?;
-                    let mut value = self.with_identity_result(
-                        Atom::mul_many(spectators.into_iter().chain([root.expression.as_view()])),
-                        None,
-                    )?;
-                    value.proofs.frontier = root.proofs.frontier;
+                    let expression =
+                        Atom::mul_many(spectators.into_iter().chain([root.expression.as_view()]));
+                    let mut proofs = self.proofs.clone();
+                    proofs.publish_interfaces(
+                        expression.as_view(),
+                        self.structure.clone(),
+                        [&root.proofs],
+                    );
+                    let mut value =
+                        self.with_published_materialization("simplify_color", expression, proofs)?;
+                    value.work.get_mut().frontier = root.work.frontier();
                     value
                 }
             }
-            None => self.collect_with_map(
+            None => self.collect_rows_with_map(
                 // Selected sums stay whole rows: the kernel distributes them
                 // itself and renames summand dummies another factor spells.
                 CollectionMode::Factored,
-                Some(&mut |states, _| {
+                &mut |states| {
                     if collect_coefficients {
                         // Row weights arrive after the kernel. Complete their
                         // arithmetic before immutable spectators are reattached.
@@ -411,7 +442,7 @@ impl SymbolicTensor<PartialStructure> {
                         }
                     }
                     Ok(())
-                }),
+                },
                 |value| atom_contains_color_node(value) && !foreign.contains(&value),
                 |selected, complete, _| row(selected, complete),
             )?,
@@ -420,17 +451,26 @@ impl SymbolicTensor<PartialStructure> {
         // the input is the exact result, with the frontier of its rows.
         if !changed.get() {
             let mut unchanged = self.clone();
-            unchanged.proofs.frontier = value.proofs.frontier;
-            let certified = fixed_point.get() && value.proofs.frontier == ReductionStatus::Complete;
+            unchanged.work.get_mut().frontier = value.work.frontier();
+            let certified = fixed_point.get() && value.work.frontier() == ReductionStatus::Complete;
             return Ok((unchanged, certified));
         }
-        let certified = fixed_point.get() && value.proofs.frontier == ReductionStatus::Complete;
+        let certified = fixed_point.get() && value.work.frontier() == ReductionStatus::Complete;
         // Terminal collection facts certify this color call only: disabled
         // traces and other domains must remain visible to later policies.
-        let status = value.proofs.frontier;
-        let mut value = self.with_identity_result(value.expression, None)?;
-        value.proofs.frontier = status;
-        Ok((value, certified))
+        let mut history = value.explicit_index_occurrences()?.clone();
+        history.branch_max(self.explicit_index_occurrences()?);
+        history.validate()?;
+        let mut result =
+            Self::from_validated_parts(value.expression, self.structure.clone(), Arc::new(history));
+        result
+            .proofs
+            .inherit_interfaces([&value.proofs, &self.proofs]);
+        result.work.get_mut().frontier = value.work.frontier();
+        if self.work.observations().is_some() {
+            result.observe_replacement(self);
+        }
+        Ok((result, certified))
     }
 }
 
@@ -478,6 +518,43 @@ impl SymbolicTensor<PartialStructure> {
 }
 
 impl ColorAlgebraSimplifier {
+    /// Boundaries of new literals emitted by the colour constructors. The
+    /// polynomial owner records this once when a new variable is introduced;
+    /// already admitted variables use their retained interface instead.
+    pub(crate) fn produced_interface(value: AtomView<'_>) -> Option<PartialStructure> {
+        let AtomView::Fun(function) = value else {
+            return None;
+        };
+        if [CS.cas, CS.idx, CS.gram].contains(&function.get_symbol()) {
+            return Some(PartialStructure::from_logical_slots([]));
+        }
+        let factor = ProductFactor::parse(value);
+        let mut ports = if let Some(invariant) = &factor.symmetric_invariant {
+            invariant.args.clone()
+        } else if let Some(structure) = &factor.structure {
+            structure.args.to_vec()
+        } else if [CS.t, CS.d].contains(&function.get_symbol()) && function.get_nargs() == 3 {
+            function.iter().collect()
+        } else {
+            factor.generator_slots()?
+        };
+        if let Some(chain) = &factor.chain {
+            ports.extend([chain.start, chain.end]);
+        }
+        let mut matcher = SlotMatcher::default();
+        let slots = ports
+            .into_iter()
+            .map(|port| {
+                let slot = matcher.parse::<LibraryRep, AbstractIndex>(port).ok()?;
+                Some(slot.rep().slot(PartialIndex::Explicit(slot.aind)))
+            })
+            .collect::<Option<Vec<_>>>()?;
+        InterfaceInference::merge_explicit_interface_sequence(&[
+            PartialStructure::from_logical_slots(slots),
+        ])
+        .ok()
+    }
+
     pub(crate) fn new(settings: ColorSimplifySettings, dummies: ParseState<AbstractIndex>) -> Self {
         Self {
             settings,
@@ -485,6 +562,8 @@ impl ColorAlgebraSimplifier {
             certificate: RowCertificate::default(),
             repeat_depth: Cell::new(0),
             canonical_cache: Default::default(),
+            admitted: RefCell::new(None),
+            renamed_slots: RefCell::default(),
         }
     }
 
@@ -504,6 +583,16 @@ impl ColorAlgebraSimplifier {
     /// Apply the local colour identities. Contraction and cross-domain
     /// scheduling belong to the shared tensor owner.
     pub(crate) fn step(&self, expression: AtomView<'_>, complete: bool) -> Atom {
+        // Raw kernel fixtures enter at this boundary; production always hands
+        // the kernel an admitted row and its retained regional interfaces.
+        #[cfg(test)]
+        if self.admitted.borrow().is_none() {
+            // Negative kernel fixtures deliberately supply malformed tensors
+            // and still exercise the structural guards of the local rules.
+            *self.admitted.borrow_mut() = SymbolicTensor::infer(expression.to_owned())
+                .ok()
+                .map(|source| source.proofs);
+        }
         self.step_within(expression, complete, &[])
     }
 
@@ -1423,6 +1512,30 @@ impl ColorAlgebraSimplifier {
         if n != Atom::var(CS.nc) {
             return None;
         }
+        // Closing this chain removes only its own fundamental pair. Other
+        // factors must not leave a fundamental or sextet channel behind: raw
+        // t(a,k,l), for example, exports k and l as well as the counted adjoint.
+        let admitted = self.admitted.borrow();
+        let proofs = admitted.as_ref()?;
+        let spectators = product
+            .factors
+            .iter()
+            .enumerate()
+            .filter(|(factor_index, _)| *factor_index != index)
+            .map(|(_, factor)| proofs.inspect_interface(factor.atom))
+            .collect::<Option<Vec<_>>>()?;
+        let spectator_interface =
+            InterfaceInference::merge_explicit_interface_sequence(&spectators).ok()?;
+        let line_representations: [LibraryRep; 2] =
+            [ColorFundamental {}.into(), ColorSextet {}.into()];
+        if spectator_interface.logical_slots().iter().any(|slot| {
+            line_representations
+                .iter()
+                .any(|representation| representation.base() == slot.rep_name().base())
+        }) {
+            return None;
+        }
+        drop(admitted);
         let mut adjoints = Vec::new();
         for (factor_index, factor) in product.factors.iter().enumerate() {
             if factor_index == index {
@@ -1507,17 +1620,34 @@ impl ColorAlgebraSimplifier {
         } else {
             closed
         };
-        // The selected complete colour row is already in the admitted frame.
-        // Its closed channel must have no remaining free tensor ports.
-        if !SymbolicTensor::infer(closed.clone()).ok()?.is_scalar() {
-            return None;
+        // The matched chain closes its fundamental pair; the incidence counts
+        // above close every adjoint. Non-colour spectators retain their ports.
+        #[cfg(debug_assertions)]
+        {
+            #[cfg(test)]
+            let _debug = DebugInference::enter();
+            let observed = SymbolicTensor::infer(closed.clone())
+                .expect("colour projection produces valid tensor syntax");
+            assert!(
+                observed.structure.logical_slots().iter().all(|slot| {
+                    let color_representations: [LibraryRep; 3] = [
+                        ColorFundamental {}.into(),
+                        ColorAdjoint {}.into(),
+                        ColorSextet {}.into(),
+                    ];
+                    !color_representations
+                        .iter()
+                        .any(|representation| representation.base() == slot.rep_name().base())
+                }),
+                "colour projection left an open colour channel"
+            );
         }
         // A closed-channel step cannot certify the surrounding projection.
         self.certificate.terminal.set(false);
         self.certificate.terminal_term.set(false);
         // Schur's lemma gives 1 Tr(S)/Nc for the singlet. With one adjoint,
-        // S^a = T^a sum_b Tr(T^b S^b)/(TR*(Nc^2-1)). The probe certifies that
-        // closing this channel leaves no additional free tensor slots.
+        // S^a = T^a sum_b Tr(T^b S^b)/(TR*(Nc^2-1)). Channel closure follows
+        // from the matched factors, without observing the emitted expression.
         Some(operator * closed / norm)
     }
 
@@ -1726,7 +1856,7 @@ impl ColorAlgebraSimplifier {
         whole_term: bool,
     ) -> Option<Atom> {
         let selective = self.settings.one_shot_traces;
-        let (index, sum) = product.color_sum_factor(selective)?;
+        let (index, sum) = product.color_sum_factor(selective, self.admitted.borrow().as_ref()?)?;
         let outside = SlotCounts::of_factors(
             product
                 .factors
@@ -2012,7 +2142,7 @@ impl ColorAlgebraSimplifier {
         let exponent = positive_integer(exponent)?;
         if exponent >= 2
             && let AtomView::Add(sum) = base
-            && let Some(ports) = colour_power_ports(base)
+            && let Some(ports) = self.colour_power_ports(base)
         {
             // X^n = sum_i x_i X^(n-1). The copies contract through the ports
             // of X; each x_i gets fresh internal dummies so that it cannot
@@ -2068,7 +2198,11 @@ impl ColorAlgebraSimplifier {
             slot.aind = *fresh
                 .entry(slot.aind)
                 .or_insert_with(|| self.dummies.fresh_index());
-            **out = slot.to_atom();
+            let target = slot.to_atom();
+            let mut renamed = self.renamed_slots.borrow_mut();
+            renamed.insert(node.to_owned());
+            renamed.insert(target.clone());
+            **out = target;
         })
     }
 
@@ -3562,7 +3696,11 @@ impl<'a> ProductView<'a> {
     /// [`Self::rule_can_span_sum`] for sums with colour ports; port-free
     /// invariant sums keep the existing distribution and with it the
     /// established expanded output.
-    fn color_sum_factor(&self, selective: bool) -> Option<(usize, AddView<'a>)> {
+    fn color_sum_factor(
+        &self,
+        selective: bool,
+        proofs: &TensorProofs,
+    ) -> Option<(usize, AddView<'a>)> {
         let mut sums = self
             .factors
             .iter()
@@ -3576,32 +3714,35 @@ impl<'a> ProductView<'a> {
         sums.into_iter()
             .find_map(|(index, factor)| match factor.atom {
                 AtomView::Add(add) if add.iter().any(atom_contains_color_node) => {
-                    if selective && add.iter().any(atom_contains_color_port_or_work) {
+                    let carries_color_ports = add.iter().any(atom_contains_color_port_or_work);
+                    if selective && carries_color_ports {
                         return self.rule_can_span_sum(index).then_some((index, add));
                     }
-                    let mut matcher = SlotMatcher::default();
+                    // Products of closed Casimirs and trace indices are emitted
+                    // as an expanded invariant polynomial. Their representation
+                    // parameters are metadata and expose no contraction ports.
+                    if !carries_color_ports
+                        && self.factors.iter().enumerate().any(|(position, other)| {
+                            position != index && atom_contains_color_node(other.atom)
+                        })
+                    {
+                        return Some((index, add));
+                    }
                     let mut outside = Vec::new();
                     let mut only_structures = true;
                     for (other_index, other) in self.factors.iter().enumerate() {
                         if other_index == index {
                             continue;
                         }
-                        if let Some(structure) = &other.structure {
-                            let parsed = structure
-                                .args
-                                .iter()
-                                .map(|slot| matcher.parse::<LibraryRep, AbstractIndex>(*slot))
-                                .collect::<Result<Vec<_>, _>>();
-                            let Ok(parsed) = parsed else {
+                        if other.structure.is_some() {
+                            let Some(interface) = proofs.inspect_interface(other.atom) else {
                                 only_structures = false;
                                 break;
                             };
-                            outside.extend(parsed);
-                        } else if !OrderedStructure::<LibraryRep, AbstractIndex>::syntactic_structure_from_atom(
-                            other.atom,
-                            &mut matcher,
-                        )
-                        .is_ok_and(|structure| structure.canonical().is_scalar())
+                            outside.extend(interface.logical_slots());
+                        } else if !proofs
+                            .inspect_interface(other.atom)
+                            .is_some_and(|structure| structure.canonical().is_scalar())
                         {
                             only_structures = false;
                             break;
@@ -3610,21 +3751,23 @@ impl<'a> ProductView<'a> {
                     // An f-only region needs at least two connections into
                     // this sum for a loop or a trace/symmetry contraction.
                     // A single bridge cannot authorize distribution. Reuse
-                    // admitted homogeneous-sum inference: it inspects only
-                    // the first summand and performs no validation walk.
+                    // the sum's retained interface and already-typed outer
+                    // ports, without parsing the factors or summands again.
                     // Other tensors, missing interfaces and Fierz/chain
                     // connections retain the existing conservative behavior.
                     if only_structures && outside.is_empty() {
                         return None;
                     }
                     if only_structures
-                        && let Ok(structure) = OrderedStructure::<LibraryRep, AbstractIndex>::syntactic_structure_from_atom(
-                            factor.atom,
-                            &mut matcher,
-                        )
+                        && let Some(structure) = proofs.inspect_interface(factor.atom)
                         && outside
                             .iter()
-                            .filter(|outer| structure.canonical().external_structure_iter().any(|inner| outer.matches(&inner)))
+                            .filter(|outer| {
+                                structure
+                                    .canonical()
+                                    .external_structure_iter()
+                                    .any(|inner| outer.matches(&inner))
+                            })
                             .take(2)
                             .count()
                             < 2
@@ -4711,20 +4854,25 @@ impl<'a> SlotCounts<'a> {
 
 /// The port slots of a colour sum, with their duals, when it has any. A power
 /// of such a sum contracts its copies with each other.
-fn colour_power_ports(base: AtomView<'_>) -> Option<ColourPorts> {
-    if !atom_contains_color_port_or_work(base) {
-        return None;
+impl ColorAlgebraSimplifier {
+    fn colour_power_ports(&self, base: AtomView<'_>) -> Option<ColourPorts> {
+        if !atom_contains_color_port_or_work(base) {
+            return None;
+        }
+        let ports = self
+            .admitted
+            .borrow()
+            .as_ref()?
+            .inspect_interface(base)?
+            .slots()
+            .ok()?;
+        (!ports.is_empty()).then(|| {
+            ports
+                .into_iter()
+                .flat_map(|slot| [slot.dual(), slot])
+                .collect()
+        })
     }
-    let ports = crate::tensor::inference::InterfaceInference::replacement_interface(base)
-        .ok()?
-        .slots()
-        .ok()?;
-    (!ports.is_empty()).then(|| {
-        ports
-            .into_iter()
-            .flat_map(|slot| [slot.dual(), slot])
-            .collect()
-    })
 }
 
 fn positive_integer(expr: AtomView) -> Option<i64> {
@@ -4741,8 +4889,73 @@ fn positive_integer(expr: AtomView) -> Option<i64> {
 #[cfg(test)]
 mod reconstruction_tests {
     use super::*;
+    use crate::CookSettings;
+    use crate::tensor::inference::tests::{INFERENCE_CALLS, INFERENCE_VISITS};
+    use crate::test_support;
+    use spenso::dind;
     use std::sync::{Arc, Mutex};
     use symbolica::{domains::float::Float, parse, parse_lit, symbol};
+
+    #[test]
+    fn color_distribution_reuses_sum_and_spectator_interfaces() {
+        test_support::test_initialize();
+        let [a, b, c, d, x, e, f] =
+            adjoint_slots("distribution_retained", ["a", "b", "c", "d", "x", "e", "f"]);
+        let sum = color_f!(&a, &b, &x) * color_f!(&x, &c, &d)
+            + color_f!(&a, &c, &x) * color_f!(&x, &b, &d);
+        let weight = Atom::var(symbol!("distribution_retained::weight"));
+        for (outside, expected) in [(color_f!(&a, &e, &f), false), (color_f!(&a, &b, &e), true)] {
+            let source = SymbolicTensor::infer(&weight * &sum * outside).unwrap();
+            let product = ProductView::parse(source.expression().as_view());
+            INFERENCE_CALLS.with(|count| count.set(0));
+            INFERENCE_VISITS.with(|count| count.set(0));
+            for selective in [false, true] {
+                assert_eq!(
+                    product
+                        .color_sum_factor(selective, &source.proofs)
+                        .is_some(),
+                    expected,
+                );
+            }
+            assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+            assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
+        }
+    }
+
+    #[test]
+    fn fundamental_projection_keeps_open_spectator_channels() {
+        test_support::test_initialize();
+        let n = Atom::var(CS.nc);
+        let a = ColorAdjoint {}
+            .to_symbolic([&n * &n - 1, Atom::var(symbol!("projection_spectator::a"))]);
+        let i = ColorFundamental {}.to_symbolic([n.clone(), Atom::num(99701)]);
+        let j = dind!(ColorFundamental {}.to_symbolic([n.clone(), Atom::num(99702)]));
+        let k = ColorFundamental {}.to_symbolic([n.clone(), Atom::num(99703)]);
+        let l = dind!(ColorFundamental {}.to_symbolic([n, Atom::num(99704)]));
+        let chain = chain!(&i, &j; [color_t!(&a)]);
+        let expression = &chain * color_t!(&a, &k, &l);
+        let cooked = CookSettings::reversible()
+            .with_representation_payloads(false, true)
+            .try_cook(expression.as_view())
+            .unwrap();
+        let source = SymbolicTensor::infer(cooked).unwrap();
+        let simplifier = ColorAlgebraSimplifier::new(Default::default(), ParseState::default());
+        *simplifier.admitted.borrow_mut() = Some(source.proofs.clone());
+        // This row has a nonzero Fierz contraction. Singlet projection would
+        // incorrectly multiply it by the vanishing trace of one generator.
+        assert!(!source.expression().is_zero());
+        INFERENCE_CALLS.with(|count| count.set(0));
+        INFERENCE_VISITS.with(|count| count.set(0));
+        assert!(
+            simplifier
+                .simplify_invariant_fundamental_product(&ProductView::parse(
+                    source.expression().as_view(),
+                ))
+                .is_none()
+        );
+        assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+        assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
+    }
 
     #[test]
     fn legacy_symmetric_invariant_reader_requires_a_uniform_adjoint_index_space() {

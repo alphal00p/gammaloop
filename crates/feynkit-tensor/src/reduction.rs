@@ -182,6 +182,16 @@ pub struct TensorReductionTerm {
     projector_orbit: Option<ContractionOrbit>,
 }
 
+/// A projector recipe whose boundary belongs to the selected source tensor.
+/// Keep intermediate longitudinal/transverse factors symbolic until the whole
+/// recipe has been assembled; partial factors need not have that boundary.
+struct ProjectedTerm {
+    coefficient: Atom,
+    tensor: Atom,
+    integrated_orbit: Option<ContractionOrbit>,
+    projector_orbit: Option<ContractionOrbit>,
+}
+
 impl TensorReductionTerm {
     /// Exact rational coefficient, including orbit multiplicities.
     pub fn coefficient(&self) -> &Atom {
@@ -207,7 +217,7 @@ impl TensorReductionTerm {
     pub fn expression(&self) -> Result<SymbolicTensor<PartialStructure>, TensorReductionError> {
         Ok(self
             .tensor
-            .with_checked_expression(&self.coefficient * self.tensor.expression())?)
+            .with_produced_expression(&self.coefficient * self.tensor.expression())?)
     }
 }
 
@@ -580,10 +590,15 @@ impl TensorReducer {
             } else {
                 Vec::new()
             };
-            for mut term in projected {
-                let tensor = coefficient.multiply(&term.tensor)?;
-                term.tensor = source.with_checked_expression(tensor.expression().clone())?;
-                terms.push(term);
+            for term in projected {
+                let projected = selected.with_produced_expression(term.tensor)?;
+                let tensor = coefficient.multiply(&projected)?;
+                terms.push(TensorReductionTerm {
+                    coefficient: term.coefficient,
+                    tensor: source.with_produced_expression(tensor.into_expression())?,
+                    integrated_orbit: term.integrated_orbit,
+                    projector_orbit: term.projector_orbit,
+                });
             }
             if terms.len() > self.output_term_limit {
                 return Err(TensorReductionError::OutputLimit {
@@ -592,7 +607,7 @@ impl TensorReducer {
                 });
             }
         }
-        let zero = source.with_checked_expression(Atom::Zero)?;
+        let zero = source.with_produced_expression(Atom::Zero)?;
         let fully_contracted = zero
             .structure()
             .logical_slots()
@@ -857,12 +872,12 @@ impl TensorReducer {
     fn reduce_monomial(
         &self,
         monomial: TensorMonomial,
-    ) -> Result<Vec<TensorReductionTerm>, TensorReductionError> {
+    ) -> Result<Vec<ProjectedTerm>, TensorReductionError> {
         let rank = monomial.integrated.len();
         if rank == 0 {
-            return Ok(vec![TensorReductionTerm {
+            return Ok(vec![ProjectedTerm {
                 coefficient: Atom::one(),
-                tensor: SymbolicTensor::infer(monomial.scalar)?,
+                tensor: monomial.scalar,
                 integrated_orbit: None,
                 projector_orbit: None,
             }]);
@@ -967,13 +982,11 @@ impl TensorReducer {
                 if coefficient.is_zero() {
                     continue;
                 }
-                terms.push(TensorReductionTerm {
+                terms.push(ProjectedTerm {
                     coefficient,
-                    tensor: SymbolicTensor::infer(
-                        monomial.scalar.clone()
-                            * integrated_orbit.invariant()
-                            * outside_classes.atoms[outside_index].clone(),
-                    )?,
+                    tensor: monomial.scalar.clone()
+                        * integrated_orbit.invariant()
+                        * outside_classes.atoms[outside_index].clone(),
                     integrated_orbit: Some(integrated_orbit.clone()),
                     projector_orbit: outside_classes.orbits[outside_index].clone(),
                 });
@@ -986,7 +999,7 @@ impl TensorReducer {
         &self,
         monomial: TensorMonomial,
         projector_vectors: Vec<Atom>,
-    ) -> Result<Vec<TensorReductionTerm>, TensorReductionError> {
+    ) -> Result<Vec<ProjectedTerm>, TensorReductionError> {
         OrthogonalWeingarten::validate_inverse_dimension(
             monomial.integrated.len() / 2,
             &self.dimension,
@@ -1018,13 +1031,11 @@ impl TensorReducer {
                     alpha: term.projector_alpha().to_vec().into_boxed_slice(),
                     labeled_pairings: term.projector_labeled_pairings(),
                 };
-                Ok(TensorReductionTerm {
+                Ok(ProjectedTerm {
                     coefficient: term.coefficient().clone(),
-                    tensor: SymbolicTensor::infer(
-                        monomial.scalar.clone()
-                            * integrated_orbit.invariant()
-                            * projector_orbit.invariant(),
-                    )?,
+                    tensor: monomial.scalar.clone()
+                        * integrated_orbit.invariant()
+                        * projector_orbit.invariant(),
                     integrated_orbit: Some(integrated_orbit),
                     projector_orbit: Some(projector_orbit),
                 })
@@ -1036,7 +1047,7 @@ impl TensorReducer {
         &self,
         monomial: TensorMonomial,
         projector_vectors: Option<Vec<Atom>>,
-    ) -> Result<Vec<TensorReductionTerm>, TensorReductionError> {
+    ) -> Result<Vec<ProjectedTerm>, TensorReductionError> {
         let pair_count = monomial.integrated.len() / 2;
         let coefficient =
             OrthogonalWeingarten::isotropic_pairing_coefficient(pair_count, self.dimension.clone());
@@ -1048,14 +1059,12 @@ impl TensorReducer {
             return orbits
                 .into_iter()
                 .map(|projector_orbit| {
-                    Ok(TensorReductionTerm {
+                    Ok(ProjectedTerm {
                         coefficient: coefficient.clone()
                             * atom_from_count(projector_orbit.labeled_pairings)?,
-                        tensor: SymbolicTensor::infer(
-                            monomial.scalar.clone()
-                                * internal.clone()
-                                * projector_orbit.invariant(),
-                        )?,
+                        tensor: monomial.scalar.clone()
+                            * internal.clone()
+                            * projector_orbit.invariant(),
                         integrated_orbit: Some(integrated_orbit.clone()),
                         projector_orbit: Some(projector_orbit),
                     })
@@ -1071,11 +1080,9 @@ impl TensorReducer {
         outside
             .into_iter()
             .map(|(tensor, multiplicity)| {
-                Ok(TensorReductionTerm {
+                Ok(ProjectedTerm {
                     coefficient: coefficient.clone() * atom_from_count(multiplicity)?,
-                    tensor: SymbolicTensor::infer(
-                        monomial.scalar.clone() * internal.clone() * tensor,
-                    )?,
+                    tensor: monomial.scalar.clone() * internal.clone() * tensor,
                     integrated_orbit: Some(integrated_orbit.clone()),
                     projector_orbit: None,
                 })
@@ -1087,7 +1094,7 @@ impl TensorReducer {
         &self,
         monomial: TensorMonomial,
         projector_vectors: &[Atom],
-    ) -> Result<Vec<TensorReductionTerm>, TensorReductionError> {
+    ) -> Result<Vec<ProjectedTerm>, TensorReductionError> {
         let pair_count = monomial.integrated.len() / 2;
         let coefficient =
             OrthogonalWeingarten::isotropic_pairing_coefficient(pair_count, self.dimension.clone());
@@ -1096,12 +1103,12 @@ impl TensorReducer {
         contraction_orbits(&monomial.integrated, self.output_term_limit)?
             .into_iter()
             .map(|integrated_orbit| {
-                Ok(TensorReductionTerm {
+                Ok(ProjectedTerm {
                     coefficient: coefficient.clone()
                         * atom_from_count(integrated_orbit.labeled_pairings)?,
-                    tensor: SymbolicTensor::infer(
-                        monomial.scalar.clone() * integrated_orbit.invariant() * projector.clone(),
-                    )?,
+                    tensor: monomial.scalar.clone()
+                        * integrated_orbit.invariant()
+                        * projector.clone(),
                     integrated_orbit: Some(integrated_orbit),
                     projector_orbit: Some(projector_orbit.clone()),
                 })
@@ -1259,7 +1266,10 @@ impl FeynmanDiagramTensorExt for FeynmanDiagram {
             .map(|(index, numerator)| {
                 self.clone()
                     .with_name(format!("{}.tensor[{index}]", self.name()))
-                    .with_projector(SymbolicTensor::infer(Atom::one())?)
+                    .with_projector(SymbolicTensor::from_produced_parts(
+                        Atom::one(),
+                        PartialStructure::from_logical_slots([]),
+                    )?)
                     .with_numerator(numerator)
                     .map_err(TensorReductionError::Diagram)
             })

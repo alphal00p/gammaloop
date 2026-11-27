@@ -1,16 +1,26 @@
 //! Contract a metric or tagged vector by replacing one compatible tensor slot.
 
 mod components;
+use super::SchoonschipWithSettings;
 pub(crate) use components::{FactorizedContraction, ReductionStatus};
 
+use crate::tensor::composition;
+use crate::tensor::inference::{InterfaceInference, TensorInferenceError};
+use crate::tensor::planning::PlanningNetwork;
+use crate::tensor::simplification::observation::DomainObservations;
+use crate::tensor::{SymbolicTensor, TensorProofs};
 use spenso::network::library::function_lib::INBUILTS;
 use spenso::network::library::symbolic::ETS;
 use spenso::network::parsing::ParseState;
 use spenso::network::tags::{SPENSO_TAG, SpensoTags};
 use spenso::shadowing;
 use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::partial::{PartialIndex, PartialStructure, PartialStructureExt};
 use spenso::structure::representation::{LibraryRep, RepName};
-use spenso::structure::slot::{SlotMatch, SlotMatcher};
+use spenso::structure::slot::{IsAbstractSlot, SlotMatch, SlotMatcher};
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::sync::Arc;
 use symbolica::atom::representation::{FunView, MulView};
 use symbolica::atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol};
 
@@ -65,20 +75,41 @@ struct ContractionRole {
     partner: bool,
 }
 
+#[derive(Clone)]
+struct PlannedScope {
+    graph: Arc<PlanningNetwork<Atom>>,
+    // A selected or unadmitted scope may have no exact root among its graph's facts.
+    fallback_root: Option<Atom>,
+}
+
+impl PlannedScope {
+    fn matches(&self, source: AtomView<'_>) -> bool {
+        match &self.fallback_root {
+            Some(root) => root.as_view() == source,
+            None => self
+                .graph
+                .admission
+                .as_ref()
+                .is_some_and(|facts| facts.owns_expression(source)),
+        }
+    }
+}
+
+#[derive(Clone)]
 pub(crate) struct SlotContraction {
     metric: Symbol,
     metrics: bool,
     expand: bool,
+    expand_scalars: bool,
+    dot_notation: bool,
     representations: Option<Vec<LibraryRep>>,
-    observations:
-        Option<std::sync::Arc<crate::tensor::simplification::observation::DomainObservations>>,
-    graph: Option<(
-        Atom,
-        std::sync::Arc<
-            crate::tensor::SymbolicNet<spenso::structure::abstract_index::AbstractIndex>,
-        >,
-    )>,
+    observations: Option<Arc<DomainObservations>>,
+    graph: Option<PlannedScope>,
     interfaces: Option<spenso::network::parsing::LeafInterfaceCache>,
+    proofs: Option<TensorProofs>,
+    // Per-operation construction witnesses. Publication drains and filters
+    // these records; input proof owners are never mutated with output syntax.
+    generated: RefCell<Vec<TensorProofs>>,
     indices: std::cell::OnceCell<ParseState<AbstractIndex>>,
     tags: &'static SpensoTags,
     projectors: [Symbol; 2],
@@ -90,8 +121,12 @@ impl SlotContraction {
             metric: ETS.metric,
             metrics: true,
             expand: true,
+            expand_scalars: false,
+            dot_notation: false,
             representations: None,
             observations: None,
+            proofs: None,
+            generated: RefCell::default(),
             graph: None,
             interfaces: None,
             indices: Default::default(),
@@ -108,14 +143,64 @@ impl SlotContraction {
         }
     }
 
-    pub(crate) fn observed(
-        mut self,
-        observations: &std::sync::Arc<
-            crate::tensor::simplification::observation::DomainObservations,
-        >,
-    ) -> Self {
-        self.observations = Some(std::sync::Arc::clone(observations));
+    pub(crate) fn observed(mut self, observations: &Arc<DomainObservations>) -> Self {
+        self.observations = Some(Arc::clone(observations));
         self
+    }
+
+    /// Carry admitted regional boundaries and construction history into every
+    /// local contraction; emitted factors never need another admission pass.
+    pub(crate) fn admitted(mut self, source: &SymbolicTensor<PartialStructure>) -> Self {
+        self.generated.get_mut().clear();
+        self.proofs = Some(source.proofs.clone());
+        self.observed(source.reduction_observations())
+    }
+
+    pub(crate) fn normalization_matcher(&self) -> SlotMatcher {
+        if self.proofs.is_none() && self.interfaces.is_none() {
+            return SlotMatcher::default();
+        }
+        SlotMatcher::with_leaf_interfaces(
+            self.interfaces
+                .iter()
+                .cloned()
+                .chain(self.proofs.iter().map(TensorProofs::parser_leaf_interfaces))
+                .chain(
+                    self.generated
+                        .borrow()
+                        .iter()
+                        .map(TensorProofs::parser_leaf_interfaces),
+                ),
+        )
+    }
+
+    fn take_generated(
+        &self,
+        expression: AtomView<'_>,
+        interface: PartialStructure,
+    ) -> TensorProofs {
+        let generated = self.generated.take();
+        let mut proofs = self.proofs.clone().unwrap_or_default();
+        if generated.is_empty() && proofs.owns_published_interface(expression, &interface) {
+            return proofs;
+        }
+        proofs.publish_interfaces(expression, interface, generated.iter());
+        proofs
+    }
+
+    /// Publish an ordered rewrite using its source boundary and generated leaves.
+    pub(crate) fn finish_tensor(
+        &self,
+        source: &SymbolicTensor<PartialStructure>,
+        expression: Atom,
+    ) -> Result<SymbolicTensor<PartialStructure>, TensorInferenceError> {
+        let generated = self.generated.take();
+        let proofs = self.proofs.as_ref().ok_or_else(|| {
+            TensorInferenceError::invalid("slot contraction requires an admitted source")
+        })?;
+        source
+            .borrowed_with_proofs(proofs)
+            .with_generated_expression("slot contraction", expression, &generated)
     }
 
     pub(crate) fn expanding(mut self, expand: bool) -> Self {
@@ -123,15 +208,34 @@ impl SlotContraction {
         self
     }
 
+    /// Expand small composite scalar spectators over their base variables
+    /// inside factorized frontiers (see `ContractSettings::expand_scalar_spectators`).
+    pub(crate) fn expanding_scalars(mut self, expand: bool) -> Self {
+        self.expand_scalars = expand;
+        self
+    }
+
+    /// Emit closed scalar products of factorized frontiers in dot notation
+    /// (see `ContractSettings::dot_notation`).
+    pub(crate) fn emitting_dots(mut self, dots: bool) -> Self {
+        self.dot_notation = dots;
+        self
+    }
+
     pub(crate) fn planned(
         mut self,
-        source: Atom,
-        graph: std::sync::Arc<
-            crate::tensor::SymbolicNet<spenso::structure::abstract_index::AbstractIndex>,
-        >,
+        source: AtomView<'_>,
+        graph: Arc<PlanningNetwork<Atom>>,
         interfaces: Option<spenso::network::parsing::LeafInterfaceCache>,
     ) -> Self {
-        self.graph = Some((source, graph));
+        let owns_root = graph
+            .admission
+            .as_ref()
+            .is_some_and(|facts| facts.owns_expression(source));
+        self.graph = Some(PlannedScope {
+            graph,
+            fallback_root: (!owns_root).then(|| source.to_owned()),
+        });
         self.interfaces = interfaces;
         self
     }
@@ -242,6 +346,79 @@ impl SlotContraction {
         }
     }
 
+    /// Finish scalar metadata in its original tensor constructor. The written
+    /// port positions survive this local rewrite even when its enclosing leaf
+    /// acquires a new key. User-normalized terms retain their ordered schedule.
+    fn contract_leaf_metadata(
+        &self,
+        view: AtomView<'_>,
+        rewrite: &SchoonschipWithSettings<'_>,
+    ) -> Atom {
+        let Some(proofs) = &self.proofs else {
+            return view.to_owned();
+        };
+        if !self
+            .observations
+            .as_ref()
+            .is_some_and(|facts| facts.candidates.intrinsic)
+        {
+            return view.to_owned();
+        }
+        let mut matcher = SlotMatcher::default();
+        view.replace_map(|node, _, out| {
+            let AtomView::Fun(function) = node else {
+                return;
+            };
+            if !matches!(matcher.classify(node), SlotMatch::Other) {
+                out.set_from_view(&node);
+                return;
+            }
+            if !function.get_symbol().has_tag(&self.tags.tensor)
+                || function.get_symbol().has_tag(&self.tags.rank1)
+            {
+                return;
+            }
+            let Some((true, ports)) = proofs.leaf_interfaces.fact(node) else {
+                return;
+            };
+            let mut changed = false;
+            let arguments = function
+                .iter()
+                .map(|argument| {
+                    if !matches!(argument, AtomView::Num(_) | AtomView::Var(_))
+                        && !ports.iter().any(|port| port.as_view() == argument)
+                        && InterfaceInference::has_structured_syntax(argument)
+                    {
+                        let updated = rewrite.run_observed::<0>(argument, None, self);
+                        changed |= updated.as_view() != argument;
+                        updated
+                    } else {
+                        argument.to_owned()
+                    }
+                })
+                .collect::<Vec<_>>();
+            if !changed {
+                return;
+            }
+            let result = FunctionBuilder::new(function.get_symbol())
+                .add_args(&arguments)
+                .finish();
+            let supplied = arguments.iter().map(Atom::as_view).collect::<Vec<_>>();
+            if let Some((target, ports)) = TensorProofs::raw_ports_after_argument_permutation(
+                &supplied,
+                result.as_view(),
+                &ports,
+            ) && target.get_symbol() == function.get_symbol()
+            {
+                let produced = TensorProofs::default();
+                if produced.retain_leaf_ports(target.as_view(), ports).is_ok() {
+                    self.generated.borrow_mut().push(produced);
+                }
+            }
+            **out = result;
+        })
+    }
+
     /// A flat product of explicit ports needs only slot substitution. Sums,
     /// powers, compact notation and scalar function payloads retain the general
     /// scope planner. The caller must separately establish intrinsic admission.
@@ -347,13 +524,6 @@ impl SlotContraction {
     /// Reuse the positional interface rewriter: no dummy indices or distribution
     /// are needed, and callbacks retain their normal handling.
     pub(crate) fn contract_inner_products(&self, source: AtomView<'_>) -> Atom {
-        use crate::tensor::{
-            SymbolicTensor, composition::rewrite_interface_ports, inference::InterfaceInference,
-        };
-        use spenso::structure::{
-            partial::{PartialIndex, PartialStructureExt},
-            slot::IsAbstractSlot,
-        };
         let mut slots = SlotMatcher::default();
         source.replace_map(|value, _, output| {
             let AtomView::Fun(dot) = value else { return };
@@ -367,16 +537,18 @@ impl SlotContraction {
                 let Some(port) = slots.vector_argument(vector_function) else { continue };
                 let Ok(representation) = slots.parse_representation::<LibraryRep>(port) else { continue };
                 if !self.permits(representation.rep) { continue }
-                let Ok(interface) = InterfaceInference::replacement_interface(operand) else { continue };
+                let Some(proofs) = self.proofs.as_ref() else { continue };
+                let Some(interface) = proofs.admitted_interface(operand) else { continue };
                 let ports = interface.logical_slots();
                 let [target] = ports.as_slice() else { continue };
                 if matches!(target.aind, PartialIndex::Explicit(_)) || !target.rep().matches(&representation) { continue }
-                let Ok(operand) = SymbolicTensor::from_declared_parts(operand.to_owned(), interface) else { continue };
-                if let Ok(result) = rewrite_interface_ports(
+                let Some(operand) = proofs.region_with_interface(operand, interface) else { continue };
+                if let Ok((result, produced)) = composition::rewrite_interface_parts(
                     &operand,
-                    &std::collections::HashMap::from([(0, vector.to_owned())]),
+                    &HashMap::from([(0, vector.to_owned())]),
                     Some(self.dummy_state()),
                 ) {
+                    self.generated.borrow_mut().push(produced);
                     **output = result;
                     return;
                 }
@@ -837,15 +1009,66 @@ impl SlotContraction {
     }
 
     fn replace_argument(&self, function: FunView<'_>, position: usize, replacement: Atom) -> Atom {
-        let mut result = FunctionBuilder::new(function.get_symbol());
-        for (i, argument) in function.iter().enumerate() {
-            result = result.add_arg(if i == position {
-                replacement.as_view()
-            } else {
-                argument
-            });
+        let arguments = function
+            .iter()
+            .enumerate()
+            .map(|(i, argument)| {
+                if i == position {
+                    replacement.as_view()
+                } else {
+                    argument
+                }
+            })
+            .collect::<Vec<_>>();
+        let result = FunctionBuilder::new(function.get_symbol())
+            .add_args(&arguments)
+            .finish();
+        if !result.is_zero() {
+            let mut generated = self.generated.borrow_mut();
+            let previous = generated
+                .iter()
+                .rev()
+                .chain(self.proofs.iter())
+                .find_map(|proofs| proofs.leaf_interfaces.fact(function.as_view()));
+            if let Some((true, mut ports)) = previous {
+                let original = function
+                    .iter()
+                    .nth(position)
+                    .expect("the replaced argument exists");
+                if let Some(port) = ports.iter().position(|port| port.as_view() == original) {
+                    let produced = TensorProofs::default();
+                    let mut matcher = SlotMatcher::default();
+                    let compact = match replacement.as_view() {
+                        AtomView::Fun(vector) if vector.get_symbol().has_tag(&self.tags.rank1) => {
+                            matcher.vector_argument(vector).filter(|&port| {
+                                matcher.parse_representation::<LibraryRep>(port).is_ok()
+                            })
+                        }
+                        _ => None,
+                    };
+                    if let Some(compact) = compact {
+                        let _ = ports.remove(port);
+                        produced
+                            .retain_leaf_ports(replacement.as_view(), vec![compact.to_owned()])
+                            .expect("a compact vector retains its constructor port");
+                    } else {
+                        ports[port] = replacement.clone();
+                    }
+                    if let Some((target, ports)) =
+                        TensorProofs::raw_ports_after_argument_permutation(
+                            &arguments,
+                            result.as_view(),
+                            &ports,
+                        )
+                        && target.get_symbol() == function.get_symbol()
+                        && produced.retain_leaf_ports(target.as_view(), ports).is_ok()
+                    {
+                        generated.push(produced);
+                    }
+                }
+            }
         }
-        result.finish()
+        result
     }
 }
 

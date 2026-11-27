@@ -50,12 +50,15 @@ impl SchoonschipWithSettings<'_> {
             // no new repeated-index or head scan is needed on its larger result.
             let reusable = candidates.intrinsic && !candidates.brackets;
             let bracketed = if candidates.brackets {
-                BracketNormalizer::normalize(current.as_view())
+                BracketNormalizer::with_matcher(
+                    current.as_view(),
+                    contractor.normalization_matcher(),
+                )
             } else {
                 current.clone()
             };
             let normalized = if candidates.dots || bracketed != current {
-                DotNormalizer::with_settings(
+                DotNormalizer::with_matcher(
                     bracketed.as_view(),
                     crate::tensor::ContractSettings {
                         metrics: self.settings.metrics,
@@ -63,6 +66,7 @@ impl SchoonschipWithSettings<'_> {
                         representations: self.settings.representations.as_deref(),
                         ..Default::default()
                     },
+                    contractor.normalization_matcher(),
                 )
             } else {
                 bracketed
@@ -83,7 +87,7 @@ impl SchoonschipWithSettings<'_> {
                     self.settings.schoonschip_rank1_tensors,
                 );
                 if contracted != normalized {
-                    let dotted = DotNormalizer::normalize_with_settings(
+                    let dotted = DotNormalizer::normalize_with_matcher(
                         contracted.as_view(),
                         crate::tensor::ContractSettings {
                             metrics: self.settings.metrics,
@@ -91,11 +95,15 @@ impl SchoonschipWithSettings<'_> {
                             representations: self.settings.representations.as_deref(),
                             ..Default::default()
                         },
+                        contractor.normalization_matcher(),
                     );
                     let next = if reusable {
                         dotted.expression
                     } else {
-                        BracketNormalizer::normalize(dotted.expression.as_view())
+                        BracketNormalizer::with_matcher(
+                            dotted.expression.as_view(),
+                            contractor.normalization_matcher(),
+                        )
                     };
                     // The contractor reached its fixed point. Only an odd
                     // power can expose a new tensor factor during intrinsic

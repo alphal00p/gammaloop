@@ -1391,6 +1391,20 @@ session in a process, and part of the serialized data model.
   coefficients, rename internal dummy indices, or return zero; they must never
   add, remove, rename or re-represent a free index. Idenso relies on this contract
   to carry admitted metadata without re-reading payloads.
+- Tensor interfaces are authoritative after admission. Built-in identities,
+  scalar algebra, routing and projections must retain or explicitly transform
+  that metadata; they must not call checked admission on their own outputs.
+  Carry subexpression interfaces with their owning tensors through decomposition
+  and recomposition. New tensor constructors derive their interfaces from their
+  typed inputs. Full interface inference belongs at raw-input and unknown user
+  transformation boundaries, including user-supplied replacement expressions.
+  Independent re-inference is permitted in debug assertions, and its results
+  must never supply production metadata. Operations allocating or renaming dummy
+  indices must also update conservative index history; occurrence accounting
+  does not authorize re-inferring the free interface. Without a retained
+  raw-port fact, admitted parsing and regional lookup read direct non-self-loop
+  tensor constructors from their written arguments, while retained facts take
+  precedence for declared orders and self-loops.
 
 ==== Notation and display
 

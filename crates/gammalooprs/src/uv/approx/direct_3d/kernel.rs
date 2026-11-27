@@ -390,7 +390,7 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
             file.tagged = %tagged.to_plain_string(),
             "Scoped a physical numerator mass before its Taylor operation"
         );
-        numerator = numerator.with_checked_expression(tagged)?;
+        numerator = numerator.with_produced_expression(tagged)?;
     }
     // Every local UV kernel starts from the vacuum-explicit reduced graph, including
     // thermal runs; the medium dependence lives in the unreduced observable.
@@ -908,7 +908,7 @@ impl Direct3dApproximation<'_> {
                     lmb,
                     false,
                 )?;
-                Ok(entry.rhs.with_checked_expression(rescaled)?)
+                Ok(entry.rhs.with_produced_expression(rescaled)?)
             })?;
         let endpoint = match deformation {
             Local3DDeformation::Ordinary => 0,

@@ -4,35 +4,52 @@
 //! for a completed monomial. Only the selected factor contributes alternatives;
 //! substitutions remain port bindings until a distinct output variable is emitted.
 
-use super::*;
-use crate::tensor::{
-    ContractSettings, SymbolicNet, simplification::observation::DomainObservations,
+use super::super::SlotContraction;
+use super::{
+    Argument, ComponentSum, InputLeaf, Intake, ScalarPolynomial, TensorSource, Terminal,
+    TerminalPorts, Variable,
 };
-use ahash::AHashSet;
-use linnet::{
-    half_edge::{
-        NodeIndex,
-        subgraph::{Inclusion, SuBitGraph},
-        tree::SimpleTraversalTree,
-    },
-    tree::child_vec::ChildVecStore,
+#[cfg(feature = "reference-cases")]
+use crate::reference_cases::timing;
+#[cfg(feature = "reference-cases")]
+use crate::reference_cases::timing::{Frontier, Phase, ScopeOpenReason};
+use crate::shorthands::bracket::BracketNormalizer;
+use crate::shorthands::schoonschip::{
+    DotNormalizer, SchoonschipSettings, SchoonschipWithSettings, SimplificationCandidates,
 };
-use spenso::{
-    network::{
-        graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp},
-        library::DummyLibrary,
-        parsing::{LeafInterfaceCache, ParseSettings, ShorthandParsing},
-        store::{TensorScalarStore, TensorScalarStoreMapping},
-    },
-    structure::{
-        OrderedStructure, TensorStructure,
-        abstract_index::AbstractIndex,
-        partial::{PartialIndex, PartialStructureExt},
-        slot::IsAbstractSlot,
-    },
+use crate::tensor::composition;
+use crate::tensor::inference::{InterfaceInference, TensorInferenceError};
+use crate::tensor::planning::{self, PlanningLeaf, PlanningNetwork, PlanningSource};
+use crate::tensor::simplification::observation::DomainObservations;
+use crate::tensor::{ContractSettings, SymbolicTensor, TensorProofs};
+use ahash::{AHashMap, AHashSet};
+use linnet::half_edge::NodeIndex;
+use linnet::half_edge::subgraph::{Inclusion, SuBitGraph};
+use linnet::half_edge::tree::SimpleTraversalTree;
+use linnet::tree::child_vec::ChildVecStore;
+use spenso::network::graph::{NetworkEdge, NetworkGraph, NetworkLeaf, NetworkNode, NetworkOp};
+use spenso::network::library::DummyKey;
+use spenso::network::parsing::{
+    AtomStructureExt, LeafInterfaceCache, ParseSettings, ShorthandParsing,
 };
+use spenso::network::store::{NetworkStore, TensorScalarStore};
+use spenso::shadowing::{TermLeaf, TermTape};
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::partial::{PartialIndex, PartialStructure, PartialStructureExt};
+use spenso::structure::representation::{LibraryRep, RepName};
+use spenso::structure::slot::{IsAbstractSlot, SlotMatch, SlotMatcher};
+use spenso::structure::{OrderedStructure, TensorStructure};
+use std::borrow::Cow;
+use std::cell::OnceCell;
+use std::cmp::Reverse;
+use std::collections::{BTreeSet, HashMap};
+use std::mem;
 use std::sync::Arc;
-use symbolica::{atom::AtomOrView, coefficient::CoefficientView};
+use symbolica::atom::{Atom, AtomCore, AtomOrView, AtomView, Symbol};
+use symbolica::coefficient::CoefficientView;
+use symbolica::domains::rational::{Q, Rational};
+use symbolica::domains::{Ring, RingOps};
+use symbolica::poly::PolyVariable;
 
 // A state contains occurrence-local port bindings, not rebuilt expressions.
 // Variables and the incidence scratch still belong to ComponentSum.
@@ -45,14 +62,603 @@ struct Remaining<'a> {
 impl Remaining<'_> {
     #[cfg(feature = "reference-cases")]
     fn storage_bytes(&self) -> usize {
-        std::mem::size_of::<Self>()
-            + self.factors.capacity() * std::mem::size_of::<(usize, Vec<Argument<'_>>)>()
+        mem::size_of::<Self>()
+            + self.factors.capacity() * mem::size_of::<(usize, Vec<Argument<'_>>)>()
             + self
                 .factors
                 .iter()
-                .map(|(_, arguments)| arguments.capacity() * std::mem::size_of::<Argument<'_>>())
+                .map(|(_, arguments)| arguments.capacity() * mem::size_of::<Argument<'_>>())
                 .sum::<usize>()
-            + self.residual.capacity() * std::mem::size_of::<(usize, u32)>()
+            + self.residual.capacity() * mem::size_of::<(usize, u32)>()
+    }
+}
+
+// Merge similarly sized coefficients instead of copying a growing polynomial
+// for every contribution to one frontier state. There is at most one partial
+// per logarithmic term-count bin, hence at most usize::BITS partials. The common
+// one-coefficient case needs no additional allocation. Symbolica still owns
+// variable-map unification, exact cancellation, and monomial ordering.
+enum CoefficientSum {
+    One(ScalarPolynomial),
+    Binned(Vec<Option<ScalarPolynomial>>),
+}
+
+impl CoefficientSum {
+    /// Restore the min-heap order of stream `heap[index]` by its current monomial.
+    fn sift_down(heap: &mut [usize], mut index: usize, current: &[u32], nvars: usize) {
+        let key = |stream: usize| &current[stream * nvars..(stream + 1) * nvars];
+        loop {
+            let left = 2 * index + 1;
+            if left >= heap.len() {
+                return;
+            }
+            let right = left + 1;
+            let smaller = if right < heap.len() && key(heap[right]) < key(heap[left]) {
+                right
+            } else {
+                left
+            };
+            if key(heap[smaller]) < key(heap[index]) {
+                heap.swap(index, smaller);
+                index = smaller;
+            } else {
+                return;
+            }
+        }
+    }
+
+    /// Sum the contributions of one frontier target in a single pass.
+    ///
+    /// Multiplying a sorted polynomial by a monomial keeps it sorted, and every
+    /// source map is a prefix of the shared map, so the target is a k-way merge of
+    /// lazily shifted and scaled sources: each output monomial is written once,
+    /// and no product of a source with a monomial is materialized. A source with
+    /// no use left is released, and one used unchanged by a single target moves.
+    fn frontier_sum(
+        sources: &mut [Option<ScalarPolynomial>],
+        uses: &mut [usize],
+        contributions: &[Contribution],
+        map: &Arc<Vec<PolyVariable>>,
+    ) -> Option<ScalarPolynomial> {
+        let nvars = map.len();
+        for contribution in contributions {
+            let source = sources.get(contribution.source)?.as_ref()?;
+            if source.nvars() > nvars
+                || source.get_vars_ref() != &map[..source.nvars()]
+                || contribution.shift.len() > nvars
+            {
+                return None;
+            }
+        }
+        for contribution in contributions {
+            uses[contribution.source] -= 1;
+        }
+        if let [contribution] = contributions {
+            let source = sources[contribution.source].as_ref()?;
+            if uses[contribution.source] == 0
+                && source.nvars() == nvars
+                && Q.is_one(&contribution.coefficient)
+                && contribution.shift.iter().all(|&exponent| exponent == 0)
+            {
+                return sources[contribution.source].take();
+            }
+        }
+        let sum = {
+            let streams = contributions
+                .iter()
+                .map(|contribution| Some((sources[contribution.source].as_ref()?, contribution)))
+                .collect::<Option<Vec<_>>>()?;
+            if streams
+                .iter()
+                .any(|(source, _)| source.get_vars_ref() != &map[..source.nvars()])
+            {
+                return None;
+            }
+            // The input term count bounds the output: reserving it avoids the
+            // repeated copies of a growing buffer. Pages never written are not
+            // touched, so the unused tail costs address space only.
+            let capacity = streams
+                .iter()
+                .map(|(source, _)| source.nterms())
+                .sum::<usize>();
+            let mut sum = ScalarPolynomial::new(&Q, Some(capacity), Arc::clone(map));
+            let mut cursors = vec![0usize; streams.len()];
+            let mut current = vec![0u32; streams.len() * nvars];
+            let load = |stream: usize, cursor: usize, current: &mut [u32]| -> Option<()> {
+                let (source, contribution) = streams[stream];
+                let width = source.nvars();
+                let exponents = &source.exponents[cursor * width..(cursor + 1) * width];
+                let target = &mut current[stream * nvars..(stream + 1) * nvars];
+                for (variable, entry) in target.iter_mut().enumerate() {
+                    *entry = exponents
+                        .get(variable)
+                        .copied()
+                        .unwrap_or(0)
+                        .checked_add(contribution.shift.get(variable).copied().unwrap_or(0))?;
+                }
+                Some(())
+            };
+            let mut heap = Vec::with_capacity(streams.len());
+            for (stream, (source, _)) in streams.iter().enumerate() {
+                if !source.is_zero() {
+                    load(stream, 0, &mut current)?;
+                    heap.push(stream);
+                }
+            }
+            for index in (0..heap.len() / 2).rev() {
+                CoefficientSum::sift_down(&mut heap, index, &current, nvars);
+            }
+            while let Some(&top) = heap.first() {
+                let (source, contribution) = streams[top];
+                let cursor = cursors[top];
+                let coefficient = if Q.is_one(&contribution.coefficient) {
+                    source.coefficients[cursor].clone()
+                } else {
+                    Q.mul(&source.coefficients[cursor], &contribution.coefficient)
+                };
+                sum.append_monomial_back(coefficient, &current[top * nvars..(top + 1) * nvars]);
+                cursors[top] += 1;
+                if cursors[top] < source.nterms() {
+                    load(top, cursors[top], &mut current)?;
+                } else {
+                    heap.swap_remove(0);
+                }
+                CoefficientSum::sift_down(&mut heap, 0, &current, nvars);
+            }
+            sum
+        };
+        for contribution in contributions {
+            if uses[contribution.source] == 0 {
+                sources[contribution.source] = None;
+            }
+        }
+        Some(sum)
+    }
+
+    /// Largest exponent of every variable of `weight`.
+    fn max_degrees(weight: &ScalarPolynomial) -> Vec<u32> {
+        let nvars = weight.nvars();
+        let mut degrees = vec![0u32; nvars];
+        if nvars > 0 {
+            for exponents in weight.exponents.chunks_exact(nvars) {
+                for (degree, &exponent) in degrees.iter_mut().zip(exponents) {
+                    *degree = (*degree).max(exponent);
+                }
+            }
+        }
+        degrees
+    }
+
+    fn check_product_degrees(degrees: &[u32], factor: &ScalarPolynomial) -> Option<()> {
+        for term in factor.into_iter() {
+            for position in 0..degrees.len().max(term.exponents.len()) {
+                let degree = degrees.get(position).copied().unwrap_or(0);
+                let exponent = term.exponents.get(position).copied().unwrap_or(0);
+                // Symbolica's expression writer represents powers as i32.
+                // Decline before multiplication can produce an unwriteable
+                // exponent, including variables newly added to the shared map.
+                i32::try_from(degree.checked_add(exponent)?).ok()?;
+            }
+        }
+        Some(())
+    }
+
+    fn push(
+        &mut self,
+        mut coefficient: ScalarPolynomial,
+        #[cfg(feature = "reference-cases")] surrounding_bytes: usize,
+    ) {
+        if coefficient.is_zero() {
+            return;
+        }
+        if let Self::One(old) = self {
+            if old.is_zero() {
+                *old = coefficient;
+                return;
+            }
+            let first = old.nterms().ilog2() as usize;
+            let second = coefficient.nterms().ilog2() as usize;
+            let old = mem::replace(old, ScalarPolynomial::new_zero(&Q));
+            if first == second {
+                *self = Self::One(Self::merge(
+                    old,
+                    coefficient,
+                    #[cfg(feature = "reference-cases")]
+                    surrounding_bytes.saturating_add(mem::size_of::<Self>()),
+                ));
+            } else {
+                let mut bins = Vec::new();
+                bins.resize_with(first.max(second) + 1, || None);
+                bins[first] = Some(old);
+                bins[second] = Some(coefficient);
+                *self = Self::Binned(bins);
+            }
+            return;
+        }
+        let Self::Binned(bins) = self else {
+            unreachable!("the single-polynomial case returned above")
+        };
+        while !coefficient.is_zero() {
+            let bin = coefficient.nterms().ilog2() as usize;
+            if bins.len() <= bin {
+                bins.resize_with(bin + 1, || None);
+            }
+            let Some(old) = bins[bin].take() else {
+                bins[bin] = Some(coefficient);
+                return;
+            };
+            coefficient = Self::merge(
+                old,
+                coefficient,
+                #[cfg(feature = "reference-cases")]
+                surrounding_bytes.saturating_add(Self::binned_bytes(bins)),
+            );
+            // Cancellation can move the result to a smaller bin. Each merge
+            // consumes an occupied bin, so the loop also terminates then.
+        }
+    }
+
+    fn finish(
+        self,
+        #[cfg(feature = "reference-cases")] surrounding_bytes: usize,
+    ) -> ScalarPolynomial {
+        let bins = match self {
+            Self::One(coefficient) => return coefficient,
+            Self::Binned(bins) => bins,
+        };
+        #[cfg(feature = "reference-cases")]
+        let mut remaining_bytes = Self::binned_bytes(&bins);
+        let mut sum = ScalarPolynomial::new_zero(&Q);
+        for coefficient in bins.into_iter().flatten() {
+            #[cfg(feature = "reference-cases")]
+            {
+                // The iterator retains the allocation while each moved
+                // coefficient leaves the unconsumed payload charge. Keep a
+                // saturated bound conservative after the exact total is lost.
+                if remaining_bytes != usize::MAX {
+                    remaining_bytes -= ComponentSum::coefficient_bytes(&coefficient)
+                        - mem::size_of::<ScalarPolynomial>();
+                }
+            }
+            // Smallest first: the final fold never repeatedly copies the
+            // largest partial while adding the remaining small ones.
+            sum = Self::merge(
+                sum,
+                coefficient,
+                #[cfg(feature = "reference-cases")]
+                surrounding_bytes.saturating_add(remaining_bytes),
+            );
+        }
+        sum
+    }
+
+    fn merge(
+        first: ScalarPolynomial,
+        second: ScalarPolynomial,
+        #[cfg(feature = "reference-cases")] surrounding_bytes: usize,
+    ) -> ScalarPolynomial {
+        #[cfg(feature = "reference-cases")]
+        let _merge_timing = timing::scope(Phase::CoefficientMerge);
+        #[cfg(feature = "reference-cases")]
+        {
+            // Addition may widen both variable maps and allocate a merged
+            // output. Include all other retained partials through the caller's
+            // surrounding storage, not just the two inputs being merged.
+            let variables = first.nvars().saturating_add(second.nvars());
+            let inputs = first
+                .nterms()
+                .saturating_add(second.nterms())
+                .saturating_mul(
+                    mem::size_of::<Rational>()
+                        .saturating_add(variables.saturating_mul(mem::size_of::<u32>())),
+                );
+            let maps = variables.saturating_mul(mem::size_of::<PolyVariable>());
+            let retained = ComponentSum::coefficient_bytes(&first)
+                .saturating_add(ComponentSum::coefficient_bytes(&second));
+            timing::frontier_workspace(
+                surrounding_bytes
+                    .saturating_add(retained)
+                    .saturating_add(inputs.saturating_add(maps).saturating_mul(2)),
+            );
+        }
+        if first.is_zero() {
+            return second;
+        }
+        if second.is_zero() {
+            return first;
+        }
+        // Symbolica inherits the first operand's variable order. Preserve the
+        // larger map so a different ordering only reconstructs the smaller
+        // polynomial; reconstructing the larger one can require quadratic
+        // monomial insertion.
+        if first.nterms() < second.nterms() {
+            second + first
+        } else {
+            first + second
+        }
+    }
+
+    #[cfg(feature = "reference-cases")]
+    fn binned_bytes(bins: &Vec<Option<ScalarPolynomial>>) -> usize {
+        mem::size_of::<Self>()
+            .saturating_add(
+                bins.capacity()
+                    .saturating_mul(mem::size_of::<Option<ScalarPolynomial>>()),
+            )
+            .saturating_add(
+                bins.iter()
+                    .flatten()
+                    .map(|coefficient| {
+                        ComponentSum::coefficient_bytes(coefficient)
+                            - mem::size_of::<ScalarPolynomial>()
+                    })
+                    .fold(0usize, usize::saturating_add),
+            )
+    }
+
+    #[cfg(all(test, feature = "reference-cases"))]
+    fn storage_bytes(&self) -> usize {
+        match self {
+            Self::One(coefficient) => {
+                mem::size_of::<Self>().saturating_add(ComponentSum::coefficient_bytes(coefficient))
+                    - mem::size_of::<ScalarPolynomial>()
+            }
+            Self::Binned(bins) => Self::binned_bytes(bins),
+        }
+    }
+}
+
+/// Sources with fewer terms are multiplied out and summed at once; larger
+/// ones are merged lazily (see [`CoefficientSum::frontier_sum`]).
+const LAZY_SOURCE_TERMS: usize = 32;
+
+/// One contribution to a frontier target: a source state times one monomial,
+/// `coefficient` times the variables of the shared map raised to `shift`.
+struct Contribution {
+    source: usize,
+    coefficient: Rational,
+    shift: Vec<u32>,
+}
+
+/// The scalar variables of one frontier, in one append-only polynomial
+/// variable map: products and merges of frontier coefficients then never
+/// reorder and rebuild a polynomial. When enabled, small composite scalar
+/// spectators (such as `2-dim` or a short closed trace) are expanded over their
+/// base variables, so equal monomials merge instead of carrying an opaque copy
+/// of the sum.
+struct SharedScalars<'a> {
+    contractor: &'a SlotContraction,
+    atoms: Vec<Atom>,
+    positions: AHashMap<Atom, usize>,
+    dot_positions: AHashMap<Atom, usize>,
+    /// Dot-notation spelling of every position.
+    dots: Vec<Atom>,
+    map: Arc<Vec<PolyVariable>>,
+    expansions: AHashMap<usize, Expansion>,
+}
+
+/// Composite scalars with at most this many polynomial terms are expanded
+/// over their base variables; larger ones stay opaque variables.
+const EXPANSION_TERM_LIMIT: usize = 64;
+
+/// Composites whose structural term bound (products of sum lengths, powers
+/// expanded) exceeds this are not converted at all, so that a large spectator
+/// such as `(x+y)^1000` is never expanded only to be discarded.
+const EXPANSION_WORK_LIMIT: usize = 1024;
+
+enum Expansion {
+    Base(usize),
+    Composite(ScalarPolynomial),
+}
+
+struct ExpansionBound {
+    terms: usize,
+    degree: u32,
+}
+
+impl<'a> SharedScalars<'a> {
+    // Bound conversion work and every intermediate monomial degree before
+    // asking Symbolica to perform unchecked polynomial arithmetic.
+    fn bound(view: AtomView<'_>) -> Option<ExpansionBound> {
+        match view {
+            AtomView::Add(sum) => sum.iter().try_fold(
+                ExpansionBound {
+                    terms: 0,
+                    degree: 0,
+                },
+                |total, term| {
+                    let next = Self::bound(term)?;
+                    Some(ExpansionBound {
+                        terms: total.terms.checked_add(next.terms)?,
+                        degree: total.degree.max(next.degree),
+                    })
+                },
+            ),
+            AtomView::Mul(product) => product.iter().try_fold(
+                ExpansionBound {
+                    terms: 1,
+                    degree: 0,
+                },
+                |total, factor| {
+                    let next = Self::bound(factor)?;
+                    Some(ExpansionBound {
+                        terms: total.terms.checked_mul(next.terms)?,
+                        degree: total.degree.checked_add(next.degree)?,
+                    })
+                },
+            ),
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                let exponent = u32::try_from(i64::try_from(exponent).ok()?).ok()?;
+                let base = Self::bound(base)?;
+                Some(ExpansionBound {
+                    terms: base.terms.checked_pow(exponent)?,
+                    degree: base.degree.checked_mul(exponent)?,
+                })
+            }
+            AtomView::Num(_) => Some(ExpansionBound {
+                terms: 1,
+                degree: 0,
+            }),
+            _ => Some(ExpansionBound {
+                terms: 1,
+                degree: 1,
+            }),
+        }
+    }
+
+    fn composite(view: AtomView<'_>) -> bool {
+        match view {
+            AtomView::Add(_) => true,
+            AtomView::Mul(product) => product.iter().any(Self::composite),
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                matches!(exponent, AtomView::Num(_)) && Self::composite(base)
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether `value` has no explicit index slot: a composite with internal dummy
+    /// indices must not be distributed, since that repeats its index labels.
+    fn index_free(slots: &mut SlotMatcher, value: AtomView<'_>) -> bool {
+        let mut free = true;
+        value.visitor(&mut |node| {
+            if matches!(slots.classify(node), SlotMatch::Explicit(_)) {
+                free = false;
+            }
+            free
+        });
+        free
+    }
+
+    /// Whether `terms^exponent` stays within the expansion limit.
+    fn small_power(terms: usize, exponent: u32) -> bool {
+        terms
+            .checked_pow(exponent)
+            .is_some_and(|terms| terms <= EXPANSION_TERM_LIMIT)
+    }
+
+    fn new(contractor: &'a SlotContraction) -> Self {
+        Self {
+            contractor,
+            atoms: Vec::new(),
+            positions: AHashMap::new(),
+            dot_positions: AHashMap::new(),
+            dots: Vec::new(),
+            map: Arc::new(Vec::new()),
+            expansions: AHashMap::new(),
+        }
+    }
+
+    /// One position per scalar up to dot spelling: `g(p,q)` from this frontier
+    /// and `dot(p,q)` from a nested contraction are one variable, so their
+    /// exponents add instead of forming distinct monomials.
+    fn position(&mut self, atom: Atom) -> usize {
+        if let Some(&position) = self.positions.get(&atom) {
+            return position;
+        }
+        let dots = DotNormalizer::notation(atom.as_view(), self.contractor.normalization_matcher());
+        if let Some(&position) = self.dot_positions.get(&dots) {
+            self.positions.insert(atom, position);
+            return position;
+        }
+        let position = self.atoms.len();
+        self.atoms.push(atom.clone());
+        self.dots.push(dots.clone());
+        self.dot_positions.insert(dots, position);
+        self.positions.insert(atom, position);
+        Arc::make_mut(&mut self.map).push(PolyVariable::Temporary(position));
+        position
+    }
+
+    /// The expansion of the scalar variable `index`, whose atom is `atom`.
+    /// `index_free` is asked once, and only when expansion is enabled.
+    fn expansion(
+        &mut self,
+        index: usize,
+        atom: &Atom,
+        index_free: impl FnOnce(&Atom) -> bool,
+    ) -> &Expansion {
+        if !self.expansions.contains_key(&index) {
+            let expansion = self.expand(atom, index_free);
+            self.expansions.insert(index, expansion);
+        }
+        &self.expansions[&index]
+    }
+
+    fn expand(&mut self, atom: &Atom, index_free: impl FnOnce(&Atom) -> bool) -> Expansion {
+        if self.contractor.expand_scalars
+            && Self::composite(atom.as_view())
+            && Self::bound(atom.as_view()).is_some_and(|bound| {
+                bound.terms <= EXPANSION_WORK_LIMIT && i32::try_from(bound.degree).is_ok()
+            })
+            && index_free(atom)
+            && let Ok(polynomial) = atom.try_to_polynomial::<_, u32>(&Q, None)
+            && polynomial.nterms() <= EXPANSION_TERM_LIMIT
+        {
+            let positions = polynomial
+                .variables()
+                .iter()
+                .map(|variable| self.position(variable.to_atom()))
+                .collect::<Vec<_>>();
+            let mut expanded =
+                ScalarPolynomial::new(&Q, Some(polynomial.nterms()), Arc::clone(&self.map));
+            let mut exponents = vec![0u32; self.map.len()];
+            let mut overflow = false;
+            for term in polynomial.into_iter() {
+                exponents.fill(0);
+                // Two variables of the composite (`g(p,q)` and `dot(p,q)`)
+                // can share one position; their exponents add.
+                for (&position, &exponent) in positions.iter().zip(term.exponents) {
+                    match exponents[position].checked_add(exponent) {
+                        Some(sum) => exponents[position] = sum,
+                        None => overflow = true,
+                    }
+                }
+                expanded.append_monomial(term.coefficient.clone(), &exponents);
+            }
+            if !overflow {
+                return Expansion::Composite(expanded);
+            }
+        }
+        Expansion::Base(self.position(atom.clone()))
+    }
+
+    /// Emit each variable in the spelling it first had in this frontier, or
+    /// in dot notation when the request ends there. The polynomial is
+    /// relabelled with those atoms and written into one expression buffer,
+    /// which is normalized once.
+    fn emit(&self, mut polynomial: ScalarPolynomial) -> Option<Atom> {
+        let spellings = if self.contractor.dot_notation {
+            &self.dots
+        } else {
+            &self.atoms
+        };
+        let variables = polynomial
+            .get_vars_ref()
+            .iter()
+            .map(|variable| {
+                let PolyVariable::Temporary(position) = variable else {
+                    return None;
+                };
+                let atom = spellings.get(*position)?.clone();
+                // Only the expression of a variable is read when writing.
+                Some(match atom.as_view() {
+                    AtomView::Var(variable) => PolyVariable::Symbol(variable.get_symbol()),
+                    AtomView::Fun(function) => PolyVariable::Function(function.get_symbol(), atom),
+                    _ => PolyVariable::Power(atom),
+                })
+            })
+            .collect::<Option<Vec<_>>>()?;
+        let mut labelled = ScalarPolynomial::new(&Q, None, Arc::new(variables));
+        labelled.coefficients = mem::take(&mut polynomial.coefficients);
+        labelled.exponents = mem::take(&mut polynomial.exponents);
+        Some(
+            labelled.to_expression_with_coeff_map(|_, coefficient, out| {
+                out.to_num(coefficient.clone());
+            }),
+        )
     }
 }
 
@@ -69,6 +675,128 @@ pub(crate) struct FactorizedContraction<Root = Atom> {
     pub(crate) root: Root,
     pub(crate) status: ReductionStatus,
     pub(crate) observations: Option<DomainObservations>,
+    /// A published Atom result owns only facts reachable from its current root.
+    /// Typed roots carry their facts directly and leave this scratch cell empty.
+    pub(crate) proofs: TensorProofs,
+}
+
+impl FactorizedContraction {
+    /// Attach the producer's retained facts before accounting for generated indices.
+    pub(crate) fn into_tensor(
+        self,
+        source: &SymbolicTensor<PartialStructure>,
+    ) -> Result<FactorizedContraction<SymbolicTensor<PartialStructure>>, TensorInferenceError> {
+        let root = source.with_published_materialization(
+            "factorized slot contraction",
+            self.root,
+            self.proofs,
+        )?;
+        let root = if let Some(observations) = self.observations {
+            root.with_identity_result(root.expression.clone(), Some(observations))?
+        } else {
+            root
+        };
+        Ok(FactorizedContraction {
+            root,
+            status: self.status,
+            observations: None,
+            proofs: TensorProofs::default(),
+        })
+    }
+
+    /// An open terminal certificate describes its root, never scalar syntax.
+    fn scalar_facts(observed: &DomainObservations) -> bool {
+        observed.is_closed_scalar()
+    }
+}
+
+// A planned domain already owns its topology, structures and leaf proofs.
+// Scratch parses keep their borrowed source views for selectively opening leaves.
+struct ScopeNetwork<'src> {
+    graph: Cow<'src, NetworkGraph<DummyKey, Symbol>>,
+    store: ScopeStore<'src>,
+    admission: Option<Arc<TensorProofs>>,
+}
+
+type ScopeLeafStore<E> = NetworkStore<PlanningLeaf<E>, E>;
+
+enum ScopeStore<'src> {
+    Planned(&'src ScopeLeafStore<Atom>),
+    Parsed(ScopeLeafStore<AtomOrView<'src>>),
+}
+
+impl<'src> ScopeNetwork<'src> {
+    fn planned(network: &'src PlanningNetwork<Atom>) -> Self {
+        Self {
+            graph: Cow::Borrowed(&network.graph),
+            store: ScopeStore::Planned(&network.store),
+            admission: network.admission.clone(),
+        }
+    }
+
+    fn parsed(network: PlanningNetwork<AtomOrView<'src>>) -> Self {
+        Self {
+            graph: Cow::Owned(network.network.graph),
+            store: ScopeStore::Parsed(network.network.store),
+            admission: network.admission,
+        }
+    }
+
+    fn structure(&self, index: usize) -> &OrderedStructure {
+        match &self.store {
+            ScopeStore::Planned(store) => &store.tensors[index].structure,
+            ScopeStore::Parsed(store) => &store.tensors[index].structure,
+        }
+    }
+
+    fn leaf<'a, E>(
+        &self,
+        store: &'a ScopeLeafStore<E>,
+        node: NodeIndex,
+    ) -> Option<(&'a E, Option<&'a PlanningLeaf<E>>)> {
+        match self.graph.graph[node] {
+            NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
+                let tensor = &store.tensors[index];
+                Some((&tensor.expression, Some(tensor)))
+            }
+            NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => {
+                Some((store.get_scalar_ref(index), None))
+            }
+            _ => None,
+        }
+    }
+
+    fn literal(&self, node: NodeIndex) -> Option<AtomView<'_>> {
+        match &self.store {
+            ScopeStore::Planned(store) => Some(self.leaf(store, node)?.0.as_view()),
+            ScopeStore::Parsed(store) => Some(self.leaf(store, node)?.0.as_view()),
+        }
+    }
+
+    fn openable_leaf(
+        &self,
+        node: NodeIndex,
+    ) -> Option<(AtomView<'src>, Option<PlanningSource<'src>>)> {
+        match &self.store {
+            ScopeStore::Planned(store) => {
+                let (value, admission) = self.leaf(*store, node)?;
+                Some((
+                    value.as_view(),
+                    admission.map(|leaf| leaf.source(value.as_view(), self.admission.as_ref())),
+                ))
+            }
+            ScopeStore::Parsed(store) => {
+                // Owned coefficients of a scratch parse have no tensor interior.
+                let (AtomOrView::View(value), admission) = self.leaf(store, node)? else {
+                    return None;
+                };
+                Some((
+                    *value,
+                    admission.map(|leaf| leaf.source(*value, self.admission.as_ref())),
+                ))
+            }
+        }
+    }
 }
 
 // A parse belongs to one arithmetic scope. Opening an occurrence is cached on
@@ -76,34 +804,36 @@ pub(crate) struct FactorizedContraction<Root = Atom> {
 // This is parser scratch, not another symbolic tensor representation.
 struct ContractionScope<'src> {
     source: AtomView<'src>,
-    network: SymbolicNet<AbstractIndex, AtomOrView<'src>>,
+    network: ScopeNetwork<'src>,
     tree: SimpleTraversalTree<ChildVecStore<()>>,
     root: NodeIndex,
     ports: AHashMap<NodeIndex, (Vec<Atom>, PartialStructure)>,
-    opened: AHashMap<NodeIndex, std::cell::OnceCell<Option<Box<Self>>>>,
-    reductions: AHashMap<NodeIndex, std::cell::OnceCell<Option<FactorizedContraction>>>,
+    opened: AHashMap<NodeIndex, OnceCell<Option<Box<Self>>>>,
+    reductions: AHashMap<NodeIndex, OnceCell<Option<FactorizedContraction>>>,
     // Each scope serves one fixed contraction or admission policy.
-    work: AHashMap<NodeIndex, std::cell::OnceCell<bool>>,
+    work: AHashMap<NodeIndex, OnceCell<bool>>,
     interfaces: Option<LeafInterfaceCache>,
 }
 
 impl<'src> ContractionScope<'src> {
+    #[cfg(test)]
     fn parse(source: AtomView<'src>) -> Option<Self> {
-        let network = SlotContraction::shallow_network(source, None).ok()?;
-        Self::from_network(source, network, None)
+        let network = SlotContraction::shallow_network(source, None, None).ok()?;
+        Self::from_network(source, ScopeNetwork::parsed(network), None)
     }
 
     fn from_network(
         source: AtomView<'src>,
-        network: SymbolicNet<AbstractIndex, AtomOrView<'src>>,
+        network: ScopeNetwork<'src>,
         interfaces: Option<LeafInterfaceCache>,
     ) -> Option<Self> {
-        let tree = network.graph.expr_tree().cast::<ChildVecStore<()>>();
-        let root = network.graph.graph.node_id(network.graph.head());
+        let graph = &network.graph;
+        let tree = graph.expr_tree().cast::<ChildVecStore<()>>();
+        let root = graph.graph.node_id(graph.head());
         let nodes = tree
-            .iter_preorder_tree_nodes(&network.graph.graph, root)
+            .iter_preorder_tree_nodes(&graph.graph, root)
             .collect::<Vec<_>>();
-        let external: SuBitGraph = network.graph.graph.external_filter();
+        let external: SuBitGraph = graph.graph.external_filter();
         // Preorder makes each arithmetic subtree a contiguous interval. Reuse
         // those intervals for every boundary instead of allocating a descendant
         // set and traversing the same tree for each node.
@@ -115,7 +845,7 @@ impl<'src> ContractionScope<'src> {
             .collect::<AHashMap<_, _>>();
         let mut ends = (1..=nodes.len()).collect::<Vec<_>>();
         for (position, &node) in nodes.iter().enumerate().rev() {
-            for child in tree.iter_children(node, &network.graph.graph) {
+            for child in tree.iter_children(node, &graph.graph) {
                 ends[position] = ends[position].max(ends[positions[&child]]);
             }
         }
@@ -127,14 +857,10 @@ impl<'src> ContractionScope<'src> {
             let interfaces = interfaces.lock().unwrap();
             let mut matcher = SlotMatcher::default();
             for &node in &nodes {
-                if let NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) =
-                    &network.graph.graph[node]
-                    && let Some((_, ports)) = interfaces.get(
-                        network.store.tensors[*index]
-                            .expression
-                            .as_atom_view()
-                            .get_data(),
-                    )
+                if matches!(
+                    &graph.graph[node],
+                    NetworkNode::Leaf(NetworkLeaf::LocalTensor(_))
+                ) && let Some((_, ports)) = interfaces.get(network.literal(node)?.get_data())
                 {
                     for atom in ports {
                         if let Ok(slot) = matcher.parse::<LibraryRep, AbstractIndex>(atom.as_view())
@@ -150,26 +876,23 @@ impl<'src> ContractionScope<'src> {
             let end = ends[begin];
             let mut boundary = Vec::new();
             for &member in &nodes[begin..end] {
-                for hedge in network.graph.graph.iter_crown(member) {
-                    let NetworkEdge::Slot(slot) = network.graph.graph[[&hedge]] else {
+                for hedge in graph.graph.iter_crown(member) {
+                    let NetworkEdge::Slot(slot) = graph.graph[[&hedge]] else {
                         continue;
                     };
                     if !external.includes(&hedge)
                         && positions
-                            .get(&network.graph.graph.node_id(network.graph.graph.inv(hedge)))
+                            .get(&graph.graph.node_id(graph.graph.inv(hedge)))
                             .is_some_and(|&other| begin <= other && other < end)
                     {
                         continue;
                     }
                     // Sewing shares one edge label; the occurrence's storage
                     // axis still owns this endpoint's variance.
-                    let slot = match &network.graph.graph[member] {
-                        NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
-                            *network.store.tensors[*index]
-                                .structure
-                                .external_structure()
-                                .get(usize::from(network.graph.slot_order[hedge.0]))?
-                        }
+                    let slot = match &graph.graph[member] {
+                        NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => network
+                            .structure(*index)
+                            .get_slot(usize::from(graph.slot_order[hedge.0]))?,
                         _ => slot,
                     };
                     boundary.push(slot);
@@ -218,41 +941,30 @@ impl<'src> ContractionScope<'src> {
         })
     }
 
-    fn payload(&self, node: NodeIndex) -> Option<&AtomOrView<'src>> {
-        match self.network.graph.graph[node] {
-            NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
-                Some(&self.network.store.tensors[index].expression)
-            }
-            NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => {
-                Some(self.network.store.get_scalar_ref(index))
-            }
-            _ => None,
-        }
-    }
-
     fn literal(&self, node: NodeIndex) -> Option<AtomView<'_>> {
-        self.payload(node)
-            .map(AtomOrView::as_view)
+        self.network
+            .literal(node)
             .or_else(|| (node == self.root).then_some(self.source))
     }
 
     fn open(&self, node: NodeIndex) -> Option<&Self> {
         self.opened[&node]
             .get_or_init(|| {
-                // Composite arithmetic leaves retain their original view. The
-                // parser's owned scalar coefficients contain no tensor interior.
-                let AtomOrView::View(value) = self.payload(node)? else {
-                    return None;
-                };
+                let (value, admission) = self.network.openable_leaf(node)?;
                 #[cfg(test)]
                 crate::tensor::SELECTED_OPENS.with(|count| count.set(count.get() + 1));
                 let network =
-                    SlotContraction::shallow_network(*value, self.interfaces.as_ref()).ok()?;
-                let opened = Self::from_network(*value, network, self.interfaces.clone())?;
+                    SlotContraction::shallow_network(value, self.interfaces.as_ref(), admission)
+                        .ok()?;
+                let opened = Self::from_network(
+                    value,
+                    ScopeNetwork::parsed(network),
+                    self.interfaces.clone(),
+                )?;
                 if matches!(
                     opened.network.graph.graph[opened.root],
                     NetworkNode::Leaf(_)
-                ) && opened.literal(opened.root)? == *value
+                ) && opened.literal(opened.root)? == value
                 {
                     // Unsupported powers and opaque scalar syntax do not expose
                     // arithmetic. Decline instead of reopening the same leaf.
@@ -329,7 +1041,7 @@ impl SlotContraction {
     pub(crate) fn minimal_work_permitted(
         &self,
         source: AtomView<'_>,
-        settings: crate::tensor::ContractSettings<'_>,
+        settings: ContractSettings<'_>,
     ) -> Option<bool> {
         let scope = self.scope(source)?;
         self.minimal_scope_work(&scope, scope.root, settings)
@@ -339,7 +1051,7 @@ impl SlotContraction {
         &self,
         scope: &ContractionScope<'_>,
         root: NodeIndex,
-        settings: crate::tensor::ContractSettings<'_>,
+        settings: ContractSettings<'_>,
     ) -> Option<bool> {
         match scope.network.graph.graph[root] {
             NetworkNode::Op(NetworkOp::Sum) => {
@@ -490,23 +1202,21 @@ impl SlotContraction {
     }
 
     fn scope<'a>(&'a self, source: AtomView<'a>) -> Option<ContractionScope<'a>> {
-        if let Some((planned, graph)) = &self.graph
-            && planned.as_view() == source
+        let network = if let Some(planned) = &self.graph
+            && planned.matches(source)
         {
-            let network = graph.map_ref(
-                |scalar| AtomOrView::View(scalar.as_view()),
-                |tensor| SymbolicTensor {
-                    expression: AtomOrView::View(tensor.expression.as_view()),
-                    structure: tensor.structure.clone(),
-                    is_metric: tensor.is_metric,
-                    is_composite: tensor.is_composite,
-                    proofs: tensor.proofs.clone(),
-                },
-            );
-            ContractionScope::from_network(source, network, self.interfaces.clone())
+            ScopeNetwork::planned(&planned.graph)
         } else {
-            ContractionScope::parse(source)
-        }
+            ScopeNetwork::parsed(
+                Self::shallow_network(
+                    source,
+                    self.interfaces.as_ref(),
+                    self.proofs.as_ref().map(PlanningSource::root),
+                )
+                .ok()?,
+            )
+        };
+        ContractionScope::from_network(source, network, self.interfaces.clone())
     }
 
     /// The shared depth-one structural view keeps arithmetic leaves borrowed.
@@ -514,14 +1224,10 @@ impl SlotContraction {
     pub(crate) fn shallow_network<'src>(
         source: AtomView<'src>,
         interfaces: Option<&LeafInterfaceCache>,
-    ) -> Result<
-        SymbolicNet<AbstractIndex, AtomOrView<'src>>,
-        crate::tensor::inference::TensorInferenceError,
-    > {
+        admission: Option<PlanningSource<'src>>,
+    ) -> Result<PlanningNetwork<AtomOrView<'src>>, TensorInferenceError> {
         #[cfg(feature = "reference-cases")]
-        let _phase = crate::reference_cases::timing::scope(
-            crate::reference_cases::timing::Phase::ShallowGraph,
-        );
+        let _phase = timing::scope(Phase::ShallowGraph);
         let settings = ParseSettings {
             precontract_scalars: false,
             depth_limit: Some(1),
@@ -529,19 +1235,7 @@ impl SlotContraction {
             parse_composite_scalars_as_tensors: true,
             ..ParseSettings::default()
         };
-        type Tensor<'src> = SymbolicTensor<OrderedStructure, AtomOrView<'src>>;
-        let library = DummyLibrary::<Tensor<'src>>::new();
-        if let Some(interfaces) = interfaces {
-            SymbolicNet::<AbstractIndex, AtomOrView<'src>>::try_from_admitted_view::<
-                OrderedStructure,
-                _,
-            >(source, &library, &settings, Arc::clone(interfaces))
-        } else {
-            SymbolicNet::<AbstractIndex, AtomOrView<'src>>::try_from_view::<OrderedStructure, _>(
-                source, &library, &settings,
-            )
-        }
-        .map_err(|error| crate::tensor::inference::TensorInferenceError::Invalid(error.to_string()))
+        planning::parse(source, interfaces, admission, &settings)
     }
 
     /// Collect notation on connected scopes of the same shallow graph. Scalar
@@ -552,31 +1246,37 @@ impl SlotContraction {
         representations: &[LibraryRep],
         collect: bool,
         traces: bool,
-    ) -> Option<Atom> {
-        use crate::shorthands::chain::Chain;
-        let scope = self.scope(source)?;
+    ) -> Result<Option<Atom>, TensorInferenceError> {
+        let Some(scope) = self.scope(source) else {
+            return Ok(None);
+        };
         let nodes = scope.factors(scope.root);
         let components = scope.network.graph.slot_components(&scope.tree, &nodes);
         let external: SuBitGraph = scope.network.graph.graph.external_filter();
         let mut output = Vec::new();
         let mut changed = false;
         for component in components {
-            let factors = component
+            let Some(factors) = component
                 .iter()
                 .map(|&node| scope.literal(node))
-                .collect::<Option<Vec<_>>>()?;
+                .collect::<Option<Vec<_>>>()
+            else {
+                return Ok(None);
+            };
             let mut expression = if factors.len() == 1 {
                 factors[0].to_owned()
             } else {
                 Atom::mul_many(factors.iter())
             };
+            let mut component_value = None;
             for &representation in representations {
                 let connection = component.len() > 1
                     // An opaque arithmetic leaf can own connections that the
                     // outer graph intentionally does not expose. Regional
                     // representation facts below select its local notation.
                     || factors.iter().any(|factor| {
-                        matches!(factor, AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_))
+                        (matches!(factor, AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_))
+                            && factor.has_repeated_explicit_indices())
                             || matches!(factor, AtomView::Fun(function)
                                 if function.get_symbol() == self.tags.chain)
                     })
@@ -611,18 +1311,34 @@ impl SlotContraction {
                             .is_none_or(|region| region.has_chain_channel(representation))
                     });
                 if relevant {
-                    let next = expression.collect_chains(representation, collect, traces, false);
-                    changed |= next != expression;
-                    expression = next;
+                    let value = match component_value.take() {
+                        Some(value) => value,
+                        None => {
+                            let interfaces = component
+                                .iter()
+                                .map(|node| scope.ports[node].1.clone())
+                                .collect::<Vec<_>>();
+                            let interface =
+                                InterfaceInference::merge_explicit_interface_sequence(&interfaces)?;
+                            self.proofs.as_ref().and_then(|proofs| proofs.region_with_interface(expression.as_view(), interface)).ok_or_else(|| TensorInferenceError::invalid("matrix collection requires its admitted component boundary"))?
+                        }
+                    };
+                    let next = value.collect_chain_words(representation, collect, traces)?;
+                    changed |= next.expression != expression;
+                    expression = next.expression.clone();
+                    component_value = Some(next);
                 }
+            }
+            if let Some(value) = component_value {
+                self.generated.borrow_mut().push(value.proofs);
             }
             output.push(expression);
         }
-        Some(if changed {
+        Ok(Some(if changed {
             Atom::mul_many(output)
         } else {
             source.to_owned()
-        })
+        }))
     }
 
     /// Select only a family's factors and metric/vector paths incident to them.
@@ -715,20 +1431,30 @@ impl SlotContraction {
         Some((Atom::mul_many(factors), interface, spectators))
     }
 
-    /// Plan an already admitted interface; the typed caller owns source validation.
+    /// Plan an admitted interface. Raw Atom adapters enter admission here once;
+    /// typed callers supply their retained metadata with `admitted`.
     pub(crate) fn contract_factorized(
         &self,
         source: AtomView<'_>,
         order: Option<&[usize]>,
         rank_one: bool,
     ) -> Option<FactorizedContraction> {
+        self.generated.borrow_mut().clear();
+        if self.proofs.is_none() {
+            let source = SymbolicTensor::observe_raw_expression(source.to_owned()).ok()?;
+            return self.clone().admitted(&source).contract_factorized(
+                source.expression().as_view(),
+                order,
+                rank_one,
+            );
+        }
         if rank_one && self.observations.is_none() && source.contains_symbol(self.tags.chain) {
             self.dummy_state().reserve_indices(source);
         }
         let intrinsic = self
             .graph
             .as_ref()
-            .filter(|(planned, _)| planned.as_view() == source)
+            .filter(|planned| planned.matches(source))
             .and(self.observations.as_ref())
             .map_or_else(
                 || InterfaceInference::normalization_is_intrinsic(source),
@@ -743,7 +1469,25 @@ impl SlotContraction {
             return None;
         }
         let scope = self.scope(source)?;
-        self.contract_graph(&scope, scope.root, order, rank_one)
+        let result = self.contract_graph(&scope, scope.root, order, rank_one);
+        let Some(mut result) = result else {
+            self.generated.borrow_mut().clear();
+            return None;
+        };
+        result.proofs =
+            self.take_generated(result.root.as_view(), scope.ports[&scope.root].1.clone());
+        // This producer promises a globally terminal polynomial. Validate that
+        // promise here: generic publication also carries temporary certificates
+        // scoped to an identity family's policy (notably colour invariants).
+        #[cfg(debug_assertions)]
+        if let Some(observed) = &result.observations {
+            observed.assert_terminal_result(
+                &result.root,
+                &scope.ports[&scope.root].1,
+                SlotMatcher::with_leaf_interfaces([result.proofs.parser_leaf_interfaces()]),
+            );
+        }
+        Some(result)
     }
 
     fn power_scope(
@@ -763,7 +1507,6 @@ impl SlotContraction {
         if !scope.ports[&child].0.is_empty() && (self.expand || !self.tensor_alternatives(source)) {
             return None;
         }
-        use spenso::network::parsing::AtomStructureExt;
         let internal = self
             .observations
             .as_ref()
@@ -788,17 +1531,35 @@ impl SlotContraction {
                     // A transparent bracket can remain after local dot pairing
                     // has removed its last explicit index. Lower just that
                     // selected wrapper, retaining ordinary scalar powers verbatim.
-                    if matches!(scope.literal(child)?, AtomView::Fun(function)
+                    let value = scope.literal(child)?;
+                    if matches!(value, AtomView::Fun(function)
                         if function.get_symbol() == self.tags.bracket)
                         && scope.contains_work(child, self, self.contraction_settings(rank_one))
+                        && self
+                            .observations
+                            .as_ref()
+                            .and_then(|observed| observed.region(value))
+                            .and_then(|region| {
+                                region.any_leaf(|leaf| {
+                                    // The bracket itself marks this region as structural.
+                                    // Only its tensor operands can supply contraction work.
+                                    leaf.get_symbol() != Some(self.tags.bracket)
+                                        && InterfaceInference::has_structured_syntax(leaf)
+                                })
+                            })
+                            .unwrap_or(true)
                     {
                         let opened = scope.open(child)?;
                         let mut result =
                             self.contract_graph(opened, opened.root, None, rank_one)?;
                         result.root = result.root.pow(power);
+                        result.observations = result
+                            .observations
+                            .filter(FactorizedContraction::scalar_facts);
                         return Some(result);
                     }
                     return Some(FactorizedContraction {
+                        proofs: Default::default(),
                         root: scope.literal(node)?.to_owned(),
                         status: ReductionStatus::Complete,
                         observations: self.observations.as_ref().and_then(|observed| {
@@ -811,6 +1572,10 @@ impl SlotContraction {
                 // open sums retain their alternatives and external connections.
                 let mut result = self.contract_graph(scope, child, None, rank_one)?;
                 result.root = result.root.pow(power);
+                // A power of an open base connects its ports.
+                result.observations = result
+                    .observations
+                    .filter(FactorizedContraction::scalar_facts);
                 Some(result)
             })
             .as_ref()
@@ -859,17 +1624,17 @@ impl SlotContraction {
                         graph.inv(hedge) == hedge || graph.node_id(graph.inv(hedge)) != node
                     })
                     .map(|hedge| hedge.0.min(graph.inv(hedge).0))
-                    .collect::<std::collections::BTreeSet<_>>()
+                    .collect::<BTreeSet<_>>()
             })
             .collect::<Vec<_>>();
-        let mut boundary = std::collections::BTreeSet::new();
+        let mut boundary = BTreeSet::new();
         let mut planned = Vec::with_capacity(selected.len());
         while !selected.is_empty() {
             let best = (0..selected.len()).min_by_key(|&i| {
                 let position = selected[i];
                 (
                     boundary.symmetric_difference(&edges[position]).count(),
-                    std::cmp::Reverse(boundary.intersection(&edges[position]).count()),
+                    Reverse(boundary.intersection(&edges[position]).count()),
                     position,
                 )
             })?;
@@ -996,7 +1761,7 @@ impl SlotContraction {
                         TermLeaf::Value(InputLeaf::Scalar(result.root.as_view()))
                     } else {
                         let position = sum.register_factor(scope, node, positions)?;
-                        sum.opaque_factors[position].0 = result.root.as_view();
+                        sum.retain_factor_result(position, result);
                         TermLeaf::Value(InputLeaf::Subtree(position))
                     });
                 }
@@ -1023,13 +1788,12 @@ impl SlotContraction {
                         }
                         #[cfg(feature = "reference-cases")]
                         {
-                            use crate::reference_cases::timing::{ScopeOpenReason, scope_open};
                             let reason = match region.as_ref() {
                                 None => ScopeOpenReason::Unobserved,
                                 Some(region) if region.contraction_sources(self.contraction_settings(sum.rank_one)) => ScopeOpenReason::MetricOrVector,
                                 Some(_) => ScopeOpenReason::OpaqueOrBracket,
                             };
-                            scope_open(reason, region.as_ref().is_some_and(|region| region.has_indexed_powers()));
+                            timing::scope_open(reason, region.as_ref().is_some_and(|region| region.has_indexed_powers()));
                         }
                         let opened = scope.open(node)?;
                         if !self.expand && sum.exposed_sum != Some((scope as *const _ as usize, node)) && self.tensor_alternatives(literal) {
@@ -1043,14 +1807,14 @@ impl SlotContraction {
                             if result.root.as_view() != literal || result.status != ReductionStatus::Complete {
                                 scoped.insert((scope as *const _ as usize, node), result);
                             }
-                            if let Some(observed) = &result.observations {
+                            if let Some(observed) = result.observations.as_ref().filter(|observed| FactorizedContraction::scalar_facts(observed)) {
                                 sum.scalar_forms.insert(result.root.as_view(), observed.needs_dot_normalization());
                             }
                             return Some(if scope.ports[&node].0.is_empty() {
                                 TermLeaf::Value(InputLeaf::Scalar(result.root.as_view()))
                             } else {
                                 let position = sum.register_factor(scope, node, positions)?;
-                                sum.opaque_factors[position].0 = result.root.as_view();
+                                sum.retain_factor_result(position, result);
                                 TermLeaf::Value(InputLeaf::Subtree(position))
                             });
                         }
@@ -1101,18 +1865,19 @@ impl SlotContraction {
                 })
         {
             return Some(FactorizedContraction {
+                proofs: Default::default(),
                 root: source.to_owned(),
                 status: ReductionStatus::Complete,
-                observations: self
-                    .observations
-                    .as_ref()
-                    .and_then(|observed| observed.certify_scalar_region(source)),
+                observations: self.observations.as_ref().and_then(|observed| {
+                    observed.certify_terminal_region(source, &scope.ports[&root].1)
+                }),
             });
         }
         if self.power_scope(scope, root).is_some() {
             return self.scoped_power(scope, root, rank_one).cloned();
         }
         let scalar_boundary = scope.ports[&root].0.is_empty();
+        let root_node = root;
         if !self.expand
             && matches!(
                 scope.network.graph.graph[root],
@@ -1129,15 +1894,19 @@ impl SlotContraction {
                 status = status.max(result.status);
                 scalar_form = scalar_form
                     .zip(result.observations.as_ref())
+                    .filter(|(_, observed)| observed.is_terminal_polynomial())
                     .map(|(needs_dots, observed)| needs_dots || observed.needs_dot_normalization());
                 terms.push(result.root);
             }
             return Some(FactorizedContraction {
+                proofs: Default::default(),
                 root: Atom::add_many(terms),
                 status,
                 observations: scalar_form
-                    .filter(|_| scalar_boundary)
-                    .map(DomainObservations::closed_scalar),
+                    .filter(|_| status == ReductionStatus::Complete)
+                    .map(|needs_dots| {
+                        DomainObservations::terminal_polynomial(&scope.ports[&root].1, needs_dots)
+                    }),
             });
         }
         let nodes = scope.factors(root);
@@ -1189,6 +1958,12 @@ impl SlotContraction {
         let mut roots = Vec::with_capacity(components.len());
         let mut status = ReductionStatus::Complete;
         let mut scalar_form = Some(false);
+        // Open slots of components that are scalar polynomials times vectors
+        // and metrics on explicit slots, with their dot-normalization need.
+        let mut terminal = Some(TerminalPorts {
+            slots: Vec::new(),
+            needs_dots: false,
+        });
         let mut changed = false;
         let mut refused = Vec::new();
         for component in components {
@@ -1204,7 +1979,7 @@ impl SlotContraction {
                 .collect::<Vec<_>>();
             let result =
                 self.contract_component(scope, &component, &selected, &exposed_sums, rank_one);
-            let (result, component_changed) = match result {
+            let (result, component_changed, open_slots) = match result {
                 Some(result) => result,
                 None => {
                     // A refusal can follow tentative port substitutions or
@@ -1219,16 +1994,30 @@ impl SlotContraction {
                     refused.push(roots.len());
                     (
                         FactorizedContraction {
+                            proofs: Default::default(),
                             root,
                             status: ReductionStatus::Deferred,
                             observations: None,
                         },
                         false,
+                        None,
                     )
                 }
             };
             changed |= component_changed;
             status = status.max(result.status);
+            terminal = match (terminal, result.observations.as_ref(), open_slots) {
+                (Some(mut terminal), Some(observed), None) if observed.is_closed_scalar() => {
+                    terminal.needs_dots |= observed.needs_dot_normalization();
+                    Some(terminal)
+                }
+                (Some(mut terminal), None, Some(open)) => {
+                    terminal.slots.extend(open.slots);
+                    terminal.needs_dots |= open.needs_dots;
+                    Some(terminal)
+                }
+                _ => None,
+            };
             scalar_form = scalar_form
                 .zip(result.observations.as_ref())
                 .map(|(needs_dots, observed)| needs_dots || observed.needs_dot_normalization());
@@ -1253,26 +2042,56 @@ impl SlotContraction {
                 );
             }
         }
-        let root = if status == ReductionStatus::Complete && !changed {
+        let retained_source = status == ReductionStatus::Complete && !changed;
+        let root = if retained_source {
             let source = scope.literal(root)?;
             // The bracket normalizer owns whether a product can be exposed:
             // closed scalar wrappers disappear, while AUTO operand order stays.
             if matches!(source, AtomView::Fun(function)
                 if function.get_symbol() == self.tags.bracket)
             {
-                crate::shorthands::bracket::BracketNormalizer::normalize(source)
+                BracketNormalizer::with_matcher(source, self.normalization_matcher())
             } else {
                 source.to_owned()
             }
         } else {
             Atom::mul_many(roots)
         };
+        let observations = if retained_source {
+            // Keeping the source's factorization also keeps its syntax facts.
+            // A tentative coefficient sum may have cancelled only some indexed
+            // terms; its terminal certificate cannot describe the old payload.
+            self.observations.as_ref().and_then(|observed| {
+                observed.certify_terminal_region(root.as_view(), &scope.ports[&root_node].1)
+            })
+        } else if scalar_boundary {
+            scalar_form
+                .filter(|_| status == ReductionStatus::Complete)
+                .map(DomainObservations::closed_scalar)
+        } else {
+            // Every component is a certified scalar polynomial, and the open
+            // vectors and metrics sit exactly on the root's ports: no internal
+            // connection and no identity candidate remains. Certify the open
+            // output as terminal, so that its replacement need not be rescanned.
+            terminal
+                .filter(|_| status == ReductionStatus::Complete)
+                .and_then(|mut terminal| {
+                    terminal.slots.sort();
+                    let mut ports = scope.ports[&root_node].1.slots().ok()?;
+                    ports.sort();
+                    (terminal.slots == ports).then(|| {
+                        DomainObservations::terminal_polynomial(
+                            &scope.ports[&root_node].1,
+                            terminal.needs_dots,
+                        )
+                    })
+                })
+        };
         Some(FactorizedContraction {
+            proofs: Default::default(),
             root,
             status,
-            observations: scalar_form
-                .filter(|_| status == ReductionStatus::Complete && scalar_boundary)
-                .map(DomainObservations::closed_scalar),
+            observations,
         })
     }
 
@@ -1285,7 +2104,7 @@ impl SlotContraction {
         selected: &[usize],
         exposed_sums: &AHashSet<NodeIndex>,
         rank_one: bool,
-    ) -> Option<(FactorizedContraction, bool)> {
+    ) -> Option<(FactorizedContraction, bool, Option<TerminalPorts>)> {
         let mut slots = SlotMatcher::default();
         let mut sum = ComponentSum::new(self, Intake::Contraction, &mut slots);
         sum.rank_one = rank_one;
@@ -1307,8 +2126,23 @@ impl SlotContraction {
             // Untouched components need neither a polynomial frontier nor a
             // unit coefficient. Keep the admitted scalar facts and exact leaves.
             let mut scalar_form = Some(false);
+            let mut terminal = Some(TerminalPorts {
+                slots: Vec::new(),
+                needs_dots: false,
+            });
             let mut factors = Vec::with_capacity(remaining.len());
-            for (position, arguments) in remaining {
+            for (&node, (position, arguments)) in nodes.iter().zip(remaining) {
+                terminal = terminal.and_then(|mut terminal| {
+                    let source = sum.opaque_factors[position].0;
+                    let interface = &scope.ports[&node].1;
+                    let observed = self
+                        .observations
+                        .as_ref()?
+                        .certify_terminal_region(source, interface)?;
+                    terminal.slots.extend(interface.slots().ok()?);
+                    terminal.needs_dots |= observed.needs_dot_normalization();
+                    Some(terminal)
+                });
                 scalar_form = scalar_form
                     .zip(sum.scalar_form(sum.opaque_factors[position].0))
                     .filter(|_| sum.opaque_factors[position].1.is_empty())
@@ -1317,16 +2151,18 @@ impl SlotContraction {
             }
             return Some((
                 FactorizedContraction {
+                    proofs: Default::default(),
                     root: Atom::mul_many(factors),
                     status: ReductionStatus::Complete,
                     observations: scalar_form.map(DomainObservations::closed_scalar),
                 },
                 false,
+                terminal.filter(|terminal| !terminal.slots.is_empty()),
             ));
         }
         let mut scoped = AHashMap::new();
         let mut compile = |sum: &mut ComponentSum<'a, '_>, position: usize| {
-            let mut tape = std::mem::take(&mut sum.input);
+            let mut tape = mem::take(&mut sum.input);
             sum.exposed_sum = exposed_sums
                 .contains(&nodes[position])
                 .then_some((scope as *const _ as usize, nodes[position]));
@@ -1353,7 +2189,11 @@ impl SlotContraction {
         for replacement in scoped.values() {
             result.status = result.status.max(replacement.status);
         }
-        Some((result, sum.contracted || !scoped.is_empty()))
+        // Coefficient cancellation can empty the frontier without contracting
+        // a port. Publish that zero instead of pairing its facts with the old
+        // source syntax, which can still contain internal indices.
+        let changed = sum.contracted || !scoped.is_empty() || result.root.is_zero();
+        Some((result, changed, sum.terminal_slots.take()))
     }
 
     /// The ordered rewrite is shared by refused intrinsic components and the
@@ -1364,7 +2204,6 @@ impl SlotContraction {
         rank_one: bool,
         observed: Option<&SimplificationCandidates<N>>,
     ) -> Atom {
-        use crate::shorthands::schoonschip::{SchoonschipSettings, SchoonschipWithSettings};
         let mut settings = SchoonschipSettings::default().with_chain_like_functions();
         settings.schoonschip_rank1_tensors = rank_one;
         settings.metrics = self.metrics;
@@ -1372,17 +2211,88 @@ impl SlotContraction {
         let rewrite = SchoonschipWithSettings {
             settings: &settings,
         };
+        let rewrite_term = |term| {
+            let prepared = self.contract_leaf_metadata(term, &rewrite);
+            rewrite.run_observed(prepared.as_view(), observed, self)
+        };
         match source {
-            AtomView::Add(sum) => Atom::add_many(
-                sum.iter()
-                    .map(|term| rewrite.run_observed(term, observed, self)),
-            ),
-            _ => rewrite.run_observed(source, observed, self),
+            AtomView::Add(sum) => Atom::add_many(sum.iter().map(rewrite_term)),
+            _ => rewrite_term(source),
         }
     }
 }
 
 impl<'a> ComponentSum<'a, '_> {
+    /// Storage of one [`CoefficientSum::frontier_sum`]: its contribution records and the
+    /// output it reserves at the input term count over the shared map.
+    #[cfg(feature = "reference-cases")]
+    fn merge_bytes(
+        sources: &[Option<ScalarPolynomial>],
+        contributions: &[Contribution],
+        nvars: usize,
+    ) -> usize {
+        let terms = contributions
+            .iter()
+            .filter_map(|contribution| sources[contribution.source].as_ref())
+            .map(ScalarPolynomial::nterms)
+            .fold(0usize, usize::saturating_add);
+        let records = contributions
+            .iter()
+            .map(|contribution| {
+                mem::size_of::<Contribution>().saturating_add(
+                    contribution
+                        .shift
+                        .capacity()
+                        .saturating_mul(mem::size_of::<u32>()),
+                )
+            })
+            .fold(0usize, usize::saturating_add);
+        terms
+            .saturating_mul(
+                mem::size_of::<Rational>()
+                    .saturating_add(nvars.saturating_mul(mem::size_of::<u32>())),
+            )
+            .saturating_add(records)
+    }
+
+    /// The explicit slots of a vector or metric variable, whose only open
+    /// indices are these slots; `None` for any other variable.
+    fn terminal_variable(&mut self, position: usize) -> Option<&TerminalPorts> {
+        if !self.terminal_variables.contains_key(&position) {
+            let certificate = self.certify_terminal_variable(position);
+            self.terminal_variables.insert(position, certificate);
+        }
+        self.terminal_variables[&position].as_ref()
+    }
+
+    fn certify_terminal_variable(&mut self, position: usize) -> Option<TerminalPorts> {
+        #[cfg(test)]
+        tests::TERMINAL_VARIABLE_OBSERVATIONS.with(|count| count.set(count.get() + 1));
+        match self.variables[position] {
+            Variable::Vector(vector, slot) => {
+                let source = self.vectors[vector];
+                let needs_dots = source.iter().take(source.get_nargs() - 1).try_fold(
+                    false,
+                    |needs_dots, argument| {
+                        self.scalar_form(argument).map(|next| needs_dots || next)
+                    },
+                )?;
+                Some(TerminalPorts {
+                    slots: vec![self.slots.parse(slot).ok()?],
+                    needs_dots,
+                })
+            }
+            Variable::Metric([first, second]) => Some(TerminalPorts {
+                slots: vec![
+                    self.slots.parse(first).ok()?,
+                    self.slots.parse(second).ok()?,
+                ],
+                needs_dots: false,
+            }),
+            _ => None,
+        }
+    }
+
     /// Reuse the admitted inventory; never inspect a completed coefficient to
     /// rediscover whether its source contains an identity or an index.
     fn scalar_form(&self, value: AtomView<'a>) -> Option<bool> {
@@ -1486,9 +2396,42 @@ impl<'a> ComponentSum<'a, '_> {
             ports.iter().map(Atom::as_view).collect(),
             interface.clone(),
         ));
+        if let Some(observed) =
+            self.contractor.observations.as_ref().and_then(|observed| {
+                observed.certify_terminal_region(scope.literal(node)?, interface)
+            })
+            && let Ok(slots) = interface.slots()
+        {
+            self.terminal_factors.insert(
+                position,
+                TerminalPorts {
+                    slots,
+                    needs_dots: observed.needs_dot_normalization(),
+                },
+            );
+        }
         self.factor_roots.push(None);
         positions.insert(key, position);
         Some(position)
+    }
+
+    fn retain_factor_result(&mut self, position: usize, result: &'a FactorizedContraction) {
+        self.opaque_factors[position].0 = result.root.as_view();
+        self.terminal_factors.remove(&position);
+        if let Some(observed) = result
+            .observations
+            .as_ref()
+            .filter(|observed| observed.is_terminal_polynomial())
+            && let Ok(slots) = self.opaque_factors[position].2.slots()
+        {
+            self.terminal_factors.insert(
+                position,
+                TerminalPorts {
+                    slots,
+                    needs_dots: observed.needs_dot_normalization(),
+                },
+            );
+        }
     }
 
     fn opaque_factor(&mut self, position: usize, arguments: &[Argument<'a>]) -> Option<()> {
@@ -1564,14 +2507,13 @@ impl<'a> ComponentSum<'a, '_> {
         compile: &mut impl FnMut(&mut Self, usize) -> Option<usize>,
     ) -> Option<FactorizedContraction> {
         #[cfg(feature = "reference-cases")]
-        let _states_timing = crate::reference_cases::timing::scope(
-            crate::reference_cases::timing::Phase::ContractionStates,
-        );
+        let _states_timing = timing::scope(Phase::ContractionStates);
         let mut states = vec![(remaining, ScalarPolynomial::new_one(&Q))];
         let mut emitted: AHashMap<usize, Atom> = AHashMap::new();
         #[cfg(feature = "reference-cases")]
         let mut emitted_bytes = 0usize;
         let mut scalar_variables: AHashMap<Atom, usize> = AHashMap::new();
+        let mut shared = SharedScalars::new(self.contractor);
         let mut scalar_form = Some(false);
         #[cfg(feature = "reference-cases")]
         let mut generated = 0usize;
@@ -1598,7 +2540,7 @@ impl<'a> ComponentSum<'a, '_> {
             #[cfg(feature = "reference-cases")]
             let predicted = state_bytes.saturating_add(emitted_bytes.saturating_mul(2));
             #[cfg(feature = "reference-cases")]
-            crate::reference_cases::timing::frontier(crate::reference_cases::timing::Frontier {
+            timing::frontier(Frontier {
                 selected,
                 states: states.len(),
                 local_terms: terms.len(),
@@ -1619,10 +2561,14 @@ impl<'a> ComponentSum<'a, '_> {
                 generated = generated.saturating_add(count);
             }
             let mut positions: AHashMap<Remaining<'a>, usize> = AHashMap::new();
-            let mut next: Vec<(Remaining<'a>, ScalarPolynomial)> = Vec::new();
-            #[cfg(feature = "reference-cases")]
-            let mut next_bytes = 0usize;
-            for (remaining, weight) in &states {
+            // Every target state collects the scaled, shifted large source
+            // states that reach it and the sum of its small products; one
+            // merge per target then builds its coefficient.
+            let mut next: Vec<(Remaining<'a>, Vec<Contribution>, Option<CoefficientSum>)> =
+                Vec::new();
+            let mut uses = vec![0usize; states.len()];
+            for (origin, (remaining, weight)) in states.iter().enumerate() {
+                let degrees = CoefficientSum::max_degrees(weight);
                 let source = remaining
                     .factors
                     .iter()
@@ -1689,8 +2635,11 @@ impl<'a> ComponentSum<'a, '_> {
                                 let atom = if let Some(value) = emitted.get(&variable) {
                                     value.clone()
                                 } else {
+                                    // Dot-notation emission discharges dot work.
+                                    let dot_notation = self.contractor.dot_notation;
                                     scalar_form = scalar_form
                                         .zip(self.variable_scalar_form(&value))
+                                        .map(|(first, second)| (first, second && !dot_notation))
                                         .map(|(first, second)| first || second);
                                     let atom = self.emit_variable(&value)?;
                                     #[cfg(feature = "reference-cases")]
@@ -1718,110 +2667,215 @@ impl<'a> ComponentSum<'a, '_> {
                     }
                     key.factors.sort_unstable_by_key(|(position, _)| *position);
                     key.residual.sort_unstable();
+                    let mut shared_exponents = Vec::with_capacity(variables.len());
+                    let mut composites = Vec::new();
                     for (variable, exponent) in variables.iter().zip(&exponents) {
-                        if let Some(position) = weight
-                            .variables()
-                            .iter()
-                            .position(|entry| entry == variable)
-                        {
-                            // Machine exponent capacity is not a work budget.
-                            // A decline preserves the caller's exact source.
-                            weight.degree(position).checked_add(*exponent)?;
+                        let PolyVariable::Temporary(index) = variable else {
+                            unreachable!("frontier variables are registered by temporary position")
+                        };
+                        let atom = emitted.get(index)?;
+                        let slots = &mut *self.slots;
+                        let composite = match shared.expansion(*index, atom, |atom| {
+                            SharedScalars::index_free(slots, atom.as_view())
+                        }) {
+                            Expansion::Base(position) => Err(*position),
+                            Expansion::Composite(expanded) => {
+                                Ok(SharedScalars::small_power(expanded.nterms(), *exponent))
+                            }
+                        };
+                        match composite {
+                            Err(position) => shared_exponents.push((position, *exponent)),
+                            Ok(true) => composites.push((*index, *exponent)),
+                            // A large power of an expanded composite stays one
+                            // opaque variable in this term.
+                            Ok(false) => {
+                                shared_exponents.push((shared.position(atom.clone()), *exponent));
+                            }
                         }
                     }
-                    #[cfg(feature = "reference-cases")]
-                    let incoming_bytes = weight.nterms().saturating_mul(
-                        std::mem::size_of::<Rational>()
-                            + (weight.nvars() + variables.len()) * std::mem::size_of::<u32>(),
-                    );
-                    let position = positions.get(&key).copied();
-                    // The position map and frontier both own a key.
-                    #[cfg(feature = "reference-cases")]
-                    let key_bytes = if position.is_none() {
-                        key.storage_bytes().saturating_mul(2)
-                    } else {
-                        0
-                    };
-                    #[cfg(feature = "reference-cases")]
-                    let target_bytes = position.map_or(0, |position| {
-                        let target = &next[position].1;
-                        target.nterms().saturating_mul(
-                            std::mem::size_of::<Rational>()
-                                + (target.nvars() + weight.nvars() + variables.len())
-                                    * std::mem::size_of::<u32>(),
-                        )
-                    });
-                    // Existing polynomial addition owns the only workspace:
-                    // two unified inputs and the merged output.
-                    #[cfg(feature = "reference-cases")]
-                    let live_bytes = state_bytes
-                        .saturating_add(next_bytes)
-                        .saturating_add(key_bytes)
-                        .saturating_add(emitted_bytes.saturating_mul(2))
-                        .saturating_add(
-                            incoming_bytes
-                                .saturating_add(target_bytes)
-                                .saturating_mul(2),
-                        );
-                    #[cfg(feature = "reference-cases")]
-                    crate::reference_cases::timing::frontier_workspace(live_bytes);
-                    let monomial = ScalarPolynomial::new(&Q, Some(1), Arc::new(variables))
-                        .monomial(self.coefficient.clone(), exponents);
-                    let coefficient = weight * &monomial;
-                    if coefficient.is_zero() {
+                    // Distinct frontier variables can share one position (a
+                    // nested `dot(p,q)` and this frontier's `g(p,q)`), so
+                    // their exponents add.
+                    let mut full = vec![0u32; shared.map.len()];
+                    for (position, exponent) in shared_exponents {
+                        full[position] = full[position].checked_add(exponent)?;
+                    }
+                    for (position, &exponent) in full.iter().enumerate().take(weight.nvars()) {
+                        // Machine exponent capacity is not a work budget.
+                        // A decline preserves the caller's exact source.
+                        if exponent != 0 {
+                            degrees[position].checked_add(exponent)?;
+                        }
+                    }
+                    let mut monomial = ScalarPolynomial::new(&Q, Some(1), Arc::clone(&shared.map))
+                        .monomial(self.coefficient.clone(), full);
+                    for (index, exponent) in composites {
+                        let Expansion::Composite(expanded) = &shared.expansions[&index] else {
+                            unreachable!("only cached composite expansions enter this list")
+                        };
+                        for _ in 0..exponent {
+                            CoefficientSum::check_product_degrees(
+                                &CoefficientSum::max_degrees(&monomial),
+                                expanded,
+                            )?;
+                            monomial = &monomial * expanded;
+                        }
+                    }
+                    // Composite expansion adds degrees after the initial
+                    // monomial was assembled. Validate the final contribution
+                    // before either eager multiplication or lazy shifting.
+                    CoefficientSum::check_product_degrees(&degrees, &monomial)?;
+                    if monomial.is_zero() || weight.is_zero() {
                         continue;
                     }
-                    #[cfg(feature = "reference-cases")]
-                    let _merge_timing = crate::reference_cases::timing::scope(
-                        crate::reference_cases::timing::Phase::CoefficientMerge,
-                    );
-                    if let Some(position) = position {
-                        let old = std::mem::replace(
-                            &mut next[position].1,
-                            ScalarPolynomial::new_zero(&Q),
-                        );
-                        #[cfg(feature = "reference-cases")]
-                        {
-                            next_bytes -= Self::coefficient_bytes(&old);
+                    // Contributions address positions of the shared map.
+                    if monomial.get_vars_ref() != &shared.map[..monomial.nvars()] {
+                        return None;
+                    }
+                    let target = match positions.get(&key) {
+                        Some(&target) => target,
+                        None => {
+                            positions.insert(key.clone(), next.len());
+                            next.push((key, Vec::new(), None));
+                            next.len() - 1
                         }
-                        let merged = old + coefficient;
-                        #[cfg(feature = "reference-cases")]
-                        {
-                            next_bytes += Self::coefficient_bytes(&merged);
+                    };
+                    if weight.nterms() < LAZY_SOURCE_TERMS {
+                        // A small product is cheaper to form and fold now
+                        // than to describe for the merge.
+                        let product = weight * &monomial;
+                        match &mut next[target].2 {
+                            Some(sum) => sum.push(
+                                product,
+                                #[cfg(feature = "reference-cases")]
+                                state_bytes.saturating_add(emitted_bytes.saturating_mul(2)),
+                            ),
+                            empty => *empty = Some(CoefficientSum::One(product)),
                         }
-                        next[position].1 = merged;
-                    } else {
-                        #[cfg(feature = "reference-cases")]
-                        {
-                            next_bytes += Self::coefficient_bytes(&coefficient) + key_bytes;
-                        }
-                        positions.insert(key.clone(), next.len());
-                        next.push((key, coefficient));
+                        continue;
+                    }
+                    uses[origin] += monomial.nterms();
+                    for term in 0..monomial.nterms() {
+                        next[target].1.push(Contribution {
+                            source: origin,
+                            coefficient: monomial.coefficients[term].clone(),
+                            shift: monomial.exponents(term).to_vec(),
+                        });
                     }
                 }
             }
             self.overrides.clear();
-            states = next
+            let mut sources: Vec<Option<ScalarPolynomial>> = mem::take(&mut states)
                 .into_iter()
-                .filter(|(_, weight)| !weight.is_zero())
+                .map(|(_, weight)| Some(weight))
                 .collect();
+            #[cfg(feature = "reference-cases")]
+            let mut next_bytes = 0usize;
+            for (remaining, mut contributions, small) in next {
+                // Released sources only lower the retained input storage, so
+                // the step's input bytes bound it.
+                #[cfg(feature = "reference-cases")]
+                let surrounding_bytes = state_bytes
+                    .saturating_add(next_bytes)
+                    .saturating_add(emitted_bytes.saturating_mul(2));
+                let small = small.map(|sum| {
+                    sum.finish(
+                        #[cfg(feature = "reference-cases")]
+                        surrounding_bytes,
+                    )
+                });
+                let weight = match small {
+                    Some(small) if contributions.is_empty() => small,
+                    small => {
+                        if let Some(small) = small {
+                            // The folded small products are one more stream.
+                            contributions.push(Contribution {
+                                source: sources.len(),
+                                coefficient: Rational::one(),
+                                shift: Vec::new(),
+                            });
+                            sources.push(Some(small));
+                            uses.push(1);
+                        }
+                        #[cfg(feature = "reference-cases")]
+                        timing::frontier_workspace(surrounding_bytes.saturating_add(
+                            Self::merge_bytes(&sources, &contributions, shared.map.len()),
+                        ));
+                        CoefficientSum::frontier_sum(
+                            &mut sources,
+                            &mut uses,
+                            &contributions,
+                            &shared.map,
+                        )?
+                    }
+                };
+                if !weight.is_zero() {
+                    #[cfg(feature = "reference-cases")]
+                    {
+                        next_bytes = next_bytes.saturating_add(
+                            Self::coefficient_bytes(&weight)
+                                .saturating_add(remaining.storage_bytes()),
+                        );
+                    }
+                    states.push((remaining, weight));
+                }
+            }
         }
         self.overrides.clear();
         #[cfg(feature = "reference-cases")]
-        let _emission_timing = crate::reference_cases::timing::scope(
-            crate::reference_cases::timing::Phase::ContractionEmission,
-        );
+        let _emission_timing = timing::scope(Phase::ContractionEmission);
         let mut terms = Vec::with_capacity(states.len());
+        // Open slots of vectors and metrics left in every state: the same
+        // sorted explicit slots in each state, or no terminal certificate.
+        let mut open_slots = None;
+        let mut any_open = false;
+        let mut terminal = true;
         for (remaining, weight) in states {
-            let mut factors = vec![self.emit_coefficient(&weight)?];
+            let mut factors = vec![shared.emit(weight)?];
+            let mut state_slots = Vec::new();
             for (position, arguments) in remaining.factors {
-                scalar_form = scalar_form
-                    .zip(self.scalar_form(self.opaque_factors[position].0))
-                    .filter(|_| self.opaque_factors[position].1.is_empty())
-                    .map(|(first, second)| first || second);
+                let ports = &self.opaque_factors[position].1;
+                if let Some(facts) = self.terminal_factors.get(&position).filter(|_| {
+                    ports.len() == arguments.len()
+                        && ports
+                            .iter()
+                            .zip(&arguments)
+                            .all(|(&port, &argument)| argument == Argument::Original(port))
+                }) {
+                    state_slots.extend_from_slice(&facts.slots);
+                    scalar_form = scalar_form.map(|needs_dots| needs_dots || facts.needs_dots);
+                } else {
+                    scalar_form = scalar_form
+                        .zip(self.scalar_form(self.opaque_factors[position].0))
+                        .filter(|_| ports.is_empty())
+                        .map(|(first, second)| first || second);
+                }
                 factors.push(self.emit_factor(position, &arguments)?);
             }
             for (variable, exponent) in remaining.residual {
+                if let Some(ports) = self.terminal_variable(variable) {
+                    // Each power repeats the slots, so a repeated (internal)
+                    // index never matches the distinct root ports.
+                    scalar_form = scalar_form.map(|needs_dots| needs_dots || ports.needs_dots);
+                    if exponent == 1 {
+                        state_slots.extend_from_slice(&ports.slots);
+                    } else {
+                        // A repeated port cannot certify an open interface. Do
+                        // not allocate one slot per power merely to reject it.
+                        terminal = false;
+                        scalar_form = None;
+                    }
+                    let atom = match emitted.get(&variable) {
+                        Some(value) => value.clone(),
+                        None => {
+                            let atom = self.emit_variable(&self.variables[variable])?;
+                            emitted.insert(variable, atom.clone());
+                            atom
+                        }
+                    };
+                    factors.push(atom.pow(exponent));
+                    continue;
+                }
                 let atom = if let Some(value) = emitted.get(&variable) {
                     value.clone()
                 } else {
@@ -1834,12 +2888,28 @@ impl<'a> ComponentSum<'a, '_> {
                 };
                 factors.push(atom.pow(exponent));
             }
+            state_slots.sort();
+            any_open |= !state_slots.is_empty();
+            match &open_slots {
+                None => open_slots = Some(state_slots),
+                Some(slots) => terminal &= *slots == state_slots,
+            }
             terms.push(Atom::mul_many(factors));
         }
+        self.terminal_slots = match (open_slots, scalar_form) {
+            (Some(slots), Some(needs_dots)) if any_open && terminal => {
+                Some(TerminalPorts { slots, needs_dots })
+            }
+            _ => None,
+        };
         Some(FactorizedContraction {
+            proofs: Default::default(),
             root: Atom::add_many(terms),
             status: ReductionStatus::Complete,
-            observations: scalar_form.map(DomainObservations::closed_scalar),
+            // Open slots leave a tensor, never a closed scalar.
+            observations: scalar_form
+                .filter(|_| !any_open)
+                .map(DomainObservations::closed_scalar),
         })
     }
 
@@ -1850,7 +2920,7 @@ impl<'a> ComponentSum<'a, '_> {
             .unwrap_or(Argument::Original(value))
     }
 
-    fn emit_argument(&self, argument: Argument<'a>) -> Atom {
+    pub(super) fn emit_argument(&self, argument: Argument<'a>) -> Atom {
         match argument {
             Argument::Original(value) => value.to_owned(),
             Argument::Vector(space, head) => {
@@ -1862,35 +2932,38 @@ impl<'a> ComponentSum<'a, '_> {
 
     pub(super) fn emit_factor(&self, position: usize, arguments: &[Argument<'a>]) -> Option<Atom> {
         let (source, ports, interface) = &self.opaque_factors[position];
-        let source = source.to_owned();
         let replacements = ports
             .iter()
             .zip(arguments)
             .enumerate()
             .filter(|(_, (port, argument))| **argument != Argument::Original(**port))
             .map(|(position, (_, &argument))| (position, self.emit_argument(argument)))
-            .collect::<std::collections::HashMap<_, _>>();
+            .collect::<HashMap<_, _>>();
         if replacements.is_empty() {
-            return Some(source);
+            return Some(source.to_owned());
         }
-        let source = SymbolicTensor::from_declared_parts(source, interface.clone()).ok()?;
-        let expression = crate::tensor::composition::rewrite_interface_ports(
+        let source = self
+            .contractor
+            .proofs
+            .as_ref()?
+            .region_with_interface(*source, interface.clone())?;
+        let (expression, produced) = composition::rewrite_interface_parts(
             &source,
             &replacements,
             Some(self.contractor.dummy_state()),
         )
         .ok()?;
-        Some(
-            crate::shorthands::schoonschip::DotNormalizer::with_settings(
-                expression.as_view(),
-                crate::tensor::ContractSettings {
-                    metrics: self.contractor.metrics,
-                    rank_one: self.rank_one,
-                    representations: self.contractor.representations.as_deref(),
-                    ..Default::default()
-                },
-            ),
-        )
+        self.contractor.generated.borrow_mut().push(produced);
+        Some(DotNormalizer::with_matcher(
+            expression.as_view(),
+            ContractSettings {
+                metrics: self.contractor.metrics,
+                rank_one: self.rank_one,
+                representations: self.contractor.representations.as_deref(),
+                ..Default::default()
+            },
+            self.contractor.normalization_matcher(),
+        ))
     }
 
     pub(super) fn metric(
@@ -1954,8 +3027,418 @@ mod tests {
     use super::super::tests::{input, setup};
     use super::*;
     use crate::shorthands::schoonschip::Schoonschip;
-    use crate::{color_f, epsilon, test_support};
-    use spenso::{g, mink, p, q};
+    use crate::tensor::SymbolicNetParse;
+    use crate::tensor::inference::tests::{INFERENCE_CALLS, INFERENCE_VISITS};
+    use crate::test_support;
+    use crate::{color_f, epsilon};
+    use spenso::{g, mink, p, q, vector_symbol};
+    use std::cell::Cell;
+    use symbolica::{function, parse_lit};
+
+    thread_local! {
+        pub(super) static TERMINAL_VARIABLE_OBSERVATIONS: Cell<usize> = const { Cell::new(0) };
+    }
+
+    #[test]
+    fn expanded_composite_degrees_decline_before_frontier_overflow() {
+        test_support::test_initialize();
+        let x = parse_lit!(frontier_overflow_x);
+        let y = parse_lit!(frontier_overflow_y);
+        let contractor = SlotContraction::new().expanding_scalars(true);
+        let mut shared = SharedScalars::new(&contractor);
+        shared.position(x.clone());
+        shared.position(y);
+        let mut source =
+            ScalarPolynomial::new(&Q, Some(LAZY_SOURCE_TERMS), Arc::clone(&shared.map));
+        for degree in 0..LAZY_SOURCE_TERMS {
+            source.append_monomial_back(Rational::one(), &[u32::MAX - 1, degree as u32]);
+        }
+        let composite = x.pow(2) + Atom::one();
+        let Expansion::Composite(expanded) = shared.expansion(7, &composite, |_| true) else {
+            panic!("the small index-free spectator must expand");
+        };
+        let degrees = CoefficientSum::max_degrees(&source);
+        assert!(CoefficientSum::check_product_degrees(&degrees, expanded).is_none());
+
+        let mut sources = vec![Some(source)];
+        let contribution = Contribution {
+            source: 0,
+            coefficient: Rational::one(),
+            shift: vec![2, 0],
+        };
+        assert!(
+            CoefficientSum::frontier_sum(&mut sources, &mut [1], &[contribution], &shared.map)
+                .is_none()
+        );
+        assert!(
+            sources[0].is_some(),
+            "overflow must not consume the exact source"
+        );
+        let contribution = Contribution {
+            source: 0,
+            coefficient: Rational::one(),
+            shift: vec![1, 0],
+        };
+        let shifted =
+            CoefficientSum::frontier_sum(&mut sources, &mut [1], &[contribution], &shared.map)
+                .unwrap();
+        assert_eq!(shifted.nterms(), LAZY_SOURCE_TERMS);
+        assert_eq!(CoefficientSum::max_degrees(&shifted)[0], u32::MAX);
+    }
+
+    #[test]
+    fn frontier_retains_composites_with_unwriteable_or_overflowing_powers() {
+        let contractor = setup().expanding_scalars(true);
+        for spectator in [
+            "(x^1073741824+y)^2",
+            "(x^1073741824+y)^4",
+            "(x^4294967296+y)^2",
+        ] {
+            let source = input(&format!(
+                "(({spectator})*p(mink(4,a))+q(mink(4,a)))*q(mink(4,a))"
+            ));
+            let result = contractor
+                .contract_factorized(source.as_view(), None, true)
+                .unwrap();
+            let expected = input(&format!(
+                "({spectator})*g(p(mink(4)),q(mink(4)))+g(q(mink(4)),q(mink(4)))"
+            ));
+            assert_eq!(result.root, expected, "{source}");
+        }
+        let source = input("(x^2147483645+y)*(x^2+z)*p(mink(4,a))*q(mink(4,a))");
+        let result = contractor
+            .contract_factorized(source.as_view(), None, true)
+            .unwrap();
+        let expected = input("(x^2147483647+x^2147483645*z+y*x^2+y*z)*g(p(mink(4)),q(mink(4)))");
+        assert_eq!(result.root.expand(), expected.expand());
+    }
+
+    #[test]
+    fn terminal_vector_metadata_is_certified_once_per_variable() {
+        let contractor = setup();
+        let reps = test_support::test_initialize();
+        let slot = reps.mink4.to_symbolic([Atom::num(991127)]);
+        let known = parse_lit!(terminal_vector_known(x));
+        let unknown = parse_lit!(terminal_vector_unknown(x));
+        let head = vector_symbol!("terminal_variable_metadata");
+        let known_vector = function!(head, &known, &slot);
+        let unknown_vector = function!(head, &unknown, &slot);
+        let mut matcher = SlotMatcher::default();
+        let mut sum = ComponentSum::new(&contractor, Intake::Contraction, &mut matcher);
+        let AtomView::Fun(known_fun) = known_vector.as_view() else {
+            unreachable!()
+        };
+        let AtomView::Fun(unknown_fun) = unknown_vector.as_view() else {
+            unreachable!()
+        };
+        let first = sum.vector(known_fun).unwrap();
+        let second = sum.vector(unknown_fun).unwrap();
+        sum.variable(Variable::Vector(first, slot.as_view()), 1);
+        sum.variable(Variable::Vector(second, slot.as_view()), 1);
+        // An admitted scalar metadata certificate can retain pending notation
+        // work. Plain inert metadata alone cannot certify identity freedom.
+        sum.scalar_forms.insert(known.as_view(), true);
+        TERMINAL_VARIABLE_OBSERVATIONS.with(|count| count.set(0));
+        for _ in 0..20 {
+            let certificate = sum.terminal_variable(0).unwrap();
+            assert_eq!(certificate.slots.len(), 1);
+            assert!(certificate.needs_dots);
+            assert!(sum.terminal_variable(1).is_none());
+        }
+        assert_eq!(TERMINAL_VARIABLE_OBSERVATIONS.with(Cell::get), 2);
+    }
+
+    #[test]
+    fn frontier_sum_merges_shifted_sources_over_prefix_maps() {
+        let map: Arc<Vec<PolyVariable>> = Arc::new((0..3).map(PolyVariable::Temporary).collect());
+        let polynomial = |nvars: usize, terms: &[(i64, &[u32])]| {
+            ScalarPolynomial::from_coefficient_list(
+                terms
+                    .iter()
+                    .map(|(coefficient, _)| Rational::from(*coefficient))
+                    .collect(),
+                terms
+                    .iter()
+                    .flat_map(|(_, exponents)| exponents.iter().copied())
+                    .collect(),
+                Arc::new(map[..nvars].to_vec()),
+                &Q,
+            )
+        };
+        let monomial = |coefficient: i64, shift: &[u32]| {
+            ScalarPolynomial::new(&Q, Some(1), map.clone())
+                .monomial(Rational::from(coefficient), shift.to_vec())
+        };
+        // Sources over prefixes of the shared map, with overlapping shifts,
+        // a non-unit scale and an exact cancellation between two streams.
+        let first = polynomial(2, &[(1, &[0, 0]), (2, &[1, 0]), (3, &[0, 2])]);
+        let second = polynomial(3, &[(1, &[1, 0, 0]), (-1, &[0, 1, 1])]);
+        let third = polynomial(1, &[(4, &[2])]);
+        let contributions = [
+            (0, 1, [0, 0, 1]),
+            (0, -2, [1, 1, 0]),
+            (1, 3, [0, 0, 0]),
+            (2, 1, [0, 0, 0]),
+            // -4*x0^2 cancels the term 4*x0^2 of the previous stream.
+            (0, -4, [2, 0, 0]),
+        ];
+        let expected = contributions
+            .iter()
+            .map(|&(source, coefficient, shift)| {
+                [&first, &second, &third][source] * &monomial(coefficient, &shift)
+            })
+            .fold(ScalarPolynomial::new(&Q, None, map.clone()), |sum, term| {
+                &sum + &term
+            });
+        let mut sources = vec![Some(first), Some(second), Some(third)];
+        let mut uses = vec![3, 1, 1];
+        let records = contributions
+            .iter()
+            .map(|&(source, coefficient, shift)| Contribution {
+                source,
+                coefficient: Rational::from(coefficient),
+                shift: shift.to_vec(),
+            })
+            .collect::<Vec<_>>();
+        let sum = CoefficientSum::frontier_sum(&mut sources, &mut uses, &records, &map).unwrap();
+        assert_eq!(sum, expected);
+        assert_eq!(sum.get_vars_ref(), map.as_ref());
+        // Every source is used up and released.
+        assert!(sources.iter().all(Option::is_none));
+
+        // A sole unscaled, unshifted use over the full map moves the source.
+        let full = polynomial(3, &[(5, &[0, 1, 2])]);
+        let mut sources = vec![Some(full.clone())];
+        let identity = [Contribution {
+            source: 0,
+            coefficient: Rational::one(),
+            shift: vec![0; 3],
+        }];
+        assert_eq!(
+            CoefficientSum::frontier_sum(&mut sources, &mut [1], &identity, &map).unwrap(),
+            full
+        );
+        assert!(sources[0].is_none());
+
+        // A source whose variables are not a prefix of the map is declined.
+        let foreign =
+            ScalarPolynomial::new(&Q, Some(1), Arc::new(vec![PolyVariable::Temporary(7)]))
+                .monomial(Rational::one(), vec![1]);
+        let mut sources = vec![Some(foreign)];
+        assert!(CoefficientSum::frontier_sum(&mut sources, &mut [2], &identity, &map).is_none());
+    }
+
+    #[test]
+    fn frontier_coefficient_sum_cancels_across_sizes_and_variable_orders() {
+        let polynomial = |variables: &[usize], terms: &[(i64, [u32; 2])]| {
+            ScalarPolynomial::from_coefficient_list(
+                terms
+                    .iter()
+                    .map(|(coefficient, _)| Rational::from(*coefficient))
+                    .collect(),
+                terms.iter().flat_map(|(_, exponents)| *exponents).collect(),
+                Arc::new(
+                    variables
+                        .iter()
+                        .copied()
+                        .map(PolyVariable::Temporary)
+                        .collect(),
+                ),
+                &Q,
+            )
+        };
+        let first = polynomial(
+            &[0, 1],
+            &[
+                (1, [1, 0]),
+                (2, [0, 1]),
+                (3, [1, 1]),
+                (-3, [0, 0]),
+                (7, [0, u32::MAX]),
+            ],
+        );
+        let opposite = polynomial(
+            &[1, 0],
+            &[(-2, [1, 0]), (-1, [0, 1]), (-3, [1, 1]), (3, [0, 0])],
+        );
+        // Addition must preserve machine-width exponents without multiplying
+        // them, and cancellation must work across the two map orderings.
+        let large_power = polynomial(&[1, 0], &[(-7, [u32::MAX, 0])]);
+        let mut sum = CoefficientSum::One(first);
+        // The five- and four-term inputs cancel down into the occupied
+        // one-term bin, where the remaining large power must cancel as well.
+        for coefficient in [large_power, opposite] {
+            sum.push(
+                coefficient,
+                #[cfg(feature = "reference-cases")]
+                0,
+            );
+        }
+        assert!(
+            sum.finish(
+                #[cfg(feature = "reference-cases")]
+                0
+            )
+            .is_zero()
+        );
+
+        let retained = polynomial(&[3, 2], &[(5, [0, 1])]);
+        let mut sum = CoefficientSum::One(retained.clone());
+        for coefficient in [
+            -retained.clone(),
+            ScalarPolynomial::new_zero(&Q),
+            retained.clone(),
+        ] {
+            sum.push(
+                coefficient,
+                #[cfg(feature = "reference-cases")]
+                0,
+            );
+        }
+        assert_eq!(
+            sum.finish(
+                #[cfg(feature = "reference-cases")]
+                0
+            ),
+            retained
+        );
+
+        // Finalizing small bins first must not impose a small partial's map
+        // order on a large partial. Swapping these variables reverses the
+        // large polynomial's monomial order, making insertion quadratic.
+        let terms = (0..=128u32)
+            .map(|power| (1, [power, 128 - power]))
+            .collect::<Vec<_>>();
+        let large = polynomial(&[0, 1], &terms);
+        let small = polynomial(&[1, 0], &[(1, [129, 0])]);
+        let large_variables = large.variables().clone();
+        let expected = &large + &small;
+        let mut sum = CoefficientSum::One(large);
+        sum.push(
+            small,
+            #[cfg(feature = "reference-cases")]
+            0,
+        );
+        let result = sum.finish(
+            #[cfg(feature = "reference-cases")]
+            0,
+        );
+        assert_eq!(result.variables(), &large_variables);
+        assert_eq!(result, expected);
+
+        #[cfg(feature = "reference-cases")]
+        {
+            let surrounding_bytes = 1 << 20;
+            let ((result, retained_bytes), clocks) =
+                timing::measure("coefficient workspace", || {
+                    timing::frontier(Frontier {
+                        selected: 0,
+                        states: 1,
+                        local_terms: 4,
+                        generated: 0,
+                        predicted_bytes: 0,
+                        coefficient_bytes: 0,
+                        max_coefficient_bytes: 0,
+                    });
+                    let mut sum = CoefficientSum::One(polynomial(&[0, 1], &[(1, [0, 0])]));
+                    let mut retained_bytes = sum.storage_bytes();
+                    for coefficient in [
+                        polynomial(&[1, 0], &[(1, [1, 0]), (1, [2, 0])]),
+                        polynomial(
+                            &[2, 0],
+                            &[(1, [1, 0]), (1, [2, 0]), (1, [3, 0]), (1, [4, 0])],
+                        ),
+                        polynomial(&[0, 1], &[(1, [1, 0])]),
+                    ] {
+                        sum.push(coefficient, surrounding_bytes);
+                        retained_bytes = retained_bytes.max(sum.storage_bytes());
+                    }
+                    (sum.finish(surrounding_bytes), retained_bytes)
+                });
+            assert_eq!(result.nterms(), 8);
+            let report = clocks.to_string();
+            let predicted: usize = report
+                .split_once("\"predicted_bytes\":")
+                .unwrap()
+                .1
+                .split(',')
+                .next()
+                .unwrap()
+                .parse()
+                .unwrap();
+            assert!(
+                predicted >= surrounding_bytes + retained_bytes,
+                "workspace includes all retained partial buffers: {report}"
+            );
+        }
+    }
+
+    #[test]
+    fn frontier_coefficient_sum_bounds_partials_and_matches_bulk_collection() {
+        let variables = Arc::new(vec![PolyVariable::Temporary(0)]);
+        let mut coefficients = Vec::new();
+        let mut exponents = Vec::new();
+        let mut sum = CoefficientSum::One(ScalarPolynomial::new_zero(&Q));
+        // A skewed arrival order includes both very small and large exponents;
+        // no contiguous degree box or input-order assumption is permitted.
+        for index in 0..1025u32 {
+            let exponent = if index % 2 == 0 {
+                index / 2
+            } else {
+                u32::MAX - index / 2
+            };
+            let coefficient = Rational::from(if index % 3 == 0 { -1 } else { 1 });
+            coefficients.push(coefficient.clone());
+            exponents.push(exponent);
+            let term = ScalarPolynomial::new(&Q, Some(1), variables.clone())
+                .monomial(coefficient, vec![exponent]);
+            sum.push(
+                term,
+                #[cfg(feature = "reference-cases")]
+                0,
+            );
+            if let CoefficientSum::Binned(bins) = &sum {
+                assert!(bins.len() <= usize::BITS as usize);
+                for (bin, partial) in bins.iter().enumerate() {
+                    if let Some(partial) = partial {
+                        assert_eq!(partial.nterms().ilog2() as usize, bin);
+                    }
+                }
+            }
+        }
+        let expected =
+            ScalarPolynomial::from_coefficient_list(coefficients, exponents, variables, &Q);
+        assert_eq!(
+            sum.finish(
+                #[cfg(feature = "reference-cases")]
+                0
+            ),
+            expected
+        );
+    }
+
+    #[test]
+    fn frontier_coefficient_sum_matches_expanded_contraction_with_cancellations() {
+        let contractor = setup();
+        let source = input(concat!(
+            "(x*p(mink(4,a))+y*q(mink(4,a))+z*r(mink(4,a))+w*s(mink(4,a)))",
+            "*(x*p(mink(4,b))-y*q(mink(4,b))+z*r(mink(4,b))-w*s(mink(4,b)))",
+            "*g(mink(4,a),mink(4,b))",
+        ));
+        let expected = input(concat!(
+            "x^2*g(p(mink(4)),p(mink(4)))+2*x*z*g(p(mink(4)),r(mink(4)))",
+            "+z^2*g(r(mink(4)),r(mink(4)))-y^2*g(q(mink(4)),q(mink(4)))",
+            "-2*y*w*g(q(mink(4)),s(mink(4)))-w^2*g(s(mink(4)),s(mink(4)))",
+        ));
+        assert_eq!(source.expand().schoonschip().expand(), expected);
+        for order in [None, Some([2, 1, 0].as_slice())] {
+            let result = contractor
+                .contract_factorized(source.as_view(), order, true)
+                .unwrap();
+            assert_eq!(result.status, ReductionStatus::Complete);
+            assert_eq!(result.root.expand(), expected);
+        }
+    }
 
     #[test]
     fn factorized_builtin_tensor_sums_preserve_antisymmetric_signs_and_typed_zero() {
@@ -1982,7 +3465,9 @@ mod tests {
         ];
         for (expression, expected) in cases {
             let source = SymbolicTensor::infer(&spectator * expression).unwrap();
-            let contractor = SlotContraction::new().observed(source.reduction_observations());
+            let contractor = SlotContraction::new().admitted(&source);
+            INFERENCE_CALLS.with(|count| count.set(0));
+            INFERENCE_VISITS.with(|count| count.set(0));
             let result = contractor
                 .contract_factorized(source.expression.as_view(), None, true)
                 .expect("intrinsic antisymmetric leaves admit factorized contraction");
@@ -1991,6 +3476,12 @@ mod tests {
             let contracted = source.contract(Default::default()).unwrap();
             assert_eq!(contracted.expression(), &result.root);
             assert_eq!(contracted.structure, source.structure);
+            if !contracted.is_zero() {
+                let network = contracted
+                    .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+                    .unwrap();
+                assert_eq!(network.graph.dangling_indices().len(), contracted.rank());
+            }
             assert_eq!(
                 contracted
                     .contract(Default::default())
@@ -1998,6 +3489,8 @@ mod tests {
                     .expression(),
                 &result.root
             );
+            assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+            assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
         }
     }
 
@@ -2015,22 +3508,28 @@ mod tests {
         let source =
             SymbolicTensor::infer(&first * p!(&mu) * q!(&mu) + &second * p!(&nu) * q!(&nu))
                 .unwrap();
-        let contractor = SlotContraction::new().observed(source.reduction_observations());
+        let contractor = SlotContraction::new().admitted(&source);
+        INFERENCE_CALLS.with(|count| count.set(0));
+        INFERENCE_VISITS.with(|count| count.set(0));
         let result = contractor
             .contract_factorized(source.expression.as_view(), None, true)
             .expect("explicit color tensor ports admit the factorized frontier");
         assert_eq!(result.status, ReductionStatus::Complete);
         let coefficient = Atom::num(2) * g!(p!(mink!(4)), q!(mink!(4)));
         assert!(result.root == &coefficient * first || result.root == coefficient * second);
-        assert_eq!(
-            SymbolicTensor::infer(result.root).unwrap().structure,
-            source.structure
-        );
+        let contracted = result.into_tensor(&source).unwrap().root;
+        assert_eq!(contracted.structure, source.structure);
+        let network = contracted
+            .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+        assert_eq!(network.graph.dangling_indices().len(), contracted.rank());
+        assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+        assert_eq!(INFERENCE_VISITS.with(|count| count.get()), 0);
     }
 
     #[test]
     fn source_free_color_scopes_stay_opaque_beside_real_contractions() {
-        let reps = crate::test_support::test_initialize();
+        let reps = test_support::test_initialize();
         let [a, b, c, d, e, f] = [97801, 97802, 97803, 97804, 97805, 97806]
             .map(|index| reps.coad_da.to_symbolic([Atom::num(index)]));
         let rep = reps.cof_nc.to_symbolic([] as [Atom; 0]);
@@ -2055,9 +3554,7 @@ mod tests {
         let nu = spenso::mink!(4, 97808);
         let source =
             SymbolicTensor::infer(&spectator * spenso::g!(&mu, &nu) * spenso::p!(&nu)).unwrap();
-        let contractor = SlotContraction::new()
-            .expanding(false)
-            .observed(source.reduction_observations());
+        let contractor = SlotContraction::new().expanding(false).admitted(&source);
         crate::tensor::SELECTED_OPENS.with(|count| count.set(0));
         let result = contractor
             .contract_factorized(source.expression.as_view(), None, true)
@@ -2073,7 +3570,7 @@ mod tests {
 
     #[test]
     fn source_free_open_color_sum_keeps_positional_metric_bindings() {
-        let reps = crate::test_support::test_initialize();
+        let reps = test_support::test_initialize();
         let [a, b, c, d, e, z] = [97811, 97812, 97813, 97814, 97815, 97816]
             .map(|index| reps.coad_da.to_symbolic([Atom::num(index)]));
         let rep = reps.cof_nc.to_symbolic([] as [Atom; 0]);
@@ -2094,9 +3591,7 @@ mod tests {
                     )
         };
         let source = SymbolicTensor::infer(spenso::g!(&a, &z) * sum(&a)).unwrap();
-        let contractor = SlotContraction::new()
-            .expanding(false)
-            .observed(source.reduction_observations());
+        let contractor = SlotContraction::new().expanding(false).admitted(&source);
         crate::tensor::SELECTED_OPENS.with(|count| count.set(0));
         let result = contractor
             .contract_factorized(source.expression.as_view(), None, true)
@@ -2113,7 +3608,7 @@ mod tests {
 
     #[test]
     fn source_free_callback_region_still_requires_checked_contraction() {
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let a = spenso::mink!(4, 97821);
         let b = spenso::mink!(4, 97822);
         let target = b.clone();
@@ -2133,7 +3628,7 @@ mod tests {
                 * (symbolica::function!(callback, &a) + symbolica::function!(sibling, &a)),
         )
         .unwrap();
-        let contractor = SlotContraction::new().observed(source.reduction_observations());
+        let contractor = SlotContraction::new().admitted(&source);
         assert!(
             contractor
                 .contract_factorized(source.expression.as_view(), None, true)
@@ -2336,7 +3831,6 @@ mod tests {
             .unwrap();
         assert!(!contracted.root.is_zero());
         assert_eq!(contracted.status, ReductionStatus::Complete);
-        use spenso::network::parsing::AtomStructureExt;
         assert!(
             !contracted.root.has_repeated_explicit_indices(),
             "all selected connections must be contracted"
@@ -2349,7 +3843,7 @@ mod tests {
     }
     #[test]
     fn scalar_power_without_graph_incidence_keeps_its_original_source() {
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let x = Atom::var(symbolica::symbol!("no_work_power_x"));
         let y = Atom::var(symbolica::symbol!("no_work_power_y"));
         let z = Atom::var(symbolica::symbol!("no_work_power_z"));
@@ -2378,7 +3872,7 @@ mod tests {
                 assert_eq!(result.root, source, "{scalar}, rank_one={rank_one}");
 
                 let tensor = SymbolicTensor::infer(source.clone()).unwrap();
-                let settings = crate::tensor::ContractSettings::default();
+                let settings = ContractSettings::default();
                 let settings = if rank_one {
                     settings
                 } else {
@@ -2396,12 +3890,19 @@ mod tests {
 
 #[cfg(test)]
 mod lazy_tests {
+    use super::super::tests as component_tests;
     use super::*;
+    use crate::test_support;
     use spenso::network::tags::SPENSO_TAG;
+    use std::ptr;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use symbolica::domains::float::Float;
+    use symbolica::parser::ParseSettings as SymbolicaParseSettings;
+    use symbolica::symbol;
 
     #[test]
     fn partial_arithmetic_scopes_have_only_one_level() {
-        let _contractor = super::super::tests::setup();
+        let _contractor = component_tests::setup();
         for (source, nodes) in [
             ("p(spenso::mink(4,a))*q(spenso::mink(4,a))+x*y", 3),
             ("(p(spenso::mink(4,a))*q(spenso::mink(4,a))+x)^2", 2),
@@ -2410,7 +3911,7 @@ mod lazy_tests {
                 2,
             ),
         ] {
-            let source = super::super::tests::input(source);
+            let source = component_tests::input(source);
             let scope = ContractionScope::parse(source.as_view()).unwrap();
             assert_eq!(scope.ports.len(), nodes, "{source}");
             assert_eq!(scope.network.graph.graph.n_nodes(), nodes, "{source}");
@@ -2419,16 +3920,92 @@ mod lazy_tests {
     }
 
     #[test]
-    fn selected_arithmetic_reuses_admission_without_nested_graphs() {
-        let setup = super::super::tests::setup();
-        let input = super::super::tests::input;
-        let scalar = Atom::add_many(
-            (0..512).map(|i| Atom::var(symbolica::symbol!(&format!("selected_tape::s{i}")))),
+    fn planned_scope_borrows_graph_and_reopens_composite_leaves() {
+        let setup = component_tests::setup();
+        let product = component_tests::input("p(mink(4,a))*q(mink(4,a))");
+        let source = &product + component_tests::input("x*y");
+        let tensor = SymbolicTensor::infer(source.clone()).unwrap();
+        let planned = tensor.shallow_graph().unwrap();
+        let contractor = setup.admitted(&tensor).planned(
+            source.as_view(),
+            Arc::clone(&planned),
+            Some(tensor.proofs.parser_leaf_interfaces()),
         );
+        assert!(contractor.graph.as_ref().unwrap().fallback_root.is_none());
+        let scope = contractor.scope(source.as_view()).unwrap();
+        assert!(ptr::eq(scope.network.graph.as_ref(), &planned.graph));
+        let child = scope
+            .tree
+            .iter_children(scope.root, &planned.graph.graph)
+            .find(|&node| scope.literal(node) == Some(product.as_view()))
+            .unwrap();
+        let opened = scope.open(child).unwrap();
+        assert!(Arc::ptr_eq(
+            opened.network.admission.as_ref().unwrap(),
+            planned.admission.as_ref().unwrap(),
+        ));
+        assert!(matches!(
+            opened.network.graph.graph[opened.root],
+            NetworkNode::Op(NetworkOp::Product)
+        ));
+    }
+
+    #[test]
+    fn selected_planned_scope_matches_its_payload_instead_of_its_enclosing_admission() {
+        let setup = component_tests::setup();
+        let selected = component_tests::input("p(mink(4,a))*q(mink(4,a))");
+        let enclosing = SymbolicTensor::infer(&selected + component_tests::input("x*y")).unwrap();
+        let mut local = SymbolicTensor::infer(selected.clone()).unwrap();
+        local.replace_admission(enclosing.proofs.clone());
+        let graph = local.shallow_graph().unwrap();
+        let contractor =
+            setup
+                .admitted(&local)
+                .planned(selected.as_view(), Arc::clone(&graph), None);
+        assert!(
+            contractor
+                .graph
+                .as_ref()
+                .unwrap()
+                .matches(selected.as_view())
+        );
+        assert!(
+            !contractor
+                .graph
+                .as_ref()
+                .unwrap()
+                .matches(enclosing.expression.as_view())
+        );
+        assert!(ptr::eq(
+            contractor
+                .scope(selected.as_view())
+                .unwrap()
+                .network
+                .graph
+                .as_ref(),
+            &graph.graph
+        ));
+        assert!(!ptr::eq(
+            contractor
+                .scope(enclosing.expression.as_view())
+                .unwrap()
+                .network
+                .graph
+                .as_ref(),
+            &graph.graph
+        ));
+    }
+
+    #[test]
+    fn selected_arithmetic_reuses_admission_without_nested_graphs() {
+        let setup = component_tests::setup();
+        let input = component_tests::input;
+        let scalar =
+            Atom::add_many((0..512).map(|i| Atom::var(symbol!(&format!("selected_tape::s{i}")))));
         let source = (&scalar * input("p(mink(4,a))") + input("q(mink(4,a))"))
             * input("t(mink(4,a),mink(4,b))");
         let tensor = SymbolicTensor::infer(source.clone()).unwrap();
-        let contractor = setup.observed(tensor.reduction_observations());
+        let contractor = setup.admitted(&tensor);
         let scope = ContractionScope::parse(source.as_view()).unwrap();
         let result = contractor
             .contract_graph(&scope, scope.root, None, true)
@@ -2446,13 +4023,13 @@ mod lazy_tests {
 
     #[test]
     fn direct_selected_arithmetic_keeps_independent_dummy_scopes() {
-        let setup = super::super::tests::setup();
-        let input = super::super::tests::input;
+        let setup = component_tests::setup();
+        let input = component_tests::input;
         let source = input(
             "(p(mink(4,a))*q(mink(4,a))*r(mink(4,b))+s(mink(4,b)))*(p(mink(4,a))*q(mink(4,a))*t(mink(4,b),mink(4,c))+u(mink(4,b),mink(4,c)))",
         );
         let tensor = SymbolicTensor::infer(source.clone()).unwrap();
-        let contractor = setup.observed(tensor.reduction_observations());
+        let contractor = setup.admitted(&tensor);
         let scope = ContractionScope::parse(source.as_view()).unwrap();
         let result = contractor
             .contract_graph(&scope, scope.root, None, true)
@@ -2469,14 +4046,13 @@ mod lazy_tests {
 
     #[test]
     fn unobserved_powers_require_intrinsic_scalar_certificates() {
-        use super::super::tests::{input, setup};
-        let contractor = setup();
-        let opaque = symbolica::symbol!("unobserved_power::opaque"; Scalar);
+        let contractor = component_tests::setup();
+        let opaque = symbol!("unobserved_power::opaque"; Scalar);
         for value in [
-            input("m^2"),
-            input("(m+n)^-2"),
-            input("(m+n)^(1/3)"),
-            opaque.call(input("(m+n)^11")).pow(2),
+            component_tests::input("m^2"),
+            component_tests::input("(m+n)^-2"),
+            component_tests::input("(m+n)^(1/3)"),
+            opaque.call(component_tests::input("(m+n)^11")).pow(2),
         ] {
             let mut slots = SlotMatcher::default();
             let mut sum = ComponentSum::new(&contractor, Intake::Contraction, &mut slots);
@@ -2489,19 +4065,19 @@ mod lazy_tests {
                 matches!(tape.leaves()[0], InputLeaf::Scalar(original) if original == value.as_view())
             );
         }
-        let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let observed = std::sync::Arc::clone(&calls);
-        let callback = symbolica::symbol!("unobserved_power::callback"; Scalar; norm=move|_,_| {
-            observed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let callback = symbol!("unobserved_power::callback"; Scalar; norm=move|_,_| {
+            observed.fetch_add(1, Ordering::Relaxed);
         });
-        let rounded = Atom::num(symbolica::domains::float::Float::parse("0.1", Some(11)).unwrap());
+        let rounded = Atom::num(Float::parse("0.1", Some(11)).unwrap());
         for value in [
-            input("p(mink(4,a))^2"),
-            input("(p(mink(4,a))*q(mink(4,a))+m)^2"),
-            callback.call(input("m")).pow(2),
-            (rounded + input("m")).pow(2),
+            component_tests::input("p(mink(4,a))^2"),
+            component_tests::input("(p(mink(4,a))*q(mink(4,a))+m)^2"),
+            callback.call(component_tests::input("m")).pow(2),
+            (rounded + component_tests::input("m")).pow(2),
         ] {
-            calls.store(0, std::sync::atomic::Ordering::Relaxed);
+            calls.store(0, Ordering::Relaxed);
             let mut slots = SlotMatcher::default();
             let mut sum = ComponentSum::new(&contractor, Intake::Contraction, &mut slots);
             let mut tape = TermTape::default();
@@ -2510,19 +4086,19 @@ mod lazy_tests {
                     .compile_arithmetic(value.as_view(), &mut tape, &mut sum)
                     .is_none()
             );
-            assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 0);
+            assert_eq!(calls.load(Ordering::Relaxed), 0);
         }
     }
 
     #[test]
     fn scalar_powers_in_selected_sums_do_not_rebuild_graphs() {
-        let setup = super::super::tests::setup();
-        let input = super::super::tests::input;
+        let setup = component_tests::setup();
+        let input = component_tests::input;
         let source = input(
             "(m^4*p(mink(4,a))+m^2*g(q(mink(4)),s(mink(4)))^2*r(mink(4,a)))*t(mink(4,a),mink(4,b))",
         );
         let tensor = SymbolicTensor::infer(source.clone()).unwrap();
-        let contractor = setup.observed(tensor.reduction_observations());
+        let contractor = setup.admitted(&tensor);
         let scope = ContractionScope::parse(source.as_view()).unwrap();
         let result = contractor
             .contract_graph(&scope, scope.root, None, true)
@@ -2539,12 +4115,12 @@ mod lazy_tests {
 
     #[test]
     fn compact_tensor_sums_do_not_enter_the_scalar_coefficient_tape() {
-        let setup = super::super::tests::setup();
-        let input = super::super::tests::input;
+        let setup = component_tests::setup();
+        let input = component_tests::input;
         let source = input("p(mink(4))+q(mink(4))");
         let tensor = SymbolicTensor::infer(source.clone()).unwrap();
         assert_eq!(tensor.structure.logical_slots().len(), 1);
-        let contractor = setup.observed(tensor.reduction_observations());
+        let contractor = setup.admitted(&tensor);
         let mut slots = SlotMatcher::default();
         let mut sum = ComponentSum::new(&contractor, Intake::Contraction, &mut slots);
         let mut tape = TermTape::default();
@@ -2565,13 +4141,13 @@ mod lazy_tests {
 
     #[test]
     fn indexed_powers_in_selected_sums_keep_the_scoped_graph() {
-        let setup = super::super::tests::setup();
-        let input = super::super::tests::input;
+        let setup = component_tests::setup();
+        let input = component_tests::input;
         let source = input(
             "((p(mink(4,a))*q(mink(4,a))+x)^2*r(mink(4,b))+s(mink(4,b)))*t(mink(4,b),mink(4,c))",
         );
         let tensor = SymbolicTensor::infer(source.clone()).unwrap();
-        let contractor = setup.observed(tensor.reduction_observations());
+        let contractor = setup.admitted(&tensor);
         let scope = ContractionScope::parse(source.as_view()).unwrap();
         let result = contractor
             .contract_graph(&scope, scope.root, None, true)
@@ -2589,9 +4165,9 @@ mod lazy_tests {
 
     #[test]
     fn fixed_component_scalar_sums_stay_closed() {
-        let contractor = super::super::tests::setup();
+        let contractor = component_tests::setup();
         let source =
-            super::super::tests::input("n*(1/(q(0,spenso::cind(0))+x)+1/(q(0,spenso::cind(0))+y))");
+            component_tests::input("n*(1/(q(0,spenso::cind(0))+x)+1/(q(0,spenso::cind(0))+y))");
         let scope = ContractionScope::parse(source.as_view()).unwrap();
         let result = contractor
             .contract_graph(&scope, scope.root, None, true)
@@ -2603,8 +4179,8 @@ mod lazy_tests {
 
     #[test]
     fn graph_order_starts_with_a_small_boundary_and_accepts_an_override() {
-        let contractor = super::super::tests::setup();
-        let source = super::super::tests::input(
+        let contractor = component_tests::setup();
+        let source = component_tests::input(
             "spenso::g(spenso::mink(4,a),spenso::mink(4,b))*p(spenso::mink(4,a))*q(spenso::mink(4,b))",
         );
         let scope = ContractionScope::parse(source.as_view()).unwrap();
@@ -2621,8 +4197,7 @@ mod lazy_tests {
                 .unwrap(),
             explicit
         );
-        let expected =
-            super::super::tests::input("spenso::g(p(spenso::mink(4)),q(spenso::mink(4)))");
+        let expected = component_tests::input("spenso::g(p(spenso::mink(4)),q(spenso::mink(4)))");
         for order in [None, Some(explicit.as_slice())] {
             let result = contractor
                 .contract_graph(&scope, scope.root, order, true)
@@ -2634,7 +4209,7 @@ mod lazy_tests {
 
     #[test]
     fn unselected_thousand_term_factors_stay_closed() {
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         SPENSO_TAG.rank_one_tensor_symbol("lazy_contraction::p");
         SPENSO_TAG.tensor_symbol("lazy_contraction::t");
         SPENSO_TAG.tensor_symbol("lazy_contraction::u");
@@ -2642,7 +4217,7 @@ mod lazy_tests {
             Atom::parse(
                 source,
                 "lazy_contraction",
-                symbolica::parser::ParseSettings::symbolica(),
+                SymbolicaParseSettings::symbolica(),
             )
             .unwrap()
         };

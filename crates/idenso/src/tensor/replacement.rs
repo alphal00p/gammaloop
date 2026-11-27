@@ -226,7 +226,7 @@ impl SymbolicTensor<PartialStructure> {
                 // Every binding preserves ports and bounds its explicit indices
                 // by the source. Retain that conservative metadata even when
                 // normalization cancels leaves or coalesces them into powers.
-                result.proofs = self.proofs.algebra_result();
+                result.replace_admission(self.proofs.clone());
                 Ok(result)
             }
         }
@@ -830,8 +830,7 @@ mod tests {
         ));
         assert_eq!(SCOPE_VALIDATIONS.with(Cell::get), 1);
         assert_eq!(INFERENCE_CALLS.with(Cell::get), 0);
-        assert!(result.proofs.rewrite.get().is_none());
-        assert!(result.proofs.algebra.get().is_none());
+        assert!(result.work.rewrite.get().is_none());
         assert!(!result.rewrites_preserve_interface());
         assert!(
             SymbolicTensor::<PartialStructure>::new(&fa * ga.pow(2), source.structure).is_err()
@@ -1460,7 +1459,7 @@ mod tests {
         let a = slot(81941);
         let inferred =
             SymbolicTensor::<PartialStructure>::infer(leaf(f, slice::from_ref(&a))).unwrap();
-        assert_eq!(inferred.proofs.validated.get(), Some(&true));
+        assert!(inferred.proofs.is_admitted());
         let (expression, structure) = inferred.into_parts();
         // Detached storage must establish its own facts even when its parts
         // came from a previously checked value.
@@ -1484,10 +1483,9 @@ mod tests {
         assert_eq!(SCOPE_VALIDATIONS.with(Cell::get), established);
 
         let changed = source.replace(&rule).unwrap();
-        assert_eq!(changed.proofs.validated.get(), Some(&true));
-        assert!(changed.proofs.rewrite.get().is_none());
-        assert!(changed.proofs.algebra.get().is_none());
-        assert!(changed.proofs.intrinsic.get().is_none());
+        assert!(changed.proofs.is_admitted());
+        assert!(changed.work.rewrite.get().is_none());
+        assert!(changed.work.intrinsic.get().is_none());
         assert_eq!(
             changed.proofs.normalized_product.get(),
             source.proofs.normalized_product.get()
@@ -1502,15 +1500,16 @@ mod tests {
             expression: changed.expression,
             is_metric: changed.is_metric,
             is_composite: changed.is_composite,
+            work: changed.work,
             proofs: changed.proofs,
         };
         let mapped = ordered.clone().map_same_structure(|value| value);
-        assert!(mapped.proofs.rewrite.get().is_none());
+        assert!(mapped.work.rewrite.get().is_none());
         // Even obtaining mutable access without an edit clears established facts.
         let _ = ordered.mut_structure();
-        assert!(ordered.proofs.rewrite.get().is_none());
-        assert!(ordered.proofs.validated.get().is_none());
-        assert!(ordered.proofs.algebra.get().is_none());
+        assert!(ordered.work.rewrite.get().is_none());
+        assert!(!ordered.proofs.is_admitted());
+
         *ordered.mut_structure() = OrderedStructure::new(Vec::new()).into_canonical();
         let (expression, structure) = ordered.into_parts();
         assert!(

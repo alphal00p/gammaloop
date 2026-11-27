@@ -11,6 +11,7 @@ use idenso::{
         inference::InterfaceInference,
     },
 };
+use spenso::structure::{OrderedStructure, ScalarStructure};
 
 use linnet::half_edge::{
     HedgeGraph,
@@ -76,9 +77,18 @@ impl IntegratedCts {
         expansion: &Series<AtomField>,
         scale_power: i64,
     ) -> Result<Self> {
+        // A selected Laurent coefficient can expose a dummy pair that was
+        // local to one additive branch. Account for those written occurrences
+        // while preserving the source interface, including a vanishing part.
         Ok(Self {
-            pole: source.with_checked_expression(truncate(expansion, false))?,
-            finite_counterterm: source.with_checked_expression(-truncate(expansion, true))?,
+            pole: source.with_materialized_expression(
+                "Laurent pole projection",
+                truncate(expansion, false),
+            )?,
+            finite_counterterm: source.with_materialized_expression(
+                "Laurent finite projection",
+                -truncate(expansion, true),
+            )?,
             scale_power,
         })
     }
@@ -118,7 +128,7 @@ impl IntegratedCts {
         } else {
             &self.pole
         };
-        Ok(projection.with_checked_expression(
+        Ok(projection.with_produced_expression(
             projection.expression() * Atom::var(GS.integrated_loop_scale).pow(self.scale_power),
         )?)
     }
@@ -132,7 +142,7 @@ impl IntegratedCts {
     }
 
     pub(crate) fn physical_pole(&self) -> Result<SymbolicTensor<IndexedStructure>> {
-        Ok(self.pole.with_checked_expression(
+        Ok(self.pole.with_produced_expression(
             self.pole
                 .expression()
                 .replace(GS.integrated_loop_scale)
@@ -141,7 +151,7 @@ impl IntegratedCts {
     }
 
     pub(crate) fn physical_finite_counterterm(&self) -> Result<SymbolicTensor<IndexedStructure>> {
-        Ok(self.finite_counterterm.with_checked_expression(
+        Ok(self.finite_counterterm.with_produced_expression(
             self.finite_counterterm
                 .expression()
                 .replace(GS.integrated_loop_scale)
@@ -168,8 +178,11 @@ fn truncate(series: &Series<AtomField>, finite: bool) -> Atom {
 
 impl Rooted for IntegratedCts {
     fn root() -> Self {
-        let zero =
-            SymbolicTensor::infer_indexed(Atom::Zero).expect("zero has a scalar tensor interface");
+        let zero = SymbolicTensor::from_produced_indexed_parts(
+            Atom::Zero,
+            IndexedStructure::identity(OrderedStructure::scalar_structure()),
+        )
+        .expect("zero has a scalar tensor interface");
         Self {
             pole: zero.clone(),
             finite_counterterm: zero,
@@ -314,7 +327,7 @@ impl Integrated<'_> {
                 // Integrate the complete signed operator in each retained frame.
                 // Linearity permits this sector sum; no soft branch is discarded
                 // before the nested forest has supplied its completed coefficient.
-                let mut integrated = integrand.atom().with_checked_expression(Atom::Zero)?;
+                let mut integrated = integrand.atom().with_produced_expression(Atom::Zero)?;
                 for sector in integrand.active_sectors() {
                     let physical = sector
                         .atom
@@ -343,7 +356,7 @@ impl Integrated<'_> {
                     marker_given.subgraph(),
                     integrated.expression(),
                 );
-                let integrated = integrated.with_checked_expression(marked)?;
+                let integrated = integrated.with_produced_expression(marked)?;
                 let expansion_depth =
                     usize::try_from(self.vakint_settings.number_of_terms_in_epsilon_expansion)
                         .wrap_err("Vakint epsilon expansion depth must be nonnegative")?;
@@ -811,8 +824,11 @@ impl Integrated<'_> {
                     );
                 }
                 for (term_index, term) in integrand_vakint.0.iter_mut().enumerate() {
-                    term.numerator =
-                        self.simplify_projected_numerator(&term.numerator, current.topo_order())?;
+                    term.numerator = self.simplify_projected_tensor_numerator(
+                        integrand,
+                        &term.numerator,
+                        current.topo_order(),
+                    )?;
                     debug_tags!(#uv, #integrated, #vakint, #trace;
                         stage = "projected_numerator_after_d_dimensional_algebra",
                         term_index = %term_index,
@@ -879,7 +895,10 @@ impl Integrated<'_> {
         // are multiplied. Their local UV dummy labels can coincide; completed
         // scalar products must not expose those labels to the next factor.
         let dotted = integrand
-            .with_checked_expression(cooking.try_cook(res.as_view())?)?
+            .with_materialized_expression(
+                "Vakint result restoration",
+                cooking.try_cook(res.as_view())?,
+            )?
             .contract(ContractSettings {
                 collect_chains: false,
                 collect_traces: false,
@@ -928,8 +947,9 @@ impl Integrated<'_> {
         }
     }
 
-    fn simplify_projected_numerator(
+    fn simplify_projected_tensor_numerator(
         &self,
+        source: &SymbolicTensor<IndexedStructure>,
         numerator: &Atom,
         topology_order: usize,
     ) -> Result<Atom> {
@@ -946,17 +966,19 @@ impl Integrated<'_> {
         // contraction can multiply a pole only after its finite term was lost.
         // The projected expression contains native gamma/fixed-vector leaves
         // alongside Vakint momenta and metrics. Restore their shared typed
-        // interface before contraction; the scalar-only Vakint dot parser
-        // cannot account for ports carried by those native tensor leaves.
+        // interface before contraction; the source already owns its free ports.
+        // Vakint projection replaces loop contractions and preserves those ports.
         let numerator = Self::restore_numerator(numerator.clone(), topology_order);
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
-        let numerator = SymbolicTensor::infer_indexed(cooking.try_cook(numerator.as_view())?)?;
+        let numerator = source.with_materialized_expression(
+            "Vakint projected numerator",
+            cooking.try_cook(numerator.as_view())?,
+        )?;
         let numerator = simplify(&numerator)?;
-        Self::ensure_resolved_lorentz_contractions(numerator.expression())?;
+        Self::ensure_resolved_lorentz_tensor_contractions(&numerator)?;
         let numerator = numerator
             .with_algebra_result(Self::dimensionally_regularized(numerator.expression()))?;
         let materialized = numerator
-            .expression()
             .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings {
                 shorthand_parsing: ShorthandParsing::Expand {
                     schoonschip: SchoonschipExpansionMode {
@@ -970,7 +992,8 @@ impl Integrated<'_> {
                 ..Default::default()
             })?
             .simple_execute::<()>()?;
-        let numerator = numerator.with_checked_expression(materialized)?;
+        let numerator = numerator
+            .with_materialized_expression("projected numerator network execution", materialized)?;
         let result = Self::to_vakint_numerator(&numerator)?;
         debug_tags!(#uv, #integrated, #diagnostic_stage;
             stage = 4u8, finished = true,
@@ -981,16 +1004,39 @@ impl Integrated<'_> {
         Ok(result)
     }
 
-    /// Inspect a borrowed native expression without changing its retained owner.
+    #[cfg(test)]
+    fn simplify_projected_numerator(
+        &self,
+        numerator: &Atom,
+        topology_order: usize,
+    ) -> Result<Atom> {
+        // Standalone raw-backend fixtures have no retained source tensor.
+        let restored = Self::restore_numerator(numerator.clone(), topology_order);
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let source = SymbolicTensor::infer_indexed(cooking.try_cook(restored.as_view())?)?;
+        self.simplify_projected_tensor_numerator(&source, numerator, topology_order)
+    }
+
+    #[cfg(test)]
     fn ensure_resolved_lorentz_contractions(numerator: &Atom) -> Result<()> {
+        // Raw diagnostic fixtures have no retained tensor owner. Production
+        // calls the typed check directly, preserving admitted leaf interfaces.
+        let numerator = SymbolicTensor::infer_indexed(numerator.clone())?;
+        Self::ensure_resolved_lorentz_tensor_contractions(&numerator)
+    }
+
+    /// Inspect a borrowed native tensor without changing its retained owner.
+    fn ensure_resolved_lorentz_tensor_contractions(
+        numerator: &SymbolicTensor<IndexedStructure>,
+    ) -> Result<()> {
         let minkowski = Minkowski {}.to_symbolic([GS.dim]).get_symbol().unwrap();
-        if !numerator.contains_symbol(minkowski) {
+        if !numerator.expression().contains_symbol(minkowski) {
             return Ok(());
         }
         let started = std::time::Instant::now();
         debug_tags!(#uv, #integrated, #diagnostic_stage;
             stage = 5u8, finished = false,
-            input_bytes = numerator.as_view().get_byte_size(),
+            input_bytes = numerator.expression().as_view().get_byte_size(),
             "Start structural residual-contraction check"
         );
         // Expose compact inter-chain contractions, retaining every analytic
@@ -1036,7 +1082,7 @@ impl Integrated<'_> {
         }
         debug_tags!(#uv, #integrated, #vakint, #trace;
             stage = "residual_lorentz_contraction_materialization",
-            file.source = %numerator.to_plain_string(),
+            file.source = %numerator.expression().to_plain_string(),
             file.explicit = %explicit.to_plain_string(),
             "Check residual contractions in the native index scope"
         );
@@ -1302,7 +1348,7 @@ impl Integrated<'_> {
         // their vector leaves. The shared notation owner preserves powers and
         // indexed contractions without opening the surrounding numerator.
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
-        let dotted = numerator.with_checked_expression(expression)?.to_dots()?;
+        let dotted = numerator.with_produced_expression(expression)?.to_dots()?;
         let numerator = cooking.uncook(dotted.expression().as_view());
         // Vakint's existing bridge carries opaque tensor slots through its
         // Lorentz projectors. Keep the actual leaves: wrapping a duplicate body
@@ -1392,24 +1438,28 @@ pub(crate) fn to_vakint_integrand<
     // distinct dummy indices during Lorentz preparation. Keep the kinematic
     // coefficients factorized throughout this independent color pass.
     let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
-    let input = GS.erase_uv_momentum_provenance(integrand.expression());
-    let color = integrand.with_checked_expression(input)?.simplify_algebra(
-        &idenso::tensor::AlgebraSettings {
+    let color = integrand
+        .clone()
+        .map_produced_vector_components(GS.emr_mom, |momentum| {
+            GS.momentum_without_uv_provenance(momentum)
+        })?
+        .simplify_algebra(&idenso::tensor::AlgebraSettings {
             color: Some(ColorSimplifySettings {
                 ..Default::default()
             }),
             ..Default::default()
-        },
-    )?;
-    let lorentz_input = cooking.uncook(color.expression().as_view());
+        })?;
     debug_tags!(#uv, #integrated, #vakint, #trace;
         stage = "to_vakint_before_lorentz_materialization",
         reduced = %reduced_label,
-        file.expr = %lorentz_input.to_plain_string(),
+        file.expr = %color.expression().to_plain_string(),
         "Admitted color result before Lorentz network materialization"
     );
-    let mut integrand_vakint = lorentz_input
-        .parse_to_symbolic_net::<Aind>(&ParseSettings {
+    // Execute while native index identities and admitted leaf interfaces remain
+    // attached. Source labels are decoded only when emitting the Vakint input;
+    // freshly allocated native dummy symbols are valid backend index labels too.
+    let materialized = color
+        .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings {
             shorthand_parsing: ShorthandParsing::Expand {
                 schoonschip: SchoonschipExpansionMode {
                     inner_products: false,
@@ -1427,7 +1477,7 @@ pub(crate) fn to_vakint_integrand<
         reduced = %reduced_label,
         dependent_subgraph = %dependent_subgraph_label,
         substitute_masses_to_m_uv = substitute_masses_to_m_uv,
-        log.integrand = integrand_vakint,
+        log.integrand = materialized,
         "Vakint trace after undo shorthands"
     );
     //Atom::Zero
@@ -1447,14 +1497,14 @@ pub(crate) fn to_vakint_integrand<
     // metric of the reduced graph. Contract those metric-only structures before
     // the expression is split into Vakint terms.
     let metric_contracted = color
-        .with_checked_expression(cooking.try_cook(integrand_vakint.as_view())?)?
+        .with_materialized_expression("Vakint numerator preparation", materialized)?
         .contract(ContractSettings {
             rank_one: false,
             collect_chains: false,
             collect_traces: false,
             ..Default::default()
         })?;
-    integrand_vakint = cooking.uncook(metric_contracted.expression().as_view());
+    let mut integrand_vakint = cooking.uncook(metric_contracted.expression().as_view());
     debug_tags!(#uv, #integrated, #vakint, #trace;
         stage = "to_vakint_integrand_after_simplify_metrics",
         reduced = %reduced_label,
@@ -1900,7 +1950,12 @@ pub(crate) fn to_vakint_integrand<
         let momentum_solution =
             VakintMomentumSolution::solve(&system, &momentum_variables, &add_additional_args)
                 .wrap_err("could not solve momentum system for Vakint integrand")?;
-        let numerator = SymbolicTensor::infer_indexed(cooking.try_cook(t.numerator.as_view())?)?;
+        // Splitting scalar denominator topologies preserves the prepared
+        // numerator's free interface for every complete Vakint term.
+        let numerator = metric_contracted.with_materialized_expression(
+            "Vakint numerator topology routing",
+            cooking.try_cook(t.numerator.as_view())?,
+        )?;
         let mut numerator = momentum_solution.rewrite_numerator(&numerator)?;
         t.integral = momentum_solution.rewrite_integral(&t.integral, &add_additional_args);
         momentum_solution.ensure_free_variables_eliminated(
@@ -1943,7 +1998,10 @@ pub(crate) fn to_vakint_integrand<
         // );
 
         let normalization =
-            additional_normalization.pow(&SymbolicTensor::infer_indexed(Atom::num(nloops))?)?;
+            additional_normalization.pow(&SymbolicTensor::from_produced_indexed_parts(
+                Atom::num(nloops),
+                IndexedStructure::identity(OrderedStructure::scalar_structure()),
+            )?)?;
         numerator = numerator.multiply(normalization)?;
         debug_tags!(#uv, #integrated, #vakint, #trace;
             stage = "to_vakint_integrand_term_after_loop_normalization",
@@ -2131,7 +2189,7 @@ impl VakintMomentumSolution {
         let expression = numerator.expression().replace_multiple(&self.replacements);
         let normalized =
             numerator
-                .with_checked_expression(expression)?
+                .with_produced_expression(expression)?
                 .contract(ContractSettings {
                     rank_one: false,
                     collect_chains: false,
@@ -3526,7 +3584,7 @@ mod tests {
             let encoded = cooking.try_cook(source.as_view())?;
             let native = SymbolicTensor::infer_indexed(encoded.clone())?;
             Integrated::ensure_resolved_lorentz_contractions(&encoded)?;
-            Integrated::ensure_resolved_lorentz_contractions(native.expression())?;
+            Integrated::ensure_resolved_lorentz_tensor_contractions(&native)?;
             assert_eq!(cooking.uncook(native.expression().as_view()), source);
 
             // An actual third occurrence still fails after reserving native and
@@ -4609,7 +4667,7 @@ mod tests {
                 .map_err(|error| eyre!(error))?;
             let native = SymbolicTensor::infer_indexed(cooking.try_cook(source.as_view())?)?;
             let original = native.clone();
-            Integrated::ensure_resolved_lorentz_contractions(native.expression())?;
+            Integrated::ensure_resolved_lorentz_tensor_contractions(&native)?;
             assert_eq!(native, original);
             assert_eq!(cooking.uncook(native.expression().as_view()), source);
         }
@@ -4661,7 +4719,7 @@ mod tests {
                         let native =
                             SymbolicTensor::infer_indexed(cooking.try_cook(source.as_view())?)?;
                         let original = native.clone();
-                        Integrated::ensure_resolved_lorentz_contractions(native.expression())?;
+                        Integrated::ensure_resolved_lorentz_tensor_contractions(&native)?;
                         assert_eq!(native, original);
                         assert!(
                             cooking

@@ -1120,26 +1120,32 @@ impl GammaloopSymbols {
     /// been planned.
     pub(crate) fn erase_uv_momentum_provenance(&self, atom: &Atom) -> Atom {
         atom.replace_map(|view, _, output| {
-            let AtomView::Fun(momentum) = view else {
-                return;
-            };
-            if momentum.get_symbol() != self.emr_mom || momentum.get_nargs() < 1 {
-                return;
+            if let Some(erased) = self.momentum_without_uv_provenance(view) {
+                **output = erased;
             }
-            let AtomView::Fun(provenance) = momentum.get(0) else {
-                return;
-            };
-            if provenance.get_symbol() != self.uv_momentum_provenance || provenance.get_nargs() != 3
-            {
-                return;
-            }
-            let indices = momentum
-                .iter()
-                .skip(1)
-                .map(|index| index.to_owned())
-                .collect::<Vec<_>>();
-            **output = self.indexed_momentum(&provenance.get(2).to_owned(), &indices);
         })
+    }
+
+    /// Restore a tagged momentum's physical routing at its original component.
+    pub(crate) fn momentum_without_uv_provenance(&self, view: AtomView<'_>) -> Option<Atom> {
+        let AtomView::Fun(momentum) = view else {
+            return None;
+        };
+        if momentum.get_symbol() != self.emr_mom || momentum.get_nargs() == 0 {
+            return None;
+        }
+        let AtomView::Fun(provenance) = momentum.get(0) else {
+            return None;
+        };
+        if provenance.get_symbol() != self.uv_momentum_provenance || provenance.get_nargs() != 3 {
+            return None;
+        }
+        let indices = momentum
+            .iter()
+            .skip(1)
+            .map(|index| index.to_owned())
+            .collect::<Vec<_>>();
+        Some(self.indexed_momentum(&provenance.get(2).to_owned(), &indices))
     }
 
     pub(crate) fn localizing_integrand(&self, lmb: &LoopMomentumBasis) -> Atom {

@@ -442,7 +442,11 @@ references before parsing components. Other shared owners can still retain the
 same caches. The optional configuration must select reversible index capture;
 its `dimensions=false` source filter controls cooking, not inverse restoration.
 `uncook` also restores portable dimension payloads outside Scalar metadata,
-including dimensions that have become scalar coefficients. Actual representation dimensions must be
+including dimensions that have become scalar coefficients. Reversible dimension
+symbols encode the compound dimension and its explicit output tags in their
+names. Tagged and untagged cooking can coexist in one Symbolica registry.
+Untagged symbols retain their original spelling, and earlier dimension names
+still decode. Actual representation dimensions must be
 specialized through the checked dimension owner before finite component
 execution. Restoring a symbolic dimension does not provide a component table.
 This handoff still parses and materializes component tensors. The result includes
@@ -549,6 +553,11 @@ monomial and factored modes before tape coalescence. Public boundary labels stil
 connect across arms, and emitted subgraphs retain their index-use history. A
 coalesced scalar power keeps its dummy history local; a non-scalar power repeats
 its public-use metadata and rejects excess multiplicities.
+
+When collection opens an intrinsic sum of at least 1 MiB, it builds and releases
+one summand graph at a time. The summands share the admitted leaf ports and
+dummy allocator. Each summand must have the same external ports as the first,
+including when an earlier summand has already exceeded the tape budget.
 
 Color-only algebra reduces complete selected products. Intermediate collector
 frontiers do not choose identities: generated terms need the whole selected
@@ -680,6 +689,9 @@ Completed identical scope observations share immutable storage even during the
 initial walk. Each occurrence is still inspected and contributes its counts;
 sharing does not skip admission or change the planner's budget. Parent records
 retain the shared completed record instead of duplicate observation subtrees.
+Regional lookup keys identify subexpressions by byte range in the current
+payload. An extracted expression can reuse the observed facts and store its
+own ranges, allowing the larger source payload to be freed.
 The same observations retain explicit metric and vector source ports by
 representation. Their absence can certify a completed structural fallback even
 when compact vectors or repeated gamma ports remain. Head occurrence alone
@@ -707,6 +719,26 @@ logical ports through Spenso's admitted parser entry. That entry skips redundant
 admission and dummy-reservation walks; only newly selected boundaries need
 interface discovery. Callback-sensitive rewrites discard invalidated interface
 facts and retain checked result boundaries.
+
+Admitted parsing and regional interface lookup read retained raw ports first,
+preserving declared port order. Without a fact, a non-scalar tensor-tagged
+head can supply ports from its written arguments when it has at least one
+slot, bare representation, or fixed component, with no nested index or bundle
+syntax and no repeated or dual-paired slot. Slots must parse in the requested
+`Aind` grammar. Spenso's syntactic readers leave bare representations
+unmaterialized, while Idenso's admitted parser assigns them fresh indices.
+Expansion and collection carry a self-loop's retained fact through renaming
+and symmetry normalization. Canonicalization matches relabelled symmetric,
+antisymmetric, and cyclic leaves. A retained fact in written order follows
+the normalized arguments, including repeated slots such as in `S(i,i,k,k)`.
+For a different declared order, canonicalization rejects ambiguity across
+dummy substitutions or matching source leaves. A power of a closed indexed
+leaf brackets the contraction so that the copy has its own scope.
+
+Callers can read cached facts through `is_certified_closed_scalar()` and
+`is_certified_terminal_polynomial()` on both partial and fully indexed tensors.
+A missing observation gives `false` without starting a scan. A scalar boundary
+alone leaves open the possibility of an internal contraction such as `T(i,i)`.
 
 Identity kernels may publish a terminal polynomial without enumerating every
 new scalar coefficient. A generated power such as $M^2$ therefore need not

@@ -513,7 +513,7 @@ fn parse_scalar_tensors_step_by() {
       overlap = "scale";
       layout = "neato";
 
-      0	 [label = "S:(d(mink(4,2)))^2*a*b(mink(4,1))*c*d(mink(4,1))"];
+      0	 [label = "T:(d(mink(4,2)))^2*a*b(mink(4,1))*c*d(mink(4,1))"];
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
     }
@@ -528,7 +528,7 @@ fn parse_scalar_tensors_step_by() {
       overlap = "scale";
       layout = "neato";
 
-      0	 [label = "S:(d(mink(4,2)))^2*a*b(mink(4,1))*c*d(mink(4,1))"];
+      0	 [label = "TT:(d(mink(4,2)))^2*b(mink(4,1))*d(mink(4,1))*a*c"];
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
     }
@@ -1322,6 +1322,7 @@ fn structural_network_borrows_source_leaves_and_owns_generated_shorthand() {
             .all(|tensor| matches!(tensor.expression, AtomOrView::View(_)))
     );
     let owned = network.map(AtomOrView::into_owned, |tensor| SymbolicTensor {
+        work: Default::default(),
         proofs: Default::default(),
         structure: tensor.structure,
         expression: tensor.expression.into_owned(),
@@ -1352,6 +1353,7 @@ fn structural_network_borrows_source_leaves_and_owns_generated_shorthand() {
             .all(|tensor| matches!(tensor.expression, AtomOrView::Atom(_)))
     );
     let owned = materialized.map(AtomOrView::into_owned, |tensor| SymbolicTensor {
+        work: Default::default(),
         proofs: Default::default(),
         structure: tensor.structure,
         expression: tensor.expression.into_owned(),
@@ -1408,6 +1410,7 @@ fn borrowed_scalar_power_base_preserves_implicit_contractions() {
     test_initialize();
     let source = vector!(p, mink!(4, i)) * vector!(q, mink!(4, i));
     let make = |expression| SymbolicTensor {
+        work: Default::default(),
         proofs: Default::default(),
         structure: OrderedStructure::<LibraryRep, AbstractIndex>::scalar_structure(),
         expression,
@@ -1437,6 +1440,7 @@ fn aliased_scalar_power_base_keeps_definition_registry() {
     let mut expression = AliasedAtom::from(source.clone());
     expression.register_alias(alias.clone(), parse_lit!(x + y));
     let tensor = SymbolicTensor {
+        work: Default::default(),
         proofs: Default::default(),
         structure: OrderedStructure::<LibraryRep, AbstractIndex>::scalar_structure(),
         expression,
