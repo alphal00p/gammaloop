@@ -910,7 +910,13 @@ mod shared_denominator_tests {
                 .is_some()
         );
         assert!(RationalSeries::validate_spectators(&input, epsilon).is_none());
-        assert!(RationalSeries::new(&input, epsilon).is_none());
+        assert!(RationalPart::new(&input, epsilon).is_none());
+        // The split takes each inverse coordinate as its own part: no common
+        // denominator is cleared, and the series is the input itself.
+        let prepared = RationalSeries::new(&input, epsilon).expect("one part per coordinate");
+        assert_eq!(prepared.valuation(), Some(0));
+        let actual = prepared.series(2).unwrap().to_atom(epsilon);
+        assert!((actual - &input).expand().is_zero());
     }
 
     #[test]
