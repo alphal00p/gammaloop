@@ -558,7 +558,16 @@ fn master_term(
     monomial: &Atom,
     order: i64,
 ) -> (Option<Laurent>, super::SeriesCounts) {
-    let epsilon = vk_symbol!("ε");
+    master_term_in(coefficient, monomial, vk_symbol!("ε"), order)
+}
+
+/// [`master_term`] in the caller's ε.
+fn master_term_in(
+    coefficient: &Atom,
+    monomial: &Atom,
+    epsilon: Symbol,
+    order: i64,
+) -> (Option<Laurent>, super::SeriesCounts) {
     let mut counts = super::SeriesCounts::default();
     let term = super::monomial_term(
         &Atom::one(),
@@ -602,6 +611,16 @@ fn q_l4_1621_master_monomial_takes_the_exact_series_at_depth_4_and_7() {
 
 /// [`master_term`] through the generic series (the reference route).
 fn generic_master_term(coefficient: &Atom, monomial: &Atom, order: i64) -> Option<Laurent> {
+    generic_master_term_in(coefficient, monomial, vk_symbol!("ε"), order)
+}
+
+/// [`generic_master_term`] in the caller's ε.
+fn generic_master_term_in(
+    coefficient: &Atom,
+    monomial: &Atom,
+    epsilon: Symbol,
+    order: i64,
+) -> Option<Laurent> {
     struct Reset;
     impl Drop for Reset {
         fn drop(&mut self) {
@@ -610,7 +629,7 @@ fn generic_master_term(coefficient: &Atom, monomial: &Atom, order: i64) -> Optio
     }
     super::FORCE_GENERIC_SERIES.with(|force| force.set(true));
     let _reset = Reset;
-    let (term, counts) = master_term(coefficient, monomial, order);
+    let (term, counts) = master_term_in(coefficient, monomial, epsilon, order);
     assert_eq!(
         (counts.exact, counts.generic),
         (0, 1),
@@ -904,4 +923,300 @@ fn probe_stand_in_sizes() {
             );
         }
     }
+}
+
+// The spectator split of a large input (the depth-7 record of Q L4 entry
+// 1621, two-point row): the split checked the spectator coordinates and
+// denominators of the WHOLE input before splitting it, a node walk capped at
+// 2^20 visits. The recorded input (12.9 MB, 28,762 summands in 470 spectator
+// groups) exceeds that walk although every group passes it, so it took the
+// generic series. Every part runs the same check on its own expression.
+
+/// The master monomial of that record: `PGamma(4) PGamma(-2)² PGamma(-3) /
+/// (PGamma(1)² PGamma(2) PGamma(-1)² PGamma(-5))`.
+const Q_L4_1621_RECORD_MONOMIAL: [(i64, i64); 7] = [
+    (4, 1),
+    (-2, 2),
+    (-3, 1),
+    (1, -2),
+    (2, -1),
+    (-1, -2),
+    (-5, -1),
+];
+
+/// The order of the master term of that record (`order=5` at depth 7).
+const Q_L4_1621_RECORD_ORDER: i64 = 5;
+
+/// The ε-linear denominators `a + bε` of the summands of that record.
+const RECORD_DENOMINATORS: [(i64, i64); 6] = [(-1, 4), (-1, 5), (-2, 5), (-3, 5), (1, 2), (1, 1)];
+
+/// Visits of a node walk of `expression` that, like the spectator check of
+/// the exact series, does not enter variables and functions.
+fn spectator_walk_visits(expression: &Atom) -> usize {
+    let mut visits = 0;
+    expression.visitor(&mut |part| {
+        visits += 1;
+        !matches!(
+            part,
+            symbolica::atom::AtomView::Var(_) | symbolica::atom::AtomView::Fun(_)
+        )
+    });
+    visits
+}
+
+/// A factor shaped like that record: `groups` distinct spectator monomials
+/// (colour × ζ values × tensor × row power × flavour × the couplings
+/// `gs⁶ gs_minus²`), each with `per_group` summands `c ε^p / Π D_j` of
+/// distinct `(p, subset of RECORD_DENOMINATORS)`, `p` from -7 to 1, all times
+/// the record's outer factors `𝑖 ε³ / (16 π² (1 - 2ε))`.
+fn record_like_factor(groups: usize, per_group: usize, seed: u64) -> Atom {
+    assert!(per_group <= 9 * 64, "(p, subset) pairs repeat");
+    let e = Atom::var(vk_symbol!("ε"));
+    let mut rng = Lcg(seed);
+    let symbol = |name: &str| Atom::var(vk_symbol!(name));
+    let (i2r, ca, cr) = (symbol("I2R"), symbol("cA"), symbol("cR"));
+    let tensors = [symbol("transverse"), symbol("longitudinal")];
+    let row = symbol("row_line_power");
+    let flavour = symbol("skeleton_flavour_0");
+    let couplings = symbol("gs").pow(Atom::num(6)) * symbol("gs_minus").pow(Atom::num(2));
+    let mut keys = Vec::with_capacity(groups);
+    'keys: for (power, flavours) in [(1i64, 1i64), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2)] {
+        for tensor in &tensors {
+            for weight in 0..=9 {
+                for zeta in zeta_monomials(weight) {
+                    for a in 0..=3i64 {
+                        for b in 0..=3 - a {
+                            if keys.len() == groups {
+                                break 'keys;
+                            }
+                            keys.push(
+                                i2r.pow(Atom::num(a))
+                                    * ca.pow(Atom::num(b))
+                                    * cr.pow(Atom::num(3 - a - b))
+                                    * &zeta
+                                    * tensor
+                                    * row.pow(Atom::num(power))
+                                    * flavour.pow(Atom::num(flavours))
+                                    * &couplings,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(
+        keys.len(),
+        groups,
+        "not enough distinct spectator monomials"
+    );
+    let denominators = RECORD_DENOMINATORS.map(|(a, b)| Atom::num(a) + Atom::num(b) * &e);
+    let mut summands = Vec::with_capacity(groups * per_group);
+    for (g, key) in keys.iter().enumerate() {
+        for s in 0..per_group {
+            let p = (s % 9) as i64 - 7;
+            let subset = (7 * s + g) % 64;
+            let sign = if rng.below(2) == 0 { 1 } else { -1 };
+            let c =
+                Atom::num(sign * (1 + rng.below(97) as i64)) / Atom::num(1 + rng.below(30) as i64);
+            let mut summand = key * c * e.pow(Atom::num(p));
+            for (j, denominator) in denominators.iter().enumerate() {
+                if (subset >> j) & 1 == 1 {
+                    summand /= denominator;
+                }
+            }
+            summands.push(summand);
+        }
+    }
+    vk_parse!("𝑖/16*ε^3*𝜋^(-2)/(1-2*ε)").unwrap() * Atom::add_many(summands.iter())
+}
+
+/// The coefficient of `ε^power` in `series` (zero outside its terms).
+fn coefficient_at(series: &Laurent, power: i64) -> Atom {
+    usize::try_from(power - series.valuation)
+        .ok()
+        .and_then(|i| series.coefficients.get(i).cloned())
+        .unwrap_or(Atom::Zero)
+}
+
+/// The master term of `monomial` with `coefficient` takes the exact series,
+/// and equals the generic series coefficient by coefficient through
+/// `ε^order`.
+fn assert_exact_term_equals_generic(
+    coefficient: &Atom,
+    monomial: &Atom,
+    epsilon: Symbol,
+    order: i64,
+) {
+    let (exact, counts) = master_term_in(coefficient, monomial, epsilon, order);
+    assert_eq!(
+        (counts.exact, counts.generic),
+        (1, 0),
+        "order {order}: the rational factor took the generic series"
+    );
+    let generic = generic_master_term_in(coefficient, monomial, epsilon, order);
+    let (exact, generic) = (exact.expect("exact term"), generic.expect("generic term"));
+    assert_eq!(
+        exact.valuation, generic.valuation,
+        "order {order}: valuation"
+    );
+    assert!(exact.order() >= order && generic.order() >= order);
+    for power in exact.valuation..=order {
+        assert!(
+            (coefficient_at(&exact, power) - coefficient_at(&generic, power))
+                .expand()
+                .is_zero(),
+            "order {order}, ε^{power}: exact and generic differ"
+        );
+    }
+}
+
+/// Many spectator groups, each inside the 2^20-visit walk of the spectator
+/// check, the whole input beyond it (record-shaped: 470 groups × 64
+/// summands): the split checks each group on its own, so the master term of
+/// the record's monomial takes the exact series, equal to the generic series
+/// coefficient by coefficient through ε^7 (the record's depth-7 order is
+/// ε^5).
+#[test]
+fn spectator_groups_are_checked_per_group_not_as_one_whole_input() {
+    crate::Vakint::initialize_vakint_symbols();
+    let epsilon = vk_symbol!("ε");
+    let factor = record_like_factor(470, 64, 1621);
+    assert!(
+        spectator_walk_visits(&factor) > 1 << 20,
+        "the whole input must exceed the walk of the spectator check"
+    );
+    assert!(RationalSeries::validate_spectators(&factor, epsilon).is_none());
+    assert!(
+        RationalPart::new(&factor, epsilon).is_none(),
+        "one part admits the factor: the test does not exercise the split"
+    );
+    let monomial = gamma_tags(&Q_L4_1621_RECORD_MONOMIAL);
+    assert_exact_term_equals_generic(&factor, &monomial, epsilon, Q_L4_1621_RECORD_ORDER + 2);
+}
+
+/// One record of `VAKINT_SERIES_DECLINE_LOG`: the header `DECLINE phase=…
+/// order=… exact_plan=…`, then `monomial=…` and `expression=…` in canonical
+/// form.
+struct DeclinedSeries {
+    order: i64,
+    monomial: Atom,
+    expression: Atom,
+    epsilon: Symbol,
+}
+
+/// The first record of the file named by `VAKINT_SERIES_FIXTURE`, in the ε
+/// named by `VAKINT_SERIES_FIXTURE_EPSILON` (default `gammalooprs::ε`, the
+/// caller of the Q L4 1621 record).
+fn declined_series_fixture() -> DeclinedSeries {
+    let path = std::env::var("VAKINT_SERIES_FIXTURE")
+        .expect("VAKINT_SERIES_FIXTURE must name a record of VAKINT_SERIES_DECLINE_LOG");
+    let text = std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("{path}: {error}"));
+    let mut lines = text.lines();
+    let order = lines
+        .next()
+        .and_then(|header| {
+            header
+                .split_whitespace()
+                .find_map(|field| field.strip_prefix("order="))
+        })
+        .and_then(|order| order.parse().ok())
+        .expect("a header with order=");
+    let parse = |text: &str| {
+        Atom::parse(
+            text,
+            "vakint",
+            symbolica::parser::ParseSettings::symbolica(),
+        )
+        .unwrap()
+    };
+    let mut field = |name: &str| {
+        parse(
+            lines
+                .next()
+                .and_then(|line| line.strip_prefix(name))
+                .unwrap_or_else(|| panic!("a line {name}…")),
+        )
+    };
+    let monomial = field("monomial=");
+    let expression = field("expression=");
+    let epsilon = std::env::var("VAKINT_SERIES_FIXTURE_EPSILON")
+        .unwrap_or_else(|_| "gammalooprs::ε".to_owned());
+    DeclinedSeries {
+        order,
+        monomial,
+        expression,
+        epsilon: parse(&epsilon).get_symbol().unwrap(),
+    }
+}
+
+/// The recorded input of a declined exact series (ignored: the record is not
+/// in the repository; `VAKINT_SERIES_FIXTURE` names it, e.g. the depth-7
+/// record of Q L4 entry 1621, 12.9 MB, sha256 5f9eee5e540eb465…): its master
+/// term takes the exact series at the recorded order, equal to the generic
+/// series coefficient by coefficient.
+#[test]
+#[ignore]
+fn a_recorded_declined_input_takes_the_exact_series() {
+    crate::Vakint::initialize_vakint_symbols();
+    let record = declined_series_fixture();
+    println!(
+        "FIXTURE order {} bytes {} spectator walk {} visits",
+        record.order,
+        record.expression.as_view().get_byte_size(),
+        spectator_walk_visits(&record.expression)
+    );
+    assert_exact_term_equals_generic(
+        &record.expression,
+        &record.monomial,
+        record.epsilon,
+        record.order,
+    );
+}
+
+/// Timing of one route on the record of `VAKINT_SERIES_FIXTURE` (ignored;
+/// run it alone with `--nocapture` under `time -v` for the peak memory):
+/// `VAKINT_SERIES_ROUTE` = `exact`, `generic`, or `parse` (reading the record
+/// only, the baseline of the other two).
+#[test]
+#[ignore]
+fn timing_a_recorded_declined_input() {
+    crate::Vakint::initialize_vakint_symbols();
+    let started = std::time::Instant::now();
+    let record = declined_series_fixture();
+    let parse_s = started.elapsed().as_secs_f64();
+    let route = std::env::var("VAKINT_SERIES_ROUTE").unwrap_or_else(|_| "exact".to_owned());
+    let started = std::time::Instant::now();
+    let term = match route.as_str() {
+        "parse" => None,
+        "exact" => {
+            let (term, counts) = master_term_in(
+                &record.expression,
+                &record.monomial,
+                record.epsilon,
+                record.order,
+            );
+            assert_eq!(
+                (counts.exact, counts.generic),
+                (1, 0),
+                "the exact series was declined"
+            );
+            term
+        }
+        "generic" => generic_master_term_in(
+            &record.expression,
+            &record.monomial,
+            record.epsilon,
+            record.order,
+        ),
+        other => panic!("VAKINT_SERIES_ROUTE {other}: exact, generic or parse"),
+    };
+    println!(
+        "TIMING route {route} order {} parse_s {parse_s:.3} route_s {:.3} valuation {:?} bytes {:?}",
+        record.order,
+        started.elapsed().as_secs_f64(),
+        term.as_ref().map(|t| t.valuation),
+        term.as_ref()
+            .map(|t| t.to_atom(record.epsilon).as_view().get_byte_size())
+    );
 }
