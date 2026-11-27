@@ -485,9 +485,13 @@ impl UnivariateScan {
 /// one [`RationalPart`], or — when the whole input exceeds the part's support
 /// bound (spectator monomials × numerator degree, [`MAX_SUPPORT`]) — one part
 /// per spectator monomial ([`Self::grouped`]), the series being the sum of the
-/// parts' series.
+/// parts' series. A whole part whose SERIES exceeds its work bound
+/// (`length² × support > MAX_WORK`, which grows with the requested order) is
+/// split the same way at that point ([`Self::series`]).
 pub(super) struct RationalSeries {
     parts: Vec<RationalPart>,
+    /// The input of a single whole part, kept for that split.
+    whole: Option<(Atom, Symbol)>,
 }
 
 /// Groups of a split input at most (one per distinct spectator monomial).
@@ -501,7 +505,17 @@ impl RationalSeries {
 
     pub(super) fn new(expression: &Atom, epsilon: Symbol) -> Option<Self> {
         match RationalPart::new(expression, epsilon) {
-            Some(part) => Some(Self { parts: vec![part] }),
+            Some(part) => {
+                // kept only when some order within MAX_SERIES can exceed the
+                // part's work bound
+                let whole = part
+                    .may_exceed_work()
+                    .then(|| (expression.clone(), epsilon));
+                Some(Self {
+                    parts: vec![part],
+                    whole,
+                })
+            }
             None => Self::grouped(expression, epsilon),
         }
     }
@@ -522,8 +536,9 @@ impl RationalSeries {
             AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
             view => vec![view],
         };
-        let (phase, rest): (Vec<_>, Vec<_>) =
-            factors.into_iter().partition(|factor| matches!(factor, AtomView::Num(_)));
+        let (phase, rest): (Vec<_>, Vec<_>) = factors
+            .into_iter()
+            .partition(|factor| matches!(factor, AtomView::Num(_)));
         let phase = Atom::mul_many(phase);
         let expanded = Atom::mul_many(rest).expand();
         let summands = match expanded.as_view() {
@@ -559,10 +574,13 @@ impl RationalSeries {
         let parts = groups
             .into_iter()
             .map(|(key, coefficients)| {
-                RationalPart::new(&(&phase * &key * Atom::add_many(coefficients.iter())), epsilon)
+                RationalPart::new(
+                    &(&phase * &key * Atom::add_many(coefficients.iter())),
+                    epsilon,
+                )
             })
             .collect::<Option<Vec<_>>>()?;
-        Some(Self { parts })
+        Some(Self { parts, whole: None })
     }
 
     pub(super) fn valuation(&self) -> Option<i64> {
@@ -577,24 +595,66 @@ impl RationalSeries {
             });
         };
         if let [part] = self.parts.as_slice() {
-            return part.series(order);
+            return part
+                .series(order)
+                .or_else(|| self.split_series(order, valuation));
+        }
+        Self::sum_series(&self.parts, order, valuation)
+    }
+
+    /// The series of a whole part beyond its work bound, from the same input
+    /// split per spectator monomial, returned with the whole part's valuation
+    /// (the one its caller already used): the split's valuation is a lower
+    /// bound of it, and every coefficient below it must be zero (structurally
+    /// or by a proof, as in the whole part) or the split is not used.
+    fn split_series(&self, order: i64, valuation: i64) -> Option<Laurent> {
+        let (expression, epsilon) = self.whole.as_ref()?;
+        let split = Self::grouped(expression, *epsilon)?;
+        let series = split.series(order)?;
+        let mut coefficients = std::collections::VecDeque::from(series.coefficients);
+        let mut at = series.valuation;
+        while at < valuation {
+            match coefficients.pop_front() {
+                Some(c) if !c.is_zero() && !c.check_zero().is_true() => return None,
+                _ => at += 1,
+            }
+        }
+        while at > valuation {
+            coefficients.push_front(Atom::Zero);
+            at -= 1;
         }
         let length = usize::try_from(order.checked_sub(valuation)?.checked_add(1)?.max(0)).ok()?;
-        let mut coefficients = vec![Atom::Zero; length];
-        for part in &self.parts {
+        coefficients.truncate(length);
+        Some(Laurent {
+            valuation,
+            coefficients: coefficients.into(),
+        })
+    }
+
+    /// The sum of the parts' series through `ε^order`, from `ε^valuation`.
+    fn sum_series(parts: &[RationalPart], order: i64, valuation: i64) -> Option<Laurent> {
+        let length = usize::try_from(order.checked_sub(valuation)?.checked_add(1)?.max(0)).ok()?;
+        // one sum per order, built once (repeated binary additions would
+        // renormalise a growing sum for every part)
+        let mut terms: Vec<Vec<Atom>> = vec![Vec::new(); length];
+        for part in parts {
             let series = part.series(order)?;
-            for (i, coefficient) in series.coefficients.iter().enumerate() {
+            for (i, coefficient) in series.coefficients.into_iter().enumerate() {
                 let at = series.valuation + i as i64 - valuation;
                 if let Ok(at) = usize::try_from(at)
                     && at < length
+                    && !coefficient.is_zero()
                 {
-                    coefficients[at] = &coefficients[at] + coefficient;
+                    terms[at].push(coefficient);
                 }
             }
         }
         Some(Laurent {
             valuation,
-            coefficients: coefficients.into_iter().map(|c| c.expand()).collect(),
+            coefficients: terms
+                .into_iter()
+                .map(|terms| Atom::add_many(terms.iter()).expand())
+                .collect(),
         })
     }
 }
@@ -775,6 +835,17 @@ impl RationalPart {
         self.valuation
     }
 
+    /// The numerator terms, the support of the work bound of [`Self::series`].
+    fn support(&self) -> usize {
+        self.numerator.iter().map(|c| c.nterms()).sum()
+    }
+
+    /// Whether the series through some order of length at most `MAX_SERIES`
+    /// exceeds the work bound.
+    fn may_exceed_work(&self) -> bool {
+        self.support().saturating_mul(MAX_SERIES * MAX_SERIES) > MAX_WORK
+    }
+
     pub(super) fn series(&self, order: i64) -> Option<Laurent> {
         let Some(valuation) = self.valuation else {
             return Some(Laurent {
@@ -783,7 +854,7 @@ impl RationalPart {
             });
         };
         let length = usize::try_from(order.checked_sub(valuation)?.checked_add(1)?.max(0)).ok()?;
-        let support = self.numerator.iter().map(|c| c.nterms()).sum::<usize>();
+        let support = self.support();
         if length > MAX_SERIES || length.checked_mul(length)?.checked_mul(support)? > MAX_WORK {
             return None;
         }
@@ -1040,7 +1111,10 @@ mod decline_probe {
         let expression = symbolica::try_parse!(&line["expression=".len()..]).unwrap();
         let epsilon = symbolica::symbol!("gammalooprs::ε");
         let mut nodes = 0;
-        eprintln!("PROBE scan: {}", scan(expression.as_view(), epsilon, &mut nodes, 0).is_some());
+        eprintln!(
+            "PROBE scan: {}",
+            scan(expression.as_view(), epsilon, &mut nodes, 0).is_some()
+        );
         eprintln!("PROBE scan nodes {nodes}");
         let mut univariate = UnivariateScan::new(epsilon);
         let shape = univariate.scan(expression.as_view(), 0);
@@ -1085,8 +1159,12 @@ mod decline_probe {
                                 None => {
                                     eprintln!(
                                         "PROBE  add declined at term {i}: acc support {} numdeg {} dendeg {}; term support {} numdeg {} dendeg {}",
-                                        a.spectator_support, a.numerator_degree, a.denominator.degree(0),
-                                        t.spectator_support, t.numerator_degree, t.denominator.degree(0)
+                                        a.spectator_support,
+                                        a.numerator_degree,
+                                        a.denominator.degree(0),
+                                        t.spectator_support,
+                                        t.numerator_degree,
+                                        t.denominator.degree(0)
                                     );
                                     break;
                                 }
@@ -1096,6 +1174,9 @@ mod decline_probe {
                 }
             }
         }
-        eprintln!("PROBE validate: {:?}", RationalSeries::validate_spectators(&expression, epsilon).is_some());
+        eprintln!(
+            "PROBE validate: {:?}",
+            RationalSeries::validate_spectators(&expression, epsilon).is_some()
+        );
     }
 }

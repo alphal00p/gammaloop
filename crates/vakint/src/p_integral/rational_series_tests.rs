@@ -1,4 +1,7 @@
-use super::{Laurent, rational_series::{RationalPart, RationalSeries}};
+use super::{
+    Laurent,
+    rational_series::{RationalPart, RationalSeries},
+};
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 use symbolica::atom::{Atom, AtomCore, Symbol};
 use symbolica::domains::rational::Rational;
@@ -385,7 +388,7 @@ fn many_spectator_monomials_are_expanded_per_monomial() {
     crate::Vakint::initialize_vakint_symbols();
     let epsilon = vk_symbol!("ε");
     let e = Atom::var(epsilon);
-    let (a, b) = (Atom::var(vk_symbol!("a")), Atom::var(vk_symbol!("b")));
+    let (a, b) = (vk_parse!("a").unwrap(), vk_parse!("b").unwrap());
     let pi2 = vk_parse!("𝜋^(-2)").unwrap();
     let terms = (0..1100i64)
         .map(|i| {
@@ -418,6 +421,7 @@ fn many_spectator_monomials_are_expanded_per_monomial() {
     }));
     assert!((actual - expected).expand().is_zero());
 }
+
 // Depth-dependent declines of the exact plan (Q L4 entry 1621 at depth 7).
 //
 // The declined input of that entry is not readable here, so the factors
@@ -513,7 +517,8 @@ fn r_star_like_factor(depth: i64, structures: usize, seed: u64) -> Atom {
     let mut colours = Vec::new();
     for a in 0..=3i64 {
         for b in 0..=3 - a {
-            colours.push(ca.pow(Atom::num(a)) * cf.pow(Atom::num(b)) * nf.pow(Atom::num(3 - a - b)));
+            colours
+                .push(ca.pow(Atom::num(a)) * cf.pow(Atom::num(b)) * nf.pow(Atom::num(3 - a - b)));
         }
     }
     let mut base = Vec::new();
@@ -592,5 +597,311 @@ fn q_l4_1621_master_monomial_takes_the_exact_series_at_depth_4_and_7() {
             (1, 0),
             "depth {depth}: the rational factor took the generic series"
         );
+    }
+}
+
+/// [`master_term`] through the generic series (the reference route).
+fn generic_master_term(coefficient: &Atom, monomial: &Atom, order: i64) -> Option<Laurent> {
+    struct Reset;
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            super::FORCE_GENERIC_SERIES.with(|force| force.set(false));
+        }
+    }
+    super::FORCE_GENERIC_SERIES.with(|force| force.set(true));
+    let _reset = Reset;
+    let (term, counts) = master_term(coefficient, monomial, order);
+    assert_eq!(
+        (counts.exact, counts.generic),
+        (0, 1),
+        "the reference was not generic"
+    );
+    term
+}
+
+/// Master monomials of four-loop terms: the one of Q L4 entry 1621, other
+/// Gamma-tag products, and products with `PG(x1, x2)` (whose Γ form adds
+/// rational ε factors to the term's rational part).
+fn four_loop_master_monomials() -> Vec<Atom> {
+    let tags: [&[(i64, i64)]; 16] = [
+        &Q_L4_1621_MONOMIAL,
+        &[(-2, -4), (-1, 8), (1, 4)],
+        &[(-2, -3), (-1, 6), (1, 3)],
+        &[(3, 1), (-3, 1), (-1, -2)],
+        &[(2, 1), (-2, 2), (1, -2), (-1, -1)],
+        &[(4, 1), (-4, -1), (-2, 2), (1, -2)],
+        &[(-3, 2), (1, -1), (-1, -1), (3, 1)],
+        &[(5, -1), (-2, 3), (2, 1)],
+        &[(1, -4)],
+        &[(-1, 4), (-2, -2)],
+        &[(3, 2), (-2, -1), (-1, -2), (1, -2)],
+        &[(-4, 1), (2, -1), (-2, 1)],
+        &[(2, 2), (-1, -3)],
+        &[(-5, 1), (5, -1), (1, 1), (-1, -1)],
+        &[(3, -1), (-2, 4), (1, -3)],
+        &[(-3, -1), (-1, 3), (4, 1), (-2, -2)],
+    ];
+    let pg = |x1: i64, x2: i64| super::super::pg_symbol().call_args([Atom::num(x1), Atom::num(x2)]);
+    let mut monomials = tags.iter().map(|t| gamma_tags(t)).collect::<Vec<_>>();
+    monomials.push(pg(1, 1) * gamma_tags(&[(-2, -1), (-1, 2)]));
+    monomials.push(pg(0, 1) * pg(1, 1));
+    monomials.push(pg(1, 2) * gamma_tags(&Q_L4_1621_MONOMIAL));
+    monomials.push(pg(2, 2) * gamma_tags(&[(1, -2)]));
+    monomials
+}
+
+/// For R*-shaped factors that the whole exact part declines (the family of
+/// Q L4 entry 1621), the split exact route equals the generic series through
+/// the requested order on 20 master monomials (depths 7 to 9), and the
+/// coefficients are identical atoms.
+#[test]
+fn split_exact_series_equals_the_generic_series_on_twenty_master_monomials() {
+    crate::Vakint::initialize_vakint_symbols();
+    let epsilon = vk_symbol!("ε");
+    let monomials = four_loop_master_monomials();
+    assert_eq!(monomials.len(), 20);
+    for (index, monomial) in monomials.iter().enumerate() {
+        let depth = 7 + (index % 3) as i64;
+        let coefficient = r_star_like_factor(depth, STAND_IN_STRUCTURES, 1621 + index as u64);
+        assert!(
+            RationalPart::new(&coefficient, epsilon).is_none(),
+            "monomial {index}: the whole part admits the factor; the test does not exercise the split"
+        );
+        let order = four_loop_order(depth);
+        let (exact, counts) = master_term(&coefficient, monomial, order);
+        assert_eq!(
+            (counts.exact, counts.generic),
+            (1, 0),
+            "monomial {index}: {monomial}"
+        );
+        let generic = generic_master_term(&coefficient, monomial, order);
+        let (exact, generic) = (exact.unwrap(), generic.unwrap());
+        assert_eq!(exact.valuation, generic.valuation, "monomial {index}");
+        assert_eq!(
+            exact.coefficients.len(),
+            generic.coefficients.len(),
+            "monomial {index}"
+        );
+        for (k, (a, b)) in exact
+            .coefficients
+            .iter()
+            .zip(&generic.coefficients)
+            .enumerate()
+        {
+            assert!(
+                (a - b).expand().is_zero(),
+                "monomial {index} ({monomial}), ε^{}: exact and generic differ",
+                exact.valuation + k as i64
+            );
+            assert_eq!(
+                a,
+                b,
+                "monomial {index}, ε^{}: equal values, different atoms",
+                exact.valuation + k as i64
+            );
+        }
+    }
+}
+
+/// `Σ_i m_i/(1 + k_i ε)` for `n` spectator monomials `m_i = a^(i%40) b^(i/40)`
+/// over the denominators `1 + kε`, `k = 1..=denominators`, and its closed form
+/// `Σ_i m_i Σ_(j<=order) (-k_i ε)^j`.
+fn geometric_family(n: i64, denominators: i64, order: i64) -> (Atom, Atom) {
+    let e = Atom::var(vk_symbol!("ε"));
+    let (a, b) = (vk_parse!("a").unwrap(), vk_parse!("b").unwrap());
+    let terms = (0..n)
+        .map(|i| {
+            (
+                a.pow(Atom::num(i % 40)) * b.pow(Atom::num(i / 40)),
+                i % denominators + 1,
+            )
+        })
+        .collect::<Vec<_>>();
+    let input = Atom::add_many(
+        terms
+            .iter()
+            .map(|(m, k)| m / (Atom::one() + Atom::num(*k) * &e))
+            .collect::<Vec<_>>()
+            .iter(),
+    );
+    let closed = Atom::add_many(
+        terms
+            .iter()
+            .map(|(m, k)| {
+                m * Atom::add_many(
+                    (0..=order)
+                        .map(|j| (Atom::num(-*k) * &e).pow(Atom::num(j)))
+                        .collect::<Vec<_>>()
+                        .iter(),
+                )
+            })
+            .collect::<Vec<_>>()
+            .iter(),
+    );
+    (input, closed.expand())
+}
+
+/// One whole part admits the input but its series at a deep order exceeds
+/// the work bound (`length² × support`, the depth-dependent decline with an
+/// exact plan available): the series is then taken per spectator monomial,
+/// equal to the closed form; a shallow order keeps the whole part's series.
+#[test]
+fn a_whole_part_beyond_its_work_bound_is_split_per_spectator_monomial() {
+    crate::Vakint::initialize_vakint_symbols();
+    let epsilon = vk_symbol!("ε");
+    let deep = 20;
+    let (input, closed) = geometric_family(1000, 3, deep);
+    let whole = RationalPart::new(&input, epsilon).expect("one part admits the input");
+    assert!(
+        whole.series(deep).is_none(),
+        "the whole series must exceed its work bound"
+    );
+    let prepared = RationalSeries::new(&input, epsilon).unwrap();
+    assert_eq!(prepared.valuation(), Some(0));
+    let actual = prepared
+        .series(deep)
+        .expect("split series")
+        .to_atom(epsilon);
+    assert!((actual - &closed).expand().is_zero());
+    let shallow = 2;
+    let whole_series = whole.series(shallow).unwrap();
+    let series = prepared.series(shallow).unwrap();
+    assert_eq!(series.valuation, whole_series.valuation);
+    assert_eq!(series.coefficients, whole_series.coefficients);
+}
+
+/// The split of a whole part keeps the whole part's (semantic) valuation:
+/// a leading coefficient that only a proof makes zero (`sin² + cos² - 1`,
+/// spread over three spectator monomials) is dropped, as the whole part does.
+#[test]
+fn a_split_whole_part_keeps_its_semantic_valuation() {
+    crate::Vakint::initialize_vakint_symbols();
+    let epsilon = vk_symbol!("ε");
+    let e = Atom::var(epsilon);
+    let deep = 20;
+    let (family, closed) = geometric_family(1000, 3, deep);
+    let identity = vk_parse!("sin(x)^2+cos(x)^2-1").unwrap();
+    let input = (&identity * e.pow(Atom::num(-3)) + family).expand();
+    let whole = RationalPart::new(&input, epsilon).expect("one part admits the input");
+    assert_eq!(whole.valuation(), Some(0));
+    assert!(whole.series(deep).is_none());
+    let prepared = RationalSeries::new(&input, epsilon).unwrap();
+    assert_eq!(prepared.valuation(), Some(0));
+    let series = prepared.series(deep).unwrap();
+    assert_eq!(series.valuation, 0);
+    assert_eq!(series.coefficients.len(), deep as usize + 1);
+    assert!((series.to_atom(epsilon) - &closed).expand().is_zero());
+}
+
+/// Timing of both routes on the Q L4 1621 master monomial (ignored; run
+/// alone, on one pinned core, with `--nocapture`): one line per depth with
+/// the stand-in's size and the seconds of the whole exact part (if it admits
+/// the factor), the split exact plan, the production term (exact) and the
+/// generic term.
+#[test]
+#[ignore]
+fn timing_q_l4_1621_master_monomial_both_routes() {
+    crate::Vakint::initialize_vakint_symbols();
+    let epsilon = vk_symbol!("ε");
+    let monomial = gamma_tags(&Q_L4_1621_MONOMIAL);
+    let depths = std::env::var("VK_SERIES_DEPTHS").unwrap_or_else(|_| "4,7".to_owned());
+    let structures = std::env::var("VK_SERIES_STRUCTURES")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(STAND_IN_STRUCTURES);
+    println!(
+        "TIMING depth\torder\tsummands\tbytes\twhole_admits\twhole_s\tsplit_s\tterm_exact_s\tterm_generic_s\tequal"
+    );
+    for depth in depths.split(',').map(|d| d.trim().parse::<i64>().unwrap()) {
+        let coefficient = r_star_like_factor(depth, structures, 1621);
+        let summands = match coefficient.as_view() {
+            symbolica::atom::AtomView::Add(sum) => sum.get_nargs(),
+            _ => 1,
+        };
+        let order = four_loop_order(depth);
+        let started = std::time::Instant::now();
+        let whole = RationalPart::new(&coefficient, epsilon);
+        let whole_admits = whole.is_some();
+        if let Some(whole) = &whole {
+            let _ = whole.series(order);
+        }
+        let whole_s = started.elapsed().as_secs_f64();
+        let started = std::time::Instant::now();
+        let split = RationalSeries::new(&coefficient, epsilon).map(|s| s.series(order));
+        let split_s = started.elapsed().as_secs_f64();
+        assert!(split.is_some_and(|s| s.is_some()));
+        let started = std::time::Instant::now();
+        let (exact, counts) = master_term(&coefficient, &monomial, order);
+        let term_exact_s = started.elapsed().as_secs_f64();
+        assert_eq!((counts.exact, counts.generic), (1, 0));
+        let started = std::time::Instant::now();
+        let generic = generic_master_term(&coefficient, &monomial, order);
+        let term_generic_s = started.elapsed().as_secs_f64();
+        let equal = (exact.unwrap().to_atom(epsilon) - generic.unwrap().to_atom(epsilon))
+            .expand()
+            .is_zero();
+        println!(
+            "TIMING {depth}\t{order}\t{summands}\t{}\t{whole_admits}\t{whole_s:.3}\t{split_s:.3}\t{term_exact_s:.3}\t{term_generic_s:.3}\t{equal}",
+            coefficient.as_view().get_byte_size()
+        );
+    }
+}
+
+/// Sizes of the stand-in factors (ignored; `--nocapture`): summands, distinct
+/// spectator monomials, whether one whole exact part admits the factor and
+/// whether the exact plan (whole or split) does, for `VK_SERIES_STRUCTURES`
+/// (comma list) and depths 4 to 9.
+#[test]
+#[ignore]
+fn probe_stand_in_sizes() {
+    crate::Vakint::initialize_vakint_symbols();
+    let epsilon = vk_symbol!("ε");
+    let structures =
+        std::env::var("VK_SERIES_STRUCTURES").unwrap_or_else(|_| "20,40,80".to_owned());
+    println!("SIZE structures\tdepth\tsummands\tkeys\tbytes\twhole\tplan\tplan_s");
+    for structures in structures
+        .split(',')
+        .map(|s| s.trim().parse::<usize>().unwrap())
+    {
+        for depth in 4..=9 {
+            let factor = r_star_like_factor(depth, structures, 1621);
+            let summands = match factor.as_view() {
+                symbolica::atom::AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
+                view => vec![view],
+            };
+            let keys = summands
+                .iter()
+                .map(|summand| {
+                    let factors = match summand {
+                        symbolica::atom::AtomView::Mul(product) => {
+                            product.iter().collect::<Vec<_>>()
+                        }
+                        view => vec![*view],
+                    };
+                    Atom::mul_many(
+                        factors
+                            .into_iter()
+                            .filter(|f| {
+                                !matches!(f, symbolica::atom::AtomView::Num(_))
+                                    && !f.contains_symbol(epsilon)
+                            })
+                            .collect::<Vec<_>>()
+                            .iter(),
+                    )
+                })
+                .collect::<std::collections::HashSet<_>>()
+                .len();
+            let whole = RationalPart::new(&factor, epsilon).is_some();
+            let started = std::time::Instant::now();
+            let plan = RationalSeries::new(&factor, epsilon)
+                .and_then(|p| p.series(four_loop_order(depth)))
+                .is_some();
+            println!(
+                "SIZE {structures}\t{depth}\t{}\t{keys}\t{}\t{whole}\t{plan}\t{:.3}",
+                summands.len(),
+                factor.as_view().get_byte_size(),
+                started.elapsed().as_secs_f64()
+            );
+        }
     }
 }

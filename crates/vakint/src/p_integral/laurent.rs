@@ -470,7 +470,11 @@ fn trace_generic<T>(
     // diagnostics: the declined input to a file named by the caller
     if let Some(path) = std::env::var_os("VAKINT_SERIES_DECLINE_LOG") {
         use std::io::Write;
-        if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
             let _ = writeln!(
                 file,
                 "DECLINE phase={phase} order={order} exact_plan={exact_plan_available}\nmonomial={}\nexpression={}",
@@ -608,6 +612,22 @@ pub(crate) fn tail_in_range_terms() -> u64 {
     TAIL_IN_RANGE_TERMS.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Tests only: every rational factor of [`monomial_term`] takes the
+    /// generic series, the reference of the exact route.
+    static FORCE_GENERIC_SERIES: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The exact plan of a rational factor, `None` for the generic series.
+fn prepare_rational(rational: &Atom, epsilon: Symbol) -> Option<rational_series::RationalSeries> {
+    #[cfg(test)]
+    if FORCE_GENERIC_SERIES.with(std::cell::Cell::get) {
+        return None;
+    }
+    rational_series::RationalSeries::new(rational, epsilon)
+}
+
 /// The Laurent series through `ε^order` of `prefactor × coefficient ×
 /// monomial` for one master monomial of [`expand`], `None` when it is an
 /// exact zero or starts above `order`.
@@ -692,7 +712,7 @@ fn monomial_term(
     );
     let prepared_rational = {
         let _stage = crate::stage_timing::StageSpan::new("vakint.p_integral.rational_prepare");
-        rational_series::RationalSeries::new(&split.rational, epsilon)
+        prepare_rational(&split.rational, epsilon)
     };
     let rational_valuation = {
         let _stage = crate::stage_timing::StageSpan::new("vakint.p_integral.rational_valuation");
