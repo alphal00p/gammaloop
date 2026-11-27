@@ -53,8 +53,10 @@
 //!    through the deepest order both sides know, at most
 //!    `VAKINT_TEST_EPS_BUBBLES_MAX_ORDER` (default 6).
 //!
-//! Every test needs the one-to-five-loop package (r3) named by
-//! `VAKINT_TEST_P_LIBRARY_1_5`, and a vakint build whose RustRed compiles arity
+//! Every test is `#[ignore]`d: `just test_vakint` compiles this file but runs
+//! none of it. Each needs the one-to-five-loop package (r3) named by
+//! `VAKINT_TEST_P_LIBRARY_1_5` (a run without it fails naming the variable,
+//! `support/wh_fixtures.rs`), and a vakint build whose RustRed compiles arity
 //! 20 (feature `five-loop-p` with `RUSTRED_RUNTIME_ARITIES=1,...,16,20`). The
 //! package loads once per process (about 25 s, 7 GiB): run them together,
 //!
@@ -71,9 +73,15 @@
 //! `VAKINT_TEST_EPS_BUBBLES_ARITHMETIC=engine` (or `exact`) for every test.
 //! `VAKINT_TEST_EPS_BUBBLES_TABLE=<file>` appends one TSV row per comparison.
 
+#[path = "support/p_library4.rs"]
+mod p_library4;
+#[path = "support/p_rustred.rs"]
+mod p_rustred;
+#[path = "support/wh_fixtures.rs"]
+mod wh_fixtures;
+
 use std::collections::{BTreeMap, HashMap};
 use std::io::Write as _;
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
@@ -85,7 +93,6 @@ use rustred::propagator::presentation::Slot;
 use rustred::propagator::tag::GammaTag;
 use rustred::propagator::topology::{Fate, Normalised, PTopo, canonical, normalise};
 use rustred::reduction::{OrderedSchedulerOptions, OrderedWeightArithmetic, ReductionLimits};
-use rustred_app::propagator::{PLibraryOptions, PLibrarySource, load_p_library};
 use serde_json::Value;
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::domains::rational::Rational;
@@ -114,21 +121,12 @@ struct Fixture {
 fn fixture() -> &'static Fixture {
     static FIXTURE: OnceLock<Fixture> = OnceLock::new();
     FIXTURE.get_or_init(|| {
-        let directory = PathBuf::from(
-            std::env::var_os(PACKAGE).unwrap_or_else(|| panic!("{PACKAGE} names the 1-5 package")),
-        );
+        let directory = wh_fixtures::required_env(PACKAGE, "the 1-5 package (r3)");
         let started = Instant::now();
-        let library = load_p_library(
-            PLibrarySource::Directory(directory.clone()),
-            &PLibraryOptions {
-                verify_descent: false,
-            },
-        )
-        .unwrap_or_else(|error| panic!("{}: {error}", directory.display()));
+        let library = p_library4::load_p_library_directory(&directory);
         assert_eq!(*library.scope().end(), 5, "the 1-5 package");
         let text = std::fs::read_to_string(directory.join("p-master-catalogue.json")).unwrap();
-        let mut engine = Vakint::new().unwrap();
-        engine.inject_p_library(Arc::clone(&library)).unwrap();
+        let mut engine = p_rustred::rustred_p_engine(Arc::clone(&library));
         engine.set_p_master_catalogue(
             PMasterCatalogue::from_json("p-master-catalogue.json", &text).unwrap(),
         );
@@ -485,12 +483,13 @@ fn rank(rows: &[Vec<Rational>]) -> usize {
             continue;
         };
         m.swap(rank, pivot);
-        for r in 0..m.len() {
-            if r != rank && !m[r][col].is_zero() {
-                let f = &m[r][col] / &m[rank][col];
-                for c in 0..width {
-                    let sub = &f * &m[rank][c];
-                    m[r][c] -= &sub;
+        let pivot_row = m[rank].clone();
+        for (r, row) in m.iter_mut().enumerate() {
+            if r != rank && !row[col].is_zero() {
+                let f = &row[col] / &pivot_row[col];
+                for (x, p) in row.iter_mut().zip(&pivot_row) {
+                    let sub = &f * p;
+                    *x -= &sub;
                 }
             }
         }
@@ -516,12 +515,13 @@ fn inverse(columns: &[Vec<i64>]) -> Option<Vec<Vec<Rational>>> {
         for x in a[col].iter_mut() {
             *x = &*x / &p;
         }
-        for r in 0..n {
-            if r != col && !a[r][col].is_zero() {
-                let f = a[r][col].clone();
-                for k in 0..2 * n {
-                    let sub = &f * &a[col][k];
-                    a[r][k] -= &sub;
+        let pivot_row = a[col].clone();
+        for (r, row) in a.iter_mut().enumerate() {
+            if r != col && !row[col].is_zero() {
+                let f = row[col].clone();
+                for (x, p) in row.iter_mut().zip(&pivot_row) {
+                    let sub = &f * p;
+                    *x -= &sub;
                 }
             }
         }
@@ -614,11 +614,12 @@ fn determinant(columns: &[Vec<i64>]) -> i64 {
             det = -det;
         }
         det = &det * &a[col][col];
-        for r in col + 1..n {
-            let f = &a[r][col] / &a[col][col];
-            for c in col..n {
-                let sub = &f * &a[col][c];
-                a[r][c] -= &sub;
+        let pivot_row = a[col].clone();
+        for row in a.iter_mut().skip(col + 1) {
+            let f = &row[col] / &pivot_row[col];
+            for (x, p) in row.iter_mut().zip(&pivot_row).skip(col) {
+                let sub = &f * p;
+                *x -= &sub;
             }
         }
     }
