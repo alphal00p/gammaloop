@@ -499,10 +499,34 @@ const MAX_GROUPS: usize = 65_536;
 /// Most terms the split may multiply an input out into ([`expansion_bound`]).
 const MAX_EXPANSION: usize = MAX_WORK;
 
+/// Largest exponent of a sum that [`power_bound`] counts; a larger one is
+/// refused, whatever the number of its terms (their coefficients grow with it).
+const MAX_POWER: u32 = 64;
+
+/// The terms of `(t_1 + ... + t_k)^n` at most: one per multiset of `n` of the
+/// `k` terms, C(k + n - 1, n). Saturating.
+fn power_bound(k: usize, n: u32) -> usize {
+    if k <= 1 || n == 1 {
+        return k;
+    }
+    if n > MAX_POWER || k > u32::MAX as usize {
+        return usize::MAX;
+    }
+    let mut count: u128 = 1;
+    for i in 1..=u128::from(n) {
+        // C(k - 1 + i, i) from C(k - 2 + i, i - 1); the division is exact
+        count = count * (k as u128 - 1 + i) / i;
+        if count > usize::MAX as u128 {
+            return usize::MAX;
+        }
+    }
+    usize::try_from(count).unwrap_or(usize::MAX)
+}
+
 /// An upper bound on the number of terms `expand()` makes of `view`: a sum
 /// adds its terms' bounds, a product multiplies its factors' bounds, and a
-/// positive integer power multiplies its base's bound that many times. Other
-/// powers are left as they are by `expand()`. Saturating.
+/// positive integer power of a base takes [`power_bound`] of the base's
+/// bound. Other powers are left as they are by `expand()`. Saturating.
 fn expansion_bound(view: AtomView, depth: usize) -> usize {
     if depth > MAX_DEPTH {
         return usize::MAX;
@@ -517,8 +541,10 @@ fn expansion_bound(view: AtomView, depth: usize) -> usize {
         AtomView::Pow(power) => {
             let (base, exponent) = power.get_base_exp();
             match crate::get_integer_from_atom(exponent) {
-                Some(n) if n > 0 => expansion_bound(base, depth + 1)
-                    .saturating_pow(u32::try_from(n).unwrap_or(u32::MAX)),
+                Some(n) if n > 0 => power_bound(
+                    expansion_bound(base, depth + 1),
+                    u32::try_from(n).unwrap_or(u32::MAX),
+                ),
                 _ => 1,
             }
         }
@@ -577,7 +603,8 @@ impl RationalSeries {
         let phase = Atom::mul_many(phase);
         // `expand()` has no bound of its own: a product of many small sums
         // would be multiplied out before any check of a part runs. Bound its
-        // output first; a refused input takes the generic series.
+        // output first; a refused input is declined (vakint then takes the
+        // generic series, a strict caller refuses the row).
         let terms = rest.iter().fold(1usize, |total, factor| {
             total.saturating_mul(expansion_bound(*factor, 0))
         });
@@ -996,6 +1023,37 @@ mod shared_denominator_tests {
             + (&s2 + &two * &s1 + &four) * e.pow(2)
             + (&s3 + &two * &s2 + &four * &s1 + &eight) * e.pow(3);
         assert!((actual - expected).expand().is_zero());
+    }
+
+    /// A power of a sum is bounded by the multisets of its terms, not by
+    /// k^n: (1 - 2e)^6 counts 7, so a normalisation power on a large input
+    /// does not push it over the limit. The bound stays a bound.
+    #[test]
+    fn a_power_of_a_sum_is_bounded_by_its_multisets() {
+        crate::Vakint::initialize_vakint_symbols();
+        let e = Atom::var(vk_symbol!("ε"));
+        let head = vk_symbol!("coordinate_limit_spectator");
+        let binomial = Atom::one() - &e - &e;
+        let trinomial = head.call(0) + head.call(1) + head.call(2);
+        let cases = [
+            (binomial.pow(6), 7),
+            (trinomial.pow(10), 66),
+            (binomial.pow(3) * trinomial.pow(2), 24),
+            (head.call(0).pow(100), 1),
+        ];
+        for (atom, bound) in cases {
+            assert_eq!(expansion_bound(atom.as_view(), 0), bound, "{atom}");
+            let terms = match atom.expand().as_view() {
+                AtomView::Add(sum) => sum.iter().count(),
+                _ => 1,
+            };
+            assert!(terms <= bound, "{atom}: {terms} terms");
+        }
+        // beyond MAX_POWER a power of a sum is refused, whatever its size
+        assert_eq!(expansion_bound(binomial.pow(64).as_view(), 0), 65);
+        assert_eq!(expansion_bound(binomial.pow(65).as_view(), 0), usize::MAX);
+        assert_eq!(power_bound(usize::MAX, 2), usize::MAX);
+        assert_eq!(power_bound(3, 1), 3);
     }
 
     #[test]
