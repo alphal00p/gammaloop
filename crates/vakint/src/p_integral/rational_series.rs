@@ -496,6 +496,35 @@ pub(super) struct RationalSeries {
 
 /// Groups of a split input at most (one per distinct spectator monomial).
 const MAX_GROUPS: usize = 65_536;
+/// Most terms the split may multiply an input out into ([`expansion_bound`]).
+const MAX_EXPANSION: usize = MAX_WORK;
+
+/// An upper bound on the number of terms `expand()` makes of `view`: a sum
+/// adds its terms' bounds, a product multiplies its factors' bounds, and a
+/// positive integer power multiplies its base's bound that many times. Other
+/// powers are left as they are by `expand()`. Saturating.
+fn expansion_bound(view: AtomView, depth: usize) -> usize {
+    if depth > MAX_DEPTH {
+        return usize::MAX;
+    }
+    match view {
+        AtomView::Add(sum) => sum.iter().fold(0usize, |total, term| {
+            total.saturating_add(expansion_bound(term, depth + 1))
+        }),
+        AtomView::Mul(product) => product.iter().fold(1usize, |total, factor| {
+            total.saturating_mul(expansion_bound(factor, depth + 1))
+        }),
+        AtomView::Pow(power) => {
+            let (base, exponent) = power.get_base_exp();
+            match crate::get_integer_from_atom(exponent) {
+                Some(n) if n > 0 => expansion_bound(base, depth + 1)
+                    .saturating_pow(u32::try_from(n).unwrap_or(u32::MAX)),
+                _ => 1,
+            }
+        }
+        _ => 1,
+    }
+}
 
 impl RationalSeries {
     #[cfg(test)]
@@ -546,6 +575,15 @@ impl RationalSeries {
             .into_iter()
             .partition(|factor| matches!(factor, AtomView::Num(_)));
         let phase = Atom::mul_many(phase);
+        // `expand()` has no bound of its own: a product of many small sums
+        // would be multiplied out before any check of a part runs. Bound its
+        // output first; a refused input takes the generic series.
+        let terms = rest.iter().fold(1usize, |total, factor| {
+            total.saturating_mul(expansion_bound(*factor, 0))
+        });
+        if terms > MAX_EXPANSION {
+            return None;
+        }
         let expanded = Atom::mul_many(rest).expand();
         let summands = match expanded.as_view() {
             AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
@@ -917,6 +955,47 @@ mod shared_denominator_tests {
         assert_eq!(prepared.valuation(), Some(0));
         let actual = prepared.series(2).unwrap().to_atom(epsilon);
         assert!((actual - &input).expand().is_zero());
+    }
+
+    /// The split multiplies its input out before it checks any part, so a
+    /// product of many small sums is refused by a bound on that expansion
+    /// (it takes the generic series), while a small product is still split.
+    #[test]
+    fn a_product_of_many_small_sums_is_refused_before_it_is_expanded() {
+        crate::Vakint::initialize_vakint_symbols();
+        let epsilon = vk_symbol!("ε");
+        let e = Atom::var(epsilon);
+        // a spectator head that is already classified for the display table
+        let head = vk_symbol!("coordinate_limit_spectator");
+        let product = |factors: i64| {
+            Atom::mul_many((0..factors).map(|i| Atom::one() + head.call(i) * &e))
+                / (Atom::one() - &e - &e)
+        };
+        assert_eq!(expansion_bound(product(3).as_view(), 0), 8);
+        assert_eq!(expansion_bound(product(20).as_view(), 0), MAX_EXPANSION);
+        assert_eq!(expansion_bound(product(66).as_view(), 0), usize::MAX);
+        // 2^21 and 2^66 terms: refused without being multiplied out.
+        assert!(RationalSeries::new(&product(21), epsilon).is_none());
+        assert!(RationalSeries::new(&product(66), epsilon).is_none());
+        // 2^3 terms: admitted, and the series is the input's:
+        // (1 + s1 e + s2 e^2 + s3 e^3) (1 + 2e + 4e^2 + 8e^3 + ...) through e^3.
+        let actual = RationalSeries::new(&product(3), epsilon)
+            .expect("a small product is admitted")
+            .series(3)
+            .unwrap()
+            .to_atom(epsilon);
+        let x: Vec<Atom> = (0..3).map(|i| head.call(i)).collect();
+        let s1 = &x[0] + &x[1] + &x[2];
+        let s2 = &x[0] * &x[1] + &x[0] * &x[2] + &x[1] * &x[2];
+        let s3 = &x[0] * &x[1] * &x[2];
+        let two = Atom::one() + Atom::one();
+        let four = &two * &two;
+        let eight = &four * &two;
+        let expected = Atom::one()
+            + (&s1 + &two) * &e
+            + (&s2 + &two * &s1 + &four) * e.pow(2)
+            + (&s3 + &two * &s2 + &four * &s1 + &eight) * e.pow(3);
+        assert!((actual - expected).expand().is_zero());
     }
 
     #[test]
