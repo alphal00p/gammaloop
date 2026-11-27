@@ -29,6 +29,7 @@ use pyo3::Python;
 use pyo3::{Bound, PyResult};
 pub mod drawing;
 mod error;
+mod highlight;
 mod scene;
 mod snapshot;
 mod svg;
@@ -36,6 +37,9 @@ pub mod typst;
 pub mod typst_export;
 mod view;
 pub use error::PyErrExt;
+pub use highlight::{
+    extract_highlights, highlight_overlap, theme_svg, SelectedHighlight, ThemeFormat, ThemePaint,
+};
 pub use scene::register_scene_selectors;
 pub use snapshot::PyDiagramRender;
 pub use typst::{PyAuto as Auto, PyRenderSettings, PyRenderSettings as RenderSettings};
@@ -452,6 +456,7 @@ config = graph.RenderSettings(
                 round_cap: false,
             };
             let node = NodeDrawing {
+                highlight_ring: Vec::new(),
                 radius: 0.2,
                 label_padding: None,
                 label: None,
@@ -461,6 +466,7 @@ config = graph.RenderSettings(
                 details: Details::default(),
             };
             let scene = Scene {
+                highlights: Default::default(),
                 graph: serde_json::from_value(json!({
                     "nodes": [{"index": 0}, {"index": 1}],
                     "edges": [{"id": 0, "source": {"node": 0, "id": 0}, "sink": {"node": 1, "id": 1}}],
@@ -470,6 +476,7 @@ config = graph.RenderSettings(
                     node,
                 ],
                 edges: vec![EdgeDrawing {
+                    highlight_strokes: Vec::new(),
                     stroke,
                     pattern: None,
                     flow: None,

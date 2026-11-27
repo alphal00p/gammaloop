@@ -2,6 +2,7 @@
 //!
 //! [`svg_source`] produces a standalone document without a compiler;
 //! [`compile_sources`] shows how to explicitly compile an owned source project.
+use linnest::svg::Scene;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Component, Path};
@@ -117,7 +118,7 @@ fn compile(
 /// ```
 #[must_use]
 pub fn svg_source(svg: &str) -> String {
-    format!("#set page(width: auto, height: auto, margin: 0pt)\n#image(bytes({svg:?}))")
+    Scene::svg_typst_source(svg)
 }
 
 #[cfg(test)]

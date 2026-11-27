@@ -1,4 +1,5 @@
 //! CFF presentation owns only inspection state; native trees and graph IDs own the data.
+use linnest::svg::SlotPaint;
 use std::collections::BTreeMap;
 
 use linnet_render_py::PyDiagramView;
@@ -99,6 +100,10 @@ impl PyCffRepresentation {
             math(symbols::on_shell().call(symbol!("feynkit_display::e")))?,
         );
         Ok(json!({
+            "slot_colors": (1..=surfaces.len()).map(|slot| {
+                let color = SlotPaint::new(slot);
+                format!("light-dark({}, {})", color.light, color.dark)
+            }).collect::<Vec<_>>(),
             "generalized": self.generalized,
             "normalization": self.normalization.to_canonical_string(),
             "normalization_html": if self.generalized { math(self.normalization.clone())? } else { String::new() },

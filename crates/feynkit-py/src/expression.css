@@ -5,15 +5,6 @@
   --hs-rule: light-dark(#e1e6e8, #3c4247);
   --hs-active: light-dark(#14786e, #83d5c7);
   --hs-tint: light-dark(#e1f1ec, #28463f);
-  /* Tol qualitative hues (https://sronpersonalpages.nl/~pault/), with lighter
-     dark-mode variants. Reserve gray for the graph rather than a surface. */
-  --hs-1: light-dark(#0077bb, #77bbee);
-  --hs-2: light-dark(#ee7733, #ffaa66);
-  --hs-3: light-dark(#009988, #44ccbb);
-  --hs-4: light-dark(#ee3377, #ff77aa);
-  --hs-5: light-dark(#33bbee, #66ddff);
-  --hs-6: light-dark(#cc3311, #ff8866);
-  --hs-7: light-dark(#aa3377, #cc88cc);
   font:
     13px/1.5 ui-sans-serif,
     system-ui,

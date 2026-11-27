@@ -1603,18 +1603,70 @@ impl PyGraph {
     }
 
     /// Snapshot a drawing, using native SVG geometry for ordinary graph settings.
-    #[pyo3(signature = (*, config=None))]
+    ///
+    /// Examples
+    /// --------
+    /// >>> view = graph.render(highlight=[outer, inner])
+    ///
+    /// Parameters
+    /// ----------
+    /// config : RenderSettings or None, optional
+    ///     Layout and drawing settings.
+    /// highlight : Subgraph or pair or sequence, optional
+    ///     A selection, a (selection, style) pair, or a sequence of either.
+    ///     Select both halves of internal edges. In FeynKit, selecting either
+    ///     half highlights the whole edge. Defaults depend on the count of
+    ///     unstyled entries regardless of where styled pairs appear. One,
+    ///     two, or three get amber, blue/red, or blue/violet/red respectively.
+    ///     Further layers get palette slots, except in casings mode. Bands
+    ///     and multi-layer lanes assign slots to all unstyled layers.
+    ///     A style dictionary accepts style, label, description, contracted, and scheme.
+    ///     Contracted selections use the treated style and accept case-insensitive scheme names.
+    /// mute_outside : bool, optional
+    ///     Fade edges and nodes outside the selected regions in applicable modes.
+    ///     Hulls and lanes keep all particle lines in normal ink.
+    /// overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature", "lanes"} or None, optional
+    ///     One ordinary layer defaults to strokes and multiple layers default
+    ///     to hulls. Lanes place layers in global colour slots
+    ///     joined by cubic turns at vertices.
+    #[pyo3(signature = (*, config=None, highlight=None, mute_outside=true, overlap=None))]
     fn render(
         slf: Py<PyGraph>,
         py: Python<'_>,
         #[gen_stub(override_type(type_repr = "RenderSettings | None"))] config: Option<
             &Bound<'_, PyAny>,
         >,
+        #[gen_stub(override_type(type_repr = "Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None", imports = ("typing")))]
+        highlight: Option<&Bound<'_, PyAny>>,
+        mute_outside: bool,
+        #[gen_stub(override_type(type_repr = "typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature', 'lanes'] | None", imports = ("typing")))]
+        overlap: Option<&str>,
     ) -> PyResult<PyDiagramView> {
-        render::render_graph(py, &slf, config, None)
+        render::render_with_highlights(py, &slf, config, highlight, mute_outside, overlap)
     }
 
-    #[pyo3(signature = (*, config=None, browser=None))]
+    /// Export SVG with the same highlights as ``render``.
+    ///
+    /// Examples
+    /// --------
+    /// >>> svg = graph.to_svg(highlight=(selection, "treated"))
+    ///
+    /// Parameters
+    /// ----------
+    /// config : RenderSettings or None, optional
+    ///     Layout and drawing settings.
+    /// browser : str or None, optional
+    ///     Explicit browser for label measurement.
+    /// highlight : Subgraph or pair or sequence, optional
+    ///     Selections and styles accepted by ``render``.
+    /// mute_outside : bool, optional
+    ///     Fade edges and nodes outside the selected regions in applicable modes.
+    ///     Hulls and lanes keep all particle lines in normal ink.
+    /// overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature", "lanes"} or None, optional
+    ///     One ordinary layer defaults to strokes and multiple layers default
+    ///     to hulls. Lanes place layers in global colour slots
+    ///     joined by cubic turns at vertices.
+    #[pyo3(signature = (*, config=None, browser=None, highlight=None, mute_outside=true, overlap=None))]
     fn to_svg(
         slf: Py<PyGraph>,
         py: Python<'_>,
@@ -1622,15 +1674,20 @@ impl PyGraph {
             &Bound<'_, PyAny>,
         >,
         browser: Option<&str>,
+        #[gen_stub(override_type(type_repr = "Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None", imports = ("typing")))]
+        highlight: Option<&Bound<'_, PyAny>>,
+        mute_outside: bool,
+        #[gen_stub(override_type(type_repr = "typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature', 'lanes'] | None", imports = ("typing")))]
+        overlap: Option<&str>,
     ) -> PyResult<String> {
-        render::render_graph(py, &slf, config, None)?
+        render::render_with_highlights(py, &slf, config, highlight, mute_outside, overlap)?
             .snapshot(py, browser)?
             .to_svg()
     }
 
     #[pyo3(signature = ())]
     fn _mime_(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        render::render_graph(py, &slf, None, None)?._mime_(py)
+        render::render_graph(py, &slf, None, &[], true)?._mime_(py)
     }
 
     #[pyo3(signature = (include=None, exclude=None))]
@@ -1640,7 +1697,7 @@ impl PyGraph {
         include: Option<Vec<String>>,
         exclude: Option<Vec<String>>,
     ) -> PyResult<Py<PyAny>> {
-        render::render_graph(py, &slf, None, None)?._repr_mimebundle_(py, include, exclude)
+        render::render_graph(py, &slf, None, &[], true)?._repr_mimebundle_(py, include, exclude)
     }
 
     #[pyo3(name = "full_subgraph", signature = ())]

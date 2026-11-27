@@ -660,7 +660,7 @@ def validate(runtime_module, stub_source):
             "def __new__(cls, *, encode_node: typing.Callable[[NodeValue], DotVertexData]",
             "def build(*items: _GraphItem, name: _OptionalString = None",
             "def map(self, *, node: typing.Callable[[Node], typing.Any] | None = None",
-            "def render(self, *, config: RenderSettings | None = None)",
+            "def render(self, *, config: RenderSettings | None = None, highlight: Subgraph | tuple[Subgraph, typing.Literal[",
             "node_outset: _AutoNumber = ...",
             "_Padding: typing.TypeAlias = builtins.int | builtins.float | _NativeArray | _NativeDict | Insets",
             "def call(self, *args: _NativeValue, **kwargs: _NativeValue) -> TypstCall",

@@ -181,6 +181,45 @@ The #link("guides/community-host/")[host guide] describes embedding the renderer
 in a distribution. Optional standalone Linnet graph interoperability is separate
 from rendering and requires that package only when explicitly used.
 
+== Nested highlights and counterterms
+
+Pass an ordered list of regions to `highlight`. At reading size, a single ordinary layer uses the original stroke treatment.
+For multiple layers, the renderer draws
+translucent hulls around member edges and vertices. It increases the radius of enclosing
+regions, then draws the original particle lines over the hulls. Use
+`DiagramStyle(miniature=True)` for stamps. The last matching layer supplies the
+edge colour. `overlap` can explicitly select `"hulls"`, `"recolour"`, `"casings"`,
+`"bands"`, `"bands-miniature"`, or `"lanes"`. The `hull_radius` and `hull_step` style options
+are measured in points.
+
+At reading size, `overlap="lanes"` assigns each layer a fixed slot along its
+internal edges. Cubic turns connect the slots at vertices while the particle
+lines retain their original styling. Some selections require crossings where
+the same edges belong to incompatible turns. A layer's label and description
+are available on its SVG strokes. Each contracted selection uses the counterterm hull treatment. Its sibling
+layers retain their selected overlap mode.
+
+// docs-example: compile
+```python
+internal_edges = [edge.id for edge in diagram.edges if not edge.is_external]
+outer = diagram.subgraph(edges=internal_edges)
+inner = diagram.subgraph(edges=internal_edges[:2])
+layers = [
+    (outer, "acted-on"),
+    (inner, {"contracted": True, "label": "γ₂",
+             "scheme": "MS-bar", "description": "local counterterm"}),
+]
+view = diagram.render(highlight=layers)
+stamp = diagram.render(highlight=layers, style=hep.DiagramStyle(miniature=True))
+view
+```
+
+A contracted layer keeps the original layout, fades its particle lines, and draws
+a treated hull with a circled cross. Scheme names are case-insensitive. Use `scheme="MS-bar"` for an open circle or
+`scheme="on-shell"` for a filled circle with a paper-coloured cross. The open
+circle also applies when the scheme is unspecified. The SVG exposes the label,
+description and any specified scheme on hover. Typst embeds the same native vector geometry for printing.
+
 == Configured amplitude collections
 
 `amplitude.render()` returns a `graph.DiagramView` that displays directly

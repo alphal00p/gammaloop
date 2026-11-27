@@ -60,6 +60,9 @@ reason = "Launches a local Chromium process through Playwright; browser workers 
 reason = "Launches a local Chromium process through Playwright; browser workers cannot spawn native processes."
 
 [cell."docs/products/feynkit/content/notebooks.typ:5"]
+depends = ["docs/products/feynkit/content/api.typ:1"]
+
+[cell."docs/products/feynkit/content/notebooks.typ:6"]
 reason = "Launches a local Chromium process through Playwright; browser workers cannot spawn native processes."
 
 [cell."docs/products/feynkit/content/quickstart-python.typ:1"]

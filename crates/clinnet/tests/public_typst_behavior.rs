@@ -123,6 +123,115 @@ fn paths_with_attr<'a>(svg: &'a str, name: &str, value: &str) -> Vec<(usize, &'a
         .collect()
 }
 
+#[test]
+fn compiled_linnest_casings_follow_global_layer_order() {
+    let (base, renderer) = staged(&PHYSICS_STYLE);
+    // FeynKit tests this fixture against its emitter. Clinnet owns compiler
+    // validation because its runtime carries Typst and the embedded plugins.
+    let source = include_str!("resources/feynkit-casings.typ")
+        .replace(
+            "assets/embedded/drawing/templates/layout-core.typ",
+            PHYSICS_STYLE[2].0,
+        )
+        .replace(
+            "assets/embedded/drawing/templates/physics-edge-style.typ",
+            PHYSICS_STYLE[0].0,
+        );
+    let svg = render(&base, &renderer, "feynkit-casings.typ", &source);
+    let layers = ["#3b82f6", "#8b5cf6", "#e4504f"];
+    for pair in layers.windows(2) {
+        let outer = paths_with_attr(&svg, "stroke", pair[0]);
+        let inner = paths_with_attr(&svg, "stroke", pair[1]);
+        assert!(outer.last().unwrap().0 < inner.first().unwrap().0);
+    }
+
+    let fixture = base.path().join(TEMPLATES).join("invalid-underlay.typ");
+    let typo = source.replace(
+        r#"subgraph-edge-underlay: "casings""#,
+        r#"subgraph-edge-underlay: "casing""#,
+    );
+    fs::write(&fixture, typo).unwrap();
+    let error = renderer
+        .compile_template(&fixture, fixture.with_extension("svg"), &[])
+        .unwrap_err();
+    assert!(
+        format!("{error:?}").contains("subgraph-edge-underlay must be true, false, or"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn compiled_linnest_bands_have_distinct_carriers_and_segmented_rings() {
+    let (base, renderer) = staged(&PHYSICS_STYLE);
+    let source = include_str!("resources/feynkit-bands.typ")
+        .replace(
+            "assets/embedded/drawing/templates/layout-core.typ",
+            PHYSICS_STYLE[2].0,
+        )
+        .replace(
+            "assets/embedded/drawing/templates/physics-edge-style.typ",
+            PHYSICS_STYLE[0].0,
+        );
+    let svg = render(&base, &renderer, "feynkit-bands.typ", &source);
+    let bands = paths_with_attr(&svg, "stroke-width", "2.4");
+    let rings = paths_with_attr(&svg, "stroke-width", "2.5");
+    assert!(bands.last().unwrap().0 < svg.find(r#"stroke-dasharray="0.9 4.05""#).unwrap());
+    assert_eq!(bands.len(), 9);
+    assert_eq!(rings.len(), 6);
+    let mut paths_by_color = BTreeMap::new();
+    for (_, tag) in bands {
+        paths_by_color
+            .entry(svg_attr(tag, "stroke").unwrap())
+            .or_insert_with(Vec::new)
+            .push(svg_attr(tag, "d").unwrap());
+    }
+    assert_eq!(paths_by_color["#3b82f6"].len(), 4);
+    assert_eq!(paths_by_color["#8b5cf6"].len(), 3);
+    assert_eq!(paths_by_color["#e4504f"].len(), 2);
+    assert!(
+        paths_by_color["#3b82f6"]
+            .iter()
+            .all(|path| !paths_by_color["#e4504f"].contains(path))
+    );
+    assert!(
+        svg.contains(r#"stroke-dasharray="0.9 4.05""#),
+        "scalar styling stays visible"
+    );
+}
+
+#[test]
+fn compiled_linnest_hull_counterterm_retains_the_filled_region_and_ink() {
+    let (base, renderer) = staged(&[]);
+    let source = include_str!("resources/feynkit-hull-counterterm.typ");
+    let svg = render(&base, &renderer, "feynkit-hull-counterterm.typ", source);
+    // Typst embeds the computed vector image; no browser mask or recomputed
+    // layer geometry is involved. The source fixture carries the filled
+    // even-odd contour, normal ink, ghost opacity and vector circled cross.
+    assert!(source.contains("fill-rule=\\\"evenodd"));
+    assert!(source.contains("fill-opacity=\\\"0.22"));
+    assert!(source.contains("opacity=\\\"0.35"));
+    assert!(source.contains(r#"data-scheme=\"on-shell"#));
+    assert!(source.contains("data-linnet-paper="));
+    assert!(source.contains("data-linnet-counterterm="));
+    assert!(svg.contains("<image") && svg.contains("image/svg+xml"));
+}
+
+#[test]
+fn compiled_linnest_lanes_retain_the_strokes_and_particle_ink() {
+    let (base, renderer) = staged(&[]);
+    let source = include_str!("resources/feynkit-lanes.typ");
+    let svg = render(&base, &renderer, "feynkit-lanes.typ", source);
+    assert!(source.contains(r#"data-linnet-lane-crossings=\"0"#));
+    for paint in ["#3b82f6", "#e4504f"] {
+        assert!(source.contains(&format!(
+            r#"fill=\"none\" stroke=\"{paint}\" stroke-width=\"2.1\" "#
+        )));
+    }
+    assert!(source.contains("stroke-dasharray="));
+    assert!(source.contains("data-linnet-paper="));
+    assert!(svg.contains("<image") && svg.contains("image/svg+xml"));
+}
+
 fn translation(value: &str) -> (f64, f64) {
     let mut coordinates = value
         .strip_prefix("translate(")

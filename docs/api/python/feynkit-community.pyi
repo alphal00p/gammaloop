@@ -2304,7 +2304,37 @@ class DiagramStyle:
         >>> hep.DiagramStyle(debug=True).debug
         True
         """
-    def __new__(cls, *, show_particle: typing.Optional[builtins.bool] = None, show_momentum: typing.Optional[builtins.bool] = None, show_edge_index: typing.Optional[builtins.bool] = None, show_node_index: typing.Optional[builtins.bool] = None, momentum_arrows: typing.Optional[builtins.bool] = None, split_initial_state: typing.Optional[builtins.bool] = None, debug: typing.Optional[builtins.bool] = None) -> DiagramStyle:
+    @property
+    def miniature(self) -> builtins.bool:
+        r"""
+        Use stamp recolouring by default.
+
+        Examples
+        --------
+        >>> hep.DiagramStyle(miniature=True).miniature
+        True
+        """
+    @property
+    def hull_radius(self) -> typing.Optional[builtins.float]:
+        r"""
+        Innermost hull radius in points, or the default.
+
+        Examples
+        --------
+        >>> hep.DiagramStyle(hull_radius=4.2).hull_radius
+        4.2
+        """
+    @property
+    def hull_step(self) -> typing.Optional[builtins.float]:
+        r"""
+        Additional hull radius per nesting level, in points.
+
+        Examples
+        --------
+        >>> hep.DiagramStyle(hull_step=2.6).hull_step
+        2.6
+        """
+    def __new__(cls, *, show_particle: typing.Optional[builtins.bool] = None, show_momentum: typing.Optional[builtins.bool] = None, show_edge_index: typing.Optional[builtins.bool] = None, show_node_index: typing.Optional[builtins.bool] = None, momentum_arrows: typing.Optional[builtins.bool] = None, split_initial_state: typing.Optional[builtins.bool] = None, debug: typing.Optional[builtins.bool] = None, miniature: builtins.bool = False, hull_radius: typing.Optional[builtins.float] = None, hull_step: typing.Optional[builtins.float] = None) -> DiagramStyle:
         r"""
         Select physics presentation without changing graph layout or drawing settings.
 
@@ -2328,6 +2358,14 @@ class DiagramStyle:
             Separate the incoming states of a cross-section drawing.
         debug : bool or None, optional
             Show both vertex and edge indices unless individually overridden.
+        miniature : bool, optional
+            Default to recolouring and increase ghost visibility for small stamps.
+        hull_radius : float or None, optional
+            Innermost hull radius in points, in [0.001, 1000]. Defaults to 4.2.
+            Effective radii including nesting and counterterm padding must
+            also be in this range. Thin hulls on long regions may require a larger radius.
+        hull_step : float or None, optional
+            Finite nonnegative radius increment per inclusion level. Defaults to 2.6 points.
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -3850,7 +3888,7 @@ class FeynmanDiagram:
         >>> restored = hep.FeynmanDiagram.from_dot(model, dot)
         >>> restored.validate()
         """
-    def to_linnest(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | None = None) -> builtins.str:
+    def to_linnest(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature', 'lanes'] | None = None) -> builtins.str:
         r"""
         Export a self-contained Typst document embedding an outlined SVG.
 
@@ -3876,10 +3914,16 @@ class FeynmanDiagram:
             Draw momentum arrows and labels in the stored basis.
         lmb : LoopMomentumBasis or None, optional
             Routing from this diagram; also enables momentum display.
-        highlight : Subgraph or None, optional
-            Region to highlight in the complete diagram.
+        highlight : Subgraph or sequence, optional
+            A selection or ordered sequence of selections and (selection, style)
+            tuples, as in ``render``.
+        mute_outside : bool, optional
+            Mute unselected drawing elements in legacy and stroke modes.
+            Hulls and lanes keep all particle lines in normal ink.
+        overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature", "lanes"} or None, optional
+            Highlight geometry and automatic palette, as in ``render``.
         """
-    def render(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | None = None) -> DiagramView:
+    def render(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature', 'lanes'] | None = None) -> DiagramView:
         r"""
         Prepare a browser-measured view using the shared physics renderer.
 
@@ -3899,6 +3943,14 @@ class FeynmanDiagram:
         >>> drawing
         >>> svg = drawing.measured(browser="chromium").to_svg()
         >>> drawing = diagram.render(lmb=next(iter(diagram.loop_momentum_bases())))
+        >>> outer = diagram.subgraph(edges=[0, 1])
+        >>> inner = diagram.subgraph(edges=[1])
+        >>> drawing = diagram.render(highlight=[(outer, "acted-on"), (inner, "treated")])
+        >>> ghost = diagram.render(highlight=[
+        ...     (outer, "acted-on"),
+        ...     (inner, {"contracted": True, "label": "γ₂", "scheme": "MS-bar", "description": "local"}),
+        ... ])
+        >>> stamp = diagram.render(highlight=[outer, inner], style=hep.DiagramStyle(miniature=True))
 
         Parameters
         ----------
@@ -3915,11 +3967,32 @@ class FeynmanDiagram:
         lmb : LoopMomentumBasis or None, optional
             Explicit routing from this diagram; also enables momentum display.
             Rendering never changes the diagram's stored loop-momentum basis.
-        highlight : Subgraph or None, optional
-            Highlight a region while preserving the full diagram as muted context.
-            A Subgraph highlights its own region by default.
+        highlight : Subgraph or sequence, optional
+            A selection or ordered sequence of selections and (selection, style)
+            tuples from this diagram. Styles are "amber" (the default), "acted-on" (blue),
+            "middle" (violet), and "treated" (red). A Subgraph highlights its own
+            region by default. Either half-edge highlights its whole edge;
+            Linnet Graph highlights instead require both halves. A styled
+            pair can be passed directly. Defaults depend on the count of
+            unstyled entries regardless of where styled pairs appear. One,
+            two, or three get amber, blue/red, or blue/violet/red respectively.
+            An empty sequence clears highlighting. A pair can use a dictionary
+            with style, label, description, contracted, and scheme fields. Contracted
+            selections use the treated style and show a hull and a ghost counterterm glyph.
+            Scheme names are case-insensitive. Use "MS-bar" for an open glyph or "on-shell" for a
+            filled glyph. None or "unspecified" uses the plain open CT2 glyph.
+        mute_outside : bool, optional
+            Mute unselected drawing elements in legacy and stroke modes.
+            Hulls and lanes keep all particle lines in normal ink.
+        overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature", "lanes"} or None, optional
+            At reading size, one ordinary layer uses strokes and multiple
+            layers use hulls. DiagramStyle(miniature=True) defaults to recolouring.
+            Use "lanes" for global colour slots
+            joined by cubic turns at vertices. Lanes and bands can assign
+            distinct palette slots to unstyled layers. Casings require
+            explicit styles after three unstyled layers.
         """
-    def to_html(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | None = None, browser: typing.Optional[builtins.str] = None) -> builtins.str:
+    def to_html(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]] | typing.Sequence[Subgraph | tuple[Subgraph, typing.Literal['amber', 'acted-on', 'middle', 'treated'] | dict[str, str | bool | None]]] | None = None, mute_outside: builtins.bool = True, overlap: typing.Literal['hulls', 'recolour', 'casings', 'bands', 'bands-miniature', 'lanes'] | None = None, browser: typing.Optional[builtins.str] = None) -> builtins.str:
         r"""
         Export a complete static HTML figure with the same options as ``render``.
 
@@ -3940,13 +4013,24 @@ class FeynmanDiagram:
             Draw momentum arrows and labels in the stored basis.
         lmb : LoopMomentumBasis or None, optional
             Routing from this diagram; also enables momentum display.
-        highlight : Subgraph or None, optional
-            Region to highlight in the complete diagram.
+        highlight : Subgraph or sequence, optional
+            A selection or ordered sequence of selections and (selection, style)
+            tuples, as in ``render``.
         browser : {"chromium"} or None, optional
             Explicit headless browser for script exports; none is started implicitly.
             Defaults use a completed measurement, optional Typst, or estimated
             MathML label sizes. For exact notebook measurements, use
             ``render().measured().to_html()`` on the displayed view instead.
+        mute_outside : bool, optional
+            Mute unselected drawing elements in legacy and stroke modes.
+            Hulls and lanes keep all particle lines in normal ink.
+        overlap : {"hulls", "recolour", "casings", "bands", "bands-miniature", "lanes"} or None, optional
+            At reading size, one ordinary layer uses strokes and multiple
+            layers use hulls. DiagramStyle(miniature=True) defaults to recolouring.
+            Use "lanes" for global colour slots
+            joined by cubic turns at vertices. Lanes and bands can assign
+            distinct palette slots to unstyled layers. Casings require
+            explicit styles after three unstyled layers.
         """
     def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
         r"""

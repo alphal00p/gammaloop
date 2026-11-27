@@ -149,7 +149,7 @@ impl PyDiagramView {
             let transport = selector(py, &scene.graph, &elements, settings)?;
             // The transport needs its own editable topology while the consumed
             // scene supplies the original drawing defaults.
-            scene = transport.native_scene(scene.graph.clone(), None, Some(scene))?;
+            scene = transport.native_scene(scene.graph.clone(), Some(scene))?;
         } else {
             settings
                 .config()?

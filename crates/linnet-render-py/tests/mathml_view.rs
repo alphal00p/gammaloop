@@ -35,6 +35,7 @@ fn fixture_scene(marker: &str) -> Scene {
         ("<msub><mi>ℓ</mi><mn>0</mn></msub>", "$ell_0$"),
     ];
     Scene {
+        highlights: Default::default(),
         graph: serde_json::from_value(json!({
             "name": format!("mathml-{marker}"),
             "nodes": [node(0), node(1), node(2)],
@@ -49,6 +50,7 @@ fn fixture_scene(marker: &str) -> Scene {
         .unwrap(),
         nodes: (0..3)
             .map(|index| NodeDrawing {
+                highlight_ring: Vec::new(),
                 radius: 0.2,
                 label_padding: Some(0.3),
                 label: Some(index),
@@ -65,6 +67,7 @@ fn fixture_scene(marker: &str) -> Scene {
             .collect(),
         edges: (0..5)
             .map(|index| EdgeDrawing {
+                highlight_strokes: Vec::new(),
                 stroke: Stroke {
                     dash: if index == 2 {
                         Dash::Dashed(3.0, 2.0)

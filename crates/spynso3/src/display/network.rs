@@ -471,6 +471,7 @@ impl SpensoNet {
             .as_array()
             .ok_or("missing network edges")?;
         let mut scene = Scene {
+            highlights: Default::default(),
             graph: TypstGraphSpec {
                 name: None,
                 data: None,
@@ -532,6 +533,7 @@ impl SpensoNet {
                 statements: BTreeMap::new(),
             });
             scene.nodes.push(NodeDrawing {
+                highlight_ring: Vec::new(),
                 radius: if operator { 0.6 } else { 0.35 },
                 label_padding: Some(0.25),
                 label: Some(page),
@@ -628,6 +630,7 @@ impl SpensoNet {
                 )]),
             });
             scene.edges.push(EdgeDrawing {
+                highlight_strokes: Vec::new(),
                 stroke: Stroke {
                     paint: if tree { "#555555" } else { "#7f95b8" }.into(),
                     width: if tree { 0.65 } else { 1.0 },

@@ -2,6 +2,8 @@
 
 use std::collections::BTreeSet;
 
+use linnest::svg::HighlightStyle;
+
 use linnet::half_edge::algorithms::DirectionBasis;
 use linnet::half_edge::involution::{EdgeIndex, Hedge};
 use linnet::half_edge::subgraph::{
@@ -49,6 +51,11 @@ impl From<PyDirectionBasis> for DirectionBasis {
 }
 
 /// A graph-bound structural selection.
+///
+/// Examples
+/// --------
+/// >>> selection = graph.subgraph(edges=[0, 1])
+/// >>> drawing = selection.render()
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(module = "symbolica.community.graph", unsendable, name = "Subgraph")]
 pub struct PySubgraph {
@@ -371,36 +378,51 @@ impl PySubgraph {
             && (self.subgraph != other.subgraph || self.isolated_nodes != other.isolated_nodes))
     }
 
-    /// Prepare the full owner graph with this selection highlighted and its complement dotted.
-    /// The owner's layout, drawing configuration, and topology remain unchanged.
-    #[pyo3(signature = (*, config=None))]
+    /// Draw this selection in amber in its owner graph.
+    ///
+    /// Examples
+    /// --------
+    /// >>> drawing = selection.render(mute_outside=False)
+    ///
+    /// Parameters
+    /// ----------
+    /// config : RenderSettings or None, optional
+    ///     Layout and drawing settings for the owner graph.
+    /// mute_outside : bool, optional
+    ///     Fade edges and nodes outside this selection.
+    #[pyo3(signature = (*, config=None, mute_outside=true))]
     fn render(
         &self,
         py: Python<'_>,
         #[gen_stub(override_type(type_repr = "RenderSettings | None"))] config: Option<
             &Bound<'_, PyAny>,
         >,
+        mute_outside: bool,
     ) -> PyResult<PyDiagramView> {
-        render::render_graph(py, self.owner(py)?.as_unbound(), config, Some(self)).and_then(
-            |view| {
-                view.map_svg(|svg| {
-                    svg.replacen("<svg ", "<svg class=\"linnet-subgraph\" ", 1)
-                        .replacen(
-                            '>',
-                            concat!(
-                                "> <style>",
-                                include_str!("../typst/subgraph.css"),
-                                "</style>"
-                            ),
-                            1,
-                        )
-                })
-            },
+        render::render_graph(
+            py,
+            self.owner(py)?.as_unbound(),
+            config,
+            &[(self, HighlightStyle::Amber)],
+            mute_outside,
         )
     }
 
     /// Render this selection in the context of the full graph, including isolated nodes.
-    #[pyo3(signature = (*, config=None, browser=None))]
+    ///
+    /// Examples
+    /// --------
+    /// >>> svg = selection.to_svg(mute_outside=False)
+    ///
+    /// Parameters
+    /// ----------
+    /// config : RenderSettings or None, optional
+    ///     Layout and drawing settings.
+    /// browser : str or None, optional
+    ///     Explicit browser for label measurement.
+    /// mute_outside : bool, optional
+    ///     Fade edges and nodes outside this selection.
+    #[pyo3(signature = (*, config=None, browser=None, mute_outside=true))]
     fn to_svg(
         &self,
         py: Python<'_>,
@@ -408,12 +430,15 @@ impl PySubgraph {
             &Bound<'_, PyAny>,
         >,
         browser: Option<&str>,
+        mute_outside: bool,
     ) -> PyResult<String> {
-        self.render(py, config)?.snapshot(py, browser)?.to_svg()
+        self.render(py, config, mute_outside)?
+            .snapshot(py, browser)?
+            .to_svg()
     }
 
     fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        self.render(py, None)?._mime_(py)
+        self.render(py, None, true)?._mime_(py)
     }
 
     /// Show the selected half-edges within their complete graph in notebook output.
@@ -424,7 +449,7 @@ impl PySubgraph {
         include: Option<Vec<String>>,
         exclude: Option<Vec<String>>,
     ) -> PyResult<Py<PyAny>> {
-        self.render(py, None)?
+        self.render(py, None, true)?
             ._repr_mimebundle_(py, include, exclude)
     }
 

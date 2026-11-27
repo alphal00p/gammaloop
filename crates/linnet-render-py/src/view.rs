@@ -1304,6 +1304,7 @@ with sync_playwright() as driver:
             round_cap: false,
         };
         let node = NodeDrawing {
+            highlight_ring: Vec::new(),
             radius: 0.2,
             label_padding: None,
             label: None,
@@ -1313,12 +1314,14 @@ with sync_playwright() as driver:
             details: Details::default(),
         };
         let scenes = (0..count).map(|_| Scene {
+                highlights: Default::default(),
                 graph: serde_json::from_value(json!({
                     "nodes": [{"index": 0}, {"index": 1}],
                     "edges": [{"id": 0, "source": {"node": 0, "id": 0}, "sink": {"node": 1, "id": 1}}],
                 })).unwrap(),
                 nodes: vec![node.clone(), node.clone()],
                 edges: vec![EdgeDrawing {
+                    highlight_strokes: Vec::new(),
                     stroke: stroke.clone(),
                     pattern: None,
                     flow: None,

@@ -1,5 +1,8 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
+use linnest::svg::{
+    HighlightDetails, HighlightOverlap, HighlightPalette, HighlightRegion, HighlightStyle,
+};
 use linnest::{
     encode_graph_spec_bytes, TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec,
     TypstGraphSpecEnvelope, TypstNodeSpec,
@@ -7,7 +10,10 @@ use linnest::{
 use linnet::half_edge::builder::{HedgeData, HedgeGraphBuilder};
 use linnet::half_edge::involution::{Flow, Hedge, HedgePair, Orientation};
 use linnet::half_edge::subgraph::{Inclusion, SubSetLike};
-use pyo3::exceptions::{PyReferenceError, PyRuntimeError, PyValueError};
+use linnet_render_py::{
+    extract_highlights, highlight_overlap, theme_svg, SelectedHighlight, ThemeFormat, ThemePaint,
+};
+use pyo3::exceptions::{PyReferenceError, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::types::{PyAny, PyDict, PyDictMethods, PyList, PyListMethods};
 use pyo3::{Bound, Py, PyResult, Python};
 
@@ -303,25 +309,91 @@ fn topology_spec(graph: &PyGraph) -> PyResult<Vec<u8>> {
     encode_graph_spec_bytes(&spec).map_err(PyRuntimeError::new_err)
 }
 
+pub(crate) fn render_with_highlights(
+    py: Python<'_>,
+    graph: &Py<PyGraph>,
+    config: Option<&Bound<'_, PyAny>>,
+    highlight: Option<&Bound<'_, PyAny>>,
+    mute_outside: bool,
+    overlap: Option<&str>,
+) -> PyResult<PyDiagramView> {
+    let overlap = overlap
+        .map(highlight_overlap)
+        .transpose()?
+        .unwrap_or_default();
+    let Some(highlight) = highlight else {
+        return render_graph_with_overlap(py, graph, config, &[], mute_outside, overlap);
+    };
+    let selections = extract_highlights(highlight, overlap, |entry| {
+        let subgraph = entry.cast::<PySubgraph>().map_err(|_| {
+            PyTypeError::new_err(
+                "highlight expects a symbolica.community.graph.Subgraph from this graph. Use graph.subgraph(...)",
+            )
+        })?;
+        Ok(subgraph.try_borrow()?)
+    })?;
+    let layers: Vec<_> = selections
+        .iter()
+        .map(|entry| SelectedHighlight {
+            selection: &*entry.selection,
+            style: entry.style,
+            details: entry.details.clone(),
+        })
+        .collect();
+    render_graph_with_overlap(py, graph, config, &layers, mute_outside, overlap)
+}
+
 pub(crate) fn render_graph(
     py: Python<'_>,
     graph: &Py<PyGraph>,
     config: Option<&Bound<'_, PyAny>>,
-    subgraph: Option<&PySubgraph>,
+    highlights: &[(&PySubgraph, HighlightStyle)],
+    mute_outside: bool,
+) -> PyResult<PyDiagramView> {
+    let highlights: Vec<_> = highlights
+        .iter()
+        .map(|&(selection, style)| SelectedHighlight {
+            selection,
+            style,
+            details: HighlightDetails::default(),
+        })
+        .collect();
+    render_graph_with_overlap(
+        py,
+        graph,
+        config,
+        &highlights,
+        mute_outside,
+        HighlightOverlap::Casings,
+    )
+}
+
+fn render_graph_with_overlap(
+    py: Python<'_>,
+    graph: &Py<PyGraph>,
+    config: Option<&Bound<'_, PyAny>>,
+    highlights: &[SelectedHighlight<&PySubgraph>],
+    mute_outside: bool,
+    overlap: HighlightOverlap,
 ) -> PyResult<PyDiagramView> {
     // Validate before callbacks and again after preparation of the graph records.
-    if let Some(subgraph) = subgraph {
-        subgraph.selection_for(py, graph, graph.borrow(py).revision()?)?;
+    for layer in highlights {
+        layer
+            .selection
+            .selection_for(py, graph, graph.borrow(py).revision()?)?;
     }
     let (topology, transport) = request(py, graph, config, false)?;
-    let selection = if let Some(subgraph) = subgraph {
-        let owner = graph.borrow(py);
-        let (selected, isolated) = subgraph.selection_for(py, graph, owner.revision()?)?;
+    let envelope: TypstGraphSpecEnvelope = ciborium::from_reader(topology.as_slice())
+        .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+    let mut scene = transport.native_scene(envelope.graph, None)?;
+    let owner = graph.borrow(py);
+    let mut regions = Vec::new();
+    for layer in highlights {
+        let (selected, isolated) = layer
+            .selection
+            .selection_for(py, graph, owner.revision()?)?;
         let state = owner.state.borrow();
         let state = state.as_ref().expect("checked selection owner");
-        let hedges = (0..selected.size())
-            .map(|index| selected.includes(&Hedge(index)))
-            .collect();
         let nodes = state
             .graph
             .iter_nodes()
@@ -330,14 +402,64 @@ pub(crate) fn render_graph(
                     .then_some(node.0)
             })
             .collect();
-        Some((hedges, nodes))
-    } else {
-        None
-    };
-    let envelope: TypstGraphSpecEnvelope = ciborium::from_reader(topology.as_slice())
-        .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-    let scene = transport.native_scene(envelope.graph, selection.as_ref(), None)?;
-    PyDiagramView::from_scene(py, scene, None)
+        let mut edges = BTreeSet::new();
+        for (index, edge) in scene.graph.edges.iter_mut().enumerate() {
+            let mut included = None;
+            for endpoint in [&mut edge.source, &mut edge.sink].into_iter().flatten() {
+                let id = endpoint
+                    .id
+                    .filter(|&id| id < selected.size())
+                    .ok_or_else(|| {
+                        PyRuntimeError::new_err("invalid half-edge ID in the native SVG renderer")
+                    })?;
+                let inside = selected.includes(&Hedge(id));
+                if included.is_some_and(|previous| previous != inside) {
+                    return Err(PyValueError::new_err(
+                        "the native SVG renderer requires complete edges in each highlight layer",
+                    ));
+                }
+                included = Some(inside);
+                if inside {
+                    endpoint.in_subgraph = true;
+                    edges.insert(index);
+                }
+            }
+        }
+        let mut region = HighlightRegion::new(edges, nodes, layer.style);
+        region.details = layer.details.clone();
+        regions.push(region);
+    }
+    let mut palette = HighlightPalette::new("#c58b13");
+    palette.amber_solid_width = Some(1.2);
+    palette.amber_node_fill = Some("#ffd16659".into());
+    palette.outside_node_fill = Some("#77777726".into());
+    scene.apply_highlights_with_overlap(&regions, &palette, mute_outside, overlap);
+    scene.validate_hull_radii().map_err(PyValueError::new_err)?;
+    let view = PyDiagramView::from_scene(py, scene, None)?;
+    if highlights.is_empty() {
+        return Ok(view);
+    }
+    let styles: Vec<_> = highlights
+        .iter()
+        .map(|layer| {
+            if layer.details.contracted {
+                HighlightStyle::Treated
+            } else {
+                layer.style
+            }
+        })
+        .collect();
+    view.map_svg(move |svg| {
+        theme_svg(
+            svg,
+            &[
+                ThemePaint::new("ink", "#000000", "#f3f4f6"),
+                ThemePaint::new("highlight", "#c58b13", "#ffd166"),
+            ],
+            &styles,
+            ThemeFormat::Linnet,
+        )
+    })
 }
 
 /// Supply live generic graph views only when the optional Linnet bindings are registered.
@@ -471,7 +593,7 @@ mod tests {
             let case = fixture.getattr("SvgInteractionTests")?.call0()?;
             case.call_method0("setUp")?;
             let graph = case.getattr("graph")?.extract::<Py<PyGraph>>()?;
-            let view = render_graph(py, &graph, None, None)?;
+            let view = render_graph(py, &graph, None, &[], true)?;
             let drawing = metrics
                 .call_method1("external_metrics_snapshot", (Py::new(py, view)?,))?
                 .extract::<PyRef<'_, PyDiagramRender>>()?

@@ -3,10 +3,12 @@
 use std::fmt::Write as _;
 use std::sync::Arc;
 
-use kurbo::{BezPath, PathEl, Rect, Shape};
+use kurbo::{BezPath, PathEl, Point, Rect, Shape};
 use serde_json::Value;
 
+use super::hulls::RESOLUTION_ERROR;
 use super::{arrow_stroke, labels::Bounds, marks, Dash, Element, Stroke, Target, Typeset, UNIT};
+use super::{CountertermScheme, HighlightDetails};
 use crate::{TypstDotEdge, TypstDotEndpoint, TypstDotNode};
 
 /// Canvas padding in drawing units; margin (2mm) and title gutter (1em) in points.
@@ -16,6 +18,9 @@ const GUTTER: f64 = 9.0;
 /// Arrowhead paint and the particle-flow triangle's outline width in points.
 pub(super) const INK: &str = "#3d2645";
 pub(super) const MARK_STROKE: f64 = 0.3;
+const HULL_STROKE: f64 = 1.1;
+// SVG's default miter limit is four times the stroke half-width.
+const MITER_EXTENT: f64 = 2.0;
 
 /// Ordered inspection fields shown by the interactive viewer.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -88,6 +93,43 @@ pub(super) fn xml_escape(text: &str) -> String {
         .replace('"', "&quot;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
+}
+
+fn hover_details(details: &HighlightDetails) -> (String, String, String, String) {
+    let escape = |text: &str| {
+        let clean: String = text
+            .chars()
+            .map(|ch| match ch {
+                '\u{0}'..='\u{8}'
+                | '\u{b}'..='\u{c}'
+                | '\u{e}'..='\u{1f}'
+                | '\u{fffe}'
+                | '\u{ffff}' => '\u{fffd}',
+                _ => ch,
+            })
+            .collect();
+        xml_escape(&clean)
+            .replace('\t', "&#9;")
+            .replace('\r', "&#13;")
+            .replace('\n', "&#10;")
+    };
+    let label = escape(&details.label);
+    let description = escape(&details.description);
+    let mut title = match (label.is_empty(), description.is_empty()) {
+        (true, _) => description.clone(),
+        (_, true) => label.clone(),
+        _ => format!("{label} — {description}"),
+    };
+    let scheme_attribute = if let Some(scheme) = details.scheme.name() {
+        if !title.is_empty() {
+            title.push_str(" — ");
+        }
+        title.push_str(scheme);
+        format!(r#" data-scheme="{scheme}""#)
+    } else {
+        String::new()
+    };
+    (label, description, title, scheme_attribute)
 }
 
 /// Links of an edge: its four hover regions (source half-edge, source edge,
@@ -194,8 +236,10 @@ pub(super) fn node_href(node: &TypstDotNode, edges: &[TypstDotEdge], fields: &De
         )
 }
 
+const SVG_DECIMALS: usize = 4;
+
 fn number(value: f64) -> String {
-    let text = format!("{value:.4}");
+    let text = format!("{value:.SVG_DECIMALS$}");
     let text = text.trim_end_matches('0').trim_end_matches('.');
     if text == "-0" {
         "0".into()
@@ -204,8 +248,82 @@ fn number(value: f64) -> String {
     }
 }
 
+/// Validate the area of each closed contour in the coordinates actually
+/// written to SVG. Subtract the first point to avoid cancellation on translation.
+fn hull_path_data(
+    path: &BezPath,
+    coordinates: impl Fn(Point) -> (String, String),
+) -> Result<String, String> {
+    let mut data = String::new();
+    let ticks = |text: &str| -> Result<i128, &'static str> {
+        let value: f64 = text.parse().map_err(|_| RESOLUTION_ERROR)?;
+        let value = (value * 10_i64.pow(SVG_DECIMALS as u32) as f64).round();
+        if value.abs() < (1_i64 << 49) as f64 {
+            Ok(value as i128)
+        } else {
+            Err(RESOLUTION_ERROR)
+        }
+    };
+    let mut ring = Vec::new();
+    for element in path.iter() {
+        match element {
+            PathEl::MoveTo(point) | PathEl::LineTo(point) => {
+                let (x, y) = coordinates(point);
+                let rounded = (ticks(&x)?, ticks(&y)?);
+                ring.push(HullVertex { rounded, x, y });
+            }
+            PathEl::ClosePath => {
+                write_hull_ring(&mut data, &ring)?;
+                ring.clear();
+            }
+            _ => return Err("hull contour must be polygonal".into()),
+        }
+    }
+    Ok(data)
+}
+
+struct HullVertex {
+    rounded: (i128, i128),
+    x: String,
+    y: String,
+}
+
+fn write_hull_ring(data: &mut String, ring: &[HullVertex]) -> Result<(), &'static str> {
+    let first = ring.first().ok_or(RESOLUTION_ERROR)?.rounded;
+    let mut area = 0_i128;
+    let mut command = 'M';
+    for (index, vertex) in ring.iter().enumerate() {
+        let count = ring.len();
+        let previous = ring[(index + count - 1) % count].rounded;
+        let current = vertex.rounded;
+        let next = ring[(index + 1) % count].rounded;
+        let incoming = (current.0 - previous.0, current.1 - previous.1);
+        let outgoing = (next.0 - current.0, next.1 - current.1);
+        area +=
+            (current.0 - first.0) * (next.1 - first.1) - (current.1 - first.1) * (next.0 - first.0);
+        // Only omit a point that lies on its neighbors' segment in emitted SVG
+        // coordinates. A zero turn at a reversal is part of the contour.
+        let cross = incoming.0 * outgoing.1 - incoming.1 * outgoing.0;
+        let dot = incoming.0 * outgoing.0 + incoming.1 * outgoing.1;
+        if cross != 0 || dot <= 0 {
+            let _ = write!(data, "{command}{} {}", vertex.x, vertex.y);
+            command = 'L';
+        }
+    }
+    if area == 0 {
+        return Err(RESOLUTION_ERROR);
+    }
+    data.push('Z');
+    Ok(())
+}
+
 /// The page: an optional centered title above the padded drawing canvas.
-pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> String {
+pub(super) fn svg(
+    typeset: &Typeset,
+    layers: &[Element],
+    targets: &[Target],
+    recolour_stamp: bool,
+) -> Result<String, String> {
     let mut bounds = Rect::new(
         f64::INFINITY,
         f64::INFINITY,
@@ -215,8 +333,29 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
     let mut include = |rect: Rect| bounds = bounds.union(rect);
     for element in layers {
         match element {
-            Element::Carrier { .. } => {}
-            Element::Path { path, .. } => include(path.bounding_box()),
+            Element::Carrier { .. } | Element::BeginGhost(_) | Element::EndGhost => {}
+            Element::LaneCrossings(_) => {}
+            Element::Hull { path, .. } | Element::Lane { path, .. } => include(path.bounding_box()),
+            Element::LaneHalo { center, radius } => {
+                let radius = radius + 1.6 / UNIT;
+                include(Rect::from_points(*center, *center).inflate(radius, radius));
+            }
+            Element::Counterterm { center, .. } => {
+                include(Rect::from_points(*center, *center).inflate(5.2 / UNIT, 5.2 / UNIT));
+            }
+            Element::Path {
+                path,
+                stroke,
+                highlight,
+            } => {
+                let bounds = path.bounding_box();
+                if *highlight {
+                    let overflow = (stroke.width / (2.0 * UNIT) - PAD).max(0.0);
+                    include(bounds.inflate(overflow, overflow));
+                } else {
+                    include(bounds);
+                }
+            }
             Element::Momentum { path, .. } => {
                 include(path.bounding_box());
                 if let Some(points) = marks::CHEVRON.at_end(path) {
@@ -241,11 +380,73 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
     if !bounds.is_finite() {
         bounds = Rect::ZERO;
     }
+    let title = typeset.title.as_ref();
+    let title_width = title.map_or(0.0, |title| title.metrics.width);
+    let title_height = title.map_or(0.0, |title| title.metrics.height + GUTTER);
+    let width = ((bounds.width() + 2.0 * PAD) * UNIT).max(title_width) + 2.0 * MARGIN;
+    // The nominal canvas sets ink weight before any bounds expansion.
+    let ink_scale = if recolour_stamp {
+        (width / 80.0).max(1.0)
+    } else {
+        1.0
+    };
+    if recolour_stamp {
+        let inflate = |rect: Rect, width: f64| rect.inflate(width / UNIT, width / UNIT);
+        for element in layers {
+            let painted = match element {
+                Element::Node {
+                    at: [x, y],
+                    size: (w, h),
+                    rectangular,
+                    stroke,
+                    ..
+                } => {
+                    let scale = if *rectangular { 1.0 } else { ink_scale };
+                    let rect =
+                        Rect::new(x - w * scale, y - h * scale, x + w * scale, y + h * scale);
+                    inflate(rect, stroke.width * ink_scale / 2.0)
+                }
+                Element::Counterterm { center, .. } => {
+                    inflate(Rect::from_points(*center, *center), 5.925 * ink_scale)
+                }
+                Element::Path { path, stroke, .. } => {
+                    inflate(path.bounding_box(), MITER_EXTENT * stroke.width * ink_scale)
+                }
+                Element::Momentum { path, .. } => {
+                    let mut rect = inflate(
+                        path.bounding_box(),
+                        MITER_EXTENT * arrow_stroke().width * ink_scale,
+                    );
+                    if let Some(points) = marks::CHEVRON.at_end(path) {
+                        let tip = points
+                            .into_iter()
+                            .fold(Rect::from_points(points[0], points[0]), |rect, point| {
+                                rect.union_pt(point)
+                            });
+                        rect = rect.union(inflate(tip, MITER_EXTENT));
+                    }
+                    rect
+                }
+                Element::Triangle(points) => {
+                    let triangle = points
+                        .iter()
+                        .copied()
+                        .fold(Rect::from_points(points[0], points[0]), |rect, point| {
+                            rect.union_pt(point)
+                        });
+                    inflate(triangle, MITER_EXTENT * MARK_STROKE)
+                }
+                Element::Hull { path, .. } => inflate(path.bounding_box(), HULL_STROKE / 2.0),
+                Element::Lane { path, width, .. } => inflate(path.bounding_box(), width / 2.0),
+                // The nominal bounds already include the unscaled halo, labels and nodes.
+                _ => continue,
+            };
+            bounds = bounds.union(painted);
+        }
+    }
     let canvas_width = (bounds.width() + 2.0 * PAD) * UNIT;
     let canvas_height = (bounds.height() + 2.0 * PAD) * UNIT;
-    let title = typeset.title.as_ref();
-    let column = title.map_or(canvas_width, |title| canvas_width.max(title.metrics.width));
-    let title_height = title.map_or(0.0, |title| title.metrics.height + GUTTER);
+    let column = canvas_width.max(title_width);
     let (width, height) = (
         column + 2.0 * MARGIN,
         title_height + canvas_height + 2.0 * MARGIN,
@@ -298,7 +499,7 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
         let mut attributes = format!(
             r#"stroke="{}" stroke-width="{}""#,
             xml_escape(&stroke.paint),
-            number(stroke.width)
+            number(stroke.width * ink_scale)
         );
         if stroke.round_cap {
             attributes.push_str(r#" stroke-linecap="round""#);
@@ -334,6 +535,23 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
             y(points[2].y)
         )
     };
+    let has_lanes = layers
+        .iter()
+        .any(|element| matches!(element, Element::Lane { .. }));
+    let write_targets = |svg: &mut String| {
+        for Target { at, size, href } in targets {
+            let _ = write!(
+                svg,
+                r#"<a href="{href}" transform="translate({} {})"><rect width="{s}" height="{s}" fill="transparent" stroke="none"/></a>"#,
+                number(ox + (at[0] - bounds.x0 + PAD) * UNIT - size / 2.0),
+                number(oy + (bounds.y1 + PAD - at[1]) * UNIT - size / 2.0),
+                s = number(*size)
+            );
+        }
+    };
+    if has_lanes {
+        write_targets(&mut svg);
+    }
     for element in layers {
         match element {
             Element::Carrier { path, href } => {
@@ -343,7 +561,7 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
                     path_data(path)
                 );
             }
-            Element::Path { path, stroke } => {
+            Element::Path { path, stroke, .. } => {
                 let _ = write!(
                     svg,
                     r#"<path fill="none" {} d="{}"/>"#,
@@ -366,6 +584,79 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
                     );
                 }
                 svg.push_str("</a>");
+            }
+            Element::BeginGhost(opacity) => {
+                let _ = write!(svg, r#"<g data-linnet-ghost="true" opacity="{opacity}">"#);
+            }
+            Element::EndGhost => svg.push_str("</g>"),
+            Element::Hull {
+                path,
+                paint,
+                details,
+            } => {
+                let opacity = if details.contracted { 0.22 } else { 0.16 };
+                let paint = xml_escape(paint);
+                let d = hull_path_data(path, |point| (x(point.x), y(point.y)))?;
+                let (label, description, title, scheme_attribute) = hover_details(details);
+                let _ = write!(
+                    svg,
+                    r#"<g data-linnet-hull="true" data-label="{label}" data-description="{description}" data-contracted="{}"{scheme_attribute}><title>{title}</title><path d="{d}" fill="{paint}" fill-rule="evenodd" fill-opacity="{opacity}" stroke="{paint}" stroke-width="{HULL_STROKE}" stroke-linejoin="round"/></g>"#,
+                    details.contracted
+                );
+            }
+            Element::Lane {
+                slot,
+                path,
+                paint,
+                details,
+                width,
+            } => {
+                let paint = xml_escape(paint);
+                let (label, description, title, _) = hover_details(details);
+                let _ = write!(
+                    svg,
+                    r#"<g data-linnet-lane="{slot}" data-label="{label}" data-description="{description}"><title>{title}</title><path d="{}" fill="none" stroke="{paint}" stroke-width="{width}" stroke-linecap="round" stroke-linejoin="round"/></g>"#,
+                    path_data(path)
+                );
+            }
+            Element::LaneCrossings(crossings) => {
+                let _ = write!(
+                    svg,
+                    r#"<metadata data-linnet-lane-crossings="{crossings}"/>"#
+                );
+            }
+            Element::LaneHalo { center, radius } => {
+                let _ = write!(
+                    svg,
+                    r##"<circle cx="{}" cy="{}" r="{}" fill="none" stroke="#ffffff" stroke-width="1.6" data-linnet-paper="true" pointer-events="none"/>"##,
+                    x(center.x),
+                    y(center.y),
+                    number(radius * UNIT + 0.8)
+                );
+            }
+            Element::Counterterm {
+                center,
+                paint,
+                details,
+            } => {
+                let paint = xml_escape(paint);
+                let (label, description, title, scheme_attribute) = hover_details(details);
+                let cx = x(center.x);
+                let cy = y(center.y);
+                let stamp_scale = if recolour_stamp {
+                    format!(" scale({})", number(ink_scale))
+                } else {
+                    String::new()
+                };
+                let (disc, cross, paper) = if details.scheme == CountertermScheme::OnShell {
+                    (paint.as_str(), "#ffffff", r#" data-linnet-paper="true""#)
+                } else {
+                    ("#ffffff", paint.as_str(), "")
+                };
+                let _ = write!(
+                    svg,
+                    r##"<g data-linnet-counterterm="true" data-label="{label}" data-description="{description}"{scheme_attribute} transform="translate({cx} {cy}){stamp_scale}"><title>{title}</title><circle r="5.2" fill="{disc}" stroke="{paint}" stroke-width="1.45"/><path d="M-3.65 -3.65L3.65 3.65M-3.65 3.65L3.65 -3.65" fill="none" stroke="{cross}" stroke-width="1.45"{paper}/></g>"##
+                );
             }
             Element::Triangle(points) => {
                 let _ = write!(
@@ -420,7 +711,7 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
                         r#"<circle data-linnet-node="{id}" cx="{}" cy="{}" r="{}" fill="{}" {}/>"#,
                         x(*nx),
                         y(*ny),
-                        number(w * UNIT),
+                        number(w * UNIT * ink_scale),
                         xml_escape(fill),
                         stroke_attributes(stroke)
                     );
@@ -428,25 +719,53 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
             }
         }
     }
-    for Target { at, size, href } in targets {
-        let _ = write!(
-            svg,
-            r#"<a href="{href}" transform="translate({} {})"><rect width="{s}" height="{s}" fill="transparent" stroke="none"/></a>"#,
-            number(ox + (at[0] - bounds.x0 + PAD) * UNIT - size / 2.0),
-            number(oy + (bounds.y1 + PAD - at[1]) * UNIT - size / 2.0),
-            s = number(*size)
-        );
+    if !has_lanes {
+        write_targets(&mut svg);
     }
     let _ = write!(
         svg,
         r##"<defs><pattern id="linnest-process-hatch" width="5" height="5" patternUnits="userSpaceOnUse"><path d="M0 5L5 0" stroke="#3d2645" stroke-width="0.35"/></pattern>{}</defs></svg>"##,
         typeset.defs
     );
-    svg
+    Ok(svg)
 }
 
 impl From<Bounds> for Rect {
     fn from(bounds: Bounds) -> Self {
         Rect::new(bounds.left, bounds.bottom, bounds.right, bounds.top)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hull_serialization_only_omits_points_collinear_after_rounding() {
+        let mut path = BezPath::new();
+        path.move_to((0.0, 0.0));
+        path.line_to((0.1, 0.10004));
+        path.line_to((0.2, 0.20008));
+        path.line_to((0.3, 0.30012));
+        path.line_to((0.4, 0.30012));
+        path.line_to((0.5, 0.30012));
+        path.close_path();
+        assert_eq!(
+            hull_path_data(&path, |p| (number(p.x), number(p.y))).unwrap(),
+            "M0 0L0.1 0.1L0.2 0.2001L0.3 0.3001L0.5 0.3001Z"
+        );
+    }
+
+    #[test]
+    fn hull_serialization_rejects_a_contour_that_rounds_to_zero_area() {
+        let mut path = BezPath::new();
+        path.move_to((44.4829, 58.8441));
+        path.line_to((44.482901, 58.8441));
+        path.line_to((44.4829, 58.844101));
+        path.close_path();
+        assert_eq!(
+            hull_path_data(&path, |p| (number(p.x), number(p.y))).unwrap_err(),
+            RESOLUTION_ERROR
+        );
     }
 }

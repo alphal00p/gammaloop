@@ -544,7 +544,13 @@
   /// Individual subgraph records may override this with `edge-style`.
   /// -> dictionary
   subgraph-edge-style: (stroke: rgb("#ffd166") + 4.5pt),
-  /// Draw subgraph shading below the normal half-edge style. -> bool
+  /// Draw subgraph shading below the normal half-edge style. With `false`,
+  /// the last matching style replaces it. Use `"casings"` to preserve earlier
+  /// matching strokes on the same path, widening them outward by at least
+  /// 1.1pt per layer. Each matching style must supply a stroke.
+  /// `"bands"` paints parallel carrier bands underneath particle strokes.
+  /// `"bands-miniature"` increases the gap for small diagrams.
+  /// -> bool | str
   subgraph-edge-underlay: true,
 ) = {
   _impl-draw(

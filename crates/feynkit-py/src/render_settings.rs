@@ -1,5 +1,5 @@
 //! Physics presentation options, independent of generic graph rendering.
-use feynkit_graph::SceneOptions;
+use feynkit_graph::{HighlightOverlap, HullOptions, SceneOptions};
 use pyo3::prelude::*;
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
@@ -71,6 +71,27 @@ pub struct PyDiagramStyle {
     /// >>> hep.DiagramStyle(debug=True).debug
     /// True
     debug: Option<bool>,
+    /// Use stamp recolouring by default.
+    ///
+    /// Examples
+    /// --------
+    /// >>> hep.DiagramStyle(miniature=True).miniature
+    /// True
+    miniature: bool,
+    /// Innermost hull radius in points, or the default.
+    ///
+    /// Examples
+    /// --------
+    /// >>> hep.DiagramStyle(hull_radius=4.2).hull_radius
+    /// 4.2
+    hull_radius: Option<f64>,
+    /// Additional hull radius per nesting level, in points.
+    ///
+    /// Examples
+    /// --------
+    /// >>> hep.DiagramStyle(hull_step=2.6).hull_step
+    /// 2.6
+    hull_step: Option<f64>,
 }
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
@@ -97,8 +118,16 @@ impl PyDiagramStyle {
     ///     Separate the incoming states of a cross-section drawing.
     /// debug : bool or None, optional
     ///     Show both vertex and edge indices unless individually overridden.
+    /// miniature : bool, optional
+    ///     Default to recolouring and increase ghost visibility for small stamps.
+    /// hull_radius : float or None, optional
+    ///     Innermost hull radius in points, in [0.001, 1000]. Defaults to 4.2.
+    ///     Effective radii including nesting and counterterm padding must
+    ///     also be in this range. Thin hulls on long regions may require a larger radius.
+    /// hull_step : float or None, optional
+    ///     Finite nonnegative radius increment per inclusion level. Defaults to 2.6 points.
     #[new]
-    #[pyo3(signature=(*,show_particle=None,show_momentum=None,show_edge_index=None,show_node_index=None,momentum_arrows=None,split_initial_state=None,debug=None))]
+    #[pyo3(signature=(*,show_particle=None,show_momentum=None,show_edge_index=None,show_node_index=None,momentum_arrows=None,split_initial_state=None,debug=None,miniature=false,hull_radius=None,hull_step=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         show_particle: Option<bool>,
@@ -108,6 +137,9 @@ impl PyDiagramStyle {
         momentum_arrows: Option<bool>,
         split_initial_state: Option<bool>,
         debug: Option<bool>,
+        miniature: bool,
+        hull_radius: Option<f64>,
+        hull_step: Option<f64>,
     ) -> Self {
         Self {
             show_particle,
@@ -117,6 +149,9 @@ impl PyDiagramStyle {
             momentum_arrows,
             split_initial_state,
             debug,
+            miniature,
+            hull_radius,
+            hull_step,
         }
     }
     /// Summarize the explicitly selected physics options.
@@ -126,7 +161,7 @@ impl PyDiagramStyle {
     /// >>> repr(hep.DiagramStyle())
     /// 'DiagramStyle()'
     fn __repr__(&self) -> String {
-        let fields = [
+        let mut fields = [
             ("show_particle", self.show_particle),
             ("show_momentum", self.show_momentum),
             ("show_edge_index", self.show_edge_index),
@@ -140,6 +175,17 @@ impl PyDiagramStyle {
             value.map(|value| format!("{name}={}", if value { "True" } else { "False" }))
         })
         .collect::<Vec<_>>();
+        if self.miniature {
+            fields.push("miniature=True".into());
+        }
+        for (name, value) in [
+            ("hull_radius", self.hull_radius),
+            ("hull_step", self.hull_step),
+        ] {
+            if let Some(value) = value {
+                fields.push(format!("{name}={value:?}"));
+            }
+        }
         format!("DiagramStyle({})", fields.join(", "))
     }
 }
@@ -163,6 +209,15 @@ impl PyDiagramStyle {
             split_initial_state: s
                 .split_initial_state
                 .unwrap_or(defaults.split_initial_state),
+            overlap: if s.miniature {
+                HighlightOverlap::Recolour
+            } else {
+                defaults.overlap
+            },
+            hulls: HullOptions {
+                radius: s.hull_radius.unwrap_or(defaults.hulls.radius),
+                step: s.hull_step.unwrap_or(defaults.hulls.step),
+            },
             ..defaults
         }
     }

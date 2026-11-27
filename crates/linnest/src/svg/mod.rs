@@ -6,23 +6,35 @@
 mod config;
 mod curves;
 pub use config::Config;
+pub use highlight::{
+    CountertermScheme, HighlightDetails, HighlightDrawing, HighlightOverlap, HighlightPalette,
+    HighlightRegion, HighlightStroke, HighlightStyle, HullOptions, HullRegion, LaneRegion,
+    SlotPaint, UnknownCountertermScheme, UnknownHighlightOverlap, UnknownHighlightStyle,
+};
+mod highlight;
+mod hulls;
 mod interactive;
 mod labels;
+mod lanes;
 mod marks;
 mod output;
 
-use kurbo::{BezPath, Point};
+use kurbo::{Arc as CurveArc, BezPath, Point, Rect, Shape, Vec2};
 use linnet::half_edge::involution::EdgeIndex;
 use linnet::half_edge::layout::impred::{EdgeLabel, ImpredConfig};
 use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph};
 use roxmltree::Document;
 use serde_json::{Map, Value};
+use std::collections::BTreeMap;
+use std::f64::consts::{FRAC_PI_2, TAU};
 use std::sync::Arc;
 
 use crate::{ImpredRun, TypstDotEdge, TypstDotEndpoint, TypstDotNode, TypstGraph, TypstGraphSpec};
 use labels::{Anchor, Bounds, Placement, Stroke as CollisionStroke};
 pub use labels::{LabelError, LabelMetrics, LabelPage, LabelSource, Typeset};
+use lanes::{Carrier as LaneCarrier, Station as LaneStation};
 pub use output::Details;
+use output::INK;
 
 /// Drawing unit in points: Linnest's default 1.5em at 9pt text.
 const UNIT: f64 = 13.5;
@@ -32,6 +44,8 @@ const NODE_RADIUS: f64 = 0.16;
 /// A prepared graph with its paint and label sources, drawn by [`Scene::render`].
 /// See [`Self::typeset_mathml`] for a complete measured-label example.
 pub struct Scene {
+    /// Highlight drawing state. Initialize with `HighlightDrawing::default()`.
+    pub highlights: HighlightDrawing,
     /// Layout graph: sizes and pins as statements, in graph-spec form.
     pub graph: TypstGraphSpec,
     /// Drawing per node and edge, in spec order.
@@ -56,6 +70,8 @@ pub struct Scene {
 
 #[derive(Clone)]
 pub struct NodeDrawing {
+    /// Ordered paints for a segmented highlight ring.
+    pub highlight_ring: Vec<String>,
     /// Radius/minimum half-size in drawing units.
     pub radius: f64,
     /// Fit labels with this padding, or keep an explicit fixed radius.
@@ -71,6 +87,8 @@ pub struct NodeDrawing {
 #[derive(Clone)]
 pub struct EdgeDrawing {
     pub stroke: Stroke,
+    /// Resolved strokes in global layer order, outermost first.
+    pub highlight_strokes: Vec<HighlightStroke>,
     pub pattern: Option<Pattern>,
     /// Particle-flow arrowhead along (`true`) or against the edge orientation.
     pub flow: Option<bool>,
@@ -84,6 +102,12 @@ pub struct EdgeDrawing {
 }
 
 impl EdgeDrawing {
+    fn has_bands(&self) -> bool {
+        self.highlight_strokes
+            .first()
+            .is_some_and(|stroke| stroke.offset.is_some())
+    }
+
     /// Default clearance used by the shared physics renderer.
     pub const DEFAULT_MOMENTUM_OFFSET: f64 = 0.35;
 }
@@ -182,6 +206,7 @@ impl Scene {
     /// use serde_json;
     /// use std::error::Error;
     /// let scene = Scene {
+    ///     highlights: Default::default(),
     ///     graph: serde_json::from_str(r#"{"nodes":[],"edges":[]}"#)?,
     ///     nodes: Vec::new(), edges: Vec::new(), preamble: String::new(),
     ///     title: Some(LabelSource::text("Measured title")), pages: Vec::new(),
@@ -239,8 +264,23 @@ impl Scene {
         Ok(typeset)
     }
 
+    /// Embed this scene's computed SVG paths in a self-contained Typst document.
+    /// Supply outlined label pages via [`Self::typeset`] for vector text.
+    ///
+    /// # Errors
+    /// Returns a layout or geometry failure from [`Self::render`].
+    pub fn render_typst(&self, typeset: &Typeset) -> Result<String, String> {
+        self.render(typeset).map(|svg| Self::svg_typst_source(&svg))
+    }
+
+    /// Wrap a static SVG as a Typst image. See [`Self::render_typst`].
+    pub fn svg_typst_source(svg: &str) -> String {
+        format!("#set page(width: auto, height: auto, margin: 0pt)\n#image(bytes({svg:?}))")
+    }
+
     /// Lay out and draw the scene with its typeset pages; one SVG document.
     pub fn render(&self, typeset: &Typeset) -> Result<String, String> {
+        self.validate_hull_radii()?;
         let mut spec = self.graph.clone();
         for (node, drawing) in spec.nodes.iter_mut().zip(&self.nodes) {
             let (w, h) = drawing.size(typeset);
@@ -284,11 +324,11 @@ impl Scene {
             }
         }
         let Some(mut run) = run else {
-            return Ok(Drawing::new(self, typeset, &laid.unwrap())?.svg(typeset));
+            return Drawing::new(self, typeset, &laid.unwrap())?.svg(typeset);
         };
         let drawing = Drawing::new(self, typeset, &Laid::new(&run)?)?;
         if !self.label_feedback {
-            return Ok(drawing.svg(typeset));
+            return drawing.svg(typeset);
         }
         // Keep the least-overlapping drawing; later passes may not improve it.
         // A rejected pass still supplies the next pass's pinned labels.
@@ -316,7 +356,7 @@ impl Scene {
                 rejected = Some(drawing);
             }
         }
-        Ok(best.svg(typeset))
+        best.svg(typeset)
     }
 }
 
@@ -414,6 +454,7 @@ enum Element {
     Path {
         path: BezPath,
         stroke: Stroke,
+        highlight: bool,
     },
     /// Momentum decorations retain their physical edge identity for overlays.
     Momentum {
@@ -421,6 +462,30 @@ enum Element {
         path: BezPath,
     },
     Triangle([Point; 3]),
+    BeginGhost(f64),
+    EndGhost,
+    Hull {
+        path: BezPath,
+        paint: String,
+        details: HighlightDetails,
+    },
+    Lane {
+        slot: usize,
+        path: BezPath,
+        paint: String,
+        details: HighlightDetails,
+        width: f64,
+    },
+    LaneCrossings(usize),
+    LaneHalo {
+        center: Point,
+        radius: f64,
+    },
+    Counterterm {
+        center: Point,
+        paint: String,
+        details: HighlightDetails,
+    },
     Label {
         page: usize,
         bounds: Bounds,
@@ -454,6 +519,7 @@ fn arrow_stroke() -> Stroke {
 }
 
 struct Drawing {
+    recolour_stamp: bool,
     layers: Vec<Element>,
     targets: Vec<Target>,
     placements: Vec<Placement>,
@@ -464,8 +530,8 @@ struct Drawing {
 
 impl Drawing {
     /// Serialize only the selected feedback pass, preserving painting order.
-    fn svg(&self, typeset: &Typeset) -> String {
-        output::svg(typeset, &self.layers, &self.targets)
+    fn svg(&self, typeset: &Typeset) -> Result<String, String> {
+        output::svg(typeset, &self.layers, &self.targets, self.recolour_stamp)
     }
 
     /// Overlapping labels first, then label pairs, then line hits.
@@ -497,11 +563,15 @@ impl Drawing {
 
     fn new(scene: &Scene, typeset: &Typeset, laid: &Laid) -> Result<Self, String> {
         let mut layers = Vec::new();
+        let mut highlight_layers = BTreeMap::new();
+        let mut overlay_marks = Vec::new();
         let mut targets = Vec::new();
         let mut strokes = Vec::new();
         let mut placements = Vec::new();
         let mut fixed_arrows = Vec::new();
         let mut region_hrefs = Vec::new();
+        let mut hull_paths = BTreeMap::new();
+        let mut lane_paths = BTreeMap::new();
         for (edge, carrier) in laid.edges.iter().zip(&laid.carriers) {
             let drawing = scene
                 .edges
@@ -510,6 +580,35 @@ impl Drawing {
             let hrefs = output::edge_hrefs(edge, &drawing.details);
             let anchor = edge.pos.as_ref().map_or([0.0; 2], |p| [p.x, p.y]);
             let (visible, parts) = Self::edge_paths(scene, typeset, laid, edge, carrier, anchor)?;
+            let member = scene
+                .highlights
+                .hulls
+                .iter()
+                .any(|region| region.edges.contains(&edge.edge));
+            let contracted = scene
+                .highlights
+                .hulls
+                .iter()
+                .any(|region| region.details.contracted && region.edges.contains(&edge.edge));
+            if member {
+                hull_paths.insert(edge.edge, visible.clone());
+            }
+            if let (Some(source), Some(sink)) = (&edge.source, &edge.sink) {
+                if scene
+                    .highlights
+                    .lanes
+                    .iter()
+                    .any(|region| region.edges.contains(&edge.edge))
+                {
+                    lane_paths.insert(
+                        edge.edge,
+                        LaneCarrier {
+                            nodes: [source.node, sink.node],
+                            path: visible.clone(),
+                        },
+                    );
+                }
+            }
             let part_refs: Vec<&BezPath> = parts.iter().collect();
             for (region, points) in curves::region_samples(&part_refs, UNIT)? {
                 targets.extend(points.into_iter().map(|at| Target {
@@ -518,7 +617,26 @@ impl Drawing {
                     href: hrefs.regions[region].clone(),
                 }));
             }
-            Self::paint_edge(drawing, &visible, &parts, &mut layers, &mut strokes)?;
+            if contracted {
+                let opacity = if scene.highlights.recolour_stamp {
+                    0.62
+                } else {
+                    0.35
+                };
+                layers.push(Element::BeginGhost(opacity));
+            }
+            Self::paint_edge(
+                drawing,
+                &visible,
+                &parts,
+                &mut layers,
+                &mut highlight_layers,
+                &mut overlay_marks,
+                &mut strokes,
+            )?;
+            if contracted {
+                layers.push(Element::EndGhost);
+            }
             for (index, path) in parts.iter().enumerate() {
                 layers.push(Element::Carrier {
                     path: path.clone(),
@@ -554,7 +672,12 @@ impl Drawing {
                     0.0,
                 )?;
                 fixed_arrows.extend(labels::arrow_footprint(&arrow));
-                layers.push(Element::Momentum {
+                let paint = if drawing.highlight_strokes.is_empty() {
+                    &mut layers
+                } else {
+                    &mut overlay_marks
+                };
+                paint.push(Element::Momentum {
                     href: hrefs.label.clone(),
                     path: arrow,
                 });
@@ -622,6 +745,110 @@ impl Drawing {
             }
         }
 
+        let highlight_elements = highlight_layers.into_values().flatten();
+        if scene.edges.iter().any(EdgeDrawing::has_bands) {
+            layers.splice(..0, highlight_elements);
+        } else {
+            layers.extend(highlight_elements);
+        }
+        layers.extend(overlay_marks);
+        if !scene.highlights.lanes.is_empty() {
+            let stations: Vec<_> = scene
+                .nodes
+                .iter()
+                .enumerate()
+                .map(|(node, drawing)| {
+                    let [x, y] = laid.node(node);
+                    let (width, height) = drawing.size(typeset);
+                    LaneStation {
+                        center: Point::new(x, y),
+                        radius: width.max(height),
+                    }
+                })
+                .collect();
+            layers.splice(
+                ..0,
+                lanes::draw(
+                    &scene.highlights.lanes,
+                    &lane_paths,
+                    &stations,
+                    scene.edges.len(),
+                )?,
+            );
+        }
+        let mut regions = Vec::new();
+        let mut counterterms = Vec::new();
+        for region in &scene.highlights.hulls {
+            let paths: Vec<_> = region
+                .edges
+                .iter()
+                .filter_map(|index| hull_paths.get(index))
+                .filter(|path| !path.elements().is_empty())
+                .collect();
+            let vertices: Vec<_> = laid
+                .nodes
+                .iter()
+                .filter(|node| region.nodes.contains(&node.node))
+                .map(|node| {
+                    let [x, y] = laid.node(node.node);
+                    Point::new(x, y)
+                })
+                .collect();
+            let path = hulls::union(&paths, &vertices, region.radius / UNIT)?;
+            if region.details.contracted {
+                let center = if vertices.is_empty() {
+                    // For a fully trimmed or empty selection, retain the glyph
+                    // at the selected edge anchors, or at the layout centre.
+                    if path.elements().is_empty() {
+                        let anchors: Vec<_> = laid
+                            .edges
+                            .iter()
+                            .filter(|edge| region.edges.contains(&edge.edge))
+                            .filter_map(|edge| edge.pos.as_ref().map(|p| Point::new(p.x, p.y)))
+                            .collect();
+                        let positions = if anchors.is_empty() {
+                            laid.nodes
+                                .iter()
+                                .filter_map(|node| node.pos.as_ref().map(|p| Point::new(p.x, p.y)))
+                                .collect()
+                        } else {
+                            anchors
+                        };
+                        positions
+                            .split_first()
+                            .map_or(Point::ORIGIN, |(&first, others)| {
+                                others
+                                    .iter()
+                                    .fold(Rect::from_points(first, first), |bounds, &p| {
+                                        bounds.union_pt(p)
+                                    })
+                                    .center()
+                            })
+                    } else {
+                        path.bounding_box().center()
+                    }
+                } else {
+                    let sum = vertices
+                        .iter()
+                        .fold(Vec2::ZERO, |sum, point| sum + point.to_vec2());
+                    (sum / vertices.len() as f64).to_point()
+                };
+                counterterms.push(Element::Counterterm {
+                    center,
+                    paint: region.paint.clone(),
+                    details: region.details.clone(),
+                });
+            }
+            if !path.elements().is_empty() {
+                regions.push(Element::Hull {
+                    path,
+                    paint: region.paint.clone(),
+                    details: region.details.clone(),
+                });
+            }
+        }
+        layers.splice(..0, regions);
+
         let obstacles: Vec<Bounds> = laid
             .nodes
             .iter()
@@ -680,6 +907,16 @@ impl Drawing {
         for (node, drawing) in laid.nodes.iter().zip(&scene.nodes) {
             let at = laid.node(node.node);
             let href = output::node_href(node, &laid.edges, &drawing.details);
+            let is_station = !drawing.rectangular
+                && lane_paths
+                    .values()
+                    .any(|carrier| carrier.nodes.contains(&node.node));
+            if is_station {
+                layers.push(Element::LaneHalo {
+                    center: Point::new(at[0], at[1]),
+                    radius: drawing.size(typeset).0,
+                });
+            }
             layers.push(Element::Node {
                 id: drawing
                     .details
@@ -689,9 +926,48 @@ impl Drawing {
                 at,
                 size: drawing.size(typeset),
                 rectangular: drawing.rectangular,
-                fill: drawing.fill.clone(),
+                fill: if is_station {
+                    INK.to_owned()
+                } else {
+                    drawing.fill.clone()
+                },
                 stroke: drawing.stroke.clone(),
             });
+            let (width, height) = drawing.size(typeset);
+            let radius = width.max(height) + 1.15 / UNIT;
+            let count = drawing.highlight_ring.len();
+            for (index, paint) in drawing.highlight_ring.iter().enumerate() {
+                let step = TAU / count as f64;
+                let gap = if count == 1 {
+                    0.0
+                } else {
+                    0.035_f64.min(step / 4.0)
+                };
+                let arc = CurveArc {
+                    center: Point::new(at[0], at[1]),
+                    radii: Vec2::new(radius, radius),
+                    start_angle: FRAC_PI_2 - index as f64 * step - gap,
+                    sweep_angle: -step + 2.0 * gap,
+                    x_rotation: 0.0,
+                };
+                let start = Point::new(
+                    at[0] + radius * arc.start_angle.cos(),
+                    at[1] + radius * arc.start_angle.sin(),
+                );
+                let mut path = BezPath::new();
+                path.move_to(start);
+                path.extend(arc.append_iter(curves::ACCURACY));
+                layers.push(Element::Path {
+                    path,
+                    stroke: Stroke {
+                        paint: paint.clone(),
+                        width: 2.5,
+                        dash: Dash::Solid,
+                        round_cap: false,
+                    },
+                    highlight: true,
+                });
+            }
             if let Some(page) = drawing.label {
                 let label = &typeset.pages[page];
                 layers.push(Element::Label {
@@ -718,8 +994,10 @@ impl Drawing {
                 href: href.into(),
             });
         }
+        layers.extend(counterterms);
         let overlaps = labels::overlaps(&placements, &chosen, &searched.lines);
         Ok(Self {
+            recolour_stamp: scene.highlights.recolour_stamp,
             layers,
             targets,
             placements,
@@ -914,31 +1192,69 @@ impl Drawing {
         visible: &BezPath,
         parts: &[BezPath],
         layers: &mut Vec<Element>,
+        highlight_layers: &mut BTreeMap<usize, Vec<Element>>,
+        overlay_marks: &mut Vec<Element>,
         strokes: &mut Vec<CollisionStroke>,
     ) -> Result<(), String> {
-        let radius = drawing.stroke.width / UNIT / 2.0;
-        if let Some(pattern) = &drawing.pattern {
-            let path = curves::pattern(visible, pattern)?;
+        let bands = drawing.has_bands();
+        if bands && !visible.elements().is_empty() {
+            for band in &drawing.highlight_strokes {
+                let offset = band.offset.unwrap_or_default() / UNIT;
+                let path = if offset == 0.0 {
+                    visible.clone()
+                } else {
+                    curves::parallel(visible, offset)?
+                };
+                strokes.push(CollisionStroke {
+                    radius: band.stroke.width / UNIT / 2.0,
+                    path: path.clone(),
+                });
+                highlight_layers.entry(0).or_default().push(Element::Path {
+                    path,
+                    stroke: band.stroke.clone(),
+                    highlight: true,
+                });
+            }
+        }
+        let outermost = drawing
+            .highlight_strokes
+            .first()
+            .filter(|_| !bands)
+            .map_or(&drawing.stroke, |highlight| &highlight.stroke);
+        let radius = outermost.width / UNIT / 2.0;
+        let paths = if let Some(pattern) = &drawing.pattern {
+            vec![curves::pattern(visible, pattern)?]
+        } else {
+            curves::cubics(visible)
+                .into_iter()
+                .map(|segment| curves::from_cubics(&[segment]))
+                .collect()
+        };
+        for path in &paths {
             strokes.push(CollisionStroke {
                 radius,
                 path: path.clone(),
             });
-            layers.push(Element::Path {
-                path,
-                stroke: drawing.stroke.clone(),
-            });
-        } else {
-            for segment in curves::cubics(visible) {
-                let path = curves::from_cubics(&[segment]);
-                strokes.push(CollisionStroke {
-                    radius,
-                    path: path.clone(),
-                });
-                layers.push(Element::Path {
-                    path,
-                    stroke: drawing.stroke.clone(),
-                });
-            }
+        }
+        let base_stroke = (bands
+            || drawing.highlight_strokes.is_empty()
+            || matches!(layers.last(), Some(Element::BeginGhost(_))))
+        .then_some((None, &drawing.stroke));
+        let highlights = drawing
+            .highlight_strokes
+            .iter()
+            .filter(|_| !bands)
+            .map(|highlight| (Some(highlight.layer), &highlight.stroke));
+        for (index, stroke) in base_stroke.into_iter().chain(highlights) {
+            let paint = match index {
+                Some(index) => highlight_layers.entry(index).or_default(),
+                None => &mut *layers,
+            };
+            paint.extend(paths.iter().map(|path| Element::Path {
+                path: path.clone(),
+                stroke: stroke.clone(),
+                highlight: index.is_some(),
+            }));
         }
         if let Some(forward) = drawing.flow {
             let ratio = match parts {
@@ -962,7 +1278,12 @@ impl Drawing {
                         kurbo::PathEl::ClosePath,
                     ]),
                 });
-                layers.push(Element::Triangle(points));
+                let paint = if drawing.highlight_strokes.is_empty() {
+                    layers
+                } else {
+                    overlay_marks
+                };
+                paint.push(Element::Triangle(points));
             }
         }
         Ok(())
@@ -1040,7 +1361,8 @@ impl Scene {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
+    use std::slice;
 
     use super::*;
     use crate::{TypstEdgeSpec, TypstEndpointSpec, TypstNodeSpec};
@@ -1102,6 +1424,7 @@ mod tests {
                 .into(),
         };
         let drawing = |pattern, flow| EdgeDrawing {
+            highlight_strokes: Vec::new(),
             stroke: ink(1.0),
             pattern,
             flow,
@@ -1116,6 +1439,7 @@ mod tests {
             longitudinal_scale: 1.4,
         };
         Scene {
+            highlights: Default::default(),
             graph: TypstGraphSpec {
                 name: Some("bubble".to_owned()),
                 data: None,
@@ -1132,6 +1456,7 @@ mod tests {
             },
             nodes: (0..2)
                 .map(|_| NodeDrawing {
+                    highlight_ring: Vec::new(),
                     radius: NODE_RADIUS,
                     label_padding: Some(0.25),
                     label: None,
@@ -1183,6 +1508,319 @@ mod tests {
                 label,
             ])
             .unwrap()
+    }
+
+    #[test]
+    fn hulls_cover_parallel_carriers_and_coil_with_escaped_counterterm_details() {
+        let mut scene = bubble(false);
+        let mut inner = HighlightRegion::new([1].into(), [0, 1].into(), HighlightStyle::Treated);
+        inner.details = HighlightDetails {
+            label: "γ₂ & <local>".into(),
+            description: "local \"subtraction\"".into(),
+            contracted: true,
+            scheme: CountertermScheme::OnShell,
+        };
+        let outer = HighlightRegion::new([1, 2].into(), [0, 1].into(), HighlightStyle::ActedOn);
+        scene.apply_highlights_with_overlap(
+            &[inner, outer],
+            &HighlightPalette::new("#ffd166"),
+            true,
+            HighlightOverlap::Hulls,
+        );
+        assert!(scene.highlights.hulls[0].radius > scene.highlights.hulls[1].radius);
+        let svg = scene.render(&typeset(&scene)).unwrap();
+        let doc = Document::parse(&svg).unwrap();
+        let regions: Vec<_> = doc
+            .descendants()
+            .filter(|node| node.attribute("data-linnet-hull") == Some("true"))
+            .collect();
+        assert_eq!(regions.len(), 2);
+        assert_eq!(
+            regions[0].last_element_child().unwrap().attribute("fill"),
+            Some("#3b82f6")
+        );
+        assert_eq!(
+            regions[1]
+                .last_element_child()
+                .unwrap()
+                .attribute("fill-opacity"),
+            Some("0.22")
+        );
+        assert_ne!(
+            regions[0].last_element_child().unwrap().attribute("d"),
+            regions[1].last_element_child().unwrap().attribute("d")
+        );
+        let marker = doc
+            .descendants()
+            .find(|node| node.attribute("data-linnet-counterterm") == Some("true"))
+            .unwrap();
+        assert_eq!(marker.attribute("data-scheme"), Some("on-shell"));
+        let disc = marker
+            .children()
+            .find(|node| node.has_tag_name("circle"))
+            .unwrap();
+        assert_eq!(disc.attribute("fill"), Some("#e4504f"));
+        assert_eq!(
+            marker.last_element_child().unwrap().attribute("stroke"),
+            Some("#ffffff")
+        );
+        assert_eq!(marker.attribute("data-label"), Some("γ₂ & <local>"));
+        assert_eq!(
+            marker.first_element_child().unwrap().text(),
+            Some("γ₂ & <local> — local \"subtraction\" — on-shell")
+        );
+        assert!(doc
+            .descendants()
+            .any(|node| node.attribute("opacity") == Some("0.35")));
+    }
+
+    #[test]
+    fn recolour_stamp_bounds_enclose_scaled_circles_and_rectangles() {
+        let mut scene = bubble(false);
+        scene.nodes[1].rectangular = true;
+        let mut labels = typeset(&scene);
+        labels.title.as_mut().unwrap().metrics.width = 3200.0;
+        let region = HighlightRegion::new([].into(), [0].into(), HighlightStyle::Treated);
+        scene.apply_highlights_with_overlap(
+            &[region],
+            &HighlightPalette::new("#ffd166"),
+            true,
+            HighlightOverlap::Recolour,
+        );
+        let svg = scene.render(&labels).unwrap();
+        let doc = Document::parse(&svg).unwrap();
+        let canvas: Vec<f64> = doc
+            .root_element()
+            .attribute("viewBox")
+            .unwrap()
+            .split_whitespace()
+            .map(|value| value.parse().unwrap())
+            .collect();
+        let nodes: Vec<_> = doc
+            .descendants()
+            .filter(|node| node.has_attribute("data-linnet-node"))
+            .collect();
+        assert_eq!(nodes.len(), 2);
+        for node in nodes {
+            let value = |key| node.attribute(key).unwrap().parse::<f64>().unwrap();
+            let half_stroke = value("stroke-width") / 2.0;
+            let (left, top, right, bottom) = if node.has_tag_name("circle") {
+                let (x, y, r) = (value("cx"), value("cy"), value("r"));
+                (x - r, y - r, x + r, y + r)
+            } else {
+                let (x, y) = (value("x"), value("y"));
+                (x, y, x + value("width"), y + value("height"))
+            };
+            assert!(left >= half_stroke && top >= half_stroke);
+            assert!(right + half_stroke <= canvas[2] && bottom + half_stroke <= canvas[3]);
+        }
+    }
+
+    #[test]
+    fn highlight_defaults_and_reset_restore_the_unstyled_scene() {
+        let mut scene = bubble(false);
+        let labels = typeset(&scene);
+        let original = scene.render(&labels).unwrap();
+        let palette = HighlightPalette::new("#ffd166");
+        let region = HighlightRegion::new([1].into(), [0, 1].into(), HighlightStyle::Treated);
+        scene.apply_highlights(slice::from_ref(&region), &palette, true);
+        let single = scene.render(&labels).unwrap();
+        assert!(!single.contains("data-linnet-hull"));
+        assert!(single.contains("#e4504f") && single.contains("#77777773"));
+        scene.apply_highlights_with_overlap(
+            slice::from_ref(&region),
+            &palette,
+            true,
+            HighlightOverlap::Recolour,
+        );
+        assert!(scene.highlights.recolour_stamp);
+        scene.apply_highlights_with_overlap(
+            slice::from_ref(&region),
+            &palette,
+            true,
+            HighlightOverlap::Lanes,
+        );
+        assert!(!scene.highlights.recolour_stamp);
+        assert!(!scene.highlights.lanes.is_empty());
+        scene.apply_highlights(&[], &palette, true);
+        assert_eq!(scene.render(&labels).unwrap(), original);
+
+        let mut empty = HighlightRegion::new(
+            Default::default(),
+            Default::default(),
+            HighlightStyle::Treated,
+        );
+        empty.details.contracted = true;
+        scene.apply_highlights(&[empty], &palette, true);
+        let svg = scene.render(&labels).unwrap();
+        assert!(!svg.contains("data-linnet-hull"));
+        assert!(svg.contains("data-linnet-counterterm"));
+    }
+
+    #[test]
+    fn bands_are_offset_from_the_carrier_and_keep_node_arcs_separate() {
+        let mut scene = bubble(false);
+        let regions: Vec<_> = (1..=3)
+            .map(|slot| {
+                HighlightRegion::new([0, 1].into(), [0, 1].into(), HighlightStyle::Slot(slot))
+            })
+            .collect();
+        let palette = HighlightPalette::new("#ffd166");
+        let original = scene.edges[1].stroke.clone();
+        scene.apply_highlights_with_overlap(
+            &regions,
+            &palette,
+            false,
+            HighlightOverlap::BandsMiniature,
+        );
+        assert_eq!(scene.edges[1].stroke, original);
+        assert_eq!(
+            scene.edges[1]
+                .highlight_strokes
+                .iter()
+                .map(|stroke| stroke.offset)
+                .collect::<Vec<_>>(),
+            [Some(-4.0), Some(0.0), Some(4.0)]
+        );
+        let svg = scene.render(&typeset(&scene)).unwrap();
+        let document = Document::parse(&svg).unwrap();
+        let paths = |width: &str| {
+            document
+                .descendants()
+                .filter(|element| {
+                    element.has_tag_name("path") && element.attribute("stroke-width") == Some(width)
+                })
+                .filter_map(|element| element.attribute("d"))
+                .collect::<Vec<_>>()
+        };
+        let strokes: Vec<_> = document
+            .descendants()
+            .filter(|element| element.has_tag_name("path"))
+            .collect();
+        let last_band = strokes
+            .iter()
+            .rposition(|element| element.attribute("stroke-width") == Some("2.4"))
+            .unwrap();
+        let first_particle = strokes
+            .iter()
+            .position(|element| element.attribute("stroke") == Some(original.paint.as_str()))
+            .unwrap();
+        assert!(
+            last_band < first_particle,
+            "all particle strokes must remain above the bands"
+        );
+        let bands = paths("2.4");
+        assert_eq!(bands.len(), 6);
+        for edge in bands.as_chunks::<3>().0 {
+            assert_ne!(edge[0], edge[1]);
+            assert_ne!(edge[1], edge[2]);
+        }
+        let rings = paths("2.5");
+        assert_eq!(rings.len(), 6);
+        assert!(rings
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .all(|node| node[0] != node[1] && node[1] != node[2]));
+        let palette = (1..=16).map(SlotPaint::new).collect::<Vec<_>>();
+        assert_eq!(palette[0].light, "#0077bb");
+        assert_eq!(
+            palette
+                .iter()
+                .map(|paint| &paint.light)
+                .collect::<BTreeSet<_>>()
+                .len(),
+            palette.len()
+        );
+        assert!(palette.iter().all(|paint| paint.light != paint.dark));
+    }
+
+    #[test]
+    fn casings_keep_the_decorated_path_and_paint_outer_strokes_first() {
+        let mut scene = bubble(false);
+        let regions = [
+            HighlightRegion {
+                edges: [1, 2].into(),
+                nodes: [0, 1].into(),
+                style: HighlightStyle::ActedOn,
+                details: HighlightDetails::default(),
+            },
+            HighlightRegion {
+                edges: [1].into(),
+                nodes: [0, 1].into(),
+                style: HighlightStyle::Middle,
+                details: HighlightDetails::default(),
+            },
+            HighlightRegion {
+                edges: [1].into(),
+                nodes: [0, 1].into(),
+                style: HighlightStyle::Treated,
+                details: HighlightDetails::default(),
+            },
+        ];
+        let palette = HighlightPalette::new("#ffd166");
+        scene.apply_highlights_with_overlap(&regions, &palette, false, HighlightOverlap::Casings);
+        let expected = [
+            HighlightStyle::ActedOn,
+            HighlightStyle::Middle,
+            HighlightStyle::Treated,
+        ]
+        .map(|style| style.light_paint().unwrap());
+        let svg = scene.render(&typeset(&scene)).unwrap();
+        let document = Document::parse(&svg).unwrap();
+        let paths: Vec<_> = document
+            .descendants()
+            .filter(|element| element.has_tag_name("path"))
+            .collect();
+        let layered_colors: Vec<_> = paths
+            .iter()
+            .filter_map(|path| {
+                path.attribute("stroke")
+                    .filter(|paint| expected.contains(paint))
+            })
+            .collect();
+        assert!(
+            layered_colors.is_sorted_by_key(|paint| expected.iter().position(|role| role == paint))
+        );
+        let mut count = 0;
+        for top in paths
+            .iter()
+            .filter(|path| path.attribute("stroke") == Some(expected[2]))
+        {
+            let casings: Vec<_> = paths
+                .iter()
+                .filter(|path| {
+                    path.attribute("d") == top.attribute("d")
+                        && path
+                            .attribute("stroke")
+                            .is_some_and(|paint| expected.contains(&paint))
+                })
+                .copied()
+                .collect();
+            let casings: [_; 3] = casings.try_into().unwrap();
+            assert_eq!(
+                casings.map(|path| path.attribute("stroke")),
+                expected.map(Some)
+            );
+            assert!(casings
+                .iter()
+                .all(|path| path.attribute("d") == top.attribute("d")));
+            let widths = casings.map(|path| {
+                path.attribute("stroke-width")
+                    .unwrap()
+                    .parse::<f64>()
+                    .unwrap()
+            });
+            assert!(widths.windows(2).all(|pair| pair[0] > pair[1]));
+            count += 1;
+        }
+        assert_eq!(count, 1, "the decorated edge has one common path");
+        assert_eq!(scene.edges[0].stroke, ink(1.0), "outside stays unmuted");
+        assert_eq!(
+            scene.nodes[0].stroke,
+            ink(1.45),
+            "named styles preserve nodes"
+        );
     }
 
     #[test]
@@ -1681,7 +2319,7 @@ mod tests {
             let mut run = ImpredRun::seeded(graph, &Value::Object(scene.layout.clone())).unwrap();
             let mut drawing = Drawing::new(scene, typeset, &Laid::new(&run).unwrap()).unwrap();
             let mut scores = vec![drawing.score()];
-            let (mut best, mut svg) = (drawing.score(), drawing.svg(typeset));
+            let (mut best, mut svg) = (drawing.score(), drawing.svg(typeset).unwrap());
             for _ in 0..FEEDBACK_PASSES {
                 if drawing.overlaps.0 == 0 {
                     break;
@@ -1696,7 +2334,7 @@ mod tests {
                     })
                     .unwrap();
                 drawing = Drawing::new(scene, typeset, &Laid::new(&run).unwrap()).unwrap();
-                let rendered = drawing.svg(typeset);
+                let rendered = drawing.svg(typeset).unwrap();
                 scores.push(drawing.score());
                 if drawing.score() < best {
                     best = drawing.score();

@@ -1,10 +1,16 @@
+use std::collections::BTreeSet;
 use std::env;
 use std::ffi::CString;
 use std::path::PathBuf;
 
-use feynkit_graph::{DiagramEdge, DiagramVertex, FeynmanDiagram, NumeratorInterface};
+use feynkit_graph::{
+    CountertermScheme, DiagramEdge, DiagramVertex, FeynmanDiagram, HighlightDetails,
+    HighlightLayer, HighlightOverlap, HighlightStyle, NumeratorInterface,
+};
 use feynkit_model::Model;
 use feynkit_py::{FeynkitModule, PyFeynmanDiagram, PyModel};
+use linnet::half_edge::involution::{EdgeIndex, Hedge};
+use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph};
 #[cfg(feature = "linnet-python")]
 use linnet_py::GraphModule;
 #[cfg(not(feature = "linnet-python"))]
@@ -93,15 +99,6 @@ fn shared_numeric_external_states_in_installed_host() {
 #[test]
 #[ignore = "browser fixture producer requires optional Marimo and AnyWidget; runs in the browser CI group"]
 fn browser_display_fixtures() {
-    let test_directory = env::var_os("GAMMALOOP_WORKSPACE_ROOT")
-        .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
-        .map(|root| PathBuf::from(root).join("crates/feynkit-py"))
-        .unwrap_or_else(|| {
-            env::var_os("CARGO_MANIFEST_DIR")
-                .map(PathBuf::from)
-                .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")))
-        })
-        .join("tests");
     Python::initialize();
     Python::attach(|py| -> PyResult<()> {
         let symbolica = install_package(py, "symbolica")?;
@@ -130,7 +127,7 @@ fn browser_display_fixtures() {
         import_wrapper(py, &community, "symbolica.community.tensor", SPENSO_WRAPPER)?;
         let code = CString::new(include_str!("browser_display_fixtures.py")).unwrap();
         let locals = PyDict::new(py);
-        locals.set_item("test_directory", test_directory)?;
+        locals.set_item("test_directory", test_directory())?;
         py.run(&code, Some(&locals), Some(&locals))
     })
     .unwrap();
@@ -210,6 +207,12 @@ assert "typst" not in sys.modules
             Some(&locals),
             Some(&locals),
         )?;
+        let highlight_tests = CString::new(include_str!("installed_graph_highlighting.py")).unwrap();
+        let highlights = PyDict::new(py);
+        highlights.set_item("__file__", test_directory().join("installed_graph_highlighting.py"))?;
+        highlights.set_item("with_linnet", cfg!(feature = "linnet-python"))?;
+        py.run(&highlight_tests, Some(&highlights), Some(&highlights))
+            .inspect_err(|error| error.print(py))?;
         Ok(())
     })
     .unwrap();
@@ -250,6 +253,124 @@ fn community_native_forwarding_uses_registered_owners() {
         py.run(&code, Some(&locals), Some(&locals))
     })
     .unwrap();
+}
+
+#[test]
+fn linnest_overlap_sources_match_the_compiled_clinnet_fixtures() {
+    let diagram = FeynmanDiagram::from_dot(
+        Model::phi4(),
+        r#"digraph basketball {
+            a -> b [particle="phi"]; a -> b [particle="phi"];
+            a -> b [particle="phi"]; a -> b [particle="phi"];
+        }"#,
+    )
+    .unwrap();
+    let empty = BTreeSet::new();
+    let regions = [8, 6, 4].map(|halves| {
+        let mut region = diagram.underlying().empty_subgraph::<SuBitGraph>();
+        for index in 0..halves {
+            region.add(Hedge(index));
+        }
+        region
+    });
+    let [outer, middle, inner] = &regions;
+    let layers = [
+        HighlightLayer::new(outer, &empty, HighlightStyle::ActedOn),
+        HighlightLayer::new(middle, &empty, HighlightStyle::Middle),
+        HighlightLayer::new(inner, &empty, HighlightStyle::Treated),
+    ];
+    let config = "(layout: (layout-algo: \"dot\"))";
+    let configured = diagram
+        .to_linnest_with_highlights(&layers, true, None, config)
+        .unwrap();
+    assert!(configured.contains(config));
+    assert!(configured.contains("subgraph-edge-underlay: \"casings\""));
+    assert!(!configured.contains("#image(bytes("));
+    let source = diagram
+        .to_linnest_with_overlap(&layers, true, None, "(:)", HighlightOverlap::Casings)
+        .unwrap();
+    assert_eq!(
+        source,
+        include_str!("../../clinnet/tests/resources/feynkit-casings.typ")
+    );
+    let bands = diagram
+        .to_linnest_with_overlap(&layers, true, None, "(:)", HighlightOverlap::Bands)
+        .unwrap();
+    assert_eq!(
+        bands,
+        include_str!("../../clinnet/tests/resources/feynkit-bands.typ")
+    );
+}
+
+#[test]
+fn native_counterterm_source_matches_the_compiled_clinnet_fixture() {
+    let diagram = FeynmanDiagram::from_dot(
+        Model::phi4(),
+        r#"digraph fixture { a -> a [particle="phi"]; a -> a [particle="phi"]; }"#,
+    )
+    .unwrap();
+    let empty = BTreeSet::new();
+    let mut region = diagram.underlying().empty_subgraph::<SuBitGraph>();
+    region.add(Hedge(0));
+    let mut layer = HighlightLayer::new(&region, &empty, HighlightStyle::Treated);
+    layer.details = HighlightDetails {
+        label: "γ₂ & <local>".into(),
+        description: "integrated".into(),
+        contracted: true,
+        scheme: CountertermScheme::OnShell,
+    };
+    let source = diagram
+        .to_linnest_with_overlap(&[layer], true, None, "(:)", HighlightOverlap::Hulls)
+        .unwrap();
+    assert_eq!(
+        source,
+        include_str!("../../clinnet/tests/resources/feynkit-hull-counterterm.typ")
+    );
+}
+
+#[test]
+fn native_lanes_source_matches_the_compiled_clinnet_fixture() {
+    let diagram = FeynmanDiagram::from_dot(
+        Model::phi4(),
+        r#"digraph fixture {
+            a -> b [particle="phi"]; a -> b [particle="phi"];
+            a -> b [particle="phi"]; a -> b [particle="phi"];
+        }"#,
+    )
+    .unwrap();
+    let graph = diagram.underlying();
+    let empty = BTreeSet::new();
+    let mut outer = graph.empty_subgraph::<SuBitGraph>();
+    let mut inner = graph.empty_subgraph::<SuBitGraph>();
+    for index in 0..4 {
+        outer.add(graph[&EdgeIndex(index)].1);
+        if index < 2 {
+            inner.add(graph[&EdgeIndex(index)].1);
+        }
+    }
+    let layers = [
+        HighlightLayer::new(&outer, &empty, HighlightStyle::ActedOn),
+        HighlightLayer::new(&inner, &empty, HighlightStyle::Treated),
+    ];
+    let source = diagram
+        .to_linnest_with_overlap(&layers, true, None, "(:)", HighlightOverlap::Lanes)
+        .unwrap();
+    assert_eq!(
+        source,
+        include_str!("../../clinnet/tests/resources/feynkit-lanes.typ")
+    );
+}
+
+fn test_directory() -> PathBuf {
+    env::var_os("GAMMALOOP_WORKSPACE_ROOT")
+        .or_else(|| env::var_os("NEXTEST_WORKSPACE_ROOT"))
+        .map(|root| PathBuf::from(root).join("crates/feynkit-py"))
+        .unwrap_or_else(|| {
+            env::var_os("CARGO_MANIFEST_DIR")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")))
+        })
+        .join("tests")
 }
 
 fn install_package<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyModule>> {

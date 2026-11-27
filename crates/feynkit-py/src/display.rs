@@ -1,6 +1,6 @@
 use crate::error;
 use crate::graph::PyFeynmanDiagram;
-use feynkit_graph::{FeynmanDiagram, SceneOptions};
+use feynkit_graph::{AMBER_HIGHLIGHT_PAINT, FeynmanDiagram, HighlightStyle, SceneOptions};
 use feynkit_model::{Model, ParticleId};
 use linnet_render_py::PyErrExt;
 use linnet_render_py::PyRenderSettings;
@@ -13,7 +13,7 @@ use crate::render_settings::PyDiagramStyle;
 use pyo3::{PyResult, Python};
 use std::fmt::Write;
 
-use linnet_render_py::PyDiagramView;
+use linnet_render_py::{PyDiagramView, ThemeFormat, ThemePaint, theme_svg};
 
 /// Energy representations reuse Linnet's layout with their own orientation marks.
 pub(crate) fn energy_graph_view(
@@ -38,7 +38,7 @@ pub(crate) fn energy_graph_view(
         edge.flow = None;
         edge.pattern = None;
     }
-    PyDiagramView::from_scene(py, scene, None)?.map_svg(themed_svg)
+    PyDiagramView::from_scene(py, scene, None)?.map_svg(|svg| themed_svg(svg, &[]))
 }
 
 pub(crate) fn escape_html(value: &str) -> String {
@@ -59,39 +59,20 @@ pub(crate) fn escape_html(value: &str) -> String {
 /// Use the website SVG palette from docs/assets/typst/theme.typ, including
 /// the 45% lightened sink strokes from the shared physics style. Keep SVG
 /// paint attributes as light-mode fallbacks for viewers without CSS support.
-pub(crate) fn themed_svg(svg: String) -> String {
-    let mut styles = String::from("<style>");
-    let mut light = String::new();
-    let mut dark = String::new();
-    for (name, light_color, dark_color) in [
-        ("ink", "#3d2645", "#f8effa"),
-        ("accent", "#6f4d85", "#d8b9e3"),
-        ("ink-sink", "#948899", "#fbf6fc"),
-        ("accent-sink", "#b09dbc", "#ead9f0"),
-        // Selection strokes stay visible over dark notebook backgrounds.
-        ("highlight", "#ffd166", "#f0bb4f"),
-        ("outside", "#77777773", "#aaaaaa73"),
-    ] {
-        light.push_str(&format!("--feynkit-{name}:{light_color};"));
-        dark.push_str(&format!("--feynkit-{name}:{dark_color};"));
-        for paint in ["fill", "stroke"] {
-            styles.push_str(&format!(
-                ".feynkit-diagram-svg [{paint}=\"{light_color}\"]{{{paint}:var(--feynkit-{name},{light_color});}}"
-            ));
-        }
-    }
-    // Explicit notebook themes override the browser preference for saved SVGs.
-    // The interactive renderer mirrors an accessible iframe parent's theme onto
-    // the SVG itself, so the same palette also applies inside notebook frames.
-    styles.push_str(&format!(
-        r#".feynkit-diagram-svg{{{light}}}
-@media(prefers-color-scheme:dark){{.feynkit-diagram-svg{{{dark}}}}}
-.feynkit-diagram-svg[data-theme="dark"],:is(.dark,[data-theme="dark"],[data-jp-theme-light="false"]) .feynkit-diagram-svg{{{dark}}}
-.feynkit-diagram-svg[data-theme="light"],:is(.light,[data-theme="light"],[data-jp-theme-light="true"]) .feynkit-diagram-svg{{{light}}}
-</style>"#
-    ));
-    svg.replacen("<svg ", "<svg class=\"feynkit-diagram-svg\" ", 1)
-        .replacen('>', &format!(">{styles}"), 1)
+pub(crate) fn themed_svg(svg: String, highlights: &[HighlightStyle]) -> String {
+    theme_svg(
+        svg,
+        &[
+            ThemePaint::new("ink", "#3d2645", "#f8effa"),
+            ThemePaint::new("accent", "#6f4d85", "#d8b9e3"),
+            ThemePaint::new("ink-sink", "#948899", "#fbf6fc"),
+            ThemePaint::new("accent-sink", "#b09dbc", "#ead9f0"),
+            ThemePaint::new("highlight", AMBER_HIGHLIGHT_PAINT, "#f0bb4f"),
+            ThemePaint::new("outside", "#77777773", "#aaaaaa73"),
+        ],
+        highlights,
+        ThemeFormat::FeynKit,
+    )
 }
 
 pub(crate) fn render_diagram_html(diagram: &FeynmanDiagram, svg: &str) -> String {
@@ -139,7 +120,7 @@ pub(crate) fn collection_view(
     }
     let mut drawings = Vec::new();
     for (index, diagram) in diagrams.take(limit).enumerate() {
-        let drawing = diagram.render(py, config, style, false, None, None)?;
+        let drawing = diagram.render(py, config, style, false, None, None, true, None)?;
         write!(
             templates,
             "<template data-feynkit-drawing><!--linnet-svg-{index}--></template>"
@@ -210,7 +191,7 @@ pub(crate) fn process_view(
         })
         .collect::<PyResult<Vec<_>>>()?;
     // process_scene resolves these settings before pinning legs around the blob.
-    PyDiagramView::from_scenes(py, scenes, None)?.map_svg(themed_svg)
+    PyDiagramView::from_scenes(py, scenes, None)?.map_svg(|svg| themed_svg(svg, &[]))
 }
 
 /// Values are escaped text or fragments from Symbolica's native expression printer.
