@@ -555,6 +555,7 @@
       "crates/feynkit-py/tests/installed_wavefunctions.py"
       "crates/feynkit-py/tests/installed_offline_rendering.py"
       "crates/feynkit-py/tests/installed_graph_highlighting.py"
+      "crates/feynkit-py/tests/installed_uv_forests.py"
       "crates/clinnet/tests/resources/feynkit-casings.typ"
       "crates/clinnet/tests/resources/feynkit-bands.typ"
       "crates/clinnet/tests/resources/feynkit-hull-counterterm.typ"
