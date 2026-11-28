@@ -1,0 +1,28 @@
+[project]
+name = "hepkit-renorm"
+version = "0.1.0"
+description = "Algebraic renormalisation with a non-anticommuting gamma5 (BMHV) on top of Symbolica / HepKIT"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["symbolica>=3.0.2", "numpy>=2"]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["hepkit_renorm", "hepkit_renorm.models"]
+
+[tool.setuptools.package-data]
+"hepkit_renorm.models" = ["*.toml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 120

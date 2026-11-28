@@ -1,0 +1,1710 @@
+{
+ "cV": {
+  "N": [
+   "cV3_G",
+   "cV1_G",
+   "cV3_W",
+   "cV1_W",
+   "cV3_B",
+   "cV1_B"
+  ],
+  "B": {
+   "L_G": {
+    "cV3_G": "-1"
+   },
+   "M_G": {
+    "cV1_G": "-1"
+   },
+   "L_W": {
+    "cV3_W": "-1"
+   },
+   "M_W": {
+    "cV1_W": "-1"
+   },
+   "L_B": {
+    "cV3_B": "-1"
+   },
+   "M_B": {
+    "cV1_B": "-1"
+   }
+  }
+ },
+ "cVV": {
+  "N": [
+   "f1_G",
+   "f2_G",
+   "f1_W",
+   "f2_W",
+   "d1",
+   "d2",
+   "d3",
+   "d4",
+   "d5",
+   "BBB1",
+   "BBB2",
+   "BBB3",
+   "BBB4",
+   "BBB5",
+   "Brr_G1",
+   "Brr_G2",
+   "Brr_G3",
+   "Brr_G4",
+   "Brr_G5",
+   "rB1_G",
+   "rB2_G",
+   "rB3_G",
+   "rB4_G",
+   "rB5_G",
+   "rB6_G",
+   "rB7_G",
+   "Brr_W1",
+   "Brr_W2",
+   "Brr_W3",
+   "Brr_W4",
+   "Brr_W5",
+   "rB1_W",
+   "rB2_W",
+   "rB3_W",
+   "rB4_W",
+   "rB5_W",
+   "rB6_W",
+   "rB7_W",
+   "eBrr_G",
+   "erB_G",
+   "eBrr_W",
+   "erB_W",
+   "ed",
+   "eBBB"
+  ],
+  "B": {
+   "T_G": {
+    "f1_G": "-1",
+    "f2_G": "1"
+   },
+   "L_G": {
+    "f2_G": "-1"
+   },
+   "T_W": {
+    "f1_W": "-1",
+    "f2_W": "1"
+   },
+   "L_W": {
+    "f2_W": "-1"
+   },
+   "3f_G": {
+    "f1_G": "1",
+    "f2_G": "-1"
+   },
+   "3f_W": {
+    "f1_W": "1",
+    "f2_W": "-1"
+   },
+   "3d": {
+    "d1": "2",
+    "d2": "-2",
+    "d3": "2",
+    "d5": "-2"
+   },
+   "3B": {
+    "BBB1": "2",
+    "BBB2": "-2",
+    "BBB3": "2",
+    "BBB5": "-2"
+   },
+   "GB1": {
+    "Brr_G1": "2",
+    "Brr_G3": "2",
+    "rB4_G": "-2",
+    "rB7_G": "-2"
+   },
+   "GB2": {
+    "Brr_G2": "-1",
+    "Brr_G5": "-1",
+    "rB1_G": "1",
+    "rB2_G": "-1",
+    "rB3_G": "1",
+    "rB5_G": "2",
+    "rB7_G": "-1"
+   },
+   "GB3": {
+    "Brr_G2": "2",
+    "Brr_G4": "1",
+    "Brr_G5": "1",
+    "rB3_G": "-1",
+    "rB4_G": "-1",
+    "rB5_G": "-1",
+    "rB6_G": "-1"
+   },
+   "GBeps": {
+    "eBrr_G": "1",
+    "erB_G": "-1"
+   },
+   "WB1": {
+    "Brr_W1": "2",
+    "Brr_W3": "2",
+    "rB4_W": "-2",
+    "rB7_W": "-2"
+   },
+   "WB2": {
+    "Brr_W2": "-1",
+    "Brr_W5": "-1",
+    "rB1_W": "1",
+    "rB2_W": "-1",
+    "rB3_W": "1",
+    "rB5_W": "2",
+    "rB7_W": "-1"
+   },
+   "WB3": {
+    "Brr_W2": "2",
+    "Brr_W4": "1",
+    "Brr_W5": "1",
+    "rB3_W": "-1",
+    "rB4_W": "-1",
+    "rB5_W": "-1",
+    "rB6_W": "-1"
+   },
+   "WBeps": {
+    "eBrr_W": "1",
+    "erB_W": "-1"
+   },
+   "rd_G": {
+    "f1_G": "1",
+    "f2_G": "-1"
+   },
+   "rd_W": {
+    "f1_W": "1",
+    "f2_W": "-1"
+   },
+   "rf_G": {
+    "f1_G": "-1",
+    "f2_G": "1"
+   },
+   "rf_W": {
+    "f1_W": "-1",
+    "f2_W": "1"
+   },
+   "rd": {
+    "d1": "1",
+    "d2": "-1"
+   },
+   "rWWB": {
+    "Brr_W1": "1",
+    "Brr_W2": "-1"
+   },
+   "rBWW": {
+    "rB3_W": "1",
+    "rB4_W": "-1"
+   },
+   "rWBW": {
+    "rB1_W": "1",
+    "rB2_W": "-1"
+   },
+   "rGGB": {
+    "Brr_G1": "1",
+    "Brr_G2": "-1"
+   },
+   "rBGG": {
+    "rB3_G": "1",
+    "rB4_G": "-1"
+   },
+   "rGBG": {
+    "rB1_G": "1",
+    "rB2_G": "-1"
+   },
+   "rBBB": {
+    "BBB1": "1",
+    "BBB2": "-1"
+   }
+  }
+ },
+ "cVVV": {
+  "N": [
+   "ff_G",
+   "Bf3_G",
+   "ff_W",
+   "Bf3_W",
+   "df",
+   "rBf_G",
+   "erBf_G",
+   "e4B_G",
+   "rBf_W",
+   "erBf_W",
+   "e4B_W",
+   "G4a",
+   "G4b",
+   "W4a",
+   "B4",
+   "GWa",
+   "GWb",
+   "GWc",
+   "GWd",
+   "GBa",
+   "GBb",
+   "GBc",
+   "GBd",
+   "WBa",
+   "WBb",
+   "WBc",
+   "WBd",
+   "GGGB1",
+   "GGGB2",
+   "GGGB3",
+   "E[d]@cVVV",
+   "E[WBW]@cVVV",
+   "E[GBG]@cVVV"
+  ],
+  "B": {
+   "3f_G": {
+    "ff_G": "1"
+   },
+   "3f_W": {
+    "ff_W": "1"
+   },
+   "3d": {
+    "df": "1"
+   },
+   "GB2": {
+    "rBf_G": "-1"
+   },
+   "GBeps": {
+    "erBf_G": "-1"
+   },
+   "WB2": {
+    "rBf_W": "-1"
+   },
+   "WBeps": {
+    "erBf_W": "-1"
+   },
+   "G4a": {
+    "G4a": "4"
+   },
+   "G4b": {
+    "G4b": "4"
+   },
+   "G4c": {
+    "ff_G": "8/3",
+    "G4a": "-4/3",
+    "G4b": "8/3"
+   },
+   "W4a": {
+    "W4a": "4"
+   },
+   "W4b": {
+    "ff_W": "-4",
+    "W4a": "4"
+   },
+   "B4": {
+    "B4": "4"
+   },
+   "GWa": {
+    "GWa": "2",
+    "GWb": "2"
+   },
+   "GWb": {
+    "GWc": "2",
+    "GWd": "2"
+   },
+   "GBa": {
+    "GBa": "2",
+    "GBb": "2"
+   },
+   "GBb": {
+    "GBc": "2",
+    "GBd": "2"
+   },
+   "WBa": {
+    "WBa": "2",
+    "WBb": "2"
+   },
+   "WBb": {
+    "WBc": "2",
+    "WBd": "2"
+   },
+   "GGGB": {
+    "GGGB1": "2",
+    "GGGB2": "1",
+    "GGGB3": "1"
+   },
+   "GGGBeps": {
+    "erBf_G": "3",
+    "e4B_G": "1"
+   },
+   "WWWBeps": {
+    "erBf_W": "3",
+    "e4B_W": "1"
+   },
+   "rd_G": {
+    "ff_G": "-1"
+   },
+   "rd_W": {
+    "ff_W": "-1"
+   },
+   "rf_G": {
+    "ff_G": "1"
+   },
+   "rf_W": {
+    "ff_W": "1"
+   },
+   "rd": {
+    "E[d]@cVVV": "1"
+   },
+   "rWWB": {
+    "Bf3_W": "-3"
+   },
+   "rWBW": {
+    "E[WBW]@cVVV": "1"
+   },
+   "rGGB": {
+    "Bf3_G": "-3"
+   },
+   "rGBG": {
+    "E[GBG]@cVVV": "1"
+   }
+  }
+ },
+ "cVVVV": {
+  "N": [
+   "BYM4_G",
+   "BYM4_W",
+   "E[d]@cVVVV",
+   "E[WBW]@cVVVV",
+   "E[GBG]@cVVVV"
+  ],
+  "B": {
+   "rd": {
+    "E[d]@cVVVV": "1"
+   },
+   "rWWB": {
+    "BYM4_W": "-1"
+   },
+   "rWBW": {
+    "E[WBW]@cVVVV": "1"
+   },
+   "rGGB": {
+    "BYM4_G": "-1"
+   },
+   "rGBG": {
+    "E[GBG]@cVVVV": "1"
+   }
+  }
+ },
+ "cSS": {
+  "N": [
+   "S_W",
+   "S2_W",
+   "SE1_W",
+   "Sm_W",
+   "S_B",
+   "S2_B",
+   "SE1_B",
+   "Sm_B"
+  ],
+  "B": {
+   "SS": {
+    "S_W": "1",
+    "S_B": "1"
+   },
+   "J_W": {
+    "S_W": "1"
+   },
+   "D_W": {
+    "S2_W": "1"
+   },
+   "J_B": {
+    "S_B": "1"
+   },
+   "D_B": {
+    "S2_B": "1"
+   },
+   "rd_W": {
+    "S_W": "-1"
+   },
+   "rd_B": {
+    "S_B": "-1"
+   },
+   "sig_W+": {
+    "S_W": "1"
+   },
+   "sig_W-": {
+    "S_W": "-1",
+    "SE1_W": "-2",
+    "Sm_W": "-2"
+   },
+   "sig_B+": {
+    "S_B": "1"
+   },
+   "sig_B-": {
+    "S_B": "-1",
+    "SE1_B": "-2",
+    "Sm_B": "-2"
+   }
+  }
+ },
+ "cSSV": {
+  "N": [
+   "SV_WW",
+   "SVE1_WW",
+   "SVE2_WW",
+   "SVE3_WW",
+   "SVE4_WW",
+   "SV_WB",
+   "SVE1_BW",
+   "SVE2_BW",
+   "SV_BW",
+   "SVE1_WB",
+   "SVE2_WB",
+   "SV_BB",
+   "SVE1_BB",
+   "SVE2_BB",
+   "SC",
+   "SG",
+   "E[BGG]@cSSV"
+  ],
+  "B": {
+   "J_W": {
+    "SV_WW": "1",
+    "SV_BW": "1"
+   },
+   "D_W": {
+    "SC": "1"
+   },
+   "J_B": {
+    "SV_WB": "1",
+    "SV_BB": "1"
+   },
+   "HWW": {
+    "SV_WW": "1"
+   },
+   "HBB": {
+    "SV_BB": "1"
+   },
+   "HWB": {
+    "SV_WB": "1",
+    "SV_BW": "1"
+   },
+   "HGG": {
+    "SG": "2"
+   },
+   "rd_W": {
+    "SV_WW": "1",
+    "SV_WB": "1"
+   },
+   "rd_B": {
+    "SV_BW": "1",
+    "SV_BB": "1"
+   },
+   "rf_W": {
+    "SV_WW": "-1",
+    "SVE1_WW": "2i",
+    "SVE2_WW": "1i",
+    "SVE3_WW": "2i",
+    "SVE4_WW": "1i"
+   },
+   "rWWB": {
+    "SV_BW": "-1i",
+    "SVE1_WB": "-4",
+    "SVE2_WB": "-2"
+   },
+   "rBWW": {
+    "SVE1_WW": "-2",
+    "SVE2_WW": "-1",
+    "SVE3_WW": "2",
+    "SVE4_WW": "1",
+    "SC": "1"
+   },
+   "rWBW": {
+    "SV_WB": "-1i",
+    "SVE1_BW": "-4",
+    "SVE2_BW": "-2"
+   },
+   "rBGG": {
+    "E[BGG]@cSSV": "1"
+   },
+   "rBBB": {
+    "SV_BB": "-1i",
+    "SVE1_BB": "-4",
+    "SVE2_BB": "-2"
+   },
+   "sig_W+": {
+    "SVE1_WW": "-2i",
+    "SVE2_WW": "-1i",
+    "SVE3_WW": "-2i",
+    "SVE4_WW": "-1i",
+    "SV_WB": "-1"
+   },
+   "sig_W-": {
+    "SVE1_WW": "-2i",
+    "SVE2_WW": "-1i",
+    "SVE3_WW": "2i",
+    "SVE4_WW": "1i",
+    "SV_WB": "1",
+    "SVE1_BW": "-4i",
+    "SVE2_BW": "-2i"
+   },
+   "sig_B+": {
+    "SV_BW": "-1",
+    "SV_BB": "-1"
+   },
+   "sig_B-": {
+    "SV_BW": "1",
+    "SVE1_WB": "-4i",
+    "SVE2_WB": "-2i",
+    "SV_BB": "1",
+    "SVE1_BB": "-4i",
+    "SVE2_BB": "-2i"
+   }
+  }
+ },
+ "cSSVV": {
+  "N": [
+   "SVV1_WWW",
+   "SVV1_WBW",
+   "SVV2_WBW",
+   "SVV1_BBW",
+   "SVV1_WWB",
+   "SVV1_WBB",
+   "SVV1_BBB",
+   "E[BWW]@cSSVV",
+   "E[BGG]@cSSVV"
+  ],
+  "B": {
+   "rf_W": {
+    "SVV1_WBW": "-2",
+    "SVV2_WBW": "2"
+   },
+   "rWWB": {
+    "SVV1_WWB": "-4i",
+    "SVV1_WBB": "-4i"
+   },
+   "rBWW": {
+    "E[BWW]@cSSVV": "1"
+   },
+   "rWBW": {
+    "SVV1_WBW": "-2i",
+    "SVV2_WBW": "-2i",
+    "SVV1_BBW": "-4i"
+   },
+   "rBGG": {
+    "E[BGG]@cSSVV": "1"
+   },
+   "rBBB": {
+    "SVV1_WBB": "-4i",
+    "SVV1_BBB": "-4i"
+   },
+   "sig_W+": {
+    "SVV1_WBW": "2",
+    "SVV2_WBW": "-2"
+   },
+   "sig_W-": {
+    "SVV1_WWW": "2",
+    "SVV1_WBW": "2",
+    "SVV2_WBW": "2",
+    "SVV1_BBW": "2"
+   },
+   "sig_B-": {
+    "SVV1_WWB": "2",
+    "SVV1_WBB": "4",
+    "SVV1_BBB": "2"
+   }
+  }
+ },
+ "cSSSS": {
+  "N": [
+   "Sl_W",
+   "Sl_B"
+  ],
+  "B": {
+   "sig_W-": {
+    "Sl_W": "-4"
+   },
+   "sig_B-": {
+    "Sl_B": "-4"
+   }
+  }
+ },
+ "ccSig": {
+  "N": [
+   "sig1_WW",
+   "sig1_WB"
+  ],
+  "B": {
+   "zf_W": {
+    "sig1_WW": "1"
+   },
+   "zWWB": {
+    "sig1_WB": "-2i"
+   },
+   "sig_W+": {
+    "sig1_WW": "-1"
+   },
+   "sig_W-": {
+    "sig1_WW": "-1"
+   }
+  }
+ },
+ "ccSigb": {
+  "N": [
+   "sig2_WW",
+   "sig2_WB"
+  ],
+  "B": {
+   "zf_W": {
+    "sig2_WW": "1"
+   },
+   "zWWB": {
+    "sig2_WB": "-2i"
+   },
+   "sig_W+": {
+    "sig2_WW": "-1"
+   },
+   "sig_W-": {
+    "sig2_WW": "1"
+   }
+  }
+ },
+ "ccRd": {
+  "N": [
+   "Rd[f_G]",
+   "Rd[f_W]",
+   "Rd[d]",
+   "Rd[WWB]",
+   "Rd[BWW]",
+   "Rd[WBW]",
+   "Rd[GGB]",
+   "Rd[BGG]",
+   "Rd[GBG]",
+   "Rd[BBB]"
+  ],
+  "B": {
+   "rf_G": {
+    "Rd[f_G]": "-1"
+   },
+   "rf_W": {
+    "Rd[f_W]": "-1"
+   },
+   "rd": {
+    "Rd[d]": "1"
+   },
+   "rWWB": {
+    "Rd[WBW]": "1"
+   },
+   "rBWW": {
+    "Rd[BWW]": "1"
+   },
+   "rWBW": {
+    "Rd[WWB]": "1"
+   },
+   "rGGB": {
+    "Rd[GBG]": "1"
+   },
+   "rBGG": {
+    "Rd[BGG]": "1"
+   },
+   "rGBG": {
+    "Rd[GGB]": "1"
+   },
+   "rBBB": {
+    "Rd[BBB]": "1"
+   },
+   "zf_G": {
+    "Rd[f_G]": "1"
+   },
+   "zf_W": {
+    "Rd[f_W]": "1"
+   },
+   "zGGB": {
+    "Rd[GGB]": "-1",
+    "Rd[GBG]": "1"
+   },
+   "zWWB": {
+    "Rd[WWB]": "-1",
+    "Rd[WBW]": "1"
+   }
+  }
+ },
+ "ccRA": {
+  "N": [
+   "RA1[f_G]",
+   "RA1[f_W]",
+   "RA1[d]",
+   "RA2[d]",
+   "RA1[WWB]",
+   "RA1[BWW]",
+   "RA2[WBW]",
+   "RA1[GGB]",
+   "RA1[BGG]",
+   "RA2[GBG]"
+  ],
+  "B": {
+   "rf_G": {
+    "RA1[f_G]": "-1"
+   },
+   "rf_W": {
+    "RA1[f_W]": "-1"
+   },
+   "rd": {
+    "RA2[d]": "-1"
+   },
+   "rBWW": {
+    "RA1[BWW]": "-1/2"
+   },
+   "rWBW": {
+    "RA2[WBW]": "-1"
+   },
+   "rBGG": {
+    "RA1[BGG]": "-1/2"
+   },
+   "rGBG": {
+    "RA2[GBG]": "-1"
+   },
+   "zf_G": {
+    "RA1[f_G]": "1"
+   },
+   "zf_W": {
+    "RA1[f_W]": "1"
+   },
+   "zGGB": {
+    "RA1[GGB]": "-1"
+   },
+   "zWWB": {
+    "RA1[WWB]": "-1"
+   }
+  }
+ },
+ "cccZ": {
+  "N": [
+   "Z3[G]",
+   "Z3[W]"
+  ],
+  "B": {
+   "zGGB": {
+    "Z3[G]": "1/2"
+   },
+   "zWWB": {
+    "Z3[W]": "1/2"
+   }
+  }
+ },
+ "cFF_Q": {
+  "N": [
+   "F_QG",
+   "E_QG",
+   "F_QW",
+   "E_QW",
+   "F_QB",
+   "E_QB"
+  ],
+  "B": {
+   "K_Q": {
+    "F_QG": "1",
+    "F_QW": "1",
+    "F_QB": "1"
+   },
+   "V_QG": {
+    "F_QG": "-1"
+   },
+   "V_QW": {
+    "F_QW": "-1"
+   },
+   "V_QB": {
+    "F_QB": "-1"
+   },
+   "rd_G": {
+    "F_QG": "-1"
+   },
+   "rd_W": {
+    "F_QW": "-1"
+   },
+   "rd_B": {
+    "F_QB": "-1"
+   },
+   "R_QG+": {
+    "F_QG": "1"
+   },
+   "R_QG-": {
+    "F_QG": "-1",
+    "E_QG": "2i"
+   },
+   "R_QW+": {
+    "F_QW": "1"
+   },
+   "R_QW-": {
+    "F_QW": "-1",
+    "E_QW": "2i"
+   },
+   "R_QB+": {
+    "F_QB": "1"
+   },
+   "R_QB-": {
+    "F_QB": "-1",
+    "E_QB": "2i"
+   }
+  }
+ },
+ "cFFV_Q": {
+  "N": [
+   "FV_QGG",
+   "FV_QGW",
+   "FV_QGB",
+   "VF_QGG",
+   "FV_QWG",
+   "FV_QWW",
+   "FV_QWB",
+   "VF_QWW",
+   "FV_QBG",
+   "FV_QBW",
+   "FV_QBB",
+   "E[d]@cFFV_Q"
+  ],
+  "B": {
+   "rf_G": {
+    "FV_QGG": "-1i",
+    "VF_QGG": "1i"
+   },
+   "rf_W": {
+    "FV_QWW": "-1i",
+    "VF_QWW": "1i"
+   },
+   "rd": {
+    "E[d]@cFFV_Q": "1"
+   },
+   "rWWB": {
+    "FV_QBW": "-6"
+   },
+   "rBWW": {
+    "FV_QWW": "-1/3",
+    "VF_QWW": "-1/3"
+   },
+   "rWBW": {
+    "FV_QWB": "-6"
+   },
+   "rGGB": {
+    "FV_QBG": "-6"
+   },
+   "rBGG": {
+    "FV_QGG": "-1/2",
+    "VF_QGG": "-1/2",
+    "E[d]@cFFV_Q": "-1/2"
+   },
+   "rGBG": {
+    "FV_QGB": "-6"
+   },
+   "rBBB": {
+    "FV_QBB": "-6"
+   },
+   "R_QG+": {
+    "FV_QGG": "1i",
+    "VF_QGG": "-1i"
+   },
+   "R_QG-": {
+    "FV_QGG": "-1i",
+    "FV_QGW": "-2i",
+    "FV_QGB": "-2i",
+    "VF_QGG": "-1i"
+   },
+   "R_QW+": {
+    "FV_QWW": "1i",
+    "VF_QWW": "-1i"
+   },
+   "R_QW-": {
+    "FV_QWG": "-2i",
+    "FV_QWW": "-1i",
+    "FV_QWB": "-2i",
+    "VF_QWW": "-1i"
+   },
+   "R_QB-": {
+    "FV_QBG": "-2i",
+    "FV_QBW": "-2i",
+    "FV_QBB": "-2i"
+   }
+  }
+ },
+ "ccRF_Q": {
+  "N": [
+   "RR_QGG",
+   "RR_QGW",
+   "RR_QGB",
+   "RR_QWW",
+   "RR_QWB"
+  ],
+  "B": {
+   "zf_G": {
+    "RR_QGG": "-1"
+   },
+   "zf_W": {
+    "RR_QWW": "-1"
+   },
+   "zGGB": {
+    "RR_QGB": "6i"
+   },
+   "zWWB": {
+    "RR_QWB": "6i"
+   },
+   "R_QG+": {
+    "RR_QGG": "1"
+   },
+   "R_QG-": {
+    "RR_QGG": "1"
+   },
+   "R_QW+": {
+    "RR_QWW": "1"
+   },
+   "R_QW-": {
+    "RR_QWW": "1"
+   }
+  }
+ },
+ "ccFR_Q": {
+  "N": [
+   "RRb_QGG",
+   "RRb_QGW",
+   "RRb_QGB",
+   "RRb_QWW",
+   "RRb_QWB"
+  ],
+  "B": {
+   "zf_G": {
+    "RRb_QGG": "-1"
+   },
+   "zf_W": {
+    "RRb_QWW": "-1"
+   },
+   "zGGB": {
+    "RRb_QGB": "6i"
+   },
+   "zWWB": {
+    "RRb_QWB": "6i"
+   },
+   "R_QG+": {
+    "RRb_QGG": "1"
+   },
+   "R_QG-": {
+    "RRb_QGG": "-1"
+   },
+   "R_QW+": {
+    "RRb_QWW": "1"
+   },
+   "R_QW-": {
+    "RRb_QWW": "-1"
+   }
+  }
+ },
+ "cFF_U": {
+  "N": [
+   "F_UG",
+   "E_UG",
+   "F_UB",
+   "E_UB"
+  ],
+  "B": {
+   "K_U": {
+    "F_UG": "1",
+    "F_UB": "1"
+   },
+   "V_UG": {
+    "F_UG": "-1"
+   },
+   "V_UB": {
+    "F_UB": "-1"
+   },
+   "rd_G": {
+    "F_UG": "-1"
+   },
+   "rd_B": {
+    "F_UB": "-1"
+   },
+   "R_UG+": {
+    "F_UG": "1"
+   },
+   "R_UG-": {
+    "F_UG": "-1",
+    "E_UG": "2i"
+   },
+   "R_UB+": {
+    "F_UB": "1"
+   },
+   "R_UB-": {
+    "F_UB": "-1",
+    "E_UB": "2i"
+   }
+  }
+ },
+ "cFFV_U": {
+  "N": [
+   "FV_UGG",
+   "FV_UGB",
+   "VF_UGG",
+   "FV_UBG",
+   "FV_UBB",
+   "E[d]@cFFV_U",
+   "E[BWW]@cFFV_U"
+  ],
+  "B": {
+   "rf_G": {
+    "FV_UGG": "-1i",
+    "VF_UGG": "1i"
+   },
+   "rd": {
+    "E[d]@cFFV_U": "1"
+   },
+   "rBWW": {
+    "E[BWW]@cFFV_U": "1"
+   },
+   "rGGB": {
+    "FV_UBG": "-3/2"
+   },
+   "rBGG": {
+    "FV_UGG": "-2",
+    "VF_UGG": "-2",
+    "E[d]@cFFV_U": "-2"
+   },
+   "rGBG": {
+    "FV_UGB": "-3/2"
+   },
+   "rBBB": {
+    "FV_UBB": "-3/2"
+   },
+   "R_UG+": {
+    "FV_UGG": "1i",
+    "VF_UGG": "-1i"
+   },
+   "R_UG-": {
+    "FV_UGG": "-1i",
+    "FV_UGB": "-2i",
+    "VF_UGG": "-1i"
+   },
+   "R_UB-": {
+    "FV_UBG": "-2i",
+    "FV_UBB": "-2i"
+   }
+  }
+ },
+ "ccRF_U": {
+  "N": [
+   "RR_UGG",
+   "RR_UGB"
+  ],
+  "B": {
+   "zf_G": {
+    "RR_UGG": "-1"
+   },
+   "zGGB": {
+    "RR_UGB": "3/2i"
+   },
+   "R_UG+": {
+    "RR_UGG": "1"
+   },
+   "R_UG-": {
+    "RR_UGG": "1"
+   }
+  }
+ },
+ "ccFR_U": {
+  "N": [
+   "RRb_UGG",
+   "RRb_UGB"
+  ],
+  "B": {
+   "zf_G": {
+    "RRb_UGG": "-1"
+   },
+   "zGGB": {
+    "RRb_UGB": "3/2i"
+   },
+   "R_UG+": {
+    "RRb_UGG": "1"
+   },
+   "R_UG-": {
+    "RRb_UGG": "-1"
+   }
+  }
+ },
+ "cFF_D": {
+  "N": [
+   "F_DG",
+   "E_DG",
+   "F_DB",
+   "E_DB"
+  ],
+  "B": {
+   "K_D": {
+    "F_DG": "1",
+    "F_DB": "1"
+   },
+   "V_DG": {
+    "F_DG": "-1"
+   },
+   "V_DB": {
+    "F_DB": "-1"
+   },
+   "rd_G": {
+    "F_DG": "-1"
+   },
+   "rd_B": {
+    "F_DB": "-1"
+   },
+   "R_DG+": {
+    "F_DG": "1"
+   },
+   "R_DG-": {
+    "F_DG": "-1",
+    "E_DG": "2i"
+   },
+   "R_DB+": {
+    "F_DB": "1"
+   },
+   "R_DB-": {
+    "F_DB": "-1",
+    "E_DB": "2i"
+   }
+  }
+ },
+ "cFFV_D": {
+  "N": [
+   "FV_DGG",
+   "FV_DGB",
+   "VF_DGG",
+   "FV_DBG",
+   "FV_DBB",
+   "E[d]@cFFV_D",
+   "E[BWW]@cFFV_D"
+  ],
+  "B": {
+   "rf_G": {
+    "FV_DGG": "-1i",
+    "VF_DGG": "1i"
+   },
+   "rd": {
+    "E[d]@cFFV_D": "1"
+   },
+   "rBWW": {
+    "E[BWW]@cFFV_D": "1"
+   },
+   "rGGB": {
+    "FV_DBG": "3"
+   },
+   "rBGG": {
+    "FV_DGG": "1",
+    "VF_DGG": "1",
+    "E[d]@cFFV_D": "1"
+   },
+   "rGBG": {
+    "FV_DGB": "3"
+   },
+   "rBBB": {
+    "FV_DBB": "3"
+   },
+   "R_DG+": {
+    "FV_DGG": "1i",
+    "VF_DGG": "-1i"
+   },
+   "R_DG-": {
+    "FV_DGG": "-1i",
+    "FV_DGB": "-2i",
+    "VF_DGG": "-1i"
+   },
+   "R_DB-": {
+    "FV_DBG": "-2i",
+    "FV_DBB": "-2i"
+   }
+  }
+ },
+ "ccRF_D": {
+  "N": [
+   "RR_DGG",
+   "RR_DGB"
+  ],
+  "B": {
+   "zf_G": {
+    "RR_DGG": "-1"
+   },
+   "zGGB": {
+    "RR_DGB": "-3i"
+   },
+   "R_DG+": {
+    "RR_DGG": "1"
+   },
+   "R_DG-": {
+    "RR_DGG": "1"
+   }
+  }
+ },
+ "ccFR_D": {
+  "N": [
+   "RRb_DGG",
+   "RRb_DGB"
+  ],
+  "B": {
+   "zf_G": {
+    "RRb_DGG": "-1"
+   },
+   "zGGB": {
+    "RRb_DGB": "-3i"
+   },
+   "R_DG+": {
+    "RRb_DGG": "1"
+   },
+   "R_DG-": {
+    "RRb_DGG": "-1"
+   }
+  }
+ },
+ "cFF_L": {
+  "N": [
+   "F_LW",
+   "E_LW",
+   "F_LB",
+   "E_LB"
+  ],
+  "B": {
+   "K_L": {
+    "F_LW": "1",
+    "F_LB": "1"
+   },
+   "V_LW": {
+    "F_LW": "-1"
+   },
+   "V_LB": {
+    "F_LB": "-1"
+   },
+   "rd_W": {
+    "F_LW": "-1"
+   },
+   "rd_B": {
+    "F_LB": "-1"
+   },
+   "R_LW+": {
+    "F_LW": "1"
+   },
+   "R_LW-": {
+    "F_LW": "-1",
+    "E_LW": "2i"
+   },
+   "R_LB+": {
+    "F_LB": "1"
+   },
+   "R_LB-": {
+    "F_LB": "-1",
+    "E_LB": "2i"
+   }
+  }
+ },
+ "cFFV_L": {
+  "N": [
+   "FV_LWW",
+   "FV_LWB",
+   "VF_LWW",
+   "FV_LBW",
+   "FV_LBB",
+   "E[BGG]@cFFV_L"
+  ],
+  "B": {
+   "rf_W": {
+    "FV_LWW": "-1i",
+    "VF_LWW": "1i"
+   },
+   "rWWB": {
+    "FV_LBW": "2"
+   },
+   "rBWW": {
+    "FV_LWW": "1",
+    "VF_LWW": "1"
+   },
+   "rWBW": {
+    "FV_LWB": "2"
+   },
+   "rBGG": {
+    "E[BGG]@cFFV_L": "1"
+   },
+   "rBBB": {
+    "FV_LBB": "2"
+   },
+   "R_LW+": {
+    "FV_LWW": "1i",
+    "VF_LWW": "-1i"
+   },
+   "R_LW-": {
+    "FV_LWW": "-1i",
+    "FV_LWB": "-2i",
+    "VF_LWW": "-1i"
+   },
+   "R_LB-": {
+    "FV_LBW": "-2i",
+    "FV_LBB": "-2i"
+   }
+  }
+ },
+ "ccRF_L": {
+  "N": [
+   "RR_LWW",
+   "RR_LWB"
+  ],
+  "B": {
+   "zf_W": {
+    "RR_LWW": "-1"
+   },
+   "zWWB": {
+    "RR_LWB": "-2i"
+   },
+   "R_LW+": {
+    "RR_LWW": "1"
+   },
+   "R_LW-": {
+    "RR_LWW": "1"
+   }
+  }
+ },
+ "ccFR_L": {
+  "N": [
+   "RRb_LWW",
+   "RRb_LWB"
+  ],
+  "B": {
+   "zf_W": {
+    "RRb_LWW": "-1"
+   },
+   "zWWB": {
+    "RRb_LWB": "-2i"
+   },
+   "R_LW+": {
+    "RRb_LWW": "1"
+   },
+   "R_LW-": {
+    "RRb_LWW": "-1"
+   }
+  }
+ },
+ "cFF_E": {
+  "N": [
+   "F_EB",
+   "E_EB"
+  ],
+  "B": {
+   "K_E": {
+    "F_EB": "1"
+   },
+   "V_EB": {
+    "F_EB": "-1"
+   },
+   "rd_B": {
+    "F_EB": "-1"
+   },
+   "R_EB+": {
+    "F_EB": "1"
+   },
+   "R_EB-": {
+    "F_EB": "-1",
+    "E_EB": "2i"
+   }
+  }
+ },
+ "cFFV_E": {
+  "N": [
+   "FV_EBB",
+   "E[BWW]@cFFV_E",
+   "E[BGG]@cFFV_E"
+  ],
+  "B": {
+   "rBWW": {
+    "E[BWW]@cFFV_E": "1"
+   },
+   "rBGG": {
+    "E[BGG]@cFFV_E": "1"
+   },
+   "rBBB": {
+    "FV_EBB": "1"
+   },
+   "R_EB-": {
+    "FV_EBB": "-2i"
+   }
+  }
+ },
+ "ccRF_E": {
+  "N": [],
+  "B": {}
+ },
+ "ccFR_E": {
+  "N": [],
+  "B": {}
+ },
+ "cFFS_QU": {
+  "N": [
+   "YuL_G",
+   "YuL_W",
+   "Yu_B"
+  ],
+  "B": {
+   "R_QG+": {
+    "YuL_G": "-1"
+   },
+   "R_QG-": {
+    "YuL_G": "1"
+   },
+   "R_QW+": {
+    "YuL_W": "-1"
+   },
+   "R_QW-": {
+    "YuL_W": "1"
+   },
+   "R_QB+": {
+    "Yu_B": "1/6"
+   },
+   "R_QB-": {
+    "Yu_B": "-1/6"
+   },
+   "R_UG+": {
+    "YuL_G": "1"
+   },
+   "R_UG-": {
+    "YuL_G": "1"
+   },
+   "R_UB+": {
+    "Yu_B": "-2/3"
+   },
+   "R_UB-": {
+    "Yu_B": "-2/3"
+   },
+   "sig_W+": {
+    "YuL_W": "1"
+   },
+   "sig_W-": {
+    "YuL_W": "-1"
+   },
+   "sig_B+": {
+    "Yu_B": "1/2"
+   },
+   "sig_B-": {
+    "Yu_B": "-1/2"
+   }
+  }
+ },
+ "cFFS_UQ": {
+  "N": [
+   "YubL_G",
+   "YubR_W",
+   "Yub_B"
+  ],
+  "B": {
+   "R_QG+": {
+    "YubL_G": "1"
+   },
+   "R_QG-": {
+    "YubL_G": "1"
+   },
+   "R_QW+": {
+    "YubR_W": "1"
+   },
+   "R_QW-": {
+    "YubR_W": "1"
+   },
+   "R_QB+": {
+    "Yub_B": "-1/6"
+   },
+   "R_QB-": {
+    "Yub_B": "-1/6"
+   },
+   "R_UG+": {
+    "YubL_G": "-1"
+   },
+   "R_UG-": {
+    "YubL_G": "1"
+   },
+   "R_UB+": {
+    "Yub_B": "2/3"
+   },
+   "R_UB-": {
+    "Yub_B": "-2/3"
+   },
+   "sig_W+": {
+    "YubR_W": "-1"
+   },
+   "sig_W-": {
+    "YubR_W": "-1"
+   },
+   "sig_B+": {
+    "Yub_B": "-1/2"
+   },
+   "sig_B-": {
+    "Yub_B": "-1/2"
+   }
+  }
+ },
+ "cFFS_QD": {
+  "N": [
+   "YdL_G",
+   "YdL_W",
+   "Yd_B"
+  ],
+  "B": {
+   "R_QG+": {
+    "YdL_G": "-1"
+   },
+   "R_QG-": {
+    "YdL_G": "1"
+   },
+   "R_QW+": {
+    "YdL_W": "-1"
+   },
+   "R_QW-": {
+    "YdL_W": "1"
+   },
+   "R_QB+": {
+    "Yd_B": "1/6"
+   },
+   "R_QB-": {
+    "Yd_B": "-1/6"
+   },
+   "R_DG+": {
+    "YdL_G": "1"
+   },
+   "R_DG-": {
+    "YdL_G": "1"
+   },
+   "R_DB+": {
+    "Yd_B": "1/3"
+   },
+   "R_DB-": {
+    "Yd_B": "1/3"
+   },
+   "sig_W+": {
+    "YdL_W": "1"
+   },
+   "sig_W-": {
+    "YdL_W": "1"
+   },
+   "sig_B+": {
+    "Yd_B": "-1/2"
+   },
+   "sig_B-": {
+    "Yd_B": "-1/2"
+   }
+  }
+ },
+ "cFFS_DQ": {
+  "N": [
+   "YdbL_G",
+   "YdbR_W",
+   "Ydb_B"
+  ],
+  "B": {
+   "R_QG+": {
+    "YdbL_G": "1"
+   },
+   "R_QG-": {
+    "YdbL_G": "1"
+   },
+   "R_QW+": {
+    "YdbR_W": "1"
+   },
+   "R_QW-": {
+    "YdbR_W": "1"
+   },
+   "R_QB+": {
+    "Ydb_B": "-1/6"
+   },
+   "R_QB-": {
+    "Ydb_B": "-1/6"
+   },
+   "R_DG+": {
+    "YdbL_G": "-1"
+   },
+   "R_DG-": {
+    "YdbL_G": "1"
+   },
+   "R_DB+": {
+    "Ydb_B": "-1/3"
+   },
+   "R_DB-": {
+    "Ydb_B": "1/3"
+   },
+   "sig_W+": {
+    "YdbR_W": "-1"
+   },
+   "sig_W-": {
+    "YdbR_W": "1"
+   },
+   "sig_B+": {
+    "Ydb_B": "1/2"
+   },
+   "sig_B-": {
+    "Ydb_B": "-1/2"
+   }
+  }
+ },
+ "cFFS_LE": {
+  "N": [
+   "YeL_W",
+   "Ye_B"
+  ],
+  "B": {
+   "R_LW+": {
+    "YeL_W": "-1"
+   },
+   "R_LW-": {
+    "YeL_W": "1"
+   },
+   "R_LB+": {
+    "Ye_B": "-1/2"
+   },
+   "R_LB-": {
+    "Ye_B": "1/2"
+   },
+   "R_EB+": {
+    "Ye_B": "1"
+   },
+   "R_EB-": {
+    "Ye_B": "1"
+   },
+   "sig_W+": {
+    "YeL_W": "1"
+   },
+   "sig_W-": {
+    "YeL_W": "1"
+   },
+   "sig_B+": {
+    "Ye_B": "-1/2"
+   },
+   "sig_B-": {
+    "Ye_B": "-1/2"
+   }
+  }
+ },
+ "cFFS_EL": {
+  "N": [
+   "YebR_W",
+   "Yeb_B"
+  ],
+  "B": {
+   "R_LW+": {
+    "YebR_W": "1"
+   },
+   "R_LW-": {
+    "YebR_W": "1"
+   },
+   "R_LB+": {
+    "Yeb_B": "1/2"
+   },
+   "R_LB-": {
+    "Yeb_B": "1/2"
+   },
+   "R_EB+": {
+    "Yeb_B": "-1"
+   },
+   "R_EB-": {
+    "Yeb_B": "1"
+   },
+   "sig_W+": {
+    "YebR_W": "-1"
+   },
+   "sig_W-": {
+    "YebR_W": "1"
+   },
+   "sig_B+": {
+    "Yeb_B": "1/2"
+   },
+   "sig_B-": {
+    "Yeb_B": "-1/2"
+   }
+  }
+ }
+}
