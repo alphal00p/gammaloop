@@ -1,3 +1,5 @@
+use feynkit_graph::symbols;
+use feynkit_model::Model;
 use symbolica::prelude::*;
 
 use color_eyre::Result;
@@ -56,16 +58,13 @@ where
     A: AtomCore,
 {
     fn to_quoted(&self) -> String {
-        // let mut opts = PrintOptions::file();
-        // opts.hide_namespace = Some("gammalooprs");
+        // An explicit graph-local name can coincide with a tensor or active-model alias.
         self.to_canonically_ordered_string(
             CanonicalOrderingSettings::new()
                 .include_namespace(true)
                 .include_attributes(false)
-                .hide_namespace(Some("gammalooprs")),
+                .hide_namespace(None),
         )
-        .to_string()
-        //.printer(opts))
     }
 }
 
@@ -103,15 +102,13 @@ impl FromStripedStr for String {
     }
 }
 
-impl FromStripedStr for Atom {
-    fn strip_from(string: &str) -> Result<Self> {
-        let a = string
-            .strip_prefix('"')
-            .unwrap_or(string)
-            .strip_suffix('"')
-            .unwrap_or(string);
-        try_parse!(a).map_err(|e| eyre!("Symbolica parsing error: {e}"))
-    }
+pub(crate) fn parse_expression(source: &str, model: &Model) -> Result<Atom> {
+    let expression = source
+        .strip_prefix('"')
+        .and_then(|quoted| quoted.strip_suffix('"'))
+        .unwrap_or(source);
+    symbols::parse_expression(expression, "gammalooprs", Some(model))
+        .map_err(|error| eyre!("Symbolica parsing error: {error}"))
 }
 
 impl FromStripedStr for bool {

@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 
+use feynkit_graph::symbols;
 use feynkit_model::{
     ComplexValue, Coupling, CouplingId, EvaluatedValues, EvaluationRequest, LorentzStructure,
     LorentzStructureId, Model, ModelEvaluator, ModelExpression, ModelFormFactor, ModelFormFactorId,
@@ -26,6 +27,8 @@ use crate::{
     generation::{PyProcess, SelectorInput, VertexInput},
 };
 use spynso3::{display::DisplaySettings, expression::TensorExpression};
+use symbolica::api::python;
+use symbolica::parser::ParseSettings;
 use symbolica::{
     api::python::{ConvertibleToExpression, PythonExpression},
     atom::{Atom, AtomCore, AtomView},
@@ -2252,7 +2255,7 @@ impl PyModelExpression {
         &self.inner.name
     }
 
-    /// Return the symbolic expression text.
+    /// Return the formula with its model parameter and coupling symbols.
     ///
     /// Examples
     /// --------
@@ -2261,8 +2264,9 @@ impl PyModelExpression {
     /// >>> formula = item.expression
     #[getter]
     fn expression(&self) -> PythonExpression {
-        crate::graph::parse_symbolic_annotation(&self.inner.expression)
+        Atom::parse(&self.inner.expression, "UFO", ParseSettings::default())
             .expect("evaluation requests contain canonical Symbolica expressions")
+            .into()
     }
 }
 
@@ -3193,6 +3197,38 @@ impl PyModel {
             .map_err(error::model)
     }
 
+    /// Parse a diagram expression with this model's parameter and coupling names.
+    ///
+    /// Graph and tensor functions use the same short names as DOT input.
+    /// Unknown names use the calling module's Symbolica namespace, as in
+    /// ``E(...)``. Explicit namespaces select the exact symbol.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model = hep.Model.standard_model()
+    /// >>> weight = model.parse_expression("GC_11*Q(0,cind(0))")
+    /// >>> assert model.parse_expression("MT") == model.parameter("MT").symbol
+    ///
+    /// Parameters
+    /// ----------
+    /// source : str
+    ///     Symbolica expression in diagram notation.
+    ///
+    /// Returns
+    /// -------
+    /// Expression
+    ///     Parsed expression, suitable for operations such as ``model.expand_couplings``.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If the expression cannot be parsed.
+    fn parse_expression(&self, py: Python<'_>, source: &str) -> PyResult<PythonExpression> {
+        symbols::parse_expression(source, python::get_namespace(py)?, Some(&self.inner))
+            .map(PythonExpression::from)
+            .map_err(PyValueError::new_err)
+    }
+
     /// Replace named UFO coefficients by their analytic model expressions.
     ///
     /// The input and the stored model are unchanged.
@@ -3909,6 +3945,13 @@ else:
                 r#"
 model = fk.Model.from_json(MODEL_JSON)
 
+try:
+    model.parse_expression("g+")
+except ValueError:
+    pass
+else:
+    raise AssertionError("malformed diagram input must raise ValueError")
+
 def plain(expression):
     return expression.format(
         max_line_length=None,
@@ -4008,8 +4051,9 @@ def evaluate(request):
     assert all(isinstance(value, fk.ModelExpression) for value in request.internal_parameters)
     assert all(isinstance(value, fk.ModelExpression) for value in request.couplings)
     assert request.internal_parameters[0].name == "double_mass"
-    assert plain(request.internal_parameters[0].expression) == "2*mass"
+    assert request.internal_parameters[0].expression == 2 * model.parameter("mass").symbol
     assert request.couplings[0].name == "GC1"
+    assert request.couplings[0].expression == model.coupling("GC1").expression
     assert request.functions[0].name == "twice"
     assert request.form_factors[0].name == "FF1"
     requests.append(request)

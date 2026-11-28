@@ -87,11 +87,10 @@ use spenso::structure::partial::PartialStructure;
 use spenso::structure::partial::PartialStructureExt;
 use spenso::structure::representation::{Minkowski, RepName};
 use spenso::structure::slot::SlotError;
-use symbolica::atom::{Atom, AtomCore, UserData};
+use symbolica::atom::{Atom, AtomCore};
 use symbolica::graph::Graph as CanonicalGraph;
-use symbolica::parser::{ParseSettings, Token};
-use symbolica::state::{State, Workspace};
-use symbolica::with_default_namespace;
+#[cfg(test)]
+use symbolica::parser::ParseSettings;
 use thiserror::Error;
 
 /// Stable vertex identifier in a [`FeynmanDiagram`].
@@ -646,13 +645,13 @@ struct DiagramSerde {
     overall_factor: String,
     numerator: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    num_interface: Option<NumeratorInterface>,
+    num_interface: Option<Vec<String>>,
     numerator_prefactor: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    numerator_prefactor_interface: Option<NumeratorInterface>,
+    numerator_prefactor_interface: Option<Vec<String>>,
     projector: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    projector_interface: Option<NumeratorInterface>,
+    projector_interface: Option<Vec<String>>,
     loop_momentum_basis: LoopMomentumBasis,
     cuts: Vec<DiagramCut>,
     topology_threshold_candidates: Vec<DiagramThresholdCandidate>,
@@ -667,7 +666,7 @@ struct DiagramVertexSerde {
     interaction: Option<VertexRuleId>,
     numerator: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    num_interface: Option<NumeratorInterface>,
+    num_interface: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -679,7 +678,7 @@ struct DiagramEdgeSerde {
     directed: bool,
     numerator: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    num_interface: Option<NumeratorInterface>,
+    num_interface: Option<Vec<String>>,
     source_slot: VertexSlot,
     target_slot: VertexSlot,
 }
@@ -2364,7 +2363,7 @@ impl FeynmanDiagram {
                 write!(
                     interfaces,
                     ", {key}={}",
-                    Self::dot_string(&interface.to_json())?
+                    Self::dot_string(&serde_json::to_string(interface)?)?
                 )?;
             }
         }
@@ -2642,32 +2641,36 @@ impl FeynmanDiagram {
 
         let mut builder = Self::builder(Arc::clone(&model), name)
             .symmetry_factor(symmetry_factor)
-            .overall_factor(Self::parse_expression("overall factor", overall_factor)?)
+            .overall_factor(Self::parse_expression(
+                Some(&model),
+                "overall factor",
+                overall_factor,
+            )?)
             .numerator(NumeratorInterface::admit(
-                Self::parse_expression("numerator", numerator)?,
+                Self::parse_expression(Some(&model), "numerator", numerator)?,
                 parsed
                     .global_data
                     .statements
                     .get("num_interface")
-                    .map(|value| NumeratorInterface::parse(value))
+                    .map(|value| NumeratorInterface::parse_with_model(value, &model))
                     .transpose()?,
             )?)
             .numerator_prefactor(NumeratorInterface::admit(
-                Self::parse_expression("numerator prefactor", numerator_prefactor)?,
+                Self::parse_expression(Some(&model), "numerator prefactor", numerator_prefactor)?,
                 parsed
                     .global_data
                     .statements
                     .get("numerator_prefactor_interface")
-                    .map(|value| NumeratorInterface::parse(value))
+                    .map(|value| NumeratorInterface::parse_with_model(value, &model))
                     .transpose()?,
             )?)
             .projector(NumeratorInterface::admit(
-                Self::parse_expression("projector", projector)?,
+                Self::parse_expression(Some(&model), "projector", projector)?,
                 parsed
                     .global_data
                     .statements
                     .get("projector_interface")
-                    .map(|value| NumeratorInterface::parse(value))
+                    .map(|value| NumeratorInterface::parse_with_model(value, &model))
                     .transpose()?,
             )?)
             .cuts(cuts)
@@ -2706,6 +2709,7 @@ impl FeynmanDiagram {
                 interaction,
                 numerator: NumeratorInterface::admit(
                     Self::parse_expression(
+                        Some(&model),
                         "vertex numerator",
                         data.statements
                             .get("numerator")
@@ -2714,7 +2718,7 @@ impl FeynmanDiagram {
                     )?,
                     data.statements
                         .get("num_interface")
-                        .map(|value| NumeratorInterface::parse(value))
+                        .map(|value| NumeratorInterface::parse_with_model(value, &model))
                         .transpose()?,
                 )?,
             };
@@ -2800,6 +2804,7 @@ impl FeynmanDiagram {
                 directed: data.orientation != Orientation::Undirected,
                 numerator: NumeratorInterface::admit(
                     Self::parse_expression(
+                        Some(&model),
                         "edge numerator",
                         data.data
                             .statements
@@ -2810,7 +2815,7 @@ impl FeynmanDiagram {
                     data.data
                         .statements
                         .get("num_interface")
-                        .map(|value| NumeratorInterface::parse(value))
+                        .map(|value| NumeratorInterface::parse_with_model(value, &model))
                         .transpose()?,
                 )?,
                 source_slot: VertexSlot(0),
@@ -3028,7 +3033,7 @@ impl FeynmanDiagram {
                         name: vertex.name.clone(),
                         interaction: vertex.interaction,
                         numerator: numerator.to_canonical_string(),
-                        num_interface,
+                        num_interface: num_interface.map(|interface| interface.canonical_ports()),
                     }
                 })
                 .collect(),
@@ -3048,7 +3053,8 @@ impl FeynmanDiagram {
                             particle: edge.particle,
                             directed: edge.directed,
                             numerator: numerator.to_canonical_string(),
-                            num_interface,
+                            num_interface: num_interface
+                                .map(|interface| interface.canonical_ports()),
                             source_slot: edge.source_slot,
                             target_slot: edge.target_slot,
                         },
@@ -3059,11 +3065,12 @@ impl FeynmanDiagram {
             symmetry_factor: self.symmetry_factor,
             overall_factor: self.overall_factor.to_canonical_string(),
             numerator: numerator.to_canonical_string(),
-            num_interface,
+            num_interface: num_interface.map(|interface| interface.canonical_ports()),
             numerator_prefactor: numerator_prefactor.to_canonical_string(),
-            numerator_prefactor_interface,
+            numerator_prefactor_interface: numerator_prefactor_interface
+                .map(|interface| interface.canonical_ports()),
             projector: projector.to_canonical_string(),
-            projector_interface,
+            projector_interface: projector_interface.map(|interface| interface.canonical_ports()),
             loop_momentum_basis: self.loop_momentum_basis.clone(),
             cuts: self.cuts.clone(),
             topology_threshold_candidates: self.topology_threshold_candidates.clone(),
@@ -3079,24 +3086,34 @@ impl FeynmanDiagram {
                 actual: actual_fingerprint,
             });
         }
+        let parse_interface = |ports: Option<Vec<String>>| {
+            ports
+                .map(|ports| NumeratorInterface::from_ports(ports, Some(&model)))
+                .transpose()
+        };
         let serialized_id = data.id;
-        let mut builder = Self::builder(model, data.name)
+        let mut builder = Self::builder(Arc::clone(&model), data.name)
             .symmetry_factor(data.symmetry_factor)
             .overall_factor(Self::parse_expression(
+                Some(&model),
                 "overall factor",
                 data.overall_factor,
             )?)
             .numerator(NumeratorInterface::admit(
-                Self::parse_expression("numerator", data.numerator)?,
-                data.num_interface,
+                Self::parse_expression(Some(&model), "numerator", data.numerator)?,
+                parse_interface(data.num_interface)?,
             )?)
             .numerator_prefactor(NumeratorInterface::admit(
-                Self::parse_expression("numerator prefactor", data.numerator_prefactor)?,
-                data.numerator_prefactor_interface,
+                Self::parse_expression(
+                    Some(&model),
+                    "numerator prefactor",
+                    data.numerator_prefactor,
+                )?,
+                parse_interface(data.numerator_prefactor_interface)?,
             )?)
             .projector(NumeratorInterface::admit(
-                Self::parse_expression("projector", data.projector)?,
-                data.projector_interface,
+                Self::parse_expression(Some(&model), "projector", data.projector)?,
+                parse_interface(data.projector_interface)?,
             )?)
             .loop_momentum_basis(data.loop_momentum_basis)
             .cuts(data.cuts)
@@ -3114,8 +3131,8 @@ impl FeynmanDiagram {
                 name: vertex.name,
                 interaction: vertex.interaction,
                 numerator: NumeratorInterface::admit(
-                    Self::parse_expression("vertex numerator", vertex.numerator)?,
-                    vertex.num_interface,
+                    Self::parse_expression(Some(&model), "vertex numerator", vertex.numerator)?,
+                    parse_interface(vertex.num_interface)?,
                 )?,
             });
         }
@@ -3129,8 +3146,8 @@ impl FeynmanDiagram {
                     particle: edge.particle,
                     directed: edge.directed,
                     numerator: NumeratorInterface::admit(
-                        Self::parse_expression("edge numerator", edge.numerator)?,
-                        edge.num_interface,
+                        Self::parse_expression(Some(&model), "edge numerator", edge.numerator)?,
+                        parse_interface(edge.num_interface)?,
                     )?,
                     source_slot: edge.source_slot,
                     target_slot: edge.target_slot,
@@ -3154,28 +3171,18 @@ impl FeynmanDiagram {
         serde_json::to_string(value).map_err(DiagramError::from)
     }
 
-    fn parse_expression(field: &'static str, expression: String) -> Result<Atom, DiagramError> {
-        // Canonical strings include attributes and tags, but not Symbolica user data.
-        // Reuse exact registered declarations so Spenso representation metadata survives.
-        let mut symbols = State::symbol_iter()
-            .filter(|(symbol, _)| !matches!(symbol.get_data(), UserData::None))
-            .map(|(symbol, _)| (Atom::var(symbol).to_canonical_string().into(), symbol))
-            .collect();
-        let namespace = with_default_namespace!(&expression, "feynkit_graph");
-        Workspace::get_local()
-            .with(|workspace| {
-                Token::parse_with_atom_info(
-                    &expression,
-                    ParseSettings::default(),
-                    Some((&namespace, &mut symbols, workspace)),
-                )?
-                .to_atom(&namespace, &mut symbols, workspace)
-            })
-            .map_err(|message| DiagramError::SymbolicParse {
+    fn parse_expression(
+        model: Option<&Model>,
+        field: &'static str,
+        expression: String,
+    ) -> Result<Atom, DiagramError> {
+        symbols::parse_expression(&expression, "feynkit_graph", model).map_err(|message| {
+            DiagramError::SymbolicParse {
                 field,
                 expression,
                 message,
-            })
+            }
+        })
     }
 }
 
@@ -4999,7 +5006,8 @@ mod tests {
         let mut expected = original.serde_view();
         let (expression, interface) = NumeratorInterface::export(&prefactor);
         expected.numerator_prefactor = expression.to_canonical_string();
-        expected.numerator_prefactor_interface = interface;
+        expected.numerator_prefactor_interface =
+            interface.map(|interface| interface.canonical_ports());
         assert_eq!(
             replacement.to_json().unwrap(),
             serde_json::to_string_pretty(&expected).unwrap()

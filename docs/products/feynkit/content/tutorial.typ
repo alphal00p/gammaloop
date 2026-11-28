@@ -598,6 +598,32 @@ This returns a new expression and preserves the stored named coefficients. Seria
 `FeynmanDiagram.from_dot_set(model, text)` returns a list in document order.
 It accepts compact physics DOT and annotated exports; exports preserve each
 diagram's momentum basis and physical cuts. An invalid graph fails the whole import.
+
+In a DOT numerator, `Q(0,cind(0))` selects the time component of edge 0's
+momentum. FeynKit resolves `Q` to `gammalooprs::Q` and `cind` to
+`spenso::cind`. Parameters and couplings from the diagram's model also have
+short names. For example, with the Standard Model loaded,
+`num="GC_11*Q(0,cind(0))"` uses the model coupling `UFO::GC_11`.
+Use an explicit namespace such as `example::GC_11` to supply your own symbol
+with the same name. Diagram JSON expressions use the same notation.
+
+Function names include the momenta `Q`, `K`, and `P`, index labels such as
+`edge` and `hedge`, and tensor operations such as `g`, `gamma`, and `dot`.
+In `g*g(i,j)`, the first `g` is a scalar and
+the function call selects the metric. Symbolica mathematical functions keep
+their usual meaning. Use `spenso::cos` for the color sextet representation
+when a formula also contains the cosine function `cos`.
+
+In Python, pass the same string to `model.parse_expression` to obtain a
+Symbolica `Expression`. Unknown names use the calling module's Symbolica
+namespace, just as they do with `E(...)`.
+
+// docs-example: compile
+```python
+weight = model.parse_expression("GC_11*Q(0,cind(0))")
+analytic_weight = model.expand_couplings(weight)
+```
+
 The model fingerprint and structural validation protect the
 interpretation of stored IDs. Model serialization keeps `UFO` implicit and
 preserves all other Symbolica namespaces, so custom gauge symbols and tensor

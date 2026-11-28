@@ -18,7 +18,7 @@ use crate::{
 use color_eyre::Result;
 use eyre::{Context, eyre};
 
-use super::parse::string_utils::consistent_dot_identity;
+use super::parse::string_utils::{self, consistent_dot_identity};
 use super::{
     Autogen,
     edge::ParseEdge,
@@ -164,7 +164,7 @@ impl ParseVertex {
             let num_interface = v
                 .get::<_, String>("num_interface")
                 .transpose()?
-                .map(|value| NumeratorInterface::parse(&value))
+                .map(|value| NumeratorInterface::parse_with_model(&value, model))
                 .transpose()?;
 
             let dod = v
@@ -198,7 +198,7 @@ impl ParseVertex {
                 .get::<_, String>("num")
                 .map(|num| -> Result<Atom> {
                     let num = num?;
-                    num.strip_parse().with_context(|| {
+                    string_utils::parse_expression(&num, model).with_context(|| {
                         format!(
                             "Error parsing vertex num {num} of graph {}",
                             parse_data.name

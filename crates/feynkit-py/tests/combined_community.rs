@@ -478,6 +478,11 @@ else:
     raise AssertionError("nonlinear auxiliary product was accepted")
 spenso_expression = spenso.TensorName("T").to_expression()
 named_coupling = core.S("UFO::SCALAR_COUPLING")
+original_namespace = core.get_namespace()
+core.set_namespace("feynkit_py_input")
+parsed = model.parse_expression("SCALAR_COUPLING*weight*Q(0,cind(0))")
+assert parsed == named_coupling * core.E("weight*gammalooprs::Q(0,spenso::cind(0))")
+core.set_namespace(original_namespace)
 expanded_coupling = model.expand_couplings(named_coupling)
 
 tensor_dimension = core.S("feynkit_py_test::D")
