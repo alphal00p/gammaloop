@@ -1,0 +1,247 @@
+{
+ "class": "g1_cVV",
+ "diagrams": [
+  {
+   "id": "(a)_Q",
+   "topology": "fermion triangle, external ghost at the Delta_1 vertex",
+   "fields": "Psi_Q (c_Q = L) on all three lines; in turn each line adjacent to Delta_1 is the sterile component",
+   "symmetry_factor": "1",
+   "sign": "-1 (closed fermion loop)",
+   "multiplicity_note": "fermion flow Delta_1 -> A^c_nu(p2) -> A^b_mu(p1) -> Delta_1; loop momenta k (A^b->Delta), k-p1, k+q; group factor Tr_f(T^a T^b T^c); = checker orientation 2"
+  },
+  {
+   "id": "(b)_Q",
+   "topology": "fermion triangle, external ghost at the Delta_1 vertex",
+   "fields": "Psi_Q (c_Q = L) on all three lines; in turn each line adjacent to Delta_1 is the sterile component",
+   "symmetry_factor": "1",
+   "sign": "-1 (closed fermion loop)",
+   "multiplicity_note": "(a) with (b,mu,p1)<->(c,nu,p2); group factor Tr_f(T^a T^c T^b); = checker orientation 1"
+  },
+  {
+   "id": "(a)_U",
+   "topology": "fermion triangle, external ghost at the Delta_1 vertex",
+   "fields": "Psi_U (c_U = R) on all three lines; in turn each line adjacent to Delta_1 is the sterile component",
+   "symmetry_factor": "1",
+   "sign": "-1 (closed fermion loop)",
+   "multiplicity_note": "fermion flow Delta_1 -> A^c_nu(p2) -> A^b_mu(p1) -> Delta_1; loop momenta k (A^b->Delta), k-p1, k+q; group factor Tr_f(T^a T^b T^c); = checker orientation 2"
+  },
+  {
+   "id": "(b)_U",
+   "topology": "fermion triangle, external ghost at the Delta_1 vertex",
+   "fields": "Psi_U (c_U = R) on all three lines; in turn each line adjacent to Delta_1 is the sterile component",
+   "symmetry_factor": "1",
+   "sign": "-1 (closed fermion loop)",
+   "multiplicity_note": "(a) with (b,mu,p1)<->(c,nu,p2); group factor Tr_f(T^a T^c T^b); = checker orientation 1"
+  },
+  {
+   "id": "(a)_D",
+   "topology": "fermion triangle, external ghost at the Delta_1 vertex",
+   "fields": "Psi_D (c_D = R) on all three lines; in turn each line adjacent to Delta_1 is the sterile component",
+   "symmetry_factor": "1",
+   "sign": "-1 (closed fermion loop)",
+   "multiplicity_note": "fermion flow Delta_1 -> A^c_nu(p2) -> A^b_mu(p1) -> Delta_1; loop momenta k (A^b->Delta), k-p1, k+q; group factor Tr_f(T^a T^b T^c); = checker orientation 2"
+  },
+  {
+   "id": "(b)_D",
+   "topology": "fermion triangle, external ghost at the Delta_1 vertex",
+   "fields": "Psi_D (c_D = R) on all three lines; in turn each line adjacent to Delta_1 is the sterile component",
+   "symmetry_factor": "1",
+   "sign": "-1 (closed fermion loop)",
+   "multiplicity_note": "(a) with (b,mu,p1)<->(c,nu,p2); group factor Tr_f(T^a T^c T^b); = checker orientation 1"
+  },
+  {
+   "id": "(a)_L",
+   "topology": "fermion triangle, external ghost at the Delta_1 vertex",
+   "fields": "Psi_L (c_L = L) on all three lines; in turn each line adjacent to Delta_1 is the sterile component",
+   "symmetry_factor": "1",
+   "sign": "-1 (closed fermion loop)",
+   "multiplicity_note": "fermion flow Delta_1 -> A^c_nu(p2) -> A^b_mu(p1) -> Delta_1; loop momenta k (A^b->Delta), k-p1, k+q; group factor Tr_f(T^a T^b T^c); = checker orientation 2"
+  },
+  {
+   "id": "(b)_L",
+   "topology": "fermion triangle, external ghost at the Delta_1 vertex",
+   "fields": "Psi_L (c_L = L) on all three lines; in turn each line adjacent to Delta_1 is the sterile component",
+   "symmetry_factor": "1",
+   "sign": "-1 (closed fermion loop)",
+   "multiplicity_note": "(a) with (b,mu,p1)<->(c,nu,p2); group factor Tr_f(T^a T^c T^b); = checker orientation 1"
+  },
+  {
+   "id": "(a)_E",
+   "topology": "fermion triangle, external ghost at the Delta_1 vertex",
+   "fields": "Psi_E (c_E = R) on all three lines; in turn each line adjacent to Delta_1 is the sterile component",
+   "symmetry_factor": "1",
+   "sign": "-1 (closed fermion loop)",
+   "multiplicity_note": "fermion flow Delta_1 -> A^c_nu(p2) -> A^b_mu(p1) -> Delta_1; loop momenta k (A^b->Delta), k-p1, k+q; group factor Tr_f(T^a T^b T^c); = checker orientation 2"
+  },
+  {
+   "id": "(b)_E",
+   "topology": "fermion triangle, external ghost at the Delta_1 vertex",
+   "fields": "Psi_E (c_E = R) on all three lines; in turn each line adjacent to Delta_1 is the sterile component",
+   "symmetry_factor": "1",
+   "sign": "-1 (closed fermion loop)",
+   "multiplicity_note": "(a) with (b,mu,p1)<->(c,nu,p2); group factor Tr_f(T^a T^c T^b); = checker orientation 1"
+  }
+ ],
+ "functions": [
+  {
+   "externals": "omega^a(q) A^b_mu(p1) A^c_nu(p2), q=-p1-p2, gauge factor G (a,b,c = A,B,C)",
+   "pole_vertex_function": [
+    {
+     "structure": "fg^(A B C) gmb^(mu nu) (hat(p)_1^2 - hat(p)_2^2)",
+     "coefficient": "-2/3 g_s^2  (= -(1/3)(S_L^(G)+S_R^(G)))"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "fg^(A B C) gmb^(mu nu) (bar(p)_1^2 - bar(p)_2^2)",
+     "coefficient": "2/3 g_s^2"
+    },
+    {
+     "structure": "fg^(A B C) (bar(p)_1^mu bar(p)_1^nu - bar(p)_2^mu bar(p)_2^nu)",
+     "coefficient": "-4/3 g_s^2"
+    },
+    {
+     "structure": "g_s^3 d^(A B C) epsilon^(mu nu alpha beta) bar(p)_(1 alpha) bar(p)_(2 beta)",
+     "coefficient": "-2/3 * D_GGG, D_GGG = 1/2[2 - (1+1)] = 0"
+    }
+   ],
+   "per_topology": {
+    "(a)": "N0^(a) = (i/3) Tr_f(T^a T^b T^c) gbar^{mu nu}(phat1^2 - phat2^2); P N1^(a) = Tr_f(T^a T^b T^c)[(2i/3)(p1b^mu p1b^nu - p2b^mu p2b^nu) - (i/3) gbar^{mu nu}(p1b^2 - p2b^2) + (2/3) s_f eps^{mu nu alpha beta} p1b_alpha p2b_beta], s_f = -1 (Q,L), +1 (U,D,E)",
+    "(b)": "(a) with (b,mu,p1)<->(c,nu,p2): parity-even kinematic factors change sign, eps factor invariant"
+   }
+  },
+  {
+   "externals": "omega^a(q) A^b_mu(p1) A^c_nu(p2), gauge factor W (a,b,c = I,J,K)",
+   "pole_vertex_function": [
+    {
+     "structure": "fg^(I J K) gmb^(mu nu) (hat(p)_1^2 - hat(p)_2^2)",
+     "coefficient": "-2/3 g^2"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "fg^(I J K) gmb^(mu nu) (bar(p)_1^2 - bar(p)_2^2)",
+     "coefficient": "2/3 g^2"
+    },
+    {
+     "structure": "fg^(I J K) (bar(p)_1^mu bar(p)_1^nu - bar(p)_2^mu bar(p)_2^nu)",
+     "coefficient": "-4/3 g^2"
+    },
+    {
+     "structure": "epsilon part",
+     "coefficient": "0 (Tr(tau^I{tau^J,tau^K}) = 0)"
+    }
+   ],
+   "per_topology": {
+    "(a)": "N0^(a) = (i/3) Tr_f(T^a T^b T^c) gbar^{mu nu}(phat1^2 - phat2^2); P N1^(a) = Tr_f(T^a T^b T^c)[(2i/3)(p1b^mu p1b^nu - p2b^mu p2b^nu) - (i/3) gbar^{mu nu}(p1b^2 - p2b^2) + (2/3) s_f eps^{mu nu alpha beta} p1b_alpha p2b_beta], s_f = -1 (Q,L), +1 (U,D,E)",
+    "(b)": "(a) with (b,mu,p1)<->(c,nu,p2): parity-even kinematic factors change sign, eps factor invariant"
+   }
+  },
+  {
+   "externals": "omega^B A^B A^B (BBB)",
+   "pole_vertex_function": [
+    {
+     "structure": "all",
+     "coefficient": "0"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "g'^3 epsilon^(mu nu alpha beta) bar(p)_(1 alpha) bar(p)_(2 beta)",
+     "coefficient": "-4/3 D_BBB, D_BBB = 6(1/6)^3 + 2(-1/2)^3 - [3(2/3)^3 + 3(-1/3)^3 + (-1)^3] = -2/9 + 2/9 = 0"
+    }
+   ],
+   "per_topology": {
+    "(a)+(b)": "parity-even part cancels (Furry); eps part 2x(a)"
+   }
+  },
+  {
+   "externals": "omega^B W^I W^J, and permutations omega^I B W^J, omega^I W^J B (BWW)",
+   "pole_vertex_function": [
+    {
+     "structure": "all",
+     "coefficient": "0"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "g' g^2 delta^(I J) epsilon^(mu nu alpha beta) bar(p)_(1 alpha) bar(p)_(2 beta)",
+     "coefficient": "-2/3 D_BWW, D_BWW = 3(1/6) + 1(-1/2) = 0"
+    }
+   ],
+   "per_topology": {
+    "(a)+(b)": "even part prop. to Tr(T^a[T^b,T^c]) = 0 for mixed factors"
+   }
+  },
+  {
+   "externals": "omega^B G^A G^B' and permutations (BGG)",
+   "pole_vertex_function": [
+    {
+     "structure": "all",
+     "coefficient": "0"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "g' g_s^2 delta^(A B') epsilon^(mu nu alpha beta) bar(p)_(1 alpha) bar(p)_(2 beta)",
+     "coefficient": "-2/3 D_BGG, D_BGG = 2(1/6) - [2/3 + (-1/3)] = 0"
+    }
+   ],
+   "per_topology": {
+    "(a)+(b)": "even part 0"
+   }
+  },
+  {
+   "externals": "GGW, GWW, GBB, WBB, GWB (all orderings)",
+   "pole_vertex_function": [
+    {
+     "structure": "all",
+     "coefficient": "0 (traceless generators)"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "all",
+     "coefficient": "0"
+    }
+   ],
+   "per_topology": {
+    "(a)+(b)": "0"
+   }
+  }
+ ],
+ "operators": [
+  {
+   "kind": "evanescent_counterterm",
+   "operator": "(Dbrk_1 dot Gamma)^((1))_div supset -1/3 lf 1/ep (S_L^((r))+S_R^((r))) integral d^d x fg^(a b c) gh^a bar(A)^b_mu hat(partial)^2 bar(A)^(c mu)  (= +1/3 (S_L+S_R) lf/ep [bop_d E^((r))_A]_(gh A A); not a delta S operator)",
+   "coefficient": "-(1/3)(S_L^(r)+S_R^(r)) in units 1/(16 pi^2 eps), r = G, W",
+   "sm_values": "G: -2/3 g_s^2; W: -2/3 g^2; B: 0. Cancelled by bop_d of delta S^(1) supset -(1/3)(S_L+S_R) E_A^(r)/(16 pi^2 eps) from g0_VV"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N^((r))_(f 1) - 2 N^((r))_(f 2)  [ = integral fg^(a b c) gh^a A^b_mu (partial^2 A^(c mu) - 2 partial^mu partial dot A^c) ]",
+   "coefficient": "(1/3)(S_L^(r)+S_R^(r)) in units 1/(16 pi^2), r = G, W",
+   "sm_values": "G: 2/3 g_s^2 N_f1^(G) - 4/3 g_s^2 N_f2^(G) (Q: g_s^2, U: g_s^2/2, D: g_s^2/2 into S); W: 2/3 g^2 N_f1^(W) - 4/3 g^2 N_f2^(W) (Q: 3g^2/2, L: g^2/2); B: 0"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "integral D^(a b c) epsilon^(mu nu rho sigma) gh^a partial_mu A^b_nu partial_rho A^c_sigma = D_GGG N_(epsilon d) + 2 D_BBB N_(epsilon B) + sum_(r=G,W) D_(B r r) (N^((r))_(epsilon B r r) + 2 N^((r))_(epsilon r B))",
+   "coefficient": "-1/3 in units 1/(16 pi^2) (per Weyl multiplet: (2/3) s_f eps Tr_f(omega dA dA) = -/+ 1/(24 pi^2) eps Tr_f(omega dA dA) for L/R)",
+   "sm_values": "D_GGG = D_BBB = D_BWW = D_BGG = 0, WWW identically 0: no epsilon term in the SM"
+  }
+ ],
+ "checks": [
+  "Deriver (hand) and checker (machine) agree coefficient by coefficient per orientation: N0 and P N1 of (a) = checker orientation 2, (b) = orientation 1, including the eps sign per chirality.",
+  "Referee re-derived by hand: projector algebra (sterile lines), Theta trace incl. eps sign, the four T^(2) terms and their sum, N1 eps coefficient (2/3)s_f, vertex functions of N_f1, N_f2 and of the eps monomial (factor 2), and the decomposition onto N_eps_d, N_eps_B, N_epsBrr, N_epsrB.",
+  "Referee re-ran check_g1_cVV.py and check_finite_independent.py: ST identity of poles PASS, pole cancellation against b_d E_A OK, independent Feynman-parameter P N1 agrees, all 1728 D^{abc} vanish.",
+  "Pole cancellation: g0_VV.typ has delta S^(1) supset -(1/3)(S_L+S_R) E_A^(r)/(16 pi^2 eps); vertex function of [b_d E_A]_{omega A A} is -fg gbar(phat1^2-phat2^2) (re-derived); sum vanishes.",
+  "Diagram list matches ENUMERATION.md (cGGG 6, cGGB 6, cWWW 4, cWWB 4, cBGG 6, cBWW 4, cBBB 10 labelled; other combinations vanish by tracelessness).",
+  "Literature: pole and parity-even X agree with targets (BIMS/LP); eps part agrees in sign and with the Bardeen magnitude 1/(24 pi^2) per Weyl fermion; the explicit targets formula is a factor 2 smaller (targets-file error, see caveats)."
+ ],
+ "caveats": [
+  "targets_in_our_conventions.md, g1_cVV X_anom: the displayed (l/3) eps (sum_L - sum_R) Tr(omega dA dA) = (l/6) D is a factor 2 too small; it contradicts the file's own statement that the magnitude is (1/3) d^{abc} = Bardeen 1/(24 pi^2). Correct (ours, two independent calculations): -(l/3) D^{abc} eps^{mu nu rho sigma} int omega^a d_mu A^b_nu d_rho A^c_sigma, i.e. (2l/3)(sum_L - sum_R) in the target's index arrangement. Sign agrees.",
+  "The eps structure (combination N_epsBrr + 2 N_epsrB, and N_eps_d, N_eps_B) is not in the image of b: anomaly direction, coefficient D^{abc} = 0 in the SM.",
+  "The pole structure is not a delta S operator; it is [b_d E_A]_{omega A A} (03b eq:b-evanescent).",
+  "Running check_g1_cVV.py regenerates checker_result.json (deterministic, same content)."
+ ]
+}

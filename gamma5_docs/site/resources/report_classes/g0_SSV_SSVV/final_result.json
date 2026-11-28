@@ -1,0 +1,314 @@
+{
+ "class": "g0_SSV_SSVV",
+ "diagrams": [
+  {
+   "id": "F",
+   "topology": "triangle, fermion loop, gauge vertex on psi' (H_j->H^dag_i line) or on psi",
+   "fields": "(psi,psi') = (D,Q) y_d, (E,L) y_e, (Q,U) y_u",
+   "symmetry_factor": "1",
+   "sign": "-1 (fermion loop)",
+   "multiplicity_note": "2 per Yukawa loop; group y^2 N t^a_{psi'} resp. y^2 N t^a_psi with t_{psi'}-t_psi = T^a_H; gluon: Tr_colour T^A = 0"
+  },
+  {
+   "id": "a",
+   "topology": "triangle H H A^c, external A on Higgs line",
+   "fields": "H,H,A^c (c=W^I,B)",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "group T^c T^a T^c = (C_H - C_ad^(a)/2) T^a"
+  },
+  {
+   "id": "b",
+   "topology": "triangle A^c A^d H with VVV",
+   "fields": "H,A^c,A^d",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "group f^{cda} T^d T^c = -(i/2) C_ad^(a) T^a"
+  },
+  {
+   "id": "c,c'",
+   "topology": "bubble SSVV(H,A^a)+SSV and mirror",
+   "fields": "H,A^c",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "group T^c{T^a,T^c} = {T^a,T^c}T^c = (2C_H - C_ad^(a)/2) T^a"
+  },
+  {
+   "id": "d",
+   "topology": "bubble SSVV(H,Hdag)+VVV",
+   "fields": "A^c,A^d",
+   "symmetry_factor": "1/2",
+   "sign": "+1",
+   "multiplicity_note": "group f^{cda}{T^c,T^d}=0"
+  },
+  {
+   "id": "e",
+   "topology": "bubble lambda + SSV",
+   "fields": "H,H",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "integrand odd, zero"
+  },
+  {
+   "id": "F4",
+   "topology": "box, fermion loop, two gauge vertices (psi'psi', psi psi, psi'psi, psi psi')",
+   "fields": "as F",
+   "symmetry_factor": "1",
+   "sign": "-1",
+   "multiplicity_note": "residues +1,+1,-2 (x gbar^{mu nu}) -> y^2 N {T^a_H,T^b_H}; gluons: bracket vanishes"
+  },
+  {
+   "id": "i",
+   "topology": "box: H H H A^c, both externals on Higgs line",
+   "fields": "H,H,H,A^c",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "2 orderings; T^c{T^a,T^b}T^c, residue -1"
+  },
+  {
+   "id": "ii",
+   "topology": "box: both externals on gauge arc (2 VVV)",
+   "fields": "H,A^c,A^e,A^d",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "2 orderings; f^{cae}f^{ebd}T^dT^c, residue 3/4"
+  },
+  {
+   "id": "iii",
+   "topology": "box: one external on each arc",
+   "fields": "H,H,A^c,A^d",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "residue 0"
+  },
+  {
+   "id": "iv",
+   "topology": "triangle SSVV(H,Hdag)+2 VVV",
+   "fields": "A^c,A^e,A^d",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "{T^c,T^d} f^{cae} f^{ebd}, residue -9/2"
+  },
+  {
+   "id": "v",
+   "topology": "triangle lambda + 2 SSV",
+   "fields": "H,H,H",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "residue 2 lambda, cancels x"
+  },
+  {
+   "id": "vi",
+   "topology": "triangle SSVV(H,A^a)+SSV(A^b on Higgs line)+SSV",
+   "fields": "H,H,A^c",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "4 diagrams (mirror, a<->b), residue 1/2"
+  },
+  {
+   "id": "vii",
+   "topology": "triangle SSVV(H,A^a)+VVV(A^b)+SSV",
+   "fields": "H,A^c,A^d",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "4 diagrams, residue -3i/4"
+  },
+  {
+   "id": "viii",
+   "topology": "triangle SSVV(A^a,A^b) on Higgs line + gauge exchange",
+   "fields": "H,H,A^c",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "T^c{T^a,T^b}T^c, residue 1 (cancels i)"
+  },
+  {
+   "id": "ix",
+   "topology": "triangle VVVV(A^a,A^b)+2 SSV",
+   "fields": "H,A^c,A^d",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "residue 3/4 per pairing (ac)(bd),(ad)(bc); 0 for (ab)(cd)"
+  },
+  {
+   "id": "x",
+   "topology": "bubble lambda + SSVV(A^a,A^b)",
+   "fields": "H,H",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "residue -2 lambda, cancels v"
+  },
+  {
+   "id": "xi",
+   "topology": "bubble SSVV(H,Hdag)+VVVV",
+   "fields": "A^c,A^d",
+   "symmetry_factor": "1/2",
+   "sign": "+1",
+   "multiplicity_note": "residue -3/2 per pairing (ac)(bd),(ad)(bc)"
+  },
+  {
+   "id": "xii",
+   "topology": "bubble SSVV(H,A^a)+SSVV(Hdag,A^b)",
+   "fields": "H,A^c",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "2 diagrams (a<->b), residue -1"
+  }
+ ],
+ "functions": [
+  {
+   "externals": "H_j(p) A^a_mu(q) H^dag_i (incoming -p', p'=p+q), gauge factor W or B; checker notation p1=p, p2=-p'",
+   "pole_vertex_function": [
+    {
+     "structure": "(p + p')^mu (Tg^a_H)_(i j)  (d-dimensional, bosonic loops)",
+     "coefficient": "C_ad^(a) - 2 C_H   [W: g^2/2 - g'^2/2 ; B: -3 g^2/2 - g'^2/2]"
+    },
+    {
+     "structure": "(overline(p) + overline(p)')^mu (Tg^a_H)_(i j)  (fermion loops, purely barred)",
+     "coefficient": "3 y_u^2 + 3 y_d^2 + y_e^2"
+    },
+    {
+     "structure": "evanescent part Evan N_0: (hat(p) + hat(p)')^mu (Tg^a_H)_(i j)",
+     "coefficient": "C_ad^(a) - 2 C_H (bosonic only); relative to the d-dim tree structure (Yt + C_ad - 2C_H)(p+p') the evanescent remainder is -Yt (hat(p)+hat(p)')^mu Tg^a_H = vertex function of Yt tilde(E)_H"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "F": "y^2 N (pbar+pbar')^mu T^a_H (psi' line: +y^2 N t_psi' (pbar+pbar'), psi line: -y^2 N t_psi (pbar+pbar'))",
+    "a": "(C_H - C_ad/2)(p+p')^mu T^a",
+    "b": "(3/4) C_ad (p+p')^mu T^a",
+    "c": "-(3/2)(2C_H - C_ad/2) p'^mu T^a",
+    "c'": "-(3/2)(2C_H - C_ad/2) p^mu T^a",
+    "d": "0",
+    "e": "0",
+    "F per SM line (normalised to tree, coefficient of (pbar+pbar'))": "W: Q in D/Q loop 3y_d^2, Q in Q/U loop 3y_u^2, L in E/L loop y_e^2; B: Q(D/Q) y_d^2, D 2y_d^2, Q(Q/U) -y_u^2, U 4y_u^2, L y_e^2, E 2y_e^2"
+   }
+  },
+  {
+   "externals": "H_j(p) A^a_mu(q1) A^b_nu(q2) H^dag_i, gauge factors WW, WB, BB",
+   "pole_vertex_function": [
+    {
+     "structure": "g^(mu nu) {Tg^a_H, Tg^b_H}_(i j)  (d-dimensional, bosonic loops)",
+     "coefficient": "C_ad^(a) + C_ad^(b) - 2 C_H   [WW: 5g^2/2 - g'^2/2 ; WB: g^2/2 - g'^2/2 ; BB: -3g^2/2 - g'^2/2]"
+    },
+    {
+     "structure": "overline(g)^(mu nu) {Tg^a_H, Tg^b_H}_(i j)  (fermion loops)",
+     "coefficient": "3 y_u^2 + 3 y_d^2 + y_e^2"
+    },
+    {
+     "structure": "[Tg^a_H, Tg^b_H]_(i j) structures",
+     "coefficient": "0 (cancel in the sum)"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "general": "N0^(D) = g^{mu nu}[x_D C_H {T^a,T^b} + y_D (C_a+C_b){T^a,T^b} + z_D Xi^{ab}], Xi^{ab}=sum_c T^c{T^a,T^b}T^c",
+    "i": "x=0,y=0,z=-1",
+    "ii": "x=3/4,y=-3/8,z=-3/4",
+    "iii": "0",
+    "iv": "x=-9/2,y=9/4,z=9/2",
+    "v+x": "0",
+    "vi": "x=1,y=-1/4,z=1",
+    "vii": "x=3/2,y=0,z=-3/2",
+    "viii": "x=0,y=0,z=1",
+    "ix": "x=-3/4,y=3/8,z=3/4",
+    "xi": "x=3,y=-3/2,z=-3",
+    "xii": "x=-3,y=1/2,z=-1",
+    "F4": "y^2 N gbar^{mu nu} {T^a_H,T^b_H}",
+    "SM WW (coeff of g{T,T})": "i:-C_H, ii:-3g^2/2, iv:9g^2, vi:(g^2+g'^2)/2, vii:0, viii:C_H, ix:3g^2/2, xi:-6g^2, xii:-(g^2+g'^2)",
+    "SM WB": "i:(g^2-g'^2)/4, vi:g'^2/2, vii:3g^2/2, viii:-(g^2-g'^2)/4, xii:-(g^2+g'^2)",
+    "SM BB": "i:-C_H, vi:2C_H, viii:C_H, xii:-4C_H"
+   }
+  },
+  {
+   "externals": "H^dag H G^A (omega=1), H^dag H G^A G^B, H^dag H G W, H^dag H G B",
+   "pole_vertex_function": [
+    {
+     "structure": "all",
+     "coefficient": "0"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "F (H^dag H G)": "0 identically: Tr_colour T^A = 0",
+    "F4 (H^dag H G G)": "y^2 N gs^2 [Tr{T^A,T^B}+Tr{T^A,T^B}-2Tr(T^AT^B+T^BT^A)] gbar = 0",
+    "mixed G W, G B": "0 identically (Tr T^A = 0)",
+    "bosonic": "none (Higgs is a colour singlet)"
+   }
+  }
+ ],
+ "operators": [
+  {
+   "kind": "pole_counterterm",
+   "operator": "-(1/(16 pi^2 eps)) int d^d x [ (Yt - 2 C_H) (D_mu H)^dag D^mu H + sum_r C_ad^(r) c_r d/dc_r (D_mu H)^dag D^mu H + Yt tilde(E)_H ]_(terms with A and AA); equivalently Yt (Dbar H)^dag Dbar H + (sum_r C_ad^(r) c_r d/dc_r - 2C_H)(DH)^dag DH",
+   "coefficient": "Yt = 3y_u^2+3y_d^2+y_e^2, C_H = 3g^2/4 + g'^2/4, C_ad^(W) = 2g^2, C_ad^(B) = 0",
+   "sm_values": "see basis entries"
+  },
+  {
+   "kind": "pole_counterterm",
+   "operator": "Q_J^((W)) (d-dim continuation as in S_0)",
+   "coefficient": "+(1/(16 pi^2 eps)) (Yt + C_ad^(W) - 2 C_H)",
+   "sm_values": "+(1/(16 pi^2 eps)) (3y_u^2+3y_d^2+y_e^2 + g^2/2 - g'^2/2)"
+  },
+  {
+   "kind": "pole_counterterm",
+   "operator": "Q_J^((B))",
+   "coefficient": "+(1/(16 pi^2 eps)) (Yt - 2 C_H)",
+   "sm_values": "+(1/(16 pi^2 eps)) (3y_u^2+3y_d^2+y_e^2 - 3g^2/2 - g'^2/2)"
+  },
+  {
+   "kind": "pole_counterterm",
+   "operator": "Q_(W W)",
+   "coefficient": "-(1/(16 pi^2 eps)) (Yt + 2 C_ad^(W) - 2 C_H)",
+   "sm_values": "-(1/(16 pi^2 eps)) (3y_u^2+3y_d^2+y_e^2 + 5g^2/2 - g'^2/2)"
+  },
+  {
+   "kind": "pole_counterterm",
+   "operator": "Q_(B B)",
+   "coefficient": "-(1/(16 pi^2 eps)) (Yt - 2 C_H)",
+   "sm_values": "-(1/(16 pi^2 eps)) (3y_u^2+3y_d^2+y_e^2 - 3g^2/2 - g'^2/2)"
+  },
+  {
+   "kind": "pole_counterterm",
+   "operator": "Q_(W B)",
+   "coefficient": "-(1/(16 pi^2 eps)) (Yt + C_ad^(W) - 2 C_H)",
+   "sm_values": "-(1/(16 pi^2 eps)) (3y_u^2+3y_d^2+y_e^2 + g^2/2 - g'^2/2)"
+  },
+  {
+   "kind": "pole_counterterm",
+   "operator": "Q_(G G)",
+   "coefficient": "0",
+   "sm_values": "0"
+  },
+  {
+   "kind": "evanescent_counterterm",
+   "operator": "tilde(E)_H restricted to its terms with one and two gauge fields (vertex functions -(hat(p)+hat(p)')^mu Tg^a_H and -hat(g)^(mu nu){Tg^a_H,Tg^b_H}); b_d-closed",
+   "coefficient": "-(1/(16 pi^2 eps)) Yt",
+   "sm_values": "-(1/(16 pi^2 eps)) (3y_u^2+3y_d^2+y_e^2)"
+  },
+  {
+   "kind": "pole_counterterm",
+   "operator": "renormalisation constants: counterterm vertex = (delta Z_H + delta_r) x tree for H^dag H A^(r), (delta Z_H + delta_r + delta_s) x tree for H^dag H A^(r) A^(s) (physical parts)",
+   "coefficient": "delta Z_H = (2C_H - Yt)/(16 pi^2 eps); delta_r = delta Z_{c_r} + delta Z_{A_r}/2 = -C_ad^(r)/(16 pi^2 eps)",
+   "sm_values": "delta Z_H = (3g^2/2 + g'^2/2 - 3y_u^2 - 3y_d^2 - y_e^2)/(16 pi^2 eps); delta_W = -2g^2/(16 pi^2 eps); delta_B = 0; Z_1^(W) - 1 = (-g^2/2 + g'^2/2 - Yt)/(16 pi^2 eps), Z_1^(B) - 1 = delta Z_H"
+  }
+ ],
+ "checks": [
+  "M^2 and m^2 have degree 2 and do not enter T^(1), T^(0): N_0 independent of M and m identically",
+  "lambda diagrams cancel (v)+(x); (d),(e) vanish; box (i) cancels (viii); box (iii) vanishes",
+  "bosonic sums equal (C_ad^(a)+C_ad^(b)-2C_H){T^a,T^b} and (C_ad^(a)-2C_H)T^a, verified with explicit matrices for the SM doublet and for an SU(3)xU(1) colour-triplet scalar (where per-diagram group factors are not proportional to the tree)",
+  "fermion parts: t_{psi'}-t_psi = T_H in all three Yukawa loops; fermion box and triangle equal Yt x tree (barred) as for anticommuting gamma5",
+  "Pphys N_0 = anticommuting-gamma5 result; delta_r = -C_ad/(16pi^2 eps) equals Feynman-gauge Z_g Z_A^{1/2}-1 (QCD: -(11/6-5/6)C_A)",
+  "abelian Ward identity for B holds for d-dim bosonic parts against Gamma_HH,bos = -C_H(2p^2+m^2)",
+  "fermion engine reproduces the H^dag H fermion pole Yt(pbar^2 + 2/3 phat^2) of g0_SS",
+  "no hatted loop contraction anywhere: N_1 = 0, eta absent",
+  "REFEREE: deriver (hand) and checker (machine, own graph generation, BMHV toolkit with d-dim external momenta) agree coefficient by coefficient in every function, per topology (SM values per diagram family for W, B, WW, WB, BB, GG) and in total",
+  "REFEREE: diagram counts W 11, B 13, WW 38, WB 33, BB 39, GG 12 equal ENUMERATION.md; zero-group-factor bubbles (VVV-SSVV) and zero-pole boxes (iii) accounted for",
+  "REFEREE: external comparison with targets_in_our_conventions.md sec. 2.1 (BIMS (5.9),(5.17),(5.21) mapped) and sec. 3 (Machacek-Vaughn): Gamma_div = kappa{-2C_H (DH)^dag DH + C_ad-weighted Higgs-gauge terms + Yt (Dbar H)^dag Dbar H + ...} reproduced exactly; delta Z_H = kappa(2C_H - T) and delta Z_g + delta Z_A/2 = -kappa C_ad agree",
+  "REFEREE: g0_SS.typ (current) already uses the split Yt [tilde(E)_H + (2/3) E_H] fixed by this class; consistent"
+ ],
+ "caveats": [
+  "Q_J, Q_WW, Q_BB, Q_WB are used with d-dimensional indices and fields as in S_0 (03b lists them four-dimensionally); the only separate evanescent operator is Yt tilde(E)_H restricted to its gauge-field terms. Equivalent bookkeeping (checker): bosonic operators split into barred part + hatted part 2C_H tilde(E)_H-type and C_ad^W hat(h)_W; hat(h)_W is not an operator listed in 03b sec:evanescent",
+  "Vertex functions use the momentum convention H_j(p), H^dag_i with incoming -p'; the checker's (p1 - p2) equals (p + p')",
+  "N_1 = 0 throughout (ghost number 0, no hatted loop contraction)"
+ ]
+}

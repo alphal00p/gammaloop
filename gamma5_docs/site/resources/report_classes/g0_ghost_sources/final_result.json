@@ -1,0 +1,260 @@
+{
+ "class": "g0_ghost_sources",
+ "diagrams": [
+  {
+   "id": "a",
+   "topology": "bubble rho-omega",
+   "fields": "ghost omega (from ghost-gauge vertex to rho vertex, momentum k), gauge A (q-k); vertices rho A omega, antighost A omega(ext)",
+   "symmetry_factor": "1",
+   "sign": "+1 (contracted pair <omega antighost> adjacent; no closed loop)",
+   "multiplicity_note": "group f^{aec} f^{ceb} = -C_ad^(r) delta^{ab}; only non-abelian factors"
+  },
+  {
+   "id": "b",
+   "topology": "triangle rho-A-omega, external A on ghost line",
+   "fields": "omega, omega, A",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "group f^{aed} f^{dbd'} f^{d'ec} = -(1/2) C_ad f^{abc}"
+  },
+  {
+   "id": "c",
+   "topology": "triangle rho-A-omega, external A on gauge line (three-gauge vertex)",
+   "fields": "omega, A, A",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "group f^{aed} f^{beh} f^{dhc} = (1/2) C_ad f^{abc}"
+  },
+  {
+   "id": "d",
+   "topology": "triangle zeta-omega-omega",
+   "fields": "omega, omega, A",
+   "symmetry_factor": "1 (labelled legs; 1/2 of the zeta term cancelled by the two ghost contractions, 1/2! of identical vertices by their exchange)",
+   "sign": "+1 for the labelled diagram (two transpositions); equivalently 4 slot configurations with signs (+,-,-,+) each compensated by the antisymmetry of fg (checker), all adding",
+   "multiplicity_note": "group f^{ade} f^{dgb} f^{egc} = (1/2) C_ad f^{abc}"
+  },
+  {
+   "id": "e",
+   "topology": "triangle Rbar_f omega Psi_f",
+   "fields": "omega, A, Psi_f (all f carrying the factor r of the ghost)",
+   "symmetry_factor": "1",
+   "sign": "+1 (two transpositions)",
+   "multiplicity_note": "group f^{bea} T^b T^e = (i/2) C_ad T^a"
+  },
+  {
+   "id": "e'",
+   "topology": "triangle omega Psibar_f R_f",
+   "fields": "omega, A, Psi_f",
+   "symmetry_factor": "1",
+   "sign": "+1 (Psibar(x) moved past four odd factors)",
+   "multiplicity_note": "group f^{bea} T^e T^b = -(i/2) C_ad T^a"
+  },
+  {
+   "id": "f",
+   "topology": "triangle sigma^dagger omega H",
+   "fields": "omega, A, H (r = W only)",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "group (i/2) C_ad T_H^a"
+  },
+  {
+   "id": "f'",
+   "topology": "triangle omega H^dagger sigma",
+   "fields": "omega, A, H (r = W only)",
+   "symmetry_factor": "1",
+   "sign": "+1 (two transpositions)",
+   "multiplicity_note": "group -(i/2) C_ad T_H^a"
+  }
+ ],
+ "functions": [
+  {
+   "externals": "rho^mu_a(-q) omega^b(q), per gauge factor r of the ghost; tree Gamma^(0) = -i q_mu delta^{ab}",
+   "pole_vertex_function": [
+    {
+     "structure": "delta^(a b) q_mu",
+     "coefficient": "(i/2) C_ad^(r)"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "a": "(i/2) C_ad^(r) delta^{ab} q_mu"
+   }
+  },
+  {
+   "externals": "rho^mu_a A^b_nu(p) omega^c(q); tree fg^{abc} g_mu^nu",
+   "pole_vertex_function": [
+    {
+     "structure": "fg^(a b c) g_mu^(space nu)",
+     "coefficient": "(1/2) C_ad^(r)"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "b": "(1/8) C_ad^(r) fg^{abc} g_mu^nu",
+    "c": "(3/8) C_ad^(r) fg^{abc} g_mu^nu"
+   }
+  },
+  {
+   "externals": "zeta_a omega^b(q1) omega^c(q2); tree -fg^{abc}",
+   "pole_vertex_function": [
+    {
+     "structure": "fg^(a b c)",
+     "coefficient": "-(1/2) C_ad^(r)"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "d": "-(1/2) C_ad^(r) fg^{abc}"
+   }
+  },
+  {
+   "externals": "Rbar_f omega^a(q) Psi_f(p), every f and every non-abelian factor r in f; tree i T^a_f P_c",
+   "pole_vertex_function": [
+    {
+     "structure": "Tg^a_f P_(c_f)",
+     "coefficient": "(i/2) C_ad^(r)  (= fg^{abc} T^b T^c P_c)"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "e": "(i/2) C_ad^(r) T^a_f P_c"
+   }
+  },
+  {
+   "externals": "omega^a(q) Psibar_f R_f; tree i P_cbar T^a_f",
+   "pole_vertex_function": [
+    {
+     "structure": "P_(overline(c)_f) Tg^a_f",
+     "coefficient": "(i/2) C_ad^(r)"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "e'": "(i/2) C_ad^(r) P_cbar T^a_f"
+   }
+  },
+  {
+   "externals": "sigma^dagger omega^a(q) H(p), r = W; tree i T^a_H",
+   "pole_vertex_function": [
+    {
+     "structure": "Tg^a_H",
+     "coefficient": "(i/2) C_ad^(W) = i g^2"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "f": "(i/2) C_ad^(W) T^a_H"
+   }
+  },
+  {
+   "externals": "omega^a(q) H^dagger sigma, r = W; tree -i T^a_H",
+   "pole_vertex_function": [
+    {
+     "structure": "Tg^a_H",
+     "coefficient": "-(i/2) C_ad^(W) = -i g^2"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "f'": "-(i/2) C_ad^(W) T^a_H"
+   }
+  },
+  {
+   "externals": "any of the above with an abelian ghost omega^B, and rho_B A omega, rho A omega^B, zeta omega omega^B",
+   "pole_vertex_function": [
+    {
+     "structure": "all",
+     "coefficient": "0 (no 1PI graph exists)"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {},
+   "coefficient_note": "topologies drawn with fg-vertices have group factor 0; no 1PI graph in the Feynman rules (ENUMERATION: none)"
+  },
+  {
+   "externals": "E multiplet: Rbar_E omega^B Psi_E and omega^B Psibar_E R_E; mixed-factor functions rho^G A^B omega^G, rho^B A^G omega^G, zeta^A omega^A omega^B, etc.",
+   "pole_vertex_function": [
+    {
+     "structure": "all",
+     "coefficient": "0"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {}
+  }
+ ],
+ "operators": [
+  {
+   "kind": "pole_counterterm",
+   "operator": "Q^((r))_(rho partial) = integral tilde(rho)^mu_a partial_mu omega^a_((r))",
+   "coefficient": "delta S contains -(1/(16 pi^2 eps)) * ( -C_ad^(r)/2 ) * Q",
+   "sm_values": "G: -3 g_s^2/2 ; W: -g^2 ; B: 0"
+  },
+  {
+   "kind": "pole_counterterm",
+   "operator": "Q_rho[fg_((r))] = integral fg^(a b c) tilde(rho)^mu_a A^b_mu omega^c",
+   "coefficient": "-(1/(16 pi^2 eps)) * ( C_ad^(r)/2 )",
+   "sm_values": "G: 3 g_s^2/2 ; W: g^2"
+  },
+  {
+   "kind": "pole_counterterm",
+   "operator": "Q_zeta[-1/2 fg_((r))] = -1/2 integral fg^(a b c) zeta_a omega^b omega^c",
+   "coefficient": "-(1/(16 pi^2 eps)) * ( C_ad^(r)/2 )",
+   "sm_values": "G: 3 g_s^2/2 ; W: g^2"
+  },
+  {
+   "kind": "pole_counterterm",
+   "operator": "Q^(f r)_R = integral [ i Rbar_f omega^((r)) psi_f + i omega^a psibar_f T^a_((r)) R_f ]",
+   "coefficient": "-(1/(16 pi^2 eps)) * ( C_ad^(r)/2 )",
+   "sm_values": "r=G (f=Q,U,D): 3 g_s^2/2 ; r=W (f=Q,L): g^2 ; r=B (all f): 0"
+  },
+  {
+   "kind": "pole_counterterm",
+   "operator": "Q^((r))_sigma = integral [ i sigma^dagger omega^((r)) H - i omega^a H^dagger T^a_((r)) sigma ]",
+   "coefficient": "-(1/(16 pi^2 eps)) * ( C_ad^(r)/2 )",
+   "sm_values": "W: g^2 ; B: 0"
+  },
+  {
+   "kind": "pole_counterterm",
+   "operator": "compact form: sum_r (C_ad^(r)/2) [ O^((r))_c - 2 Q^((r))_(rho partial) ]",
+   "coefficient": "-(1/(16 pi^2 eps))",
+   "sm_values": "C_ad^(G)=3 g_s^2, C_ad^(W)=2 g^2, C_ad^(B)=0"
+  },
+  {
+   "kind": "pole_counterterm",
+   "operator": "all other ghost-sector monomials: Q_rho[g_s d], the seven Kronecker Q_rho[t], Q_zeta[(zeta^A omega^A omega^B)], Q_zeta[(zeta^I omega^I omega^B)], Q^(f B)_R, Q^((B))_sigma",
+   "coefficient": "0",
+   "sm_values": "0"
+  },
+  {
+   "kind": "evanescent_counterterm",
+   "operator": "none (the Q_alpha above are taken in their d-dimensional covariant continuation, which contains the hatted parts integral rhohat.partialhat omega and integral fg rhohat.Ahat omega)",
+   "coefficient": "0",
+   "sm_values": "0"
+  }
+ ],
+ "checks": [
+  "Group identities f f f = +-(C_ad/2) f and fg^{abc} T^b T^c = (i/2) C_ad T^a verified numerically for SU(2) and SU(3) (SCRATCHPAD/classes/g0_ghost_sources/deriver_group_checks.py).",
+  "Slavnov-Taylor structure: the coefficients of Q_rho[fg], Q_zeta[-fg/2], every Q^(fr)_R and Q^(W)_sigma are equal (C_ad/2), as required for a combination of the closed directions O_A, O_c, O_g of eq:closed; this tests every Grassmann reordering sign independently.",
+  "Textbook Feynman-gauge values reproduced: ghost field Ztilde3 = 1 + (C_A/2) a, ghost-gauge vertex Ztilde1 = 1 - (C_A/2) a, split (b):(c) = 1:3.",
+  "Cross-class predictions (units of -1/(16 pi^2 eps), invariant 4d parts): [Q_3f]-[Q_T] = C_ad^(r); [Q^(fr)_V]-[Q^f_K] = C_ad^(r); [Q^(W)_J]+[Q_SS] = -C_ad^(W); for B: [Q^(fB)_V]=[Q^f_K], [Q^(B)_J]+[Q_SS]=0.",
+  "Ghost equation: replacing rho^mu by the antighost leaves the integrands unchanged up to the factor i pbar_mu.",
+  "Hermiticity: conjugate functions (e'), (f') give the same coefficient as (e), (f).",
+  "No M or m^2 dependence in any pole; N_1 = 0; no evanescent pole.",
+  "Referee: deriver (hand) and checker (engine + independent hand script check_hand.py, 27/27) agree coefficient by coefficient and per topology: rho omega -C/2 x tree; rho A omega (b) 1/8 C, (c) 3/8 C, total +C/2 x tree; zeta omega omega +C/2; Rbar omega Psi, omega Psibar R +C/2 for every f in r; sigma^dag omega H, omega H^dag sigma +C/2 (W only); B: 0.",
+  "Referee: re-ran check_hand.py (reproduced), verified the group identities of graphs (a)-(e) numerically for SU(2), and re-derived by hand the rule prefactors and Wick signs of (a), (b), (d), (e).",
+  "Referee: diagram list identical to ENUMERATION.md (rho omega 1, rho omega A 2, zeta omega omega 1, matter-source 1 per f in a non-abelian factor; abelian, E and mixed-factor functions: none).",
+  "Literature (targets_in_our_conventions.md, BIMS (5.24)-(5.29), LP, xi=1): Gamma_div = (kappa/2)[-C rho~.d omega + C fg rho~ A omega - (1/2) C fg zeta omega omega + source terms with s_C] and Ztilde_3 = 1 + kappa C/2: exact agreement."
+ ],
+ "caveats": [
+  "Vertex functions are stated in the leg order of the Feynman rules eq:V-src-gauge / eq:V-src-matter as Feynman rule / i, i.e. the V_Y convention of sec:dictionary (coefficient of theta_1...theta_n). The one-loop/tree ratios used in the report are independent of this choice. Observation on 02_method.typ (after eq:m-glue-wFF): with standard left derivatives Gamma_{Phi1 Phi2} = delta_{Phi1}(delta_{Phi2} Gamma), Gamma^(0)_{omega rho} = -i q^mu agrees, but Gamma^(0)_{Rbar omega Psi} = -i T P_c and Gamma^(0)_{omega Psibar R} = -i P_cbar T (not +i); the quoted +i values follow the V_Y convention instead. The quoted tree values thus mix two ordering conventions; this does not affect this class (ratios) but matters for the signs in the gluing formula eq:m-glue-wFF.",
+  "Vertex functions in the V_Y convention of 03b (coefficient of theta_1..theta_n, = Feynman rule / i, legs in the order written); only one-loop/tree ratios enter.",
+  "The ghost-sector poles are d-dimensional covariant; delta S is stated with d-dimensional indices and the 4d basis names Q_(rho partial), Q_rho[fg] denote their covariant continuations. If the 03b basis is read strictly 4-dimensional, the remainders integral rhohat.partialhat omega and integral fg rhohat.Ahat omega are evanescent monomials not listed in eq:evanescent."
+ ],
+ "renormalisation_constants": {
+  "Ztilde3 (ghost field; coefficient of tilde(rho) d omega and of d antighost d omega)": "1 + C_ad^(r)/2 * 1/(16 pi^2 eps): G: 1 + 3 g_s^2/(32 pi^2 eps); W: 1 + g^2/(16 pi^2 eps); B: 1",
+  "Ztilde1 (common factor of all non-linear BRST terms: fg A omega in sA, somega, s Psi_f, s H of factor r)": "1 - C_ad^(r)/2 * 1/(16 pi^2 eps): G: 1 - 3 g_s^2/(32 pi^2 eps); W: 1 - g^2/(16 pi^2 eps); B: 1",
+  "renormalised BRST": "s A -> Ztilde3 d omega + Ztilde1 fg A omega; s omega -> Ztilde1 s omega; s Psi_f -> i (Ztilde1 omega) P_c Psi_f; s H -> i (Ztilde1 omega) H",
+  "abelian ghost": "free; no graph; Ztilde3^(B) = Ztilde1^(B) = 1; no omega^B in delta S^(1) from this class"
+ }
+}

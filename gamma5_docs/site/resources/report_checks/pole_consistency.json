@@ -1,0 +1,1912 @@
+{
+ "summary": {
+  "identity": "[(Delta_1 . Gamma)^(1)]_div + b_d delta S^(1) = 0, complete d-dimensional structure",
+  "units": "1/(16 pi^2 eps); vertex functions in the 03b convention (ghost first, Feynman rule = i x vertex function)",
+  "delta_S_form": "delta S^(1) = -(1/(16 pi^2 eps)) [ I_inv + sum_r C_ad^(r) (O_g^(r) - O_c^(r)/2) + (1/3) sum_r S_F^(r) E_A^(r) + (2/3) Yt E_H ], I_inv source free and s-invariant in d dimensions, O_g^(r) = c_r dS_0/dc_r, O_c^(r) = -b_d int zeta omega_(r) (d-dimensional S_0)",
+  "b_d_delta_S": "b_d delta S^(1) = -(1/(16 pi^2 eps)) [ sum_r (C_ad^(r)/2) Delta_1^(r) + (1/3) sum_r S_F^(r) b_d E_A^(r) + (2/3) Yt b_d E_H ], using b_d O_g^(r) = b_d O_c^(r) = Delta_1^(r) and b_d I_inv = 0",
+  "n_assignments": 146,
+  "n_agree": 146,
+  "numerics": "D = 6 explicit components (hat components 4,5), 8x8 Dirac matrices, generic couplings, 2 random kinematic points per assignment",
+  "scripts": "SCRATCHPAD/phase4/pole_consistency/{engine_d.py, model_d.py, gfunc.py, sanity.py, check_pole_identity.py, extra_checks.py, make_json.py}"
+ },
+ "rows": [
+  {
+   "class": "g1_cV",
+   "legs": "omega^G A^G",
+   "found": "(i/3) S_F^(G) hat(q)^2 bar(q)^nu delta^(ab) = i 2/3 g_s^2 hat(q)^2 bar(q)^nu delta^(ab)",
+   "predicted": "(i/3) S_F^(G) hat(q)^2 bar(q)^nu delta^(ab) = i 2/3 g_s^2 hat(q)^2 bar(q)^nu delta^(ab)  [from (1/3) S_F^(G) b_d E_A^(G)]",
+   "source_of_prediction": "g0_VV: E_A^(G) coefficient -(1/3) S_F in delta S",
+   "numeric": {
+    "max_abs_found": 31.012808526180184,
+    "max_abs_predicted": 31.01280852618021,
+    "max_abs_difference": 3.8150339056589873e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cV",
+   "legs": "omega^G A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "group factor zero (traceless generators / no mixed E_A)",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cV",
+   "legs": "omega^G A^B",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "group factor zero (traceless generators / no mixed E_A)",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cV",
+   "legs": "omega^W A^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "group factor zero (traceless generators / no mixed E_A)",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cV",
+   "legs": "omega^W A^W",
+   "found": "(i/3) S_F^(W) hat(q)^2 bar(q)^nu delta^(ab) = i 2/3 g^2 hat(q)^2 bar(q)^nu delta^(ab)",
+   "predicted": "(i/3) S_F^(W) hat(q)^2 bar(q)^nu delta^(ab) = i 2/3 g^2 hat(q)^2 bar(q)^nu delta^(ab)  [from (1/3) S_F^(W) b_d E_A^(W)]",
+   "source_of_prediction": "g0_VV: E_A^(W) coefficient -(1/3) S_F in delta S",
+   "numeric": {
+    "max_abs_found": 26.149903565113732,
+    "max_abs_predicted": 26.149903565113757,
+    "max_abs_difference": 2.5121479338940402e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cV",
+   "legs": "omega^W A^B",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "group factor zero (traceless generators / no mixed E_A)",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cV",
+   "legs": "omega^B A^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "group factor zero (traceless generators / no mixed E_A)",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cV",
+   "legs": "omega^B A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "group factor zero (traceless generators / no mixed E_A)",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cV",
+   "legs": "omega^B A^B",
+   "found": "(i/3) S_F^(B) hat(q)^2 bar(q)^nu delta^(ab) = i 10/9 g'^2 hat(q)^2 bar(q)^nu delta^(ab)",
+   "predicted": "(i/3) S_F^(B) hat(q)^2 bar(q)^nu delta^(ab) = i 10/9 g'^2 hat(q)^2 bar(q)^nu delta^(ab)  [from (1/3) S_F^(B) b_d E_A^(B)]",
+   "source_of_prediction": "g0_VV: E_A^(B) coefficient -(1/3) S_F in delta S",
+   "numeric": {
+    "max_abs_found": 4.947578845445546,
+    "max_abs_predicted": 4.947578845445546,
+    "max_abs_difference": 3.0847422370805075e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVV",
+   "legs": "omega^G A^G A^G",
+   "found": "-(1/3) S_F^(G) fg^(abc) gbar^(mu nu) (hat(p)_1^2 - hat(p)_2^2) = -2/3 g_s^2 fg^(abc) gbar^(mu nu)(hat(p)_1^2 - hat(p)_2^2)",
+   "predicted": "-(1/3) S_F^(G) fg^(abc) gbar^(mu nu) (hat(p)_1^2 - hat(p)_2^2) = -2/3 g_s^2 fg^(abc) gbar^(mu nu)(hat(p)_1^2 - hat(p)_2^2)  [from (1/3) S_F^(G) b_d E_A^(G)]",
+   "source_of_prediction": "g0_VV: E_A^(G)",
+   "numeric": {
+    "max_abs_found": 36.460186538629245,
+    "max_abs_predicted": 36.46018653862948,
+    "max_abs_difference": 5.402578411571408e-13
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVV",
+   "legs": "omega^G A^G A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "no non-abelian E_A term for this assignment",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVV",
+   "legs": "omega^G A^W A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "no non-abelian E_A term for this assignment",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVV",
+   "legs": "omega^G A^B A^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "no non-abelian E_A term for this assignment",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVV",
+   "legs": "omega^G A^B A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "no non-abelian E_A term for this assignment",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVV",
+   "legs": "omega^G A^B A^B",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "no non-abelian E_A term for this assignment",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVV",
+   "legs": "omega^W A^G A^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "no non-abelian E_A term for this assignment",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVV",
+   "legs": "omega^W A^G A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "no non-abelian E_A term for this assignment",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVV",
+   "legs": "omega^W A^W A^W",
+   "found": "-(1/3) S_F^(W) fg^(abc) gbar^(mu nu) (hat(p)_1^2 - hat(p)_2^2) = -2/3 g^2 fg^(abc) gbar^(mu nu)(hat(p)_1^2 - hat(p)_2^2)",
+   "predicted": "-(1/3) S_F^(W) fg^(abc) gbar^(mu nu) (hat(p)_1^2 - hat(p)_2^2) = -2/3 g^2 fg^(abc) gbar^(mu nu)(hat(p)_1^2 - hat(p)_2^2)  [from (1/3) S_F^(W) b_d E_A^(W)]",
+   "source_of_prediction": "g0_VV: E_A^(W)",
+   "numeric": {
+    "max_abs_found": 12.038156934448727,
+    "max_abs_predicted": 12.038156934448686,
+    "max_abs_difference": 5.260536147119711e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVV",
+   "legs": "omega^W A^B A^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "no non-abelian E_A term for this assignment",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVV",
+   "legs": "omega^W A^B A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "no non-abelian E_A term for this assignment",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVV",
+   "legs": "omega^W A^B A^B",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "no non-abelian E_A term for this assignment",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVV",
+   "legs": "omega^B A^G A^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "no non-abelian E_A term for this assignment",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVV",
+   "legs": "omega^B A^G A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "no non-abelian E_A term for this assignment",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVV",
+   "legs": "omega^B A^W A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "no non-abelian E_A term for this assignment",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVV",
+   "legs": "omega^B A^B A^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "no non-abelian E_A term for this assignment",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVV",
+   "legs": "omega^B A^B A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "no non-abelian E_A term for this assignment",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVV",
+   "legs": "omega^B A^B A^B",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "no non-abelian E_A term for this assignment",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVVV_cVVVV",
+   "legs": "omega^G AAA (all factors)",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 1.5252689837551246e-12,
+    "max_abs_difference": 1.5252689837551246e-12
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVVV_cVVVV",
+   "legs": "omega^W AAA (all factors)",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 2.2300177457843823e-13,
+    "max_abs_difference": 2.2300177457843823e-13
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVVV_cVVVV",
+   "legs": "omega^B AAA (all factors)",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVVV_cVVVV",
+   "legs": "omega^G A^GA^GA^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 1.1325970970785463e-12,
+    "max_abs_difference": 1.1325970970785463e-12
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVVV_cVVVV",
+   "legs": "omega^W A^WA^WA^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 1.1457157353758233e-13,
+    "max_abs_difference": 1.1457157353758233e-13
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVVV_cVVVV",
+   "legs": "omega^G AAAA (all factors)",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 4.324019743261286e-12,
+    "max_abs_difference": 4.324019743261286e-12
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVVV_cVVVV",
+   "legs": "omega^W AAAA (all factors)",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 2.631088319046146e-13,
+    "max_abs_difference": 2.631088319046146e-13
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cVVV_cVVVV",
+   "legs": "omega^B AAAA (all factors)",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFF",
+   "legs": "omega^G Psibar_Q Psi_Q",
+   "found": "(C_ad^(G)/2) V[Delta_1^(QG)] = -(3 i/2) g_s^2 Tg^a (slh(p) P_cbar - slh(p)' P_c)",
+   "predicted": "(C_ad^(G)/2) V[Delta_1^(QG)] = -(3 i/2) g_s^2 Tg^a (slh(p) P_cbar - slh(p)' P_c)  [from (C_ad^(G)/2) b_d Q_R^(QG): evanescent part of eq:m-bYR; equivalently C_ad (b_d O_g - b_d O_c/2) = (C_ad/2) Delta_1]",
+   "source_of_prediction": "g0_ghost_sources: Q_R coefficient -(C_ad/2) in delta S; 4-dim parts cancel with g0_FF, g0_FFV, g0_ghost_sources (z_fr = C_f + C_ad + Y_f)",
+   "numeric": {
+    "max_abs_found": 198.5639639827578,
+    "max_abs_predicted": 198.56396398275794,
+    "max_abs_difference": 1.156679772130055e-13
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFF",
+   "legs": "omega^W Psibar_Q Psi_Q",
+   "found": "(C_ad^(W)/2) V[Delta_1^(QW)] = -i g^2 Tg^a (slh(p) P_cbar - slh(p)' P_c)",
+   "predicted": "(C_ad^(W)/2) V[Delta_1^(QW)] = -i g^2 Tg^a (slh(p) P_cbar - slh(p)' P_c)  [from (C_ad^(W)/2) b_d Q_R^(QW): evanescent part of eq:m-bYR; equivalently C_ad (b_d O_g - b_d O_c/2) = (C_ad/2) Delta_1]",
+   "source_of_prediction": "g0_ghost_sources: Q_R coefficient -(C_ad/2) in delta S; 4-dim parts cancel with g0_FF, g0_FFV, g0_ghost_sources (z_fr = C_f + C_ad + Y_f)",
+   "numeric": {
+    "max_abs_found": 9.710807206932737,
+    "max_abs_predicted": 9.710807206932744,
+    "max_abs_difference": 3.357575818008288e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFF",
+   "legs": "omega^B Psibar_Q Psi_Q",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "C_ad^(B) = 0",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 3.37661150723213e-15,
+    "max_abs_difference": 3.37661150723213e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFF",
+   "legs": "omega^G Psibar_U Psi_U",
+   "found": "(C_ad^(G)/2) V[Delta_1^(UG)] = -(3 i/2) g_s^2 Tg^a (slh(p) P_cbar - slh(p)' P_c)",
+   "predicted": "(C_ad^(G)/2) V[Delta_1^(UG)] = -(3 i/2) g_s^2 Tg^a (slh(p) P_cbar - slh(p)' P_c)  [from (C_ad^(G)/2) b_d Q_R^(UG): evanescent part of eq:m-bYR; equivalently C_ad (b_d O_g - b_d O_c/2) = (C_ad/2) Delta_1]",
+   "source_of_prediction": "g0_ghost_sources: Q_R coefficient -(C_ad/2) in delta S; 4-dim parts cancel with g0_FF, g0_FFV, g0_ghost_sources (z_fr = C_f + C_ad + Y_f)",
+   "numeric": {
+    "max_abs_found": 39.45149090719441,
+    "max_abs_predicted": 39.451490907194426,
+    "max_abs_difference": 3.776586443654626e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFF",
+   "legs": "omega^W Psibar_U Psi_U",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "f is a singlet of the ghost factor",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFF",
+   "legs": "omega^B Psibar_U Psi_U",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "C_ad^(B) = 0",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 6.5906489508797204e-15,
+    "max_abs_difference": 6.5906489508797204e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFF",
+   "legs": "omega^G Psibar_D Psi_D",
+   "found": "(C_ad^(G)/2) V[Delta_1^(DG)] = -(3 i/2) g_s^2 Tg^a (slh(p) P_cbar - slh(p)' P_c)",
+   "predicted": "(C_ad^(G)/2) V[Delta_1^(DG)] = -(3 i/2) g_s^2 Tg^a (slh(p) P_cbar - slh(p)' P_c)  [from (C_ad^(G)/2) b_d Q_R^(DG): evanescent part of eq:m-bYR; equivalently C_ad (b_d O_g - b_d O_c/2) = (C_ad/2) Delta_1]",
+   "source_of_prediction": "g0_ghost_sources: Q_R coefficient -(C_ad/2) in delta S; 4-dim parts cancel with g0_FF, g0_FFV, g0_ghost_sources (z_fr = C_f + C_ad + Y_f)",
+   "numeric": {
+    "max_abs_found": 79.43495069867153,
+    "max_abs_predicted": 79.43495069867146,
+    "max_abs_difference": 7.528065317933784e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFF",
+   "legs": "omega^W Psibar_D Psi_D",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "f is a singlet of the ghost factor",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFF",
+   "legs": "omega^B Psibar_D Psi_D",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "C_ad^(B) = 0",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 3.580361673049448e-15,
+    "max_abs_difference": 3.580361673049448e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFF",
+   "legs": "omega^G Psibar_L Psi_L",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "f is a singlet of the ghost factor",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFF",
+   "legs": "omega^W Psibar_L Psi_L",
+   "found": "(C_ad^(W)/2) V[Delta_1^(LW)] = -i g^2 Tg^a (slh(p) P_cbar - slh(p)' P_c)",
+   "predicted": "(C_ad^(W)/2) V[Delta_1^(LW)] = -i g^2 Tg^a (slh(p) P_cbar - slh(p)' P_c)  [from (C_ad^(W)/2) b_d Q_R^(LW): evanescent part of eq:m-bYR; equivalently C_ad (b_d O_g - b_d O_c/2) = (C_ad/2) Delta_1]",
+   "source_of_prediction": "g0_ghost_sources: Q_R coefficient -(C_ad/2) in delta S; 4-dim parts cancel with g0_FF, g0_FFV, g0_ghost_sources (z_fr = C_f + C_ad + Y_f)",
+   "numeric": {
+    "max_abs_found": 3.501620241902468,
+    "max_abs_predicted": 3.501620241902468,
+    "max_abs_difference": 4.854925440353203e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFF",
+   "legs": "omega^B Psibar_L Psi_L",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "C_ad^(B) = 0",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 4.965068306494546e-16,
+    "max_abs_difference": 4.965068306494546e-16
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFF",
+   "legs": "omega^G Psibar_E Psi_E",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "f is a singlet of the ghost factor",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFF",
+   "legs": "omega^W Psibar_E Psi_E",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "f is a singlet of the ghost factor",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFF",
+   "legs": "omega^B Psibar_E Psi_E",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "C_ad^(B) = 0",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 4.875529749534861e-16,
+    "max_abs_difference": 4.875529749534861e-16
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^G Psibar_Q Psi_Q A^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 5.385454148899787e-13,
+    "max_abs_difference": 5.385454148899787e-13
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^G Psibar_Q Psi_Q A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 3.262407362284984e-14,
+    "max_abs_difference": 3.262407362284984e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^G Psibar_Q Psi_Q A^B",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 9.00922299725456e-15,
+    "max_abs_difference": 9.00922299725456e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^W Psibar_Q Psi_Q A^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 8.00881805269803e-14,
+    "max_abs_difference": 8.00881805269803e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^W Psibar_Q Psi_Q A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 5.646801836481796e-14,
+    "max_abs_difference": 5.646801836481796e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^W Psibar_Q Psi_Q A^B",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 1.3783884927740694e-15,
+    "max_abs_difference": 1.3783884927740694e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^B Psibar_Q Psi_Q A^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 4.272793791552383e-15,
+    "max_abs_difference": 4.272793791552383e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^B Psibar_Q Psi_Q A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 6.401356269155147e-15,
+    "max_abs_difference": 6.401356269155147e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^B Psibar_Q Psi_Q A^B",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 3.7424384578975556e-16,
+    "max_abs_difference": 3.7424384578975556e-16
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^G Psibar_U Psi_U A^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 1.7393565204287838e-13,
+    "max_abs_difference": 1.7393565204287838e-13
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^G Psibar_U Psi_U A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^G Psibar_U Psi_U A^B",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 1.0808631278823091e-14,
+    "max_abs_difference": 1.0808631278823091e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^W Psibar_U Psi_U A^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^W Psibar_U Psi_U A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^W Psibar_U Psi_U A^B",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^B Psibar_U Psi_U A^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 2.4174598192046447e-14,
+    "max_abs_difference": 2.4174598192046447e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^B Psibar_U Psi_U A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^B Psibar_U Psi_U A^B",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 5.539297415819217e-16,
+    "max_abs_difference": 5.539297415819217e-16
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^G Psibar_D Psi_D A^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 1.5470169842732168e-13,
+    "max_abs_difference": 1.5470169842732168e-13
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^G Psibar_D Psi_D A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^G Psibar_D Psi_D A^B",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 4.423160311372801e-15,
+    "max_abs_difference": 4.423160311372801e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^W Psibar_D Psi_D A^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^W Psibar_D Psi_D A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^W Psibar_D Psi_D A^B",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^B Psibar_D Psi_D A^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 3.3827181059271666e-14,
+    "max_abs_difference": 3.3827181059271666e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^B Psibar_D Psi_D A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^B Psibar_D Psi_D A^B",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 6.832682567884753e-16,
+    "max_abs_difference": 6.832682567884753e-16
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^G Psibar_L Psi_L A^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^G Psibar_L Psi_L A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^G Psibar_L Psi_L A^B",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^W Psibar_L Psi_L A^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^W Psibar_L Psi_L A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 1.036200881696594e-14,
+    "max_abs_difference": 1.036200881696594e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^W Psibar_L Psi_L A^B",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 1.5198238438622137e-15,
+    "max_abs_difference": 1.5198238438622137e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^B Psibar_L Psi_L A^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^B Psibar_L Psi_L A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 1.8580801391881615e-15,
+    "max_abs_difference": 1.8580801391881615e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^B Psibar_L Psi_L A^B",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 1.4471757125988917e-16,
+    "max_abs_difference": 1.4471757125988917e-16
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^G Psibar_E Psi_E A^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^G Psibar_E Psi_E A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^G Psibar_E Psi_E A^B",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^W Psibar_E Psi_E A^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^W Psibar_E Psi_E A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^W Psibar_E Psi_E A^B",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^B Psibar_E Psi_E A^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^B Psibar_E Psi_E A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFV",
+   "legs": "omega^B Psibar_E Psi_E A^B",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 1.1460418874424611e-15,
+    "max_abs_difference": 1.1460418874424611e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFS",
+   "legs": "omega^G Psibar_Q Psi_U Hd",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 4.5694296771819725e-14,
+    "max_abs_difference": 4.5694296771819725e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFS",
+   "legs": "omega^W Psibar_Q Psi_U Hd",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 8.58311922153797e-14,
+    "max_abs_difference": 8.58311922153797e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFS",
+   "legs": "omega^B Psibar_Q Psi_U Hd",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 2.9120881411321604e-14,
+    "max_abs_difference": 2.9120881411321604e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFS",
+   "legs": "omega^G Psibar_Q Psi_D H",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 2.7834617849438167e-14,
+    "max_abs_difference": 2.7834617849438167e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFS",
+   "legs": "omega^W Psibar_Q Psi_D H",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 8.829297729853692e-15,
+    "max_abs_difference": 8.829297729853692e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFS",
+   "legs": "omega^B Psibar_Q Psi_D H",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 3.2068599345887836e-15,
+    "max_abs_difference": 3.2068599345887836e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFS",
+   "legs": "omega^G Psibar_L Psi_E H",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFS",
+   "legs": "omega^W Psibar_L Psi_E H",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 2.6400821167189174e-16,
+    "max_abs_difference": 2.6400821167189174e-16
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFS",
+   "legs": "omega^B Psibar_L Psi_E H",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 3.4045501312595154e-16,
+    "max_abs_difference": 3.4045501312595154e-16
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFS",
+   "legs": "omega^G Psibar_U Psi_Q H",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 8.586436536420836e-14,
+    "max_abs_difference": 8.586436536420836e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFS",
+   "legs": "omega^W Psibar_U Psi_Q H",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 2.4764416858202833e-14,
+    "max_abs_difference": 2.4764416858202833e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFS",
+   "legs": "omega^B Psibar_U Psi_Q H",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 1.342406304036168e-15,
+    "max_abs_difference": 1.342406304036168e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFS",
+   "legs": "omega^G Psibar_D Psi_Q Hd",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 7.582090936859515e-14,
+    "max_abs_difference": 7.582090936859515e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFS",
+   "legs": "omega^W Psibar_D Psi_Q Hd",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 1.6657799271164364e-14,
+    "max_abs_difference": 1.6657799271164364e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFS",
+   "legs": "omega^B Psibar_D Psi_Q Hd",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 6.796960391800336e-15,
+    "max_abs_difference": 6.796960391800336e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFS",
+   "legs": "omega^G Psibar_E Psi_L Hd",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFS",
+   "legs": "omega^W Psibar_E Psi_L Hd",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 1.9747493462299084e-15,
+    "max_abs_difference": 1.9747493462299084e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cFFS",
+   "legs": "omega^B Psibar_E Psi_L Hd",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 1.0783767778023506e-15,
+    "max_abs_difference": 1.0783767778023506e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cSS_cSSV",
+   "legs": "omega^G H Hdag",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "Tg^A_H = 0",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cSS_cSSV",
+   "legs": "omega^G H Hdag A^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cSS_cSSV",
+   "legs": "omega^G H Hdag A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cSS_cSSV",
+   "legs": "omega^G H Hdag A^B",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cSS_cSSV",
+   "legs": "omega^G H Hdag A A (all factors)",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cSS_cSSV",
+   "legs": "omega^G H Hdag H Hdag",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "Tg^A_H = 0",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cSS_cSSV",
+   "legs": "omega^W H Hdag",
+   "found": "-(2 i/3) Yt (hat(p)_1^2 - hat(p)_2^2) Tg^a_H,  Yt = 3 y_u^2 + 3 y_d^2 + y_e^2",
+   "predicted": "-(2 i/3) Yt (hat(p)_1^2 - hat(p)_2^2) Tg^a_H,  Yt = 3 y_u^2 + 3 y_d^2 + y_e^2  [from (2/3) Yt b_d E_H]",
+   "source_of_prediction": "g0_SS / g0_SSV_SSVV: E_H coefficient -(2/3) Yt in delta S",
+   "numeric": {
+    "max_abs_found": 6.792409769816731,
+    "max_abs_predicted": 6.7924097698167385,
+    "max_abs_difference": 7.119291619286993e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cSS_cSSV",
+   "legs": "omega^W H Hdag A^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cSS_cSSV",
+   "legs": "omega^W H Hdag A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 7.53644380168212e-15,
+    "max_abs_difference": 7.53644380168212e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cSS_cSSV",
+   "legs": "omega^W H Hdag A^B",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 6.661338147750939e-16,
+    "max_abs_difference": 6.661338147750939e-16
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cSS_cSSV",
+   "legs": "omega^W H Hdag A A (all factors)",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 1.2385761027858916e-14,
+    "max_abs_difference": 1.2385761027858916e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cSS_cSSV",
+   "legs": "omega^W H Hdag H Hdag",
+   "found": "-(2 i/3) Yt (hat(p)_1^2 - hat(p)_2^2) Tg^a_H,  Yt = 3 y_u^2 + 3 y_d^2 + y_e^2",
+   "predicted": "-(2 i/3) Yt (hat(p)_1^2 - hat(p)_2^2) Tg^a_H,  Yt = 3 y_u^2 + 3 y_d^2 + y_e^2  [from (2/3) Yt b_d E_H]",
+   "source_of_prediction": "g0_SS / g0_SSV_SSVV: E_H coefficient -(2/3) Yt in delta S",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 1.1750555660980757e-15,
+    "max_abs_difference": 1.1750555660980757e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cSS_cSSV",
+   "legs": "omega^B H Hdag",
+   "found": "-(2 i/3) Yt (hat(p)_1^2 - hat(p)_2^2) Tg^a_H,  Yt = 3 y_u^2 + 3 y_d^2 + y_e^2",
+   "predicted": "-(2 i/3) Yt (hat(p)_1^2 - hat(p)_2^2) Tg^a_H,  Yt = 3 y_u^2 + 3 y_d^2 + y_e^2  [from (2/3) Yt b_d E_H]",
+   "source_of_prediction": "g0_SS / g0_SSV_SSVV: E_H coefficient -(2/3) Yt in delta S",
+   "numeric": {
+    "max_abs_found": 10.561368838222188,
+    "max_abs_predicted": 10.56136883822219,
+    "max_abs_difference": 1.9860273225978185e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cSS_cSSV",
+   "legs": "omega^B H Hdag A^G",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cSS_cSSV",
+   "legs": "omega^B H Hdag A^W",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 5.773159728050814e-15,
+    "max_abs_difference": 5.773159728050814e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cSS_cSSV",
+   "legs": "omega^B H Hdag A^B",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 5.23691153334427e-16,
+    "max_abs_difference": 5.23691153334427e-16
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cSS_cSSV",
+   "legs": "omega^B H Hdag A A (all factors)",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 8.277547474765986e-16,
+    "max_abs_difference": 8.277547474765986e-16
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_cSS_cSSV",
+   "legs": "omega^B H Hdag H Hdag",
+   "found": "-(2 i/3) Yt (hat(p)_1^2 - hat(p)_2^2) Tg^a_H,  Yt = 3 y_u^2 + 3 y_d^2 + y_e^2",
+   "predicted": "-(2 i/3) Yt (hat(p)_1^2 - hat(p)_2^2) Tg^a_H,  Yt = 3 y_u^2 + 3 y_d^2 + y_e^2  [from (2/3) Yt b_d E_H]",
+   "source_of_prediction": "g0_SS / g0_SSV_SSVV: E_H coefficient -(2/3) Yt in delta S",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 2.175092785383672e-15,
+    "max_abs_difference": 2.175092785383672e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_ccRF",
+   "legs": "omega omega Rbar_Q Psi_Q",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 3.330159919115761e-14,
+    "max_abs_difference": 3.330159919115761e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_ccRF",
+   "legs": "omega omega Psibar_Q R_Q",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 5.2531574054229636e-14,
+    "max_abs_difference": 5.2531574054229636e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_ccRF",
+   "legs": "omega omega Rbar_U Psi_U",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 4.613740737729259e-14,
+    "max_abs_difference": 4.613740737729259e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_ccRF",
+   "legs": "omega omega Psibar_U R_U",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 6.015581942877206e-14,
+    "max_abs_difference": 6.015581942877206e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_ccRF",
+   "legs": "omega omega Rbar_D Psi_D",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 5.582554798278213e-14,
+    "max_abs_difference": 5.582554798278213e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_ccRF",
+   "legs": "omega omega Psibar_D R_D",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 2.4468055217137374e-14,
+    "max_abs_difference": 2.4468055217137374e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_ccRF",
+   "legs": "omega omega Rbar_L Psi_L",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 5.9085487317096e-15,
+    "max_abs_difference": 5.9085487317096e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_ccRF",
+   "legs": "omega omega Psibar_L R_L",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 2.906364038324227e-15,
+    "max_abs_difference": 2.906364038324227e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_ccRF",
+   "legs": "omega omega Rbar_E Psi_E",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_ccRF",
+   "legs": "omega omega Psibar_E R_E",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 0.0,
+    "max_abs_difference": 0.0
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_ccRF",
+   "legs": "omega omega rhotilde",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 4.3773900149132486e-14,
+    "max_abs_difference": 4.3773900149132486e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_ccRF",
+   "legs": "omega omega rhotilde A",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 2.1379593236111042e-13,
+    "max_abs_difference": 2.1379593236111042e-13
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_ccRF",
+   "legs": "omega omega omega zeta",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 5.778470061033662e-14,
+    "max_abs_difference": 5.778470061033662e-14
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_ccRF",
+   "legs": "omega omega sigmadag H",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 1.368174222537637e-15,
+    "max_abs_difference": 1.368174222537637e-15
+   },
+   "verdict": "agree"
+  },
+  {
+   "class": "g1_ccRF",
+   "legs": "omega omega Hdag sigma",
+   "found": "0",
+   "predicted": "0",
+   "source_of_prediction": "b_d G vanishes identically in this class",
+   "numeric": {
+    "max_abs_found": 0.0,
+    "max_abs_predicted": 9.942824341635515e-16,
+    "max_abs_difference": 9.942824341635515e-16
+   },
+   "verdict": "agree"
+  }
+ ]
+}

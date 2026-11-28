@@ -1,0 +1,135 @@
+{
+ "class": "g1_cFFS",
+ "diagrams": [
+  {
+   "id": "(a1)",
+   "topology": "internal ghost; Delta_1 at the incoming leg Psi_{f2} (sterile internal f2 line), ghost omega^b -> ghost-gauge vertex with external omega^a, A^d absorbed by the outgoing fermion f1 at its external vertex; Yukawa vertex with external phi on the loop",
+   "fields": "omega^b, A^d, Psi_{f1}, Psi_{f2} (sterile at Delta_1)",
+   "symmetry_factor": "1",
+   "sign": "+1 (Wick, even permutation)",
+   "multiplicity_note": "group factor frak(f)^{bda} T^d_{f1} Y^i T^b_{f2}; exists for a in SU(3), SU(2)"
+  },
+  {
+   "id": "(a2)",
+   "topology": "internal ghost; Delta_1 at the outgoing leg Psibar_{f1}, A^d absorbed by the incoming fermion f2",
+   "fields": "omega^b, A^d, Psi_{f2}, Psi_{f1} (sterile at Delta_1)",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "group factor frak(f)^{bda} T^b_{f1} Y^i T^d_{f2}"
+  },
+  {
+   "id": "(b1)",
+   "topology": "internal ghost; Delta_1 at Psi_{f2}, A^d absorbed by the scalar line (H^dagger H A vertex with external phi), Yukawa vertex with external Psibar_{f1} and internal scalar",
+   "fields": "omega^b, A^d, phi (H or H^dagger line), Psi_{f2} (sterile at Delta_1)",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "group factor frak(f)^{bda} Y^j (T^d_phi)_{ji} T^b_{f2}"
+  },
+  {
+   "id": "(b2)",
+   "topology": "internal ghost; Delta_1 at Psibar_{f1}, A^d absorbed by the scalar line",
+   "fields": "omega^b, A^d, phi, Psi_{f1} (sterile at Delta_1)",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "group factor frak(f)^{bda} T^b_{f1} Y^j (T^d_phi)_{ji}"
+  },
+  {
+   "id": "(c1),(c2)",
+   "topology": "external ghost on Delta_1 with two internal fermion legs; gauge exchange between the two external fermion legs, Yukawa vertex of phi on the line; Delta_1 on the f2 (c1) or f1 (c2) segment",
+   "fields": "A^d, Psi_{f2}, Psi_{f2}, Psi_{f1} / A^d, Psi_{f2}, Psi_{f1}, Psi_{f1}",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "vanish identically at T^(0) (zero ghost momentum), eq:g1_cFFS-extghost"
+  },
+  {
+   "id": "(d1),(d2)",
+   "topology": "external ghost on Delta_1; gauge exchange between the Psi_{f2} leg (d1) or the Psibar_{f1} leg (d2) and the scalar",
+   "fields": "A^d, phi, Psi_{f2}, Psi_{f2} / A^d, phi, Psi_{f1}, Psi_{f1}",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "vanish identically at T^(0)"
+  },
+  {
+   "id": "(e1),(e2)",
+   "topology": "external ghost on Delta_1; Higgs exchange with three Yukawa vertices, Delta_1 on either internal fermion segment",
+   "fields": "phi', Psi_{f3}, Psi_{f3}, Psi_{f4} / phi', Psi_{f3}, Psi_{f4}, Psi_{f4}",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "exists only for the four quark vertices (Higgs exchange needs the Yukawa coupling of the other quark flavour); none for (L,E,H), (E,L,H^dagger); vanishes identically at T^(0)"
+  },
+  {
+   "id": "count",
+   "topology": "all",
+   "fields": "-",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "16 (vertex, ghost factor) assignments, 122 multiplet-level graphs, identical to model/ENUMERATION.md (checker T1=(c), T2=(e), T3=(d), T4a=(a2), T4b=(a1), T5a=(b2), T5b=(b1))"
+  }
+ ],
+ "functions": [
+  {
+   "externals": "omega^a(q) Psibar_{f1} Psi_{f2}(p) phi_i(p_phi), for (f1,f2,phi) = (Q,U,H^dagger),(Q,D,H),(L,E,H),(U,Q,H),(D,Q,H^dagger),(E,L,H^dagger); Yukawa vertex -i Y^j P_y with P_y = P_{c(f2)} = P_{cbar(f1)}; T^a_{H^dagger} = -(T^a_H)^*; omega(G) = 0, evaluated at zero external momenta",
+   "pole_vertex_function": [
+    {
+     "structure": "any",
+     "coefficient": "0"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "bold(Y)^j (Tg^a_phi)_(j i) P_y = (Tg^a_(f_1) bold(Y)^i - bold(Y)^i Tg^a_(f_2)) P_y",
+     "coefficient": "i/4 C_ad^((a))  (nonzero only for a = W^I: i/2 g^2)"
+    }
+   ],
+   "per_topology": {
+    "(a1)": "N_1 = 1/3 frak(f)^{bda} T^d_{f1} Y^i T^b_{f2} P_y ; gluon: -i/6 C_ad^(G) T^A_{f1} Y^i P_y = -i/2 g_s^2 T^A Y^i P_y; W, B: 0",
+    "(a2)": "N_1 = 1/3 frak(f)^{bda} T^b_{f1} Y^i T^d_{f2} P_y = -N_1(a1) ; gluon: +i/2 g_s^2 T^A Y^i P_y",
+    "(b1)": "N_1 = -1/2 frak(f)^{bda} Y^j (T^d_phi)_{ji} T^b_{f2} P_y ; W, conjugate vertices (doublet f2): -i/2 g^2 Y^i T^I_{f2} P_y; else 0",
+    "(b2)": "N_1 = 1/2 frak(f)^{bda} T^b_{f1} Y^j (T^d_phi)_{ji} P_y ; W, vertices O_k (doublet f1): +i/2 g^2 T^I_{f1} Y^i P_y; else 0",
+    "(c),(d),(e)": "0 (N_0 = N_1 = 0)",
+    "N_0 all graphs": "0 (every graph proportional to eta)"
+   }
+  }
+ ],
+ "operators": [
+  {
+   "kind": "pole_counterterm",
+   "operator": "none (N_0 = 0 in this class; consistent with b_d delta S^(1) = 0 here because the fermion and Higgs source pole coefficients are universal, -C_ad^(r)/2 /(16 pi^2 eps))",
+   "coefficient": "0",
+   "sm_values": "0"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "X_1 supset lf sum_vertices i/4 C_ad^((W)) integral d^4x gh^a_((W)) overline(psi)_(f_1) (Tg^a_(f_1) bold(Y)^i - bold(Y)^i Tg^a_(f_2)) P_y psi_(f_2) phi_i = lf g^2/2 sum_(k=u,d,e) ( - N^(O_k W)_(Y L) + N^(O_k^dagger W)_(Y R) )",
+   "coefficient": "1/(16 pi^2) * g^2/2 per monomial (with the signs shown)",
+   "sm_values": "16 pi^2 X_1: N^(O_u W)_(YL): -g^2/2; N^(O_d W)_(YL): -g^2/2; N^(O_e W)_(YL): -g^2/2; N^(O_u^dag W)_(YR): +g^2/2; N^(O_d^dag W)_(YR): +g^2/2; N^(O_e^dag W)_(YR): +g^2/2; all N^(O G)_(YL), N^(O G)_(YR): 0; all N^(O)_(YB): 0"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "equivalent form: X_1|_(omega psibar psi H) = lf g^2/2 ([b Q^(QW)_R]_Yuk + [b Q^(LW)_R]_Yuk) = - lf g^2/2 [b Q^((W))_sigma]_Yuk",
+   "coefficient": "g^2/(2*16 pi^2)",
+   "sm_values": "C_ad^(W)/4 = g^2/2"
+  }
+ ],
+ "checks": [
+  "N_0 = 0 for every graph; b_d delta S^(1) has no omega psibar psi H vertex because the source pole counterterms Q_R^(fr), Q_sigma^(r) have the universal coefficient -C_ad^(r)/(2*16 pi^2 eps) (sec:g0_ghost_sources) and the field-by-field BRST variations of a Yukawa monomial add up to s O_k = 0 in d dimensions",
+  "external-ghost graphs (c)-(e): Pc S(k+q) Delta_1 S(k) Pcbar = i T^a [ S(k+q) khat^2/k^2 - (k+q)hat^2/(k+q)^2 S(k) ] Pcbar vanishes at q = 0, hence T^(0) G = 0 identically",
+  "(a1)+(a2) = 0 by antisymmetry of frak(f); (b1)+(b2) = i/4 C_ad Y^j (T^a_phi)_{ji} P_y by rigid invariance and [T_phi^b,T_phi^d] = i frak(f)^{bdx} T_phi^x (also for phi = H^dagger)",
+  "no gh^B component: confirms the (N4) existence condition of sec:normalisation (coefficient of N^(O_k)_(YB) - N^(O_k^dag)_(YB) vanishes)",
+  "result independent of M and m^2; same form for a vertex and its conjugate; relative sign O_k vs O_k^dagger is the one in b(span Q_alpha) (the opposite sign would lie outside it)",
+  "numerical checks (SCRATCHPAD/classes/g1_cFFS/deriver_numcheck.py): Dirac strings in an explicit 8x8 Clifford representation (4 barred + 2 hatted), the extghost identity at q=0 and q!=0, tensor-reduction factors (Monte Carlo), all group factors for the six vertices and all twelve ghosts with explicit SU(3), SU(2) matrices and hypercharges, the four Wick reordering signs",
+  "consistency conditions for the ST solution (given the b-table of 03b): r_R^(QG) = r_R^(UG) = r_R^(DG); r_R^(QW) - r_sigma^(W) = r_R^(LW) - r_sigma^(W) = -g^2/(2*16 pi^2) = -C_ad^(W)/(4*16 pi^2); B: -1/6 r_R^(QB) + 2/3 r_R^(UB) - 1/2 r_sigma^(B) = 0, -1/6 r_R^(QB) - 1/3 r_R^(DB) + 1/2 r_sigma^(B) = 0, 1/2 r_R^(LB) - r_R^(EB) + 1/2 r_sigma^(B) = 0 (trivial under (N4))",
+  "REFEREE: deriver (hand) and checker (machine, bmhvkit symbolic + explicit-matrix back-end) agree per graph and in total after the conversion Y_checker = -Y_deriver (checker's Y_j P is the tree vertex function incl. -y; deriver's -i Y P is the Feynman rule): (a1)=T4b: -i/6 C_ad^(G) T Y P; (a2)=T4a: +i/6 C_ad^(G) T Y P; (b1)=T5b: -i/4 C_ad^(W) Y T P; (b2)=T5a: +i/4 C_ad^(W) T Y P; (c)-(e)=T1-T3: 0; N_0 = 0 everywhere",
+  "REFEREE: checker scripts re-run in a copy (check_diagrams.py, check_matrices.py): all values reproduced, explicit-matrix angular averages 4(d-4)/(d(d+2)) (T4) and -(d-4)/d (T5) agree with the eta bookkeeping",
+  "REFEREE: integrals re-derived by hand: kbar^2 khat^2 D^4 -> -8 eta/(d(d+2)) -> -eta/3, k^2 khat^2 D^4 -> -2 eta/d -> -eta/2; scalar-line factor eq:g1_cFFS-scalar re-derived for phi = H and phi = H^dagger; extghost identity eq:g1_cFFS-extghost re-derived",
+  "REFEREE: translation to N basis re-derived: V(N^{O W}_{YL}) = -i T^a_{f1} Y P_y, V(N^{O^dag W}_{YR}) = -i Y T^a_{f2} P_y; consistency conditions re-derived from eq:btable-fermion, eq:btable-yuk-B, eq:btable-higgs",
+  "EXTERNAL (targets_in_our_conventions.md, g1_cFFS, from BIMS (6.26) + covariance): X ⊃ -(1/16pi^2)(1/4) int [Psibar_L Y(i omega_C H) P_R Psi_R + h.c.] gives the vertex function +(i/4) C_ad (T_{f1} Y - Y T_{f2}) P_y: agrees. The target's representative Delta S ⊃ -(1/4)(1/16pi^2) sum_f [Rbar s_C Psi - (s_C Psibar) R] = -(1/16pi^2) sum_{f,r} (C_ad^(r)/4) Q^{fr}_R with no sigma term satisfies all consistency conditions of this class (r_R^{QW}-r_sigma^W = -g^2/(2 16pi^2), r_R^{QG}=r_R^{UG}=r_R^{DG}=-3 g_s^2/(4 16pi^2), B: 0)"
+ ],
+ "caveats": [
+  "Translation to the N basis uses N^(O r)_(YL) = i y_k int O[psibar -> psibar wm] (vertex function, ghost first: -i T^a_{f1} Y^i P_y) and N^(O r)_(YR) = i y_k int O[psi -> wm psi] (vertex function -i Y^i T^a_{f2} P_y); the sign comes from anticommuting omega^a past psibar. The equivalent form in terms of [b Q_R]_Yuk, [b Q_sigma]_Yuk relies on the b-table of 03b_operator_bases.typ, which is being verified independently.",
+  "The class has omega(G) = 0 and dimension 5 = dim(omega psibar psi H): X is momentum independent, so only zero external momenta are needed; the m^2 dependence of the Higgs propagator never enters.",
+  "Momentum labels: Psibar_{f1} leaves with p' = p + q + p_phi (no overline is used for this momentum, to avoid confusion with the four-dimensional projection).",
+  "The (e) graphs exist only for quark vertices (corrected in the subsection; irrelevant for the values since all external-ghost graphs vanish at T^(0)).",
+  "The 'Beyond one loop' remark (vanishing of external-ghost-on-Delta graphs at every order) is a structural argument, not checked beyond one loop."
+ ]
+}

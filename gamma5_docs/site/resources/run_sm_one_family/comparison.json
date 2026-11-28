@@ -1,0 +1,101 @@
+{
+ "seconds": 80.7,
+ "all_passed": true,
+ "comparisons": [
+  {
+   "name": "renormalisation constants",
+   "passed": true,
+   "detail": "20 of 20 equal; differing: []"
+  },
+  {
+   "name": "beta functions = 2 delta p",
+   "passed": true,
+   "detail": "8 parameters; differing: []"
+  },
+  {
+   "name": "deltaS^(1) (closed directions continued + evanescent) equals the report",
+   "passed": true,
+   "detail": "fingerprints in D = 4, 6, 8, every class"
+  },
+  {
+   "name": "evanescent operators: 8, four of them b_d-closed",
+   "passed": true,
+   "detail": "{'E1[G G]': '-2/3*g_s^2 [not closed]', 'E2[W W]': '-2/3*g^2 [not closed]', 'E3[B B]': '-5/9*gp^2 [not closed]', 'E4[H Hdag]': '2*y_u^2+2*y_d^2+2/3*y_e^2 [not closed]', 'E5[G G]': '-4/3*g_s^2 [closed]', 'E6[W W]': '-4/3*g^2 [closed]', 'E7[B B]': '-20/9*gp^2 [closed]', 'E8[H Hdag]': '-3*y_u^2-3*y_d^2-y_e^2 [closed]'}"
+  },
+  {
+   "name": "evanescent part equals the report (E_A, Etilde_F, E_H, Etilde_H)",
+   "passed": true,
+   "detail": "Evan[C] in D = 6, 8"
+  },
+  {
+   "name": "X_1 equals the report",
+   "passed": true,
+   "detail": "fingerprints in D = 4 on physical spinors, all ghost-number-1 classes"
+  },
+  {
+   "name": "X_1 on the report's N monomials, coefficient by coefficient",
+   "passed": true,
+   "detail": "71 non-zero of 71 (rank 71); all equal at a random point"
+  },
+  {
+   "name": "DeltaS^(1) equals the report",
+   "passed": true,
+   "detail": "39 non-zero r_alpha on the generated basis"
+  },
+  {
+   "name": "39 non-zero r_alpha on the generated basis",
+   "passed": true,
+   "detail": "39"
+  },
+  {
+   "name": "r_alpha on the report's 97 monomials (its removal lists), by name",
+   "passed": true,
+   "detail": "97 of 97 equal, 39 non-zero, 64 allowed, rank 64, 8 existence conditions; differing: []"
+  },
+  {
+   "name": "existence conditions on the generated basis: 14",
+   "passed": true,
+   "detail": "14"
+  },
+  {
+   "name": "run check: pole identity (ghost-number-1 poles = -V_{b_d deltaS})",
+   "passed": true,
+   "detail": "168 of 168 classes (D = 6, 2 parameter points); failed: []"
+  },
+  {
+   "name": "run check: b X = 0",
+   "passed": true,
+   "detail": "on 526 rows of the ghost-number-2 classes"
+  },
+  {
+   "name": "run check: no anomaly (X in b(span Q))",
+   "passed": true,
+   "detail": "rank b(span Q) = 84; components outside: {}"
+  },
+  {
+   "name": "run check: four-dimensional limit of deltaS is b-closed",
+   "passed": true,
+   "detail": "all 84 relations of b on the Q coefficients hold"
+  },
+  {
+   "name": "deltaS^(1) rules equal 05a (cr-tab-inv, cr-tab-full, cr-ev-rules)",
+   "passed": true,
+   "detail": "class by class"
+  },
+  {
+   "name": "DeltaS^(1) rules equal 05a (eq:sts-result, cr-fin)",
+   "passed": true,
+   "detail": "class by class"
+  },
+  {
+   "name": "model file = the writer on the store",
+   "passed": true,
+   "detail": "912 vertex rules, 500 couplings (coupling expressions compared as expressions: the printed order of a product depends on the order in which a process registered its symbols)"
+  },
+  {
+   "name": "written counterterm vertices (UFO strings) equal i V of the store entries",
+   "passed": true,
+   "detail": "252 vertex groups"
+  }
+ ]
+}

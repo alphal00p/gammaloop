@@ -1,0 +1,157 @@
+{
+ "class": "g0_SSSS",
+ "diagrams": [
+  {
+   "id": "a_s",
+   "topology": "scalar bubble, two quartic vertices, s channel",
+   "fields": "H, H (H_j H_l at one vertex, H^dag_i H^dag_k at the other)",
+   "symmetry_factor": "1/2",
+   "sign": "+1",
+   "multiplicity_note": "1 graph; group factor 2 S; N0 = 4 lambda^2 S"
+  },
+  {
+   "id": "a_t",
+   "topology": "scalar bubble, t channel",
+   "fields": "H, H (H^dag_i H_j at one vertex)",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "1 graph; group factor 4 d_ij d_kl + d_il d_kj"
+  },
+  {
+   "id": "a_u",
+   "topology": "scalar bubble, u channel",
+   "fields": "H, H (H^dag_i H_l at one vertex)",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "1 graph; group factor d_ij d_kl + 4 d_il d_kj"
+  },
+  {
+   "id": "b_u",
+   "topology": "fermion box",
+   "fields": "U, Q, U, Q",
+   "symmetry_factor": "1",
+   "sign": "-1 (fermion loop)",
+   "multiplicity_note": "2 cyclic orders; colour 3; SU(2) 3 d_il d_kj resp. 3 d_ij d_kl; N0 per graph = -2 y_u^4 c"
+  },
+  {
+   "id": "b_d",
+   "topology": "fermion box",
+   "fields": "D, Q, D, Q",
+   "symmetry_factor": "1",
+   "sign": "-1",
+   "multiplicity_note": "2 graphs, total group factor 3 S"
+  },
+  {
+   "id": "b_e",
+   "topology": "fermion box",
+   "fields": "E, L, E, L",
+   "symmetry_factor": "1",
+   "sign": "-1",
+   "multiplicity_note": "2 graphs, total group factor S"
+  },
+  {
+   "id": "b_ud",
+   "topology": "fermion box",
+   "fields": "U, Q, D, Q",
+   "symmetry_factor": "1",
+   "sign": "-1",
+   "multiplicity_note": "4 graphs, each -6 y_u^2 y_d^2 eps_wx eps_zy = +-6 y_u^2 y_d^2 (d_ij d_kl - d_il d_kj); sum 0"
+  },
+  {
+   "id": "c",
+   "topology": "gauge bubble, two seagulls",
+   "fields": "A^a, A^b (a,b in W^1..3, B)",
+   "symmetry_factor": "1/2",
+   "sign": "+1",
+   "multiplicity_note": "2 pairings (ij)(kl), (il)(kj); 6 graphs with W and B distinguished (WW, WB, BB per pairing)"
+  },
+  {
+   "id": "d",
+   "topology": "gauge triangle, seagull + two cubic vertices",
+   "fields": "A^a, A^b, H",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "4 seagull positions; 16 graphs with W, B distinguished"
+  },
+  {
+   "id": "e",
+   "topology": "gauge box, four cubic vertices",
+   "fields": "H, A^a, H, A^b",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "uncrossed and crossed x 2 H-line pairings = 4; 16 graphs with W, B distinguished"
+  },
+  {
+   "id": "f_i",
+   "topology": "mixed triangle, quartic + two cubic vertices",
+   "fields": "H, A^a, H",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "H^dag_x H_y at the quartic vertex, 4 assignments; s1 s2 = +1"
+  },
+  {
+   "id": "f_ii",
+   "topology": "mixed triangle",
+   "fields": "H, A^a, H",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "H^dag_i H^dag_k at the quartic vertex, 1 assignment; s1 s2 = -1"
+  },
+  {
+   "id": "f_iii",
+   "topology": "mixed triangle",
+   "fields": "H, A^a, H",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "H_j H_l at the quartic vertex, 1 assignment; s1 s2 = -1. (f) total: 6 multiplet-level graphs, 12 with W, B distinguished. Grand total 29 multiplet-level = 63 labelled component-level graphs of ENUMERATION.md (10/6/3/28/16)"
+  }
+ ],
+ "functions": [
+  {
+   "externals": "H^dagger_i(0) H_j(0) H^dagger_k(0) H_l(0), all momenta zero (omega = 0); S = (delta_(i j) delta_(k l) + delta_(i l) delta_(k j))",
+   "pole_vertex_function": [
+    {
+     "structure": "(delta_(i j) delta_(k l) + delta_(i l) delta_(k j))",
+     "coefficient": "24*lambda^2 - 2*(3*y_u^4 + 3*y_d^4 + y_e^4) - lambda*(3*g^2 + g'^2) + (3/8)*(3*g^4 + 2*g^2*g'^2 + g'^4)"
+    },
+    {
+     "structure": "(delta_(i j) delta_(k l) - delta_(i l) delta_(k j))",
+     "coefficient": "0"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "a (lambda^2 scalar bubbles)": "24*lambda^2*S [s: 4 lambda^2 S; t: 4 lambda^2 (4 d_ij d_kl + d_il d_kj); u: 4 lambda^2 (d_ij d_kl + 4 d_il d_kj)]",
+    "b (fermion boxes)": "-2*(3*y_u^4 + 3*y_d^4 + y_e^4)*S; mixed y_u^2 y_d^2: 0",
+    "c (gauge bubbles)": "(1/2)*(3*g^4 + 2*g^2*g'^2 + g'^4)*S",
+    "d (gauge triangles)": "-(1/4)*(3*g^4 + 2*g^2*g'^2 + g'^4)*S",
+    "e (gauge boxes)": "(1/8)*(3*g^4 + 2*g^2*g'^2 + g'^4)*S",
+    "f (lambda-gauge triangles)": "-lambda*(3*g^2 + g'^2)*S = -4*lambda*C_H*S  [per coupling: (i) -4 lambda g^2 - 2 lambda g'^2, (ii)+(iii) +lambda g^2 + lambda g'^2]",
+    "matrix_form": "N_0 = [24 lambda^2 - 2(3y_u^4+3y_d^4+y_e^4) - 4 lambda C_H] S + (3/2) Xi_ijkl, Xi_ijkl = sum_ab ({T^a,T^b}_ij {T^a,T^b}_kl + {T^a,T^b}_il {T^a,T^b}_kj) = (1/4)(3g^4+2g^2g'^2+g'^4) S, T^a = cal(T)^a_H, C_H = 3/4 g^2 + 1/4 g'^2",
+    "N1": "0 for every graph (no hatted contraction); no evanescent pole (omega = 0, momentum independent)"
+   }
+  }
+ ],
+ "operators": [
+  {
+   "kind": "pole_counterterm",
+   "operator": "Q_lambda = integral dif^d x (H^dagger H)^2 ; delta S^((1)) supset -(1/(16 pi^2 eps)) c_lambda Q_lambda",
+   "coefficient": "c_lambda = 12*lambda^2 - (3*y_u^4 + 3*y_d^4 + y_e^4) - (lambda/2)*(3*g^2 + g'^2) + (3/16)*(3*g^4 + 2*g^2*g'^2 + g'^4)",
+   "sm_values": "lambda^2: 12; y_u^4: -3; y_d^4: -3; y_e^4: -1; y_u^2 y_d^2: 0; g^4: 9/16; g^2 g'^2: 3/8; g'^4: 3/16; lambda g^2: -3/2; lambda g'^2: -1/2; g_s: none (N_c = 3 only via quark boxes); m^2: none"
+  }
+ ],
+ "checks": [
+  "Deriver (hand) and checker (own Wick enumerator + bmhvkit uv_pole) agree per topology and in total; referee re-derived every integrand prefactor and group factor by hand and checked all 16 SU(2) components per topology with explicit matrices (referee_group.py): agree",
+  "Toolkit spot check (referee_toolkit.py): fermion-box trace tr[P_R kslash P_L kslash P_R kslash P_L kslash] gives N0 = 2 (times loop sign and y^4: -2 y^4), N1 = 0; gauge triangle N0 = -1; seagull bubble N0 = 2",
+  "Machine log-expansion of the one-loop effective action (check_effpot.py) rerun by referee: reproduces per-insertion-number groups and the total; STr M^4 (Fermi gauge, xi = 1) agrees",
+  "Diagram count: 29 multiplet-level graphs (W, B lumped) = 63 labelled component-level graphs, matching ENUMERATION.md per topology (fermion 10, gauge bubble 6, scalar bubble 3, 3-vertex scalar-gauge 28 = 16 gauge triangles + 12 mixed, 4-vertex 16)",
+  "Literature: equals targets_in_our_conventions.md sec. 3, Gamma_div contains kappa[12 lambda^2 - lambda/2(3g^2+g'^2) + 3/16(3g^4+2g^2g'^2+g'^4) - (3y_u^4+3y_d^4+y_e^4)](H^dag H)^2 exactly",
+  "Beta function: with c_SS = 3y_u^2+3y_d^2+y_e^2 - 2 C_H (coefficient of Q_SS in g0_SS.typ eq:g0_SS-ct-basis), 16 pi^2 beta_lambda = 2(c_lambda + 2 lambda c_SS) = 24 lambda^2 - 3 lambda(3g^2+g'^2) + 4 lambda T - 2(3y_u^4+3y_d^4+y_e^4) + 3/8(2g^4+(g^2+g'^2)^2), the Machacek-Vaughn one-family value",
+  "M and m^2 independence; Bose symmetry leaves only S; antisymmetric eps_ik eps_jl of mixed boxes cancels",
+  "b Q_lambda = 0: no ghost-number-1 vertex from this counterterm"
+ ],
+ "caveats": [
+  "Lambda-gauge vertex part -4 lambda C_H is Feynman-gauge specific; gauge independent only combined with Z_H",
+  "The ghost-number-1 function omega H^dag H H^dag H (fermion pentagon with Delta_1, omega = 0) belongs to class g1_cSS_cSSV (ENUMERATION.md lists cW/cB Hdag H Hdag H there), not to this class"
+ ]
+}

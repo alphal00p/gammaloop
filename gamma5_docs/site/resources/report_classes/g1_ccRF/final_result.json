@@ -1,0 +1,179 @@
+{
+ "class": "g1_ccRF",
+ "diagrams": [
+  {
+   "id": "(b)[Q]",
+   "topology": "(b) Delta_1 ghost internal: source vertex <- ghost <- omegabar A omega (ext omega^c) -A- omegabar A omega (ext omega^a) -> ghost -> Delta_1 (ext Psi_f) -> Psi_f (sterile part) -> source vertex",
+   "fields": "omega^b, A^d, omega^e of one non-abelian factor r in {G, W}; Psi_Q",
+   "symmetry_factor": "1 (1/2! of the two identical ghost-gauge vertices cancelled by their two placements)",
+   "sign": "+1 for the ghost order omega^a omega^c with omega^a on the Delta_1 side (26 inversions)",
+   "multiplicity_note": "only (r,r); conjugate (b') for omega omega Psibar R, sign +1"
+  },
+  {
+   "id": "(a)[Q]",
+   "topology": "(a) Delta_1 ghost external: source vertex <- ghost <- omegabar A omega (ext omega^c) -A-> Psibar Psi A (ext Psi_f) -> Psi_f -> Delta_1 (ext omega^a) -> Psi_f -> source vertex; other ordering 1PR",
+   "fields": "omega^b, A^d (non-abelian factor of omega^c), Psi_Q, Psi_Q; omega^a any factor of Q",
+   "symmetry_factor": "1",
+   "sign": "+1 (12 inversions)",
+   "multiplicity_note": "rows (a1),(a2) = the two terms of the Delta vertex, parts of one graph; vanishes identically at T^(0); conjugate (a')"
+  },
+  {
+   "id": "(b)[U]",
+   "topology": "(b) Delta_1 ghost internal: source vertex <- ghost <- omegabar A omega (ext omega^c) -A- omegabar A omega (ext omega^a) -> ghost -> Delta_1 (ext Psi_f) -> Psi_f (sterile part) -> source vertex",
+   "fields": "omega^b, A^d, omega^e of one non-abelian factor r in {G}; Psi_U",
+   "symmetry_factor": "1 (1/2! of the two identical ghost-gauge vertices cancelled by their two placements)",
+   "sign": "+1 for the ghost order omega^a omega^c with omega^a on the Delta_1 side (26 inversions)",
+   "multiplicity_note": "only (r,r); conjugate (b') for omega omega Psibar R, sign +1"
+  },
+  {
+   "id": "(a)[U]",
+   "topology": "(a) Delta_1 ghost external: source vertex <- ghost <- omegabar A omega (ext omega^c) -A-> Psibar Psi A (ext Psi_f) -> Psi_f -> Delta_1 (ext omega^a) -> Psi_f -> source vertex; other ordering 1PR",
+   "fields": "omega^b, A^d (non-abelian factor of omega^c), Psi_U, Psi_U; omega^a any factor of U",
+   "symmetry_factor": "1",
+   "sign": "+1 (12 inversions)",
+   "multiplicity_note": "rows (a1),(a2) = the two terms of the Delta vertex, parts of one graph; vanishes identically at T^(0); conjugate (a')"
+  },
+  {
+   "id": "(b)[D]",
+   "topology": "(b) Delta_1 ghost internal: source vertex <- ghost <- omegabar A omega (ext omega^c) -A- omegabar A omega (ext omega^a) -> ghost -> Delta_1 (ext Psi_f) -> Psi_f (sterile part) -> source vertex",
+   "fields": "omega^b, A^d, omega^e of one non-abelian factor r in {G}; Psi_D",
+   "symmetry_factor": "1 (1/2! of the two identical ghost-gauge vertices cancelled by their two placements)",
+   "sign": "+1 for the ghost order omega^a omega^c with omega^a on the Delta_1 side (26 inversions)",
+   "multiplicity_note": "only (r,r); conjugate (b') for omega omega Psibar R, sign +1"
+  },
+  {
+   "id": "(a)[D]",
+   "topology": "(a) Delta_1 ghost external: source vertex <- ghost <- omegabar A omega (ext omega^c) -A-> Psibar Psi A (ext Psi_f) -> Psi_f -> Delta_1 (ext omega^a) -> Psi_f -> source vertex; other ordering 1PR",
+   "fields": "omega^b, A^d (non-abelian factor of omega^c), Psi_D, Psi_D; omega^a any factor of D",
+   "symmetry_factor": "1",
+   "sign": "+1 (12 inversions)",
+   "multiplicity_note": "rows (a1),(a2) = the two terms of the Delta vertex, parts of one graph; vanishes identically at T^(0); conjugate (a')"
+  },
+  {
+   "id": "(b)[L]",
+   "topology": "(b) Delta_1 ghost internal: source vertex <- ghost <- omegabar A omega (ext omega^c) -A- omegabar A omega (ext omega^a) -> ghost -> Delta_1 (ext Psi_f) -> Psi_f (sterile part) -> source vertex",
+   "fields": "omega^b, A^d, omega^e of one non-abelian factor r in {W}; Psi_L",
+   "symmetry_factor": "1 (1/2! of the two identical ghost-gauge vertices cancelled by their two placements)",
+   "sign": "+1 for the ghost order omega^a omega^c with omega^a on the Delta_1 side (26 inversions)",
+   "multiplicity_note": "only (r,r); conjugate (b') for omega omega Psibar R, sign +1"
+  },
+  {
+   "id": "(a)[L]",
+   "topology": "(a) Delta_1 ghost external: source vertex <- ghost <- omegabar A omega (ext omega^c) -A-> Psibar Psi A (ext Psi_f) -> Psi_f -> Delta_1 (ext omega^a) -> Psi_f -> source vertex; other ordering 1PR",
+   "fields": "omega^b, A^d (non-abelian factor of omega^c), Psi_L, Psi_L; omega^a any factor of L",
+   "symmetry_factor": "1",
+   "sign": "+1 (12 inversions)",
+   "multiplicity_note": "rows (a1),(a2) = the two terms of the Delta vertex, parts of one graph; vanishes identically at T^(0); conjugate (a')"
+  }
+ ],
+ "functions": [
+  {
+   "externals": "omega^a(q_a) omega^c(q_c) overline(R)_f(p_R) Psi_f(p), all incoming, f in {Q,U,D,L,E}",
+   "pole_vertex_function": [
+    {
+     "structure": "all (evanescent included)",
+     "coefficient": "0"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "-i fg^(a c e) Tg^e_f P_(c_f)  (a, c in the same non-abelian factor r carried by f)",
+     "coefficient": "C_ad^((r))/4 : r = G: 3 g_s^2/4 (f = Q, U, D); r = W: g^2/2 (f = Q, L)"
+    },
+    {
+     "structure": "a, c in different factors, or omega^B; multiplet E",
+     "coefficient": "0"
+    }
+   ],
+   "per_topology": {
+    "(a)": "N0 = 0, N1 = N1^(a1)+N1^(a2) = (-i/3 + i/3) Theta^(a)_f P_c = 0 (T^(0) G_(a) = 0 identically)",
+    "(b)": "N0 = 0, N1 = -1/2 Theta^(b)_f P_c = sum_r C_ad^((r))/4 wm^((r)) wm^((r)) P_c, Theta^(b)_f = [Tg^d,wm][Tg^d,wm] = -sum_r C_ad^((r))/2 wm^((r)) wm^((r))"
+   }
+  },
+  {
+   "externals": "omega^a omega^c overline(Psi)_f(pbar) R_f(p_R), all incoming",
+   "pole_vertex_function": [
+    {
+     "structure": "all (evanescent included)",
+     "coefficient": "0"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "-i fg^(a c e) Tg^e_f P_(overline(c)_f)  (a, c in the same non-abelian factor r carried by f)",
+     "coefficient": "C_ad^((r))/4 : r = G: 3 g_s^2/4 (f = Q, U, D); r = W: g^2/2 (f = Q, L)"
+    },
+    {
+     "structure": "a, c in different factors, or omega^B; multiplet E",
+     "coefficient": "0"
+    }
+   ],
+   "per_topology": {
+    "(a')": "0 identically",
+    "(b')": "N0 = 0, N1 = +1/2 Thetabar^(b)_f Pbar_c = sum_r C_ad^((r))/4 wm^((r)) wm^((r)) Pbar_c, Thetabar^(b) = -Theta^(b)"
+   }
+  },
+  {
+   "externals": "omega omega rho~ (one derivative), omega omega rho~ A, omega omega omega zeta, omega omega sigma^dagger H, omega omega H^dagger sigma",
+   "pole_vertex_function": [
+    {
+     "structure": "all",
+     "coefficient": "0 (no one-loop 1PI graph with Delta_1)"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "all",
+     "coefficient": "0 (first at two loops: (I,V) = (6,5), (7,6), (7,6), (7,6), (7,6))"
+    }
+   ],
+   "per_topology": {}
+  }
+ ],
+ "operators": [
+  {
+   "kind": "breaking_X",
+   "operator": "X_1 ⊃ lf integral sum_f sum_(r = G, W; r in f) C^((r))_\"ad\"/4 [ N^(f r r)_(R R) + overline(N)^(f r r)_(R R) ]",
+   "coefficient": "C_ad^((r))/4 (units 1/(16 pi^2))",
+   "sm_values": "N^(QGG), N^(UGG), N^(DGG) and their bars: 3*g_s**2/4; N^(QWW), N^(LWW) and their bars: g**2/2"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N^(f r s)_(R R), overline(N)^(f r s)_(R R) with r != s (GW, GB, WB), multiplet E",
+   "coefficient": "0",
+   "sm_values": "0"
+  },
+  {
+   "kind": "pole_counterterm",
+   "operator": "none",
+   "coefficient": "0",
+   "sm_values": "N0 = 0 for every multiplet and factor pair"
+  },
+  {
+   "kind": "evanescent_counterterm",
+   "operator": "none",
+   "coefficient": "0",
+   "sm_values": "0"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "omega omega rho~, omega omega rho~ A, omega omega omega zeta, omega omega sigma^dagger H, omega omega H^dagger sigma",
+   "coefficient": "0 at one loop",
+   "sm_values": "0"
+  }
+ ],
+ "checks": [
+  "Deriver (hand) and checker (machine) agree on topology (a): vanishes identically at T^(0); group factor Theta^(a) identical (GW: -i/2(3gs^2-2g^2), GB: -3i gs^2/2, WB: -i g^2).",
+  "Topology (b) (missed by the deriver) recomputed by the referee by hand: Wick parity +1 (ghost order a on Delta side), constants multiply to 1, numerator hat(k)^2 k^2 -> -2 eta (k^2)^2/d, N1 = -1/2 Theta^(b) P_c, Theta^(b) = -sum C_ad/2 wm wm; agrees with the checker's bmhvkit and explicit-matrix (d = 6..12) results; checker scripts rerun, outputs reproduced.",
+  "Vertex function from left derivatives: Gamma_{omega^a omega^c Rbar Psi} = -i kappa fg^(ace) Tg^e P_c for Gamma ⊃ kappa int Rbar wm wm P_c Psi.",
+  "N0 = 0 for all graphs with d-dimensional external momenta; consistent with b_d delta S^(1) = 0 in this class (equal pole coefficients C_ad/2 of Q_R^(fr) and Q_zeta[-1/2 fg_(r)] in g0_ghost_sources).",
+  "Diagram list agrees with ENUMERATION.md for all 22 source/fermion assignments and the 6 vanishing source functions.",
+  "External: agrees with targets_in_our_conventions.md (BIMS (6.27)-(6.28), LP): X ⊃ (l/4) sum_f int (i/2) C fg^(abc) omega^a omega^b [Rbar T^c P Psi + Psibar P T^c R] = l C/4 (N + Nbar).",
+  "typst_check.sh compiles; pages inspected."
+ ],
+ "caveats": [
+  "The class specification listed only topology (a); topology (b) (Delta_1 ghost internal) is one-loop with (I,V) = (4,4) and carries the whole result.",
+  "Consequence for the ST solution: r[Q_R^(fr)] - r[Q_zeta[-1/2 fg_(r)]] = -C_ad^((r))/4 for every f, r = G, W; r[Q_zeta[(zeta^A omega^A omega^B)]] = r[Q_zeta[(zeta^I omega^I omega^B)]] = 0. Consistent with the literature representative (source counterterm -1/4 C_ad Q_R, Q_zeta coefficient 0).",
+  "No finite-part check of the ST identity in this class (finite parts of Gamma_{Rbar omega Psi}, Gamma_{zeta omega omega} are non-local at zero momentum)."
+ ]
+}

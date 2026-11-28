@@ -1,0 +1,233 @@
+{
+ "class": "g0_FFV",
+ "diagrams": [
+  {
+   "id": "(a)",
+   "topology": "gauge exchange across the vertex, external A^a on the internal fermion",
+   "fields": "Psi_f, Psi_f, A^b (all twelve b; group factor Tg^b Tg^a Tg^b = (C_f - C_ad^(a)/2) Tg^a)",
+   "symmetry_factor": "1",
+   "sign": "+1 (open fermion line)",
+   "multiplicity_note": "per (f,r): one multiplet-level diagram per exchanged factor G/W/B coupling to f (ENUMERATION: 1-3 per (f,r))"
+  },
+  {
+   "id": "(b)",
+   "topology": "three-gauge vertex",
+   "fields": "Psi_f, A^b, A^c of the factor of a (G or W)",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "ordered pair (b,c) summed; group factor fg^{abc} Tg^b Tg^c = (i/2) C_ad^(a) Tg^a; absent for B"
+  },
+  {
+   "id": "(c)",
+   "topology": "Higgs exchange, A^a on the internal fermion",
+   "fields": "Psi_F, Psi_F, phi with (F,phi,y) in {(Q:U,Htilde,y_u),(Q:D,H,y_d),(L:E,H,y_e),(U:Q,H,y_u),(D:Q,Htilde,y_d),(E:L,Htilde,y_e)}",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "one per Yukawa partner; zero if F does not carry factor r"
+  },
+  {
+   "id": "(d)",
+   "topology": "Higgs exchange, A^a on the internal scalar",
+   "fields": "Psi_F, phi, phi (same partners as (c))",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "one per Yukawa partner; Htilde = eps H^* with Tg_Htilde = -eps Tg_H^T eps^T (W: g tau/2, B: -g'/2); zero for r = G"
+  }
+ ],
+ "functions": [
+  {
+   "externals": "Psibar_Q(p') Psi_Q(p) A^a_mu(q), a in gauge factor G; pole momentum independent (omega=0)",
+   "pole_vertex_function": [
+    {
+     "structure": "gbar^mu P_(c_f) Tg^a_f",
+     "coefficient": "z_(QG) = C_Q + C_ad^(G) + Y_Q = 13/3 g_s^2 + 3/4 g^2 + 1/36 g'^2 + (y_u^2 + y_d^2)/2"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "(a)": "-1/6 g_s^2 + 3/4 g^2 + 1/36 g'^2",
+    "(b)": "9/2 g_s^2",
+    "(c)": "(y_u^2 + y_d^2)/2",
+    "(d)": "0"
+   }
+  },
+  {
+   "externals": "Psibar_Q(p') Psi_Q(p) A^a_mu(q), a in gauge factor W; pole momentum independent (omega=0)",
+   "pole_vertex_function": [
+    {
+     "structure": "gbar^mu P_(c_f) Tg^a_f",
+     "coefficient": "z_(QW) = C_Q + C_ad^(W) + Y_Q = 4/3 g_s^2 + 11/4 g^2 + 1/36 g'^2 + (y_u^2 + y_d^2)/2"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "(a)": "4/3 g_s^2 - 1/4 g^2 + 1/36 g'^2",
+    "(b)": "3 g^2",
+    "(c)": "0",
+    "(d)": "(y_u^2 + y_d^2)/2"
+   }
+  },
+  {
+   "externals": "Psibar_Q(p') Psi_Q(p) A^a_mu(q), a in gauge factor B; pole momentum independent (omega=0)",
+   "pole_vertex_function": [
+    {
+     "structure": "gbar^mu P_(c_f) Tg^a_f",
+     "coefficient": "z_(QB) = C_Q + C_ad^(B) + Y_Q = 4/3 g_s^2 + 3/4 g^2 + 1/36 g'^2 + (y_u^2 + y_d^2)/2"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "(a)": "4/3 g_s^2 + 3/4 g^2 + 1/36 g'^2",
+    "(b)": "0",
+    "(c)": "2 y_u^2 - y_d^2",
+    "(d)": "3/2 (y_d^2 - y_u^2)"
+   }
+  },
+  {
+   "externals": "Psibar_U(p') Psi_U(p) A^a_mu(q), a in gauge factor G; pole momentum independent (omega=0)",
+   "pole_vertex_function": [
+    {
+     "structure": "gbar^mu P_(c_f) Tg^a_f",
+     "coefficient": "z_(UG) = C_U + C_ad^(G) + Y_U = 13/3 g_s^2 + 4/9 g'^2 + y_u^2"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "(a)": "-1/6 g_s^2 + 4/9 g'^2",
+    "(b)": "9/2 g_s^2",
+    "(c)": "y_u^2",
+    "(d)": "0"
+   }
+  },
+  {
+   "externals": "Psibar_U(p') Psi_U(p) A^a_mu(q), a in gauge factor B; pole momentum independent (omega=0)",
+   "pole_vertex_function": [
+    {
+     "structure": "gbar^mu P_(c_f) Tg^a_f",
+     "coefficient": "z_(UB) = C_U + C_ad^(B) + Y_U = 4/3 g_s^2 + 4/9 g'^2 + y_u^2"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "(a)": "4/3 g_s^2 + 4/9 g'^2",
+    "(b)": "0",
+    "(c)": "y_u^2/4",
+    "(d)": "3/4 y_u^2"
+   }
+  },
+  {
+   "externals": "Psibar_D(p') Psi_D(p) A^a_mu(q), a in gauge factor G; pole momentum independent (omega=0)",
+   "pole_vertex_function": [
+    {
+     "structure": "gbar^mu P_(c_f) Tg^a_f",
+     "coefficient": "z_(DG) = C_D + C_ad^(G) + Y_D = 13/3 g_s^2 + 1/9 g'^2 + y_d^2"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "(a)": "-1/6 g_s^2 + 1/9 g'^2",
+    "(b)": "9/2 g_s^2",
+    "(c)": "y_d^2",
+    "(d)": "0"
+   }
+  },
+  {
+   "externals": "Psibar_D(p') Psi_D(p) A^a_mu(q), a in gauge factor B; pole momentum independent (omega=0)",
+   "pole_vertex_function": [
+    {
+     "structure": "gbar^mu P_(c_f) Tg^a_f",
+     "coefficient": "z_(DB) = C_D + C_ad^(B) + Y_D = 4/3 g_s^2 + 1/9 g'^2 + y_d^2"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "(a)": "4/3 g_s^2 + 1/9 g'^2",
+    "(b)": "0",
+    "(c)": "-y_d^2/2",
+    "(d)": "3/2 y_d^2"
+   }
+  },
+  {
+   "externals": "Psibar_L(p') Psi_L(p) A^a_mu(q), a in gauge factor W; pole momentum independent (omega=0)",
+   "pole_vertex_function": [
+    {
+     "structure": "gbar^mu P_(c_f) Tg^a_f",
+     "coefficient": "z_(LW) = C_L + C_ad^(W) + Y_L = 11/4 g^2 + 1/4 g'^2 + y_e^2/2"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "(a)": "-1/4 g^2 + 1/4 g'^2",
+    "(b)": "3 g^2",
+    "(c)": "0",
+    "(d)": "y_e^2/2"
+   }
+  },
+  {
+   "externals": "Psibar_L(p') Psi_L(p) A^a_mu(q), a in gauge factor B; pole momentum independent (omega=0)",
+   "pole_vertex_function": [
+    {
+     "structure": "gbar^mu P_(c_f) Tg^a_f",
+     "coefficient": "z_(LB) = C_L + C_ad^(B) + Y_L = 3/4 g^2 + 1/4 g'^2 + y_e^2/2"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "(a)": "3/4 g^2 + 1/4 g'^2",
+    "(b)": "0",
+    "(c)": "y_e^2",
+    "(d)": "-y_e^2/2"
+   }
+  },
+  {
+   "externals": "Psibar_E(p') Psi_E(p) A^a_mu(q), a in gauge factor B; pole momentum independent (omega=0)",
+   "pole_vertex_function": [
+    {
+     "structure": "gbar^mu P_(c_f) Tg^a_f",
+     "coefficient": "z_(EB) = C_E + C_ad^(B) + Y_E = g'^2 + y_e^2"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "(a)": "g'^2",
+    "(b)": "0",
+    "(c)": "y_e^2/2",
+    "(d)": "y_e^2/2"
+   }
+  }
+ ],
+ "operators": [
+  {
+   "kind": "pole_counterterm",
+   "operator": "Q^(f r)_V = integral dif^d x overline(Psi)_f gbar^mu Am^((r))_mu P_(c_f) Psi_f",
+   "coefficient": "-(1/(16 pi^2 eps)) z_(f r), z_(f r) = C_f + C_ad^((r)) + Y_f, Y_Q=(y_u^2+y_d^2)/2, Y_U=y_u^2, Y_D=y_d^2, Y_L=y_e^2/2, Y_E=y_e^2",
+   "sm_values": "QG: z = 13/3 g_s^2 + 3/4 g^2 + 1/36 g'^2 + (y_u^2 + y_d^2)/2; QW: z = 4/3 g_s^2 + 11/4 g^2 + 1/36 g'^2 + (y_u^2 + y_d^2)/2; QB: z = 4/3 g_s^2 + 3/4 g^2 + 1/36 g'^2 + (y_u^2 + y_d^2)/2; UG: z = 13/3 g_s^2 + 4/9 g'^2 + y_u^2; UB: z = 4/3 g_s^2 + 4/9 g'^2 + y_u^2; DG: z = 13/3 g_s^2 + 1/9 g'^2 + y_d^2; DB: z = 4/3 g_s^2 + 1/9 g'^2 + y_d^2; LW: z = 11/4 g^2 + 1/4 g'^2 + y_e^2/2; LB: z = 3/4 g^2 + 1/4 g'^2 + y_e^2/2; EB: z = g'^2 + y_e^2"
+  },
+  {
+   "kind": "evanescent_counterterm",
+   "operator": "none",
+   "coefficient": "0",
+   "sm_values": "no ghat^mu and no hatted momentum in the pole of any (f,r)"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "none (ghost number 0 class)",
+   "coefficient": "0",
+   "sm_values": "N_1 = 0 for every diagram"
+  }
+ ],
+ "checks": [
+  "Deriver (hand) and checker (bmhvkit symbolic + explicit numpy Clifford matrices at d=4,6,8, barred and hatted mu) agree coefficient by coefficient for all 10 (f,r), per topology (a),(b),(c),(d) and in total.",
+  "Referee re-derived by hand: overall factors 1 (a), i (b), -y^2 (c,d); Dirac strings -2 slb gbar slb, -2 kbar^2 gbar - 4 k^mu slb, slb gbar slb, -2 k^mu slb; tensor reduction 4/d, -12/d, -2/d, -2/d; group factors T^b T^a T^b = (C_f - C_ad/2)T^a, fg^{abc}T^bT^c = (i/2)C_ad T^a; Htilde generator and the (d) orientation sign; SM table entries n y^2 Y_F/(2Y_f), n y^2 Y_phi/(2Y_f).",
+  "Referee re-ran check_g0_FFV.py and check_g0_FFV_matrices.py: identical output, ALL OK.",
+  "Completeness: 46 multiplet-level diagrams of ENUMERATION.md (Qbar Q G 6, Qbar Q W 6, Qbar Q B 7, U G 4, U B 4, D G 4, D B 4, L W 4, L B 4, E B 3) = topologies (a)-(d) of the report; no bubble or tadpole topologies exist (no Psibar Psi A A or Psibar Psi H A vertices), no ghost or closed loops.",
+  "No evanescent pole; N_1 = 0; pole independent of M, m^2 and external momenta.",
+  "Abelian Ward identity: z_(f B) = C_f + Y_f equals the g0_FF self-energy coefficient (report g0_FF eq:g0_FF-pole: C_f + cal(Y)_f, same cal(Y)_f), Z_1 = Z_2 for U(1)_Y, Yukawa part separately via Y_F + Y_phi = Y_f.",
+  "Relation: delta Z_f + delta Z_(g_r) + 1/2 delta Z_(A_r) = -z_(f r)/(16 pi^2 eps); with g0_FF delta Z_f = -(C_f + Y_f)/(16 pi^2 eps): delta Z_(g_r) + 1/2 delta Z_(A_r) = -C_ad^((r))/(16 pi^2 eps), f-independent, zero for B; to be confronted with g0_VV (delta Z_A) and g0_VVV (delta Z_g + 3/2 delta Z_A) at assembly.",
+  "Literature (targets 2.1, BIMS (5.10),(5.16), LP): vertex coefficient Tg^bTg^aTg^b + 3/2 C_ad Tg^a + 1/2 Y_2 Tg^a = (C_f + C_ad + Y_2/2) Tg^a with Y_2/2 = Y_f for all five multiplets: agreement, no evanescent pole. QCD Feynman-gauge Z_1F = 1 - g_s^2(C_F+C_A)/(16 pi^2 eps) reproduced; standard SM delta Z_f values reproduced."
+ ],
+ "caveats": [
+  "Q^(f r)_V is continued to d dimensions as integral overline(Psi)_f gbar^mu Am^((r))_mu P_c Psi_f (barred gamma and A, as the tree vertex).",
+  "The report subsection uses the symbol cal(Y)_f (same as in g0_FF) for the Yukawa coefficient the deriver called kappa_f."
+ ]
+}

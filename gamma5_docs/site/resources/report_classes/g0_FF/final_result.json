@@ -1,0 +1,299 @@
+{
+ "class": "g0_FF",
+ "role": "referee",
+ "diagrams": [
+  {
+   "id": "Q-VG",
+   "topology": "(a) gauge exchange",
+   "fields": "Psi_Q line, G propagator (all generators of factor G)",
+   "symmetry_factor": "1",
+   "sign": "+1 (open fermion line); vertex/propagator prefactor i*i*i*(-i) = -1 in the integrand",
+   "multiplicity_note": "group factor sum over factor G of Tg^a_Q Tg^a_Q = 4/3 g_s^2 times 1"
+  },
+  {
+   "id": "Q-VW",
+   "topology": "(a) gauge exchange",
+   "fields": "Psi_Q line, W propagator (all generators of factor W)",
+   "symmetry_factor": "1",
+   "sign": "+1 (open fermion line); vertex/propagator prefactor i*i*i*(-i) = -1 in the integrand",
+   "multiplicity_note": "group factor sum over factor W of Tg^a_Q Tg^a_Q = 3/4 g^2 times 1"
+  },
+  {
+   "id": "Q-VB",
+   "topology": "(a) gauge exchange",
+   "fields": "Psi_Q line, B propagator (all generators of factor B)",
+   "symmetry_factor": "1",
+   "sign": "+1 (open fermion line); vertex/propagator prefactor i*i*i*(-i) = -1 in the integrand",
+   "multiplicity_note": "group factor sum over factor B of Tg^a_Q Tg^a_Q = 1/36 g'^2 times 1"
+  },
+  {
+   "id": "Q-SU",
+   "topology": "(b) Higgs exchange",
+   "fields": "Psi_U (physical chirality), H",
+   "symmetry_factor": "1",
+   "sign": "+1; prefactor (-i)(i)(-i)(i) = +1",
+   "multiplicity_note": "Yukawa/SU(2) factor = 2 x (y_u^2/2) (contributes half of it to N_0)"
+  },
+  {
+   "id": "Q-SD",
+   "topology": "(b) Higgs exchange",
+   "fields": "Psi_D (physical chirality), H",
+   "symmetry_factor": "1",
+   "sign": "+1; prefactor (-i)(i)(-i)(i) = +1",
+   "multiplicity_note": "Yukawa/SU(2) factor = 2 x (y_d^2/2) (contributes half of it to N_0)"
+  },
+  {
+   "id": "U-VG",
+   "topology": "(a) gauge exchange",
+   "fields": "Psi_U line, G propagator (all generators of factor G)",
+   "symmetry_factor": "1",
+   "sign": "+1 (open fermion line); vertex/propagator prefactor i*i*i*(-i) = -1 in the integrand",
+   "multiplicity_note": "group factor sum over factor G of Tg^a_U Tg^a_U = 4/3 g_s^2 times 1"
+  },
+  {
+   "id": "U-VB",
+   "topology": "(a) gauge exchange",
+   "fields": "Psi_U line, B propagator (all generators of factor B)",
+   "symmetry_factor": "1",
+   "sign": "+1 (open fermion line); vertex/propagator prefactor i*i*i*(-i) = -1 in the integrand",
+   "multiplicity_note": "group factor sum over factor B of Tg^a_U Tg^a_U = 4/9 g'^2 times 1"
+  },
+  {
+   "id": "U-SQ",
+   "topology": "(b) Higgs exchange",
+   "fields": "Psi_Q (physical chirality), H",
+   "symmetry_factor": "1",
+   "sign": "+1; prefactor (-i)(i)(-i)(i) = +1",
+   "multiplicity_note": "Yukawa/SU(2) factor = 2 x (y_u^2) (contributes half of it to N_0)"
+  },
+  {
+   "id": "D-VG",
+   "topology": "(a) gauge exchange",
+   "fields": "Psi_D line, G propagator (all generators of factor G)",
+   "symmetry_factor": "1",
+   "sign": "+1 (open fermion line); vertex/propagator prefactor i*i*i*(-i) = -1 in the integrand",
+   "multiplicity_note": "group factor sum over factor G of Tg^a_D Tg^a_D = 4/3 g_s^2 times 1"
+  },
+  {
+   "id": "D-VB",
+   "topology": "(a) gauge exchange",
+   "fields": "Psi_D line, B propagator (all generators of factor B)",
+   "symmetry_factor": "1",
+   "sign": "+1 (open fermion line); vertex/propagator prefactor i*i*i*(-i) = -1 in the integrand",
+   "multiplicity_note": "group factor sum over factor B of Tg^a_D Tg^a_D = 1/9 g'^2 times 1"
+  },
+  {
+   "id": "D-SQ",
+   "topology": "(b) Higgs exchange",
+   "fields": "Psi_Q (physical chirality), H",
+   "symmetry_factor": "1",
+   "sign": "+1; prefactor (-i)(i)(-i)(i) = +1",
+   "multiplicity_note": "Yukawa/SU(2) factor = 2 x (y_d^2) (contributes half of it to N_0)"
+  },
+  {
+   "id": "L-VW",
+   "topology": "(a) gauge exchange",
+   "fields": "Psi_L line, W propagator (all generators of factor W)",
+   "symmetry_factor": "1",
+   "sign": "+1 (open fermion line); vertex/propagator prefactor i*i*i*(-i) = -1 in the integrand",
+   "multiplicity_note": "group factor sum over factor W of Tg^a_L Tg^a_L = 3/4 g^2 times 1"
+  },
+  {
+   "id": "L-VB",
+   "topology": "(a) gauge exchange",
+   "fields": "Psi_L line, B propagator (all generators of factor B)",
+   "symmetry_factor": "1",
+   "sign": "+1 (open fermion line); vertex/propagator prefactor i*i*i*(-i) = -1 in the integrand",
+   "multiplicity_note": "group factor sum over factor B of Tg^a_L Tg^a_L = 1/4 g'^2 times 1"
+  },
+  {
+   "id": "L-SE",
+   "topology": "(b) Higgs exchange",
+   "fields": "Psi_E (physical chirality), H",
+   "symmetry_factor": "1",
+   "sign": "+1; prefactor (-i)(i)(-i)(i) = +1",
+   "multiplicity_note": "Yukawa/SU(2) factor = 2 x (y_e^2/2) (contributes half of it to N_0)"
+  },
+  {
+   "id": "E-VB",
+   "topology": "(a) gauge exchange",
+   "fields": "Psi_E line, B propagator (all generators of factor B)",
+   "symmetry_factor": "1",
+   "sign": "+1 (open fermion line); vertex/propagator prefactor i*i*i*(-i) = -1 in the integrand",
+   "multiplicity_note": "group factor sum over factor B of Tg^a_E Tg^a_E = g'^2 times 1"
+  },
+  {
+   "id": "E-SL",
+   "topology": "(b) Higgs exchange",
+   "fields": "Psi_L (physical chirality), H",
+   "symmetry_factor": "1",
+   "sign": "+1; prefactor (-i)(i)(-i)(i) = +1",
+   "multiplicity_note": "Yukawa/SU(2) factor = 2 x (y_e^2) (contributes half of it to N_0)"
+  }
+ ],
+ "functions": [
+  {
+   "externals": "overline(Psi)_Q(-p) Psi_Q(p), physical components, p d-dimensional",
+   "pole_vertex_function": [
+    {
+     "structure": "slb(p) P_upright(L) (identity in colour x SU(2)_L)",
+     "coefficient": "4/3 g_s^2 + 3/4 g^2 + 1/36 g'^2 + (y_u^2 + y_d^2)/2"
+    },
+    {
+     "structure": "evanescent structures (slh(p), hat(p)^2 slb(p)/..., any)",
+     "coefficient": "0"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "gauge G": "(4/3 g_s^2) slb(p) P_upright(L)",
+    "gauge W": "(3/4 g^2) slb(p) P_upright(L)",
+    "gauge B": "(1/36 g'^2) slb(p) P_upright(L)",
+    "Higgs, internal U": "(y_u^2/2) slb(p) P_upright(L)",
+    "Higgs, internal D": "(y_d^2/2) slb(p) P_upright(L)",
+    "N_1": "0 (not used at ghost number 0; no hatted object in the numerators)"
+   }
+  },
+  {
+   "externals": "overline(Psi)_U(-p) Psi_U(p), physical components, p d-dimensional",
+   "pole_vertex_function": [
+    {
+     "structure": "slb(p) P_upright(R) (identity in colour x SU(2)_L)",
+     "coefficient": "4/3 g_s^2 + 4/9 g'^2 + y_u^2"
+    },
+    {
+     "structure": "evanescent structures (slh(p), hat(p)^2 slb(p)/..., any)",
+     "coefficient": "0"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "gauge G": "(4/3 g_s^2) slb(p) P_upright(R)",
+    "gauge B": "(4/9 g'^2) slb(p) P_upright(R)",
+    "Higgs, internal Q": "(y_u^2) slb(p) P_upright(R)",
+    "N_1": "0 (not used at ghost number 0; no hatted object in the numerators)"
+   }
+  },
+  {
+   "externals": "overline(Psi)_D(-p) Psi_D(p), physical components, p d-dimensional",
+   "pole_vertex_function": [
+    {
+     "structure": "slb(p) P_upright(R) (identity in colour x SU(2)_L)",
+     "coefficient": "4/3 g_s^2 + 1/9 g'^2 + y_d^2"
+    },
+    {
+     "structure": "evanescent structures (slh(p), hat(p)^2 slb(p)/..., any)",
+     "coefficient": "0"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "gauge G": "(4/3 g_s^2) slb(p) P_upright(R)",
+    "gauge B": "(1/9 g'^2) slb(p) P_upright(R)",
+    "Higgs, internal Q": "(y_d^2) slb(p) P_upright(R)",
+    "N_1": "0 (not used at ghost number 0; no hatted object in the numerators)"
+   }
+  },
+  {
+   "externals": "overline(Psi)_L(-p) Psi_L(p), physical components, p d-dimensional",
+   "pole_vertex_function": [
+    {
+     "structure": "slb(p) P_upright(L) (identity in colour x SU(2)_L)",
+     "coefficient": "3/4 g^2 + 1/4 g'^2 + y_e^2/2"
+    },
+    {
+     "structure": "evanescent structures (slh(p), hat(p)^2 slb(p)/..., any)",
+     "coefficient": "0"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "gauge W": "(3/4 g^2) slb(p) P_upright(L)",
+    "gauge B": "(1/4 g'^2) slb(p) P_upright(L)",
+    "Higgs, internal E": "(y_e^2/2) slb(p) P_upright(L)",
+    "N_1": "0 (not used at ghost number 0; no hatted object in the numerators)"
+   }
+  },
+  {
+   "externals": "overline(Psi)_E(-p) Psi_E(p), physical components, p d-dimensional",
+   "pole_vertex_function": [
+    {
+     "structure": "slb(p) P_upright(R) (identity in colour x SU(2)_L)",
+     "coefficient": "g'^2 + y_e^2"
+    },
+    {
+     "structure": "evanescent structures (slh(p), hat(p)^2 slb(p)/..., any)",
+     "coefficient": "0"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "gauge B": "(g'^2) slb(p) P_upright(R)",
+    "Higgs, internal L": "(y_e^2) slb(p) P_upright(R)",
+    "N_1": "0 (not used at ghost number 0; no hatted object in the numerators)"
+   }
+  },
+  {
+   "externals": "any function with an external sterile component chi_f or overline(chi)_f",
+   "pole_vertex_function": [
+    {
+     "structure": "none",
+     "coefficient": "0 (no one-loop diagram: every vertex of S_0 except Delta_1 contains only P_c Psi_f and overline(Psi)_f P_cbar, and P_c P_cbar = 0)"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {}
+  }
+ ],
+ "operators": [
+  {
+   "kind": "pole_counterterm",
+   "operator": "Q^Q_K = integral dif^d x overline(psi)_Q i gbar^mu partial_mu psi_Q (Q^f_K of tab:Qbasis continued with gbar, bar(partial))",
+   "coefficient": "-(1/(16 pi^2 eps)) (4/3 g_s^2 + 3/4 g^2 + 1/36 g'^2 + (y_u^2 + y_d^2)/2)",
+   "sm_values": "delta Z_Q = -(4/3 g_s^2 + 3/4 g^2 + 1/36 g'^2 + (y_u^2 + y_d^2)/2)/(16 pi^2 eps), Feynman gauge; gauge part per factor: G: 4/3 g_s^2, W: 3/4 g^2, B: 1/36 g'^2; Yukawa part: internal U: y_u^2/2, internal D: y_d^2/2"
+  },
+  {
+   "kind": "pole_counterterm",
+   "operator": "Q^U_K = integral dif^d x overline(psi)_U i gbar^mu partial_mu psi_U (Q^f_K of tab:Qbasis continued with gbar, bar(partial))",
+   "coefficient": "-(1/(16 pi^2 eps)) (4/3 g_s^2 + 4/9 g'^2 + y_u^2)",
+   "sm_values": "delta Z_U = -(4/3 g_s^2 + 4/9 g'^2 + y_u^2)/(16 pi^2 eps), Feynman gauge; gauge part per factor: G: 4/3 g_s^2, B: 4/9 g'^2; Yukawa part: internal Q: y_u^2"
+  },
+  {
+   "kind": "pole_counterterm",
+   "operator": "Q^D_K = integral dif^d x overline(psi)_D i gbar^mu partial_mu psi_D (Q^f_K of tab:Qbasis continued with gbar, bar(partial))",
+   "coefficient": "-(1/(16 pi^2 eps)) (4/3 g_s^2 + 1/9 g'^2 + y_d^2)",
+   "sm_values": "delta Z_D = -(4/3 g_s^2 + 1/9 g'^2 + y_d^2)/(16 pi^2 eps), Feynman gauge; gauge part per factor: G: 4/3 g_s^2, B: 1/9 g'^2; Yukawa part: internal Q: y_d^2"
+  },
+  {
+   "kind": "pole_counterterm",
+   "operator": "Q^L_K = integral dif^d x overline(psi)_L i gbar^mu partial_mu psi_L (Q^f_K of tab:Qbasis continued with gbar, bar(partial))",
+   "coefficient": "-(1/(16 pi^2 eps)) (3/4 g^2 + 1/4 g'^2 + y_e^2/2)",
+   "sm_values": "delta Z_L = -(3/4 g^2 + 1/4 g'^2 + y_e^2/2)/(16 pi^2 eps), Feynman gauge; gauge part per factor: W: 3/4 g^2, B: 1/4 g'^2; Yukawa part: internal E: y_e^2/2"
+  },
+  {
+   "kind": "pole_counterterm",
+   "operator": "Q^E_K = integral dif^d x overline(psi)_E i gbar^mu partial_mu psi_E (Q^f_K of tab:Qbasis continued with gbar, bar(partial))",
+   "coefficient": "-(1/(16 pi^2 eps)) (g'^2 + y_e^2)",
+   "sm_values": "delta Z_E = -(g'^2 + y_e^2)/(16 pi^2 eps), Feynman gauge; gauge part per factor: B: g'^2; Yukawa part: internal L: y_e^2"
+  },
+  {
+   "kind": "evanescent_counterterm",
+   "operator": "none",
+   "coefficient": "0",
+   "sm_values": "0 for all f"
+  }
+ ],
+ "checks": [
+  "deriver (hand) and checker (bmhvkit uv_pole + explicit matrices at d=6,8 with hatted external p) agree coefficient by coefficient, per topology and in total, for all five multiplets",
+  "referee re-derived both integrands by hand: prefactors -1 (gauge) and +1 (Higgs), gbar^mu slb(k) gbar_mu = -2 slb(k), PR sl(k) PL = slb(k) PL, T^(1) -> (2/d) slb(p) int k^2/(k^2-M^2)^3 -> (1/2) slb(p) i/(16 pi^2 eps); SU(2) factors eps.eps = delta (Q,L partners) and 2 (U,D,E)",
+  "referee re-ran check_g0_FF.py: all assertions pass",
+  "diagram list: 16 multiplet-level diagrams (10 gauge, 6 Higgs) = ENUMERATION.md (Q 3+2, U 2+1, D 2+1, L 2+1, E 1+1)",
+  "targets_in_our_conventions.md: Gamma_div = kappa (C_f + Y_2(f)/2) pbar-slash P_c and delta Z_f = -kappa [C_f + Y_2(f)/2] with Y_2(Q)=y_u^2+y_d^2, Y_2(U)=2y_u^2, Y_2(D)=2y_d^2, Y_2(L)=y_e^2, Y_2(E)=2y_e^2: identical to our result (cal(Y)_f = Y_2(f)/2)",
+  "no M or m^2 dependence; no evanescent pole (P_cbar slh(p) P_c = 0); typst subsection compiles (3 pages), layout inspected"
+ ],
+ "caveats": [
+  "delta Z_f is the coefficient of Q^f_K in delta S^(1), Feynman gauge (gauge part is xi-dependent in general)",
+  "cal(Y)_f is a symbol local to the subsection (cal(Y)_f = Y_2(f)/2 of the targets file)",
+  "Q^f_K is used in its d-dimensional continuation with gbar and bar(partial); only the physical chiral block is renormalised"
+ ]
+}

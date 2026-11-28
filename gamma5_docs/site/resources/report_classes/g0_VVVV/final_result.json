@@ -1,0 +1,243 @@
+{
+ "class": "g0_VVVV",
+ "diagrams": [
+  {
+   "id": "a",
+   "topology": "fermion box",
+   "fields": "Psi_f, f in {Q,U,D,L,E}; four vertices i gbar^mu P_c T^a",
+   "symmetry_factor": "1",
+   "sign": "-1 (fermion loop)",
+   "multiplicity_note": "6 oriented orderings (cyclic words w) per multiplet; group factor Tr_f[T^(w)]; E contributes only to BBBB"
+  },
+  {
+   "id": "b",
+   "topology": "Higgs box",
+   "fields": "H; four H^dag H A vertices",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "6 oriented orderings; Tr_H[T^(w)]; W and B legs only"
+  },
+  {
+   "id": "c",
+   "topology": "Higgs triangle with one seagull",
+   "fields": "H; one H^dag H A A, two H^dag H A",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "12 = 6 pairs on the seagull x 2 orientations; Tr_H[{T^i,T^j} T^k T^l]"
+  },
+  {
+   "id": "d",
+   "topology": "Higgs bubble with two seagulls",
+   "fields": "H; two H^dag H A A",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "3 pairings; Tr_H[{T^i,T^j}{T^k,T^l}]"
+  },
+  {
+   "id": "e",
+   "topology": "gauge box",
+   "fields": "A^x of the same non-abelian factor (G or W); four AAA vertices",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "3 diagrams = 1/2 x 6 oriented words; Tr_adj[T^(w)] with (T_adj^a)_{xy} = -i fg^{axy}"
+  },
+  {
+   "id": "f",
+   "topology": "gauge triangle with one four-gauge vertex",
+   "fields": "A^x; one AAAA, two AAA",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "6 diagrams (pair on the AAAA vertex) = 1/2 x 12 oriented"
+  },
+  {
+   "id": "g",
+   "topology": "gauge bubble with two four-gauge vertices",
+   "fields": "A^x; two AAAA",
+   "symmetry_factor": "1/2",
+   "sign": "+1",
+   "multiplicity_note": "3 pairings"
+  },
+  {
+   "id": "h",
+   "topology": "ghost box",
+   "fields": "omega^x, omegabar^x of G or W",
+   "symmetry_factor": "1",
+   "sign": "-1 (ghost loop)",
+   "multiplicity_note": "6 oriented words"
+  }
+ ],
+ "functions": [
+  {
+   "externals": "A^a_mu(0) A^b_nu(0) A^c_rho(0) A^d_sigma(0), all twelve gauge fields (general form)",
+   "pole_vertex_function": [
+    {
+     "structure": "sum_(w in cal(W)) sum_f Tr_f[Tg^((w))] (overline(cal(G))_adj[w] - 2 overline(cal(G))_opp[w])",
+     "coefficient": "-2/3"
+    },
+    {
+     "structure": "sum_(w in cal(W)) (Tr_H[Tg^((w))] + Tr_adj[Tg^((w))]) (cal(G)_adj[w] - 2 cal(G)_opp[w])",
+     "coefficient": "-1/3"
+    },
+    {
+     "structure": "equivalently sum_(r=G,W) [kappa_F^((r)) overline(Gamma)^((0,r))_(A A A A) + kappa_B^((r)) Gamma^((0,r))_(A A A A)] (tree vertex function eq:V-vvvv / i restricted to factor r; bar: four-dimensional metrics)",
+     "coefficient": "kappa_F^(r) = 2/3 sum_f S_f^(r); kappa_B^(r) = 1/3 (S_H^(r) + C_ad^(r))"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "a fermion box (each multiplet, L or R identical, gamma5 part 0 per word)": "x=-2/3, y=4/3 (barred metrics) -> 1/6 Tr_f([Abar_mu,Abar_nu][Abar^mu,Abar^nu])",
+    "b Higgs box": "x=2/3, y=2/3",
+    "c Higgs triangle": "x=-2, y=0",
+    "d Higgs bubble": "x=1, y=0",
+    "Higgs sum": "x=-1/3, y=2/3 -> 1/12 Tr_H([A,A]^2) = 1/3 S_H^(W) L4^(W)[A] (+0 for B)",
+    "e gauge box": "x=47/24, y=17/24",
+    "f gauge triangle": "x=-23/4, y=4",
+    "g gauge bubble": "x=7/2, y=-4",
+    "h ghost box": "x=-1/24, y=-1/24",
+    "gauge+ghost sum": "x=-1/3, y=2/3 -> 1/3 C_ad^(r) L4^(r)[A]",
+    "units": "per word w: x Gadj[w] + y Gopp[w], Gadj = g^{w1w2}g^{w3w4}+g^{w1w4}g^{w2w3}, Gopp = g^{w1w3}g^{w2w4}"
+   }
+  },
+  {
+   "externals": "G G G G (factor G)",
+   "pole_vertex_function": [
+    {
+     "structure": "Gamma^((0,G))_(A A A A) (d-dim metrics)",
+     "coefficient": "C_ad^(G)/3 = g_s^2 (gauge+ghost)"
+    },
+    {
+     "structure": "overline(Gamma)^((0,G))_(A A A A) (four-dim metrics)",
+     "coefficient": "2/3 (S_Q+S_U+S_D)^(G) = 4/3 g_s^2 (quarks: Q 2/3, U 1/3, D 1/3)"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "fermions (Q_G4a,Q_G4b,Q_G4c)": "(-1/6, 1/3, -1/2) [Q (-1/12,1/6,-1/4), U and D (-1/24,1/12,-1/8) each]",
+    "e": "(131/128, 91/64, 15/32)",
+    "f": "(-21/8, -3/8, -117/32)",
+    "g": "(3/2, -3/4, 45/16)",
+    "h": "(-3/128, -3/64, 0)",
+    "gauge+ghost": "(-1/8, 1/4, -3/8)",
+    "total": "(-7/24, 7/12, -7/8) = 7/3 g_s^2 cal(Q)^(G)_YM"
+   }
+  },
+  {
+   "externals": "W W W W (factor W)",
+   "pole_vertex_function": [
+    {
+     "structure": "Gamma^((0,W))_(A A A A) (d-dim metrics)",
+     "coefficient": "(C_ad^(W)+S_H^(W))/3 = 5/6 g^2 (gauge+ghost 2/3 g^2, Higgs 1/6 g^2)"
+    },
+    {
+     "structure": "overline(Gamma)^((0,W))_(A A A A)",
+     "coefficient": "2/3 (S_Q+S_L)^(W) = 4/3 g^2 (Q 1, L 1/3)"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "fermions (Q_W4a,Q_W4b)": "(-1/3, 1/3) [Q (-1/4,1/4), L (-1/12,1/12)]",
+    "b": "(1/48, 1/24)",
+    "c": "(-1/8, 0)",
+    "d": "(1/16, 0)",
+    "e": "(47/48, 4/3)",
+    "f": "(-23/8, -7/8)",
+    "g": "(7/4, -1/4)",
+    "h": "(-1/48, -1/24)",
+    "total": "(-13/24, 13/24) = 13/6 g^2 cal(Q)^(W)_YM"
+   }
+  },
+  {
+   "externals": "B B B B",
+   "pole_vertex_function": [
+    {
+     "structure": "Q_B4",
+     "coefficient": "0"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "fermions": "0 per multiplet after the 6 orderings",
+    "Higgs b, c, d": "Q_B4: 1/16, -1/8, 1/16; sum 0"
+   }
+  },
+  {
+   "externals": "W W B B",
+   "pole_vertex_function": [
+    {
+     "structure": "Q^((WB))_a, Q^((WB))_b",
+     "coefficient": "0"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "fermions Q, L": "0",
+    "Higgs b, c, d": "(1/8,1/4), (-1/4,-1/2), (1/8,1/4); sum 0"
+   }
+  },
+  {
+   "externals": "G G G B, G G W W, G G B B, W W W B",
+   "pole_vertex_function": [
+    {
+     "structure": "Q_GGGB, Q^((G))_(4 eps), Q^((GW))_(a,b), Q^((GB))_(a,b), Q^((W))_(4 eps)",
+     "coefficient": "0"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "fermion boxes": "0 per multiplet (commutator form; Tr(T^E)Tr(tau^K) = 0; eps part 0 per word)",
+    "Higgs (WWWB)": "0"
+   }
+  },
+  {
+   "externals": "G G G W, G W W W, G B B B, W B B B, G G W B, G W W B, G W B B",
+   "pole_vertex_function": [
+    {
+     "structure": "all",
+     "coefficient": "0 diagram by diagram (single traceless generator of a factor)"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {}
+  }
+ ],
+ "operators": [
+  {
+   "kind": "pole_counterterm",
+   "operator": "cal(Q)^((r))_\"YM\" of eq:QYM (barred fields, integrated over d^d x), r = G, W",
+   "coefficient": "delta S^((1)) contains (1/(16 pi^2 eps)) delta z_4^((r)) cal(Q)^((r))_YM, delta z_4^((r)) = -kappa^((r)) = -2/3 sum_f S_f^((r)) - 1/3 S_H^((r)) - 1/3 C_ad^((r))",
+   "sm_values": "G: delta z_4 = -7/3 g_s^2, i.e. delta S contains -(1/(16 pi^2 eps)) int [-7/24 Q_G4a + 7/12 Q_G4b - 7/8 Q_G4c]; W: delta z_4 = -13/6 g^2, delta S contains -(1/(16 pi^2 eps)) int [-13/24 Q_W4a + 13/24 Q_W4b]"
+  },
+  {
+   "kind": "pole_counterterm",
+   "operator": "Q_B4, Q^((rs))_(a,b) (rs = GW, GB, WB), Q_GGGB, Q^((r))_(4 eps)",
+   "coefficient": "0",
+   "sm_values": "0"
+  },
+  {
+   "kind": "evanescent_counterterm",
+   "operator": "tilde(E)^((r))_F |_(A A A A) = int d^d x (L4^((r))[bar(A)] - L4^((r))[A]), L4^((r))[A] = -1/4 fg^(a b e) fg^(c d e) (A^a dot A^c)(A^b dot A^d)",
+   "coefficient": "+(1/(16 pi^2 eps)) kappa_B^((r)), kappa_B^((r)) = 1/3 (S_H^((r)) + C_ad^((r)))  [with the barred continuation of cal(Q)_YM]",
+   "sm_values": "G: +g_s^2/(16 pi^2 eps); W: +5/6 g^2/(16 pi^2 eps); B: none"
+  },
+  {
+   "kind": "evanescent_counterterm",
+   "operator": "same functional, alternative split: delta S contains -(1/(16 pi^2 eps)) [kappa^((r)) int d^d x L4^((r))[A] + kappa_F^((r)) tilde(E)^((r))_F |_(A A A A)] (d-dimensional continuation of cal(Q)_YM)",
+   "coefficient": "kappa_F^((r)) = 2/3 sum_f S_f^((r)) as coefficient of -(1/(16 pi^2 eps)) tilde(E)_F",
+   "sm_values": "G: 4/3 g_s^2; W: 4/3 g^2; uniform with the 2- and 3-point classes (g0_VV, g0_VVV)"
+  }
+ ],
+ "checks": [
+  "Two independent calculations (deriver: hand + own index script; checker: toolkit uv_pole + explicit-matrix script + exact group fit) agree on every per-topology coefficient and every gauge-factor combination.",
+  "Referee re-evaluation with own scripts (referee_check_bosonic.py, referee_check_fermion.py): per-word (x,y) of all eight topologies reproduced exactly; fermion box with explicit Dirac matrices: (-2/3, 4/3) for P_L and P_R, no epsilon structure.",
+  "Each species sums to commutator form (x = -y/2): B and mixed functions vanish; physical pole is kappa^(r) times the invariant quartic YM term.",
+  "Slavnov-Taylor: delta z_4 = 2 delta z_1 - delta z_A with the actual results of g0_VV (delta z_A = 5/3 C_ad - 1/3 S_H - 2/3 S_F) and g0_VVV (delta z_1 = 2/3 C_ad - 1/3 S_H - 2/3 S_F): G -7/3 g_s^2, W -13/6 g^2.",
+  "Textbook QCD Z_4 at xi = 1: Z_4 - 1 = -(g_s^2/16 pi^2 eps)(C_A/3 + 4/3 T_F n_f) with n_f = 2 Dirac: 7/3 g_s^2.",
+  "Literature (targets 2.1, BIMS 2004.14398 at xi = 1): Gamma_div contains 1/3 C_ad S_AAAA (d-dim) - 1/12 Tr_H(FF) (d-dim) - 1/6 sum_f Tr_f(Fbar Fbar): quartic parts agree exactly, including barred vs d-dimensional.",
+  "Diagram counts agree with ENUMERATION.md (GGGG 42, WWWW 517 component diagrams; multiplet-level topologies per assignment).",
+  "M independence, m^2 drops out (omega = 0), N_1 = 0."
+ ],
+ "caveats": [
+  "Only zero external momenta (as specified; the pole has no momentum dependence at dimension 0).",
+  "Bosonic Feynman-rule transcription in the checker is shared between its two scripts; the deriver's and referee's transcriptions are independent of it."
+ ]
+}

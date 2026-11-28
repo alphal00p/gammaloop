@@ -1,0 +1,57 @@
+{
+ "class": "g0_SS",
+ "diagrams": [
+  {"id": "a_d", "topology": "fermion loop (Yukawa bubble)", "fields": "Q, D (H_j vertex Qbar D H_j: -i y_d PR; H^dagger_i vertex Dbar Q H^dagger_i: -i y_d PL)", "symmetry_factor": "1", "sign": "-1 (closed fermion loop)", "multiplicity_note": "colour 3, SU(2) delta_li delta_lj = delta_ij; group factor 3 y_d^2 delta_ij"},
+  {"id": "a_e", "topology": "fermion loop (Yukawa bubble)", "fields": "L, E (vertices -i y_e PR, -i y_e PL)", "symmetry_factor": "1", "sign": "-1 (closed fermion loop)", "multiplicity_note": "colour 1; group factor y_e^2 delta_ij"},
+  {"id": "a_u", "topology": "fermion loop (Yukawa bubble)", "fields": "Q, U (H_j vertex Ubar Q H_j: -i y_u eps PL; H^dagger_i vertex Qbar U H^dagger_i: -i y_u eps PR)", "symmetry_factor": "1", "sign": "-1 (closed fermion loop)", "multiplicity_note": "colour 3, eps_li eps_lj = delta_ij; group factor 3 y_u^2 delta_ij"},
+  {"id": "b_W", "topology": "gauge-Higgs bubble", "fields": "H, W^I", "symmetry_factor": "1", "sign": "+1", "multiplicity_note": "(T^I_H T^I_H)_ij = 3/4 g^2 delta_ij"},
+  {"id": "b_B", "topology": "gauge-Higgs bubble", "fields": "H, B", "symmetry_factor": "1", "sign": "+1", "multiplicity_note": "(T^B_H)^2 = g'^2/4 delta_ij"},
+  {"id": "c_W", "topology": "gauge tadpole from the seagull H^dagger H A A", "fields": "W^I", "symmetry_factor": "1/2", "sign": "+1", "multiplicity_note": "{T^I_H, T^I_H}_ij = 3/2 g^2 delta_ij; scaleless, N_0 = 0"},
+  {"id": "c_B", "topology": "gauge tadpole from the seagull H^dagger H A A", "fields": "B", "symmetry_factor": "1/2", "sign": "+1", "multiplicity_note": "{T^B_H, T^B_H}_ij = g'^2/2 delta_ij; scaleless, N_0 = 0"},
+  {"id": "d", "topology": "quartic scalar tadpole", "fields": "H", "symmetry_factor": "1 (vertex eq:V-ssss is the full fourfold derivative; oriented charged loop)", "sign": "+1", "multiplicity_note": "(delta_ij delta_kl + delta_il delta_kj) delta_lk = 3 delta_ij"}
+ ],
+ "functions": [
+  {
+   "externals": "H^dagger_i(-p) H_j(p), all momenta incoming (H_j enters with p, H^dagger_i leaves with p); tree vertex function (p^2 - m^2) delta_ij; no gluon contribution",
+   "pole_vertex_function": [
+    {"structure": "overline(p)^2 delta_(i j)", "coefficient": "3*y_u^2 + 3*y_d^2 + y_e^2"},
+    {"structure": "hat(p)^2 delta_(i j)", "coefficient": "(2/3)*(3*y_u^2 + 3*y_d^2 + y_e^2)"},
+    {"structure": "p^2 delta_(i j) (d-dimensional p^2)", "coefficient": "-2*C_H = -(3/2)*g^2 - (1/2)*g'^2"},
+    {"structure": "m^2 delta_(i j)", "coefficient": "6*lambda - C_H = 6*lambda - (3/4)*g^2 - (1/4)*g'^2"}
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "a (Q-D, y_d)": "3 y_d^2 (pbar^2 + 2/3 phat^2) delta_ij",
+    "a (L-E, y_e)": "y_e^2 (pbar^2 + 2/3 phat^2) delta_ij",
+    "a (Q-U, y_u)": "3 y_u^2 (pbar^2 + 2/3 phat^2) delta_ij",
+    "b (W)": "-(3/4) g^2 (2 p^2 + m^2) delta_ij",
+    "b (B)": "-(1/4) g'^2 (2 p^2 + m^2) delta_ij",
+    "c (W, B)": "0",
+    "d": "6 lambda m^2 delta_ij",
+    "N_1": "0 in every diagram (no closed hatted contraction)"
+   }
+  }
+ ],
+ "operators": [
+  {"kind": "pole_counterterm", "operator": "Q_(S S) = integral dif^d x (partial_mu H)^dagger partial^mu H (d-dimensional continuation, as in S_0; its covariant completion (D H)^dagger D H is fixed in g0_SSV_SSVV)", "coefficient": "-(1/(16 pi^2 eps))*(Ycal - 2*C_H), Ycal = 3 y_u^2 + 3 y_d^2 + y_e^2, C_H = 3/4 g^2 + 1/4 g'^2", "sm_values": "-(1/(16 pi^2 eps))*(3 y_u^2 + 3 y_d^2 + y_e^2 - (3/2) g^2 - (1/2) g'^2), i.e. delta Z_H = (3/2 g^2 + 1/2 g'^2 - 3 y_u^2 - 3 y_d^2 - y_e^2)/(16 pi^2 eps); W: +3/2 g^2, B: +1/2 g'^2, G: 0"},
+  {"kind": "evanescent_counterterm", "operator": "tilde(E)_H = integral dif^d x [(bar(D)_mu H)^dagger bar(D)^mu H - (D_mu H)^dagger D^mu H] (two-point part: vertex function -hat(p)^2)", "coefficient": "-(1/(16 pi^2 eps))*Ycal", "sm_values": "-(1/(16 pi^2 eps))*(3 y_u^2 + 3 y_d^2 + y_e^2); b_d-closed; the split against E_H is fixed by g0_SSV_SSVV (fermion-loop H^dagger H A pole has no hatted structure)"},
+  {"kind": "evanescent_counterterm", "operator": "E_H = integral dif^d x (hat(partial)_mu H)^dagger hat(partial)^mu H", "coefficient": "-(1/(16 pi^2 eps))*(2/3)*Ycal", "sm_values": "-(1/(16 pi^2 eps))*(2 y_u^2 + 2 y_d^2 + (2/3) y_e^2); not b_d-closed: fixes [(Delta_1.Gamma)^(1)_{omega H^dag H}]_div = +(2/3)(Ycal/(16 pi^2 eps)) b_d E_H"},
+  {"kind": "pole_counterterm", "operator": "m^2 Q_m = m^2 integral dif^d x H^dagger H", "coefficient": "-(1/(16 pi^2 eps))*(6*lambda - C_H)", "sm_values": "-(1/(16 pi^2 eps))*(6 lambda - (3/4) g^2 - (1/4) g'^2) m^2, i.e. delta m^2 = (6 lambda - 3/4 g^2 - 1/4 g'^2) m^2/(16 pi^2 eps) with delta S > -delta m^2 H^dag H"},
+  {"kind": "pole_counterterm", "operator": "monomial form (unambiguous, two-point part): -(1/(16 pi^2 eps)) integral dif^d x [ Ycal (bar(partial)_mu H)^dagger bar(partial)^mu H + (2/3) Ycal (hat(partial)_mu H)^dagger hat(partial)^mu H - 2 C_H (partial_mu H)^dagger partial^mu H + (6 lambda - C_H) m^2 H^dagger H ]", "coefficient": "as written", "sm_values": "Ycal = 3 y_u^2 + 3 y_d^2 + y_e^2; C_H = 3/4 g^2 (W) + 1/4 g'^2 (B)"}
+ ],
+ "checks": [
+  "Deriver (hand, T^(2) with auxiliary mass) and checker (toolkit uv_pole + own Feynman-parameter extractor) agree on N_0 for every diagram and in total.",
+  "Referee recomputation by Feynman parameters with split metrics: fermion bubble int 2 kbar.(kbar+pbar)/(k^2(k+p)^2) has pole (i/(16pi^2 eps)) (-pbar^2 - 2/3 phat^2); gauge bubble int (2p+k)^2/(k^2((k+p)^2-m^2)) has pole (i/(16pi^2 eps)) (2p^2 + m^2); quartic tadpole 6 lambda m^2; seagull scaleless.",
+  "Vertex rules, loop signs, symmetry factors and group factors re-derived (H_j/H^dag_i momentum routing, eps_li eps_lj = delta_ij, (delta delta + delta delta) delta = 3 delta).",
+  "M independence per topology (4-4, 2-2, 1-1, 1-1). N_1 = 0.",
+  "P N_0 = anticommuting-gamma5 result; m_0^2 = m^2[1 + (6 lambda + Ycal - 3 C_H)/(16 pi^2 eps)] gives 16 pi^2 dm^2/dln mu = m^2 (12 lambda + 2 Ycal - 9/2 g^2 - 3/2 g'^2) (targets section 3, Machacek-Vaughn).",
+  "delta Z_H = (2 C_H - Ycal)/(16 pi^2 eps) equals targets section 3; Gamma_div = kappa{-2C_H (DH)^dag DH + Ycal (Dbar H)^dag Dbar H + 2/3 Ycal (dhat H)^dag dhat H} two-point part equals targets section 2.1 (BIMS (5.9)).",
+  "Diagram list: 8 multiplet-level diagrams (26 component diagrams) as in ENUMERATION.md; no gluon, no ghost diagrams.",
+  "Evanescent split cross-check: with c(E_H) = -(2/3) Ycal/(16pi^2 eps) in delta S, -b_d delta S gives the vertex function (2/3) Ycal kappa i T^a_H (phat_Hdag^2 - phat_H^2), identical to the pole found by the g1_cSS_cSSV checker (check_cSS_output.json: (2i/3) Ycal (p2h^2 - p1h^2), p1 on H, p2 on H^dag)."
+ ],
+ "caveats": [
+  "Feynman gauge; delta Z_H and the -C_H m^2 term are gauge dependent, m_0^2 is not.",
+  "Q_SS and Q_m are four-dimensional monomials in 03b; here their d-dimensional continuations (as in S_0) are used, with the hatted parts carried by tilde(E)_H and E_H.",
+  "The two-point function alone fixes only c(E_H) - c(tilde(E)_H) = -(1/3) Ycal (Gamma units); the split c(tilde E_H) : c(E_H) = Ycal : (2/3) Ycal is taken from g0_SSV_SSVV (deriver result) and is confirmed by the g1_cSS_cSSV checker pole."
+ ]
+}

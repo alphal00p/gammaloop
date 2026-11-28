@@ -1,0 +1,545 @@
+{
+ "source": "report sources (Typst), heading numbering 1.1; pages of report/one_loop_gamma5.pdf",
+ "sections": {
+  "sec:intro": {
+   "number": "1",
+   "level": 1,
+   "title": "Introduction",
+   "page": 3
+  },
+  "sec:method": {
+   "number": "2",
+   "level": 1,
+   "title": "Systematics of the method",
+   "page": 5
+  },
+  "sec:m-objects": {
+   "number": "2.1",
+   "level": 2,
+   "title": "The objects",
+   "page": 5
+  },
+  "sec:m-dictionary": {
+   "number": "2.2",
+   "level": 2,
+   "title": "The dictionary",
+   "page": 6
+  },
+  "sec:m-i": {
+   "number": "2.2.1",
+   "level": 3,
+   "title": "(i) The breaking vertex",
+   "page": 7
+  },
+  "sec:m-ii": {
+   "number": "2.2.2",
+   "level": 3,
+   "title": "(ii) The regularised action principle",
+   "page": 8
+  },
+  "sec:m-iii": {
+   "number": "2.2.3",
+   "level": 3,
+   "title": "(iii) The linearised operator on a counterterm",
+   "page": 9
+  },
+  "sec:m-K": {
+   "number": "2.2.4",
+   "level": 3,
+   "title": "(iv) Taylor operator, pole parts and the tag η",
+   "page": 10
+  },
+  "sec:m-v": {
+   "number": "2.2.5",
+   "level": 3,
+   "title": "(v) Physical projection and the limit",
+   "page": 11
+  },
+  "sec:m-vi": {
+   "number": "2.2.6",
+   "level": 3,
+   "title": "(vi) The insertion operator and the restoring condition at order l",
+   "page": 11
+  },
+  "sec:m-algorithm": {
+   "number": "2.3",
+   "level": 2,
+   "title": "The algorithm at loop order l",
+   "page": 12
+  },
+  "sec:m-oneloop": {
+   "number": "2.4",
+   "level": 2,
+   "title": "The one-loop limit",
+   "page": 13
+  },
+  "sec:m-beyond": {
+   "number": "2.5",
+   "level": 2,
+   "title": "Beyond one loop",
+   "page": 14
+  },
+  "sec:setup": {
+   "number": "3",
+   "level": 1,
+   "title": "Lagrangian, notation and Feynman rules",
+   "page": 19
+  },
+  "sec:bmhv": {
+   "number": "3.1",
+   "level": 2,
+   "title": "Dimensions and the BMHV algebra",
+   "page": 20
+  },
+  "sec:fields": {
+   "number": "3.2",
+   "level": 2,
+   "title": "Field content and multiplet notation",
+   "page": 21
+  },
+  "sec:action": {
+   "number": "3.3",
+   "level": 2,
+   "title": "The regularised tree-level action",
+   "page": 23
+  },
+  "sec:brst": {
+   "number": "3.4",
+   "level": 2,
+   "title": "BRST transformations and the Slavnov–Taylor operator",
+   "page": 24
+  },
+  "sec:delta": {
+   "number": "3.5",
+   "level": 2,
+   "title": "The tree-level breaking Δ₁",
+   "page": 26
+  },
+  "sec:feynman-rules": {
+   "number": "3.6",
+   "level": 2,
+   "title": "Feynman rules",
+   "page": 26
+  },
+  "sec:integrals": {
+   "number": "3.7",
+   "level": 2,
+   "title": "One-loop integrals and the expansion operator",
+   "page": 28
+  },
+  "sec:bases": {
+   "number": "3.8",
+   "level": 2,
+   "title": "Counterterm operators and the action of 𝐛",
+   "page": 29
+  },
+  "sec:st-signs": {
+   "number": "3.8.1",
+   "level": 3,
+   "title": "The operator 𝐛 on fields and sources",
+   "page": 29
+  },
+  "sec:dictionary": {
+   "number": "3.8.2",
+   "level": 3,
+   "title": "Diagrammatic form of 𝐛",
+   "page": 30
+  },
+  "sec:Qbasis": {
+   "number": "3.8.4",
+   "level": 3,
+   "title": "Basis Qα of the restoring counterterm",
+   "page": 31
+  },
+  "sec:closed": {
+   "number": "3.8.5",
+   "level": 3,
+   "title": "The invariant directions",
+   "page": 33
+  },
+  "sec:evanescent": {
+   "number": "3.8.6",
+   "level": 3,
+   "title": "Evanescent operators with one-loop poles",
+   "page": 34
+  },
+  "sec:Nbasis": {
+   "number": "3.8.7",
+   "level": 3,
+   "title": "Basis Nβ of the breaking",
+   "page": 35
+  },
+  "sec:btable": {
+   "number": "3.8.8",
+   "level": 3,
+   "title": "The action of 𝐛 on the basis",
+   "page": 37
+  },
+  "sec:normalisation": {
+   "number": "3.8.9",
+   "level": 3,
+   "title": "Normalisation conditions",
+   "page": 39
+  },
+  "sec:classes": {
+   "number": "4",
+   "level": 1,
+   "title": "Explicit one-loop calculations",
+   "page": 41
+  },
+  "sec:g0": {
+   "number": "4.1",
+   "level": 2,
+   "title": "Ghost number zero: divergent counterterms",
+   "page": 42
+  },
+  "sec:g0_VV": {
+   "number": "4.1.1",
+   "level": 3,
+   "title": "Gauge two-point functions AA",
+   "page": 43
+  },
+  "sec:g0_VVV": {
+   "number": "4.1.2",
+   "level": 3,
+   "title": "Gauge three-point functions AAA",
+   "page": 47
+  },
+  "sec:g0_VVVV": {
+   "number": "4.1.3",
+   "level": 3,
+   "title": "Gauge four-point functions AAAA",
+   "page": 53
+  },
+  "sec:g0_FF": {
+   "number": "4.1.4",
+   "level": 3,
+   "title": "Fermion two-point functions Ψ̄Ψ",
+   "page": 60
+  },
+  "sec:g0_FFV": {
+   "number": "4.1.5",
+   "level": 3,
+   "title": "Fermion–gauge vertices Ψ̄ΨA",
+   "page": 63
+  },
+  "sec:g0_SS": {
+   "number": "4.1.6",
+   "level": 3,
+   "title": "Higgs two-point function H†H",
+   "page": 67
+  },
+  "sec:g0_SSV_SSVV": {
+   "number": "4.1.7",
+   "level": 3,
+   "title": "Higgs–gauge functions H†HA and H†HAA",
+   "page": 71
+  },
+  "sec:g0_SSSS": {
+   "number": "4.1.8",
+   "level": 3,
+   "title": "Higgs four-point function (H†H)^2",
+   "page": 77
+  },
+  "sec:g0_FFS": {
+   "number": "4.1.9",
+   "level": 3,
+   "title": "Yukawa vertices Ψ̄ΨH",
+   "page": 83
+  },
+  "sec:g0_ghost_sources": {
+   "number": "4.1.10",
+   "level": 3,
+   "title": "Ghost and BRST-source functions",
+   "page": 87
+  },
+  "sec:g1": {
+   "number": "4.2",
+   "level": 2,
+   "title": "Ghost number one: insertions of the breaking",
+   "page": 92
+  },
+  "sec:g1_cV": {
+   "number": "4.2.1",
+   "level": 3,
+   "title": "Breaking of ωA",
+   "page": 92
+  },
+  "sec:g1_cVV": {
+   "number": "4.2.2",
+   "level": 3,
+   "title": "Breaking of ωAA and the anomaly",
+   "page": 96
+  },
+  "sec:g1_cVVV_cVVVV": {
+   "number": "4.2.3",
+   "level": 3,
+   "title": "Breaking of ωAAA and ωAAAA",
+   "page": 100
+  },
+  "sec:g1_cFF": {
+   "number": "4.2.4",
+   "level": 3,
+   "title": "Breaking of ωΨ̄Ψ",
+   "page": 105
+  },
+  "sec:g1_cFFV": {
+   "number": "4.2.5",
+   "level": 3,
+   "title": "Breaking of ωΨ̄ΨA",
+   "page": 109
+  },
+  "sec:g1_cSS_cSSV": {
+   "number": "4.2.6",
+   "level": 3,
+   "title": "Breaking of ωH†H, ωH†HA and higher",
+   "page": 114
+  },
+  "sec:g1_cFFS": {
+   "number": "4.2.7",
+   "level": 3,
+   "title": "Breaking of ωΨ̄ΨH",
+   "page": 119
+  },
+  "sec:g1_ccRF": {
+   "number": "4.2.8",
+   "level": 3,
+   "title": "Breaking with BRST sources: ωωR̄Ψ",
+   "page": 124
+  },
+  "sec:st-solution": {
+   "number": "4.3",
+   "level": 2,
+   "title": "Solution of the Slavnov–Taylor conditions",
+   "page": 129
+  },
+  "sec:st-dS": {
+   "number": "4.3.1",
+   "level": 3,
+   "title": "The singular counterterm δS⁽¹⁾",
+   "page": 130
+  },
+  "sec:st-poles": {
+   "number": "4.3.2",
+   "level": 3,
+   "title": "The pole identity",
+   "page": 132
+  },
+  "sec:st-X": {
+   "number": "4.3.3",
+   "level": 3,
+   "title": "The finite breaking X₁",
+   "page": 133
+  },
+  "sec:st-solve": {
+   "number": "4.3.4",
+   "level": 3,
+   "title": "Solving 𝐛ΔS⁽¹⁾_ST=-X₁",
+   "page": 135
+  },
+  "sec:st-result": {
+   "number": "4.3.5",
+   "level": 3,
+   "title": "Result",
+   "page": 141
+  },
+  "sec:st-lit": {
+   "number": "4.3.6",
+   "level": 3,
+   "title": "Comparison with the literature",
+   "page": 142
+  },
+  "sec:st-checks": {
+   "number": "4.3.7",
+   "level": 3,
+   "title": "Checks with complete finite parts",
+   "page": 143
+  },
+  "sec:conclusion": {
+   "number": "5",
+   "level": 1,
+   "title": "Conclusion",
+   "page": 146
+  },
+  "sec:Sren1": {
+   "number": "5.1",
+   "level": 2,
+   "title": "The renormalised action at one loop",
+   "page": 146
+  },
+  "sec:ct-rules": {
+   "number": "5.2",
+   "level": 2,
+   "title": "Feynman rules of the counterterms",
+   "page": 151
+  },
+  "cr-inv": {
+   "number": "5.2.1",
+   "level": 3,
+   "title": "Singular counterterm: invariant part",
+   "page": 151
+  },
+  "cr-ev": {
+   "number": "5.2.2",
+   "level": 3,
+   "title": "Singular counterterm: evanescent part",
+   "page": 152
+  },
+  "cr-fin": {
+   "number": "5.2.3",
+   "level": 3,
+   "title": "Finite counterterm",
+   "page": 153
+  },
+  "cr-model": {
+   "number": "5.2.4",
+   "level": 3,
+   "title": "The counterterm vertices as model input",
+   "page": 155
+  },
+  "sec:recipe": {
+   "number": "5.3",
+   "level": 2,
+   "title": "The recipe in brief",
+   "page": 156
+  },
+  "sec:Sren-broken": {
+   "number": "5.4",
+   "level": 2,
+   "title": "The renormalised action in the broken phase",
+   "page": 156
+  },
+  "sec:bl-statement": {
+   "number": "5.4.1",
+   "level": 3,
+   "title": "Statement",
+   "page": 156
+  },
+  "sec:bl-fields": {
+   "number": "5.4.2",
+   "level": 3,
+   "title": "Parameters and fields",
+   "page": 157
+  },
+  "sec:bl-tree": {
+   "number": "5.4.3",
+   "level": 3,
+   "title": "The tree action",
+   "page": 158
+  },
+  "sec:bl-dS": {
+   "number": "5.4.4",
+   "level": 3,
+   "title": "The divergent counterterm",
+   "page": 160
+  },
+  "sec:bl-ST": {
+   "number": "5.4.5",
+   "level": 3,
+   "title": "The finite restoring counterterm",
+   "page": 163
+  },
+  "sec:bl-massless": {
+   "number": "5.4.6",
+   "level": 3,
+   "title": "Check: the photon and the gluon stay massless",
+   "page": 166
+  },
+  "sec:bl-implications": {
+   "number": "5.4.7",
+   "level": 3,
+   "title": "What this implies and what it does not",
+   "page": 168
+  },
+  "sec:broken": {
+   "number": "5.5",
+   "level": 2,
+   "title": "Subtleties in going to the broken phase",
+   "page": 169
+  },
+  "sec:bp-shift": {
+   "number": "5.5.1",
+   "level": 3,
+   "title": "Why the shift needs no further loop input",
+   "page": 169
+  },
+  "sec:bp-fermion": {
+   "number": "5.5.2",
+   "level": 3,
+   "title": "Fermion masses with sterile partners",
+   "page": 169
+  },
+  "sec:bp-gauge": {
+   "number": "5.5.3",
+   "level": 3,
+   "title": "Choosing another gauge",
+   "page": 170
+  },
+  "sec:bp-tadpole": {
+   "number": "5.5.4",
+   "level": 3,
+   "title": "The vacuum value and tadpoles",
+   "page": 171
+  },
+  "sec:bp-cms": {
+   "number": "5.5.5",
+   "level": 3,
+   "title": "From MS-bar to the complex-mass scheme",
+   "page": 172
+  },
+  "sec:bp-needed": {
+   "number": "5.5.6",
+   "level": 3,
+   "title": "What is needed beyond this report",
+   "page": 173
+  },
+  "sec:automation": {
+   "number": "6",
+   "level": 1,
+   "title": "Towards automation",
+   "page": 174
+  },
+  "sec:auto-status-text": {
+   "number": "6.1",
+   "level": 2,
+   "title": "What was automated in this report",
+   "page": 174
+  },
+  "sec:auto-table": {
+   "number": "6.2",
+   "level": 2,
+   "title": "Status by step",
+   "page": 174
+  },
+  "sec:auto-missing": {
+   "number": "6.3",
+   "level": 2,
+   "title": "Missing ingredients",
+   "page": 175
+  },
+  "sec:auto-bugs": {
+   "number": "6.4",
+   "level": 2,
+   "title": "Bugs and inconsistencies found",
+   "page": 179
+  },
+  "sec:auto-generation": {
+   "number": "6.5",
+   "level": 2,
+   "title": "Reproducing the diagram generation",
+   "page": 180
+  },
+  "sec:auto-beyond": {
+   "number": "6.6",
+   "level": 2,
+   "title": "Beyond one loop",
+   "page": 181
+  },
+  "sec:supporting": {
+   "number": "7",
+   "level": 1,
+   "title": "Supporting material",
+   "page": 183
+  }
+ }
+}

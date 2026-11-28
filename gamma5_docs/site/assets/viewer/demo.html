@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Expression viewer gallery</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1f2933; --bg: #f7f8fa; --card: #ffffff; --line: #dde2e8; --muted: #5b6672;
+          --accent: #1f5f8b; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --fg: #e6e9ee; --bg: #14171c;
+          --card: #1c2027; --line: #2e343d; --muted: #9aa5b1; --accent: #7fb4dc; } }
+  :root[data-theme="dark"] { --fg: #e6e9ee; --bg: #14171c; --card: #1c2027; --line: #2e343d; --muted: #9aa5b1;
+          --accent: #7fb4dc; }
+  :root[data-theme="light"] { color-scheme: light; }
+  :root[data-theme="dark"] { color-scheme: dark; }
+  body { margin: 0; font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--fg);
+         background: var(--bg); }
+  header { padding: 18px 24px 8px; max-width: 1280px; margin: 0 auto; }
+  header h1 { font-size: 22px; margin: 0 0 4px; font-weight: 600; }
+  header p { margin: 4px 0; color: var(--muted); max-width: 70em; }
+  .bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .bar button { font: inherit; color: inherit; background: var(--card); border: 1px solid var(--line);
+                border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+  main { max-width: 1280px; margin: 0 auto; padding: 0 24px 48px; }
+  h2 { font-size: 18px; font-weight: 600; margin: 28px 0 4px; }
+  .intro { color: var(--muted); margin: 0 0 10px; max-width: 70em; }
+  .item { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px 12px;
+          margin: 10px 0; --mv-bg: var(--card); --mv-accent: var(--accent); }
+  .item h3 { font-size: 14px; font-weight: 600; margin: 0 0 6px; }
+  .item .note { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
+  .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+  .col { min-width: 0; }
+  .col .lab { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .src { font: 11.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); margin-top: 4px;
+         overflow-wrap: anywhere; }
+  .prose { font-size: 15px; }
+  @media (max-width: 820px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Expression viewer gallery</h1>
+  <p>Expressions of the one-family Standard Model in the BMHV scheme, produced from the automation's order store
+  and run report, printed by Symbolica's MathML printer in the site notation (left) and explored with
+  Symbolica's pager on a pre-computed payload (right). In the interactive view, hover or click a numbered
+  marker to inspect the omitted part; the keys + − 0 zoom when the expression has focus.</p>
+  <div class="bar"><span id="count"></span><button type="button" id="theme">Toggle light / dark</button></div>
+</header>
+<main id="main"></main>
+<script type="module">
+import { renderMath, ready } from './mathview.js';
+const root = document.documentElement;
+document.getElementById('theme').onclick = () => {
+  const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  root.dataset.theme = dark ? 'light' : 'dark';
+};
+const params = new URLSearchParams(location.search);
+if (params.get('theme')) root.dataset.theme = params.get('theme');
+const data = await (await fetch('./demo_data.json')).json();
+await ready();
+const main = document.getElementById('main');
+document.getElementById('count').textContent = `${data.count} items`;
+const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls;
+  if (html !== undefined) e.innerHTML = html; return e; };
+for (const sec of data.sections) {
+  const h = el('h2'); h.id = sec.id; h.textContent = sec.title; main.append(h);
+  main.append(el('p', 'intro', sec.intro));
+  for (const it of sec.items) {
+    const card = el('section', 'item');
+    if (it.title) { const t = el('h3'); t.textContent = it.title; card.append(t); }
+    if (it.prose !== undefined) { card.append(el('div', 'prose', it.prose)); main.append(card); continue; }
+    const cols = el('div', 'cols');
+    const a = el('div', 'col'); a.append(el('div', 'lab', 'Static MathML'));
+    const sa = el('div'); a.append(sa); renderMath(sa, it.static);
+    const src = el('div', 'src'); src.textContent = it.static.src; a.append(src);
+    const b = el('div', 'col');
+    const iv = it.interactive && it.interactive.view;
+    b.append(el('div', 'lab', iv ? `Interactive pager (${(it.interactive.view.bytes / 1024).toFixed(1)} kB payload` +
+      `${it.interactive.view.complete ? '' : ', partial'})` : 'Interactive pager (not pre-computed)'));
+    const sb = el('div'); b.append(sb);
+    if (iv) renderMath(sb, it.interactive, { interactive: true }); else renderMath(sb, it.static);
+    cols.append(a, b); card.append(cols);
+    if (it.note) card.append(el('div', 'note', it.note));
+    main.append(card);
+  }
+}
+document.body.dataset.ready = '1';
+</script>
+</body>
+</html>

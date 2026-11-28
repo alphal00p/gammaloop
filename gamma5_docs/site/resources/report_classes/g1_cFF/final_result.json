@@ -1,0 +1,301 @@
+{
+ "class": "g1_cFF",
+ "diagrams": [
+  {
+   "id": "a",
+   "topology": "external ghost at the Delta_1 vertex on the internal fermion line; gauge boson A^e exchanged between the two external-leg gauge vertices",
+   "fields": "Psi_f (k), Psi_f (k+q, sterile next to Delta_1), A^e (p-k), e over all 12 gauge fields",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "one multiplet-level graph per exchanged gauge factor; group factor sum_e Tg^e Tg^a Tg^e = (C_f - C_ad^(r)/2) Tg^a_f; Feynman-rule prefactor -i"
+  },
+  {
+   "id": "b",
+   "topology": "external ghost at the Delta_1 vertex on the internal Yukawa-partner line; Higgs exchange",
+   "fields": "Psi_f', Psi_f', H; f' = U, D for Q; Q for U, D; E for L; L for E",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "Delta_1 carries the generator of f'; group factor M^a_f = sum_(f',j) Y^(ff')_j Tg^a_(f') Y^(ff')_j^dagger = nu_(fr) Tg^a_f; prefactor +i; absent for omega^W on Q, L (partners are SU(2) singlets)"
+  },
+  {
+   "id": "c1",
+   "topology": "internal ghost: Delta_1 at the incoming Psi_f leg (external physical/sterile Psi_f, internal Psi_f), ghost omega^b from the ghost-gauge vertex (where the external omega^a enters) to Delta_1, A^e absorbed at the outgoing fermion leg",
+   "fields": "Psi_f (k), omega^b (k-p), A^e (p'-k)",
+   "symmetry_factor": "1",
+   "sign": "+1 (explicit Wick contraction: open ghost line, ghost moves past even bilinears only)",
+   "multiplicity_note": "non-abelian factors only (G on Q,U,D; W on Q,L); group factor fg^(bea) Tg^e Tg^b = -(i/2) C_ad^(r) Tg^a_f; prefactor +1"
+  },
+  {
+   "id": "c2",
+   "topology": "internal ghost: Delta_1 at the outgoing Psibar_f leg (mirror of c1)",
+   "fields": "Psi_f (k), omega^b (p'-k), A^e (k-p)",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "non-abelian only; group factor fg^(bea) Tg^b Tg^e = +(i/2) C_ad^(r) Tg^a_f; prefactor +1"
+  }
+ ],
+ "functions": [
+  {
+   "externals": "generic: omega^a(q) incoming, Psibar_f outgoing p' = p+q, Psi_f(p); ghost leftmost Grassmann factor; d-dim externals, unprojected spinor matrix; a in gauge factor r",
+   "pole_vertex_function": [
+    {
+     "structure": "Tg^a_f (slh(p) P_(overline(c)_f) - slh(p)' P_(c_f))",
+     "coefficient": "-(i/2) C_ad^((r))   [= (C_ad^((r))/2) x vertex function -i Tg^a (slh(p) Pcb - slh(p)' Pc) of Delta_1; evanescent]"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "slb(q) P_(c_f), q = p'-p (matrix Tg^a_f in multiplet space)",
+     "coefficient": "-i [ (C_f - C_ad^((r))/4) + nu_(fr)/2 ] = i x_(fr), x_(fr) = -(C_f - C_ad^((r))/4) - nu_(fr)/2  (X = lf P N_1)"
+    }
+   ],
+   "per_topology": {
+    "a": "N_0 = 0; P N_1 = N_1 = -i (C_f - C_ad^((r))/2) Tg^a_f slb(q) P_c",
+    "b": "N_0 = 0; N_1 = -(i/2) M^a_f slb(q) P_c = -(i/2) nu_(fr) Tg^a_f slb(q) P_c",
+    "c1": "N_0 = -(i/2) C_ad^((r)) Tg^a_f slh(p) P_cbar; N_1 = (i/12) C_ad^((r)) Tg^a_f (2 slb(p) - slb(p)') P_c",
+    "c2": "N_0 = +(i/2) C_ad^((r)) Tg^a_f slh(p)' P_c; N_1 = (i/12) C_ad^((r)) Tg^a_f (slb(p) - 2 slb(p)') P_c",
+    "c1+c2": "N_0 = -(i/2) C_ad Tg^a (slh(p) Pcb - slh(p)' Pc); N_1 = -(i/4) C_ad^((r)) Tg^a_f slb(q) P_c"
+   }
+  },
+  {
+   "externals": "omega^a(q) Psibar_Q(p' outgoing) Psi_Q(p), q = p'-p, ghost factor G (gluon ghost omega^A), c_f = L",
+   "pole_vertex_function": [
+    {
+     "structure": "Tg^a_f (slh(p) Pcb - slh(p)' Pc)",
+     "coefficient": "-3*I*g_s**2/2   [= (C_ad^(G)/2) V[Delta_1], V[Delta_1] = -i Tg^a (slh(p) Pcb - slh(p)' Pc)]"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "Tg^a_f (slb(p) - slb(p)') Pc",
+     "coefficient": "I*(27*g**2 + 21*g_s**2 + g'**2 + 18*y_d**2 + 18*y_u**2)/36   [= -lambda V[N_F^(QG)], lambda = (27*g**2 + 21*g_s**2 + g'**2 + 18*y_d**2 + 18*y_u**2)/36]"
+    }
+   ],
+   "per_topology": {
+    "a": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(I*(27*g**2 - 6*g_s**2 + g'**2)/36) slb(p) + (-I*(27*g**2 - 6*g_s**2 + g'**2)/36) slb(p)'] Tg^a Pc = (-(27*g**2 - 6*g_s**2 + g'**2)/36) V[N_F] + (0) V[N_E]",
+    "b": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(I*(y_d**2 + y_u**2)/2) slb(p) + (-I*(y_d**2 + y_u**2)/2) slb(p)'] Tg^a Pc = (-(y_d**2 + y_u**2)/2) V[N_F] + (0) V[N_E]",
+    "c1": "N0 = (-3*I*g_s**2/2) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(I*g_s**2/2) slb(p) + (-I*g_s**2/4) slb(p)'] Tg^a Pc = (-g_s**2/2) V[N_F] + (I*g_s**2/4) V[N_E]",
+    "c2": "N0 = (0) Tg^a slh(p) Pcb + (3*I*g_s**2/2) Tg^a slh(p)' Pc ; P N1 = [(I*g_s**2/4) slb(p) + (-I*g_s**2/2) slb(p)'] Tg^a Pc = (-g_s**2/4) V[N_F] + (-I*g_s**2/4) V[N_E]"
+   }
+  },
+  {
+   "externals": "omega^a(q) Psibar_Q(p' outgoing) Psi_Q(p), q = p'-p, ghost factor W (omega^I), c_f = L",
+   "pole_vertex_function": [
+    {
+     "structure": "Tg^a_f (slh(p) Pcb - slh(p)' Pc)",
+     "coefficient": "-I*g**2   [= (C_ad^(W)/2) V[Delta_1], V[Delta_1] = -i Tg^a (slh(p) Pcb - slh(p)' Pc)]"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "Tg^a_f (slb(p) - slb(p)') Pc",
+     "coefficient": "I*(9*g**2 + 48*g_s**2 + g'**2)/36   [= -lambda V[N_F^(QW)], lambda = (9*g**2 + 48*g_s**2 + g'**2)/36]"
+    }
+   ],
+   "per_topology": {
+    "a": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(-I*(9*g**2 - 48*g_s**2 - g'**2)/36) slb(p) + (I*(9*g**2 - 48*g_s**2 - g'**2)/36) slb(p)'] Tg^a Pc = ((9*g**2 - 48*g_s**2 - g'**2)/36) V[N_F] + (0) V[N_E]",
+    "b": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(0) slb(p) + (0) slb(p)'] Tg^a Pc = (0) V[N_F] + (0) V[N_E]",
+    "c1": "N0 = (-I*g**2) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(I*g**2/3) slb(p) + (-I*g**2/6) slb(p)'] Tg^a Pc = (-g**2/3) V[N_F] + (I*g**2/6) V[N_E]",
+    "c2": "N0 = (0) Tg^a slh(p) Pcb + (I*g**2) Tg^a slh(p)' Pc ; P N1 = [(I*g**2/6) slb(p) + (-I*g**2/3) slb(p)'] Tg^a Pc = (-g**2/6) V[N_F] + (-I*g**2/6) V[N_E]"
+   }
+  },
+  {
+   "externals": "omega^a(q) Psibar_Q(p' outgoing) Psi_Q(p), q = p'-p, ghost factor B (omega^B), c_f = L",
+   "pole_vertex_function": [
+    {
+     "structure": "Tg^a_f (slh(p) Pcb - slh(p)' Pc)",
+     "coefficient": "0   [= (C_ad^(B)/2) V[Delta_1], V[Delta_1] = -i Tg^a (slh(p) Pcb - slh(p)' Pc)]"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "Tg^a_f (slb(p) - slb(p)') Pc",
+     "coefficient": "I*(27*g**2 + 48*g_s**2 + g'**2 - 36*y_d**2 + 72*y_u**2)/36   [= -lambda V[N_F^(QB)], lambda = (27*g**2 + 48*g_s**2 + g'**2 - 36*y_d**2 + 72*y_u**2)/36]"
+    }
+   ],
+   "per_topology": {
+    "a": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(I*(27*g**2 + 48*g_s**2 + g'**2)/36) slb(p) + (-I*(27*g**2 + 48*g_s**2 + g'**2)/36) slb(p)'] Tg^a Pc = (-(27*g**2 + 48*g_s**2 + g'**2)/36) V[N_F] + (0) V[N_E]",
+    "b": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(-I*(y_d**2 - 2*y_u**2)) slb(p) + (I*(y_d**2 - 2*y_u**2)) slb(p)'] Tg^a Pc = (y_d**2 - 2*y_u**2) V[N_F] + (0) V[N_E]",
+    "c1": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(0) slb(p) + (0) slb(p)'] Tg^a Pc = (0) V[N_F] + (0) V[N_E]",
+    "c2": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(0) slb(p) + (0) slb(p)'] Tg^a Pc = (0) V[N_F] + (0) V[N_E]"
+   }
+  },
+  {
+   "externals": "omega^a(q) Psibar_U(p' outgoing) Psi_U(p), q = p'-p, ghost factor G (gluon ghost omega^A), c_f = R",
+   "pole_vertex_function": [
+    {
+     "structure": "Tg^a_f (slh(p) Pcb - slh(p)' Pc)",
+     "coefficient": "-3*I*g_s**2/2   [= (C_ad^(G)/2) V[Delta_1], V[Delta_1] = -i Tg^a (slh(p) Pcb - slh(p)' Pc)]"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "Tg^a_f (slb(p) - slb(p)') Pc",
+     "coefficient": "I*(21*g_s**2 + 16*g'**2 + 36*y_u**2)/36   [= -lambda V[N_F^(UG)], lambda = (21*g_s**2 + 16*g'**2 + 36*y_u**2)/36]"
+    }
+   ],
+   "per_topology": {
+    "a": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(-I*(3*g_s**2 - 8*g'**2)/18) slb(p) + (I*(3*g_s**2 - 8*g'**2)/18) slb(p)'] Tg^a Pc = ((3*g_s**2 - 8*g'**2)/18) V[N_F] + (0) V[N_E]",
+    "b": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(I*y_u**2) slb(p) + (-I*y_u**2) slb(p)'] Tg^a Pc = (-y_u**2) V[N_F] + (0) V[N_E]",
+    "c1": "N0 = (-3*I*g_s**2/2) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(I*g_s**2/2) slb(p) + (-I*g_s**2/4) slb(p)'] Tg^a Pc = (-g_s**2/2) V[N_F] + (I*g_s**2/4) V[N_E]",
+    "c2": "N0 = (0) Tg^a slh(p) Pcb + (3*I*g_s**2/2) Tg^a slh(p)' Pc ; P N1 = [(I*g_s**2/4) slb(p) + (-I*g_s**2/2) slb(p)'] Tg^a Pc = (-g_s**2/4) V[N_F] + (-I*g_s**2/4) V[N_E]"
+   }
+  },
+  {
+   "externals": "omega^a(q) Psibar_U(p' outgoing) Psi_U(p), q = p'-p, ghost factor B (omega^B), c_f = R",
+   "pole_vertex_function": [
+    {
+     "structure": "Tg^a_f (slh(p) Pcb - slh(p)' Pc)",
+     "coefficient": "0   [= (C_ad^(B)/2) V[Delta_1], V[Delta_1] = -i Tg^a (slh(p) Pcb - slh(p)' Pc)]"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "Tg^a_f (slb(p) - slb(p)') Pc",
+     "coefficient": "I*(48*g_s**2 + 16*g'**2 + 9*y_u**2)/36   [= -lambda V[N_F^(UB)], lambda = (48*g_s**2 + 16*g'**2 + 9*y_u**2)/36]"
+    }
+   ],
+   "per_topology": {
+    "a": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(4*I*(3*g_s**2 + g'**2)/9) slb(p) + (-4*I*(3*g_s**2 + g'**2)/9) slb(p)'] Tg^a Pc = (-4*(3*g_s**2 + g'**2)/9) V[N_F] + (0) V[N_E]",
+    "b": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(I*y_u**2/4) slb(p) + (-I*y_u**2/4) slb(p)'] Tg^a Pc = (-y_u**2/4) V[N_F] + (0) V[N_E]",
+    "c1": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(0) slb(p) + (0) slb(p)'] Tg^a Pc = (0) V[N_F] + (0) V[N_E]",
+    "c2": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(0) slb(p) + (0) slb(p)'] Tg^a Pc = (0) V[N_F] + (0) V[N_E]"
+   }
+  },
+  {
+   "externals": "omega^a(q) Psibar_D(p' outgoing) Psi_D(p), q = p'-p, ghost factor G (gluon ghost omega^A), c_f = R",
+   "pole_vertex_function": [
+    {
+     "structure": "Tg^a_f (slh(p) Pcb - slh(p)' Pc)",
+     "coefficient": "-3*I*g_s**2/2   [= (C_ad^(G)/2) V[Delta_1], V[Delta_1] = -i Tg^a (slh(p) Pcb - slh(p)' Pc)]"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "Tg^a_f (slb(p) - slb(p)') Pc",
+     "coefficient": "I*(21*g_s**2 + 4*g'**2 + 36*y_d**2)/36   [= -lambda V[N_F^(DG)], lambda = (21*g_s**2 + 4*g'**2 + 36*y_d**2)/36]"
+    }
+   ],
+   "per_topology": {
+    "a": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(-I*(3*g_s**2 - 2*g'**2)/18) slb(p) + (I*(3*g_s**2 - 2*g'**2)/18) slb(p)'] Tg^a Pc = ((3*g_s**2 - 2*g'**2)/18) V[N_F] + (0) V[N_E]",
+    "b": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(I*y_d**2) slb(p) + (-I*y_d**2) slb(p)'] Tg^a Pc = (-y_d**2) V[N_F] + (0) V[N_E]",
+    "c1": "N0 = (-3*I*g_s**2/2) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(I*g_s**2/2) slb(p) + (-I*g_s**2/4) slb(p)'] Tg^a Pc = (-g_s**2/2) V[N_F] + (I*g_s**2/4) V[N_E]",
+    "c2": "N0 = (0) Tg^a slh(p) Pcb + (3*I*g_s**2/2) Tg^a slh(p)' Pc ; P N1 = [(I*g_s**2/4) slb(p) + (-I*g_s**2/2) slb(p)'] Tg^a Pc = (-g_s**2/4) V[N_F] + (-I*g_s**2/4) V[N_E]"
+   }
+  },
+  {
+   "externals": "omega^a(q) Psibar_D(p' outgoing) Psi_D(p), q = p'-p, ghost factor B (omega^B), c_f = R",
+   "pole_vertex_function": [
+    {
+     "structure": "Tg^a_f (slh(p) Pcb - slh(p)' Pc)",
+     "coefficient": "0   [= (C_ad^(B)/2) V[Delta_1], V[Delta_1] = -i Tg^a (slh(p) Pcb - slh(p)' Pc)]"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "Tg^a_f (slb(p) - slb(p)') Pc",
+     "coefficient": "I*(24*g_s**2 + 2*g'**2 - 9*y_d**2)/18   [= -lambda V[N_F^(DB)], lambda = (24*g_s**2 + 2*g'**2 - 9*y_d**2)/18]"
+    }
+   ],
+   "per_topology": {
+    "a": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(I*(12*g_s**2 + g'**2)/9) slb(p) + (-I*(12*g_s**2 + g'**2)/9) slb(p)'] Tg^a Pc = (-(12*g_s**2 + g'**2)/9) V[N_F] + (0) V[N_E]",
+    "b": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(-I*y_d**2/2) slb(p) + (I*y_d**2/2) slb(p)'] Tg^a Pc = (y_d**2/2) V[N_F] + (0) V[N_E]",
+    "c1": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(0) slb(p) + (0) slb(p)'] Tg^a Pc = (0) V[N_F] + (0) V[N_E]",
+    "c2": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(0) slb(p) + (0) slb(p)'] Tg^a Pc = (0) V[N_F] + (0) V[N_E]"
+   }
+  },
+  {
+   "externals": "omega^a(q) Psibar_L(p' outgoing) Psi_L(p), q = p'-p, ghost factor W (omega^I), c_f = L",
+   "pole_vertex_function": [
+    {
+     "structure": "Tg^a_f (slh(p) Pcb - slh(p)' Pc)",
+     "coefficient": "-I*g**2   [= (C_ad^(W)/2) V[Delta_1], V[Delta_1] = -i Tg^a (slh(p) Pcb - slh(p)' Pc)]"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "Tg^a_f (slb(p) - slb(p)') Pc",
+     "coefficient": "I*(g**2 + g'**2)/4   [= -lambda V[N_F^(LW)], lambda = (g**2 + g'**2)/4]"
+    }
+   ],
+   "per_topology": {
+    "a": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(-I*(g - g')*(g + g')/4) slb(p) + (I*(g - g')*(g + g')/4) slb(p)'] Tg^a Pc = ((g - g')*(g + g')/4) V[N_F] + (0) V[N_E]",
+    "b": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(0) slb(p) + (0) slb(p)'] Tg^a Pc = (0) V[N_F] + (0) V[N_E]",
+    "c1": "N0 = (-I*g**2) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(I*g**2/3) slb(p) + (-I*g**2/6) slb(p)'] Tg^a Pc = (-g**2/3) V[N_F] + (I*g**2/6) V[N_E]",
+    "c2": "N0 = (0) Tg^a slh(p) Pcb + (I*g**2) Tg^a slh(p)' Pc ; P N1 = [(I*g**2/6) slb(p) + (-I*g**2/3) slb(p)'] Tg^a Pc = (-g**2/6) V[N_F] + (-I*g**2/6) V[N_E]"
+   }
+  },
+  {
+   "externals": "omega^a(q) Psibar_L(p' outgoing) Psi_L(p), q = p'-p, ghost factor B (omega^B), c_f = L",
+   "pole_vertex_function": [
+    {
+     "structure": "Tg^a_f (slh(p) Pcb - slh(p)' Pc)",
+     "coefficient": "0   [= (C_ad^(B)/2) V[Delta_1], V[Delta_1] = -i Tg^a (slh(p) Pcb - slh(p)' Pc)]"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "Tg^a_f (slb(p) - slb(p)') Pc",
+     "coefficient": "I*(3*g**2 + g'**2 + 4*y_e**2)/4   [= -lambda V[N_F^(LB)], lambda = (3*g**2 + g'**2 + 4*y_e**2)/4]"
+    }
+   ],
+   "per_topology": {
+    "a": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(I*(3*g**2 + g'**2)/4) slb(p) + (-I*(3*g**2 + g'**2)/4) slb(p)'] Tg^a Pc = (-(3*g**2 + g'**2)/4) V[N_F] + (0) V[N_E]",
+    "b": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(I*y_e**2) slb(p) + (-I*y_e**2) slb(p)'] Tg^a Pc = (-y_e**2) V[N_F] + (0) V[N_E]",
+    "c1": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(0) slb(p) + (0) slb(p)'] Tg^a Pc = (0) V[N_F] + (0) V[N_E]",
+    "c2": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(0) slb(p) + (0) slb(p)'] Tg^a Pc = (0) V[N_F] + (0) V[N_E]"
+   }
+  },
+  {
+   "externals": "omega^a(q) Psibar_E(p' outgoing) Psi_E(p), q = p'-p, ghost factor B (omega^B), c_f = R",
+   "pole_vertex_function": [
+    {
+     "structure": "Tg^a_f (slh(p) Pcb - slh(p)' Pc)",
+     "coefficient": "0   [= (C_ad^(B)/2) V[Delta_1], V[Delta_1] = -i Tg^a (slh(p) Pcb - slh(p)' Pc)]"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "Tg^a_f (slb(p) - slb(p)') Pc",
+     "coefficient": "I*(2*g'**2 + y_e**2)/2   [= -lambda V[N_F^(EB)], lambda = (2*g'**2 + y_e**2)/2]"
+    }
+   ],
+   "per_topology": {
+    "a": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(I*g'**2) slb(p) + (-I*g'**2) slb(p)'] Tg^a Pc = (-g'**2) V[N_F] + (0) V[N_E]",
+    "b": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(I*y_e**2/2) slb(p) + (-I*y_e**2/2) slb(p)'] Tg^a Pc = (-y_e**2/2) V[N_F] + (0) V[N_E]",
+    "c1": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(0) slb(p) + (0) slb(p)'] Tg^a Pc = (0) V[N_F] + (0) V[N_E]",
+    "c2": "N0 = (0) Tg^a slh(p) Pcb + (0) Tg^a slh(p)' Pc ; P N1 = [(0) slb(p) + (0) slb(p)'] Tg^a Pc = (0) V[N_F] + (0) V[N_E]"
+   }
+  }
+ ],
+ "operators": [
+  {
+   "kind": "evanescent_counterterm",
+   "operator": "pole of (Delta_1 . Gamma)^(1) (not a counterterm of delta S): lf (1/ep) sum_f sum_(r=G,W) (C_ad^((r))/2) Delta_1^((f r)),  Delta_1^((f r)) = integral dif^d x omega^a_((r)) [ overline(Psi)_f Tg^a_f ghat^mu P_(overline(c)_f) partial_mu Psi_f + (partial_mu overline(Psi)_f) ghat^mu P_(c_f) Tg^a_f Psi_f ]  (ghost-number-1 evanescent monomial, not in the bases of 03b; it is the evanescent part of b_d Q^(f r)_R)",
+   "coefficient": "C_ad^((r))/2 in units of 1/(16 pi^2 eps); cancelled by b_d of delta S^(1) \u2283 -(1/(16 pi^2 eps)) (C_ad^((r))/2) Q^(f r)_R",
+   "sm_values": "r=G (f=Q,U,D): 3/2 g_s^2; r=W (f=Q,L): g^2; r=B: 0"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "X_1 \u2283 (1/(16 pi^2)) sum_f sum_(r in f) x_(f r) N^(f r)_F,  N^(f r)_F = integral overline(psi)_f gamma^mu (partial_mu wm^((r))) psi_f  (vertex function +i slb(q) Tg^a_f P_(c_f), ghost first); matrix form -(1/(16 pi^2)) sum_f integral overline(psi)_f gamma^mu (partial_mu [C_f wm - 1/4 sum_r C_ad^((r)) wm^((r)) + 1/2 sum_(f',j) Y^(ff')_j wm_(f') Y^(ff')_j^dagger]) psi_f",
+   "coefficient": "x_(f r) = -(C_f - C_ad^((r))/2) [a] - nu_(f r)/2 [b] - C_ad^((r))/4 [c] = -(C_f - C_ad^((r))/4) - nu_(f r)/2, in units of 1/(16 pi^2)",
+   "sm_values": "Q,G: -7/12 g_s^2 - 3/4 g^2 - 1/36 g'^2 - 1/2 (y_u^2 + y_d^2); Q,W: -4/3 g_s^2 - 1/4 g^2 - 1/36 g'^2; Q,B: -4/3 g_s^2 - 3/4 g^2 - 1/36 g'^2 - 2 y_u^2 + y_d^2; U,G: -7/12 g_s^2 - 4/9 g'^2 - y_u^2; U,B: -4/3 g_s^2 - 4/9 g'^2 - 1/4 y_u^2; D,G: -7/12 g_s^2 - 1/9 g'^2 - y_d^2; D,B: -4/3 g_s^2 - 1/9 g'^2 + 1/2 y_d^2; L,W: -1/4 g^2 - 1/4 g'^2; L,B: -3/4 g^2 - 1/4 g'^2 - y_e^2; E,B: -g'^2 - 1/2 y_e^2.  nu_(fr): QG y_u^2+y_d^2, QW 0, QB 4 y_u^2 - 2 y_d^2, UG 2 y_u^2, UB y_u^2/2, DG 2 y_d^2, DB -y_d^2, LW 0, LB 2 y_e^2, EB y_e^2"
+  }
+ ],
+ "checks": [
+  "Deriver (hand) and checker (machine, bmhvkit) agree coefficient by coefficient: per graph N_0 and P N_1 for a, b, c1, c2, all 10 pairs (f, r), and in total.",
+  "Referee re-derivation by hand: prefactors (-i, +i, +1, +1), the Dirac reductions of a, b, c1, the integrals khat^2 D^3 -> -eta/2, khat^2 kbar 2k.P D^4 -> -eta/6 Pbar, the group factors of c1/c2 and nu_(fr) for all pairs; agree.",
+  "Checker scripts re-run by the referee: check_crosscheck.py (explicit matrices d=6,8, hand eta/eps vs engine, routing) and check_st_pole.py (pole-level ST identity for all 10 pairs) pass.",
+  "Pole-level ST identity: K T(Delta graphs) + V_{b_d delta S^(1)} = 0; evanescent part via z_R = -(C_ad/2)/(16 pi^2 eps) of Q_R (agrees with g0_ghost_sources final_result); 4-dim N_F part: -(C_f+Y_f) [Q_K, g0_FF] + (C_f+C_ad+Y_f) [Q_V, g0_FFV] - C_ad/2 [Q_R] - C_ad/2 [Q_rho partial] = 0 (agrees with the final results of g0_FF, g0_FFV, g0_ghost_sources).",
+  "Rigid invariance: P X = 0 at q = 0 (c1 and c2 separately not, their sum is); N_E components of c1, c2 (+-i C_ad/12) cancel.",
+  "No dependence on M or m^2; Evan N_1 = 0.",
+  "Completeness: diagram list agrees with ENUMERATION.md (g1_cFF, 10 assignments, 42 multiplet-level graphs) and with the class specification.",
+  "Literature (targets_in_our_conventions.md, sec. 2.2, and VALIDATION.md (iii)): pole = (1/2) Delta_1|_{omega -> omega_C}; X \u2283 -l sum_f int omega^a dbar_mu[Psibar gbar^mu((C_f - C_ad/4) T^a + Sigma^a/2) P_c Psi] = -l sum lambda N_F, Sigma^a = M^a: identical."
+ ],
+ "caveats": [
+  "The pole is proportional to Delta_1^((f r)) (d-dimensional, with external sterile components); this ghost-number-1 evanescent monomial is not among the operators of 03b (whose evanescent list is ghost-number-0 and whose N basis is four-dimensional). It is the evanescent part of b_d Q_R^(fr).",
+  "Vertex functions follow the 03b convention (coefficient of theta_omega theta_Psibar theta_Psi, ghost first); Feynman rule = i x vertex function.",
+  "The 4-dim cancellation of the Yukawa part of the N_F pole uses cal(Y)_f of g0_FF/g0_FFV; it was verified with independently computed delta S^(1) graphs by the checker and against those classes' final results by the referee.",
+  "Per-pair entries in 'functions' (after the generic one) are the checker's machine output, in the basis slb(p), slb(p)' with V[N_F] = i (slb(p)' - slb(p)) Tg^a P_c."
+ ]
+}

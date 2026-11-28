@@ -1,0 +1,89 @@
+%% Theory cards: the finite Slavnov-Taylor-restoring counterterm DeltaS^(1)_ST, its normalisation and the anomaly.
+
+=== card st-gauge
+title: Finite restoring counterterms of the gauge sector
+report: sec:g1_cV sec:g1_cVV sec:g1_cVVV_cVVVV sec:st-solve cr-fin sec:st-checks
+---
+The finite counterterm is [[ eqs(DeltaS1ST, lf*sumover(alpha, rc(alpha)*Qop(alpha))) ]], with four-dimensional monomials [[ Qop(alpha) ]] and rational coefficients [[ rc(alpha) ]]. Its gauge part is [[ lf ]] times the expression below, with the matrix-valued field [[ eqs(Am(mu), ord(Tg(a, f), A(mu, a))) ]] in the representation of each fermion multiplet f and all objects four-dimensional,
+
+[[ int4(sumover(f, Tr(ord(rat(1, 6), pd(lo(mu), Am(up(mu))), pd(lo(nu), Am(up(nu)))) - ord(rati(1, 3), pd(lo(mu), Am(lo(nu))), comm(Am(up(mu)), Am(up(nu)))) + ord(rat(1, 3), Am(lo(mu)), Am(up(mu)), Am(lo(nu)), Am(up(nu))) - ord(rat(1, 4), Am(lo(mu)), Am(lo(nu)), Am(up(mu)), Am(up(nu)))))) ]]
+
+a sum of traces over the fermion multiplets. In the gauge classes the ghost of the breaking vertex is external and the loop is a closed fermion loop, the only kind of loop that sees the breaking.
+
+The coefficients follow from [[ eqs(ord(bop, DeltaS1ST), -X1) ]], class by class. In the class [[ ord(omega, A) ]] ({sec:g1_cV}; 10 graphs with one {card:breaking|breaking vertex}) the finite breaking is [[ -1/3*lf*Ssum(r)*Nop(3, r) ]], with [[ eqs(Nop(3, r), int4(ord(omega(a), pd2(pd(mu, A(up(mu), a)))))) ]] and [[ Ssum(r) ]] the sum of [[ Tr(Tg(a), Tg(b)) ]] over the multiplets ([[ 2*g_s^2 ]], [[ 2*g^2 ]], [[ 10/3*gp^2 ]]). The longitudinal monomial [[ eqs(Qop(L, r), -ord(rat(1, 2), int4(par(pd(mu, A(up(mu), a)))^2))) ]] has [[ eqs(ord(bop, Qop(L, r)), -Nop(3, r)) ]], so [[ eqs(rc(Qop(L, r)), -1/3*Ssum(r)) ]]: [[ -2/3*g_s^2 ]], [[ -2/3*g^2 ]], [[ -10/9*gp^2 ]]. The mass monomial gets no coefficient: there is no finite gauge-boson mass term. The class [[ ord(omega, A, A) ]] ({sec:g1_cVV}; 40 graphs) fixes the cubic coefficient [[ eqs(rc(Qop(3*f, r)), -1/3*Ssum(r)) ]] and checks the longitudinal one; the classes [[ ord(omega, A, A, A) ]] and [[ ord(omega, A, A, A, A) ]] ({sec:g1_cVVV_cVVVV}; 1320 graphs) fix the thirteen quartic coefficients (for example 11/72, −1/4 and 5/12 for the three gluon monomials and 95/648 for [[ gp^4*par(ord(B(mu), B(up(mu))))^2 ]]), and the five-point breaking vanishes identically.
+
+The normalisation (N2) excludes the transverse monomial [[ Qop(T, r) ]], which is invariant ({card:normalisation|normalisation}). Several monomials have no tree-level counterpart, for instance the quartic hypercharge term and a gluon–gluon–gluon–B term with the symmetric tensor [[ dsym(A, C, D) ]]. The report checks the result with complete MS-bar finite parts: the fermion loops of the renormalised self-energy give [[ eqs(ord(vec(p, lo(mu)), field(Gamma, up(mu), up(nu))), -ord(rat(1, 3), lf, Ssum(r), sq(p), vec(p, nu))) ]] (times [[ delta(a, b) ]]) and the longitudinal term adds the opposite, so the self-energy is transverse ({sec:st-checks}).
+
+=== card st-fermion
+title: Finite restoring counterterms of the fermion–gauge vertices
+report: sec:g1_cFF sec:g1_cFFV sec:st-solve cr-fin sec:st-checks
+---
+The fermion part of the finite counterterm is a four-dimensional gauge vertex of the physical components,
+
+[[ -lf*int4(sumover(f, ord(psibar(f), gam(mu), par(Cinv(f)*Am(lo(mu)) + 1/2*sumover(r, field(nu, fr)*Am(lo(mu), up(par(r))))), psi(f)))) ]]
+
+where [[ Cinv(f) ]] is the Casimir of the multiplet f, [[ Am(lo(mu), up(par(r))) ]] the matrix-valued gauge field of the factor r, and [[ field(nu, fr) ]] are Yukawa numbers: [[ y_u^2 + y_d^2 ]], 0 and [[ 4*y_u^2 - 2*y_d^2 ]] for Q with G, W, B; [[ 2*y_u^2 ]] and [[ y_u^2/2 ]] for U; [[ 2*y_d^2 ]] and [[ -y_d^2 ]] for D; 0 and [[ 2*y_e^2 ]] for L; [[ y_e^2 ]] for E. The Feynman rule is [[ -i*lf*(Cinv(f) + 1/2*field(nu, fr))*ord(gammabar(mu), Tg(a, f), Pc(f)) ]]. Since the Yukawa parts are not proportional to the charges, they cannot be absorbed into a renormalisation of the gauge couplings.
+
+The coefficient is fixed in the class [[ ord(omega, Psibar, Psi) ]] ({sec:g1_cFF}; 42 graphs). Its graphs are of two kinds: the external ghost sits on [[ Delta1 ]] and both fermion legs of the vertex are internal, or the ghost of [[ Delta1 ]] is internal and ends on a ghost–gauge vertex that carries the external ghost. The finite breaking is [[ lf*sumover(fr, field(x, fr)*Nop(F, up(fr))) ]], with [[ eqs(Nop(F, up(fr)), int4(ord(psibar(f), gam(mu), pd(lo(mu), wm(par(r))), psi(f)))) ]] and [[ eqs(field(x, fr), -(Cinv(f) - 1/4*Cad(r)) - 1/2*field(nu, fr)) ]], [[ Cad(r) ]] being the adjoint Casimir. The vertex monomial gives [[ -Nop(F, up(fr)) ]] under [[ bop ]] and the fermion source monomial gives [[ +Nop(F, up(fr)) ]], so [[ eqs(rc(Qop(R, up(fr))) - rc(Qop(V, up(fr))), -field(x, fr)) ]]. With the source coefficient [[ -1/4*Cad(r) ]] fixed elsewhere ({card:st-source|source terms}), [[ eqs(rc(Qop(V, up(fr))), -Cinv(f) - 1/2*field(nu, fr)) ]]: the term [[ Cad(r)/4 ]] cancels. The class [[ ord(omega, Psibar, Psi, A) ]] ({sec:g1_cFFV}; 220 graphs) confirms the source coefficient.
+
+The normalisation (N1) excludes a finite fermion kinetic term, which would shift [[ rc(Qop(V, up(fr))) ]]; the representatives in the literature contain one and differ by invariant terms. The report checks the restored Ward identity of the legs ghost, [[ Psibar(f) ]], [[ Psi(f) ]] with complete MS-bar finite parts at off-shell points: without the finite counterterm the violation is [[ -lf*i*(Cinv(f) - 1/4*Cad(r) + 1/2*field(nu, fr))*ord(slashbar(q), Tg(a, f), Pc(f)) ]], and the vertex and source terms cancel it to a relative precision of 10<sup>−13</sup> ({sec:st-checks}).
+
+=== card st-source
+title: Finite counterterms of the source terms
+report: sec:g1_ccRF sec:st-solve sec:st-result cr-fin
+---
+The only term of the finite counterterm that contains a ghost is a finite part of the fermion source terms,
+
+[[ -1/4*lf*int4(sumover(f, i*ord(Rbar(f), wm(lo(C)), psi(f)) - i*ord(psibar(f), wm(lo(C)), R(f)))) ]]
+
+with [[ eqs(wm(lo(C)), sumover(r, Cad(r)*wm(par(r)))) ]], the sum over the non-abelian factors of the adjoint Casimir ([[ 3*g_s^2 ]], [[ 2*g^2 ]]) times the matrix-valued ghost [[ eqs(wm(par(r)), ord(Tg(a, f), omega(a))) ]] of the factor. In the basis this is [[ eqs(rc(Qop(R, up(fr))), -1/4*Cad(r)) ]], i.e. [[ -3/4*g_s^2 ]] for gluon ghosts and [[ -1/2*g^2 ]] for W ghosts; the hypercharge coefficient is zero by the normalisation (N4). The Feynman rules are [[ 1/4*lf*Cad(r)*ord(Tg(a, f), Pc(f)) ]] for the legs [[ ord(Rbar(f), omega(a), Psi(f)) ]] and [[ 1/4*lf*Cad(r)*ord(Pcbar(f), Tg(a, f)) ]] for [[ ord(omega(a), Psibar(f), R(f)) ]]. A source term changes the BRST transformation of the field it multiplies: this counterterm is a finite renormalisation of [[ ord(sop, psi(f)) ]].
+
+The coefficient is fixed by the class [[ ord(omega, omega, Rbar, Psi) ]] and its conjugate ({sec:g1_ccRF}; 54 graphs). Its pole vanishes, [[ eqs(Nop(0), 0) ]] ({eq:g1_ccRF-pole}), consistent with [[ eqs(ord(bdop, deltaS1), 0) ]] in this class, where [[ Qop(R, up(fr)) ]] and [[ Qop(zsrc) ]] have the same singular coefficient [[ -1/2*Cad(r) ]]. Its finite breaking is [[ 1/4*lf*Cad(r) ]] times [[ ord(Rbar(f), wm(par(r)), wm(par(r)), psi(f)) ]] plus the conjugate structure. The five source classes [[ ord(omega, omega, rhotilde) ]], [[ ord(omega, omega, rhotilde, A) ]], [[ ord(omega, omega, omega, zsrc) ]], [[ ord(omega, omega, sigmadag, H) ]] and [[ ord(omega, omega, Hdag, sigma) ]] have no one-loop graph with [[ Delta1 ]], so the breaking vanishes there ({sec:g1}; {sec:normalisation|Section 3.8.9}); this sets the finite coefficients of the [[ rho(mu, a) ]], [[ zsrc(a) ]] and [[ sigma ]] terms to zero, and then [[ eqs(rc(Qop(R, up(fr))), -1/4*Cad(r)) ]]. The classes [[ ord(omega, Psibar, Psi, A) ]] and [[ ord(omega, Psibar, Psi, H) ]] confirm the value independently.
+
+In d dimensions [[ bdop ]] of the source monomial contains the breaking [[ Delta1r(fr) ]], so [[ eqs(ord(Evan, bdop, DeltaS1ST), -1/4*lf*sumover(r, Cad(r)*Delta1r(r))) ]], where [[ Evan ]] is the evanescent part. This has no effect at one loop. At two loops it enters as a vertex of ghost number 1, and the source counterterms enter quadratically through the source–field part of the Slavnov–Taylor operator ({card:method-beyond|beyond one loop}).
+
+=== card st-scalar
+title: Finite restoring counterterms with scalars
+report: sec:g1_cSS_cSSV sec:st-solve cr-fin sec:st-checks
+---
+The scalar part of the finite counterterm is, with [[ eqs(Ytil, 3*y_u^2 + 3*y_d^2 + y_e^2) ]] and the matrix-valued gauge fields [[ Am(up(par(W))) ]], [[ Am(up(par(B))) ]] on the doublet,
+
+[[ lf*int4(Ytil/3*i*(ord(dagger(pd(lo(mu), H)), Am(up(mu)), H) - ord(Hdag, Am(up(mu)), pd(lo(mu), H))) - Ytil*ord(Hdag, Am(lo(mu), up(par(W))), Am(up(mu), up(par(W))), H) - (y_u^2 + 2*y_d^2)*ord(Hdag, acomm(Am(lo(mu), up(par(W))), Am(up(mu), up(par(B)))), H) - (13/3*y_u^2 + 7/3*y_d^2 + 3*y_e^2)*ord(Hdag, Am(lo(mu), up(par(B))), Am(up(mu), up(par(B))), H) - 1/2*(y_u^2 + y_d^2)*g_s^2*ord(Hdag, H, G(mu, A), G(up(mu), A))) ]]
+
+with [[ eqs(Am, Am(up(par(W))) + Am(up(par(B)))) ]] in the first term. Every coefficient is a Yukawa combination: the scalar sector is BRST invariant in d dimensions, and the scalars feel the breaking only through Yukawa fermion loops. There is no finite counterterm for the Higgs kinetic term, the potential or the Yukawa vertices, and none with the Higgs source [[ sigma ]].
+
+The coefficients come from the classes [[ ord(omega, Hdag, H) ]], [[ ord(omega, Hdag, H, A) ]], [[ ord(omega, Hdag, H, A, A) ]] and [[ ord(omega, Hdag, H, Hdag, H) ]] ({sec:g1_cSS_cSSV}; 525 graphs). In [[ ord(omega, Hdag, H) ]] the breaking is [[ -1/3*lf*Ytil*(Nop(S, W) + Nop(S, B)) ]], and the current monomials [[ Qop(J, r) ]] (the first term above for one factor) give [[ eqs(ord(bop, Qop(J, r)), Nop(S, r)) ]], hence [[ eqs(rc(Qop(J, r)), Ytil/3) ]] for both factors. In [[ ord(omega, Hdag, H, A) ]] five structures fix the four two-gauge coefficients, with one consistency condition; the breaking of the last two classes vanishes, as does [[ ord(bop, DeltaS1ST) ]] there. The pole of [[ ord(omega, Hdag, H) ]] is the evanescent [[ 2/3*lfe*Ytil*Nhat(H) ]], cancelled by the variation of the {card:ct-evanescent|evanescent counterterm} [[ Eop(H) ]].
+
+The report checks the abelian Ward identity of the legs [[ omega(B) ]], [[ Hdag ]], [[ H ]] with exact bubble and triangle finite parts: the fermion graphs violate it by [[ -lf*Ytil/3*gp/2*(sq(p(1)) - sq(p(2))) ]], which the term [[ rc(Qop(J, B))*Qop(J, B) ]] cancels to working precision ({sec:st-checks}). In the broken phase these terms produce the finite gauge-boson mass terms and the change of the gauge–Goldstone mixing ({card:broken-st|broken phase}).
+
+=== card normalisation
+title: Freedom of the finite counterterm and the normalisation conditions
+report: sec:closed sec:normalisation sec:st-solve sec:st-lit
+---
+The restoring condition [[ eqs(ord(bop, DeltaS1ST), -X1) ]] fixes [[ DeltaS1ST ]] only up to the kernel of [[ bop ]], the linearised Slavnov–Taylor operator in four dimensions. On the 97 monomials [[ Qop(alpha) ]] (four-dimensional, Lorentz and rigidly invariant, hermitian, ghost number 0, dimension at most 4) the image of [[ bop ]] has dimension 72 and the kernel dimension 25. The 25 invariant directions are the 20 renormalisations of fields and parameters, the three imaginary Yukawa couplings and two charge deformations of the hypercharge (baryon and lepton number). A finite counterterm along them is a finite, invariant renormalisation; it does not restore anything.
+
+The report removes these directions by four conditions on the monomials allowed in [[ DeltaS1ST ]]:
+
+<ol><li>(N1) no monomial that survives when all gauge fields, ghosts and sources vanish: the fermion and Higgs kinetic terms, the mass and quartic terms and the six Yukawa monomials (14 monomials);</li><li>(N2) no transverse gauge two-point monomial [[ Qop(T, r) ]] (3);</li><li>(N3) no source monomial [[ int4(ord(rhotilde(mu, a), pd(lo(mu), omega(a)))) ]] and no [[ int4(ord(fg(a, b, c), rhotilde(mu, a), A(lo(mu), b), omega(c))) ]] (5);</li><li>(N4) no monomial that contains the hypercharge ghost [[ omega(B) ]] (11).</li></ol>
+
+On the remaining 64 monomials [[ bop ]] has rank 64, so the solution is unique. It exists only if [[ X1 ]] satisfies eight linear conditions, and all eight hold: five say that [[ X1 ]] vanishes in the source classes, which have no one-loop graph with [[ Delta1 ]]; three say that [[ X1 ]] has no component along [[ i*y_k*gp*int4(ord(omega(B), par(field(O, k) - dagger(field(O, k))))) ]], with [[ field(O, k) ]] the Yukawa monomials. The latter hold because at one loop the hypercharge ghost has no vertex with two internal lines. Beyond one loop it can sit on an internal line; if the condition fails, (N4) is replaced by (N4′), which keeps the hypercharge source monomials of the right-handed multiplets U, D, E.
+
+With these conditions the finite counterterm contains no fermion kinetic, Yukawa, potential or transverse gauge term: everything invariant is MS-bar. The representatives of Bělusca-Maïto et al. and of Lazopoulos et al. differ from it by invariant terms ({sec:st-lit}).
+
+=== card anomaly
+title: The would-be gauge anomaly
+report: sec:g1_cVV sec:st-X sec:st-solve sec:Nbasis
+---
+Each fermion multiplet contributes a parity-odd part to the finite breaking [[ X1 ]], with the four-dimensional Levi-Civita symbol [[ levi(mu, nu, rho, sigma) ]] from the trace of [[ gamma5 ]] with four Dirac matrices. Summed over the multiplets it is proportional to the totally symmetric traces
+
+[[ eqs(field(D, up(abc)), sumover(lh, Tr(Tg(a, f), acomm(Tg(b, f), Tg(c, f)))) - sumover(rh, Tr(Tg(a, f), acomm(Tg(b, f), Tg(c, f))))) ]]
+
+where lh runs over the left-handed multiplets Q, L and rh over the right-handed U, D, E:
+
+[[ eqs(field(X, anom), lf*(-1/3*int4(ord(field(D, up(abc)), levi(mu, nu, rho, sigma), omega(a), pd(lo(mu), A(nu, b)), pd(lo(rho), A(sigma, c)))) + 1/12*int4(ord(field(D, up(aed)), fg(b, c, e), levi(mu, nu, rho, sigma), pd(lo(mu), omega(a)), A(nu, b), A(rho, c), A(sigma, d))))) ]]
+
+It comes from the classes [[ ord(omega, A, A) ]] and [[ ord(omega, A, A, A) ]] ({sec:g1_cVV}). Per Weyl multiplet the first term is [[ 2/3*lf ]] times [[ ord(levi(mu, nu, rho, sigma), Tr(wm, pd(lo(mu), Am(lo(nu))), pd(lo(rho), Am(lo(sigma))))) ]] up to its sign, the consistent anomaly.
+
+It satisfies the consistency condition [[ eqs(ord(bop, field(X, anom)), 0) ]] multiplet by multiplet, but it does not lie in the image of [[ bop ]]: the only parity-odd monomials of the restoring basis can remove part of it, and what remains lies outside unless the four independent anomaly coefficients vanish. An anomaly cannot be removed by a local counterterm, and the solution of [[ eqs(ord(bop, DeltaS1ST), -X1) ]] exists only if they vanish.
+
+With the hypercharges of one family, the hypercharge coefficient is [[ 2*(6*par(1/6)^3 + 2*par(-1/2)^3 - 3*par(2/3)^3 - 3*par(-1/3)^3 - par(-1)^3) ]], which is zero; the mixed coefficients, [[ 3*par(1/6) - par(1/2) ]] for hypercharge with two W fields and [[ 2*par(1/6) - par(par(2/3) - par(1/3)) ]] for hypercharge with two gluons, and the SU(3) coefficient, one half of (2 − 1 − 1), vanish as well (in units of the couplings). Hence the parity-odd part of [[ X1 ]] vanishes, the parity-odd monomials get zero coefficients and [[ DeltaS1ST ]] contains no Levi-Civita symbol. The report confirms numerically that the parity-odd parts of the single multiplets, of order 10<sup>2</sup>, cancel to below 10<sup>−13</sup>. The automation detects an anomalous content and stops with an error.

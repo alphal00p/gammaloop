@@ -1,0 +1,116 @@
+%% Summaries of the groups of Green's functions (merged into data/classes.json, groups[].title/report/summary).
+%% Graph counts are the report's multiplet-level counts (its Table of the eighteen classes).
+
+=== group g0_VV
+title: Gauge two-point functions AA
+report: sec:g0_VV
+---
+The one-loop self-energies of the gluon, W and B fields (20 graphs, superficial degree 2) fix the gauge field constants [[ dZ(A, r) ]], equal to [[ 11/3*g_s^2 ]], [[ 11/6*g^2 ]] and [[ -43/18*gp^2 ]] in units of [[ lfe ]]. Gauge, ghost and Higgs loops give the d-dimensional transverse tensor; fermion loops give its barred form and an evanescent, non-transverse remainder [[ sqhat(p)*gbar(mu, nu) ]], the two-point parts of the {card:ct-evanescent|evanescent counterterms} [[ Etil(F, r) ]] and [[ Eop(A, r) ]]. Mixed pairs of gauge factors have no pole.
+
+=== group g0_VVV
+title: Gauge three-point functions AAA
+report: sec:g0_VVV
+---
+The three-gauge functions (54 graphs, superficial degree 1) have a pole only for three gluons and three W fields. The bosonic loops multiply the d-dimensional tree vertex, the fermion loops its barred form with the coefficient [[ 2/3*Ssum(r) ]]; the result fixes the vertex factor [[ dZc(field(c, r)) + 3/2*dZ(A, r) ]], equal to [[ 2/3*g_s^2 ]] and [[ -1/6*g^2 ]] in units of [[ lfe ]], and gives the three-point part of [[ Etil(F, r) ]] with the same coefficient as the two-point function.
+
+=== group g0_VVVV
+title: Gauge four-point functions AAAA
+report: sec:g0_VVVV
+---
+The four-gauge functions at zero momentum (237 graphs, superficial degree 0) have a pole only for four gluons and four W fields, a combination of the d-dimensional and the barred quartic tree vertex. They fix the factor [[ 2*dZc(field(c, r)) + 2*dZ(A, r) ]] ([[ -7/3*g_s^2 ]] and [[ -13/6*g^2 ]] in units of [[ lfe ]]) and confirm that one field constant and one coupling constant per factor fit the two-, three- and four-point functions.
+
+=== group g0_FF
+title: Fermion two-point functions Ψ̄Ψ
+report: sec:g0_FF
+---
+The self-energies of the five fermion multiplets (16 graphs, superficial degree 1, gauge and Yukawa bubbles) have the pole [[ lfe*(Cinv(f) + Ycal(f))*ord(slashbar(p), Pc(f)) ]], four-dimensional and without evanescent part. They fix the fermion field constants [[ eqs(dZ(f), -lfe*(Cinv(f) + Ycal(f))) ]], with [[ Cinv(f) ]] the Casimir and [[ Ycal(f) ]] the Yukawa part of the multiplet; only the physical component is renormalised.
+
+=== group g0_FFV
+title: Fermion–gauge vertices Ψ̄ΨA
+report: sec:g0_FFV
+---
+The fermion–gauge vertices of the ten pairs of a multiplet and a gauge factor acting on it (46 graphs, superficial degree 0) have a pole proportional to the tree vertex [[ ord(gammabar(mu), Pc(f), Tg(a, f)) ]], with the factor [[ lfe*(Cinv(f) + Cad(r) + Ycal(f)) ]] and no evanescent part. Together with the fermion self-energies they fix the coupling constants through the cross-class condition that the vertex and kinetic coefficients differ by [[ -Cad(r) ]].
+
+=== group g0_SS
+title: Higgs two-point function H†H
+report: sec:g0_SS
+---
+The Higgs self-energy (8 graphs, superficial degree 2) fixes [[ eqs(dZ(H), lfe*(2*Cinv(H) - Ytil)) ]] and [[ eqs(dpar(m2), lfe*m2*(6*lambda - 3*Cinv(H) + Ytil)) ]], with [[ eqs(Ytil, 3*y_u^2 + 3*y_d^2 + y_e^2) ]]. The Yukawa fermion loops give the barred and hatted structure [[ Ytil*(sqbar(p) + 2/3*sqhat(p)) ]] instead of the d-dimensional [[ sq(p) ]]; the difference is the two-point part of the evanescent counterterms [[ Etil(H) ]] and [[ Eop(H) ]].
+
+=== group g0_SSV_SSVV
+title: Higgs–gauge functions H†HA and H†HAA
+report: sec:g0_SSV_SSVV
+---
+The scalar–gauge vertices with one and two gauge fields (146 graphs, superficial degrees 1 and 0) have bosonic poles with the d-dimensional tree structure and Yukawa-loop poles with its barred form. They fix the vertex factors [[ lfe*(2*Cinv(H) - Ytil - Cad(r)) ]] and [[ lfe*(2*Cinv(H) - Ytil - Cad(r) - Cad(s)) ]] and give the three- and four-point parts of [[ Etil(H) ]]; the functions with an external gluon have no pole.
+
+=== group g0_SSSS
+title: Higgs four-point function (H†H)²
+report: sec:g0_SSSS
+---
+The quartic Higgs function at zero momentum (63 graphs, superficial degree 0) has a pole proportional to the tree vertex and fixes [[ eqs(dpar(lambda), lfe*(12*lambda^2 - 6*lambda*Cinv(H) + 2*lambda*Ytil - field(Y, 4) + 3/16*field(G, 4))) ]], with [[ eqs(field(Y, 4), 3*y_u^4 + 3*y_d^4 + y_e^4) ]] and [[ eqs(field(G, 4), 3*g^4 + 2*g^2*gp^2 + gp^4) ]]. The resulting beta function of [[ lambda ]] is the known one-family value.
+
+=== group g0_FFS
+title: Yukawa vertices Ψ̄ΨH
+report: sec:g0_FFS
+---
+The six Yukawa vertices and their conjugates (32 graphs, superficial degree 0) have poles proportional to the tree vertices and fix the Yukawa counterterms [[ dpar(y_k) ]]. The vertex factor is identical for a vertex and its conjugate, and the resulting beta functions of [[ y_u ]], [[ y_d ]], [[ y_e ]] are the known one-family values.
+
+=== group g0_ghost_sources
+title: Ghost and BRST-source functions
+report: sec:g0_ghost_sources
+---
+The functions with a BRST source and ghosts (20 graphs; superficial degree 1 for [[ ord(rho, omega) ]], 0 otherwise) fix the ghost field constant and the common coefficient [[ -1/2*lfe*Cad(r) ]] of all non-linear source terms ([[ +1/2*lfe*Cad(r) ]] for the linear term of [[ rho(mu, a) ]]); they vanish for the hypercharge. Functions with an external antighost follow from these by the ghost equation and are not computed separately.
+
+=== group g1_cV
+title: Breaking of ωA
+report: sec:g1_cV
+---
+The ghost–gauge two-point function with one breaking vertex (10 graphs, superficial degree 3) has the evanescent pole [[ i/3*lfe*Ssum(r)*sqhat(q)*vecbar(q, nu) ]], cancelled by the variation of the evanescent counterterm [[ Eop(A, r) ]]. Its finite breaking, [[ -1/3*lf*Ssum(r) ]] times [[ Nop(3, r) ]], fixes the longitudinal restoring coefficient [[ eqs(rc(Qop(L, r)), -1/3*Ssum(r)) ]]; there is no finite gauge-boson mass term.
+
+=== group g1_cVV
+title: Breaking of ωAA and the anomaly
+report: sec:g1_cVV
+---
+The functions with a ghost and two gauge fields (40 graphs, superficial degree 2) have an evanescent pole for gluons and W fields and a finite breaking that fixes the cubic restoring coefficient [[ eqs(rc(Qop(3*f, r)), -1/3*Ssum(r)) ]]. Their parity-odd part is proportional to the anomaly traces [[ field(D, up(abc)) ]], which vanish for the Standard-Model charges ({card:anomaly|anomaly}).
+
+=== group g1_cVVV_cVVVV
+title: Breaking of ωAAA and ωAAAA
+report: sec:g1_cVVV_cVVVV
+---
+The functions with a ghost and three or four gauge fields (1320 graphs, superficial degrees 1 and 0) have no pole. The finite breaking of the four-point class fixes the thirteen quartic restoring coefficients; the five-point class has no finite breaking.
+
+=== group g1_cFF
+title: Breaking of ωΨ̄Ψ
+report: sec:g1_cFF
+---
+The ghost–fermion–antifermion functions (42 graphs, superficial degree 1), including graphs with the ghost of the breaking vertex on an internal line, have an evanescent pole [[ 1/2*lfe*Cad(r)*Delta1r(fr) ]], cancelled by the variation of the singular fermion source counterterm, and no four-dimensional pole. The finite breaking fixes the difference of the finite fermion–gauge and fermion-source coefficients ({card:st-fermion|finite fermion counterterms}).
+
+=== group g1_cFFV
+title: Breaking of ωΨ̄ΨA
+report: sec:g1_cFFV
+---
+The functions with a ghost, a fermion pair and a gauge field (220 graphs, superficial degree 0) have no pole. Their finite breaking is non-zero only for gluon and W ghosts, [[ 1/4*lf*Cad(r) ]] times a commutator structure, and confirms the finite source coefficient [[ -1/4*Cad(r) ]].
+
+=== group g1_cSS_cSSV
+title: Breaking of ωH†H, ωH†HA and higher
+report: sec:g1_cSS_cSSV
+---
+The functions with a ghost and Higgs legs (525 graphs) have an evanescent pole only in [[ ord(omega, Hdag, H) ]], [[ 2/3*lfe*Ytil*Nhat(H) ]], cancelled by the variation of [[ Eop(H) ]]. The finite breaking of [[ ord(omega, Hdag, H) ]] and [[ ord(omega, Hdag, H, A) ]] fixes the scalar–gauge restoring coefficients, all Yukawa combinations; the classes with two gauge fields or four scalars have no breaking.
+
+=== group g1_cFFS
+title: Breaking of ωΨ̄ΨH
+report: sec:g1_cFFS
+---
+The functions with a ghost, a fermion pair and a Higgs leg (122 graphs, superficial degree 0) have no pole. The finite breaking is non-zero only for the W ghost, [[ 1/2*lf*g^2 ]] times Yukawa structures reproduced by the finite fermion source terms, and it has no component along the hypercharge ghost, which is required for the normalisation (N4) to admit a solution.
+
+=== group g1_ccRF
+title: Breaking with BRST sources: ωωR̄Ψ
+report: sec:g1_ccRF
+---
+The functions with two ghosts, a fermion source and a fermion (54 graphs, superficial degree 0) have no pole, [[ eqs(Nop(0), 0) ]], consistent with [[ eqs(ord(bdop, deltaS1), 0) ]] in this class, where the fermion and ghost source counterterms have the same singular coefficient. Their finite breaking fixes the finite fermion source coefficient [[ eqs(rc(Qop(R, up(fr))), -1/4*Cad(r)) ]]. The other ghost-number-one functions with a BRST source have no one-loop graph with the breaking vertex, so the breaking vanishes there.
+
+=== group g1_c
+title: Breaking of the one-point function of the abelian ghost
+report: sec:g1
+---
+This class is not one of the report's eighteen: the automation evaluates the one-point function of the hypercharge ghost [[ omega(B) ]] with one insertion of the breaking vertex (5 graphs), for which the report has no subsection. The automation finds no component of the finite breaking in this class.

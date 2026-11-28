@@ -1,0 +1,221 @@
+{
+ "class": "g0_VV",
+ "diagrams": [
+  {
+   "id": "a",
+   "topology": "(a) fermion bubble, two FFV vertices",
+   "fields": "Psi_f, f in {Q,U,D,L,E}; only P_(c_f) components couple (gbar^mu P_c vertex)",
+   "symmetry_factor": "1",
+   "sign": "-1 (closed fermion loop)",
+   "multiplicity_note": "one diagram per multiplet with S_f^((r)) != 0: GG: Q,U,D; WW: Q,L; BB: Q,U,D,L,E (10 diagrams). Group factor Tr_f(Tg^a Tg^b) = S_f^((a)) delta^(a b)"
+  },
+  {
+   "id": "b1",
+   "topology": "(b1) Higgs bubble, two SSV vertices",
+   "fields": "H, H",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "WW, BB (2 diagrams); complex doublet, no 1/2; Tr(Tg_H^a Tg_H^b) = S_H^((a)) delta^(a b)"
+  },
+  {
+   "id": "b2",
+   "topology": "(b2) Higgs seagull tadpole, SSVV vertex",
+   "fields": "H",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "WW, BB (2 diagrams); Tr{Tg_H^a,Tg_H^b} = 2 S_H^((a)) delta^(a b)"
+  },
+  {
+   "id": "c1",
+   "topology": "(c1) gauge bubble, two VVV vertices",
+   "fields": "A^c, A^d (same non-abelian factor)",
+   "symmetry_factor": "1/2",
+   "sign": "+1",
+   "multiplicity_note": "GG, WW (2 diagrams); fg^(a c d) fg^(b c d) = C_ad^((a)) delta^(a b)"
+  },
+  {
+   "id": "c2",
+   "topology": "(c2) gauge tadpole, VVVV vertex",
+   "fields": "A^c",
+   "symmetry_factor": "1/2",
+   "sign": "+1",
+   "multiplicity_note": "GG, WW (2 diagrams); contracted vertex -2i(d-1) C_ad delta^(a b) g^(mu nu); massless tadpole, zero pole"
+  },
+  {
+   "id": "d",
+   "topology": "(d) ghost bubble, two ghost-gauge vertices",
+   "fields": "omega^c, omegabar^e",
+   "symmetry_factor": "1",
+   "sign": "-1 (ghost loop)",
+   "multiplicity_note": "GG, WW (2 diagrams); fg^(e a c) fg^(c b e) = -C_ad^((a)) delta^(a b)"
+  },
+  {
+   "id": "mixed",
+   "topology": "(a),(b1),(b2),(c1),(c2),(d) with a, b in different gauge factors (WB, GB, GW)",
+   "fields": "all of the above",
+   "symmetry_factor": "as above",
+   "sign": "as above",
+   "multiplicity_note": "group factors vanish identically (traceless SU(3), SU(2) generators; fg zero across factors); for W^3 B individual components cancel inside the multiplet trace"
+  }
+ ],
+ "functions": [
+  {
+   "externals": "A^a_mu(p) A^b_nu(-p), a, b in one gauge factor r (general)",
+   "pole_vertex_function": [
+    {
+     "structure": "delta^(a b) (p^2 g^(mu nu) - p^mu p^nu)  [d-dimensional; bosonic loops]",
+     "coefficient": "5/3 C_ad^((r)) - 1/3 S_H^((r))"
+    },
+    {
+     "structure": "delta^(a b) (bar(p)^2 gmb^(mu nu) - bar(p)^mu bar(p)^nu)  [four-dimensional; fermion loops]",
+     "coefficient": "-2/3 (S_L^((r)) + S_R^((r)))"
+    },
+    {
+     "structure": "delta^(a b) hat(p)^2 gmb^(mu nu)  [evanescent, non-transverse; fermion loops]",
+     "coefficient": "-1/3 (S_L^((r)) + S_R^((r)))"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "a": "per multiplet: -S_f^((r)) delta^(a b) [2/3 (bar(p)^2 gmb^(mu nu) - bar(p)^mu bar(p)^nu) + 1/3 hat(p)^2 gmb^(mu nu)], identical for L and R; no epsilon term",
+    "b1": "S_H^((r)) delta^(a b) [-1/3 (p^2 g^(mu nu) - p^mu p^nu) + 2 m^2 g^(mu nu)]",
+    "b2": "-2 m^2 S_H^((r)) delta^(a b) g^(mu nu)",
+    "c1": "C_ad^((r)) delta^(a b) (19/12 p^2 g^(mu nu) - 11/6 p^mu p^nu)",
+    "c2": "0",
+    "d": "C_ad^((r)) delta^(a b) (1/12 p^2 g^(mu nu) + 1/6 p^mu p^nu)",
+    "N_1": "0 for every topology"
+   }
+  },
+  {
+   "externals": "G^A_mu(p) G^B_nu(-p), gauge factor G",
+   "pole_vertex_function": [
+    {
+     "structure": "delta^(a b) (p^2 g^(mu nu) - p^mu p^nu)  [d-dimensional; bosonic loops]",
+     "coefficient": "5 g_s^2"
+    },
+    {
+     "structure": "delta^(a b) (bar(p)^2 gmb^(mu nu) - bar(p)^mu bar(p)^nu)  [four-dimensional; fermion loops]",
+     "coefficient": "-4/3 g_s^2"
+    },
+    {
+     "structure": "delta^(a b) hat(p)^2 gmb^(mu nu)  [evanescent, non-transverse; fermion loops]",
+     "coefficient": "-2/3 g_s^2"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "a": "Q: g_s^2, U: g_s^2/2, D: g_s^2/2 times -[2/3 T4bar + 1/3 phat^2 gbar]",
+    "b1+b2": "0",
+    "c1": "3 g_s^2 (19/12 p^2 g - 11/6 p p)",
+    "c2": "0",
+    "d": "3 g_s^2 (1/12 p^2 g + 1/6 p p)"
+   }
+  },
+  {
+   "externals": "W^I_mu(p) W^J_nu(-p), gauge factor W",
+   "pole_vertex_function": [
+    {
+     "structure": "delta^(a b) (p^2 g^(mu nu) - p^mu p^nu)  [d-dimensional; bosonic loops]",
+     "coefficient": "19/6 g^2"
+    },
+    {
+     "structure": "delta^(a b) (bar(p)^2 gmb^(mu nu) - bar(p)^mu bar(p)^nu)  [four-dimensional; fermion loops]",
+     "coefficient": "-4/3 g^2"
+    },
+    {
+     "structure": "delta^(a b) hat(p)^2 gmb^(mu nu)  [evanescent, non-transverse; fermion loops]",
+     "coefficient": "-2/3 g^2"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "a": "Q: 3 g^2/2, L: g^2/2 times -[2/3 T4bar + 1/3 phat^2 gbar]",
+    "b1": "g^2/2 [-1/3 T_d + 2 m^2 g]",
+    "b2": "-g^2 m^2 g",
+    "c1": "2 g^2 (19/12 p^2 g - 11/6 p p)",
+    "c2": "0",
+    "d": "2 g^2 (1/12 p^2 g + 1/6 p p)"
+   }
+  },
+  {
+   "externals": "B_mu(p) B_nu(-p), gauge factor B",
+   "pole_vertex_function": [
+    {
+     "structure": "delta^(a b) (p^2 g^(mu nu) - p^mu p^nu)  [d-dimensional; bosonic loops]",
+     "coefficient": "-1/6 g'^2"
+    },
+    {
+     "structure": "delta^(a b) (bar(p)^2 gmb^(mu nu) - bar(p)^mu bar(p)^nu)  [four-dimensional; fermion loops]",
+     "coefficient": "-20/9 g'^2"
+    },
+    {
+     "structure": "delta^(a b) hat(p)^2 gmb^(mu nu)  [evanescent, non-transverse; fermion loops]",
+     "coefficient": "-10/9 g'^2"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "a": "Q: g'^2/6, U: 4 g'^2/3, D: g'^2/3, L: g'^2/2, E: g'^2 times -[2/3 T4bar + 1/3 phat^2 gbar]",
+    "b1": "g'^2/2 [-1/3 T_d + 2 m^2 g]",
+    "b2": "-g'^2 m^2 g",
+    "c1": "0",
+    "c2": "0",
+    "d": "0"
+   }
+  },
+  {
+   "externals": "mixed W^I B, G^A B, G^A W^I",
+   "pole_vertex_function": [
+    {
+     "structure": "all",
+     "coefficient": "0"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "all": "0, diagram by diagram (group factors vanish)"
+   }
+  }
+ ],
+ "operators": [
+  {
+   "kind": "pole_counterterm",
+   "operator": "Q^((r))_T (quadratic part; read as the barred monomial integrated over d^d x)",
+   "coefficient": "delta S^((1)) contains + 1/(16 pi^2 eps) delta z_A^((r)) Q^((r))_T, delta z_A^((r)) = 5/3 C_ad^((r)) - 1/3 S_H^((r)) - 2/3 (S_L^((r)) + S_R^((r)))",
+   "sm_values": "delta z_A: G 11/3 g_s^2; W 11/6 g^2; B -43/18 g'^2"
+  },
+  {
+   "kind": "evanescent_counterterm",
+   "operator": "tilde(E)^((r))_F (quadratic part)",
+   "coefficient": "+1/(16 pi^2 eps) * ( -(5/3 C_ad^((r)) - 1/3 S_H^((r))) )",
+   "sm_values": "G -5 g_s^2; W -19/6 g^2; B +1/6 g'^2"
+  },
+  {
+   "kind": "evanescent_counterterm",
+   "operator": "E^((r))_A = 1/2 int d^d x bar(A)^a_mu hat(partial)^2 bar(A)^(a mu)",
+   "coefficient": "+1/(16 pi^2 eps) * ( -1/3 (S_L^((r)) + S_R^((r))) )",
+   "sm_values": "G -2/3 g_s^2; W -2/3 g^2; B -10/9 g'^2"
+  },
+  {
+   "kind": "pole_counterterm",
+   "operator": "equivalent form: delta S^((1)) contains -1/(16 pi^2 eps) int d^d x [ -(5/3 C_ad - 1/3 S_H)(-1/4 F F) + 2/3 (S_L+S_R)(-1/4 Fbar Fbar) + 1/3 (S_L+S_R) 1/2 Abar hat(partial)^2 Abar ] (quadratic parts, F d-dimensional)",
+   "coefficient": "as stated",
+   "sm_values": "see above"
+  }
+ ],
+ "checks": [
+  "Deriver (hand + standalone sympy) and checker (machine: toolkit + explicit components D=5..9, explicit gamma matrices D=6,8) agree coefficient by coefficient per topology, per gauge factor and in total",
+  "Referee recomputation: fermion loop by hand (split-metric bubble reduction, kbar^2 -> -1/3 phat^2); bosonic bubbles by an independent Feynman-parameter script (<scratch>/tmp/g0_VV_referee/ref.py): b1 = -1/3 T_d + 2 m^2 g, c1 = 19/12 p^2 g - 11/6 pp, d = 1/12 p^2 g + 1/6 pp",
+  "M-independence per topology; m^2 pole of b1 cancels against b2 (no Q_M)",
+  "bosonic part d-dimensionally transverse, fermion four-dimensional part transverse, only the evanescent pole is non-transverse (no Q_L)",
+  "-i p_mu Gamma^(mu nu)|pole = (i/3)(S_L+S_R) phat^2 pbar^nu delta^(ab)/(16 pi^2 eps) equals the pole of (Delta_1.Gamma)_(omega A) found in g1_cV (eq:g1_cV-pole) and is cancelled by b_d of the E_A counterterm",
+  "diagram list agrees with model/ENUMERATION.md (GG 6, WW 7, BB 7 = 20 multiplet-level diagrams) and with the class specification; mixed pairs vanish by group theory",
+  "literature (targets section 2.1, BIMS/LP): quadratic part of -5/3 C S_AA - 1/6 sum Tr(Fbar Fbar) - 1/12 Tr_H(F F) + 1/6 sum Tr(Abar hat(partial)^2 Abar) reproduced exactly, including the evanescent -1/3 S_f phat^2 gbar",
+  "targets section 3: delta Z_G = 11/3 g_s^2, delta Z_W = 11/6 g^2, delta Z_B = -43/18 g'^2 (one family) reproduced; b_1 = 43/18 (41/6 for three families)"
+ ],
+ "caveats": [
+  "Q^((r))_T in 03b is a four-dimensional monomial; it is read here as the barred monomial integrated over d^d x, and the d-dimensional -1/4 F F of the bosonic loops is written Q_T - tilde(E)_F (quadratic parts). The hatted-index part of the bosonic pole is expressible only through tilde(E)_F, not through E_A or E_H.",
+  "Only the quadratic parts of Q_T and tilde(E)_F are fixed here; the non-abelian completion comes from g0_VVV and g0_VVVV.",
+  "N_1 = 0 for all diagrams of this class (setup rule); the toolkit's non-zero N_1 for the gauge bubble is an artefact of its documented splitting rule and irrelevant (poles only)."
+ ]
+}

@@ -1,0 +1,45 @@
+%% Theory cards: the singular counterterm deltaS^(1) (MS-bar poles, invariant and evanescent parts).
+
+=== card ct-fields
+title: Field renormalisation constants
+report: sec:st-dS sec:Sren1 cr-inv sec:closed
+---
+The singular counterterm [[ deltaS1 ]] is fixed graph by graph. Every one-loop 1PI graph G of a ghost-number-zero class is expanded with the Taylor operator [[ Taylor(deg(G)) ]] to its superficial degree [[ deg(G) ]] around an auxiliary mass; its MS-bar pole part is [[ eqs(ord(Kop, Taylor(deg(G)), G), i*lfe*Nop(0)) ]] ([[ eqs(d, 4 - 2*ep) ]]), and minus the sum over the graphs with given external legs is the Feynman rule of the counterterm vertex. These graphs have no evanescent finite part, [[ eqs(Nop(1), 0) ]], and evanescent and non-invariant pole structures are kept.
+
+In four dimensions the poles lie in the 25-dimensional kernel of the linearised Slavnov–Taylor operator [[ bop ]] on the 97 monomials [[ Qop(alpha) ]] of the restoring basis: 25 coefficients fix the invariant directions and the other 72 are predictions, all of which hold. The invariant part of [[ deltaS1 ]] is therefore the first-order term of [[ S0 ]] written in bare quantities, [[ eqs(field(A, 0), ord(field(Z, A)^(1/2), A)) ]], [[ eqs(field(omega, 0), ord(field(Z, omega)^(1/2), omega)) ]], [[ eqs(field(psi, f, 0), ord(field(Z, f)^(1/2), psi(f))) ]], [[ eqs(field(H, 0), ord(field(Z, H)^(1/2), H)) ]], with every source scaled by the inverse factor of its field, one constant per gauge factor and [[ eqs(field(Z, x), 1 + dZ(x)) ]]. The sterile partners and the gauge fixing are not renormalised. Each constant [[ dZ(x) ]] includes the factor [[ lfe ]].
+
+In the Feynman gauge, in units of [[ lfe ]]: [[ dZ(A, r) ]] is [[ 11/3*g_s^2 ]], [[ 11/6*g^2 ]], [[ -43/18*gp^2 ]] for the gluon, W and B fields; [[ dZ(omega, r) ]] is [[ 20/3*g_s^2 ]] and [[ 23/6*g^2 ]]; [[ eqs(dZ(f), -(Cinv(f) + Ycal(f))) ]] for the five fermion multiplets, with [[ Cinv(f) ]] the Casimir and [[ Ycal(f) ]] the Yukawa part; and [[ eqs(dZ(H), 3/2*g^2 + 1/2*gp^2 - Ytil) ]] with [[ Ytil ]] the Yukawa sum [[ 3*y_u^2 + 3*y_d^2 + y_e^2 ]]. They agree with the standard Feynman-gauge values, and the automation reproduces all twenty constants of fields and parameters exactly.
+
+In d dimensions the invariant directions are continued with unsplit d-dimensional indices, fields and derivatives in the bosonic monomials and with the barred vertex [[ ord(psibar(f), gammabar(mu), Am(mu), psi(f)) ]] in the fermion monomials. The graphs without a closed fermion loop give exactly these combinations. The closed fermion loops give barred invariants, whose difference from the continued ones is part of the {card:ct-evanescent|evanescent counterterm}.
+
+=== card ct-couplings
+title: Coupling and mass counterterms, beta functions
+report: sec:st-dS sec:Sren1 sec:closed sec:evanescent
+---
+The parameters are renormalised multiplicatively in MS-bar: [[ eqs(field(c, r, 0), ord(mu^ep, field(Z, field(c, r)), field(c, r))) ]] for the gauge couplings [[ field(c, r) ]] ([[ g_s ]], [[ g ]], [[ gp ]]), [[ eqs(field(y, k, 0), mu^ep*(y_k + dpar(y_k))) ]], [[ eqs(field(lambda, 0), mu^(2*ep)*(lambda + dpar(lambda))) ]] and [[ eqs(field(m, 0)^2, m2 + dpar(m2)) ]]; every counterterm includes [[ lfe ]]. For the gauge couplings
+
+[[ eqs(dZc(field(c, r)), lfe*(-11/6*Cad(r) + 1/3*Ssum(r) + 1/6*Sinv(H, r))) ]]
+
+with the adjoint Casimir [[ Cad(r) ]] ([[ 3*g_s^2 ]], [[ 2*g^2 ]], 0), the fermion trace [[ Ssum(r) ]] ([[ 2*g_s^2 ]], [[ 2*g^2 ]], [[ 10/3*gp^2 ]]) and the Higgs trace [[ Sinv(H, r) ]]; this is [[ -29/6*g_s^2 ]], [[ -35/12*g^2 ]] and [[ 43/36*gp^2 ]] in units of [[ lfe ]]. For the hypercharge, [[ eqs(ord(field(Z, gp), field(Z, B)^(1/2)), 1) ]], with [[ field(Z, B) ]] the field constant of [[ B(mu) ]]. The Yukawa, quartic and mass constants are given in the cards on {card:yukawa|Yukawa couplings} and {card:higgs-potential|the scalar potential}.
+
+At one loop the beta function [[ field(beta, x) ]] of a coupling x is [[ 2*x ]] times the coefficient of [[ lfe ]] in [[ dpar(x)/x ]] (with [[ eqs(dpar(field(c, r)), ord(field(c, r), dZc(field(c, r)))) ]] for the gauge couplings), which gives [[ eqs(field(beta, g_s), -29/3*lf*g_s^3) ]], [[ eqs(field(beta, g), -35/6*lf*g^3) ]] and [[ eqs(field(beta, gp), 43/18*lf*gp^3) ]], and the Yukawa and quartic beta functions; all agree with the known one-loop values of the Standard Model with one family (Machacek and Vaughn), and the automation reproduces the eight beta functions.
+
+The non-anticommuting [[ gamma5 ]] enters through the d-dimensional form of these counterterms. In four dimensions the coupling direction [[ Oop(g, r) ]], equal to [[ field(c, r) ]] times the derivative of [[ S0 ]] with respect to [[ field(c, r) ]], is invariant under [[ bop ]]. In d dimensions it is not: since [[ Delta1 ]] is linear in the generators of each factor, [[ eqs(ord(bdop, Oop(g, r)), Delta1r(r)) ]], the part of the breaking with the ghosts of the factor r. The coupling and ghost counterterms thereby contribute [[ -1/2*lfe*Cad(r)*Delta1r(r) ]] to [[ ord(bdop, deltaS1) ]], which predicts the evanescent pole of the [[ ord(omega, Psibar, Psi) ]] functions; the class result agrees ({sec:st-poles}).
+
+=== card ct-evanescent
+title: Evanescent singular counterterms
+report: sec:evanescent sec:st-dS cr-ev sec:st-poles
+---
+Fermion loops couple only to the four-dimensional gauge field [[ bar(A(mu, a)) ]] and give barred tensors, while bosonic loops give d-dimensional covariant ones. Hatted external momenta, the (d−4)-dimensional parts, enter only through [[ dothat(k, p) ]] in the denominators and need a superficial degree of at least 2: they occur only in the two-point functions [[ ord(A, A) ]] and [[ ord(Hdag, H) ]]. The one-loop poles therefore contain four evanescent operators, which vanish when all hatted quantities are set to zero:
+
+[[ eqs(Eop(A, r), 1/2*intd(ord(bar(A(mu, a)), pdhat2(bar(A(up(mu), a)))))) ]]
+
+[[ eqs(Eop(H), intd(ord(dagger(pdhat(mu, H)), pdhat(up(mu), H)))) ]]
+
+and [[ Etil(F, r) ]], [[ Etil(H) ]], the differences between the barred invariants [[ -1/4*ord(bar(F(mu, nu, a)), bar(F(up(mu), up(nu), a))) ]], [[ ord(dagger(par(ord(field(bar(D), lo(mu)), H))), field(bar(D), up(mu)), H) ]] and their d-dimensional counterparts. With [[ Ssum(r) ]] the fermion trace of the factor r and [[ eqs(Ytil, 3*y_u^2 + 3*y_d^2 + y_e^2) ]], the evanescent part of [[ deltaS1 ]] is
+
+[[ -lfe*(sumover(r, Ssum(r)*(2/3*Etil(F, r) + 1/3*Eop(A, r))) + Ytil*(Etil(H) + 2/3*Eop(H))) ]]
+
+In the Standard Model the coefficients of [[ Eop(A, r) ]] are [[ -lfe ]] times [[ 2/3*g_s^2 ]], [[ 2/3*g^2 ]], [[ 10/9*gp^2 ]], that of [[ Eop(H) ]] is [[ -2/3*lfe*Ytil ]], those of [[ Etil(F, r) ]] are [[ -lfe ]] times [[ 4/3*g_s^2 ]], [[ 4/3*g^2 ]], [[ 20/9*gp^2 ]], and that of [[ Etil(H) ]] is [[ -lfe*Ytil ]]. The coefficient of [[ Etil(F, r) ]] is the same in the two-, three- and four-point functions. No fermion bilinear carries an evanescent pole.
+
+[[ Etil(F, r) ]] and [[ Etil(H) ]] are invariant under [[ bdop ]]; [[ Eop(A, r) ]] and [[ Eop(H) ]] are the two non-invariant singular counterterms of one loop. Their variations, [[ eqs(ord(bdop, Eop(A, r)), Nhat(A, r) + Nhat(AA, r)) ]] and [[ eqs(ord(bdop, Eop(H)), Nhat(H)) ]], are evanescent operators of ghost number 1, and they predict the evanescent poles of the classes [[ ord(omega, A) ]], [[ ord(omega, A, A) ]] and [[ ord(omega, Hdag, H) ]]; the class results agree ({sec:st-poles}). These operators do not affect four-dimensional one-loop quantities, but they must be kept in their d-dimensional form: inserted into a loop, the hatted derivatives of [[ Eop(A, r) ]] become the hatted loop momentum, [[ -sqhat(k) ]], and give [[ eta/ep^2 ]], hence a pole and a finite part at two loops.

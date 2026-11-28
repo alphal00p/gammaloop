@@ -1,0 +1,59 @@
+%% Method cards of the Theory view (keys beyond the 26 of DATA_FORMAT.md section 7).
+
+=== card method-overview
+title: The recipe in ten steps
+report: sec:recipe sec:m-algorithm sec:m-oneloop
+---
+The renormalised action [[ eqs(Sren, S0 + deltaS1 + DeltaS1ST) ]] is obtained by the one-loop case of a construction defined at every loop order. Its ten steps are the following.
+
+<ol><li><strong>Model.</strong> Propagators and vertices of the regularised action [[ S0 ]] in [[ eqs(d, 4 - 2*ep) ]] dimensions, with sterile partners, ghosts and BRST sources as non-propagating legs, and the vertex of the breaking [[ Delta1 ]] ({card:breaking|breaking}).</li><li><strong>Ghost-number-zero graphs.</strong> The one-loop 1PI graphs of the ten classes with total dimension of the legs at most 4.</li><li><strong>R-operation.</strong> At one loop the forest is empty: each graph G is subtracted by [[ -ord(Kop, Taylor(deg(G)), G) ]], its pole after expansion to its superficial degree.</li><li><strong>Numerator algebra.</strong> The BMHV algebra, traces with [[ gamma5 ]], tensor reduction and the evanescent tag [[ eta ]] ({card:method-bmhv|BMHV algebra}).</li><li><strong>Pole matching.</strong> [[ deltaS1 ]] on a basis of local operators, invariant and evanescent ({card:ct-fields|field constants}, {card:ct-evanescent|evanescent part}).</li><li><strong>Breaking vertices.</strong> [[ Delta1 ]] and the tree vertex [[ ord(bdop, deltaS1) ]].</li><li><strong>Insertion graphs.</strong> The one-loop graphs of the eight ghost-number-one classes with exactly one [[ Delta1 ]] vertex.</li><li><strong>Finite breaking.</strong> The poles cancel class by class against [[ ord(bdop, deltaS1) ]]; the projected coefficient of [[ eta/ep ]] gives [[ X1 ]].</li><li><strong>Restoring condition.</strong> Solve [[ eqs(ord(bop, DeltaS1ST), -X1) ]] under the normalisation conditions ({card:method-st|Slavnov–Taylor operator}, {card:normalisation|normalisation}).</li><li><strong>Model update.</strong> Add [[ deltaS1 ]] and [[ DeltaS1ST ]] in their d-dimensional forms as counterterm vertices.</li></ol>
+
+In the report all steps were carried out by hand and with stand-alone codes; the graphs were generated with HepKIT. The automation package of this repository runs the same ten steps from a model specification and reproduces the report's constants, breaking and restoring coefficients. Its graphs are the ones drawn on this site.
+
+=== card method-bmhv
+title: The BMHV algebra in one screen
+report: sec:bmhv sec:integrals sec:m-K sec:m-v
+---
+In [[ eqs(d, 4 - 2*ep) ]] dimensions every index, momentum and Dirac matrix is split into a four-dimensional (barred) and a (d−4)-dimensional (hatted) part: [[ eqs(g(mu, nu), gbar(mu, nu) + ghat(mu, nu)) ]], [[ eqs(vec(k, mu), vecbar(k, mu) + vechat(k, mu)) ]], [[ eqs(gam(mu), gammabar(mu) + gammahat(mu)) ]], with [[ eqs(ord(gbar(mu, nu), ghat(lo(nu), lo(rho))), 0) ]], [[ eqs(gbar(mu, lo(mu)), 4) ]] and [[ eqs(ghat(mu, lo(mu)), d - 4) ]]. The matrix [[ eqs(gamma5, i*ord(gam(0), gam(1), gam(2), gam(3))) ]] and the Levi-Civita symbol [[ levi(mu, nu, rho, sigma) ]] are four-dimensional, and
+
+[[ eqs(acomm(gammabar(mu), gamma5), 0) ]]
+
+[[ eqs(comm(gammahat(mu), gamma5), 0) ]]
+
+so [[ gamma5 ]] does not anticommute with the full [[ gam(mu) ]]. With [[ eqs(PL, (1 - gamma5)/2) ]] and [[ eqs(PR, (1 + gamma5)/2) ]], [[ eqs(ord(PR, gam(mu), PL), ord(gammabar(mu), PL)) ]] and [[ eqs(ord(PL, gam(mu), PL), ord(gammahat(mu), PL)) ]]. A trace with one [[ gamma5 ]] and four Dirac matrices is [[ -4*i*levi(mu, nu, rho, sigma) ]], and only the barred parts contribute.
+
+The physical projection [[ Pphys ]] sets every hatted external momentum, metric and Dirac matrix to zero, after all index contractions; an operator with vanishing projection is evanescent. [[ Pphys ]] does not commute with the loop integration: inside a loop [[ ord(vechat(k, mu), vechat(k, lo(mu))) ]] gives a trace of the hatted metric.
+
+To separate an evanescent contraction from an ultraviolet pole, the trace of the hatted metric is written [[ eqs(ghat(mu, lo(mu)), -2*eta) ]], including [[ to(sqhat(k), -2*eta*sq(k)/d) ]] under the integral, and [[ eta ]] is set to [[ ep ]] only at the end; every other factor of d is written [[ 4 - 2*ep ]]. After expansion with the Taylor operator to its superficial degree around an auxiliary mass, every one-loop graph takes the form
+
+[[ eqs(ord(Taylor(deg(G)), G), i*lf*(Nop(0)/ep + eta*Nop(1)/ep) + field(F, M)) ]]
+
+with polynomials [[ Nop(0) ]], [[ Nop(1) ]] in the external momenta and masses and finite terms [[ field(F, M) ]] that depend on the auxiliary mass and are never used. [[ Nop(0) ]] gives the pole, [[ Nop(1) ]] the evanescent-induced finite part. Graphs without [[ Delta1 ]] have four-dimensional fermion numerators and [[ eqs(Nop(1), 0) ]].
+
+=== card method-st
+title: The Slavnov–Taylor operator and the restoring equation
+report: sec:brst sec:m-ii sec:m-iii sec:dictionary sec:m-oneloop
+---
+The Slavnov–Taylor operator [[ STop(field(F)) ]] of a functional [[ field(F) ]] of fields and sources is quadratic: it sums the products of the derivative of [[ field(F) ]] with respect to each source [[ rho(mu, a) ]], [[ zsrc(a) ]], [[ Rbar(f) ]], [[ R(f) ]], [[ sigmadag ]], [[ sigma ]] and the derivative with respect to its field, plus the term of the auxiliary field. Its linearisation at the tree action is [[ bdop ]] in d dimensions and [[ bop ]] in four, with [[ eqs(ord(bop, bop), 0) ]]. The identity [[ eqs(STop(Gamma), 0) ]] for the effective action is the content of BRST invariance; in the regularised theory [[ eqs(STop(S0), Delta1) ]] is not zero.
+
+For the effective action the regularised quantum action principle states that [[ STop(Gamma) ]] equals the insertion of [[ STop(Sren) ]] into [[ Gamma ]]. On graphs the left side is a sum of products of two 1PI functions glued at a source leg and its field leg without propagator; the right side is the sum of 1PI graphs with exactly one breaking vertex. At one loop the left side is one loop function glued to one tree vertex.
+
+[[ ord(bop, field(Y)) ]] of a local functional [[ field(Y) ]] is a set of tree vertices of ghost number 1, built from the vertices of [[ field(Y) ]] with the ghost [[ omega(a) ]] of polarisation [[ field(u, up(a)) ]] and incoming momentum [[ q ]]: an added gauge leg with polarisation [[ -i*vec(q, lo(mu))*field(u, up(a)) ]] (the ghost-momentum contraction); each gauge, ghost and matter leg rotated by the ghost with its momentum shifted by [[ q ]]; and each source leg replaced by the amputated leg of its field on a tree vertex of [[ S0 ]] (an equation of motion).
+
+At one loop the restoring condition reads, for every ghost-number-one class of external legs,
+
+[[ eqs(field(V, ord(bop, DeltaS1ST)), -X1) ]]
+
+The left side is the vertex function of [[ ord(bop, DeltaS1ST) ]], linear in the unknown coefficients [[ rc(alpha) ]]; the right side is the finite, projected sum [[ X1 ]] of the graphs with one [[ Delta1 ]] vertex, after their poles have cancelled against [[ ord(bdop, deltaS1) ]]. Matching all classes gives an overdetermined linear system with a unique solution under the normalisation conditions; the Wess–Zumino condition [[ eqs(ord(bop, X1), 0) ]] and the absence of an anomaly are its consistency conditions.
+
+=== card method-beyond
+title: Beyond one loop
+report: sec:m-beyond sec:recipe sec:st-solution sec:auto-beyond
+---
+At order l the same identities hold: [[ deltaS(l) ]] is minus the pole of the graphs of order l, with all subdivergences subtracted by the forest formula of [[ Rbarop ]]; the breaking [[ Dl(l) ]] collects [[ Delta1 ]], the variations under [[ bdop ]] of the singular counterterms up to order l and of the finite ones below order l, and the products of source-dependent counterterms; [[ field(X, l) ]] is the finite, projected part of their insertions, and [[ eqs(ord(bop, DeltaS(l)), -field(X, l)) ]] is solved over the same basis with the same normalisation conditions.
+
+Three things change at two loops. The singular counterterm can contain non-evanescent non-invariant poles. The evanescent parts of [[ deltaS1 ]] and the d-dimensional form of [[ DeltaS1ST ]] enter the two-loop graphs and change [[ field(X, 2) ]]; they must be kept exactly as at one loop. The source counterterms enter quadratically. Since the hypercharge ghost can then sit on an internal line, the existence condition of (N4) must be checked again.
+
+The finite part of the two-loop breaking is local only after the sum of four classes of graphs. It can be obtained in two bookkeepings. In bookkeeping A the one-loop subgraphs that contain [[ Delta1 ]] are not subtracted, and [[ field(X, 2) ]] needs the complete finite parts of all classes. In bookkeeping B (the prescription of Lazopoulos et al.) these subgraphs are subtracted at fixed [[ eta ]] with [[ Kf ]], the pole part with [[ eta ]] kept until the last integration, and a purely evanescent remainder of one loop is inserted; then UV-expanded integrals suffice.
+
+Status, as stated in the report: the one-loop extraction is proven; bookkeeping A is exact at every order; bookkeeping B is shown at two loops, checked on a toy two-loop graph and consistent with the published abelian two-loop breaking; its extension beyond two loops is argued but not tested on any graph. No two-loop calculation in the Standard Model was done. The automation package supports one loop only and lists what is missing for two: a two-loop back-end, the subtraction of subdivergences, graphs with counterterm insertions, the source–field products of the breaking and the remainder of bookkeeping B.

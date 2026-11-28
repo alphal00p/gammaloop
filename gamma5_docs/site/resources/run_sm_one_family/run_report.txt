@@ -1,0 +1,149 @@
+hepkit_renorm run report: model sm_one_family, target order 1
+status: done
+checks: 15 of 15 passed
+
+steps:
+  [l=0] action                 3.6 s  fields=42, S0_classes=77, Delta1_classes=77
+  [l=0] tree_model             3.6 s  particles=60, vertex_rules=174, couplings=63
+  [l=1] classes                3.2 s  ghost_number_0=85, structures_0=109, ghost_number_1=168, structures_1=353, ghost_number_2=280, structures_2=879
+  [l=1] bases                 12.9 s  Q=109, N=353, singular=117, evanescent=8
+  [l=1] graphs                38.4 s  graphs_ghost_number_0=655, graphs_ghost_number_1=2218, vanishing_odd_automorphism=0
+  [l=1] poles                 31.2 s  nonzero_singular_coefficients=59, evanescent_nonzero=8, closure_rank=84, loop_evaluations=0, cache_hits=1317
+  [l=1] pole_identity          9.8 s  classes=168, failed=0, loop_evaluations=0, cache_hits=3535
+  [l=1] breaking              67.1 s  nonzero_components=132, closed=True, anomalous=False, loop_evaluations=0, cache_hits=10189
+  [l=1] restoring             20.1 s  unknowns=109, allowed=70, rank=70, nonzero=39, existence_conditions=14
+  [l=1] store                 22.6 s  
+  [l=1] model                 14.7 s  vertex_rules=912, particles=60, couplings=500
+
+checks:
+  [PASS] [l=0] ST(S_0) = Delta_1: exact zero test (D = 4, 6, 8) of ST(S_0) - s S_0
+  [PASS] [l=0] Delta_1 is non-zero and evanescent: 77 classes; its four-dimensional limit vanishes
+  [PASS] [l=0] tree model loads in HepKIT: 60 particles, 174 vertex rules
+  [PASS] [l=1] classes derived: 85 / 168 / 280 classes of ghost number 0 / 1 / 2
+  [PASS] [l=1] Q and N complete: |Q| = 109, |N| = 353 equal the structure counts of their classes
+  [PASS] [l=1] ghost-number-0 poles in the span of the singular basis: 496 exact equations on 85 classes (D = 6, full spinors), coefficients polynomials on their graded supports; reconstructed at 1 prime(s), confirmed at a further prime
+  [PASS] [l=1] four-dimensional limit of deltaS is b-closed: all 84 relations of b on the Q coefficients hold
+  [PASS] [l=1] deltaS spanned by field and parameter directions: 20 derived directions; unmatched: []
+  [PASS] [l=1] pole identity (ghost-number-1 poles = -V_{b_d deltaS}): 168 of 168 classes (D = 6, 2 parameter points); failed: []
+  [PASS] [l=1] P N1 of the ghost-number-1 classes in the span of N: 2050 exact equations on 168 classes (D = 4, physical spinors, both embeddings of i), coefficients polynomials on their graded supports; reconstructed at 1 prime(s), confirmed at a further prime
+  [PASS] [l=1] b X = 0: on 526 rows of the ghost-number-2 classes
+  [PASS] [l=1] no anomaly (X in b(span Q)): rank b(span Q) = 84; components outside: {}
+  [PASS] [l=1] restoring counterterm unique: 109 unknowns, 70 allowed by the normalisation, rank 70; rank of b on Q 84
+  [PASS] [l=1] normalisation conditions applied without relaxation: N1: 14/14, N2: 18/18, N3: 14/14, N4: 18/18
+  [PASS] [l=1] renormalised model loads in HepKIT: 912 vertex rules: {'S0': 151, 'Delta1': 23, 'deltaS1': 316, 'DeltaS1': 145, 'bd_deltaS1': 39, 'bd_DeltaS1': 238}
+
+results of order 1:
+  renormalisation constants (units (1/(16 pi^2))^l / eps):
+    Z[G]: 11/3*g_s^2
+    Z[gh_G]: 20/3*g_s^2
+    Z[W]: 11/6*g^2
+    Z[gh_W]: 23/6*g^2
+    Z[B]: -43/18*gp^2
+    Z[gh_B]: -43/18*gp^2
+    Z[Q]: -4/3*g_s^2-3/4*g^2-1/36*gp^2-1/2*y_u^2-1/2*y_d^2
+    Z[U]: -4/3*g_s^2-4/9*gp^2-y_u^2
+    Z[D]: -4/3*g_s^2-1/9*gp^2-y_d^2
+    Z[L]: -3/4*g^2-1/4*gp^2-1/2*y_e^2
+    Z[E]: -gp^2-y_e^2
+    Z[H]: 3/2*g^2+1/2*gp^2-3*y_u^2-3*y_d^2-y_e^2
+    d[g_s]: -29/6*g_s^3
+    d[g]: -35/12*g^3
+    d[gp]: 43/36*gp^3
+    d[m2]: 6*m2*lambda+3*m2*y_u^2+3*m2*y_d^2+m2*y_e^2-9/4*g^2*m2-3/4*gp^2*m2
+    d[lambda]: 6*lambda*y_u^2+6*lambda*y_d^2+2*lambda*y_e^2-9/2*g^2*lambda+3/8*g^2*gp^2+9/16*g^4-3/2*gp^2*lambda+3/16*gp^4+12*lambda^2-3*y_u^4-3*y_d^4-y_e^4
+    d[y_u]: 3/4*y_u*y_d^2+1/2*y_u*y_e^2-4*g_s^2*y_u-9/8*g^2*y_u-17/24*gp^2*y_u+9/4*y_u^3
+    d[y_d]: 1/2*y_d*y_e^2-4*g_s^2*y_d-9/8*g^2*y_d-5/24*gp^2*y_d+3/4*y_u^2*y_d+9/4*y_d^3
+    d[y_e]: -9/8*g^2*y_e-15/8*gp^2*y_e+3/2*y_u^2*y_e+3/2*y_d^2*y_e+5/4*y_e^3
+  beta functions (units (1/(16 pi^2))^l):
+    g_s: -29/3*g_s^3
+    g: -35/6*g^3
+    gp: 43/18*gp^3
+    m2: 12*m2*lambda+6*m2*y_u^2+6*m2*y_d^2+2*m2*y_e^2-9/2*g^2*m2-3/2*gp^2*m2
+    lambda: 12*lambda*y_u^2+12*lambda*y_d^2+4*lambda*y_e^2-9*g^2*lambda+3/4*g^2*gp^2+9/8*g^4-3*gp^2*lambda+3/8*gp^4+24*lambda^2-6*y_u^4-6*y_d^4-2*y_e^4
+    y_u: 3/2*y_u*y_d^2+y_u*y_e^2-8*g_s^2*y_u-9/4*g^2*y_u-17/12*gp^2*y_u+9/2*y_u^3
+    y_d: y_d*y_e^2-8*g_s^2*y_d-9/4*g^2*y_d-5/12*gp^2*y_d+3/2*y_u^2*y_d+9/2*y_d^3
+    y_e: -9/4*g^2*y_e-15/4*gp^2*y_e+3*y_u^2*y_e+3*y_d^2*y_e+5/2*y_e^3
+  anomalous dimensions (units (1/(16 pi^2))^l):
+    G: -11/3*g_s^2
+    gh_G: -20/3*g_s^2
+    W: -11/6*g^2
+    gh_W: -23/6*g^2
+    B: 43/18*gp^2
+    gh_B: 43/18*gp^2
+    Q: 4/3*g_s^2+3/4*g^2+1/36*gp^2+1/2*y_u^2+1/2*y_d^2
+    U: 4/3*g_s^2+4/9*gp^2+y_u^2
+    D: 4/3*g_s^2+1/9*gp^2+y_d^2
+    L: 3/4*g^2+1/4*gp^2+1/2*y_e^2
+    E: gp^2+y_e^2
+    H: -3/2*g^2-1/2*gp^2+3*y_u^2+3*y_d^2+y_e^2
+  evanescent counterterm coefficients [b_d-closed]:
+    E1[G G]: -2/3*g_s^2 [not closed]
+    E2[W W]: -2/3*g^2 [not closed]
+    E3[B B]: -5/9*gp^2 [not closed]
+    E4[H Hdag]: 2*y_u^2+2*y_d^2+2/3*y_e^2 [not closed]
+    E5[G G]: -4/3*g_s^2 [closed]
+    E6[W W]: -4/3*g^2 [closed]
+    E7[B B]: -20/9*gp^2 [closed]
+    E8[H Hdag]: -3*y_u^2-3*y_d^2-y_e^2 [closed]
+  restoring counterterm r_alpha (non-zero):
+    Q2[G G]: -2/3*g_s^2
+    Q6[W W]: -2/3*g^2
+    Q10[B B]: -5/9*gp^2
+    Q21[G G G]: -8/3*g_s^3
+    Q30[G Q Qbar]: 3/4*g_s*g^2+1/36*g_s*gp^2+1/2*g_s*y_u^2+1/2*g_s*y_d^2+4/3*g_s^3
+    Q31[G U Ubar]: 4/9*g_s*gp^2+g_s*y_u^2+4/3*g_s^3
+    Q32[G D Dbar]: 1/9*g_s*gp^2+g_s*y_d^2+4/3*g_s^3
+    Q37[gh_G Q src_Q]: -3/2*g_s^3
+    Q39[gh_G U src_U]: -3/2*g_s^3
+    Q41[gh_G D src_D]: -3/2*g_s^3
+    Q42[W W W]: -8/3*g^3
+    Q50[W Q Qbar]: 1/36*g*gp^2+4/3*g_s^2*g+3/4*g^3
+    Q51[W L Lbar]: 1/4*g*gp^2+3/4*g^3
+    Q53[W H Hdag]: 2*g*y_u^2+2*g*y_d^2+2/3*g*y_e^2
+    Q58[gh_W Q src_Q]: -g^3
+    Q60[gh_W L src_L]: -g^3
+    Q65[B Q Qbar]: 1/3*gp*y_u^2-1/6*gp*y_d^2+2/9*g_s^2*gp+1/8*g^2*gp+1/216*gp^3
+    Q66[B U Ubar]: 1/6*gp*y_u^2+8/9*g_s^2*gp+8/27*gp^3
+    Q67[B D Dbar]: 1/6*gp*y_d^2-4/9*g_s^2*gp-1/27*gp^3
+    Q68[B L Lbar]: -1/2*gp*y_e^2-3/8*g^2*gp-1/8*gp^3
+    Q69[B E Ebar]: -1/2*gp*y_e^2-gp^3
+    Q71[B H Hdag]: gp*y_u^2+gp*y_d^2+1/3*gp*y_e^2
+    Q90[G G G G]: -1/2*g_s^4
+    Q91[G G G G]: 10/3*g_s^4
+    Q92[G G G G]: -g_s^4
+    Q93[G G G B]: 2/9*g_s^3*gp
+    Q95[G G W W]: 1/6*g_s^2*g^2
+    Q96[G G W W]: 1/3*g_s^2*g^2
+    Q97[G G B B]: 11/108*g_s^2*gp^2
+    Q98[G G B B]: 11/54*g_s^2*gp^2
+    Q99[G G H Hdag]: -g_s^2*y_u^2-g_s^2*y_d^2
+    Q100[W W W W]: 7/6*g^4
+    Q101[W W W W]: -g^4
+    Q103[W W B B]: 1/18*g^2*gp^2
+    Q104[W W B B]: 1/9*g^2*gp^2
+    Q105[W W H Hdag]: -3/2*g^2*y_u^2-3/2*g^2*y_d^2-1/2*g^2*y_e^2
+    Q106[W B H Hdag]: -g*gp*y_u^2-2*g*gp*y_d^2
+    Q107[B B B B]: 95/648*gp^4
+    Q108[B B H Hdag]: -13/12*gp^2*y_u^2-7/12*gp^2*y_d^2-3/4*gp^2*y_e^2
+  existence conditions:
+    0: Q29[G gh_B src_G] (testable in ['G G gh_B', 'gh_G gh_B src_G', 'G G G gh_B', 'G gh_B Q Qbar', 'G gh_B U Ubar', 'G gh_B D Dbar', 'G G G G gh_B'])
+    1: Q35[gh_G gh_B src_gh_G] (testable in ['gh_G gh_B src_G', 'G gh_G gh_B src_G', 'gh_G gh_G gh_B src_gh_G', 'gh_G gh_B Q src_Q', 'gh_G gh_B Qbar src_Qbar', 'gh_G gh_B U src_U', 'gh_G gh_B Ubar src_Ubar', 'gh_G gh_B D src_D', 'gh_G gh_B Dbar src_Dbar'])
+    2: Q49[W gh_B src_W] (testable in ['W W gh_B', 'gh_W gh_B src_W', 'W W W gh_B', 'W gh_B Q Qbar', 'W gh_B L Lbar', 'W gh_B H Hdag', 'W W W W gh_B', 'W W gh_B H Hdag', 'W B gh_B H Hdag'])
+    3: Q56[gh_W gh_B src_gh_W] (testable in ['gh_W gh_B src_W', 'W gh_W gh_B src_W', 'gh_W gh_W gh_B src_gh_W', 'gh_W gh_B Q src_Q', 'gh_W gh_B Qbar src_Qbar', 'gh_W gh_B L src_L', 'gh_W gh_B Lbar src_Lbar', 'gh_W gh_B H src_H', 'gh_W gh_B Hdag src_Hdag'])
+    4: Q64[B gh_B src_B] (testable in ['B B gh_B', 'gh_B gh_B src_B', 'B gh_B Q Qbar', 'B gh_B U Ubar', 'B gh_B D Dbar', 'B gh_B L Lbar', 'B gh_B E Ebar', 'B gh_B H Hdag', 'W B gh_B H Hdag', 'B B gh_B H Hdag'])
+    5: Q72[gh_B Q src_Q] (testable in ['gh_B Q Qbar', 'G gh_B Q Qbar', 'W gh_B Q Qbar', 'B gh_B Q Qbar', 'gh_B Q Ubar H', 'gh_B Q Dbar Hdag', 'gh_B Qbar U Hdag', 'gh_B Qbar D H'])
+    6: Q73[gh_B Q src_Q] (testable in ['gh_B Q Ubar H', 'gh_B Q Dbar Hdag', 'gh_B Qbar U Hdag', 'gh_B Qbar D H'])
+    7: Q74[gh_B U src_U] (testable in ['gh_B U Ubar', 'G gh_B U Ubar', 'B gh_B U Ubar', 'gh_B Q Ubar H', 'gh_B Qbar U Hdag'])
+    8: Q75[gh_B U src_U] (testable in ['gh_B Q Ubar H', 'gh_B Qbar U Hdag'])
+    9: Q76[gh_B D src_D] (testable in ['gh_B D Dbar', 'G gh_B D Dbar', 'B gh_B D Dbar', 'gh_B Q Dbar Hdag', 'gh_B Qbar D H'])
+    10: Q78[gh_B L src_L] (testable in ['gh_B L Lbar', 'W gh_B L Lbar', 'B gh_B L Lbar', 'gh_B L Ebar Hdag', 'gh_B Lbar E H'])
+    11: Q79[gh_B L src_L] (testable in ['gh_B L Ebar Hdag', 'gh_B Lbar E H'])
+    12: Q80[gh_B E src_E] (testable in ['gh_B E Ebar', 'B gh_B E Ebar', 'gh_B L Ebar Hdag', 'gh_B Lbar E H'])
+    13: Q82[gh_B H src_H] (testable in ['gh_B H Hdag', 'W gh_B H Hdag', 'B gh_B H Hdag', 'gh_B Q Ubar H', 'gh_B Q Dbar Hdag', 'gh_B Qbar U Hdag', 'gh_B Qbar D H', 'gh_B L Ebar Hdag', 'gh_B Lbar E H', 'W W gh_B H Hdag', 'W B gh_B H Hdag', 'B B gh_B H Hdag', 'gh_B H H Hdag Hdag'])
+  breaking X_l: 132 non-zero components on N
+
+outputs:
+  tree_model: sm_one_family_tree.json
+  store: sm_one_family_store.json
+  order_data: sm_one_family_order_data.json
+  renormalised_model: sm_one_family_renormalised.json

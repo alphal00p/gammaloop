@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="The renormalised Lagrangian of the Standard Model at one loop with a non-anticommuting gamma5 (BMHV scheme), operator by operator, with coefficients, Feynman rules and the graphs behind each term.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Renormalised Standard Model at one loop, BMHV γ₅">
+<meta property="og:description" content="The one-loop renormalised Lagrangian of the Standard Model with a non-anticommuting γ₅ (BMHV scheme, sterile partners, MS-bar, finite Slavnov–Taylor-restoring counterterms), operator by operator, in the unbroken and the broken phase.">
+<title>Renormalised SM, BMHV γ₅</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1d22'/%3E%3Ctext x='15' y='22' font-family='Georgia,serif' font-style='italic' font-size='19' fill='%23f6f5f1' text-anchor='middle'%3E%CE%B3%3C/text%3E%3Ctext x='23' y='26' font-family='Georgia,serif' font-size='10' fill='%23f6f5f1'%3E5%3C/text%3E%3C/svg%3E">
+<script>
+  // theme before the first paint (no flash); storage may be unavailable
+  try { var t = localStorage.getItem("gamma5docs.theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+<link rel="stylesheet" href="assets/app.css">
+<link rel="modulepreload" href="assets/app.js">
+<script type="module" src="assets/app.js"></script>
+</head>
+<body>
+<a id="skip" class="skip" href="#/">Skip to content</a>
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="brand" href="#/" data-nav="home">
+      <span class="brand-mark" aria-hidden="true">γ<sub>5</sub></span>
+      <span class="brand-text"><span class="brand-main">Renormalised SM</span><span class="brand-sub">one loop · BMHV</span></span>
+    </a>
+    <nav id="main-nav" class="mainnav" aria-label="Main">
+      <ul>
+        <li><a href="#/" data-nav="home">Overview</a></li>
+        <li class="nav-phases"><ul id="main-nav-phases">
+          <li><a href="#/phase/unbroken" data-nav="phase:unbroken">Unbroken phase</a></li>
+          <li><a href="#/phase/broken" data-nav="phase:broken">Broken phase</a></li>
+        </ul></li>
+        <li><a href="#/classes" data-nav="classes">Green's functions</a></li>
+        <li><a href="#/theory" data-nav="theory">Theory</a></li>
+        <li><a href="#/report" data-nav="report">Report</a></li>
+        <li><a href="#/resources" data-nav="resources">Resources</a></li>
+      </ul>
+    </nav>
+    <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Theme">
+      <svg class="ti ti-system" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10 3.5a6.5 6.5 0 0 1 0 13z" fill="currentColor"/></svg>
+      <svg class="ti ti-light" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3.6" fill="none" stroke="currentColor" stroke-width="1.5"/><g stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M10 1.8v2.2M10 16v2.2M1.8 10H4M16 10h2.2M4.2 4.2l1.6 1.6M14.2 14.2l1.6 1.6M4.2 15.8l1.6-1.6M14.2 5.8l1.6-1.6"/></g></svg>
+      <svg class="ti ti-dark" viewBox="0 0 20 20" aria-hidden="true"><path d="M15.8 12.6A6.6 6.6 0 0 1 7.4 4.2a6.6 6.6 0 1 0 8.4 8.4z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+      <span class="theme-label">Auto</span>
+    </button>
+  </div>
+</header>
+<div id="mock-notice" class="mock-notice" role="note" hidden></div>
+<main id="main" tabindex="-1">
+  <noscript><div class="page"><h1>JavaScript is required</h1><p>This reference is a static single-page application; it needs JavaScript to read its data files. The report itself is available as <a href="report/one_loop_gamma5.pdf">PDF</a>.</p></div></noscript>
+</main>
+<footer class="foot">
+  <div class="foot-in">
+    <p>One-loop renormalisation of the Standard Model with a non-anticommuting γ<sub>5</sub>: BMHV scheme, sterile partners, MS-bar, finite Slavnov–Taylor-restoring counterterms. Mathematics rendered with the Symbolica expression viewer; graphs drawn with HepKIT.</p>
+    <p id="foot-meta" class="muted"></p>
+  </div>
+</footer>
+<dialog id="lightbox" class="lightbox" aria-label="Graph"></dialog>
+</body>
+</html>

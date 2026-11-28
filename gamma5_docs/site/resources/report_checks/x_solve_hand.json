@@ -1,0 +1,297 @@
+{
+ "units": "1/(16 pi^2); Delta S^(1)_ST = (1/(16 pi^2)) sum_alpha r_alpha Q_alpha",
+ "normalisation": "(N1)-(N4) of sec:normalisation; (N4) holds, (N4') not needed",
+ "r": {
+  "Q_rho[gs d]": "0",
+  "Q_rho[(B,W^I,W^I)]": "0",
+  "Q_rho[(W^I,B,W^I)]": "0",
+  "Q_rho[(B,G^A,G^A)]": "0",
+  "Q_rho[(G^A,B,G^A)]": "0",
+  "Q_zeta[-1/2 fg_(G)]": "0",
+  "Q_zeta[-1/2 fg_(W)]": "0",
+  "Q_sigma^(W)": "0",
+  "Q_L^(G)": "-2*g_s**2/3",
+  "Q_M^(G)": "0",
+  "Q_L^(W)": "-2*g**2/3",
+  "Q_M^(W)": "0",
+  "Q_L^(B)": "-10*g'**2/9",
+  "Q_M^(B)": "0",
+  "Q_3f^(G)": "-2*g_s**2/3",
+  "Q_3f^(W)": "-2*g**2/3",
+  "Q_3d": "0",
+  "Q_3B": "0",
+  "Q_B1^(G)": "0",
+  "Q_B1^(W)": "0",
+  "Q_B2^(G)": "0",
+  "Q_B2^(W)": "0",
+  "Q_B3^(G)": "0",
+  "Q_B3^(W)": "0",
+  "Q_Beps^(G)": "0",
+  "Q_Beps^(W)": "0",
+  "Q_G4a": "11/72",
+  "Q_G4b": "-1/4",
+  "Q_G4c": "5/12",
+  "Q_W4a": "7/24",
+  "Q_W4b": "-1/4",
+  "Q_B4": "95/648",
+  "Q_a^(GW)": "1/24",
+  "Q_b^(GW)": "1/12",
+  "Q_a^(GB)": "11/216",
+  "Q_b^(GB)": "11/108",
+  "Q_a^(WB)": "1/36",
+  "Q_b^(WB)": "1/18",
+  "Q_GGGB": "1/18",
+  "Q_4eps^(G)": "0",
+  "Q_4eps^(W)": "0",
+  "Q_R^(QG)": "-3*g_s**2/4",
+  "Q_V^(QG)": "-(27*g**2 + g'**2 + 48*g_s**2 + 18*y_d**2 + 18*y_u**2)/36",
+  "Q_R^(QW)": "-g**2/2",
+  "Q_V^(QW)": "-(27*g**2 + g'**2 + 48*g_s**2)/36",
+  "Q_V^(QB)": "-(27*g**2 + g'**2 + 48*g_s**2 - 36*y_d**2 + 72*y_u**2)/36",
+  "Q_R^(UG)": "-3*g_s**2/4",
+  "Q_V^(UG)": "-(4*g'**2 + 12*g_s**2 + 9*y_u**2)/9",
+  "Q_V^(UB)": "-(16*g'**2 + 48*g_s**2 + 9*y_u**2)/36",
+  "Q_R^(DG)": "-3*g_s**2/4",
+  "Q_V^(DG)": "-(g'**2 + 12*g_s**2 + 9*y_d**2)/9",
+  "Q_V^(DB)": "-(2*g'**2 + 24*g_s**2 - 9*y_d**2)/18",
+  "Q_R^(LW)": "-g**2/2",
+  "Q_V^(LW)": "-(3*g**2 + g'**2)/4",
+  "Q_V^(LB)": "-(3*g**2 + g'**2 + 4*y_e**2)/4",
+  "Q_V^(EB)": "-(2*g'**2 + y_e**2)/2",
+  "Q_J^(W)": "(3*y_d**2 + y_e**2 + 3*y_u**2)/3",
+  "Q_J^(B)": "(3*y_d**2 + y_e**2 + 3*y_u**2)/3",
+  "Q_D^(W)": "0",
+  "Q_D^(B)": "0",
+  "Q_WW": "-3*y_d**2 - y_e**2 - 3*y_u**2",
+  "Q_WB": "-2*y_d**2 - y_u**2",
+  "Q_BB": "-(7*y_d**2 + 9*y_e**2 + 13*y_u**2)/3",
+  "Q_GG": "-(y_d**2 + y_u**2)/2"
+ },
+ "r_excluded_by_normalisation": {
+  "Q_K^(Q)": "0 (N1)",
+  "Q_K^(U)": "0 (N1)",
+  "Q_K^(D)": "0 (N1)",
+  "Q_K^(L)": "0 (N1)",
+  "Q_K^(E)": "0 (N1)",
+  "Q_SS": "0 (N1)",
+  "Q_m": "0 (N1)",
+  "Q_lambda": "0 (N1)",
+  "Q_yu^+": "0 (N1)",
+  "Q_yu^-": "0 (N1)",
+  "Q_yd^+": "0 (N1)",
+  "Q_yd^-": "0 (N1)",
+  "Q_ye^+": "0 (N1)",
+  "Q_ye^-": "0 (N1)",
+  "Q_T^(G)": "0 (N2)",
+  "Q_rhod^(G)": "0 (N3)",
+  "Q_T^(W)": "0 (N2)",
+  "Q_rhod^(W)": "0 (N3)",
+  "Q_T^(B)": "0 (N2)",
+  "Q_rhod^(B)": "0 (N3)",
+  "Q_rho[fg_(G)]": "0 (N3)",
+  "Q_rho[fg_(W)]": "0 (N3)",
+  "Q_rho[(W^I,W^I,B)]": "0 (N4)",
+  "Q_rho[(G^A,G^A,B)]": "0 (N4)",
+  "Q_rho[(B,B,B)]": "0 (N4)",
+  "Q_zeta[(zeta^A w^A w^B)]": "0 (N4)",
+  "Q_zeta[(zeta^I w^I w^B)]": "0 (N4)",
+  "Q_R^(QB)": "0 (N4)",
+  "Q_R^(UB)": "0 (N4)",
+  "Q_R^(DB)": "0 (N4)",
+  "Q_R^(LB)": "0 (N4)",
+  "Q_R^(EB)": "0 (N4)",
+  "Q_sigma^(B)": "0 (N4)"
+ },
+ "conditions": [
+  {
+   "class": "omega omega rho~ (ccrho)",
+   "statement": "seven independent structures, only Q_rho[t] (5 allowed tensors) and Q_zeta[-1/2 fg_(r)] contribute, X = 0 => all seven r vanish",
+   "holds": true
+  },
+  {
+   "class": "omega omega rho~ A, omega omega omega zeta",
+   "statement": "b Delta S = 0 there after r_rho = r_zeta = 0; X = 0 at one loop",
+   "holds": true
+  },
+  {
+   "class": "omega omega sigma^dag H (ccsigmaH)",
+   "statement": "(r_zeta^(W) - r_sigma^(W)) (N_sigma^(WW) + Nbar_sigma^(WW)) = -X = 0 => r_sigma^(W) = 0; N_sigma^(WB) components: 0 = 0",
+   "holds": true
+  },
+  {
+   "class": "g1_cVV f-type, r=G",
+   "statement": "coefficient of N_f2: -r_L - r_3f = +2/3 (S_L+S_R) with r_L from omega A",
+   "holds": true
+  },
+  {
+   "class": "g1_cVV f-type, r=W",
+   "statement": "coefficient of N_f2: -r_L - r_3f = +2/3 (S_L+S_R) with r_L from omega A",
+   "holds": true
+  },
+  {
+   "class": "g1_cVV symmetric (d, BBB, B r r, r B)",
+   "statement": "X = 0; images of Q_3d, Q_3B, Q_B1,2,3^(r) linearly independent => coefficients 0",
+   "holds": true
+  },
+  {
+   "class": "g1_cVV epsilon",
+   "statement": "X_eps = -(1/3)[D_GGG N_eps_d + 2 D_BBB N_eps_B + sum_r D_Brr (N_epsBrr + 2 N_epsrB)] = 0 (D^{abc} = 0 in the SM); Q_Beps^(r) image N_epsBrr - N_epsrB => r_Beps = 0",
+   "holds": true
+  },
+  {
+   "class": "g1_cVVV (GW)",
+   "statement": "coefficients of N_a, N_b equal and of N_c, N_d equal (image 2(N_a+N_b), 2(N_c+N_d))",
+   "holds": true
+  },
+  {
+   "class": "g1_cVVV (GB)",
+   "statement": "coefficients of N_a, N_b equal and of N_c, N_d equal (image 2(N_a+N_b), 2(N_c+N_d))",
+   "holds": true
+  },
+  {
+   "class": "g1_cVVV (WB)",
+   "statement": "coefficients of N_a, N_b equal and of N_c, N_d equal (image 2(N_a+N_b), 2(N_c+N_d))",
+   "holds": true
+  },
+  {
+   "class": "g1_cVVV GGGB",
+   "statement": "X along N_GGGB1,2,3 in ratio 2:1:1 (image of Q_GGGB)",
+   "holds": true
+  },
+  {
+   "class": "g1_cVVV epsilon",
+   "statement": "X_eps along N_epsrBf - N_eps4B and N_epsdf proportional to D = 0; r_4eps = 0",
+   "holds": true
+  },
+  {
+   "class": "g1_cVVV other monomials",
+   "statement": "N_Bf3, N_rBf, N_df, N_E[t]: X = 0 and b Delta S = 0 (r_3d = r_B = r_rho = 0)",
+   "holds": true
+  },
+  {
+   "class": "g1_cVVVV",
+   "statement": "b Delta S|_(omega AAAA) = 0 identically (no quintic monomial, quartic monomials without derivative); X = 0",
+   "holds": true
+  },
+  {
+   "class": "g1_cFFV (Q,G)",
+   "statement": "i(N_FV^{frr} - N_VF^{fr}): r_R = -C_ad/4 (from ccRF) reproduces -X = -(C_ad/4)",
+   "holds": true
+  },
+  {
+   "class": "g1_cFFV (Q,W)",
+   "statement": "i(N_FV^{frr} - N_VF^{fr}): r_R = -C_ad/4 (from ccRF) reproduces -X = -(C_ad/4)",
+   "holds": true
+  },
+  {
+   "class": "g1_cFFV (Q,B)",
+   "statement": "i(N_FV^{frr} - N_VF^{fr}): r_R = -C_ad/4 (from ccRF) reproduces -X = -(C_ad/4)",
+   "holds": true
+  },
+  {
+   "class": "g1_cFFV (U,G)",
+   "statement": "i(N_FV^{frr} - N_VF^{fr}): r_R = -C_ad/4 (from ccRF) reproduces -X = -(C_ad/4)",
+   "holds": true
+  },
+  {
+   "class": "g1_cFFV (U,B)",
+   "statement": "i(N_FV^{frr} - N_VF^{fr}): r_R = -C_ad/4 (from ccRF) reproduces -X = -(C_ad/4)",
+   "holds": true
+  },
+  {
+   "class": "g1_cFFV (D,G)",
+   "statement": "i(N_FV^{frr} - N_VF^{fr}): r_R = -C_ad/4 (from ccRF) reproduces -X = -(C_ad/4)",
+   "holds": true
+  },
+  {
+   "class": "g1_cFFV (D,B)",
+   "statement": "i(N_FV^{frr} - N_VF^{fr}): r_R = -C_ad/4 (from ccRF) reproduces -X = -(C_ad/4)",
+   "holds": true
+  },
+  {
+   "class": "g1_cFFV (L,W)",
+   "statement": "i(N_FV^{frr} - N_VF^{fr}): r_R = -C_ad/4 (from ccRF) reproduces -X = -(C_ad/4)",
+   "holds": true
+  },
+  {
+   "class": "g1_cFFV (L,B)",
+   "statement": "i(N_FV^{frr} - N_VF^{fr}): r_R = -C_ad/4 (from ccRF) reproduces -X = -(C_ad/4)",
+   "holds": true
+  },
+  {
+   "class": "g1_cFFV (E,B)",
+   "statement": "i(N_FV^{frr} - N_VF^{fr}): r_R = -C_ad/4 (from ccRF) reproduces -X = -(C_ad/4)",
+   "holds": true
+  },
+  {
+   "class": "g1_ccRF",
+   "statement": "mixed N_RR^{frs} (r != s) and multiplet E: X = 0, b Delta S = 0",
+   "holds": true
+  },
+  {
+   "class": "g1_cFFV",
+   "statement": "mixed N_FV^{frs} (r != s), N_E[t]: X = 0, b Delta S = 0",
+   "holds": true
+  },
+  {
+   "class": "g1_cSSV N_SV^(WB) vs N_SV^(BW)",
+   "statement": "r_J^(B) + r_WB = r_J^(W) + r_WB = -(y_d^2 - y_e^2/3)",
+   "holds": true
+  },
+  {
+   "class": "g1_cSSV N_SC, N_SVE1..4, N_E",
+   "statement": "X = 0; b Delta S = 0 since r_D^(W) = r_sigma^(W) = 0",
+   "holds": true
+  },
+  {
+   "class": "g1_cSS N_S2, N_SE, N_Sm",
+   "statement": "X = 0; b Delta S = 0 (r_D = 0; Q_m excluded)",
+   "holds": true
+  },
+  {
+   "class": "g1_cSSVV, g1_cSSSS",
+   "statement": "b Delta S = 0 identically (no derivative-free rotation survives rigid invariance; r_sigma = 0); X = 0",
+   "holds": true
+  },
+  {
+   "class": "g1_cFFS O_u, W",
+   "statement": "r_R^(QW) - r_sigma^(W) = -g^2/2",
+   "holds": true
+  },
+  {
+   "class": "g1_cFFS O_u, G",
+   "statement": "r_R^(QG) - r_R^(UG) = 0",
+   "holds": true
+  },
+  {
+   "class": "g1_cFFS O_u, B (existence of (N4))",
+   "statement": "component of X along i y_k g' int omega^B (O_k - O_k^dag) is 0 (class g1_cFFS); b Delta S has none under (N4)",
+   "holds": true
+  },
+  {
+   "class": "g1_cFFS O_d, W",
+   "statement": "r_R^(QW) - r_sigma^(W) = -g^2/2",
+   "holds": true
+  },
+  {
+   "class": "g1_cFFS O_d, G",
+   "statement": "r_R^(QG) - r_R^(DG) = 0",
+   "holds": true
+  },
+  {
+   "class": "g1_cFFS O_d, B (existence of (N4))",
+   "statement": "component of X along i y_k g' int omega^B (O_k - O_k^dag) is 0 (class g1_cFFS); b Delta S has none under (N4)",
+   "holds": true
+  },
+  {
+   "class": "g1_cFFS O_e, W",
+   "statement": "r_R^(LW) - r_sigma^(W) = -g^2/2",
+   "holds": true
+  },
+  {
+   "class": "g1_cFFS O_e, B (existence of (N4))",
+   "statement": "component of X along i y_k g' int omega^B (O_k - O_k^dag) is 0 (class g1_cFFS); b Delta S has none under (N4)",
+   "holds": true
+  }
+ ]
+}

@@ -1,0 +1,162 @@
+%% Theory cards: the classical (tree-level) action S_0 and the breaking Delta_1.
+%% Format: see the docstring of gdocs/theory/__init__.py. Every number is taken from the report.
+
+=== card gauge-kinetic
+title: Gauge kinetic terms
+report: sec:action sec:g0_VV sec:st-dS cr-inv
+---
+The twelve gauge fields [[ A(mu, a) ]] (eight gluons [[ G(mu, A) ]], three fields [[ W(mu, I) ]] and the hypercharge field [[ B(mu) ]]) enter the classical action through the Yang–Mills Lagrangian [[ -1/4*ord(F(mu, nu, a), F(up(mu), up(nu), a)) ]], with [[ eqs(F(mu, nu, a), pd(lo(mu), A(nu, a)) - pd(lo(nu), A(mu, a)) + ord(fg(a, b, c), A(mu, b), A(nu, c))) ]] and the coupling-weighted structure constants [[ fg(a, b, c) ]] ([[ g_s*f(A, C, D) ]] for SU(3), [[ g*levi(I, J, K) ]] for SU(2), zero for U(1)). All its Lorentz indices are d-dimensional, [[ eqs(d, 4 - 2*ep) ]]; the term is BRST invariant in d dimensions and does not contribute to the breaking. Since the auxiliary field [[ b(a) ]] is kept as a field, the tree-level two-point function is the transverse [[ -(sq(p)*g(mu, nu) - vec(p, mu)*vec(p, nu))*delta(a, b) ]]; the gauge fixing sits in the [[ b(a) ]]–[[ A(mu, b) ]] function ({card:gauge-fixing|gauge fixing}).
+
+With a non-anticommuting [[ gamma5 ]] the chiral gauge vertex contains only the four-dimensional matrix [[ gammabar(mu) ]], so fermions couple only to the four-dimensional components [[ bar(A(mu, a)) ]] and fermion loops have four-dimensional numerators with d-dimensional denominators. The one-loop pole of the gauge two-point function therefore has three tensor structures: the unsplit transverse tensor of the gauge, ghost and Higgs loops, the barred transverse tensor [[ sqbar(p)*gbar(mu, nu) - vecbar(p, mu)*vecbar(p, nu) ]] of the fermion loops, and the evanescent, non-transverse remainder [[ sqhat(p)*gbar(mu, nu) ]] of the fermion loops (bars denote four-dimensional and hats (d−4)-dimensional parts).
+
+The coefficient is fixed by the class [[ ord(A, A) ]] ({sec:g0_VV}; 20 graphs of superficial degree 2): each graph G is expanded with the Taylor operator [[ Taylor(2) ]] around an auxiliary mass, and minus its pole, [[ -ord(Kop, Taylor(2), G) ]], is its contribution to the counterterm vertex. With [[ eqs(field(A, 0), ord(field(Z, A)^(1/2), A)) ]] the field-renormalisation constant is
+
+[[ eqs(dZ(A, r), lfe*(5/3*Cad(r) - 2/3*Ssum(r) - 1/3*Sinv(H, r))) ]]
+
+where [[ Cad(r) ]] is the adjoint Casimir ([[ 3*g_s^2 ]], [[ 2*g^2 ]], 0), [[ Ssum(r) ]] the fermion-loop sum of [[ Tr(Tg(a), Tg(b)) ]] ([[ 2*g_s^2 ]], [[ 2*g^2 ]], [[ 10/3*gp^2 ]]) and [[ Sinv(H, r) ]] the Higgs value (0, [[ g^2/2 ]], [[ gp^2/2 ]]); in units of [[ lfe ]] this is [[ 11/3*g_s^2 ]], [[ 11/6*g^2 ]] and [[ -43/18*gp^2 ]]. The fermion-loop parts not carried by the continued invariant form the {card:ct-evanescent|evanescent counterterms}. Since the gauge fixing is not renormalised, the invariant two-point counterterm is transverse; the finite restoring counterterm adds a longitudinal term ({card:st-gauge|finite gauge counterterms}).
+
+=== card gauge-self
+title: Cubic and quartic gauge self-interactions
+report: sec:action sec:g0_VVV sec:g0_VVVV cr-inv
+---
+The cubic and quartic terms of [[ -1/4*ord(F(mu, nu, a), F(up(mu), up(nu), a)) ]] couple the gluons among themselves and the [[ W(mu, I) ]] fields among themselves through the coupling-weighted structure constants [[ fg(a, b, c) ]] ([[ g_s*f(A, C, D) ]] and [[ g*levi(I, J, K) ]]); the abelian field [[ B(mu) ]] has no self-coupling. The three-gauge Feynman rule is [[ fg(a, b, c)*par(g(mu, nu)*vec(p(1) - p(2), rho) + g(nu, rho)*vec(p(2) - p(3), mu) + g(rho, mu)*vec(p(3) - p(1), nu)) ]] with all momenta incoming, and the four-gauge rule is [[ -i ]] times the usual sum of products [[ fg(a, b, x)*fg(c, e, x) ]] with differences of metrics. All metrics and momenta are d-dimensional, [[ eqs(d, 4 - 2*ep) ]].
+
+As for the two-point function, the fermion loops couple only to the four-dimensional components [[ bar(A(mu, a)) ]] and give the barred form of the tree vertex, while gauge, ghost and Higgs loops give its d-dimensional form. The poles of the classes [[ ord(A, A, A) ]] ({sec:g0_VVV}; 54 graphs, superficial degree 1) and [[ ord(A, A, A, A) ]] ({sec:g0_VVVV}; 237 graphs, degree 0) are combinations of these two structures, with the fermion-loop coefficient [[ 2/3*Ssum(r) ]] in both, [[ Ssum(r) ]] being the sum of [[ Tr(Tg(a), Tg(b)) ]] over the fermion multiplets. The difference between barred and d-dimensional structures is the evanescent operator [[ Etil(F, r) ]], whose coefficient is the same in the two-, three- and four-point functions ({card:ct-evanescent|evanescent counterterms}). Mixed and abelian combinations have no pole.
+
+In bare quantities the cubic term carries [[ field(Z, field(c, r))*field(Z, A)^(3/2) ]] and the quartic term [[ field(Z, field(c, r))^2*field(Z, A)^2 ]], with [[ field(c, r) ]] the coupling of the factor r. The counterterm factors are
+
+[[ eqs(dZc(field(c, r)) + 3/2*dZ(A, r), lfe*(2/3*Cad(r) - 2/3*Ssum(r) - 1/3*Sinv(H, r))) ]]
+
+[[ eqs(2*dZc(field(c, r)) + 2*dZ(A, r), lfe*(-1/3*Cad(r) - 2/3*Ssum(r) - 1/3*Sinv(H, r))) ]]
+
+with [[ Cad(r) ]] the adjoint Casimir and [[ Sinv(H, r) ]] the Higgs trace; in units of [[ lfe ]] the cubic factor is [[ 2/3*g_s^2 ]] and [[ -1/6*g^2 ]], the quartic one [[ -7/3*g_s^2 ]] and [[ -13/6*g^2 ]]. One field constant and one coupling constant per gauge factor fit the classes [[ ord(A, A) ]], [[ ord(A, A, A) ]], [[ ord(A, A, A, A) ]] and the ghost functions together; the report lists these cross-class conditions as a check ({sec:st-dS}). The finite restoring counterterm contains cubic and quartic gauge terms as well, some without a tree-level counterpart ({card:st-gauge|finite gauge counterterms}).
+
+=== card gauge-fixing
+title: Linear gauge fixing and the auxiliary field
+report: sec:action sec:brst sec:Sren1 sec:bp-gauge
+---
+For each of the twelve gauge fields there is a ghost [[ omega(a) ]], an antighost [[ omegabar(a) ]] and an auxiliary field [[ b(a) ]]. The gauge-fixing Lagrangian is
+
+[[ ord(b(a), pd(up(mu), A(mu, a))) + xi/2*ord(b(a), b(a)) + ord(pd(up(mu), omegabar(a)), field(par(ord(Dcov(mu), omega)), up(a))) ]]
+
+a linear covariant gauge. Together with the BRST source terms it is BRST exact: it is the BRST variation [[ sop ]] of [[ ord(omegabar(a), par(pd(up(mu), A(mu, a)) + xi/2*b(a))) ]] plus source terms, with [[ eqs(ord(sop, omegabar(a)), b(a)) ]] and [[ eqs(ord(sop, b(a)), 0) ]], and hence BRST invariant in d dimensions. Every calculation is done in the Feynman gauge [[ eqs(xi, 1) ]], where eliminating [[ b(a) ]] gives [[ -1/2*par(pd(up(mu), A(mu, a)))^2 ]], with the gauge propagator [[ -i*g(mu, nu)*delta(a, b)/sq(k) ]] and a d-dimensional metric.
+
+The gauge fixing is not renormalised. Because it is linear in the quantum fields, the identity [[ eqs(fder(Gamma, b(a)), pd(up(mu), A(mu, a)) + xi*b(a)) ]] holds exactly in the regularised theory and for every counterterm: [[ b(a) ]] never appears inside a loop, functions with an external [[ b(a) ]] are tree level, and no such class is computed. In bare quantities [[ b(a) ]], [[ omegabar(a) ]] and the source [[ rho(mu, a) ]] scale with [[ field(Z, A)^(-1/2) ]] and [[ eqs(field(xi, 0), field(Z, A)*xi) ]], so the gauge-fixing term receives no counterterm and the invariant gauge two-point counterterm is transverse. The companion identity for the antighost is the ghost equation ({card:ghost|ghost terms}).
+
+The gauge fixing contains no fermion and plays no role in the breaking. Its form matters for the broken phase: it does not depend on the Higgs doublet, so the shift [[ to(H, Hv + phi) ]] leaves it unchanged and the broken-phase action needs no further loop input ({card:broken-shift|broken phase}). An [[ field(R, xi) ]] gauge, which removes the gauge–Goldstone mixing, depends on [[ Hv ]]; the report describes the additional input it would need but does not compute it ({sec:bp-gauge}). The dependence on [[ xi ]] was not computed: all results hold at [[ eqs(xi, 1) ]].
+
+=== card ghost
+title: Ghost terms and the ghost equation
+report: sec:action sec:brst sec:g0_ghost_sources cr-inv
+---
+The Faddeev–Popov term [[ ord(pd(up(mu), omegabar(a)), field(par(ord(Dcov(mu), omega)), up(a))) ]], with [[ eqs(field(par(ord(Dcov(mu), omega)), up(a)), pd(lo(mu), omega(a)) + ord(fg(a, b, c), A(mu, b), omega(c))) ]], contains the ghost kinetic term (propagator [[ i*delta(a, b)/sq(k) ]]) and the ghost–gauge vertex with Feynman rule [[ -fg(a, b, c)*vec(pp, mu) ]], where [[ pp ]] is the outgoing momentum of the antighost [[ omegabar(a) ]]. Ghosts are Grassmann odd and carry ghost number 1; a closed ghost loop carries a factor −1. They couple only to gauge fields, and the ghost [[ omega(B) ]] of the abelian factor is free.
+
+By the ghost equation [[ eqs(fder(Gamma, omegabar(a)) + pd(lo(mu), fder(Gamma, rho(mu, a))), 0) ]], which holds exactly because it is linear in the quantum fields, the effective action [[ Gamma ]] depends on the antighost and on the source [[ rho(mu, a) ]] of [[ ord(sop, A(mu, a)) ]] only through [[ eqs(rhotilde(mu, a), rho(mu, a) + pd(up(mu), omegabar(a))) ]]. Green's functions with an external antighost therefore follow from those with an external [[ rho(mu, a) ]]. The ghost counterterms are fixed by the functions [[ ord(rho, omega) ]], [[ ord(rho, A, omega) ]] and [[ ord(zsrc, omega, omega) ]] of the class of ghost and BRST-source functions ({sec:g0_ghost_sources}; 20 graphs), where [[ zsrc(a) ]] is the source of [[ ord(sop, omega(a)) ]].
+
+With [[ eqs(field(omega, 0), ord(field(Z, omega)^(1/2), omega)) ]] the ghost constant is [[ eqs(dZ(omega, r), lfe*(8/3*Cad(r) - 2/3*Ssum(r) - 1/3*Sinv(H, r))) ]] ([[ 20/3*g_s^2 ]] and [[ 23/6*g^2 ]] in units of [[ lfe ]]), with [[ Cad(r) ]] the adjoint Casimir, [[ Ssum(r) ]] the fermion trace and [[ Sinv(H, r) ]] the Higgs trace. The ghost kinetic counterterm has the coefficient [[ eqs(1/2*(dZ(omega, r) - dZ(A, r)), 1/2*lfe*Cad(r)) ]], and the ghost–gauge vertex and all non-linear source terms share [[ eqs(dZc(field(c, r)) + 1/2*dZ(omega, r), -1/2*lfe*Cad(r)) ]], i.e. [[ -3/2*g_s^2 ]] and [[ -g^2 ]]. In the abelian factor every ghost counterterm vanishes.
+
+Ghost loops are d-dimensional and covariant and give no evanescent pole. The ghost does enter the breaking [[ Delta1 ]], where it multiplies the evanescent fermion kinetic term, and in the classes with external fermions the ghost of [[ Delta1 ]] can be an internal line that ends on a ghost–gauge vertex. The finite restoring counterterm has no ghost kinetic and no ghost–gauge term; its only ghost-dependent term is the {card:st-source|fermion source term}.
+
+=== card fermion-kinetic
+title: Fermion kinetic terms and sterile partners
+report: sec:fields sec:action sec:feynman-rules sec:g0_FF
+---
+Each chiral multiplet [[ f ]] (Q, U, D, L, E) has a physical field [[ psi(f) ]] of chirality [[ field(c, f) ]] (left-handed for Q and L, right-handed for U, D and E) and a sterile partner [[ chi(f) ]] of the opposite chirality. The partner has the colour and SU(2) indices of [[ psi(f) ]] and transforms like it under global transformations, but it is a singlet under all gauge groups. The pair forms one Dirac field [[ eqs(Psi(f), psi(f) + chi(f)) ]], [[ eqs(psi(f), ord(Pc(f), Psi(f))) ]], whose kinetic term [[ ord(Psibar(f), i, slash(pd), Psi(f)) ]] is the complete d-dimensional Dirac operator, while the gauge interaction [[ ord(Psibar(f), gammabar(mu), Tg(a, f), Pc(f), Psi(f), A(lo(mu), a)) ]] contains only the four-dimensional [[ gammabar(mu) ]] and the physical chirality.
+
+The sterile partners are needed for the propagator: [[ i*slash(k)/sq(k) ]] is the inverse of the complete d-dimensional kinetic operator, which is what makes a gauge vertex contracted with the ghost momentum cancel the adjacent propagators. In chiral components the kinetic term contains, besides [[ ord(i, psibar(f), gammabar(mu), Dcov(mu), psi(f)) ]] and the free term of [[ chi(f) ]], the evanescent terms [[ ord(i, psibar(f), gammahat(mu), pd(lo(mu), chi(f))) + ord(i, chibar(f), gammahat(mu), pd(lo(mu), psi(f))) ]]. They are not gauge invariant; they are the only place where the regularisation breaks the gauge symmetry, and their BRST variation is the {card:breaking|breaking} [[ Delta1 ]]. Between two physical vertices the propagator is [[ eqs(ord(Pc(f), i*slash(k)/sq(k), Pcbar(f)), ord(i*slashbar(k)/sq(k), Pcbar(f))) ]]: in a graph without [[ Delta1 ]] the Dirac algebra is four-dimensional and the regularisation acts only through the integrals.
+
+The class [[ ord(Psibar, Psi) ]] ({sec:g0_FF}; 16 graphs, superficial degree 1) has the pole [[ lfe*(Cinv(f) + Ycal(f))*ord(slashbar(p), Pc(f)) ]] and no evanescent part. Only the physical component is renormalised, [[ eqs(field(psi, f, 0), ord(field(Z, f)^(1/2), psi(f))) ]], with
+
+[[ eqs(dZ(f), -lfe*(Cinv(f) + Ycal(f))) ]]
+
+where [[ eqs(Cinv(f), sumover(a, ord(Tg(a, f), Tg(a, f)))) ]] is the Casimir of the multiplet and [[ Ycal(f) ]] its Yukawa part ([[ (y_u^2 + y_d^2)/2 ]], [[ y_u^2 ]], [[ y_d^2 ]], [[ y_e^2/2 ]], [[ y_e^2 ]] on Q, U, D, L, E); for Q, [[ eqs(dZ(Q), -lfe*(4/3*g_s^2 + 3/4*g^2 + 1/36*gp^2 + (y_u^2 + y_d^2)/2)) ]]. The sterile partners and the evanescent kinetic terms are not renormalised. The normalisation condition (N1) excludes a finite fermion kinetic counterterm ({card:normalisation|normalisation}).
+
+=== card fermion-gauge
+title: Fermion–gauge vertices
+report: sec:action sec:m-i sec:g0_FFV cr-inv
+---
+The fermions couple to the gauge fields through [[ ord(Psibar(f), gammabar(mu), Tg(a, f), Pc(f), Psi(f), A(lo(mu), a)) ]], with the coupling-weighted generators [[ Tg(a, f) ]] ([[ g_s*T(A) ]], [[ g*tau(I)/2 ]], [[ gp*Y(f) ]]) and the projector [[ Pc(f) ]] on the physical chirality. The Feynman rule is [[ i*ord(gammabar(mu), Pc(f), Tg(a, f)) ]]. A chiral coupling can be written consistently only with the four-dimensional [[ gammabar(mu) ]], which anticommutes with [[ gamma5 ]] while [[ gammahat(mu) ]] commutes with it; the fermions therefore see only the four-dimensional gauge field [[ bar(A(mu, a)) ]]. This four-dimensional vertex next to a d-dimensional kinetic term is the origin of every finite breaking of the Slavnov–Taylor identity.
+
+Contracting the vertex with the incoming ghost momentum [[ q ]] gives two inverse propagators, which cancel the adjacent propagators as in a theory with an anticommuting [[ gamma5 ]], plus the vertex of the tree-level {card:breaking|breaking} [[ Delta1 ]] ({sec:m-i}). In a loop the inverse propagators cancel pairwise along the cycle after shifts of the loop momentum; what remains is the graph with the gauge vertex replaced by [[ Delta1 ]].
+
+The class [[ ord(Psibar, Psi, A) ]] ({sec:g0_FFV}; 46 graphs, superficial degree 0) covers the ten pairs of a multiplet [[ f ]] and a gauge factor [[ r ]] acting on it. Its pole has no evanescent part and is proportional to the tree vertex, with the counterterm factor
+
+[[ eqs(dZ(f) + dZc(field(c, r)) + 1/2*dZ(A, r), -lfe*(Cinv(f) + Cad(r) + Ycal(f))) ]]
+
+where [[ Cinv(f) ]] is the Casimir of the multiplet, [[ Cad(r) ]] the adjoint Casimir of the factor and [[ Ycal(f) ]] the Yukawa part of the fermion constant. The report checks that the coefficients of the vertex and of the kinetic monomial differ by [[ -Cad(r) ]] for all ten pairs ({sec:st-dS}). The finite restoring counterterm adds a four-dimensional vertex with the coefficient [[ -Cinv(f) - 1/2*field(nu, fr) ]] (times [[ lf ]]), where [[ field(nu, fr) ]] are Yukawa numbers ({card:st-fermion|finite fermion counterterms}).
+
+=== card yukawa
+title: Yukawa couplings
+report: sec:action sec:g0_FFS sec:g1_cFFS sec:normalisation
+---
+With one fermion family the Yukawa couplings [[ y_u ]], [[ y_d ]], [[ y_e ]] are real numbers without flavour mixing:
+
+[[ withhc(-y_u*ord(Qbar, Htilde, PR, U) - y_d*ord(Qbar, H, PR, D) - y_e*ord(Lbar, H, PR, E)) ]]
+
+with [[ eqs(Htilde(i), ord(levi(lo(i), lo(j)), cc(H(j)))) ]]. Only physical components enter, because [[ ord(Qbar, PR) ]] is the conjugate of the left-handed quark doublet and [[ ord(PR, U) ]] is the right-handed up quark; the sterile partners never couple to the Higgs doublet. The Yukawa terms are BRST invariant in d dimensions and do not contribute to the breaking [[ Delta1 ]].
+
+The class [[ ord(Psibar, Psi, H) ]] ({sec:g0_FFS}; 32 graphs, superficial degree 0) has a pole proportional to the tree vertex. With [[ eqs(field(y, k, 0), mu^ep*(y_k + dpar(y_k))) ]] the vertex counterterm is the tree rule times [[ dpar(y_k)/y_k + 1/2*(dZ(f) + dZ(prime(f)) + dZ(H)) ]], where [[ f ]] and [[ prime(f) ]] are the two multiplets of the vertex. For the up-type coupling
+
+[[ eqs(dpar(y_u)/y_u, lfe*(9/4*y_u^2 + 3/4*y_d^2 + 1/2*y_e^2 - 4*g_s^2 - 9/8*g^2 - 17/24*gp^2)) ]]
+
+which gives the beta function [[ eqs(field(beta, y_u), lf*y_u*(9/2*y_u^2 + 3/2*y_d^2 + y_e^2 - 8*g_s^2 - 9/4*g^2 - 17/12*gp^2)) ]], in agreement with the known one-family value.
+
+The finite restoring counterterm contains no Yukawa vertex: the real and imaginary Yukawa monomials are invariant directions, and the normalisation condition (N1) sets their finite coefficients to zero ({card:normalisation|normalisation}). The Yukawa couplings still enter the finite counterterms of other vertices through fermion loops (the numbers [[ field(nu, fr) ]] of the fermion–gauge vertices and [[ Ytil ]] of the scalar–gauge vertices). In the class [[ ord(omega, Psibar, Psi, H) ]] ({sec:g1_cFFS}; 122 graphs) the finite breaking is non-zero only for the SU(2) ghost and is reproduced by the finite fermion source terms; it has no component along the hypercharge ghost [[ omega(B) ]], which is one of the existence conditions of the normalisation (N4).
+
+=== card higgs-kinetic
+title: Higgs kinetic term and scalar–gauge vertices
+report: sec:action sec:g0_SS sec:g0_SSV_SSVV cr-ev
+---
+The Higgs doublet [[ H ]] (hypercharge 1/2, colour singlet) has the d-dimensional kinetic term [[ ord(dagger(par(ord(Dcov(mu), H))), Dcov(up(mu)), H) ]] with the covariant derivative [[ eqs(Dcov(mu), pd(lo(mu)) - i*ord(Tg(a, H), A(mu, a))) ]], where [[ Tg(a, H) ]] are the coupling-weighted generators on the doublet ([[ g*tau(I)/2 ]] and [[ gp/2 ]]). Its Feynman rules are the propagator [[ i*delta(lo(i), lo(j))/(sq(k) - m2) ]] and the vertices [[ i*vec(p + pp, mu)*Tg(a, H) ]] for [[ ord(Hdag, H, A) ]] and [[ i*g(mu, nu)*acomm(Tg(a, H), Tg(b, H)) ]] for [[ ord(Hdag, H, A, A) ]]. The term contains no fermion and is BRST invariant in d dimensions.
+
+The scalar functions receive two kinds of loops. Bosonic loops are d-dimensional and covariant. The Yukawa fermion loops have four-dimensional numerators and couple only to [[ bar(A(mu, a)) ]], so they give barred structures. The pole of the Higgs two-point function ({sec:g0_SS}; 8 graphs) is [[ lfe*(Ytil*(sqbar(p) + 2/3*sqhat(p)) - (2*sq(p) + m2)*Cinv(H) + 6*lambda*m2) ]], with [[ eqs(Ytil, 3*y_u^2 + 3*y_d^2 + y_e^2) ]] and [[ eqs(Cinv(H), 3/4*g^2 + 1/4*gp^2) ]]. The field constant, defined by [[ eqs(field(H, 0), ord(field(Z, H)^(1/2), H)) ]], is
+
+[[ eqs(dZ(H), lfe*(2*Cinv(H) - Ytil)) ]]
+
+and multiplies the continued d-dimensional invariant; the barred and hatted remainders of the fermion loops are the evanescent counterterms [[ Etil(H) ]] and [[ Eop(H) ]] ({card:ct-evanescent|evanescent counterterms}).
+
+The functions [[ ord(Hdag, H, A) ]] and [[ ord(Hdag, H, A, A) ]] ({sec:g0_SSV_SSVV}; 146 graphs) give the vertex factors [[ dZ(H) + dZc(field(c, r)) + 1/2*dZ(A, r) ]], equal to [[ lfe*(2*Cinv(H) - Ytil - Cad(r)) ]] for one gauge leg and [[ lfe*(2*Cinv(H) - Ytil - Cad(r) - Cad(s)) ]] for two, with [[ Cad(r) ]] the adjoint Casimir of the factor of each gauge leg; the functions with an external gluon have no pole. The Yukawa loops also break the Slavnov–Taylor identity at finite level; the restoring terms have purely Yukawa coefficients ({card:st-scalar|finite scalar counterterms}).
+
+=== card higgs-potential
+title: Scalar potential: mass and quartic terms
+report: sec:action sec:g0_SS sec:g0_SSSS sec:st-dS
+---
+The potential is [[ -m2*ord(Hdag, H) - lambda*par(ord(Hdag, H))^2 ]]. The unbroken phase is the expansion around [[ eqs(H, 0) ]]; [[ m2 ]] is a real parameter of either sign, the Higgs propagator is [[ i/(sq(k) - m2) ]] and the quartic Feynman rule is [[ -2*i*lambda*(delta(lo(i), lo(j))*delta(lo(k), lo(l)) + delta(lo(i), lo(l))*delta(lo(k), lo(j))) ]]. The potential contains no fermion, is BRST invariant in d dimensions and plays no role in the breaking.
+
+The mass counterterm follows from the Higgs two-point function ({sec:g0_SS}; 8 graphs, superficial degree 2) and the quartic one from the four-point function ({sec:g0_SSSS}; 63 graphs, degree 0). With [[ eqs(field(m, 0)^2, m2 + dpar(m2)) ]] and [[ eqs(field(lambda, 0), mu^(2*ep)*(lambda + dpar(lambda))) ]],
+
+[[ eqs(dpar(m2), lfe*m2*(6*lambda - 3*Cinv(H) + Ytil)) ]]
+
+[[ eqs(dpar(lambda), lfe*(12*lambda^2 - 6*lambda*Cinv(H) + 2*lambda*Ytil - field(Y, 4) + 3/16*field(G, 4))) ]]
+
+where [[ eqs(Cinv(H), 3/4*g^2 + 1/4*gp^2) ]], [[ eqs(Ytil, 3*y_u^2 + 3*y_d^2 + y_e^2) ]], [[ eqs(field(Y, 4), 3*y_u^4 + 3*y_d^4 + y_e^4) ]] and [[ eqs(field(G, 4), 3*g^4 + 2*g^2*gp^2 + gp^4) ]]. They give [[ eqs(field(beta, lambda), lf*(24*lambda^2 - 3*lambda*(3*g^2 + gp^2) + 4*lambda*Ytil - 2*field(Y, 4) + 3/8*field(G, 4))) ]], the known one-family value.
+
+There is no finite counterterm in this sector. The mass and quartic monomials are invariant directions, and the normalisation condition (N1) sets their finite coefficients to zero ({card:normalisation|normalisation}). The finite breaking does not depend on [[ m2 ]]: in a one-loop graph with [[ Delta1 ]], Higgs propagators occur only in classes with external fermions, whose local part has dimensionless coefficients. Hence there is no finite gauge-boson mass term at [[ eqs(H, 0) ]], and the breaking vanishes in the class [[ ord(omega, Hdag, H, Hdag, H) ]]. The potential is renormalised by the MS-bar poles alone, in the broken phase as well ({card:broken-masses|masses}).
+
+=== card brst-sources
+title: BRST source terms
+report: sec:action sec:brst sec:g0_ghost_sources sec:st-poles
+---
+The BRST operator [[ sop ]] acts as [[ eqs(ord(sop, A(mu, a)), field(par(ord(Dcov(mu), omega)), up(a))) ]], [[ eqs(ord(sop, omega(a)), -1/2*ord(fg(a, b, c), omega(b), omega(c))) ]], [[ eqs(ord(sop, Psi(f)), i*ord(omega(a), Tg(a, f), Pc(f), Psi(f))) ]] and [[ eqs(ord(sop, H), i*ord(omega(a), Tg(a, H), H)) ]]; the sterile partners do not transform. The non-linear variations are coupled to external sources that never propagate and have the statistics opposite to their field:
+
+[[ ord(rho(mu, a), sop, A(mu, a)) + ord(zsrc(a), sop, omega(a)) + sumover(f, ord(Rbar(f), sop, Psi(f)) - ord(par(ord(sop, Psibar(f))), R(f))) + ord(sigmadag, sop, H) + ord(par(ord(sop, Hdag)), sigma) ]]
+
+The sources make the Slavnov–Taylor operator possible: for a functional [[ field(F) ]] of fields and sources, [[ STop(field(F)) ]] is the integral of a sum of products of a derivative with respect to a source and one with respect to its field, for example [[ ord(fder(field(F), rho(mu, a)), fder(field(F), A(mu, a))) ]], plus [[ ord(b(a), fder(field(F), omegabar(a))) ]]. For the tree action the source derivative of [[ S0 ]] is the BRST variation of the field, so [[ eqs(STop(S0), eqs(ord(sop, S0), Delta1)) ]]. The linearised operator [[ bdop ]] acts as [[ sop ]] on the fields and replaces each source by plus or minus the equation of motion of its field. A counterterm that depends on sources changes the BRST transformations themselves.
+
+The source functions [[ ord(rho, omega) ]], [[ ord(rho, A, omega) ]], [[ ord(zsrc, omega, omega) ]], [[ ord(Rbar, omega, Psi) ]], [[ ord(sigmadag, omega, H) ]] and their conjugates form one class ({sec:g0_ghost_sources}; 20 graphs). With the sources scaled inversely to their fields, all non-linear source terms share one coefficient, [[ -1/2*lfe*Cad(r) ]] ([[ -3/2*g_s^2 ]] and [[ -g^2 ]] in units of [[ lfe ]]; zero for the hypercharge), and the linear term of [[ rho(mu, a) ]] has [[ +1/2*lfe*Cad(r) ]], with [[ Cad(r) ]] the adjoint Casimir. In d dimensions [[ bdop ]] of the fermion source counterterm contains the breaking [[ Delta1r(fr) ]] of the multiplet [[ f ]] and the factor [[ r ]]; this is the term that cancels the evanescent pole of the [[ ord(omega, Psibar, Psi) ]] graphs with an internal ghost ({sec:st-poles}). Of all source terms only the fermion ones receive a {card:st-source|finite counterterm}.
+
+=== card breaking
+title: The tree-level breaking Δ₁
+report: sec:delta sec:feynman-rules sec:m-i sec:m-oneloop
+---
+Every term of the regularised action [[ S0 ]] except the evanescent fermion kinetic terms is BRST invariant in d dimensions. Applying [[ sop ]] to the fermion Lagrangian, the variation of the gauge vertex cancels the four-dimensional part of the variation of the kinetic term, and what remains is
+
+[[ eqs(Delta1, sumover(f, intd(ord(omega(a), Psibar(f), Tg(a, f), gammahat(mu), Pcbar(f), pd(lo(mu), Psi(f))) + ord(omega(a), pd(lo(mu), Psibar(f)), gammahat(mu), Pc(f), Tg(a, f), Psi(f))))) ]]
+
+an integrated local operator of ghost number 1 and dimension 5 coupling a ghost, a physical fermion and its sterile partner through the evanescent matrix [[ gammahat(mu) ]]; its physical projection vanishes, [[ eqs(ord(Pphys, Delta1), 0) ]]. Its sign agrees with Bělusca-Maïto et al. (arXiv:2004.14398) and with Lazopoulos et al. (arXiv:2610.38618) and is opposite to eq. (1.18) of the BMHV starter pack read with the ghost as the leftmost factor. [[ Delta1 ]] is not part of the action; it is listed for its Feynman rule. With [[ Psi(f) ]] entering with momentum [[ p ]], [[ Psibar(f) ]] leaving with [[ pp ]] and the ghost [[ omega(a) ]] carrying [[ pp - p ]], the rule is
+
+[[ eqs(i*field(V, Delta1), ord(Tg(a, f), par(ord(slashhat(p), Pcbar(f)) - ord(slashhat(pp), Pc(f))))) ]]
+
+When the external ghost sits on [[ Delta1 ]], both fermion legs are internal, one is the sterile component, and vertex and sterile propagator combine into the scalar insertion [[ i*ord(Tg(a), sqhat(q)/sq(q)) ]] on a physical fermion line ({eq:m-sterile}). If its ghost is internal (classes with external fermions), [[ Delta1 ]] sits at an external fermion leg ({sec:g1}).
+
+[[ Delta1 ]] is what determines the finite counterterm. By the regularised quantum action principle, [[ STop(Gamma) ]] equals the insertion of [[ STop(Sren) ]] into the effective action. At one loop this insertion consists of the one-loop graphs with exactly one [[ Delta1 ]] vertex plus the tree vertex [[ ord(bdop, deltaS1) ]]: their poles cancel class by class, and their finite part, projected on four dimensions, is the breaking [[ X1 ]], [[ eqs(ord(i, X1), sumover(G, ord(Pphys, i*lf*Nop(1)))) ]], with [[ Nop(1) ]] the coefficient of [[ eta/ep ]] in the expanded graph G and [[ Pphys ]] the projection on four-dimensional external momenta and indices ({card:method-st|Slavnov–Taylor operator}). [[ X1 ]] is local and independent of the auxiliary mass because [[ Delta1 ]] is evanescent: only graphs of non-negative superficial degree with an internal sterile line next to [[ Delta1 ]] contribute, and no reading point enters.

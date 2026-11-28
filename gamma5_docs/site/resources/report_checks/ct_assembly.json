@@ -1,0 +1,1253 @@
+{
+ "key": "ct_assembly",
+ "units": "kappa = 1/(16 pi^2 eps); every coefficient is that of 16 pi^2 eps delta S^(1)",
+ "symbols": "gp = g' ; m2 = m^2 ; Yt = 3 y_u^2 + 3 y_d^2 + y_e^2 ; C_H = 3/4 g^2 + 1/4 g'^2 ; S_F^(r) = S_L^(r) + S_R^(r) = (2 g_s^2, 2 g^2, 10/3 g'^2) ; C_ad = (3 g_s^2, 2 g^2, 0)",
+ "1_delta_S_monomials": {
+  "note": "four-dimensional limit per monomial of tab:Qbasis (engine names); \"bosonic\" = graphs without a closed fermion loop (d-dimensional covariant, or fermion bilinears with unique continuation), \"fermion_loops\" = closed fermion loops (barred). Monomials not listed with a non-zero value are zero (class given).",
+  "monomials": {
+   "T_G": {
+    "total": "11*g_s**2/3",
+    "bosonic": "5*g_s**2",
+    "fermion_loops": "-4*g_s**2/3",
+    "classes": [
+     "g0_VV"
+    ]
+   },
+   "L_G": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VV"
+    ]
+   },
+   "M_G": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VV"
+    ]
+   },
+   "T_W": {
+    "total": "11*g**2/6",
+    "bosonic": "19*g**2/6",
+    "fermion_loops": "-4*g**2/3",
+    "classes": [
+     "g0_VV"
+    ]
+   },
+   "L_W": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VV"
+    ]
+   },
+   "M_W": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VV"
+    ]
+   },
+   "T_B": {
+    "total": "-43*gp**2/18",
+    "bosonic": "-gp**2/6",
+    "fermion_loops": "-20*gp**2/9",
+    "classes": [
+     "g0_VV"
+    ]
+   },
+   "L_B": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VV"
+    ]
+   },
+   "M_B": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VV"
+    ]
+   },
+   "3f_G": {
+    "total": "2*g_s**2/3",
+    "bosonic": "2*g_s**2",
+    "fermion_loops": "-4*g_s**2/3",
+    "classes": [
+     "g0_VVV"
+    ]
+   },
+   "3f_W": {
+    "total": "-g**2/6",
+    "bosonic": "7*g**2/6",
+    "fermion_loops": "-4*g**2/3",
+    "classes": [
+     "g0_VVV"
+    ]
+   },
+   "3d": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VVV"
+    ]
+   },
+   "3B": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VVV"
+    ]
+   },
+   "GB1": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VVV"
+    ]
+   },
+   "GB2": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VVV"
+    ]
+   },
+   "GB3": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VVV"
+    ]
+   },
+   "GBeps": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VVV"
+    ]
+   },
+   "WB1": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VVV"
+    ]
+   },
+   "WB2": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VVV"
+    ]
+   },
+   "WB3": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VVV"
+    ]
+   },
+   "WBeps": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VVV"
+    ]
+   },
+   "G4a": {
+    "total": "7/24",
+    "bosonic": "1/8",
+    "fermion_loops": "1/6",
+    "classes": [
+     "g0_VVVV"
+    ]
+   },
+   "G4b": {
+    "total": "-7/12",
+    "bosonic": "-1/4",
+    "fermion_loops": "-1/3",
+    "classes": [
+     "g0_VVVV"
+    ]
+   },
+   "G4c": {
+    "total": "7/8",
+    "bosonic": "3/8",
+    "fermion_loops": "1/2",
+    "classes": [
+     "g0_VVVV"
+    ]
+   },
+   "W4a": {
+    "total": "13/24",
+    "bosonic": "5/24",
+    "fermion_loops": "1/3",
+    "classes": [
+     "g0_VVVV"
+    ]
+   },
+   "W4b": {
+    "total": "-13/24",
+    "bosonic": "-5/24",
+    "fermion_loops": "-1/3",
+    "classes": [
+     "g0_VVVV"
+    ]
+   },
+   "B4": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VVVV"
+    ]
+   },
+   "GWa": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VVVV"
+    ]
+   },
+   "GWb": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VVVV"
+    ]
+   },
+   "GBa": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VVVV"
+    ]
+   },
+   "GBb": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VVVV"
+    ]
+   },
+   "WBa": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VVVV"
+    ]
+   },
+   "WBb": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VVVV"
+    ]
+   },
+   "GGGB": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VVVV"
+    ]
+   },
+   "GGGBeps": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VVVV"
+    ]
+   },
+   "WWWBeps": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_VVVV"
+    ]
+   },
+   "K_Q": {
+    "total": "-3*g**2/4 - 4*g_s**2/3 - gp**2/36 - y_d**2/2 - y_u**2/2",
+    "bosonic": "-3*g**2/4 - 4*g_s**2/3 - gp**2/36 - y_d**2/2 - y_u**2/2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_FF"
+    ]
+   },
+   "V_QG": {
+    "total": "-3*g**2/4 - 13*g_s**2/3 - gp**2/36 - y_d**2/2 - y_u**2/2",
+    "bosonic": "-3*g**2/4 - 13*g_s**2/3 - gp**2/36 - y_d**2/2 - y_u**2/2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_FFV"
+    ]
+   },
+   "V_QW": {
+    "total": "-11*g**2/4 - 4*g_s**2/3 - gp**2/36 - y_d**2/2 - y_u**2/2",
+    "bosonic": "-11*g**2/4 - 4*g_s**2/3 - gp**2/36 - y_d**2/2 - y_u**2/2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_FFV"
+    ]
+   },
+   "V_QB": {
+    "total": "-3*g**2/4 - 4*g_s**2/3 - gp**2/36 - y_d**2/2 - y_u**2/2",
+    "bosonic": "-3*g**2/4 - 4*g_s**2/3 - gp**2/36 - y_d**2/2 - y_u**2/2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_FFV"
+    ]
+   },
+   "K_U": {
+    "total": "-4*g_s**2/3 - 4*gp**2/9 - y_u**2",
+    "bosonic": "-4*g_s**2/3 - 4*gp**2/9 - y_u**2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_FF"
+    ]
+   },
+   "V_UG": {
+    "total": "-13*g_s**2/3 - 4*gp**2/9 - y_u**2",
+    "bosonic": "-13*g_s**2/3 - 4*gp**2/9 - y_u**2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_FFV"
+    ]
+   },
+   "V_UB": {
+    "total": "-4*g_s**2/3 - 4*gp**2/9 - y_u**2",
+    "bosonic": "-4*g_s**2/3 - 4*gp**2/9 - y_u**2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_FFV"
+    ]
+   },
+   "K_D": {
+    "total": "-4*g_s**2/3 - gp**2/9 - y_d**2",
+    "bosonic": "-4*g_s**2/3 - gp**2/9 - y_d**2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_FF"
+    ]
+   },
+   "V_DG": {
+    "total": "-13*g_s**2/3 - gp**2/9 - y_d**2",
+    "bosonic": "-13*g_s**2/3 - gp**2/9 - y_d**2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_FFV"
+    ]
+   },
+   "V_DB": {
+    "total": "-4*g_s**2/3 - gp**2/9 - y_d**2",
+    "bosonic": "-4*g_s**2/3 - gp**2/9 - y_d**2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_FFV"
+    ]
+   },
+   "K_L": {
+    "total": "-3*g**2/4 - gp**2/4 - y_e**2/2",
+    "bosonic": "-3*g**2/4 - gp**2/4 - y_e**2/2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_FF"
+    ]
+   },
+   "V_LW": {
+    "total": "-11*g**2/4 - gp**2/4 - y_e**2/2",
+    "bosonic": "-11*g**2/4 - gp**2/4 - y_e**2/2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_FFV"
+    ]
+   },
+   "V_LB": {
+    "total": "-3*g**2/4 - gp**2/4 - y_e**2/2",
+    "bosonic": "-3*g**2/4 - gp**2/4 - y_e**2/2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_FFV"
+    ]
+   },
+   "K_E": {
+    "total": "-gp**2 - y_e**2",
+    "bosonic": "-gp**2 - y_e**2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_FF"
+    ]
+   },
+   "V_EB": {
+    "total": "-gp**2 - y_e**2",
+    "bosonic": "-gp**2 - y_e**2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_FFV"
+    ]
+   },
+   "SS": {
+    "total": "3*g**2/2 + gp**2/2 - 3*y_d**2 - y_e**2 - 3*y_u**2",
+    "bosonic": "3*g**2/2 + gp**2/2",
+    "fermion_loops": "-3*y_d**2 - y_e**2 - 3*y_u**2",
+    "classes": [
+     "g0_SS"
+    ]
+   },
+   "m": {
+    "total": "3*g**2*m2/4 + gp**2*m2/4 - 6*lambda*m2",
+    "bosonic": "3*g**2*m2/4 + gp**2*m2/4 - 6*lambda*m2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_SS"
+    ]
+   },
+   "lam": {
+    "total": "-9*g**4/16 - 3*g**2*gp**2/8 + 3*g**2*lambda/2 - 3*gp**4/16 + gp**2*lambda/2 - 12*lambda**2 + 3*y_d**4 + y_e**4 + 3*y_u**4",
+    "bosonic": "-9*g**4/16 - 3*g**2*gp**2/8 + 3*g**2*lambda/2 - 3*gp**4/16 + gp**2*lambda/2 - 12*lambda**2",
+    "fermion_loops": "3*y_d**4 + y_e**4 + 3*y_u**4",
+    "classes": [
+     "g0_SSSS"
+    ]
+   },
+   "J_W": {
+    "total": "g**2/2 - gp**2/2 + 3*y_d**2 + y_e**2 + 3*y_u**2",
+    "bosonic": "g**2/2 - gp**2/2",
+    "fermion_loops": "3*y_d**2 + y_e**2 + 3*y_u**2",
+    "classes": [
+     "g0_SSV_SSVV"
+    ]
+   },
+   "D_W": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_SSV_SSVV"
+    ]
+   },
+   "J_B": {
+    "total": "-3*g**2/2 - gp**2/2 + 3*y_d**2 + y_e**2 + 3*y_u**2",
+    "bosonic": "-3*g**2/2 - gp**2/2",
+    "fermion_loops": "3*y_d**2 + y_e**2 + 3*y_u**2",
+    "classes": [
+     "g0_SSV_SSVV"
+    ]
+   },
+   "D_B": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_SSV_SSVV"
+    ]
+   },
+   "HWW": {
+    "total": "-5*g**2/2 + gp**2/2 - 3*y_d**2 - y_e**2 - 3*y_u**2",
+    "bosonic": "-5*g**2/2 + gp**2/2",
+    "fermion_loops": "-3*y_d**2 - y_e**2 - 3*y_u**2",
+    "classes": [
+     "g0_SSV_SSVV"
+    ]
+   },
+   "HBB": {
+    "total": "3*g**2/2 + gp**2/2 - 3*y_d**2 - y_e**2 - 3*y_u**2",
+    "bosonic": "3*g**2/2 + gp**2/2",
+    "fermion_loops": "-3*y_d**2 - y_e**2 - 3*y_u**2",
+    "classes": [
+     "g0_SSV_SSVV"
+    ]
+   },
+   "HWB": {
+    "total": "-g**2/2 + gp**2/2 - 3*y_d**2 - y_e**2 - 3*y_u**2",
+    "bosonic": "-g**2/2 + gp**2/2",
+    "fermion_loops": "-3*y_d**2 - y_e**2 - 3*y_u**2",
+    "classes": [
+     "g0_SSV_SSVV"
+    ]
+   },
+   "HGG": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_SSV_SSVV"
+    ]
+   },
+   "yu+": {
+    "total": "-3*g**2*y_u/4 - 16*g_s**2*y_u/3 - 25*gp**2*y_u/36 - y_d**2*y_u",
+    "bosonic": "-3*g**2*y_u/4 - 16*g_s**2*y_u/3 - 25*gp**2*y_u/36 - y_d**2*y_u",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_FFS"
+    ]
+   },
+   "yu-": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_FFS"
+    ]
+   },
+   "yd+": {
+    "total": "-3*g**2*y_d/4 - 16*g_s**2*y_d/3 - gp**2*y_d/36 - y_d*y_u**2",
+    "bosonic": "-3*g**2*y_d/4 - 16*g_s**2*y_d/3 - gp**2*y_d/36 - y_d*y_u**2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_FFS"
+    ]
+   },
+   "yd-": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_FFS"
+    ]
+   },
+   "ye+": {
+    "total": "-3*g**2*y_e/4 - 9*gp**2*y_e/4",
+    "bosonic": "-3*g**2*y_e/4 - 9*gp**2*y_e/4",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_FFS"
+    ]
+   },
+   "ye-": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_FFS"
+    ]
+   },
+   "rd_G": {
+    "total": "3*g_s**2/2",
+    "bosonic": "3*g_s**2/2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "rd_W": {
+    "total": "g**2",
+    "bosonic": "g**2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "rd_B": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "rf_G": {
+    "total": "-3*g_s**2/2",
+    "bosonic": "-3*g_s**2/2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "rf_W": {
+    "total": "-g**2",
+    "bosonic": "-g**2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "rd": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "rWWB": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "rBWW": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "rWBW": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "rGGB": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "rBGG": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "rGBG": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "rBBB": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "zf_G": {
+    "total": "-3*g_s**2/2",
+    "bosonic": "-3*g_s**2/2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "zf_W": {
+    "total": "-g**2",
+    "bosonic": "-g**2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "zGGB": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "zWWB": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "R_QG+": {
+    "total": "-3*g_s**2/2",
+    "bosonic": "-3*g_s**2/2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "R_QW+": {
+    "total": "-g**2",
+    "bosonic": "-g**2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "R_QB+": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "R_UG+": {
+    "total": "-3*g_s**2/2",
+    "bosonic": "-3*g_s**2/2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "R_UB+": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "R_DG+": {
+    "total": "-3*g_s**2/2",
+    "bosonic": "-3*g_s**2/2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "R_DB+": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "R_LW+": {
+    "total": "-g**2",
+    "bosonic": "-g**2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "R_LB+": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "R_EB+": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "sig_W+": {
+    "total": "-g**2",
+    "bosonic": "-g**2",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   },
+   "sig_B+": {
+    "total": "0",
+    "bosonic": "0",
+    "fermion_loops": "0",
+    "classes": [
+     "g0_ghost_sources"
+    ]
+   }
+  }
+ },
+ "1b_d_dimensional_form": {
+  "statement": "delta S^(1) = kappa { sum_(r=G,W) [ A_r O_A^(r,d) + Gamma_r O_g^(r,d) + K_r O_c^(r,d) ] + t_B Q_T^(B,d) + sum_(r=G,W,B) F_r int d^d x (-1/4 Fbar^(r)_(mu nu) Fbar^(r mu nu)) + sum_f (dZ_f/2) O_psi^f + C_H O_H^(d) - Yt int d^d x (Dbar_mu H)^dag Dbar^mu H + Y4 Q_lambda + X_lambda^bos Q_lambda + X_m^bos Q_m + sum_k dy_k^bos Q^+_(y_k) + sum_r c_EA^(r) E_A^(r) + c_EH E_H }, with O^(d) the directions of eq:closed continued with unsplit d-dimensional indices, fields and derivatives; fermion bilinears (Q_K, Q_V, Q_R, Yukawa) have a unique continuation (P_cbar gamma^mu P_c = gbar^mu P_c).",
+  "coefficients": {
+   "A_G (O_A^(d))": "5*g_s**2/2",
+   "Gamma_G (O_g^(d))": "-11*g_s**2/2",
+   "K_G (O_c^(d))": "4*g_s**2",
+   "K_G+Gamma_G (coefficient of Delta_1^(G) in b_d delta S)": "-3*g_s**2/2",
+   "A_W (O_A^(d))": "19*g**2/12",
+   "Gamma_W (O_g^(d))": "-43*g**2/12",
+   "K_W (O_c^(d))": "31*g**2/12",
+   "K_W+Gamma_W (coefficient of Delta_1^(W) in b_d delta S)": "-g**2",
+   "t_B (Q_T^(B,d))": "-gp**2/6",
+   "O_A^B, O_c^B": "(0, 0)",
+   "Z_H^bos (O_H^(d))": "(3*g**2 + gp**2)/4",
+   "fermion loops: -1/4Fbar^2_G": "-4*g_s**2/3",
+   "fermion loops: -1/4Fbar^2_W": "-4*g**2/3",
+   "fermion loops: -1/4Fbar^2_B": "-20*gp**2/9",
+   "fermion loops: |DbarH|^2": "-3*y_d**2 - y_e**2 - 3*y_u**2",
+   "fermion loops: Q_lambda": "3*y_d**4 + y_e**4 + 3*y_u**4"
+  },
+  "bosonic_decomposition_4d_names": {
+   "O_A^G": "5*g_s**2/2",
+   "O_c^G": "4*g_s**2",
+   "O_g^G": "-11*g_s**2/2",
+   "O_A^W": "19*g**2/12",
+   "O_c^W": "31*g**2/12",
+   "O_g^W": "-43*g**2/12",
+   "Q_T^B": "-gp**2/6",
+   "O_A^B": "0",
+   "O_c^B": "0",
+   "O_psi^Q": "-(27*g**2 + 48*g_s**2 + gp**2 + 18*y_d**2 + 18*y_u**2)/72",
+   "O_psi^U": "-(12*g_s**2 + 4*gp**2 + 9*y_u**2)/18",
+   "O_psi^D": "-(12*g_s**2 + gp**2 + 9*y_d**2)/18",
+   "O_psi^L": "-(3*g**2 + gp**2 + 2*y_e**2)/8",
+   "O_psi^E": "-(gp**2 + y_e**2)/2",
+   "O_H": "(3*g**2 + gp**2)/4",
+   "Q^+_yu": "-y_u*(27*g**2 + 96*g_s**2 + 17*gp**2 + 18*y_d**2 - 18*y_u**2)/24",
+   "Q^-_yu": "0",
+   "Q^+_yd": "-y_d*(27*g**2 + 96*g_s**2 + 5*gp**2 - 18*y_d**2 + 18*y_u**2)/24",
+   "Q^-_yd": "0",
+   "Q^+_ye": "-3*y_e*(3*g**2 + 5*gp**2 - 2*y_e**2)/8",
+   "Q^-_ye": "0",
+   "Q_lambda": "-3*(3*g**4 + 2*g**2*gp**2 - 24*g**2*lambda + gp**4 - 8*gp**2*lambda + 64*lambda**2)/16",
+   "Q_m": "3*m2*(3*g**2 + gp**2 - 8*lambda)/4",
+   "O_baryon": "0",
+   "O_lepton": "0"
+  },
+  "equivalent_all_d_dimensional_form": "F_r int(-1/4 Fbar^2) = F_r int(-1/4 F^2) + F_r Etilde_F^(r); -Yt |Dbar H|^2 = -Yt |D H|^2 - Yt Etilde_H. Then delta S = (all d-dim invariant directions) + Etilde_F^(r) [-2/3 S_F^(r)] + Etilde_H [-Yt] + E_A^(r) [-1/3 S_F^(r)] + E_H [-2/3 Yt].",
+  "b_d_of_delta_S": "b_d O_A^(r,d) = 0, b_d (O_g - O_c)^(r,d) = 0, b_d O_c^(r,d) = b_d O_g^(r,d) = Delta_1^(r) (the part of eq:Delta1 with ghosts of factor r), barred invariants, Etilde_F, Etilde_H, O_psi, O_H^(d), Q_lambda, Q_m, Q^+ are b_d-closed. Hence b_d delta S^(1) = kappa [ sum_(r=G,W) (K_r + Gamma_r) Delta_1^(r) + sum_r c_EA^(r) b_d E_A^(r) + c_EH b_d E_H ], K_r + Gamma_r = -C_ad^(r)/2.",
+  "correction_to_expected_resolution": "The expected form of cross-class point (1) holds with two amendments: (a) O_c^(r,d) and O_g^(r,d) are NOT b_d-closed (b_d O_c^(r,d) = b_d O_g^(r,d) = Delta_1^(r)); only O_A^(d), (O_g - O_c)^(d) and the source-free invariants are; the non-invariant part of delta S^(1) is therefore E_A^(r), E_H AND the source counterterms with coefficient K_r + Gamma_r = -C_ad^(r)/2 (Q_R^(fr), Q_sigma^(W), Q_zeta, Q_rho[fg]); (b) the fermion loops do not populate barred copies Obar_A, Obar_g, Obar_c separately (Obar_A is not b_d-closed: b_d Qbar_(rho partial) contains the barred-only gauge variation of the d-dimensional F^2); they populate only the source-free barred invariants -1/4 Fbar^2 (coefficient -2/3 S_F^(r)), |Dbar H|^2 (-Yt) and Q_lambda (+Y4), i.e. the 4d combination (O_A - O_g + O_c)/2 with coefficient -2/3 S_F."
+ },
+ "2_decomposition_4d": {
+  "coefficients_of_closed_directions": {
+   "O_A^G": "11*g_s**2/6",
+   "O_c^G": "10*g_s**2/3",
+   "O_g^G": "-29*g_s**2/6",
+   "O_A^W": "11*g**2/12",
+   "O_c^W": "23*g**2/12",
+   "O_g^W": "-35*g**2/12",
+   "Q_T^B": "-43*gp**2/18",
+   "O_A^B": "0",
+   "O_c^B": "0",
+   "O_psi^Q": "-(27*g**2 + 48*g_s**2 + gp**2 + 18*y_d**2 + 18*y_u**2)/72",
+   "O_psi^U": "-(12*g_s**2 + 4*gp**2 + 9*y_u**2)/18",
+   "O_psi^D": "-(12*g_s**2 + gp**2 + 9*y_d**2)/18",
+   "O_psi^L": "-(3*g**2 + gp**2 + 2*y_e**2)/8",
+   "O_psi^E": "-(gp**2 + y_e**2)/2",
+   "O_H": "(3*g**2 + gp**2 - 6*y_d**2 - 2*y_e**2 - 6*y_u**2)/4",
+   "Q^+_yu": "-y_u*(27*g**2 + 96*g_s**2 + 17*gp**2 - 18*y_d**2 - 12*y_e**2 - 54*y_u**2)/24",
+   "Q^-_yu": "0",
+   "Q^+_yd": "-y_d*(27*g**2 + 96*g_s**2 + 5*gp**2 - 54*y_d**2 - 12*y_e**2 - 18*y_u**2)/24",
+   "Q^-_yd": "0",
+   "Q^+_ye": "-y_e*(9*g**2 + 15*gp**2 - 12*y_d**2 - 10*y_e**2 - 12*y_u**2)/8",
+   "Q^-_ye": "0",
+   "Q_lambda": "-(9*g**4 + 6*g**2*gp**2 - 72*g**2*lambda + 3*gp**4 - 24*gp**2*lambda + 192*lambda**2 + 96*lambda*y_d**2 + 32*lambda*y_e**2 + 96*lambda*y_u**2 - 48*y_d**4 - 16*y_e**4 - 48*y_u**4)/16",
+   "Q_m": "m2*(9*g**2 + 3*gp**2 - 24*lambda - 12*y_d**2 - 4*y_e**2 - 12*y_u**2)/4",
+   "O_baryon": "0",
+   "O_lepton": "0"
+  },
+  "vanishing": "Q^-_(y_k) = 0 (k = u, d, e), O_baryon = O_lepton = 0, O_A^(B) = O_c^(B) = 0",
+  "overdetermination": "97 monomial coefficients from ten classes, 25 unknowns; 25 pivot monomials fix the coefficients, the other 72 are reproduced exactly (residual empty).",
+  "fit_residual": {},
+  "controls_symbolic": {
+   "3f_G": "fit fails (detected)",
+   "G4c": "fit fails (detected)",
+   "rf_W": "fit fails (detected)",
+   "R_QG+": "fit fails (detected)",
+   "V_LW": "fit fails (detected)",
+   "HWB": "fit fails (detected)",
+   "sig_W+": "fit fails (detected)",
+   "zf_G": "fit fails (detected)",
+   "J_B": "fit fails (detected)",
+   "T_B": "NOT DETECTED",
+   "V_EB": "fit fails (detected)",
+   "K_U": "fit fails (detected)"
+  },
+  "engine_b_closure": {
+   "stored_fingerprints": {
+    "cV": {
+     "abs": 5.951252563475193e-14,
+     "max_term": 5.0941023185092984e-14
+    },
+    "cVV": {
+     "abs": 2.5172073293884444e-12,
+     "max_term": 3230.2739226784956
+    },
+    "cVVV": {
+     "abs": 3.0926163410039053e-12,
+     "max_term": 5543.043177064777
+    },
+    "cVVVV": {
+     "abs": 2.120969705114584e-11,
+     "max_term": 1.3175675837658656e-11
+    },
+    "cSS": {
+     "abs": 8.152394204457378e-15,
+     "max_term": 40.88680073233918
+    },
+    "cSSV": {
+     "abs": 4.6056997016081074e-14,
+     "max_term": 45.34705987480643
+    },
+    "cSSVV": {
+     "abs": 8.136412426011069e-14,
+     "max_term": 26.622348800838598
+    },
+    "cSSSS": {
+     "abs": 1.6873899179256186e-14,
+     "max_term": 1.6873899179256186e-14
+    },
+    "ccSig": {
+     "abs": 2.6645352591003757e-15,
+     "max_term": 11.495216146675736
+    },
+    "ccSigb": {
+     "abs": 3.66205343881779e-15,
+     "max_term": 8.159359857850545
+    },
+    "ccRd": {
+     "abs": 1.0616525387548232e-13,
+     "max_term": 141.4164352224119
+    },
+    "ccRA": {
+     "abs": 3.8455700619993883e-13,
+     "max_term": 582.2833463918093
+    },
+    "cccZ": {
+     "abs": 1.4386433608866504e-13,
+     "max_term": 1.4480091346762213e-13
+    },
+    "cFF_Q": {
+     "abs": 6.487375805200672e-13,
+     "max_term": 441.2627507542787
+    },
+    "cFFV_Q": {
+     "abs": 2.341305701707205e-12,
+     "max_term": 566.6166460476923
+    },
+    "ccRF_Q": {
+     "abs": 1.449425816734581e-13,
+     "max_term": 231.84282360816215
+    },
+    "ccFR_Q": {
+     "abs": 2.8863236473409645e-13,
+     "max_term": 159.8747293727588
+    },
+    "cFF_U": {
+     "abs": 9.613685227616606e-14,
+     "max_term": 221.62086982358156
+    },
+    "cFFV_U": {
+     "abs": 1.3887002415814587e-12,
+     "max_term": 632.9556708294324
+    },
+    "ccRF_U": {
+     "abs": 6.032875804631393e-14,
+     "max_term": 83.12779960018983
+    },
+    "ccFR_U": {
+     "abs": 1.0577151482229422e-13,
+     "max_term": 79.32619133825922
+    },
+    "cFF_D": {
+     "abs": 1.884697027118463e-13,
+     "max_term": 223.23005916932922
+    },
+    "cFFV_D": {
+     "abs": 7.568346219991476e-13,
+     "max_term": 261.6778486488228
+    },
+    "ccRF_D": {
+     "abs": 5.678714019755555e-14,
+     "max_term": 124.31537489421636
+    },
+    "ccFR_D": {
+     "abs": 9.324498265862135e-14,
+     "max_term": 118.36029878131352
+    },
+    "cFF_L": {
+     "abs": 8.72983452674649e-15,
+     "max_term": 24.667324339047
+    },
+    "cFFV_L": {
+     "abs": 2.2609331405046364e-14,
+     "max_term": 20.582506907812565
+    },
+    "ccRF_L": {
+     "abs": 4.636427468134552e-15,
+     "max_term": 7.089692376649855
+    },
+    "ccFR_L": {
+     "abs": 4.782987168225453e-15,
+     "max_term": 12.061720139128488
+    },
+    "cFF_E": {
+     "abs": 2.220446049250313e-15,
+     "max_term": 7.987252292698218
+    },
+    "cFFV_E": {
+     "abs": 1.6489916001429096e-15,
+     "max_term": 1.6489916001429096e-15
+    },
+    "ccRF_E": {
+     "abs": 0.0,
+     "max_term": 1.0
+    },
+    "ccFR_E": {
+     "abs": 0.0,
+     "max_term": 1.0
+    },
+    "cFFS_QU": {
+     "abs": 1.1346521953453469e-13,
+     "max_term": 70.73528505816451
+    },
+    "cFFS_UQ": {
+     "abs": 1.9446897328759713e-13,
+     "max_term": 56.38695234182035
+    },
+    "cFFS_QD": {
+     "abs": 1.0225392166986224e-13,
+     "max_term": 53.57796483719325
+    },
+    "cFFS_DQ": {
+     "abs": 1.482630699580155e-13,
+     "max_term": 62.902576276439326
+    },
+    "cFFS_LE": {
+     "abs": 4.2241504759731946e-15,
+     "max_term": 6.783352044917467
+    },
+    "cFFS_EL": {
+     "abs": 3.432056157332031e-15,
+     "max_term": 5.188972635745895
+    }
+   },
+   "fresh_engine_evaluation_abs": {
+    "cV": 3.470568363811443e-14,
+    "cVV": 2.055130479204008e-13,
+    "cVVV": 9.868425679034127e-13,
+    "cVVVV": 5.72795040515333e-12,
+    "cSS": 2.808666774861361e-15,
+    "cSSV": 1.2933979113692383e-14,
+    "cSSVV": 2.3741127116891753e-14,
+    "cSSSS": 1.5066276542790435e-14,
+    "ccSig": 5.900916318210353e-16,
+    "ccSigb": 1.1957467920563633e-15,
+    "ccRd": 4.3498645783278965e-14,
+    "ccRA": 1.3336362016809245e-13,
+    "cccZ": 8.568356034932897e-14,
+    "cFF_Q": 3.784020547763039e-14,
+    "cFFV_Q": 1.574138085084136e-13,
+    "ccRF_Q": 5.4003877329337014e-14,
+    "ccFR_Q": 1.193237213563759e-13,
+    "cFF_U": 7.283063041541027e-14,
+    "cFFV_U": 1.9065862296939058e-13,
+    "ccRF_U": 2.842517866562357e-14,
+    "ccFR_U": 2.929642751054232e-14,
+    "cFF_D": 8.903517976938074e-14,
+    "cFFV_D": 1.7989505211591227e-13,
+    "ccRF_D": 3.03543989777123e-14,
+    "ccFR_D": 7.418283949015283e-14,
+    "cFF_L": 5.0242958677880805e-15,
+    "cFFV_L": 1.0048591735576161e-14,
+    "ccRF_L": 1.6011864169946886e-15,
+    "ccFR_L": 1.7763568394002505e-15,
+    "cFF_E": 8.881784197001252e-16,
+    "cFFV_E": 9.724487881612731e-15,
+    "ccRF_E": 0.0,
+    "ccFR_E": 0.0,
+    "cFFS_QU": 5.719152704227259e-14,
+    "cFFS_UQ": 5.34445266270135e-14,
+    "cFFS_QD": 1.6653345369377348e-14,
+    "cFFS_DQ": 1.7430589879943744e-14,
+    "cFFS_LE": 1.1102230246251565e-15,
+    "cFFS_EL": 2.094764613337708e-15
+   },
+   "controls": {
+    "3f_G": "perturbed by 0.1: max over classes 1.22e+02, in cVV 6.44e+01",
+    "rf_W": "perturbed by 0.1: max over classes 4.59e+01, in ccRA 6.38e+00",
+    "R_QG+": "perturbed by 0.1: max over classes 2.76e+01, in cFF_Q 6.49e+00",
+    "HWB": "perturbed by 0.1: max over classes 1.55e+00, in cSSV 1.55e+00",
+    "V_LW": "perturbed by 0.1: max over classes 1.22e+00, in cFF_L 1.22e+00",
+    "G4c": "perturbed by 0.1: max over classes 4.86e+02, in cVVV 4.86e+02"
+   }
+  }
+ },
+ "3_renormalisation_constants": {
+  "convention": "bare = Z x renormalised, S_0[bare] = S_0 + delta S^(1) at first order (MS-bar, Feynman gauge): A^(r)_0 = Z_A^(r)1/2 A^(r), rho_0 = Z_A^-1/2 rho, omegabar_0 = Z_A^-1/2 omegabar, b_0 = Z_A^-1/2 b, xi_0 = Z_A xi (gauge fixing and rho~ = rho + d omegabar unrenormalised as a whole); omega^(r)_0 = Z_omega^(r)1/2 omega^(r), zeta_0 = Z_omega^-1/2 zeta; c_(r,0) = mu^eps Z_(c_r) c_r; psi_(f,0) = Z_f^1/2 psi_f (physical chirality only), R_(f,0) = Z_f^-1/2 R_f, chi_(f,0) = chi_f; H_0 = Z_H^1/2 H, sigma_0 = Z_H^-1/2 sigma; y_(k,0) = mu^eps (y_k + dy_k), lambda_0 = mu^(2 eps)(lambda + dlambda), m^2_0 = m^2 + dm2. Then delta S = (dZ_A/2) O_A + dZ_c O_g + (dZ_omega/2) O_c + sum_f (dZ_f/2) O_psi^f + (dZ_H/2) O_H + dy_k Q^+_(y_k) - dlambda Q_lambda - dm2 Q_m, except the evanescent kinetic term psibar ghat d chi + chibar ghat d psi, which is not rescaled (delta S^(1) has no chi), and the evanescent operators of item 4. Abelian: O_g^B = O_A^B + O_c^B - 2 Q_T^B gives Z_(gp) Z_B^1/2 = 1 and Z_(gp) Z_(omega^B)^1/2 = 1.",
+  "values_in_kappa_units": {
+   "dZ_A": {
+    "G": "11*g_s**2/3",
+    "W": "11*g**2/6",
+    "B": "-43*gp**2/18"
+   },
+   "dZ_g": {
+    "G": "-29*g_s**2/6",
+    "W": "-35*g**2/12",
+    "B": "43*gp**2/36"
+   },
+   "dZ_omega": {
+    "G": "20*g_s**2/3",
+    "W": "23*g**2/6",
+    "B": "-43*gp**2/18"
+   },
+   "Ztilde3_minus1": {
+    "G": "3*g_s**2/2",
+    "W": "g**2",
+    "B": "0"
+   },
+   "Ztilde1_minus1": {
+    "G": "-3*g_s**2/2",
+    "W": "-g**2",
+    "B": "0"
+   },
+   "dZ_f": {
+    "Q": "-3*g**2/4 - 4*g_s**2/3 - gp**2/36 - y_d**2/2 - y_u**2/2",
+    "U": "-4*g_s**2/3 - 4*gp**2/9 - y_u**2",
+    "D": "-4*g_s**2/3 - gp**2/9 - y_d**2",
+    "L": "-3*g**2/4 - gp**2/4 - y_e**2/2",
+    "E": "-gp**2 - y_e**2"
+   },
+   "dZ_H": "3*g**2/2 + gp**2/2 - 3*y_d**2 - y_e**2 - 3*y_u**2",
+   "dy": {
+    "u": "-9*g**2*y_u/8 - 4*g_s**2*y_u - 17*gp**2*y_u/24 + 3*y_d**2*y_u/4 + y_e**2*y_u/2 + 9*y_u**3/4",
+    "d": "-9*g**2*y_d/8 - 4*g_s**2*y_d - 5*gp**2*y_d/24 + 9*y_d**3/4 + y_d*y_e**2/2 + 3*y_d*y_u**2/4",
+    "e": "-9*g**2*y_e/8 - 15*gp**2*y_e/8 + 3*y_d**2*y_e/2 + 5*y_e**3/4 + 3*y_e*y_u**2/2"
+   },
+   "dlambda": "9*g**4/16 + 3*g**2*gp**2/8 - 9*g**2*lambda/2 + 3*gp**4/16 - 3*gp**2*lambda/2 + 12*lambda**2 + 6*lambda*y_d**2 + 2*lambda*y_e**2 + 6*lambda*y_u**2 - 3*y_d**4 - y_e**4 - 3*y_u**4",
+   "dm2": "-9*g**2*m2/4 - 3*gp**2*m2/4 + 6*lambda*m2 + 3*m2*y_d**2 + m2*y_e**2 + 3*m2*y_u**2",
+   "dZ_m2": "-9*g**2/4 - 3*gp**2/4 + 6*lambda + 3*y_d**2 + y_e**2 + 3*y_u**2"
+  },
+  "derived": "Ztilde_3 - 1 = (dZ_omega - dZ_A)/2 (coefficient of rho~ d omega, contains dbar omega d omega); Ztilde_1 - 1 = dZ_c + dZ_omega/2 (common factor of all non-linear BRST terms) = -C_ad^(r)/2"
+ },
+ "3b_beta_functions": {
+  "rule": "x_0 = mu^(n eps)(x + dx) with dx = r_x kappa  =>  beta_x = 2 r_x/(16 pi^2); for couplings dx = x dZ_x",
+  "beta_times_16pi2": {
+   "g_s": "-29*g_s**3/3",
+   "g": "-35*g**3/6",
+   "g'": "43*gp**3/18",
+   "y_u": "-y_u*(27*g**2 + 96*g_s**2 + 17*gp**2 - 18*y_d**2 - 12*y_e**2 - 54*y_u**2)/12",
+   "y_d": "-y_d*(27*g**2 + 96*g_s**2 + 5*gp**2 - 54*y_d**2 - 12*y_e**2 - 18*y_u**2)/12",
+   "y_e": "-y_e*(9*g**2 + 15*gp**2 - 12*y_d**2 - 10*y_e**2 - 12*y_u**2)/4",
+   "lambda": "9*g**4/8 + 3*g**2*gp**2/4 - 9*g**2*lambda + 3*gp**4/8 - 3*gp**2*lambda + 24*lambda**2 + 12*lambda*y_d**2 + 4*lambda*y_e**2 + 12*lambda*y_u**2 - 6*y_d**4 - 2*y_e**4 - 6*y_u**4",
+   "m^2": "-m2*(9*g**2 + 3*gp**2 - 24*lambda - 12*y_d**2 - 4*y_e**2 - 12*y_u**2)/2"
+  },
+  "gamma_m2_times_16pi2 (d ln m^2/d ln mu)": "-9*g**2/2 - 3*gp**2/2 + 12*lambda + 6*y_d**2 + 2*y_e**2 + 6*y_u**2",
+  "comparison_with_targets_section3 (done after the derivation)": {
+   "beta_g_s": "agree",
+   "beta_g": "agree",
+   "beta_g'": "agree",
+   "beta_y_u": "agree",
+   "beta_y_d": "agree",
+   "beta_y_e": "agree",
+   "beta_lambda": "agree",
+   "beta_m^2": "agree",
+   "dZ_G": "agree",
+   "dZ_W": "agree",
+   "dZ_B": "agree",
+   "dZ_H": "agree",
+   "Ztilde3_G": "agree",
+   "Ztilde3_W": "agree",
+   "dZ_Q": "agree",
+   "dZ_U": "agree",
+   "dZ_D": "agree",
+   "dZ_L": "agree",
+   "dZ_E": "agree",
+   "Gamma_div_yukawa": "agree",
+   "Gamma_div_m2": "agree",
+   "Gamma_div_lambda": "agree"
+  }
+ },
+ "4_evanescent_part": {
+  "form": "all-d-dimensional form: coefficients of E_A^(r), E_H, Etilde_F^(r), Etilde_H in 16 pi^2 eps delta S^(1)",
+  "general": {
+   "E_A^(r)": "-1/3 S_F^(r)",
+   "Etilde_F^(r)": "-2/3 S_F^(r) (uniform in the 2-, 3- and 4-point parts)",
+   "E_H": "-2/3 Yt",
+   "Etilde_H": "-Yt"
+  },
+  "SM": {
+   "E_A^(G)": "-2*g_s**2/3",
+   "Etilde_F^(G)": "-4*g_s**2/3",
+   "E_A^(W)": "-2*g**2/3",
+   "Etilde_F^(W)": "-4*g**2/3",
+   "E_A^(B)": "-10*gp**2/9",
+   "Etilde_F^(B)": "-20*gp**2/9",
+   "E_H": "-2*y_d**2 - 2*y_e**2/3 - 2*y_u**2",
+   "Etilde_H": "-3*y_d**2 - y_e**2 - 3*y_u**2"
+  },
+  "remark": "The class files g0_VV, g0_VVV, g0_VVVV state Etilde_F with the barred continuation of the invariant operators: then its 2-, 3-, 4-point coefficients are -(5/3 C - 1/3 S_H), -(2/3 C - 1/3 S_H), +(1/3 C + 1/3 S_H), which no single Etilde_F can carry. Both are the same functional; the consistent statement is the d-dimensional continuation of the bosonic part with the uniform Etilde_F coefficient -2/3 S_F^(r)."
+ },
+ "cross_class_checks": [
+  [
+   "dz_4 = 2 dz_1 - dz_A (VVVV vs VV, VVV), G and W",
+   "pass"
+  ],
+  [
+   "dz_1 - dz_A = -C_ad (VVV, VV vs ghost Q_rho_partial, Q_rho[fg])",
+   "pass"
+  ],
+  [
+   "Q_zeta[-fg/2], Q_R^(fr) (Q,U,D for G; Q,L for W), Q_sigma^(W) equal Q_rho[fg] coefficient -C_ad/2",
+   "pass"
+  ],
+  [
+   "Q_V^(fr) = Q_K^f - C_ad^(r) for all 10 (f,r) (FFV vs FF, VV/VVV/ghost)",
+   "pass"
+  ],
+  [
+   "abelian: Q_V^(fB) = Q_K^f (Ward identity), Q_rho_partial^B = Q_R^(fB) = Q_sigma^B = 0 => O_A^B = O_c^B = O_baryon = O_lepton = 0",
+   "pass"
+  ],
+  [
+   "Higgs: Q_J^(W,B), Q_WW, Q_BB, Q_WB (SSV_SSVV) from Q_SS (SS) and a_r + g_r = -C_ad (gauge)",
+   "pass"
+  ],
+  [
+   "zeros: Q_L, Q_M, Q_3d, Q_3B, Q_B1-3, Q_Beps, Q_B4, Q^(rs)_(a,b), Q_GGGB, Q_4eps, Q_D, Q_GG, Q^-_y, mixed ghost-sector tensors",
+   "pass"
+  ],
+  [
+   "fermion-loop parts of VV, VVV, VVVV, SS, SSV_SSVV, SSSS = barred invariants only (-2/3 S_F per factor, -Yt |Dbar H|^2, +Y4 Q_lambda)",
+   "pass"
+  ],
+  [
+   "bosonic parts alone b-closed (d-dimensional covariant directions), no evanescent bosonic operator needed",
+   "pass"
+  ],
+  [
+   "engine: b(delta S^(1)_4d) = 0 on all 37 ghost-number-1 leg classes (stored fingerprints and fresh evaluation, |residual| <= 6e-12 vs terms up to 3e3)",
+   "pass"
+  ],
+  [
+   "pole identity [Delta_1.Gamma]_div + b_d delta S = 0: g1_cV / g1_cVV vs -1/3 S_F E_A; g1_cSS vs -2/3 Yt E_H; g1_cFF pole (C_ad/2) Delta_1 vs (K+Gamma) = -C_ad/2; g1_cVVV_cVVVV, g1_cFFV, g1_cFFS, g1_ccRF, cSSV zero poles vs b_d-closed remainder",
+   "pass (class results)"
+  ],
+  [
+   "targets section 3: all Z factors, 1PI pole parts and the eight beta functions",
+   "pass (agree)"
+  ]
+ ],
+ "errors_found": [],
+ "setup_remarks": [
+  "03b sec:evanescent: E_A^(r) and E_H are not the only parts of delta S^(1) with b_d delta S != 0; the source counterterms (coefficient -C_ad^(r)/2) give b_d delta S ⊃ -(C_ad^(r)/2) kappa Delta_1^(r), cancelled by the g1_cFF pole. The text should say so (02_method eq:m-bYR already describes the mechanism).",
+  "eq:closed read in d dimensions: O_c^(r) and O_g^(r) are not b_d-closed (b_d O_c^(r,d) = b_d O_g^(r,d) = Delta_1^(r)); O_A^(r,d), (O_g - O_c)^(r,d), O_psi, O_H^(d) are.",
+  "eq:evanescent is sufficient once the bosonic counterterms are continued d-dimensionally with unsplit indices (also in the ghost sector); with the barred continuation the list would need a second gauge-sector evanescent direction."
+ ]
+}

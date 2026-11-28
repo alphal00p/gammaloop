@@ -1,0 +1,204 @@
+{
+ "class": "g1_cSS_cSSV",
+ "diagrams": [
+  {
+   "id": "a1",
+   "topology": "triangle (Delta_1, H, H^dagger)",
+   "fields": "Yukawa pair k=(f,f') in {(D,Q) y_d, (E,L) y_e, (Q,U) y_u}; Delta_1 on f' (line leaving the H vertex)",
+   "symmetry_factor": "1",
+   "sign": "-1 (fermion loop)",
+   "multiplicity_note": "one per k; group factor y_k^2 <T^a_{f'},1>_{ij} = y_k^2 Tr(Lambda_i^dagger T^a_{f'} Lambda_j)"
+  },
+  {
+   "id": "a2",
+   "topology": "triangle",
+   "fields": "same pairs; Delta_1 on f (line entering the H vertex)",
+   "symmetry_factor": "1",
+   "sign": "-1",
+   "multiplicity_note": "group factor y_k^2 <1,T^a_f>_{ij}; a1 - a2 group difference = N_k (T^a_H)_{ij}"
+  },
+  {
+   "id": "b1",
+   "topology": "box, gauge vertex adjacent to Delta_1",
+   "fields": "Delta_1 and A on f', two orderings",
+   "symmetry_factor": "1",
+   "sign": "-1",
+   "multiplicity_note": "group y_k^2 <T^a T^c,1>, y_k^2 <T^c T^a,1>"
+  },
+  {
+   "id": "b2",
+   "topology": "box, gauge vertex adjacent to Delta_1",
+   "fields": "Delta_1 and A on f, two orderings",
+   "symmetry_factor": "1",
+   "sign": "-1",
+   "multiplicity_note": "group y_k^2 <1,T^a T^c>, y_k^2 <1,T^c T^a>"
+  },
+  {
+   "id": "c1",
+   "topology": "box, gauge vertex opposite Delta_1",
+   "fields": "Delta_1 on f', A on f",
+   "symmetry_factor": "1",
+   "sign": "-1",
+   "multiplicity_note": "group y_k^2 <T^a,T^c>"
+  },
+  {
+   "id": "c2",
+   "topology": "box, gauge vertex opposite Delta_1",
+   "fields": "Delta_1 on f, A on f'",
+   "symmetry_factor": "1",
+   "sign": "-1",
+   "multiplicity_note": "group y_k^2 <T^c,T^a>"
+  },
+  {
+   "id": "d",
+   "topology": "pentagon omega H^dagger H A A (all placements)",
+   "fields": "fermion loop, 2 Yukawa + 2 gauge vertices",
+   "symmetry_factor": "1",
+   "sign": "-1",
+   "multiplicity_note": "T^(0) G = 0 identically; ENUMERATION.md: 5-vertex fermion loops for all (ghost, A, A) assignments (e.g. cW Hdag H W W: 18 labelled)"
+  },
+  {
+   "id": "e",
+   "topology": "pentagon omega (H^dagger H)^2 (all placements)",
+   "fields": "fermion loop, 4 Yukawa vertices",
+   "symmetry_factor": "1",
+   "sign": "-1",
+   "multiplicity_note": "T^(0) G = 0 identically; ENUMERATION.md: cW Hdag H Hdag H 20, cB Hdag H Hdag H 40 labelled"
+  }
+ ],
+ "functions": [
+  {
+   "externals": "omega^a(q) H_j(p1) H^dagger_i(p2), q=-(p1+p2), gauge factor W and B (gluon ghost: 0); Yt = 3y_u^2+3y_d^2+y_e^2",
+   "pole_vertex_function": [
+    {
+     "structure": "(hat(p)_1^2 - hat(p)_2^2) (Tg^a_H)_(i j)  [= -i x vertex of b_d E_H]",
+     "coefficient": "-(2 i/3) Yt"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "(p_1^2 - p_2^2) (Tg^a_H)_(i j)  (P N_1, four-dimensional)",
+     "coefficient": "(i/3) Yt"
+    }
+   ],
+   "per_topology": {
+    "triangle Delta on f' (a1)": "N0 = -(2i/3) y_k^2 <T^a,1> (p1h^2-p2h^2); P N1 = (i/3) y_k^2 <T^a,1> (p1^2-p2^2)",
+    "triangle Delta on f (a2)": "same with <T^a,1> -> -<1,T^a>; (a1)+(a2): <T^a,1>-<1,T^a> = N_k T^a_H",
+    "per pair (units of the structure above)": "pole: d -2i y_d^2 (W,B), u -2i y_u^2, e -(2i/3) y_e^2; finite: d i y_d^2, u i y_u^2, e (i/3) y_e^2"
+   }
+  },
+  {
+   "externals": "omega^a(q) H_j(p1) H^dagger_i(p2) A^c_nu(p3), q=-(p1+p2+p3)",
+   "pole_vertex_function": [
+    {
+     "structure": "all",
+     "coefficient": "0 (diagram by diagram)"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "q^nu sum_k y_k^2 C^(a c)_(k,i j), C_k = -(4/3) N_k {Tg^a_H,Tg^c_H} - 2(<Tg^a,Tg^c>+<Tg^c,Tg^a>)",
+     "coefficient": "i/2"
+    },
+    {
+     "structure": "-i bar(q)^nu {Tg^a_H,Tg^c_H}_(ij), a,c in W (vertex of N_SV^(WW))",
+     "coefficient": "(2/3) Yt"
+    },
+    {
+     "structure": "-i bar(q)^nu {Tg^a_H,Tg^c_H}_(ij), (a,c) in (W,B) or (B,W) (vertex of N_SV^(WB), N_SV^(BW))",
+     "coefficient": "y_d^2 - (1/3) y_e^2"
+    },
+    {
+     "structure": "-i bar(q)^nu {Tg^a_H,Tg^c_H}_(ij), a,c = B (vertex of N_SV^(BB))",
+     "coefficient": "(10/3) y_u^2 + (4/3) y_d^2 + (8/3) y_e^2"
+    },
+    {
+     "structure": "-i bar(q)^nu g_s^2 delta^(A C) delta_(ij), gluon ghost and gluon (vertex of N_SG)",
+     "coefficient": "y_u^2 + y_d^2"
+    }
+   ],
+   "per_topology": {
+    "box, A adjacent to Delta (b1,b2)": "trace -> -(4/3) eta (k^2)^2 bar(q)^nu; P N1 = -(2i/3) y_k^2 [group] bar(q)^nu, group <{T^a,T^c},1> resp. <1,{T^a,T^c}>",
+    "box, A opposite (c1,c2)": "trace -> +(2/3) eta (k^2)^2 bar(q)^nu; P N1 = (i/3) y_k^2 [group] bar(q)^nu, group <T^a,T^c> resp. <T^c,T^a>",
+    "sum per pair": "P N1 = (i/2) y_k^2 bar(q)^nu C_k; N0 = 0"
+   }
+  },
+  {
+   "externals": "omega H^dagger H A A (all gauge assignments) and omega (H^dagger H)^2",
+   "pole_vertex_function": [
+    {
+     "structure": "all",
+     "coefficient": "0"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "all",
+     "coefficient": "0"
+    }
+   ],
+   "per_topology": {
+    "pentagons": "omega(G)=0; T^(0) sets all external momenta to 0, q=0, and P_c S(l) V_Delta(l,l) S(l) P_cbar = 0 identically; each diagram vanishes"
+   }
+  }
+ ],
+ "operators": [
+  {
+   "kind": "evanescent_counterterm",
+   "operator": "(Dbrk_1 dot Gamma)^((1))|_pole = lf (2 Yt)/(3 ep) bop_d E_H  (E_H of eq:evanescent); cancels -b_d of the Yukawa part -lf Yt/ep [tilde(E)_H + 2/3 E_H] of delta S^((1)) (g0_SS, g0_SSV_SSVV)",
+   "coefficient": "(2/3) Yt / (16 pi^2 eps)",
+   "sm_values": "(2 y_u^2 + 2 y_d^2 + (2/3) y_e^2)/(16 pi^2 eps); omega H^dag H A, AA, (H^dag H)^2 components: 0"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N^((W))_S + N^((B))_S",
+   "coefficient": "-(1/3) Yt /(16 pi^2)",
+   "sm_values": "-(y_u^2 + y_d^2 + y_e^2/3)/(16 pi^2), same for W and B"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N^((W W))_(S V)",
+   "coefficient": "(2/3) Yt /(16 pi^2)",
+   "sm_values": "(2 y_u^2 + 2 y_d^2 + (2/3) y_e^2)/(16 pi^2)"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N^((W B))_(S V) + N^((B W))_(S V)",
+   "coefficient": "(y_d^2 - y_e^2/3)/(16 pi^2)",
+   "sm_values": "per pair: d y_d^2, u 0, e -y_e^2/3; general N_k(2/3 + Y_f) y_k^2 (f' doublet), N_k(2/3 - Y_f') y_k^2 (f doublet)"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N^((B B))_(S V)",
+   "coefficient": "((10/3) y_u^2 + (4/3) y_d^2 + (8/3) y_e^2)/(16 pi^2)",
+   "sm_values": "per pair N_k (2/3 + 4 Y_f Y_f') y_k^2: d 4/3 y_d^2, u 10/3 y_u^2, e 8/3 y_e^2"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N_(S G)",
+   "coefficient": "(y_u^2 + y_d^2)/(16 pi^2)",
+   "sm_values": "d y_d^2, u y_u^2, e 0"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N_(S C), N_(S V E i), N_(S 2), N_(S E), N_(S m), N_cal(E), N_(S V V), N_(S lambda)",
+   "coefficient": "0",
+   "sm_values": "0"
+  }
+ ],
+ "checks": [
+  "Deriver (hand) and checker (toolkit, 15-dim flavour space, all cyclic orders) agree on every coefficient: pole and P N1 of omega H^dag H per W/B ghost, the five nonzero N-basis coefficients of omega H^dag H A, zero box poles, vanishing omega=0 functions.",
+  "Referee: re-derived the Delta-propagator identity eq:g1_cSS_cSSV-E, the box trace reductions (-4/3 eta, +2/3 eta), the triangle T^(2) reduction (1/3 hat, -1/6 eta bar), the vertex functions of N_S, N_SV, N_SG, b_d E_H, and the b-preimage coefficients (13/3,7/3,3; y_u^2+2y_d^2; (y_u^2+y_d^2)/2) by hand.",
+  "Referee: numerical check with explicit SM matrices that the operator eq:g1_cSS_cSSV-X3-op equals its N-basis form eq:g1_cSS_cSSV-X3-basis and equals the dw part of -b of the literature A A Y Y^dag counterterm (BIMS (6.23)/(6.46) mapped).",
+  "Referee: re-ran check_st_poles.py: fermion-loop Gamma_{H^dag H}|pole = Yt (Pbar^2 + 2/3 Phat^2), Gamma_{A H^dag H}|pole = Yt (p1b - p2b)^mu T^c_H, Gamma_{AAH^dagH} = Yt gbar {T,T}; [Delta.Gamma]_div = b_d Gamma_pole holds for cSS (W,B) and all cSSV structures.",
+  "Pole consistent with g0_SS final (delta S ⊃ -lf Yt/ep [tilde(E)_H + 2/3 E_H]) and g0_SSV_SSVV final.",
+  "Non-vanishing multiplet-level counts (agree with ENUMERATION.md): cW Hdag H 3, cB Hdag H 6, cG Hdag H G 12, cW Hdag H W 6, cW Hdag H B 9, cB Hdag H W 9, cB Hdag H B 18",
+  "Literature (targets_in_our_conventions.md): pole (2/3) kappa b Tr_L(hat dY hat dY^dag) = (2/3) Yt kappa b_d E_H: agrees; X_cSS = -(l/3) b Tr_L(dY dY^dag) = -(Yt/3)(N_S^W+N_S^B): agrees; X_cSSV = dw part of -b[-2/3(Tr_L AAYY^+ + Tr_R AAY^+Y) + 1/3 Tr_L(A^L Y A^R Y^+)]: agrees (this target was marked [?] there; two independent calculations now confirm it); X_cSSVV = X_cSSSS = 0 and no m^2: agree.",
+  "b-exactness: -X_1|cSS,cSSV = b[lf((Yt/3)(Q_J^W+Q_J^B) - Yt Q_WW - (13/3 y_u^2+7/3 y_d^2+3 y_e^2) Q_BB - (y_u^2+2y_d^2) Q_WB - (1/2)(y_u^2+y_d^2) Q_GG)] with the 03b b-table (not the normalised solution)."
+ ],
+ "caveats": [
+  "Evanescent finite parts E[N1] (needed at two loops) are not reported; they depend on the tagging of unsplit objects.",
+  "For omega=0 functions the complete d-dimensional uv_pole was run for one diagram per function; for the others the vanishing of the p=0 numerator (exact algebraic identity) was used.",
+  "checker_notes.md calls the fermion-loop Higgs self-energy pole 'purely barred'; the script output is Yt(Pbar^2 + 2/3 Phat^2), consistent with g0_SS. Wording error in the notes only."
+ ]
+}

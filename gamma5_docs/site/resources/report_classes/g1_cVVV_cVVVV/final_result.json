@@ -1,0 +1,274 @@
+{
+ "class": "g1_cVVV_cVVVV",
+ "diagrams": [
+  {
+   "id": "box_f_sigma",
+   "topology": "fermion box with the Delta_1 vertex (external ghost at Delta), omega A A A",
+   "fields": "closed Psi_f loop (sterile component next to Delta), f in {Q,U,D,L,E} with non-zero Tr_f(Tg^a Tg^b Tg^c Tg^d); vertices Delta_1[omega^a Psibar_f Psi_f] and three Psibar_f Psi_f A vertices",
+   "symmetry_factor": "1",
+   "sign": "-1 (closed fermion loop)",
+   "multiplicity_note": "6 diagrams per multiplet: the 3! orderings sigma of the gauge legs along the fermion flow (Delta fixed; both orientations included). Labelled counts agree with ENUMERATION.md for all 13 gauge contents: cGGGG/cGGGB/cGGBB/cBGGG/cBGGB 18 (Q,U,D x 6), cGGWW/cWGGW 6 (Q), cWWWW/cWWWB/cWWBB/cBWWW/cBWWB 12 (Q,L), cBBBB 30 (5 x 6). Contents with a single SU(3) or SU(2) generator (e.g. cGGGW, cGWWB, cWBBB) vanish by tracelessness and are absent from both lists."
+  },
+  {
+   "id": "pentagon_f_sigma",
+   "topology": "fermion pentagon with the Delta_1 vertex (external ghost at Delta), omega A A A A",
+   "fields": "closed Psi_f loop, Delta_1 vertex and four Psibar_f Psi_f A vertices",
+   "symmetry_factor": "1",
+   "sign": "-1 (closed fermion loop)",
+   "multiplicity_note": "24 orderings per multiplet; agrees with ENUMERATION.md (cGGGGG 72 = 3 x 24, cWWWWW 48 = 2 x 24, cBBBBB 120 = 5 x 24, mixed contents likewise). Each diagram vanishes separately (N0 = N1 = 0)."
+  }
+ ],
+ "functions": [
+  {
+   "externals": "gh^a (q) A^b_mu (p_1) A^c_nu (p_2) A^d_rho (p_3), all incoming, q = -(p_1+p_2+p_3); all gauge factors",
+   "pole_vertex_function": [
+    {
+     "structure": "(Dbrk_1 dot Gamma)^((1))_(gh A A A)|_pole",
+     "coefficient": "0 (every diagram has N_0 = 0 with d-dimensional external momenta; no evanescent pole either)"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "sum_f sum_(sigma in S_3) Tr_f (Tg^a Tg^(b_(sigma 1)) Tg^(b_(sigma 2)) Tg^(b_(sigma 3))) [q^(mu_(sigma 1)) g^(mu_(sigma 2) mu_(sigma 3)) - q^(mu_(sigma 2)) g^(mu_(sigma 1) mu_(sigma 3)) + q^(mu_(sigma 3)) g^(mu_(sigma 1) mu_(sigma 2))]   with (b_1,b_2,b_3) = (b,c,d), (mu_1,mu_2,mu_3) = (mu,nu,rho)",
+     "coefficient": "i/3"
+    },
+    {
+     "structure": "sum_(sigma in S_3) (sum_R - sum_L) Tr_f (Tg^a Tg^(b_(sigma 1)) Tg^(b_(sigma 2)) Tg^(b_(sigma 3))) epsilon^(q mu_(sigma 1) mu_(sigma 2) mu_(sigma 3))",
+     "coefficient": "1/3  (this is the vertex function of the local functional (1/12) lf integral epsilon^(lambda mu nu rho) partial_lambda gh^a A^b_mu A^c_nu A^d_rho fg^(c d e) D^(a b e), verified numerically with anomalous content; zero for the SM since D^(abc) = 0)"
+    }
+   ],
+   "per_topology": {
+    "box": "For one multiplet f and the ordering (b,mu,p_1),(c,nu,p_2),(d,rho,p_3) along the loop (group factor Tr_f(Tg^a Tg^b Tg^c Tg^d)), P N_1 = (i/3)(q^mu gmb^(nu rho) - q^nu gmb^(mu rho) + q^rho gmb^(mu nu)) + s_f (1/3) epsilon^(q mu nu rho), s_f = +1 (c_f = R), -1 (c_f = L), q = -(p_1+p_2+p_3); N_0 = 0 with d-dimensional externals. The function depends on the external momenta only through the ghost momentum q: X vanishes at q = 0 (all-order statement below). Hand: N_1 = (i/6) Tr_f(...) tr[qbar-slash gbar^mu gbar^nu gbar^rho P_c].",
+    "pentagon": "none"
+   }
+  },
+  {
+   "externals": "gh^a (q) A^b_mu A^c_nu A^d_rho A^e_sigma, all gauge factors",
+   "pole_vertex_function": [
+    {
+     "structure": "(Dbrk_1 dot Gamma)^((1))_(gh A A A A)|_pole",
+     "coefficient": "0"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "X_(1; gh A A A A)",
+     "coefficient": "0"
+    }
+   ],
+   "per_topology": {
+    "pentagon": "omega(G) = 0, T^(0) puts every external momentum, hence q, to zero; P_c S(k) V_Delta(k,k) S(k) P_cbar = 0 identically (V_Delta(k,k) = khat-slash (P_cbar - P_c)), so the T^(0) integrand of each of the 24 orderings vanishes before integration: N_0 = N_1 = 0 per diagram.",
+    "box": "none"
+   }
+  }
+ ],
+ "operators": [
+  {
+   "kind": "pole_counterterm",
+   "operator": "none: (Dbrk_1 dot Gamma)^((1))|_pole = 0 in the classes gh A A A and gh A A A A (no evanescent pole either)",
+   "coefficient": "0",
+   "sm_values": "0"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "sum_f integral dif^4 x Tr_f [ (partial^mu wm) (Am_mu Am_nu Am^nu - Am_nu Am_mu Am^nu + Am_nu Am^nu Am_mu) ]",
+   "coefficient": "-1/3 (units 1/(16 pi^2))",
+   "sm_values": "see N-basis entries"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "sum_f s_f integral dif^4 x epsilon^(mu nu rho sigma) Tr_f [ (partial_mu wm) Am_nu Am_rho Am_sigma ], s_f = -1 (Q,L), +1 (U,D,E); = (1/12) integral D^(a e d) fg^(b c e) epsilon^(mu nu rho sigma) (partial_mu gh^a) A^b_nu A^c_rho A^d_sigma after the sum",
+   "coefficient": "i/3 (units 1/(16 pi^2))",
+   "sm_values": "0 (D^(abc) = 0)"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "integral d_4^(a b c d) (partial_mu gh^a A^(b mu))(A^c dot A^d) - (2/3) sum_r (S_L^(r)+S_R^(r)) N^((r))_(f f)  [equivalent form of the parity-even part; d_4^(abcd) = 1/6 sum_f sum_perm(bcd) Tr_f(T^a T^b T^c T^d)]",
+   "coefficient": "-1/3 (units 1/(16 pi^2))",
+   "sm_values": "d4^(GGGG)=gs^4(dd+dd+dd)/6, d4^(WWWW)=g^4(dd+dd+dd)/6, d4^(BBBB)=95 g'^4/54, d4^(ABC B)=gs^3 g' d^(ABC)/6, d4^(AB BB)=11 gs^2 g'^2 delta/36, d4^(IJ BB)=g^2 g'^2 delta/6, d4^(AB IJ)=gs^2 g^2 delta delta/4"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N^((G))_(f f)",
+   "coefficient": "-4/9 g_s^2 (units 1/(16 pi^2))",
+   "sm_values": "Q -2gs^2/9, U -gs^2/9, D -gs^2/9, L 0, E 0"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N^((W))_(f f)",
+   "coefficient": "-1/3 g^2 (units 1/(16 pi^2))",
+   "sm_values": "Q -g^2/4, L -g^2/12, others 0"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N_(G 4 a)",
+   "coefficient": "-1/18 (units 1/(16 pi^2))",
+   "sm_values": "Q -1/36, U -1/72, D -1/72"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N_(G 4 b)",
+   "coefficient": "-1/9 (units 1/(16 pi^2))",
+   "sm_values": "Q -1/18, U -1/36, D -1/36"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N_(W 4 a)",
+   "coefficient": "-1/6 (units 1/(16 pi^2))",
+   "sm_values": "Q -1/8, L -1/24"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N_(B 4)",
+   "coefficient": "-95/162 (units 1/(16 pi^2))",
+   "sm_values": "Q -1/648, U -16/81, D -1/81, L -1/24, E -1/3"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N_(G G G B 1)",
+   "coefficient": "-1/9 (units 1/(16 pi^2))",
+   "sm_values": "Q -1/18, U -1/9, D 1/18"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N_(G G G B 2)",
+   "coefficient": "-1/18 (units 1/(16 pi^2))",
+   "sm_values": "Q -1/36, U -1/18, D 1/36"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N_(G G G B 3)",
+   "coefficient": "-1/18 (units 1/(16 pi^2))",
+   "sm_values": "Q -1/36, U -1/18, D 1/36"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N^((G B))_a",
+   "coefficient": "-11/108 (units 1/(16 pi^2))",
+   "sm_values": "Q -1/108, U -2/27, D -1/54"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N^((G B))_b",
+   "coefficient": "-11/108 (units 1/(16 pi^2))",
+   "sm_values": "Q -1/108, U -2/27, D -1/54"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N^((G B))_c",
+   "coefficient": "-11/54 (units 1/(16 pi^2))",
+   "sm_values": "Q -1/54, U -4/27, D -1/27"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N^((G B))_d",
+   "coefficient": "-11/54 (units 1/(16 pi^2))",
+   "sm_values": "Q -1/54, U -4/27, D -1/27"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N^((W B))_a",
+   "coefficient": "-1/18 (units 1/(16 pi^2))",
+   "sm_values": "Q -1/72, L -1/24"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N^((W B))_b",
+   "coefficient": "-1/18 (units 1/(16 pi^2))",
+   "sm_values": "Q -1/72, L -1/24"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N^((W B))_c",
+   "coefficient": "-1/9 (units 1/(16 pi^2))",
+   "sm_values": "Q -1/36, L -1/12"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N^((W B))_d",
+   "coefficient": "-1/9 (units 1/(16 pi^2))",
+   "sm_values": "Q -1/36, L -1/12"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N^((G W))_a",
+   "coefficient": "-1/12 (units 1/(16 pi^2))",
+   "sm_values": "Q -1/12"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N^((G W))_b",
+   "coefficient": "-1/12 (units 1/(16 pi^2))",
+   "sm_values": "Q -1/12"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N^((G W))_c",
+   "coefficient": "-1/6 (units 1/(16 pi^2))",
+   "sm_values": "Q -1/6"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N^((G W))_d",
+   "coefficient": "-1/6 (units 1/(16 pi^2))",
+   "sm_values": "Q -1/6"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N^((G))_(epsilon G B f)",
+   "coefficient": "0 (units 1/(16 pi^2))",
+   "sm_values": "Q 1/36, U -1/18, D 1/36 (= D_f^(G)/12)"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N^((G))_(epsilon 4 B)",
+   "coefficient": "0 (units 1/(16 pi^2))",
+   "sm_values": "Q -1/36, U 1/18, D -1/36 (= -D_f^(G)/12)"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N^((W))_(epsilon W B f)",
+   "coefficient": "0 (units 1/(16 pi^2))",
+   "sm_values": "Q 1/24, L -1/24"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N^((W))_(epsilon 4 B)",
+   "coefficient": "0 (units 1/(16 pi^2))",
+   "sm_values": "Q -1/24, L 1/24"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "N_(epsilon d f) = g_s^4 integral epsilon^(mu nu rho sigma) d^(A E D) f^(B C E) (partial_mu gh^A) G^B_nu G^C_rho G^D_sigma  [NOT in tab:Nbasis]",
+   "coefficient": "0 (units 1/(16 pi^2))",
+   "sm_values": "Q 1/12, U -1/24, D -1/24 (= D_f^(GGG)/24)"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "all other cVVV monomials of tab:Nbasis (N_(B f 3), N_(r B f), N_(d f), N_cal(E)[t])",
+   "coefficient": "0 (units 1/(16 pi^2))",
+   "sm_values": "0"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "class gh A A A A: N^((r))_(B Y M), N_cal(E)[t]",
+   "coefficient": "0 (units 1/(16 pi^2))",
+   "sm_values": "0 per diagram"
+  }
+ ],
+ "checks": [
+  "Deriver (hand) and checker (bmhvkit, independent) agree coefficient by coefficient: per-ordering N_0 = 0 and P N_1 = (i/3)(q^mu g^{nu rho} - q^nu g^{mu rho} + q^rho g^{mu nu}) + (s_f/3) eps^{q mu nu rho}; operator form; all 21 non-zero N-basis coefficients and per-multiplet values; omega AAAA = 0.",
+  "Referee re-derivation by hand: chain identity, N_ch, T^(1) at p_j = 0, khat^2 kbar kbar -> -2 eta (k^2)^2 gbar/(d(d+2)), overall factor -i(-1)(-2eta)(-2)/24 = i eta/6, trace with P_c = (1+s_f g5)/2; q=0 Dirac identity; delta_chi sign of the all-order statement.",
+  "Referee analytic re-derivation of the SM table from d_4 (sym. SU(3)/SU(2) trace = (dd+dd+dd)/24 per triplet/doublet), S_f, and the SU(2) identity (d w^I.W^J)(W^I.W^J) = N_W4a - g^2 N_ff^(W).",
+  "Referee numeric check (eps_map.py, 3 random points, 1e-15): eps part per multiplet = sum_r D_f^(r)/12 (N_erBf - N_e4B) + D_f^(GGG)/24 N_edf.",
+  "Diagram list = ENUMERATION.md for every gauge content (checker; referee spot-checked counts 18/6/12/30 boxes, 72/24/48 pentagons).",
+  "Pole consistency: g0_VVV / g0_VVVV final fermion counterterms are -2/3 sum S_f times barred Q_3f and Q_YM (barred YM action, b_d-closed); bosonic poles b_d-closed; E_A feeds only omega A, omega AA.",
+  "Literature: parity-even part equals (1/6) int omega^a d_nu(A^b_mu A^c mu A^d nu) Acal^{abcd} of the targets file (BIMS) exactly; eps part prop. to D; omega AAAA = 0 as expected."
+ ],
+ "caveats": [
+  "N_(epsilon d f) (SU(3)^3 anomaly structure in cVVV) is missing from tab:Nbasis; coefficient zero in the SM.",
+  "tab:Nbasis notation: in N_(G G G B 2) the ghost gh^B is the hypercharge ghost (index clash with SU(3) index B).",
+  "Parity-even part is b-exact in the quartic sector (b Y_4 with Y_4 = -1/3 sum_f int [1/2 Tr(A.A A.A) - 1/4 Tr(A_m A_n A^m A^n)]); the full solution needs g1_cVV (Q_3f, Q_3d, Q_B2 contribute here).",
+  "All-order statement assumes S_ren - S_0 contains no sterile component; it concerns only the Delta_1 insertion."
+ ]
+}

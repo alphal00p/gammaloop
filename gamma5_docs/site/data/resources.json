@@ -1,0 +1,548 @@
+[
+ {
+  "path": "report/one_loop_gamma5.pdf",
+  "title": "Report (PDF)",
+  "description": "The report “One-loop renormalisation of the Standard Model in the unbroken phase with a non-anticommuting gamma5” (PDF, 186 pages).",
+  "bytes": 8205966,
+  "group": "Report"
+ },
+ {
+  "path": "resources/report_headings.txt",
+  "title": "Report headings and pages",
+  "description": "First page of every labelled heading of the report, used for the page references of this site.",
+  "bytes": 3378,
+  "group": "Report"
+ },
+ {
+  "path": "resources/automation/sm_one_family.toml",
+  "title": "Model specification (TOML)",
+  "description": "Input of the automation: gauge group, chiral multiplets, scalar doublet, classical four-dimensional Lagrangian, gauge fixing and regularisation of the one-family Standard Model.",
+  "bytes": 1556,
+  "group": "Automation: model specification and run outputs"
+ },
+ {
+  "path": "resources/run_sm_one_family/comparison.json",
+  "title": "Comparison with the report",
+  "description": "Comparison of the run with the report's final numbers, quantity by quantity.",
+  "bytes": 3176,
+  "group": "Automation: model specification and run outputs"
+ },
+ {
+  "path": "resources/run_sm_one_family/run_report.json",
+  "title": "Run report (JSON)",
+  "description": "Every step, check and result of the run: graph counts per class, renormalisation constants, beta functions, breaking and restoring coefficients.",
+  "bytes": 31154,
+  "group": "Automation: model specification and run outputs"
+ },
+ {
+  "path": "resources/run_sm_one_family/run_report.txt",
+  "title": "Run report (text)",
+  "description": "Readable summary of the run report: steps with timings, the fifteen checks and the results of order one.",
+  "bytes": 9514,
+  "group": "Automation: model specification and run outputs"
+ },
+ {
+  "path": "resources/run_sm_one_family/sm_one_family_order_data.json",
+  "title": "Order data",
+  "description": "Matched loop data of order one as exact local functionals: the pole coefficients and the finite breaking.",
+  "bytes": 478705,
+  "group": "Automation: model specification and run outputs"
+ },
+ {
+  "path": "resources/run_sm_one_family/sm_one_family_renormalised.json",
+  "title": "Renormalised model (HepKIT JSON)",
+  "description": "The renormalised model: classical action, breaking, singular and finite restoring counterterms and their breaking insertions, as a HepKIT model.",
+  "bytes": 1238690,
+  "group": "Automation: model specification and run outputs"
+ },
+ {
+  "path": "resources/run_sm_one_family/sm_one_family_store.json",
+  "title": "Order store",
+  "description": "Exact order store of the run (all functionals of order one), the input of the next loop order.",
+  "bytes": 1348864,
+  "group": "Automation: model specification and run outputs"
+ },
+ {
+  "path": "resources/run_sm_one_family/sm_one_family_tree.json",
+  "title": "Tree-level model (HepKIT JSON)",
+  "description": "Regularised classical action with ghosts, sources and the breaking insertion, in the Feynman gauge, as a HepKIT model.",
+  "bytes": 236296,
+  "group": "Automation: model specification and run outputs"
+ },
+ {
+  "path": "resources/final_counterterms.json",
+  "title": "Final counterterms",
+  "description": "The report's final numbers: singular counterterm, finite breaking, restoring coefficients and literature comparison.",
+  "bytes": 48056,
+  "group": "Final numbers of the report"
+ },
+ {
+  "path": "resources/report_classes/g0_FF/final_result.json",
+  "title": "g0_FF: final result",
+  "description": "Final numbers of the class g0_FF, Fermion two-point functions Ψ̄Ψ (Section 4.1.4): graphs, loop functions, local operators, checks and caveats of the two independent calculations.",
+  "bytes": 12823,
+  "group": "Per-class results of the report"
+ },
+ {
+  "path": "resources/report_classes/g0_FFS/final_result.json",
+  "title": "g0_FFS: final result",
+  "description": "Final numbers of the class g0_FFS, Yukawa vertices Ψ̄ΨH (Section 4.1.9): graphs, loop functions, local operators, checks and caveats of the two independent calculations.",
+  "bytes": 8604,
+  "group": "Per-class results of the report"
+ },
+ {
+  "path": "resources/report_classes/g0_FFV/final_result.json",
+  "title": "g0_FFV: final result",
+  "description": "Final numbers of the class g0_FFV, Fermion–gauge vertices Ψ̄ΨA (Section 4.1.5): graphs, loop functions, local operators, checks and caveats of the two independent calculations.",
+  "bytes": 9420,
+  "group": "Per-class results of the report"
+ },
+ {
+  "path": "resources/report_classes/g0_SS/final_result.json",
+  "title": "g0_SS: final result",
+  "description": "Final numbers of the class g0_SS, Higgs two-point function H†H (Section 4.1.6): graphs, loop functions, local operators, checks and caveats of the two independent calculations.",
+  "bytes": 7194,
+  "group": "Per-class results of the report"
+ },
+ {
+  "path": "resources/report_classes/g0_SSSS/final_result.json",
+  "title": "g0_SSSS: final result",
+  "description": "Final numbers of the class g0_SSSS, Higgs four-point function (H†H)² (Section 4.1.8): graphs, loop functions, local operators, checks and caveats of the two independent calculations.",
+  "bytes": 7288,
+  "group": "Per-class results of the report"
+ },
+ {
+  "path": "resources/report_classes/g0_SSV_SSVV/final_result.json",
+  "title": "g0_SSV_SSVV: final result",
+  "description": "Final numbers of the class g0_SSV_SSVV, Higgs–gauge functions H†HA and H†HAA (Section 4.1.7): graphs, loop functions, local operators, checks and caveats of the two independent calculations.",
+  "bytes": 12559,
+  "group": "Per-class results of the report"
+ },
+ {
+  "path": "resources/report_classes/g0_VV/final_result.json",
+  "title": "g0_VV: final result",
+  "description": "Final numbers of the class g0_VV, Gauge two-point functions AA (Section 4.1.1): graphs, loop functions, local operators, checks and caveats of the two independent calculations.",
+  "bytes": 9450,
+  "group": "Per-class results of the report"
+ },
+ {
+  "path": "resources/report_classes/g0_VVV/final_result.json",
+  "title": "g0_VVV: final result",
+  "description": "Final numbers of the class g0_VVV, Gauge three-point functions AAA (Section 4.1.2): graphs, loop functions, local operators, checks and caveats of the two independent calculations.",
+  "bytes": 9261,
+  "group": "Per-class results of the report"
+ },
+ {
+  "path": "resources/report_classes/g0_VVVV/final_result.json",
+  "title": "g0_VVVV: final result",
+  "description": "Final numbers of the class g0_VVVV, Gauge four-point functions AAAA (Section 4.1.3): graphs, loop functions, local operators, checks and caveats of the two independent calculations.",
+  "bytes": 9696,
+  "group": "Per-class results of the report"
+ },
+ {
+  "path": "resources/report_classes/g0_ghost_sources/final_result.json",
+  "title": "g0_ghost_sources: final result",
+  "description": "Final numbers of the class g0_ghost_sources, Ghost and BRST-source functions (Section 4.1.10): graphs, loop functions, local operators, checks and caveats of the two independent calculations.",
+  "bytes": 11704,
+  "group": "Per-class results of the report"
+ },
+ {
+  "path": "resources/report_classes/g1_cFF/final_result.json",
+  "title": "g1_cFF: final result",
+  "description": "Final numbers of the class g1_cFF, Breaking of ωΨ̄Ψ (Section 4.2.4): graphs, loop functions, local operators, checks and caveats of the two independent calculations.",
+  "bytes": 19922,
+  "group": "Per-class results of the report"
+ },
+ {
+  "path": "resources/report_classes/g1_cFFS/final_result.json",
+  "title": "g1_cFFS: final result",
+  "description": "Final numbers of the class g1_cFFS, Breaking of ωΨ̄ΨH (Section 4.2.7): graphs, loop functions, local operators, checks and caveats of the two independent calculations.",
+  "bytes": 10218,
+  "group": "Per-class results of the report"
+ },
+ {
+  "path": "resources/report_classes/g1_cFFV/final_result.json",
+  "title": "g1_cFFV: final result",
+  "description": "Final numbers of the class g1_cFFV, Breaking of ωΨ̄ΨA (Section 4.2.5): graphs, loop functions, local operators, checks and caveats of the two independent calculations.",
+  "bytes": 6985,
+  "group": "Per-class results of the report"
+ },
+ {
+  "path": "resources/report_classes/g1_cSS_cSSV/final_result.json",
+  "title": "g1_cSS_cSSV: final result",
+  "description": "Final numbers of the class g1_cSS_cSSV, Breaking of ωH†H, ωH†HA and higher (Section 4.2.6): graphs, loop functions, local operators, checks and caveats of the two independent calculations.",
+  "bytes": 9135,
+  "group": "Per-class results of the report"
+ },
+ {
+  "path": "resources/report_classes/g1_cV/final_result.json",
+  "title": "g1_cV: final result",
+  "description": "Final numbers of the class g1_cV, Breaking of ωA (Section 4.2.1): graphs, loop functions, local operators, checks and caveats of the two independent calculations.",
+  "bytes": 14218,
+  "group": "Per-class results of the report"
+ },
+ {
+  "path": "resources/report_classes/g1_cVV/final_result.json",
+  "title": "g1_cVV: final result",
+  "description": "Final numbers of the class g1_cVV, Breaking of ωAA and the anomaly (Section 4.2.2): graphs, loop functions, local operators, checks and caveats of the two independent calculations.",
+  "bytes": 11889,
+  "group": "Per-class results of the report"
+ },
+ {
+  "path": "resources/report_classes/g1_cVVV_cVVVV/final_result.json",
+  "title": "g1_cVVV_cVVVV: final result",
+  "description": "Final numbers of the class g1_cVVV_cVVVV, Breaking of ωAAA and ωAAAA (Section 4.2.3): graphs, loop functions, local operators, checks and caveats of the two independent calculations.",
+  "bytes": 11841,
+  "group": "Per-class results of the report"
+ },
+ {
+  "path": "resources/report_classes/g1_ccRF/final_result.json",
+  "title": "g1_ccRF: final result",
+  "description": "Final numbers of the class g1_ccRF, Breaking with BRST sources: ωωR̄Ψ (Section 4.2.8): graphs, loop functions, local operators, checks and caveats of the two independent calculations.",
+  "bytes": 9773,
+  "group": "Per-class results of the report"
+ },
+ {
+  "path": "resources/report_checks/ct_assembly.json",
+  "title": "Assembly of the singular counterterm",
+  "description": "Over-determined assembly of the singular counterterm from the eighteen classes: monomial coefficients, renormalisation constants, beta functions and evanescent part.",
+  "bytes": 34353,
+  "group": "Assembly and checks of the report"
+ },
+ {
+  "path": "resources/report_checks/pole_consistency.json",
+  "title": "Pole identity",
+  "description": "Check of the pole identity for the Green's functions with one breaking insertion, leg assignment by leg assignment.",
+  "bytes": 52926,
+  "group": "Assembly and checks of the report"
+ },
+ {
+  "path": "resources/report_checks/x_solve_engine.json",
+  "title": "Restoring counterterm (engine solution)",
+  "description": "Solution of the restoring condition with the plane-wave engine: the finite breaking by class and the restoring coefficients.",
+  "bytes": 70062,
+  "group": "Assembly and checks of the report"
+ },
+ {
+  "path": "resources/report_checks/x_solve_hand.json",
+  "title": "Restoring counterterm (hand solution)",
+  "description": "Independent hand solution of the restoring condition under the normalisation conditions.",
+  "bytes": 8873,
+  "group": "Assembly and checks of the report"
+ },
+ {
+  "path": "resources/report_model/ENUMERATION.md",
+  "title": "Graph enumeration summary",
+  "description": "Counts of the one-loop one-particle-irreducible graphs per class and their comparison with hand counts.",
+  "bytes": 187108,
+  "group": "Hand-written HepKIT model of the report"
+ },
+ {
+  "path": "resources/report_model/README.md",
+  "title": "Notes on the hand-written model",
+  "description": "Encoding of the hand-written model and description of the enumeration scripts (which are not copied here).",
+  "bytes": 8772,
+  "group": "Hand-written HepKIT model of the report"
+ },
+ {
+  "path": "resources/report_model/sm_unbroken_bmhv.json",
+  "title": "HepKIT model of the report",
+  "description": "Hand-written HepKIT JSON model of the regularised unbroken Standard Model with sterile partners, used for the report's graph enumeration.",
+  "bytes": 83681,
+  "group": "Hand-written HepKIT model of the report"
+ },
+ {
+  "path": "resources/report_model/sm_unbroken_bmhv_native.json",
+  "title": "HepKIT model with true ghost numbers",
+  "description": "Variant of the hand-written model with anticommuting (native) ghosts.",
+  "bytes": 83712,
+  "group": "Hand-written HepKIT model of the report"
+ },
+ {
+  "path": "resources/toolkit/README.md",
+  "title": "Toolkit interface",
+  "description": "Interface of the stand-alone BMHV and one-loop toolkit bmhvkit (the code itself is not copied here).",
+  "bytes": 15911,
+  "group": "Stand-alone toolkit"
+ },
+ {
+  "path": "resources/toolkit/VALIDATION.md",
+  "title": "Validation notes of the toolkit",
+  "description": "Independent validation of the stand-alone BMHV toolkit bmhvkit: what was checked and how.",
+  "bytes": 9411,
+  "group": "Stand-alone toolkit"
+ },
+ {
+  "path": "resources/report_src/build_report.py",
+  "title": "Report build script",
+  "description": "Assembles the class section and compiles the report with Typst.",
+  "bytes": 9067,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/diagrams.typ",
+  "title": "Diagram macros",
+  "description": "Typst (CeTZ) macros that draw the report's Feynman graphs.",
+  "bytes": 5472,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/macros.typ",
+  "title": "Notation macros",
+  "description": "Typst macros of the report's notation.",
+  "bytes": 5496,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/one_loop_gamma5.typ",
+  "title": "Main Typst file",
+  "description": "Title, abstract and the list of included sections.",
+  "bytes": 3223,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/refs.bib",
+  "title": "Bibliography",
+  "description": "Bibliography of the report (BibTeX).",
+  "bytes": 6110,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/01_introduction.typ",
+  "title": "01_introduction.typ",
+  "description": "Typst source of the report: Introduction.",
+  "bytes": 6502,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/02_method.typ",
+  "title": "02_method.typ",
+  "description": "Typst source of the report: Systematics of the method.",
+  "bytes": 62140,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/03_setup.typ",
+  "title": "03_setup.typ",
+  "description": "Typst source of the report: Lagrangian, notation and Feynman rules.",
+  "bytes": 39409,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/03b_operator_bases.typ",
+  "title": "03b_operator_bases.typ",
+  "description": "Typst source of the report: Counterterm operators and the action of.",
+  "bytes": 46323,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/04_classes.typ",
+  "title": "04_classes.typ",
+  "description": "Typst source of the report: Explicit one-loop calculations.",
+  "bytes": 880,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/04a_classes_intro.typ",
+  "title": "04a_classes_intro.typ",
+  "description": "Typst source of the report.",
+  "bytes": 6189,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/04b_g0_intro.typ",
+  "title": "04b_g0_intro.typ",
+  "description": "Typst source of the report.",
+  "bytes": 2150,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/04b_g1_intro.typ",
+  "title": "04b_g1_intro.typ",
+  "description": "Typst source of the report.",
+  "bytes": 3346,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/04z_st_solution.typ",
+  "title": "04z_st_solution.typ",
+  "description": "Typst source of the report: Solution of the Slavnov--Taylor conditions.",
+  "bytes": 59802,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/05_conclusion.typ",
+  "title": "05_conclusion.typ",
+  "description": "Typst source of the report: Conclusion.",
+  "bytes": 22186,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/05a_ct_feynman_rules.typ",
+  "title": "05a_ct_feynman_rules.typ",
+  "description": "Typst source of the report: Feynman rules of the counterterms.",
+  "bytes": 20797,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/05b_broken_phase.typ",
+  "title": "05b_broken_phase.typ",
+  "description": "Typst source of the report: Subtleties in going to the broken phase.",
+  "bytes": 22515,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/05c_broken_lagrangian.typ",
+  "title": "05c_broken_lagrangian.typ",
+  "description": "Typst source of the report: The renormalised action in the broken phase.",
+  "bytes": 46998,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/05r_recipe.typ",
+  "title": "05r_recipe.typ",
+  "description": "Typst source of the report: The recipe in brief.",
+  "bytes": 3617,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/06_automation.typ",
+  "title": "06_automation.typ",
+  "description": "Typst source of the report: Towards automation.",
+  "bytes": 37684,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/07_supporting_material.typ",
+  "title": "07_supporting_material.typ",
+  "description": "Typst source of the report: Supporting material.",
+  "bytes": 8578,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/classes/g0_FF.typ",
+  "title": "g0_FF.typ",
+  "description": "Typst source of the report: Fermion two-point functions.",
+  "bytes": 13293,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/classes/g0_FFS.typ",
+  "title": "g0_FFS.typ",
+  "description": "Typst source of the report: Yukawa vertices.",
+  "bytes": 18166,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/classes/g0_FFV.typ",
+  "title": "g0_FFV.typ",
+  "description": "Typst source of the report: Fermion--gauge vertices.",
+  "bytes": 17341,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/classes/g0_SS.typ",
+  "title": "g0_SS.typ",
+  "description": "Typst source of the report: Higgs two-point function.",
+  "bytes": 14757,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/classes/g0_SSSS.typ",
+  "title": "g0_SSSS.typ",
+  "description": "Typst source of the report: Higgs four-point function.",
+  "bytes": 20152,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/classes/g0_SSV_SSVV.typ",
+  "title": "g0_SSV_SSVV.typ",
+  "description": "Typst source of the report: Higgs--gauge functions and.",
+  "bytes": 29696,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/classes/g0_VV.typ",
+  "title": "g0_VV.typ",
+  "description": "Typst source of the report: Gauge two-point functions.",
+  "bytes": 18987,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/classes/g0_VVV.typ",
+  "title": "g0_VVV.typ",
+  "description": "Typst source of the report: Gauge three-point functions.",
+  "bytes": 25193,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/classes/g0_VVVV.typ",
+  "title": "g0_VVVV.typ",
+  "description": "Typst source of the report: Gauge four-point functions.",
+  "bytes": 28994,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/classes/g0_ghost_sources.typ",
+  "title": "g0_ghost_sources.typ",
+  "description": "Typst source of the report: Ghost and BRST-source functions.",
+  "bytes": 22379,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/classes/g1_cFF.typ",
+  "title": "g1_cFF.typ",
+  "description": "Typst source of the report: Breaking of.",
+  "bytes": 20113,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/classes/g1_cFFS.typ",
+  "title": "g1_cFFS.typ",
+  "description": "Typst source of the report: Breaking of.",
+  "bytes": 21294,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/classes/g1_cFFV.typ",
+  "title": "g1_cFFV.typ",
+  "description": "Typst source of the report: Breaking of.",
+  "bytes": 20994,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/classes/g1_cSS_cSSV.typ",
+  "title": "g1_cSS_cSSV.typ",
+  "description": "Typst source of the report: Breaking of , and higher.",
+  "bytes": 22439,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/classes/g1_cV.typ",
+  "title": "g1_cV.typ",
+  "description": "Typst source of the report: Breaking of.",
+  "bytes": 13980,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/classes/g1_cVV.typ",
+  "title": "g1_cVV.typ",
+  "description": "Typst source of the report: Breaking of and the anomaly.",
+  "bytes": 16777,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/classes/g1_cVVV_cVVVV.typ",
+  "title": "g1_cVVV_cVVVV.typ",
+  "description": "Typst source of the report: Breaking of and.",
+  "bytes": 23736,
+  "group": "Typst sources of the report"
+ },
+ {
+  "path": "resources/report_src/sections/classes/g1_ccRF.typ",
+  "title": "g1_ccRF.typ",
+  "description": "Typst source of the report: Breaking with BRST sources.",
+  "bytes": 22458,
+  "group": "Typst sources of the report"
+ }
+]

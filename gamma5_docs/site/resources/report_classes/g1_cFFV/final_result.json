@@ -1,0 +1,135 @@
+{
+ "class": "g1_cFFV",
+ "diagrams": [
+  {
+   "id": "a",
+   "topology": "external ghost on Delta_1 (both fermion legs internal), gauge exchange A^e, external A^b on an internal fermion segment (before or after Delta_1)",
+   "fields": "Psi_f (3 segments), A^e for every factor (G, W, B) carried by f",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "2 positions of A^b per exchanged factor; N0 = N1 = 0 identically (integrand vanishes at q = 0, eq:g1_cFFV-ad-zero)"
+  },
+  {
+   "id": "b",
+   "topology": "external ghost on Delta_1, gauge exchange, A^b on the exchanged line (three-gauge vertex)",
+   "fields": "Psi_f (2), A^e, A^e' in the non-abelian factor of b",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "N0 = N1 = 0 identically"
+  },
+  {
+   "id": "c",
+   "topology": "external ghost on Delta_1 on the internal Yukawa-partner line, Higgs exchange, A^b on an internal fermion segment",
+   "fields": "Psi_f' (3), H; (f,f') in {(Q,U),(Q,D),(U,Q),(D,Q),(L,E),(E,L)}",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "2 positions per partner; N0 = N1 = 0 identically, no Yukawa contribution"
+  },
+  {
+   "id": "d",
+   "topology": "external ghost on Delta_1, Higgs exchange, A^b on the Higgs line (H^dag H A vertex)",
+   "fields": "Psi_f' (2), H (2)",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "b in W or B; N0 = N1 = 0 identically"
+  },
+  {
+   "id": "e_L, e_R",
+   "topology": "internal ghost: Delta_1 at the external Psibar_f (L) or Psi_f (R), internal ghost to the ghost-gauge vertex of the external omega^a, gauge line to the fermion; A^b on the internal fermion line",
+   "fields": "Psi_f (physical + sterile segment), A^e, omega^c; a,c,e in non-abelian r carried by f; b any factor carried by f",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "N1(e,L) = -1/3 fg^(c e a) T^c T^b T^e gbar^mu P_c ; N1(e,R) = -1/3 fg^(c e a) T^e T^b T^c gbar^mu P_c ; L+R = 0"
+  },
+  {
+   "id": "f_L, f_R",
+   "topology": "internal ghost, A^b on the internal gauge line (three-gauge vertex)",
+   "fields": "Psi_f, A^e, A^e', omega^c; all adjoint indices in r",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "N1(f,L) = (5i/12) fg^(e b e') fg^(c e' a) T^c T^e gbar^mu P_c ; N1(f,R) = -(5i/12) fg^(e b e') fg^(c e' a) T^e T^c gbar^mu P_c"
+  },
+  {
+   "id": "g_L, g_R",
+   "topology": "internal ghost, A^b on the internal ghost line",
+   "fields": "Psi_f, A^e, omega^x, omega^c; all in r",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "N1(g,L) = (i/12) fg^(c b x) fg^(x e a) T^c T^e gbar^mu P_c ; N1(g,R) = -(i/12) fg^(c b x) fg^(x e a) T^e T^c gbar^mu P_c"
+  }
+ ],
+ "functions": [
+  {
+   "externals": "omega^a(q) Psibar_f(p') Psi_f(p) A^b_mu(r), a,b in the same non-abelian factor r in {G,W}, f charged under r; degree 0 (zero momenta); leg order omega, Psibar, Psi, A",
+   "pole_vertex_function": [
+    {
+     "structure": "all (barred and evanescent, external index d-dimensional)",
+     "coefficient": "0"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "fg^(a b c) Tg^c_f overline(gamma)^mu P_(c_f)  (= -i [Tg^a_f, Tg^b_f] overline(gamma)^mu P_(c_f))",
+     "coefficient": "C_ad^((r))/4"
+    }
+   ],
+   "per_topology": {
+    "a": "0",
+    "b": "0",
+    "c": "0",
+    "d": "0",
+    "e (L+R)": "0",
+    "f (L+R)": "(5/24) C_ad^((r)) fg^(a b c) Tg^c gbar^mu P_c",
+    "g (L+R)": "(1/24) C_ad^((r)) fg^(a b c) Tg^c gbar^mu P_c"
+   }
+  },
+  {
+   "externals": "omega^a Psibar_f Psi_f A^b_mu with a abelian (B), or a and b in different factors, or f a singlet of the factor of a",
+   "pole_vertex_function": [
+    {
+     "structure": "all",
+     "coefficient": "0"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "all",
+     "coefficient": "0"
+    }
+   ],
+   "per_topology": {
+    "a-d": "0 identically",
+    "e (L+R)": "0 (antisymmetry of fg^(c e a))",
+    "f, g": "absent"
+   }
+  }
+ ],
+ "operators": [
+  {
+   "kind": "breaking_X",
+   "operator": "i (N^(f r r)_(F V) - N^(f r)_(V F)) = i integral overline(psi)_f gamma^mu [wm^((r)), Am^((r))_mu] psi_f",
+   "coefficient": "(1/(16 pi^2)) C_ad^((r))/4, for r in {G, W} and every f charged under r",
+   "sm_values": "r = G: 3 g_s^2/4 for f = Q, U, D; r = W: g^2/2 for f = Q, L; r = B: 0; E: 0; mixed N^(f r s)_(F V), r != s: 0; N_E[t]: 0. Vertex function 16 pi^2 X: G: (3/4) g_s^4 f^(A B C) T^C gbar^mu P_(c_f); W: (1/4) g^4 epsilon^(I J K) tau^K gbar^mu P_L"
+  },
+  {
+   "kind": "evanescent_counterterm",
+   "operator": "none (the pole of (Delta_1.Gamma)_(omega Psibar Psi A) vanishes)",
+   "coefficient": "0",
+   "sm_values": "0"
+  }
+ ],
+ "checks": [
+  "Deriver (hand) and checker (machine) agree per topology (all 12 graphs, both chiralities) and in total after mapping the checker's labels (Bbar_i = L, B_i = R; checker's fg^(y1 b y) in Bbar2/B2 is -deriver's fg^(e b e')).",
+  "Referee re-derived the constants (1, i, -i for e, f, g L; 1, -i, i for R), the reductions khat^2 kbar^2 -> -eta/3, khat^2 k^2 -> -eta/2, khat^2 kbar-slash k^mu -> -eta/12 gbar^mu, and the vanishing of (a)-(d) by hand; re-ran check_explicit_matrices.py (all topologies agree, d = 4..12) and check_cffv_total.py; independent numpy check of all group sums for SU(3), SU(2) (referee_group_check.py).",
+  "Pole: N0 = 0 graph by graph; b_d delta S^(1) restricted to omega Psibar Psi A vanishes (b_d Q_rho[fg] and b_d Q_R^(fr) cancel, source-free counterterms give nothing at q = 0), as required by the pole check of sec:m-oneloop.",
+  "Enumeration: 220 labelled multiplet-level graphs over the 27 assignments of ENUMERATION.md (17 for omega_G Qbar Q G: 7 + 4 + 6); 10 further assignments with identically vanishing group factors (found by the checker) are 0.",
+  "M-independence trivial; chirality- and Yukawa-independent.",
+  "Literature: agrees with BIMS 2004.14398 eq. (6.25b), (C_ad/4) int f^(abc) c_a psibar G-slash^b T^c psi (with BIMS's prefactor -i hbar times i = hbar), including the sign and the statements that only the four graphs f, g contribute and e cancels; also consistent with the targets' Delta S_ST term -(1/4) sum_f [Rbar s_C Psi - (s_C Psibar) R] = -(C_ad/4) Q_R through b Q_R superset i(N_FV - N_VF)."
+ ],
+ "caveats": [
+  "Feynman gauge only.",
+  "targets_in_our_conventions.md, g1_cFFV line, has the opposite sign (X superset (l/4) Psibar i[A-slash, omega_C] P Psi = -(our X)); diagnosed as a Grassmann reordering slip in the translation (moving c_a past psibar), since BIMS (6.25b) and the target file's own Delta S_ST both give our sign.",
+  "Under (N1)-(N4) this class requires Delta S^(1) superset -(1/16pi^2) C_ad^((r))/4 sum_f Q_R^(fr) (r = G, W) and predicts X_ccRF superset +(1/16pi^2) C_ad^((r))/4 (N_RR^(frr) + Nbar_RR^(frr)); to be confirmed by g1_ccRF and the final solution.",
+  "Graphs (a)-(d) vanish only in their degree-0 local part (integrand zero at q = 0); they are non-zero at q != 0 but contribute nothing to N0 or N1."
+ ]
+}

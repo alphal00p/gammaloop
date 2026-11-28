@@ -1,0 +1,67 @@
+# The Standard Model with one family in the unbroken phase, as in the report
+# "One-loop renormalisation of the Standard Model with a non-anticommuting gamma5" (sections 03_setup, 03b).
+# Everything else (sterile partners, ghosts, BRST sources and transformations, h.c. terms) is derived.
+
+name = "sm_one_family"
+generations = 1
+
+[gauge]
+G = { group = "SU(3)", coupling = "g_s" }
+W = { group = "SU(2)", coupling = "g" }
+B = { group = "U(1)", coupling = "gp" }
+
+[fermions]
+Q = { chirality = "L", G = "F", W = "F", B = "1/6" }
+U = { chirality = "R", G = "F", B = "2/3" }
+D = { chirality = "R", G = "F", B = "-1/3" }
+L = { chirality = "L", W = "F", B = "-1/2" }
+E = { chirality = "R", B = "-1" }
+
+[scalars]
+H = { complex = true, W = "F", B = "1/2" }
+
+[parameters]
+m2 = {}
+lambda = {}
+y_u = { flavour = true }
+y_d = { flavour = true }
+y_e = { flavour = true }
+
+# V = m2 (H^dag H) + lambda (H^dag H)^2
+[[potential]]
+coupling = "m2"
+bilinears = [["H", "H"]]
+
+[[potential]]
+coupling = "lambda"
+bilinears = [["H", "H"], ["H", "H"]]
+
+# L_Yuk = - y_u Qbar Htilde PR U - y_d Qbar H PR D - y_e Lbar H PR E + h.c.,  Htilde_j = eps_{jk} H^*_k
+[[yukawa]]
+coupling = "y_u"
+fermion_bar = "Q"
+scalar = "Hdag"
+fermion = "U"
+
+[[yukawa]]
+coupling = "y_d"
+fermion_bar = "Q"
+scalar = "H"
+fermion = "D"
+
+[[yukawa]]
+coupling = "y_e"
+fermion_bar = "L"
+scalar = "H"
+fermion = "E"
+
+[gauge_fixing]
+kind = "linear_covariant"
+xi = "xi"
+
+[regularisation]
+scheme = "BMHV"
+sterile_partners = true
+fermion_kinetic = "d_dimensional"
+gauge_vertex = "barred_physical"
+bosonic = "d_dimensional"

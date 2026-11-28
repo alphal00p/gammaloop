@@ -1,0 +1,171 @@
+{
+ "class": "g0_VVV",
+ "diagrams": [
+  {
+   "id": "a1,a2",
+   "topology": "fermion triangle, two orientations",
+   "fields": "Psi_f, f in {Q,U,D,L,E}",
+   "symmetry_factor": "1",
+   "sign": "-1 (fermion loop); overall prefactor (-1) i^6 = +1",
+   "multiplicity_note": "group Tr_f[T^a T^b T^c] (a1), Tr_f[T^a T^c T^b] (a2); numerator four-dimensional by eq:phys-prop; machine check (checker) and referee numeric 4D-trace check: -2/3 Vbar per orientation (colour stripped), no epsilon pole, for P_L and P_R"
+  },
+  {
+   "id": "b1,b2",
+   "topology": "Higgs triangle, two orientations",
+   "fields": "H",
+   "symmetry_factor": "1",
+   "sign": "+1; prefactor i^3 i^3 = -1",
+   "multiplicity_note": "group Tr_H[T^a T^c T^b] (b1), Tr_H[T^a T^b T^c] (b2)"
+  },
+  {
+   "id": "c",
+   "topology": "Higgs bubble with one seagull, 3 channels (ab|c),(bc|a),(ca|b)",
+   "fields": "H",
+   "symmetry_factor": "1",
+   "sign": "+1; prefactor i^4 = 1",
+   "multiplicity_note": "group Tr_H[{T^a,T^b}T^c]; vanishes identically (k -> -k-p_3)"
+  },
+  {
+   "id": "d",
+   "topology": "gauge triangle",
+   "fields": "A (all twelve)",
+   "symmetry_factor": "1",
+   "sign": "+1; prefactor (-i)^3 = i",
+   "multiplicity_note": "group f^{axy} f^{byz} f^{czx} = (C_ad/2) f^{abc}"
+  },
+  {
+   "id": "e",
+   "topology": "gauge bubble with one VVVV vertex, 3 channels",
+   "fields": "A",
+   "symmetry_factor": "1/2",
+   "sign": "+1; prefactor (1/2)(-i)^2(-i) = i/2",
+   "multiplicity_note": "group factors f^{axy}f^{bce}f^{xye} = C f^{abc}, f^{axy}f^{bxe}f^{cye} = C/2 f^{abc}, f^{axy}f^{bye}f^{cxe} = -C/2 f^{abc}"
+  },
+  {
+   "id": "f1,f2",
+   "topology": "ghost triangle, two orientations",
+   "fields": "omega, bar(omega)",
+   "symmetry_factor": "1",
+   "sign": "-1 (ghost loop); prefactor (-1)(-1)^3 i^3 = -i",
+   "multiplicity_note": "group f^{yax}f^{zby}f^{xcz} = C/2 f^{abc} (f1), b<->c for f2"
+  },
+  {
+   "id": "(none)",
+   "topology": "tadpoles / Yukawa / quartic-scalar topologies",
+   "fields": "-",
+   "symmetry_factor": "-",
+   "sign": "-",
+   "multiplicity_note": "absent: a one-loop tadpole with three external gauge legs needs a five-leg vertex; Yukawa and lambda vertices need external matter. Diagram list agrees with ENUMERATION.md (which omits only colour-vanishing assignments and the identically zero WWW Higgs seagull bubbles)."
+  }
+ ],
+ "functions": [
+  {
+   "externals": "G^A_mu(p1) G^B_nu(p2) G^C_rho(p3), gauge factor G (GGG)",
+   "pole_vertex_function": [
+    {
+     "structure": "i gs f^(A B C) V^(mu nu rho) = g^(mu nu)(p_1-p_2)^rho + g^(nu rho)(p_2-p_3)^mu + g^(rho mu)(p_3-p_1)^nu",
+     "coefficient": "2*gs^2"
+    },
+    {
+     "structure": "i gs f^(A B C) overline(V)^(mu nu rho) (same with gmb and bar(p)_j)",
+     "coefficient": "-4/3*gs^2"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "a (Q)": "-2/3 gs^2 i fg^{ABC} Vbar",
+    "a (U)": "-1/3 gs^2 i fg Vbar",
+    "a (D)": "-1/3 gs^2 i fg Vbar",
+    "a gamma5-odd": "0 (per orientation, per multiplet)",
+    "b": "0",
+    "c": "0",
+    "d": "-39/8 gs^2 i fg V",
+    "e": "27/4 gs^2 i fg V",
+    "f": "1/8 gs^2 i fg V"
+   }
+  },
+  {
+   "externals": "W^I_mu(p1) W^J_nu(p2) W^K_rho(p3), gauge factor W (WWW)",
+   "pole_vertex_function": [
+    {
+     "structure": "i g epsilon^(I J K) V^(mu nu rho) = g^(mu nu)(p_1-p_2)^rho + g^(nu rho)(p_2-p_3)^mu + g^(rho mu)(p_3-p_1)^nu",
+     "coefficient": "7/6*g^2"
+    },
+    {
+     "structure": "i g epsilon^(I J K) overline(V)^(mu nu rho) (same with gmb and bar(p)_j)",
+     "coefficient": "-4/3*g^2"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "a (Q)": "-g^2 i fg Vbar",
+    "a (L)": "-1/3 g^2 i fg Vbar",
+    "a gamma5-odd": "0",
+    "b": "-1/6 g^2 i fg V",
+    "c": "0",
+    "d": "-13/4 g^2 i fg V",
+    "e": "9/2 g^2 i fg V",
+    "f": "1/12 g^2 i fg V"
+   }
+  },
+  {
+   "externals": "all other combinations: BBB, GGB, WWB, GBB, WBB, GGW, GWW, GWB",
+   "pole_vertex_function": [],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "all": "0: f^{abc}=0 unless all legs in one non-abelian factor; Tr_f[T^a[T^b,T^c]]=0 with a B leg (Y central) or with generators of different factors (traceless); gamma5-odd parts Tr_f[T^a{T^b,T^c}] eps (nonzero per multiplet for GGG d^{ABC}, GGB, WWB, BBB) have no pole per orientation and per multiplet; Higgs seagull bubbles vanish identically"
+   }
+  },
+  {
+   "externals": "general (matrix-valued), A^a_mu(p1) A^b_nu(p2) A^c_rho(p3)",
+   "pole_vertex_function": [
+    {
+     "structure": "V^(mu nu rho) = g^(mu nu)(p_1-p_2)^rho + g^(nu rho)(p_2-p_3)^mu + g^(rho mu)(p_3-p_1)^nu",
+     "coefficient": "(4 i/3) fg^{axy} fg^{byz} fg^{czx} - (1/3) Tr_H[T^a [T^b, T^c]]  (= i fg^{abc} (2/3 C_ad - 1/3 S_H))"
+    },
+    {
+     "structure": "overline(V)^(mu nu rho) (same with gmb and bar(p)_j)",
+     "coefficient": "-(2/3) sum_f Tr_f[T^a [T^b, T^c]]  (= -2/3 i fg^{abc} S_F, S_F = S_L + S_R)"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "a (per multiplet, both orientations)": "-(2/3) i fg^{abc} S_f Vbar",
+    "b (both orientations)": "-(1/3) i fg^{abc} S_H V",
+    "c": "0",
+    "d": "-(13/8) i C_ad fg^{abc} V",
+    "e (3 channels)": "(9/4) i C_ad fg^{abc} V; channel (bc|a): (9/4) i C_ad fg^{abc}(g^{mu nu} p1^rho - g^{mu rho} p1^nu)",
+    "f (both orientations)": "(1/24) i C_ad fg^{abc} V",
+    "a gamma5-odd": "0 per orientation and per multiplet (hand, toolkit, explicit components, referee numeric)"
+   }
+  }
+ ],
+ "operators": [
+  {
+   "kind": "pole_counterterm",
+   "operator": "Q^((r))_(3 f) (four-dimensional, barred: -int fg^(abc) (bar(partial)_mu bar(A)^a_nu) bar(A)^(b mu) bar(A)^(c nu), in d^d x); delta S^(1) contains (1/(16 pi^2 eps)) delta z_1^(r) Q^((r))_(3 f), i.e. -(1/(16 pi^2 eps)) int [-delta z_1^(r) (barred cubic monomial)]",
+   "coefficient": "(1/(16 pi^2 eps)) * delta z_1^(r), delta z_1^(r) = 2/3 C_ad^(r) - 1/3 S_H^(r) - 2/3 S_F^(r)",
+   "sm_values": "r=G: delta z_1 = 2/3 gs^2; r=W: delta z_1 = -1/6 g^2; r=B: no AAA term"
+  },
+  {
+   "kind": "evanescent_counterterm",
+   "operator": "tilde(E)^((r))_F |_(A A A) = Q^((r))_(3 f) - Q^((r) d)_(3 f)  (three-field part of tilde(E)_F^(r))",
+   "coefficient": "(1/(16 pi^2 eps)) * (-B^(r)) on tilde(E)^((r))_F|_(AAA) = Qbar_3f - Q^(d)_3f, B^(r) = 2/3 C_ad^(r) - 1/3 S_H^(r). Equivalent split: delta S contains (1/(16 pi^2 eps)) [B^(r) Q^((r) d)_(3 f) - 2/3 S_F^(r) Qbar^((r))_(3 f)] = (1/(16 pi^2 eps)) [delta z_1^(r) Q^((r) d)_(3 f) - 2/3 S_F^(r) tilde(E)^((r))_F|_(AAA)]",
+   "sm_values": "r=G: B = 2 gs^2 (coefficient -2 gs^2/(16 pi^2 eps)); r=W: B = 7/6 g^2 (coefficient -7/6 g^2/(16 pi^2 eps))"
+  }
+ ],
+ "checks": [
+  "Deriver (hand) and checker (symbolic toolkit + explicit-component Feynman-parameter extrapolation + Wick contractions) agree coefficient by coefficient: per topology (d -13/8, e +9/4, f +1/24 C_ad; b -1/3 S_H; c 0; a -2/3 S_f per multiplet on Vbar) and in total, for every gauge-factor combination.",
+  "Referee re-ran check_vvv.py (reproduces fG: 2 i gs^3 V - 4/3 i gs^3 Vbar; epsW: 7/6 i g^3 V - 4/3 i g^3 Vbar; all other tensors zero; no epsilon parts) and verified by hand the Higgs, ghost, gauge-triangle and gauge-bubble intermediate steps of the subsection and the group-factor identities.",
+  "Referee independent numeric check of the fermion triangle (explicit 4x4 Dirac matrices, T^(1) with residue rules): single orientation N0 = -2/3 Vbar with zero epsilon part for both P_L and P_R, to 2e-16.",
+  "Literature (targets_in_our_conventions.md sec. 2.1, BIMS/LP): Gamma_div cubic part kappa[-2/3 C S_AAA + 1/3 S_H S_AAA (from -1/12 Tr_H FF) + 2/3 S_F Sbar_AAA (from -1/6 Tr_f Fbar Fbar)] = kappa[-B Q^d_3f + 2/3 S_F Qbar_3f]: identical to our result, including the split d-dimensional (bosonic) vs barred (fermion).",
+  "Feynman-gauge Z_1 = 1 + kappa(2/3 C_A - 4/3 T_F n_D - 1/3 T_S) reproduced (chiral multiplet = half Dirac).",
+  "With delta z_A = 5/3 C - 1/3 S_H - 2/3 S_F (g0_VV final): delta z_1 - 3/2 delta z_A = -beta_0/2 = -29/6 gs^2, -35/12 g^2; delta z_1 - delta z_A = -C_ad = Ztilde_1 - Ztilde_3 (Feynman gauge).",
+  "Bose symmetry, M and m^2 independence, N_1 = 0.",
+  "Abelian/mixed combinations vanish: fg = 0 across factors; Tr_f[T^a[T^b,T^c]] = 0 with a B leg or with generators from different factors (traceless); symmetric traces multiply only the gamma5-odd structure, which has no pole per orientation (D^{abc}=0 not used)."
+ ],
+ "caveats": [
+  "Gauge-triangle N_2 and N_3 pieces are routing dependent individually (routing stated in the report); only their sum -13/4 i V is routing independent. N_3 given at d=4 (only the residue is needed).",
+  "Evanescent basis: the bosonic d-dimensional poles of AA (-(5/3 C - 1/3 S_H)) and AAA (-(2/3 C - 1/3 S_H)) equal -a(Q_T+Q_3f)^d - b(2Q_T+3Q_3f)^d with a = 11/3 C - 1/3 S_H, b = -C. tilde(E)_F alone (ratio 1:1) cannot carry both evanescent parts; a second evanescent direction (evanescent part of the d-dimensional field-counting operator of A, ratio 2:3 plus ghost-source terms) is missing from eq:evanescent of 03b, or the bosonic counterterm must be stated in d-dimensional form. Here the AAA part is stated as -B tilde(E)_F|_AAA, consistent with g0_VV's -(5/3 C - 1/3 S_H) tilde(E)_F|_AA only as separate monomial coefficients."
+ ]
+}

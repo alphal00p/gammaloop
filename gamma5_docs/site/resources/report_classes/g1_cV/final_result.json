@@ -1,0 +1,214 @@
+{
+ "class": "g1_cV",
+ "diagrams": [
+  {
+   "id": "a_G_Q",
+   "topology": "fermion bubble: Delta_1 vertex (external ghost omega^a(q)) and gauge vertex (A^b_nu(-q)); fermion enters Delta_1 with k, leaves with k+q",
+   "fields": "Psi_Q loop; sterile component next to Delta_1 on line k (term slh(p) P_cbar) or on line k+q (term -slh(p') P_c): two terms of one graph",
+   "symmetry_factor": "1",
+   "sign": "-1 (closed fermion loop)",
+   "multiplicity_note": "one graph per multiplet and gauge factor; group factor Tr_Q(T^a T^b) = S_Q^(G) delta^(ab) = g_s^2 delta^(ab); L and R chirality give the same Dirac part"
+  },
+  {
+   "id": "a_G_U",
+   "topology": "fermion bubble: Delta_1 vertex (external ghost omega^a(q)) and gauge vertex (A^b_nu(-q)); fermion enters Delta_1 with k, leaves with k+q",
+   "fields": "Psi_U loop; sterile component next to Delta_1 on line k (term slh(p) P_cbar) or on line k+q (term -slh(p') P_c): two terms of one graph",
+   "symmetry_factor": "1",
+   "sign": "-1 (closed fermion loop)",
+   "multiplicity_note": "one graph per multiplet and gauge factor; group factor Tr_U(T^a T^b) = S_U^(G) delta^(ab) = g_s^2/2 delta^(ab); L and R chirality give the same Dirac part"
+  },
+  {
+   "id": "a_G_D",
+   "topology": "fermion bubble: Delta_1 vertex (external ghost omega^a(q)) and gauge vertex (A^b_nu(-q)); fermion enters Delta_1 with k, leaves with k+q",
+   "fields": "Psi_D loop; sterile component next to Delta_1 on line k (term slh(p) P_cbar) or on line k+q (term -slh(p') P_c): two terms of one graph",
+   "symmetry_factor": "1",
+   "sign": "-1 (closed fermion loop)",
+   "multiplicity_note": "one graph per multiplet and gauge factor; group factor Tr_D(T^a T^b) = S_D^(G) delta^(ab) = g_s^2/2 delta^(ab); L and R chirality give the same Dirac part"
+  },
+  {
+   "id": "a_W_Q",
+   "topology": "fermion bubble: Delta_1 vertex (external ghost omega^a(q)) and gauge vertex (A^b_nu(-q)); fermion enters Delta_1 with k, leaves with k+q",
+   "fields": "Psi_Q loop; sterile component next to Delta_1 on line k (term slh(p) P_cbar) or on line k+q (term -slh(p') P_c): two terms of one graph",
+   "symmetry_factor": "1",
+   "sign": "-1 (closed fermion loop)",
+   "multiplicity_note": "one graph per multiplet and gauge factor; group factor Tr_Q(T^a T^b) = S_Q^(W) delta^(ab) = 3 g^2/2 delta^(ab); L and R chirality give the same Dirac part"
+  },
+  {
+   "id": "a_W_L",
+   "topology": "fermion bubble: Delta_1 vertex (external ghost omega^a(q)) and gauge vertex (A^b_nu(-q)); fermion enters Delta_1 with k, leaves with k+q",
+   "fields": "Psi_L loop; sterile component next to Delta_1 on line k (term slh(p) P_cbar) or on line k+q (term -slh(p') P_c): two terms of one graph",
+   "symmetry_factor": "1",
+   "sign": "-1 (closed fermion loop)",
+   "multiplicity_note": "one graph per multiplet and gauge factor; group factor Tr_L(T^a T^b) = S_L^(W) delta^(ab) = g^2/2 delta^(ab); L and R chirality give the same Dirac part"
+  },
+  {
+   "id": "a_B_Q",
+   "topology": "fermion bubble: Delta_1 vertex (external ghost omega^a(q)) and gauge vertex (A^b_nu(-q)); fermion enters Delta_1 with k, leaves with k+q",
+   "fields": "Psi_Q loop; sterile component next to Delta_1 on line k (term slh(p) P_cbar) or on line k+q (term -slh(p') P_c): two terms of one graph",
+   "symmetry_factor": "1",
+   "sign": "-1 (closed fermion loop)",
+   "multiplicity_note": "one graph per multiplet and gauge factor; group factor Tr_Q(T^a T^b) = S_Q^(B) delta^(ab) = g'^2/6 delta^(ab); L and R chirality give the same Dirac part"
+  },
+  {
+   "id": "a_B_U",
+   "topology": "fermion bubble: Delta_1 vertex (external ghost omega^a(q)) and gauge vertex (A^b_nu(-q)); fermion enters Delta_1 with k, leaves with k+q",
+   "fields": "Psi_U loop; sterile component next to Delta_1 on line k (term slh(p) P_cbar) or on line k+q (term -slh(p') P_c): two terms of one graph",
+   "symmetry_factor": "1",
+   "sign": "-1 (closed fermion loop)",
+   "multiplicity_note": "one graph per multiplet and gauge factor; group factor Tr_U(T^a T^b) = S_U^(B) delta^(ab) = 4 g'^2/3 delta^(ab); L and R chirality give the same Dirac part"
+  },
+  {
+   "id": "a_B_D",
+   "topology": "fermion bubble: Delta_1 vertex (external ghost omega^a(q)) and gauge vertex (A^b_nu(-q)); fermion enters Delta_1 with k, leaves with k+q",
+   "fields": "Psi_D loop; sterile component next to Delta_1 on line k (term slh(p) P_cbar) or on line k+q (term -slh(p') P_c): two terms of one graph",
+   "symmetry_factor": "1",
+   "sign": "-1 (closed fermion loop)",
+   "multiplicity_note": "one graph per multiplet and gauge factor; group factor Tr_D(T^a T^b) = S_D^(B) delta^(ab) = g'^2/3 delta^(ab); L and R chirality give the same Dirac part"
+  },
+  {
+   "id": "a_B_L",
+   "topology": "fermion bubble: Delta_1 vertex (external ghost omega^a(q)) and gauge vertex (A^b_nu(-q)); fermion enters Delta_1 with k, leaves with k+q",
+   "fields": "Psi_L loop; sterile component next to Delta_1 on line k (term slh(p) P_cbar) or on line k+q (term -slh(p') P_c): two terms of one graph",
+   "symmetry_factor": "1",
+   "sign": "-1 (closed fermion loop)",
+   "multiplicity_note": "one graph per multiplet and gauge factor; group factor Tr_L(T^a T^b) = S_L^(B) delta^(ab) = g'^2/2 delta^(ab); L and R chirality give the same Dirac part"
+  },
+  {
+   "id": "a_B_E",
+   "topology": "fermion bubble: Delta_1 vertex (external ghost omega^a(q)) and gauge vertex (A^b_nu(-q)); fermion enters Delta_1 with k, leaves with k+q",
+   "fields": "Psi_E loop; sterile component next to Delta_1 on line k (term slh(p) P_cbar) or on line k+q (term -slh(p') P_c): two terms of one graph",
+   "symmetry_factor": "1",
+   "sign": "-1 (closed fermion loop)",
+   "multiplicity_note": "one graph per multiplet and gauge factor; group factor Tr_E(T^a T^b) = S_E^(B) delta^(ab) = g'^2 delta^(ab); L and R chirality give the same Dirac part"
+  }
+ ],
+ "functions": [
+  {
+   "externals": "omega^a(q) A^b_nu(-q), a,b in gauge factor G, delta^(ab); (Delta_1 . Gamma)^(1)_(omega^a A^b_nu)",
+   "pole_vertex_function": [
+    {
+     "structure": "hat(q)^2 bar(q)^nu delta^(a b)",
+     "coefficient": "(i/3) sum_f S_f^((G)) = i 2/3 g_s^2"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "bar(q)^2 bar(q)^nu delta^(a b)",
+     "coefficient": "(i/3) sum_f S_f^((G)) = i 2/3 g_s^2"
+    }
+   ],
+   "per_topology": {
+    "a (fermion bubble with Delta_1)": "numerator after Dirac algebra (both chiralities): -tr[...] -> i * 2[hat(k)^2 (bar(k)+bar(q))^nu - (hat(k)+hat(q))^2 bar(k)^nu] = 2i[hat(k)^2 bar(q)^nu - 2 (hat(k).hat(q)) bar(k)^nu - hat(q)^2 bar(k)^nu]; per multiplet N_0 = (i/3) S_f hat(q)^2 bar(q)^nu delta^ab, N_1 = (i/3) S_f q^2 bar(q)^nu delta^ab (q^2 = bar(q)^2 + hat(q)^2), P N_1 = (i/3) S_f bar(q)^2 bar(q)^nu delta^ab; S_f: Q: g_s^2, U: g_s^2/2, D: g_s^2/2",
+    "evanescent finite part (not in X_1, needed at two loops)": "(1/(16 pi^2)) (i/3) S_f hat(q)^2 bar(q)^nu delta^ab"
+   }
+  },
+  {
+   "externals": "omega^a(q) A^b_nu(-q), a,b in gauge factor W, delta^(ab); (Delta_1 . Gamma)^(1)_(omega^a A^b_nu)",
+   "pole_vertex_function": [
+    {
+     "structure": "hat(q)^2 bar(q)^nu delta^(a b)",
+     "coefficient": "(i/3) sum_f S_f^((W)) = i 2/3 g^2"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "bar(q)^2 bar(q)^nu delta^(a b)",
+     "coefficient": "(i/3) sum_f S_f^((W)) = i 2/3 g^2"
+    }
+   ],
+   "per_topology": {
+    "a (fermion bubble with Delta_1)": "numerator after Dirac algebra (both chiralities): -tr[...] -> i * 2[hat(k)^2 (bar(k)+bar(q))^nu - (hat(k)+hat(q))^2 bar(k)^nu] = 2i[hat(k)^2 bar(q)^nu - 2 (hat(k).hat(q)) bar(k)^nu - hat(q)^2 bar(k)^nu]; per multiplet N_0 = (i/3) S_f hat(q)^2 bar(q)^nu delta^ab, N_1 = (i/3) S_f q^2 bar(q)^nu delta^ab (q^2 = bar(q)^2 + hat(q)^2), P N_1 = (i/3) S_f bar(q)^2 bar(q)^nu delta^ab; S_f: Q: 3 g^2/2, L: g^2/2",
+    "evanescent finite part (not in X_1, needed at two loops)": "(1/(16 pi^2)) (i/3) S_f hat(q)^2 bar(q)^nu delta^ab"
+   }
+  },
+  {
+   "externals": "omega^a(q) A^b_nu(-q), a,b in gauge factor B, delta^(ab); (Delta_1 . Gamma)^(1)_(omega^a A^b_nu)",
+   "pole_vertex_function": [
+    {
+     "structure": "hat(q)^2 bar(q)^nu delta^(a b)",
+     "coefficient": "(i/3) sum_f S_f^((B)) = i 10/9 g'^2"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "bar(q)^2 bar(q)^nu delta^(a b)",
+     "coefficient": "(i/3) sum_f S_f^((B)) = i 10/9 g'^2"
+    }
+   ],
+   "per_topology": {
+    "a (fermion bubble with Delta_1)": "numerator after Dirac algebra (both chiralities): -tr[...] -> i * 2[hat(k)^2 (bar(k)+bar(q))^nu - (hat(k)+hat(q))^2 bar(k)^nu] = 2i[hat(k)^2 bar(q)^nu - 2 (hat(k).hat(q)) bar(k)^nu - hat(q)^2 bar(k)^nu]; per multiplet N_0 = (i/3) S_f hat(q)^2 bar(q)^nu delta^ab, N_1 = (i/3) S_f q^2 bar(q)^nu delta^ab (q^2 = bar(q)^2 + hat(q)^2), P N_1 = (i/3) S_f bar(q)^2 bar(q)^nu delta^ab; S_f: Q: g'^2/6, U: 4 g'^2/3, D: g'^2/3, L: g'^2/2, E: g'^2",
+    "evanescent finite part (not in X_1, needed at two loops)": "(1/(16 pi^2)) (i/3) S_f hat(q)^2 bar(q)^nu delta^ab"
+   }
+  },
+  {
+   "externals": "omega^a A^b_nu with a, b in different gauge factors (GW, GB, WB)",
+   "pole_vertex_function": [
+    {
+     "structure": "-",
+     "coefficient": "0"
+    }
+   ],
+   "finite_breaking_vertex_function": [
+    {
+     "structure": "-",
+     "coefficient": "0"
+    }
+   ],
+   "per_topology": {
+    "a": "0: Tr_f(T^a T^b) = 0 across factors (traceless SU(3), SU(2) generators)"
+   }
+  }
+ ],
+ "operators": [
+  {
+   "kind": "evanescent_counterterm",
+   "operator": "(Dbrk_1 dot Gamma)^((1))|_(\"pole\", gh A) = - lf 1/(3 ep) sum_f integral dif^d x Tr_f (wm hat(partial)^2 bar(partial)^mu bar(Am)_mu) = lf 1/(3 ep) (S_L^((G)) + S_R^((G))) bop_d E^((G))_A |_(gh A)   [ghost-number-1 evanescent monomial integral gh^a hat(partial)^2 bar(partial) dot bar(A)^a, unnamed in 03b; = - bop_d E_A^((r))|_(gh A)]",
+   "coefficient": "+(1/3)(S_L^((G))+S_R^((G))) times bop_d E_A^((G)), units 1/(16 pi^2 eps); cancelled by bop_d of delta S^(1) supset -(1/3)(S_L+S_R) E_A^((G))/(16 pi^2 eps) (g0_VV)",
+   "sm_values": "coefficient of bop_d E_A^((G)): 2/3 g_s^2"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "X_1 supset - lf 1/3 sum_f integral dif^4 x Tr_f(wm partial^2 partial^mu Am_mu) = c N^((G))_3,  N^((G))_3 = integral gh^a partial^2 partial dot A^a",
+   "coefficient": "c = -(1/3)(S_L^((G))+S_R^((G))) in units of 1/(16 pi^2); coefficient of N^((G))_1 is 0",
+   "sm_values": "-2/3 g_s^2 (Q: -g_s^2/3, U: -g_s^2/6, D: -g_s^2/6, L: 0, E: 0)"
+  },
+  {
+   "kind": "evanescent_counterterm",
+   "operator": "(Dbrk_1 dot Gamma)^((1))|_(\"pole\", gh A) = - lf 1/(3 ep) sum_f integral dif^d x Tr_f (wm hat(partial)^2 bar(partial)^mu bar(Am)_mu) = lf 1/(3 ep) (S_L^((W)) + S_R^((W))) bop_d E^((W))_A |_(gh A)   [ghost-number-1 evanescent monomial integral gh^a hat(partial)^2 bar(partial) dot bar(A)^a, unnamed in 03b; = - bop_d E_A^((r))|_(gh A)]",
+   "coefficient": "+(1/3)(S_L^((W))+S_R^((W))) times bop_d E_A^((W)), units 1/(16 pi^2 eps); cancelled by bop_d of delta S^(1) supset -(1/3)(S_L+S_R) E_A^((W))/(16 pi^2 eps) (g0_VV)",
+   "sm_values": "coefficient of bop_d E_A^((W)): 2/3 g^2"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "X_1 supset - lf 1/3 sum_f integral dif^4 x Tr_f(wm partial^2 partial^mu Am_mu) = c N^((W))_3,  N^((W))_3 = integral gh^a partial^2 partial dot A^a",
+   "coefficient": "c = -(1/3)(S_L^((W))+S_R^((W))) in units of 1/(16 pi^2); coefficient of N^((W))_1 is 0",
+   "sm_values": "-2/3 g^2 (Q: -g^2/2, U: 0, D: 0, L: -g^2/6, E: 0)"
+  },
+  {
+   "kind": "evanescent_counterterm",
+   "operator": "(Dbrk_1 dot Gamma)^((1))|_(\"pole\", gh A) = - lf 1/(3 ep) sum_f integral dif^d x Tr_f (wm hat(partial)^2 bar(partial)^mu bar(Am)_mu) = lf 1/(3 ep) (S_L^((B)) + S_R^((B))) bop_d E^((B))_A |_(gh A)   [ghost-number-1 evanescent monomial integral gh^a hat(partial)^2 bar(partial) dot bar(A)^a, unnamed in 03b; = - bop_d E_A^((r))|_(gh A)]",
+   "coefficient": "+(1/3)(S_L^((B))+S_R^((B))) times bop_d E_A^((B)), units 1/(16 pi^2 eps); cancelled by bop_d of delta S^(1) supset -(1/3)(S_L+S_R) E_A^((B))/(16 pi^2 eps) (g0_VV)",
+   "sm_values": "coefficient of bop_d E_A^((B)): 10/9 g'^2"
+  },
+  {
+   "kind": "breaking_X",
+   "operator": "X_1 supset - lf 1/3 sum_f integral dif^4 x Tr_f(wm partial^2 partial^mu Am_mu) = c N^((B))_3,  N^((B))_3 = integral gh^a partial^2 partial dot A^a",
+   "coefficient": "c = -(1/3)(S_L^((B))+S_R^((B))) in units of 1/(16 pi^2); coefficient of N^((B))_1 is 0",
+   "sm_values": "-10/9 g'^2 (Q: -g'^2/18, U: -4 g'^2/9, D: -g'^2/9, L: -g'^2/6, E: -g'^2/3)"
+  }
+ ],
+ "checks": [
+  "Deriver (hand) and checker (toolkit) agree coefficient by coefficient: numerator, N_0, N_1, P N_1, operators, SM values per multiplet",
+  "Referee re-derivation by hand: Dirac trace, T^(3) expansion (M^2 terms cancel), pole tensor bubbles (1/3 qq - 1/12 q^2 g; -q/2), tagged reduction -> N_0 = (i/3) S qhat^2 qbar^nu, N_1 = (i/3) S q^2 qbar^nu",
+  "Referee re-ran check_cV.py: all assertions pass (symbolic vs explicit matrices d=4,6,8; Feynman parameters; exact bubble; exact one-loop ST identity -i q_mu Gamma_AA^{mu nu} = (Delta.Gamma)^nu)",
+  "Pole cancels against bop_d of the E_A counterterm of g0_VV (coefficient -(1/3)(S_L+S_R)/(16 pi^2 eps), both g0_VV results agree)",
+  "Vertex-function translation: integral omega^a partial^2 partial.A^a on omega(q) A(-q) -> -i q^2 q^nu; bop_d E_A|_(omega A) -> +i qhat^2 qbar^nu",
+  "Diagram list agrees with ENUMERATION.md (G: Q,U,D; W: Q,L; B: Q,U,D,L,E; 10 multiplet-level graphs); no other one-loop topology",
+  "Literature (targets 2.2, BIMS single group): X ni (l/3) Tr(dbar omega dbar^2 Abar), pole (kappa/3) Tr(dbar omega dhat^2 Abar): identical after integration by parts; also a+b = -1/6 per multiplet in Delta S_ST is consistent with -X_(omega A)"
+ ],
+ "caveats": [
+  "The pole structure integral omega^a hat(partial)^2 bar(partial).bar(A)^a (ghost number 1, evanescent) has no name in 03b_operator_bases.typ; stated as monomial and as -bop_d E_A^((r))|_(omega A)",
+  "Evanescent finite part (i/3) S_f hat(q)^2 bar(q)^nu /(16 pi^2) under the tagging rule of sec:integrals: not used at one loop, needed at two loops",
+  "(a1)/(a2) split is not separately meaningful; cubic-in-k terms cancel only in the sum"
+ ]
+}

@@ -1,0 +1,2066 @@
+{
+"Dabc": {
+"number": 55,
+"page": 23
+},
+"Delta1": {
+"number": 76,
+"page": 26
+},
+"L0": {
+"number": 56,
+"page": 23
+},
+"LHiggs": {
+"number": 60,
+"page": 23
+},
+"LYuk": {
+"number": 61,
+"page": 23
+},
+"Lext": {
+"number": 63,
+"page": 24
+},
+"Lext-explicit": {
+"number": 64,
+"page": 24
+},
+"Lferm": {
+"number": 59,
+"page": 23
+},
+"Lferm-weyl": {
+"number": 58,
+"page": 23
+},
+"Lgauge": {
+"number": 57,
+"page": 23
+},
+"Lgf": {
+"number": 62,
+"page": 24
+},
+"N0N1": {
+"number": 95,
+"page": 29
+},
+"Nhat": {
+"number": 111,
+"page": 35
+},
+"Nhat-V": {
+"number": 112,
+"page": 35
+},
+"Ok": {
+"number": 104,
+"page": 31
+},
+"Phistar": {
+"number": 69,
+"page": 25
+},
+"Pproj": {
+"number": 45,
+"page": 21
+},
+"QYM": {
+"number": 105,
+"page": 33
+},
+"SLR": {
+"number": 54,
+"page": 23
+},
+"ST": {
+"number": 68,
+"page": 25
+},
+"ST-S0": {
+"number": 71,
+"page": 25
+},
+"ST-compact": {
+"number": 70,
+"page": 25
+},
+"Tg": {
+"number": 47,
+"page": 21
+},
+"Tg-explicit": {
+"number": 48,
+"page": 22
+},
+"V-delta": {
+"number": 87,
+"page": 27
+},
+"V-ffv": {
+"number": 78,
+"page": 27
+},
+"V-ghost": {
+"number": 81,
+"page": 27
+},
+"V-src-gauge": {
+"number": 85,
+"page": 27
+},
+"V-src-matter": {
+"number": 86,
+"page": 27
+},
+"V-ssss": {
+"number": 83,
+"page": 27
+},
+"V-ssv": {
+"number": 82,
+"page": 27
+},
+"V-vvv": {
+"number": 79,
+"page": 27
+},
+"V-vvvv": {
+"number": 80,
+"page": 27
+},
+"V-yuk": {
+"number": 84,
+"page": 27
+},
+"b-R": {
+"number": 99,
+"page": 30
+},
+"b-action": {
+"number": 73,
+"page": 26
+},
+"b-evanescent": {
+"number": 109,
+"page": 34
+},
+"b-rho": {
+"number": 97,
+"page": 30
+},
+"b-sigma": {
+"number": 100,
+"page": 30
+},
+"b-sources": {
+"number": 72,
+"page": 25
+},
+"b-zeta": {
+"number": 98,
+"page": 30
+},
+"bd-Oc": {
+"number": 110,
+"page": 35
+},
+"bl-Am": {
+"number": 540,
+"page": 160
+},
+"bl-EA": {
+"number": 558,
+"page": 163
+},
+"bl-J": {
+"number": 566,
+"page": 164
+},
+"bl-L": {
+"number": 559,
+"page": 163
+},
+"bl-L2F": {
+"number": 534,
+"page": 158
+},
+"bl-L2S": {
+"number": 533,
+"page": 158
+},
+"bl-L2V": {
+"number": 531,
+"page": 158
+},
+"bl-L2gh": {
+"number": 535,
+"page": 158
+},
+"bl-L2mix": {
+"number": 532,
+"page": 158
+},
+"bl-Lint": {
+"number": 539,
+"page": 159
+},
+"bl-M": {
+"number": 561,
+"page": 164
+},
+"bl-M-def": {
+"number": 560,
+"page": 163
+},
+"bl-Mkin": {
+"number": 536,
+"page": 159
+},
+"bl-Mphi": {
+"number": 565,
+"page": 164
+},
+"bl-combo": {
+"number": 527,
+"page": 158
+},
+"bl-dMVV": {
+"number": 562,
+"page": 164
+},
+"bl-dS-bar": {
+"number": 557,
+"page": 163
+},
+"bl-dS-cubic": {
+"number": 546,
+"page": 161
+},
+"bl-dS-ferm": {
+"number": 553,
+"page": 162
+},
+"bl-dS-kinZA": {
+"number": 543,
+"page": 160
+},
+"bl-dS-mass": {
+"number": 547,
+"page": 161
+},
+"bl-dS-mix": {
+"number": 549,
+"page": 161
+},
+"bl-dS-scalar": {
+"number": 550,
+"page": 162
+},
+"bl-dT": {
+"number": 551,
+"page": 162
+},
+"bl-dZZA": {
+"number": 544,
+"page": 161
+},
+"bl-def": {
+"number": 521,
+"page": 157
+},
+"bl-fermions": {
+"number": 530,
+"page": 158
+},
+"bl-masses": {
+"number": 529,
+"page": 158
+},
+"bl-massless": {
+"number": 575,
+"page": 168
+},
+"bl-mix": {
+"number": 564,
+"page": 164
+},
+"bl-ml-G": {
+"number": 569,
+"page": 167
+},
+"bl-ml-GS": {
+"number": 572,
+"page": 167
+},
+"bl-ml-N1": {
+"number": 574,
+"page": 167
+},
+"bl-ml-WI": {
+"number": 576,
+"page": 168
+},
+"bl-ml-diff": {
+"number": 573,
+"page": 167
+},
+"bl-nu": {
+"number": 568,
+"page": 165
+},
+"bl-prop": {
+"number": 537,
+"page": 159
+},
+"bl-rest": {
+"number": 567,
+"page": 165
+},
+"bl-rot": {
+"number": 526,
+"page": 157
+},
+"bl-sphi": {
+"number": 522,
+"page": 157
+},
+"bl-sums": {
+"number": 542,
+"page": 160
+},
+"bl-vev": {
+"number": 523,
+"page": 157
+},
+"bl-yuk": {
+"number": 541,
+"page": 160
+},
+"bp-AminusS": {
+"number": 570,
+"page": 167
+},
+"bp-H": {
+"number": 524,
+"page": 157
+},
+"bp-Rxi": {
+"number": 580,
+"page": 170
+},
+"bp-bgvertices": {
+"number": 583,
+"page": 171
+},
+"bp-cms": {
+"number": 584,
+"page": 172
+},
+"bp-dM-1loop": {
+"number": 585,
+"page": 173
+},
+"bp-ghost": {
+"number": 582,
+"page": 171
+},
+"bp-masses": {
+"number": 528,
+"page": 158
+},
+"bp-prop": {
+"number": 538,
+"page": 159
+},
+"bp-r1": {
+"number": 578,
+"page": 169
+},
+"bp-rot": {
+"number": 525,
+"page": 157
+},
+"bp-trade": {
+"number": 571,
+"page": 167
+},
+"bp-tree": {
+"number": 581,
+"page": 171
+},
+"bp-uu": {
+"number": 579,
+"page": 169
+},
+"brst": {
+"number": 65,
+"page": 24
+},
+"brst-matter": {
+"number": 66,
+"page": 24
+},
+"btable-fermion": {
+"number": 114,
+"page": 38
+},
+"btable-gauge": {
+"number": 113,
+"page": 38
+},
+"btable-ghost": {
+"number": 118,
+"page": 39
+},
+"btable-higgs": {
+"number": 117,
+"page": 39
+},
+"btable-yuk-B": {
+"number": 115,
+"page": 38
+},
+"btable-yuk-GW": {
+"number": 116,
+"page": 38
+},
+"c-DS": {
+"number": 510,
+"page": 148
+},
+"c-E": {
+"number": 507,
+"page": 148
+},
+"c-Sren": {
+"number": 503,
+"page": 146
+},
+"c-bare": {
+"number": 506,
+"page": 147
+},
+"c-bd-DS": {
+"number": 511,
+"page": 149
+},
+"c-bd-dS": {
+"number": 509,
+"page": 148
+},
+"c-beta": {
+"number": 512,
+"page": 149
+},
+"c-dS-ev": {
+"number": 508,
+"page": 148
+},
+"c-dS-inv": {
+"number": 505,
+"page": 147
+},
+"clifford": {
+"number": 36,
+"page": 20
+},
+"closed": {
+"number": 107,
+"page": 33
+},
+"contr1": {
+"number": 41,
+"page": 20
+},
+"contr2": {
+"number": 42,
+"page": 20
+},
+"covD": {
+"number": 50,
+"page": 22
+},
+"cr-ev-rules": {
+"number": 514,
+"page": 153
+},
+"cr-factor": {
+"number": 513,
+"page": 151
+},
+"cr-fin-2": {
+"number": 515,
+"page": 154
+},
+"cr-fin-3": {
+"number": 516,
+"page": 154
+},
+"cr-fin-4": {
+"number": 517,
+"page": 154
+},
+"cr-fin-ffv": {
+"number": 518,
+"page": 154
+},
+"cr-fin-higgs": {
+"number": 520,
+"page": 155
+},
+"cr-fin-src": {
+"number": 519,
+"page": 155
+},
+"dict": {
+"number": 101,
+"page": 30
+},
+"dict-i": {
+"number": 102,
+"page": 30
+},
+"dict-ii": {
+"number": 103,
+"page": 30
+},
+"dirac-pack": {
+"number": 46,
+"page": 21
+},
+"epseps": {
+"number": 44,
+"page": 21
+},
+"eta": {
+"number": 94,
+"page": 29
+},
+"evanescent": {
+"number": 108,
+"page": 34
+},
+"extraction": {
+"number": 96,
+"page": 29
+},
+"fg": {
+"number": 49,
+"page": 22
+},
+"g0_FF-N": {
+"number": 196,
+"page": 61
+},
+"g0_FF-T1": {
+"number": 195,
+"page": 61
+},
+"g0_FF-Y": {
+"number": 197,
+"page": 61
+},
+"g0_FF-ct": {
+"number": 199,
+"page": 62
+},
+"g0_FF-dZ": {
+"number": 200,
+"page": 62
+},
+"g0_FF-dirac": {
+"number": 193,
+"page": 61
+},
+"g0_FF-int-a": {
+"number": 191,
+"page": 61
+},
+"g0_FF-int-b": {
+"number": 192,
+"page": 61
+},
+"g0_FF-num": {
+"number": 194,
+"page": 61
+},
+"g0_FF-pole": {
+"number": 198,
+"page": 62
+},
+"g0_FFS-N": {
+"number": 285,
+"page": 85
+},
+"g0_FFS-T0": {
+"number": 284,
+"page": 84
+},
+"g0_FFS-casimir": {
+"number": 278,
+"page": 83
+},
+"g0_FFS-ct": {
+"number": 288,
+"page": 85
+},
+"g0_FFS-dirac": {
+"number": 283,
+"page": 84
+},
+"g0_FFS-dy": {
+"number": 290,
+"page": 85
+},
+"g0_FFS-int-a": {
+"number": 279,
+"page": 84
+},
+"g0_FFS-int-b1": {
+"number": 280,
+"page": 84
+},
+"g0_FFS-int-b2": {
+"number": 281,
+"page": 84
+},
+"g0_FFS-int-c": {
+"number": 282,
+"page": 84
+},
+"g0_FFS-legs": {
+"number": 276,
+"page": 83
+},
+"g0_FFS-nu": {
+"number": 287,
+"page": 85
+},
+"g0_FFS-pole": {
+"number": 286,
+"page": 85
+},
+"g0_FFS-rel": {
+"number": 289,
+"page": 85
+},
+"g0_FFS-rigid": {
+"number": 277,
+"page": 83
+},
+"g0_FFV-N": {
+"number": 210,
+"page": 65
+},
+"g0_FFV-THt": {
+"number": 201,
+"page": 63
+},
+"g0_FFV-Y": {
+"number": 211,
+"page": 65
+},
+"g0_FFV-ct": {
+"number": 213,
+"page": 65
+},
+"g0_FFV-int-a": {
+"number": 202,
+"page": 64
+},
+"g0_FFV-int-b": {
+"number": 203,
+"page": 64
+},
+"g0_FFV-int-c": {
+"number": 204,
+"page": 64
+},
+"g0_FFV-int-d": {
+"number": 205,
+"page": 64
+},
+"g0_FFV-master": {
+"number": 206,
+"page": 64
+},
+"g0_FFV-pole": {
+"number": 212,
+"page": 65
+},
+"g0_SS-N-a": {
+"number": 225,
+"page": 69
+},
+"g0_SS-N-b": {
+"number": 227,
+"page": 69
+},
+"g0_SS-N-c": {
+"number": 228,
+"page": 69
+},
+"g0_SS-N-d": {
+"number": 229,
+"page": 69
+},
+"g0_SS-T2": {
+"number": 221,
+"page": 68
+},
+"g0_SS-Y": {
+"number": 215,
+"page": 67
+},
+"g0_SS-ct": {
+"number": 231,
+"page": 69
+},
+"g0_SS-ct-basis": {
+"number": 232,
+"page": 69
+},
+"g0_SS-dZ": {
+"number": 233,
+"page": 70
+},
+"g0_SS-int-a": {
+"number": 216,
+"page": 67
+},
+"g0_SS-int-a2": {
+"number": 217,
+"page": 68
+},
+"g0_SS-int-b": {
+"number": 218,
+"page": 68
+},
+"g0_SS-int-c": {
+"number": 219,
+"page": 68
+},
+"g0_SS-int-d": {
+"number": 220,
+"page": 68
+},
+"g0_SS-pole": {
+"number": 230,
+"page": 69
+},
+"g0_SS-red": {
+"number": 223,
+"page": 68
+},
+"g0_SS-sm": {
+"number": 234,
+"page": 70
+},
+"g0_SSSS-N-a": {
+"number": 267,
+"page": 81
+},
+"g0_SSSS-N-b": {
+"number": 268,
+"page": 81
+},
+"g0_SSSS-N-cde": {
+"number": 269,
+"page": 81
+},
+"g0_SSSS-N-f": {
+"number": 270,
+"page": 81
+},
+"g0_SSSS-N-graph": {
+"number": 264,
+"page": 80
+},
+"g0_SSSS-Omega": {
+"number": 266,
+"page": 81
+},
+"g0_SSSS-clambda": {
+"number": 274,
+"page": 81
+},
+"g0_SSSS-ct": {
+"number": 273,
+"page": 81
+},
+"g0_SSSS-group": {
+"number": 265,
+"page": 80
+},
+"g0_SSSS-int-a": {
+"number": 257,
+"page": 79
+},
+"g0_SSSS-int-b": {
+"number": 258,
+"page": 79
+},
+"g0_SSSS-int-c": {
+"number": 259,
+"page": 80
+},
+"g0_SSSS-int-d": {
+"number": 260,
+"page": 80
+},
+"g0_SSSS-int-e": {
+"number": 261,
+"page": 80
+},
+"g0_SSSS-int-f": {
+"number": 262,
+"page": 80
+},
+"g0_SSSS-pole": {
+"number": 271,
+"page": 81
+},
+"g0_SSSS-pole-sm": {
+"number": 272,
+"page": 81
+},
+"g0_SSSS-trace": {
+"number": 263,
+"page": 80
+},
+"g0_SSV_SSVV-F4": {
+"number": 248,
+"page": 74
+},
+"g0_SSV_SSVV-F4-traces": {
+"number": 243,
+"page": 73
+},
+"g0_SSV_SSVV-N3": {
+"number": 246,
+"page": 74
+},
+"g0_SSV_SSVV-T1": {
+"number": 244,
+"page": 74
+},
+"g0_SSV_SSVV-TaT": {
+"number": 250,
+"page": 75
+},
+"g0_SSV_SSVV-Z": {
+"number": 256,
+"page": 76
+},
+"g0_SSV_SSVV-ct": {
+"number": 254,
+"page": 76
+},
+"g0_SSV_SSVV-ct-basis": {
+"number": 255,
+"page": 76
+},
+"g0_SSV_SSVV-int-F": {
+"number": 237,
+"page": 73
+},
+"g0_SSV_SSVV-int-a": {
+"number": 238,
+"page": 73
+},
+"g0_SSV_SSVV-int-b": {
+"number": 239,
+"page": 73
+},
+"g0_SSV_SSVV-int-c": {
+"number": 240,
+"page": 73
+},
+"g0_SSV_SSVV-n4": {
+"number": 242,
+"page": 73
+},
+"g0_SSV_SSVV-pole3": {
+"number": 252,
+"page": 75
+},
+"g0_SSV_SSVV-pole4": {
+"number": 253,
+"page": 75
+},
+"g0_SSV_SSVV-red-ex": {
+"number": 251,
+"page": 75
+},
+"g0_SSV_SSVV-tdiff": {
+"number": 236,
+"page": 72
+},
+"g0_SSV_SSVV-vvv0": {
+"number": 241,
+"page": 73
+},
+"g0_SSV_SSVV-xyz": {
+"number": 249,
+"page": 75
+},
+"g0_VV-N-a": {
+"number": 131,
+"page": 45
+},
+"g0_VV-N-b": {
+"number": 132,
+"page": 45
+},
+"g0_VV-N-cd": {
+"number": 133,
+"page": 45
+},
+"g0_VV-T": {
+"number": 127,
+"page": 44
+},
+"g0_VV-basis": {
+"number": 137,
+"page": 46
+},
+"g0_VV-c1-terms": {
+"number": 134,
+"page": 45
+},
+"g0_VV-ct": {
+"number": 136,
+"page": 46
+},
+"g0_VV-int-a": {
+"number": 119,
+"page": 43
+},
+"g0_VV-int-b": {
+"number": 120,
+"page": 44
+},
+"g0_VV-int-c1": {
+"number": 121,
+"page": 44
+},
+"g0_VV-int-c2": {
+"number": 122,
+"page": 44
+},
+"g0_VV-int-d": {
+"number": 123,
+"page": 44
+},
+"g0_VV-masters": {
+"number": 128,
+"page": 45
+},
+"g0_VV-num-a": {
+"number": 124,
+"page": 44
+},
+"g0_VV-num-b": {
+"number": 125,
+"page": 44
+},
+"g0_VV-num-c1": {
+"number": 126,
+"page": 44
+},
+"g0_VV-pole": {
+"number": 135,
+"page": 45
+},
+"g0_VV-split": {
+"number": 130,
+"page": 45
+},
+"g0_VV-tad": {
+"number": 129,
+"page": 45
+},
+"g0_VV-zA": {
+"number": 138,
+"page": 46
+},
+"g0_VVV-N-a": {
+"number": 152,
+"page": 50
+},
+"g0_VVV-N-a-sum": {
+"number": 153,
+"page": 50
+},
+"g0_VVV-N-b": {
+"number": 154,
+"page": 50
+},
+"g0_VVV-N-d": {
+"number": 161,
+"page": 51
+},
+"g0_VVV-N-e": {
+"number": 163,
+"page": 51
+},
+"g0_VVV-N-f": {
+"number": 164,
+"page": 51
+},
+"g0_VVV-T1": {
+"number": 148,
+"page": 49
+},
+"g0_VVV-V": {
+"number": 139,
+"page": 47
+},
+"g0_VVV-V0": {
+"number": 155,
+"page": 50
+},
+"g0_VVV-Xi": {
+"number": 140,
+"page": 47
+},
+"g0_VVV-ct": {
+"number": 167,
+"page": 52
+},
+"g0_VVV-dV": {
+"number": 158,
+"page": 51
+},
+"g0_VVV-group": {
+"number": 141,
+"page": 48
+},
+"g0_VVV-int-a": {
+"number": 145,
+"page": 49
+},
+"g0_VVV-int-b": {
+"number": 142,
+"page": 48
+},
+"g0_VVV-int-c": {
+"number": 146,
+"page": 49
+},
+"g0_VVV-int-d": {
+"number": 143,
+"page": 48
+},
+"g0_VVV-int-e": {
+"number": 147,
+"page": 49
+},
+"g0_VVV-int-f": {
+"number": 144,
+"page": 49
+},
+"g0_VVV-n2d": {
+"number": 160,
+"page": 51
+},
+"g0_VVV-n2d-parts": {
+"number": 159,
+"page": 51
+},
+"g0_VVV-n3d": {
+"number": 156,
+"page": 50
+},
+"g0_VVV-pole": {
+"number": 165,
+"page": 52
+},
+"g0_VVV-pole-r": {
+"number": 166,
+"page": 52
+},
+"g0_VVV-res": {
+"number": 149,
+"page": 49
+},
+"g0_VVV-z1": {
+"number": 168,
+"page": 52
+},
+"g0_VVVV-G": {
+"number": 179,
+"page": 56
+},
+"g0_VVVV-L4": {
+"number": 185,
+"page": 57
+},
+"g0_VVVV-N-a": {
+"number": 181,
+"page": 56
+},
+"g0_VVVV-V3": {
+"number": 173,
+"page": 55
+},
+"g0_VVVV-V4": {
+"number": 174,
+"page": 55
+},
+"g0_VVVV-Z4": {
+"number": 190,
+"page": 58
+},
+"g0_VVVV-chains": {
+"number": 182,
+"page": 56
+},
+"g0_VVVV-chains-red": {
+"number": 183,
+"page": 56
+},
+"g0_VVVV-ct": {
+"number": 189,
+"page": 58
+},
+"g0_VVVV-ct-matrix": {
+"number": 188,
+"page": 58
+},
+"g0_VVVV-dirac": {
+"number": 180,
+"page": 56
+},
+"g0_VVVV-fadj": {
+"number": 170,
+"page": 54
+},
+"g0_VVVV-int-a": {
+"number": 171,
+"page": 55
+},
+"g0_VVVV-int-bcd": {
+"number": 172,
+"page": 55
+},
+"g0_VVVV-int-e": {
+"number": 175,
+"page": 55
+},
+"g0_VVVV-int-f": {
+"number": 176,
+"page": 55
+},
+"g0_VVVV-int-g": {
+"number": 177,
+"page": 55
+},
+"g0_VVVV-int-h": {
+"number": 178,
+"page": 56
+},
+"g0_VVVV-op": {
+"number": 184,
+"page": 57
+},
+"g0_VVVV-pole": {
+"number": 187,
+"page": 58
+},
+"g0_VVVV-pole-w": {
+"number": 186,
+"page": 57
+},
+"g0_VVVV-words": {
+"number": 169,
+"page": 54
+},
+"g0_ghost_sources-N0": {
+"number": 299,
+"page": 89
+},
+"g0_ghost_sources-N0b": {
+"number": 300,
+"page": 89
+},
+"g0_ghost_sources-T-a": {
+"number": 298,
+"page": 89
+},
+"g0_ghost_sources-Z": {
+"number": 304,
+"page": 91
+},
+"g0_ghost_sources-ct": {
+"number": 302,
+"page": 90
+},
+"g0_ghost_sources-ct-basis": {
+"number": 303,
+"page": 90
+},
+"g0_ghost_sources-int-a": {
+"number": 291,
+"page": 88
+},
+"g0_ghost_sources-int-b": {
+"number": 292,
+"page": 88
+},
+"g0_ghost_sources-int-c": {
+"number": 293,
+"page": 88
+},
+"g0_ghost_sources-int-d": {
+"number": 294,
+"page": 88
+},
+"g0_ghost_sources-int-e": {
+"number": 295,
+"page": 89
+},
+"g0_ghost_sources-int-e2": {
+"number": 296,
+"page": 89
+},
+"g0_ghost_sources-int-f": {
+"number": 297,
+"page": 89
+},
+"g0_ghost_sources-pole": {
+"number": 301,
+"page": 90
+},
+"g1_cFF-G-a": {
+"number": 362,
+"page": 106
+},
+"g1_cFF-G-b": {
+"number": 363,
+"page": 107
+},
+"g1_cFF-G-c1": {
+"number": 364,
+"page": 107
+},
+"g1_cFF-G-c2": {
+"number": 365,
+"page": 107
+},
+"g1_cFF-N-ab": {
+"number": 368,
+"page": 107
+},
+"g1_cFF-N-c": {
+"number": 369,
+"page": 107
+},
+"g1_cFF-X": {
+"number": 372,
+"page": 108
+},
+"g1_cFF-X-op": {
+"number": 373,
+"page": 108
+},
+"g1_cFF-int-a": {
+"number": 357,
+"page": 106
+},
+"g1_cFF-int-b": {
+"number": 358,
+"page": 106
+},
+"g1_cFF-int-c1": {
+"number": 359,
+"page": 106
+},
+"g1_cFF-int-c2": {
+"number": 360,
+"page": 106
+},
+"g1_cFF-ints": {
+"number": 366,
+"page": 107
+},
+"g1_cFF-pole": {
+"number": 370,
+"page": 107
+},
+"g1_cFF-pole-op": {
+"number": 371,
+"page": 108
+},
+"g1_cFF-x": {
+"number": 374,
+"page": 108
+},
+"g1_cFFS-N": {
+"number": 426,
+"page": 122
+},
+"g1_cFFS-Nb": {
+"number": 427,
+"page": 122
+},
+"g1_cFFS-T0": {
+"number": 424,
+"page": 122
+},
+"g1_cFFS-X": {
+"number": 429,
+"page": 122
+},
+"g1_cFFS-X-b": {
+"number": 431,
+"page": 123
+},
+"g1_cFFS-X-op": {
+"number": 430,
+"page": 123
+},
+"g1_cFFS-extghost": {
+"number": 422,
+"page": 121
+},
+"g1_cFFS-int-a1": {
+"number": 418,
+"page": 121
+},
+"g1_cFFS-int-a2": {
+"number": 419,
+"page": 121
+},
+"g1_cFFS-int-b1": {
+"number": 420,
+"page": 121
+},
+"g1_cFFS-int-b2": {
+"number": 421,
+"page": 121
+},
+"g1_cFFS-ints": {
+"number": 425,
+"page": 122
+},
+"g1_cFFS-legs": {
+"number": 415,
+"page": 119
+},
+"g1_cFFS-pole": {
+"number": 428,
+"page": 122
+},
+"g1_cFFS-rigid": {
+"number": 416,
+"page": 119
+},
+"g1_cFFS-scalar": {
+"number": 417,
+"page": 121
+},
+"g1_cFFV-N": {
+"number": 383,
+"page": 112
+},
+"g1_cFFV-N-sum": {
+"number": 385,
+"page": 112
+},
+"g1_cFFV-X": {
+"number": 387,
+"page": 113
+},
+"g1_cFFV-X-op": {
+"number": 388,
+"page": 113
+},
+"g1_cFFV-ad-zero": {
+"number": 380,
+"page": 112
+},
+"g1_cFFV-fff": {
+"number": 384,
+"page": 112
+},
+"g1_cFFV-int-ad": {
+"number": 376,
+"page": 111
+},
+"g1_cFFV-int-e": {
+"number": 377,
+"page": 111
+},
+"g1_cFFV-int-f": {
+"number": 378,
+"page": 111
+},
+"g1_cFFV-int-g": {
+"number": 379,
+"page": 111
+},
+"g1_cFFV-num": {
+"number": 381,
+"page": 112
+},
+"g1_cFFV-pole": {
+"number": 386,
+"page": 113
+},
+"g1_cFFV-red": {
+"number": 382,
+"page": 112
+},
+"g1_cSS_cSSV-C": {
+"number": 400,
+"page": 116
+},
+"g1_cSS_cSSV-E": {
+"number": 392,
+"page": 115
+},
+"g1_cSS_cSSV-F": {
+"number": 394,
+"page": 116
+},
+"g1_cSS_cSSV-F-pole": {
+"number": 403,
+"page": 117
+},
+"g1_cSS_cSSV-N-box": {
+"number": 399,
+"page": 116
+},
+"g1_cSS_cSSV-N-tri": {
+"number": 404,
+"page": 117
+},
+"g1_cSS_cSSV-Phi": {
+"number": 389,
+"page": 114
+},
+"g1_cSS_cSSV-T1": {
+"number": 396,
+"page": 116
+},
+"g1_cSS_cSSV-X0": {
+"number": 412,
+"page": 117
+},
+"g1_cSS_cSSV-X2": {
+"number": 408,
+"page": 117
+},
+"g1_cSS_cSSV-X3": {
+"number": 409,
+"page": 117
+},
+"g1_cSS_cSSV-X3-basis": {
+"number": 411,
+"page": 117
+},
+"g1_cSS_cSSV-X3-op": {
+"number": 410,
+"page": 117
+},
+"g1_cSS_cSSV-a": {
+"number": 395,
+"page": 116
+},
+"g1_cSS_cSSV-box-t": {
+"number": 398,
+"page": 116
+},
+"g1_cSS_cSSV-br": {
+"number": 390,
+"page": 114
+},
+"g1_cSS_cSSV-cov": {
+"number": 391,
+"page": 114
+},
+"g1_cSS_cSSV-int-a1": {
+"number": 393,
+"page": 116
+},
+"g1_cSS_cSSV-lit": {
+"number": 413,
+"page": 118
+},
+"g1_cSS_cSSV-pole": {
+"number": 405,
+"page": 117
+},
+"g1_cSS_cSSV-pole-box": {
+"number": 407,
+"page": 117
+},
+"g1_cSS_cSSV-pole-op": {
+"number": 406,
+"page": 117
+},
+"g1_cV-G": {
+"number": 311,
+"page": 93
+},
+"g1_cV-N": {
+"number": 317,
+"page": 94
+},
+"g1_cV-T": {
+"number": 312,
+"page": 94
+},
+"g1_cV-T2": {
+"number": 313,
+"page": 94
+},
+"g1_cV-X": {
+"number": 320,
+"page": 95
+},
+"g1_cV-X-op": {
+"number": 321,
+"page": 95
+},
+"g1_cV-bub1": {
+"number": 315,
+"page": 94
+},
+"g1_cV-bub2": {
+"number": 314,
+"page": 94
+},
+"g1_cV-int": {
+"number": 307,
+"page": 93
+},
+"g1_cV-int2": {
+"number": 308,
+"page": 93
+},
+"g1_cV-lit": {
+"number": 322,
+"page": 96
+},
+"g1_cV-num": {
+"number": 310,
+"page": 93
+},
+"g1_cV-pole": {
+"number": 318,
+"page": 94
+},
+"g1_cV-pole-op": {
+"number": 319,
+"page": 95
+},
+"g1_cV-red": {
+"number": 316,
+"page": 94
+},
+"g1_cVV-N-a": {
+"number": 329,
+"page": 98
+},
+"g1_cVV-N1-a": {
+"number": 330,
+"page": 98
+},
+"g1_cVV-T": {
+"number": 326,
+"page": 97
+},
+"g1_cVV-Theta": {
+"number": 324,
+"page": 97
+},
+"g1_cVV-X": {
+"number": 333,
+"page": 98
+},
+"g1_cVV-X-basis": {
+"number": 335,
+"page": 98
+},
+"g1_cVV-X-matrix": {
+"number": 334,
+"page": 98
+},
+"g1_cVV-int-a": {
+"number": 323,
+"page": 97
+},
+"g1_cVV-num-a": {
+"number": 325,
+"page": 97
+},
+"g1_cVV-pole": {
+"number": 331,
+"page": 98
+},
+"g1_cVV-pole-op": {
+"number": 332,
+"page": 98
+},
+"g1_cVV-sum": {
+"number": 328,
+"page": 97
+},
+"g1_cVV-terms": {
+"number": 327,
+"page": 97
+},
+"g1_cVVV_cVVVV-Ga": {
+"number": 338,
+"page": 101
+},
+"g1_cVVV_cVVVV-Na": {
+"number": 344,
+"page": 102
+},
+"g1_cVVV_cVVVV-Nb": {
+"number": 346,
+"page": 102
+},
+"g1_cVVV_cVVVV-Nch": {
+"number": 339,
+"page": 101
+},
+"g1_cVVV_cVVVV-T1": {
+"number": 341,
+"page": 101
+},
+"g1_cVVV_cVVVV-Ta": {
+"number": 343,
+"page": 102
+},
+"g1_cVVV_cVVVV-X": {
+"number": 348,
+"page": 102
+},
+"g1_cVVV_cVVVV-X4": {
+"number": 349,
+"page": 102
+},
+"g1_cVVV_cVVVV-Xop": {
+"number": 350,
+"page": 102
+},
+"g1_cVVV_cVVVV-Xop2": {
+"number": 351,
+"page": 102
+},
+"g1_cVVV_cVVVV-chain": {
+"number": 337,
+"page": 101
+},
+"g1_cVVV_cVVVV-eps-basis": {
+"number": 353,
+"page": 103
+},
+"g1_cVVV_cVVVV-int-a": {
+"number": 336,
+"page": 101
+},
+"g1_cVVV_cVVVV-pole": {
+"number": 347,
+"page": 102
+},
+"g1_cVVV_cVVVV-q0": {
+"number": 340,
+"page": 101
+},
+"g1_cVVV_cVVVV-red": {
+"number": 342,
+"page": 101
+},
+"g1_cVVV_cVVVV-tr": {
+"number": 345,
+"page": 102
+},
+"g1_ccRF-G": {
+"number": 438,
+"page": 126
+},
+"g1_ccRF-Gb": {
+"number": 441,
+"page": 127
+},
+"g1_ccRF-Gbar": {
+"number": 439,
+"page": 127
+},
+"g1_ccRF-Gbp": {
+"number": 442,
+"page": 127
+},
+"g1_ccRF-N": {
+"number": 446,
+"page": 127
+},
+"g1_ccRF-Nb": {
+"number": 447,
+"page": 128
+},
+"g1_ccRF-Nbp": {
+"number": 448,
+"page": 128
+},
+"g1_ccRF-Theta": {
+"number": 444,
+"page": 127
+},
+"g1_ccRF-Theta1": {
+"number": 443,
+"page": 127
+},
+"g1_ccRF-X": {
+"number": 450,
+"page": 128
+},
+"g1_ccRF-X-op": {
+"number": 451,
+"page": 128
+},
+"g1_ccRF-bct": {
+"number": 452,
+"page": 129
+},
+"g1_ccRF-int": {
+"number": 436,
+"page": 126
+},
+"g1_ccRF-others": {
+"number": 433,
+"page": 126
+},
+"g1_ccRF-pole": {
+"number": 449,
+"page": 128
+},
+"g1_ccRF-sandwich": {
+"number": 437,
+"page": 126
+},
+"g1_ccRF-tens": {
+"number": 445,
+"page": 127
+},
+"g5comm": {
+"number": 38,
+"page": 20
+},
+"g5def": {
+"number": 37,
+"page": 20
+},
+"gf-exact": {
+"number": 67,
+"page": 25
+},
+"invariants": {
+"number": 53,
+"page": 22
+},
+"linear-ids": {
+"number": 74,
+"page": 26
+},
+"logpole": {
+"number": 91,
+"page": 28
+},
+"m-Delta-l": {
+"number": 21,
+"page": 11
+},
+"m-Gamma": {
+"number": 2,
+"page": 6
+},
+"m-K": {
+"number": 19,
+"page": 11
+},
+"m-LP": {
+"number": 30,
+"page": 15
+},
+"m-LPl": {
+"number": 32,
+"page": 17
+},
+"m-PG": {
+"number": 27,
+"page": 14
+},
+"m-QAP": {
+"number": 7,
+"page": 8
+},
+"m-Rbar": {
+"number": 3,
+"page": 6
+},
+"m-S-exact": {
+"number": 20,
+"page": 11
+},
+"m-Sren": {
+"number": 1,
+"page": 5
+},
+"m-X1": {
+"number": 26,
+"page": 13
+},
+"m-X2B": {
+"number": 31,
+"page": 16
+},
+"m-Xl": {
+"number": 24,
+"page": 12
+},
+"m-Z1": {
+"number": 25,
+"page": 13
+},
+"m-b-rules": {
+"number": 17,
+"page": 10
+},
+"m-bY": {
+"number": 16,
+"page": 9
+},
+"m-bYR": {
+"number": 18,
+"page": 10
+},
+"m-dS-per-graph": {
+"number": 4,
+"page": 6
+},
+"m-general": {
+"number": 29,
+"page": 14
+},
+"m-glue": {
+"number": 8,
+"page": 8
+},
+"m-glue-wA": {
+"number": 9,
+"page": 8
+},
+"m-glue-wAA": {
+"number": 10,
+"page": 8
+},
+"m-glue-wFF": {
+"number": 11,
+"page": 8
+},
+"m-glue-wHH": {
+"number": 12,
+"page": 8
+},
+"m-restore": {
+"number": 22,
+"page": 12
+},
+"m-sterile": {
+"number": 6,
+"page": 7
+},
+"m-tree-WI": {
+"number": 5,
+"page": 7
+},
+"m-wA-1loop": {
+"number": 15,
+"page": 9
+},
+"matrix-fields": {
+"number": 51,
+"page": 22
+},
+"metric": {
+"number": 35,
+"page": 20
+},
+"phys-prop": {
+"number": 88,
+"page": 28
+},
+"proj": {
+"number": 39,
+"page": 20
+},
+"propagators": {
+"number": 77,
+"page": 27
+},
+"rhotilde": {
+"number": 75,
+"page": 26
+},
+"sandwich": {
+"number": 40,
+"page": 20
+},
+"split": {
+"number": 34,
+"page": 20
+},
+"sts-D": {
+"number": 463,
+"page": 135
+},
+"sts-anom": {
+"number": 460,
+"page": 134
+},
+"sts-anom-basis": {
+"number": 461,
+"page": 135
+},
+"sts-bR": {
+"number": 467,
+"page": 136
+},
+"sts-bare": {
+"number": 454,
+"page": 130
+},
+"sts-bd-dS": {
+"number": 459,
+"page": 132
+},
+"sts-beta": {
+"number": 456,
+"page": 131
+},
+"sts-bghost": {
+"number": 470,
+"page": 136
+},
+"sts-d1": {
+"number": 487,
+"page": 139
+},
+"sts-dS": {
+"number": 455,
+"page": 130
+},
+"sts-eq": {
+"number": 464,
+"page": 135
+},
+"sts-lit": {
+"number": 499,
+"page": 142
+},
+"sts-lit-shift": {
+"number": 498,
+"page": 142
+},
+"sts-r-J": {
+"number": 491,
+"page": 139
+},
+"sts-r-R": {
+"number": 488,
+"page": 139
+},
+"sts-r-V": {
+"number": 489,
+"page": 139
+},
+"sts-r-a": {
+"number": 475,
+"page": 137
+},
+"sts-r-b": {
+"number": 478,
+"page": 137
+},
+"sts-r-eps": {
+"number": 480,
+"page": 137
+},
+"sts-r-ghost": {
+"number": 471,
+"page": 136
+},
+"sts-r-higgs": {
+"number": 494,
+"page": 140
+},
+"sts-r-mixed": {
+"number": 485,
+"page": 138
+},
+"sts-r-quartic": {
+"number": 484,
+"page": 138
+},
+"sts-r-sigma": {
+"number": 472,
+"page": 136
+},
+"sts-r-sym": {
+"number": 479,
+"page": 137
+},
+"sts-result": {
+"number": 497,
+"page": 141
+},
+"sts-theta": {
+"number": 465,
+"page": 135
+},
+"sts-thetaF": {
+"number": 468,
+"page": 136
+},
+"sts-thetaH": {
+"number": 469,
+"page": 136
+},
+"sts-yuk": {
+"number": 453,
+"page": 130
+},
+"sumLR": {
+"number": 52,
+"page": 22
+},
+"tadpole": {
+"number": 90,
+"page": 28
+},
+"tensor-red": {
+"number": 92,
+"page": 28
+},
+"tensor-red-split": {
+"number": 93,
+"page": 28
+},
+"tr5": {
+"number": 43,
+"page": 20
+},
+"uv-expansion": {
+"number": 89,
+"page": 28
+}
+}

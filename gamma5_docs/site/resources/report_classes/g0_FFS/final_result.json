@@ -1,0 +1,160 @@
+{
+ "class": "g0_FFS",
+ "diagrams": [
+  {
+   "id": "a",
+   "topology": "triangle: gauge exchange between the two fermion legs, external scalar on the Yukawa vertex",
+   "fields": "Psi_f1, Psi_f2, A^a (a over all 12)",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "one per vertex; W absent for all (f2 = U, D, E is an SU(2) singlet); gluon only for quarks; multiplet level: G and B for quark vertices, B only for lepton vertices"
+  },
+  {
+   "id": "b1",
+   "topology": "triangle: gauge boson joins the Psi_f2 leg to the scalar line",
+   "fields": "Psi_f2, A^a, H",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "gluon gives 0 (H colourless); W gives 0 (f2 singlet); B only"
+  },
+  {
+   "id": "b2",
+   "topology": "triangle: gauge boson joins the Psibar_f1 leg to the scalar line",
+   "fields": "Psi_f1, A^a, H",
+   "symmetry_factor": "1",
+   "sign": "+1",
+   "multiplicity_note": "W and B; gluon gives 0. For the conjugate vertices b1 and b2 exchange roles"
+  },
+  {
+   "id": "c",
+   "topology": "triangle: scalar exchange between the two fermion legs (three Yukawa vertices)",
+   "fields": "Qbar U Hdag: internal Psi_Q, Psi_D, H (y_u y_d^2); Qbar D H: internal Psi_Q, Psi_U, H (y_d y_u^2); Lbar E H: none",
+   "symmetry_factor": "1",
+   "sign": "+1 (prefactor), group factor carries epsilon^T = -epsilon",
+   "multiplicity_note": "no y_u^3, y_d^3, y_e^3 graph: the two outer vertices would carry the same scalar field (H H or Hdag Hdag)"
+  },
+  {
+   "id": "count",
+   "topology": "all",
+   "fields": "32 multiplet-level diagrams: 6 each for Qbar U Hdag, Qbar D H, Ubar Q H, Dbar Q Hdag; 4 each for Lbar E H, Ebar L Hdag",
+   "symmetry_factor": "1",
+   "sign": "+1 (open fermion line)",
+   "multiplicity_note": "identical to SCRATCHPAD/model/ENUMERATION.md (fermion-gauge, fermion-scalar, fermion-scalar-gauge loops)"
+  }
+ ],
+ "functions": [
+  {
+   "externals": "Qbar^{alpha i'}(0) U_beta(0) Hdag_j(0); tree Gamma^(0) = -y_u eps_{i'j} delta^alpha_beta P_R",
+   "pole_vertex_function": [
+    {
+     "structure": "Gamma^((0)) = -y_u epsilon_(i' j) delta^alpha_beta P_R",
+     "coefficient": "nu_u = 16/3 g_s^2 + 3/4 g^2 + 25/36 g'^2 + y_d^2"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "a": "(16/3 g_s^2 + 4/9 g'^2) Gamma^(0)",
+    "b1": "(1/3 g'^2) Gamma^(0)",
+    "b2": "(3/4 g^2 - 1/12 g'^2) Gamma^(0)",
+    "c": "y_d^2 Gamma^(0)"
+   }
+  },
+  {
+   "externals": "Qbar^{alpha i'} D_beta H_j, zero momenta; tree Gamma^(0) = -y_d delta_{i'j} delta^alpha_beta P_R",
+   "pole_vertex_function": [
+    {
+     "structure": "Gamma^((0)) = -y_d delta_(i' j) delta^alpha_beta P_R",
+     "coefficient": "nu_d = 16/3 g_s^2 + 3/4 g^2 + 1/36 g'^2 + y_u^2"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "a": "(16/3 g_s^2 - 2/9 g'^2) Gamma^(0)",
+    "b1": "(1/6 g'^2) Gamma^(0)",
+    "b2": "(3/4 g^2 + 1/12 g'^2) Gamma^(0)",
+    "c": "y_u^2 Gamma^(0)"
+   }
+  },
+  {
+   "externals": "Lbar^{i'} E H_j, zero momenta; tree Gamma^(0) = -y_e delta_{i'j} P_R",
+   "pole_vertex_function": [
+    {
+     "structure": "Gamma^((0)) = -y_e delta_(i' j) P_R",
+     "coefficient": "nu_e = 3/4 g^2 + 9/4 g'^2"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "a": "(2 g'^2) Gamma^(0)",
+    "b1": "(1/2 g'^2) Gamma^(0)",
+    "b2": "(3/4 g^2 - 1/4 g'^2) Gamma^(0)",
+    "c": "0"
+   }
+  },
+  {
+   "externals": "conjugates Ubar Q H, Dbar Q Hdag, Ebar L Hdag (tree -y_k (...) P_L)",
+   "pole_vertex_function": [
+    {
+     "structure": "Gamma^((0)) of the conjugate vertex",
+     "coefficient": "same nu_k as the corresponding vertex"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "note": "a and c identical; values of b1 and b2 interchanged"
+   }
+  },
+  {
+   "externals": "general (matrix-valued): Psibar_f1 Psi_f2 phi_i, Yukawa rule -i bold(Y)^j P_y, T_phi = T_H (phi=H) or -T_H^* (phi=Hdag)",
+   "pole_vertex_function": [
+    {
+     "structure": "N_0 = [-2 sum_a T^a_f1 Y^i T^a_f2 - (C_f1 + C_f2) Y^i - ytilde_k^2 Y^i] P_y = nu_k Gamma^(0)",
+     "coefficient": "nu_k = 2 t_k + C_f1 + C_f2 + ytilde_k^2 = 2(C_f1 + C_f2) - C_H + ytilde_k^2, with 2 t_k Y = 2 sum_a T_f1 Y T_f2 = (C_f1 + C_f2 - C_H) Y; ytilde_u = y_d, ytilde_d = y_u, ytilde_e = 0; equivalently nu_k = C_H + 4 t_k + ytilde_k^2 (b1 + b2 = C_H)"
+    }
+   ],
+   "finite_breaking_vertex_function": [],
+   "per_topology": {
+    "a": "-4 sum_a T^a_f1 Y^i T^a_f2 P_y = 4 t_k Gamma^(0)",
+    "b1": "sum_a Y^j (T^a_phi)_{ji} T^a_f2 P_y = (C_f2 - t_k) Gamma^(0)",
+    "b2": "-sum_a T^a_f1 Y^j (T^a_phi)_{ji} P_y = (C_f1 - t_k) Gamma^(0)",
+    "c": "ytilde_k^2 Gamma^(0)"
+   }
+  }
+ ],
+ "operators": [
+  {
+   "kind": "pole_counterterm",
+   "operator": "Q^+_(y_k) = - integral (O_k + O_k^dagger), O_u = overline(Q) tilde(H) P_R U, O_d = overline(Q) H P_R D, O_e = overline(L) H P_R E (continued to d dims unchanged)",
+   "coefficient": "-(1/(16 pi^2 eps)) nu_k y_k",
+   "sm_values": "u: -(1/(16 pi^2 eps)) y_u (16/3 g_s^2 + 3/4 g^2 + 25/36 g'^2 + y_d^2); d: -(1/(16 pi^2 eps)) y_d (16/3 g_s^2 + 3/4 g^2 + 1/36 g'^2 + y_u^2); e: -(1/(16 pi^2 eps)) y_e (3/4 g^2 + 9/4 g'^2)"
+  },
+  {
+   "kind": "pole_counterterm",
+   "operator": "relation: coefficient of Q^+_(y_k) = delta y_k + (y_k/2)(delta Z_f1 + delta Z_f2 + delta Z_H), delta Z_f = -(C_f + calY_f)/(16 pi^2 eps) (coefficient of Q^f_K, g0_FF), delta Z_H = -(Y_2 - 2 C_H)/(16 pi^2 eps) (coefficient of the d-dimensional Q_SS, g0_SS; the evanescent E_H, Etilde_H poles of g0_SS do not enter), Y_2 = 3y_u^2+3y_d^2+y_e^2",
+   "coefficient": "delta y_k = (1/(16 pi^2 eps)) y_k [ -3/2 (C_f1 + C_f2) + 1/2 (calY_f1 + calY_f2 + Y_2) - ytilde_k^2 ]",
+   "sm_values": "16 pi^2 eps delta y_u/y_u = -4 g_s^2 - 9/8 g^2 - 17/24 g'^2 + 9/4 y_u^2 + 3/4 y_d^2 + 1/2 y_e^2; 16 pi^2 eps delta y_d/y_d = -4 g_s^2 - 9/8 g^2 - 5/24 g'^2 + 3/4 y_u^2 + 9/4 y_d^2 + 1/2 y_e^2; 16 pi^2 eps delta y_e/y_e = -9/8 g^2 - 15/8 g'^2 + 3/2 y_u^2 + 3/2 y_d^2 + 5/4 y_e^2"
+  },
+  {
+   "kind": "evanescent_counterterm",
+   "operator": "none",
+   "coefficient": "0",
+   "sm_values": "no evanescent pole and no Q^-_(y_k) in this class"
+  }
+ ],
+ "checks": [
+  "omega = 0 for all topologies; M and m^2 drop out of T^(0); N_0 is a pure number times the tree vertex",
+  "no hatted contraction: N_1 = 0, K = K_eta; no evanescent pole (string between P_cbar(f1) and P_c(f2) contains only barred matrices, no external momentum/index at omega = 0); no sterile-leg components",
+  "hermiticity: identical nu_k for O_k and O_k^dagger, no Q^-_(y_k)",
+  "gluon only: nu = 4 C_F g_s^2 (only diagram a), delta y/y = -3 C_F g_s^2/(16 pi^2 eps) = QCD delta Z_m",
+  "beta_y = 2 y (16 pi^2 eps delta y / y)/(16 pi^2) reproduces the standard one-loop SM Yukawa beta functions: y_u(9/2 y_u^2 + 3/2 y_d^2 + y_e^2 - 8 g_s^2 - 9/4 g^2 - 17/12 g'^2), y_d(3/2 y_u^2 + 9/2 y_d^2 + y_e^2 - 8 g_s^2 - 9/4 g^2 - 5/12 g'^2), y_e(3 y_u^2 + 3 y_d^2 + 5/2 y_e^2 - 9/4 g^2 - 15/4 g'^2)",
+  "brute-force numerical contraction of the Feynman rules with explicit Dirac matrices and SU(3)xSU(2)xU(1) generators, all six vertices and all topologies, independent of the rigid-invariance identity: SCRATCHPAD/classes/g0_FFS/deriver_algebra_check.py, referee_check.py (independent explicit-matrix implementation) and check_g0_FFS.py (symbolic BMHV, d-dimensional external momenta) (exact agreement with the table)",
+  "b_d Q^+_(y_k) = 0 (O_k contains only physical components), so this counterterm enters the g1_cFFS pole check only through delta Z_f, delta Z_H of the related classes",
+  "Two independent calculations (deriver: hand; checker: toolkit) and the referee's own explicit-matrix script agree per topology, per vertex and per SU(2) component of the external scalar",
+  "delta Z_f agrees with g0_FF final_result.json (coefficient of Q^f_K); delta Z_H agrees with the g0_SS deriver and checker results (coefficient of Q_SS = -(Y_2 - 2 C_H)/(16 pi^2 eps))",
+  "Literature: gauge part C_H + 4 t_k = BIMS (2004.14398) eq. (5.14) at xi=1 (xi C_2(S) + (3+xi) T_Rbar Y T_R / Y); fermion self-energy = BIMS eq. (5.10); full pole parts equal targets_in_our_conventions.md sec. 3; beta functions are the standard one-generation SM ones"
+ ],
+ "caveats": [
+  "Feynman gauge only; the split of the gauge part between nu_k and delta Z is gauge dependent, delta y_k is not (consistency with the standard beta functions checked; general xi not computed here, but BIMS (5.14) gives xi C_H + (3+xi) t_k for the vertex)",
+  "Field renormalisation convention: psi_f -> (1 + delta Z_f/2) psi_f on physical components only, H -> (1 + delta Z_H/2) H"
+ ]
+}
