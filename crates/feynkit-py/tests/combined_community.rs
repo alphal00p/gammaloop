@@ -213,6 +213,11 @@ assert "typst" not in sys.modules
         highlights.set_item("with_linnet", cfg!(feature = "linnet-python"))?;
         py.run(&highlight_tests, Some(&highlights), Some(&highlights))
             .inspect_err(|error| error.print(py))?;
+        let uv_tests = CString::new(include_str!("installed_uv_forests.py")).unwrap();
+        let uv = PyDict::new(py);
+        uv.set_item("__file__", test_directory().join("installed_uv_forests.py"))?;
+        py.run(&uv_tests, Some(&uv), Some(&uv))
+            .inspect_err(|error| error.print(py))?;
         Ok(())
     })
     .unwrap();

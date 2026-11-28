@@ -664,6 +664,7 @@ let
     PY
     "$linnet_python/bin/python" -m unittest discover -s crates/linnet-py/tests -p 'test_*.py'
     "$linnet_python/bin/python" crates/feynkit-py/tests/installed_graph_highlighting.py
+    "$linnet_python/bin/python" crates/feynkit-py/tests/installed_uv_forests.py
     "$linnet_python/bin/python" crates/feynkit-py/tests/installed_four_loop_showcase.py
     export MPLBACKEND=Agg
     "$linnet_python/bin/python" crates/feynkit-py/tests/installed_numerical_showcase.py \

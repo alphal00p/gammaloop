@@ -216,9 +216,55 @@ view
 
 A contracted layer keeps the original layout, fades its particle lines, and draws
 a treated hull with a circled cross. Scheme names are case-insensitive. Use `scheme="MS-bar"` for an open circle or
-`scheme="on-shell"` for a filled circle with a paper-coloured cross. The open
-circle also applies when the scheme is unspecified. The SVG exposes the label,
+`scheme="on-shell"` for a filled circle with a paper-coloured cross. An
+unspecified scheme draws the cross in a dashed ring. The SVG exposes the label,
 description and any specified scheme on hover. Typst embeds the same native vector geometry for printing.
+
+== UV spinneys, woods and forests
+
+`hep.Wood(diagram)` enumerates the UV-divergent subgraphs (spinneys) of a
+diagram with FeynKit's four-dimensional power counting, using the numerator as
+stored: apply Feynman rules first for diagrams read from DOT. A `Spinney`
+reports its edges, components, loop count, classifying and superficial degrees,
+and its relation to another spinney. Disjoint spinneys share no vertex; spinneys
+that share only a vertex touch and, like overlapping ones, never belong to one
+forest. `wood.forests()` lists the forests of the forest formula with their
+Foata levels, depth and sign. `Wood.from_spinneys` checks user-given spinneys
+against the diagram and raises `hep.UvError` naming the failed check.
+
+// docs-example: compile
+```python
+from symbolica.community import hepkit as hep
+
+sunrise = hep.FeynmanDiagram.from_dot(hep.Model.phi4(), """digraph sunrise {
+    edge [particle=phi]; ext [style=invis];
+    ext -> a; a -> b; a -> b; a -> b; b -> ext; }""")
+wood = hep.Wood(sunrise)
+bubble, full = wood[0], wood[-1]
+assert bubble.relation(full) == "contained in"
+forest = next(forest for forest in wood.forests() if forest.depth == 2)
+counterterm = forest.counterterm("on-shell")
+views = [full, wood, forest, wood.operation_graph(), counterterm]
+wood.operation_graph()
+```
+
+Displaying a spinney draws it as a hull on the diagram; a forest stacks its
+spinneys as hulls, blue outside and red innermost. Hover shows each spinney's
+edges, loop count, degrees and approximation. A wood displays as the Hasse
+diagram of its spinneys, drawn as recoloured stamps of the diagram.
+`wood.operation_graph()` draws the forests in Linnest's layered layout, ranked
+by the size of the covered subgraph. Each box writes a forest's term
+`K[m(S|G) · inner]`: the stamp `m(S|G)` shows the spinney `S` being approximated
+in blue and the spinneys `G` already treated in red, and `inner` is the nested
+term for `G`. The operator is `K` by default; `op="T"` or any other math string
+replaces it. `wood.expansion()` writes the whole forest formula with signs and
+cofactors, one group of lines per depth, and `wood.k_table()` lists the stored
+quantities `k0, k1, …`; the whole graph is named `Γ` and the other spinneys
+`a, b, …`, or as `wood.renamed({...})` sets them. A `Counterterm` contracts a
+spinney or forest in place: one circled cross per outermost contracted spinney,
+open for MS-bar, filled on shell and in a dashed ring while the scheme is
+unspecified, with nested spinneys shown as hulls in one colour per level. It is
+a combinatorial object; counterterm expressions are not built yet.
 
 == Configured amplitude collections
 

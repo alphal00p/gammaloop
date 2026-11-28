@@ -15,7 +15,9 @@ use linnet::half_edge::nodestore::NodeStorageVec;
 use linnet::half_edge::subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps};
 use thiserror::Error;
 
-use crate::{ForeignReason, ForestNode, OwnedForestNode, Spinney, UvGraph, UvGraphError, Wood};
+use crate::{
+    ForeignReason, ForestNode, OwnedForestNode, Spinney, UvGraph, UvGraphError, Wood, WoodInclusion,
+};
 
 /// One UV operation: a wood transition, ordered by its Taylor scope.
 pub type Operation = HiddenData<SuBitGraph, EdgeIndex>;
@@ -147,6 +149,60 @@ impl OperationNode {
         self.key
             .iter_levels_top_down()
             .map(|level| level.iter_leaf_ops().map(|op| &op.order).collect())
+            .collect()
+    }
+
+    /// The Foata levels, first applied first, each listing the wood transitions
+    /// of its operations. Each transition approximates its larger spinney after
+    /// its smaller one was treated. [`Wood::transition_elements`] gives the
+    /// forest elements each adds: the larger spinney, or the factor a product
+    /// step acts on.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an operation does not name a paired edge of `wood`, that is if
+    /// this forest was unfolded from another wood.
+    ///
+    /// ```
+    /// use feynkit_graph::FeynmanDiagram;
+    /// use feynkit_model::Model;
+    /// use feynkit_uv::{RenormalizationPrescriptionSettings, UvGraph, Wood};
+    ///
+    /// let eye = FeynmanDiagram::from_dot(
+    ///     Model::phi4(),
+    ///     "digraph eye { edge [particle=phi]; ext [style=invis]; ext -> a; ext -> a; \
+    ///          a -> b; a -> c; b -> c; b -> c; b -> ext; c -> ext; }",
+    /// )?;
+    /// let spinneys = eye.classify_spinneys(
+    ///     &eye.hedge_graph().full_filter(),
+    ///     eye.model(),
+    ///     &RenormalizationPrescriptionSettings::default(),
+    ///     eye.loop_momentum_basis(),
+    /// )?;
+    /// let forests = Wood::from_spinneys(spinneys, &eye, eye.loop_momentum_basis())?.unfold();
+    /// let (_, nested) = forests
+    ///     .operations()
+    ///     .find(|(_, forest)| forest.depth() == 2)
+    ///     .expect("the bubble nests in the full graph");
+    /// let levels = nested.transitions(forests.wood());
+    /// let (inner, outer) = (levels[0][0], levels[1][0]);
+    /// // The full graph is approximated after the bubble it contains.
+    /// assert_eq!(outer.smaller, inner.larger);
+    /// assert!(forests.wood().spinney(inner.smaller).is_empty());
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn transitions<'a, B>(&self, wood: &'a Wood<B>) -> Vec<Vec<WoodInclusion<'a>>> {
+        self.key
+            .iter_levels_top_down()
+            .map(|level| {
+                level
+                    .iter_leaf_ops()
+                    .map(|op| {
+                        wood.inclusion(op.data)
+                            .expect("forest operations name paired edges of their wood")
+                    })
+                    .collect()
+            })
             .collect()
     }
 
@@ -356,6 +412,66 @@ impl<B> Forests<B> {
         self.graph
             .iter_nodes()
             .map(|(node, _, operation)| (node, operation))
+    }
+
+    /// The elements of the forest at `node` by Foata level, first applied
+    /// first: pairwise nested or vertex-disjoint connected spinneys, plus any
+    /// collective disconnected union the wood does not factorize. A product of
+    /// disjoint spinneys lists each factor. See [`Wood::transition_elements`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if `node` is not a forest of these forests.
+    ///
+    /// ```
+    /// use feynkit_graph::FeynmanDiagram;
+    /// use feynkit_model::Model;
+    /// use feynkit_uv::{RenormalizationPrescriptionSettings, UvGraph, Wood};
+    ///
+    /// let spectacles = FeynmanDiagram::from_dot(
+    ///     Model::phi3(),
+    ///     "digraph spectacles { edge [particle=phi]; a -> a; a -> b; b -> b; }",
+    /// )?;
+    /// let spinneys = spectacles.classify_spinneys(
+    ///     &spectacles.hedge_graph().full_filter(),
+    ///     spectacles.model(),
+    ///     &RenormalizationPrescriptionSettings::default(),
+    ///     spectacles.loop_momentum_basis(),
+    /// )?;
+    /// let forests = Wood::from_spinneys(spinneys, &spectacles, spectacles.loop_momentum_basis())?.unfold();
+    /// let (product, _) = forests
+    ///     .operations()
+    ///     .find(|(node, _)| forests.is_disjoint_union(*node))
+    ///     .expect("the two tadpoles factorize");
+    /// // One commuting level holding both tadpoles.
+    /// let levels = forests.forest_levels(product);
+    /// assert_eq!(levels.len(), 1);
+    /// let mut loops: Vec<_> = levels[0].iter().map(|s| s.edges(&spectacles)).collect();
+    /// loops.sort();
+    /// assert_eq!(loops.concat().iter().map(|e| e.0).collect::<Vec<_>>(), [0, 2]);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn forest_levels(&self, node: NodeIndex) -> Vec<Vec<&Spinney<B>>> {
+        self.graph[node]
+            .transitions(&self.wood)
+            .iter()
+            .map(|level| {
+                level
+                    .iter()
+                    .flat_map(|transition| self.wood.transition_elements(transition))
+                    .collect()
+            })
+            .collect()
+    }
+
+    /// The elements of the forest at `node`, in application order: the
+    /// flattened [`Self::forest_levels`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if `node` is not a forest of these forests.
+    pub fn forest_spinneys(&self, node: NodeIndex) -> Vec<&Spinney<B>> {
+        self.forest_levels(node).into_iter().flatten().collect()
     }
 
     /// The edges of the unfolded forests.

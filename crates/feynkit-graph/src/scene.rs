@@ -76,7 +76,16 @@ pub struct SceneOptions {
     pub label_feedback: bool,
     /// Explicit `impred-*` layout options.
     pub layout: Map<String, Value>,
+    /// Line weight multiplier of recoloured miniature stamps; see
+    /// [`MINIATURE_STAMP_WEIGHT`]. It must be positive and finite when
+    /// [`HighlightOverlap::Recolour`] is selected, or drawing fails with
+    /// [`DiagramError::SceneConfiguration`].
+    pub stamp_weight: f64,
 }
+
+/// Default line weight multiplier of miniature stamps drawn at about 28 points,
+/// where the reading-size weights look thin.
+pub const MINIATURE_STAMP_WEIGHT: f64 = 1.35;
 
 impl Default for SceneOptions {
     fn default() -> Self {
@@ -93,6 +102,7 @@ impl Default for SceneOptions {
             hulls: HullOptions::default(),
             label_feedback: false,
             layout: Map::new(),
+            stamp_weight: 1.0,
         }
     }
 }
@@ -573,6 +583,20 @@ impl FeynmanDiagram {
             options.overlap,
             options.hulls,
         );
+        if options.overlap == HighlightOverlap::Recolour {
+            if !(options.stamp_weight.is_finite() && options.stamp_weight > 0.0) {
+                return Err(DiagramError::SceneConfiguration(format!(
+                    "stamp_weight must be positive and finite, not {}",
+                    options.stamp_weight
+                )));
+            }
+            for edge in &mut scene.edges {
+                edge.stroke.width *= options.stamp_weight;
+            }
+            for node in &mut scene.nodes {
+                node.stroke.width *= options.stamp_weight;
+            }
+        }
         Ok(scene)
     }
 }

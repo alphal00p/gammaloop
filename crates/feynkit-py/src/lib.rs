@@ -19,6 +19,7 @@ mod sector_decomposition;
 mod tensor;
 #[cfg(feature = "ufo")]
 mod ufo;
+mod uv;
 mod wavefunction;
 
 #[cfg(feature = "python_stubgen")]
@@ -69,6 +70,7 @@ pub use sector_decomposition::SECTOR_DECOMPOSE;
 pub use tensor::PyTensorReducer;
 #[cfg(feature = "ufo")]
 pub use ufo::{PyLoadedModel, PyUfoLoadDiagnostics, PyUfoLoader};
+pub use uv::{PyCounterterm, PyForest, PySpinney, PyWood};
 pub use wavefunction::PyWavefunction;
 
 mod symbols;
@@ -234,6 +236,7 @@ pub fn initialize_feynkit(module: &Bound<'_, PyModule>) -> PyResult<()> {
 
     tensor::register(module)?;
     integrals::register(module)?;
+    uv::register(module)?;
     #[cfg(feature = "ufo")]
     ufo::register(module)?;
     Ok(())

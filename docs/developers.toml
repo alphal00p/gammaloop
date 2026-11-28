@@ -307,7 +307,10 @@ anchor = "pub struct FeynmanDiagram {"
 # No-impact attestation 2026-11-26: the display stack adds renderer exports,
 # a drawing error and display regressions. Graph construction, routing,
 # retained tensors and persistence use the existing ownership boundaries.
-digest = "e4f1f7c745c0dfde27a2c4bb18e9e60647ac894a"
+# No-impact attestation 2026-11-27: the crate root re-exports the miniature
+# stamp weight constant of the scene options. Graph construction, routing,
+# retained tensors and persistence are unchanged.
+digest = "be09809cf2a1f6f2ded86772e18080f262edd2f0"
 
 [[section.note.scope]]
 path = "crates/feynkit-tensor/src/lib.rs"
@@ -2099,7 +2102,9 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # source tiers.
 # No-impact attestation 2026-11-26: Native lane regression fixtures are
 # compile-time test inputs. Production and runtime source ownership is unchanged.
-digest = "64d7001acdd1867f693631acbbaae29773543659"
+# No-impact attestation 2026-11-27: the feynkit-py fixture closure also stages the
+# installed UV spinney, wood and forest regressions; producers are unchanged.
+digest = "6a3bcfc5bf30d944d85fc5f001a13e4fb01f372d"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -2171,7 +2176,10 @@ end_anchor = "\nin\n{\n  inherit"
 # No-impact attestation 2026-11-26:
 # The installed native notebook check also runs graph highlighting
 # regressions. Wheel production and runtime licensing are unchanged.
-digest = "daadc6b0bb90ba0e158cd32ed2d846803b67cbbf"
+# No-impact attestation 2026-11-27: the installed native notebook check also runs
+# the UV spinney, wood, forest and counterterm regressions. Wheel production and
+# runtime licensing are unchanged.
+digest = "6aa2da1d99dd8d15db8e2fb31c14e414da11a932"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"

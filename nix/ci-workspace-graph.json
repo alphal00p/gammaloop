@@ -102,6 +102,7 @@
       "feynkit-model",
       "feynkit-tensor",
       "feynkit-ufo",
+      "feynkit-uv",
       "idenso",
       "linnest",
       "linnet",
@@ -123,6 +124,7 @@
     "feynkit-uv": [
       "feynkit-graph",
       "feynkit-model",
+      "linnest",
       "linnet"
     ],
     "gammaloop-api": [
@@ -397,6 +399,9 @@
       "feynkit-model": [],
       "feynkit-tensor": [],
       "feynkit-ufo": [],
+      "feynkit-uv": [
+        "svg"
+      ],
       "idenso": [],
       "linnest": [
         "svg"
@@ -424,6 +429,9 @@
     "feynkit-uv": {
       "feynkit-graph": [],
       "feynkit-model": [],
+      "linnest": [
+        "svg"
+      ],
       "linnet": [
         "serde"
       ]
@@ -837,6 +845,7 @@
       "feynkit-model",
       "feynkit-tensor",
       "feynkit-ufo",
+      "feynkit-uv",
       "gammaloop-workspace-hack",
       "idenso",
       "kurvst",
@@ -1182,6 +1191,7 @@
       "feynkit-model",
       "feynkit-tensor",
       "feynkit-ufo",
+      "feynkit-uv",
       "gammaloop-workspace-hack",
       "idenso",
       "kurvst",
@@ -1559,6 +1569,7 @@
       "feynkit-model",
       "feynkit-tensor",
       "feynkit-ufo",
+      "feynkit-uv",
       "idenso",
       "linnest",
       "linnet",
@@ -1582,6 +1593,7 @@
       "feynkit-generator",
       "feynkit-graph",
       "feynkit-model",
+      "linnest",
       "linnet"
     ],
     "gammaloop-api": [
@@ -1860,6 +1872,9 @@
       "feynkit-model": [],
       "feynkit-tensor": [],
       "feynkit-ufo": [],
+      "feynkit-uv": [
+        "svg"
+      ],
       "idenso": [],
       "linnest": [
         "svg"
@@ -1889,6 +1904,9 @@
       "feynkit-generator": [],
       "feynkit-graph": [],
       "feynkit-model": [],
+      "linnest": [
+        "svg"
+      ],
       "linnet": [
         "serde"
       ]

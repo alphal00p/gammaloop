@@ -1,3 +1,5 @@
+use feynkit_graph::DiagramError as NativeDiagramError;
+use feynkit_uv::{CountertermError, UvDisplayError, UvGraphError};
 use linnet_render_py::PyErrExt;
 use pyo3::{PyErr, create_exception, exceptions::PyException, types::PyModuleMethods};
 
@@ -88,6 +90,25 @@ define_exception!(
     "Invalid amplitude, conjugation, or external-state sum.\n\nExamples\n--------\n>>> from symbolica import S, E\n>>> from symbolica.community import hepkit as hep\n>>> try:\n...     hep.Amplitude([])\n... except hep.AmplitudeError as error:\n...     message = str(error)"
 );
 
+define_exception!(
+    UvError,
+    FeynkitError,
+    pyo3_stub_gen::TypeInfo::unqualified("FeynkitError"),
+    "Invalid UV spinney, wood, forest or counterterm, such as a spinney of another diagram.\n\nExamples\n--------\n>>> from symbolica.community import hepkit as hep\n>>> try:\n...     hep.Counterterm([])\n... except hep.UvError as error:\n...     message = str(error)"
+);
+
+pub(crate) fn uv(error: UvGraphError<NativeDiagramError>) -> PyErr {
+    UvError::new_err(error.to_string()).with_rust_cause(&error)
+}
+
+pub(crate) fn uv_display(error: UvDisplayError) -> PyErr {
+    UvError::new_err(error.to_string()).with_rust_cause(&error)
+}
+
+pub(crate) fn counterterm(error: CountertermError<NativeDiagramError>) -> PyErr {
+    UvError::new_err(error.to_string()).with_rust_cause(&error)
+}
+
 pub(crate) fn amplitude(error: feynkit_amplitude::AmplitudeError) -> PyErr {
     AmplitudeError::new_err(error.to_string())
 }
@@ -158,6 +179,7 @@ pub(crate) fn register(module: &pyo3::Bound<'_, pyo3::types::PyModule>) -> pyo3:
         "TensorReductionError",
         py.get_type::<TensorReductionError>(),
     )?;
+    module.add("UvError", py.get_type::<UvError>())?;
     #[cfg(feature = "ufo")]
     module.add("UfoLoadError", py.get_type::<UfoLoadError>())?;
     Ok(())

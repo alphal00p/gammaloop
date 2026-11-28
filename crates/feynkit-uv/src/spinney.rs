@@ -267,6 +267,143 @@ impl<B> Spinney<B> {
         self.components.len()
     }
 
+    /// Whether every connected component has a nonnegative classifying degree
+    /// in `graph`: the condition under which classification retains a
+    /// spinney. [`Self::new`] also builds collective regions with a convergent
+    /// factor, which hosts use as atomic Taylor sources; this tells them apart.
+    ///
+    /// `graph` must be the graph the spinney was built for; it is not checked.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the graph cannot power count a component.
+    ///
+    /// ```
+    /// use feynkit_graph::FeynmanDiagram;
+    /// use feynkit_model::Model;
+    /// use feynkit_uv::{Spinney, UvGraph};
+    /// use linnet::half_edge::subgraph::{InternalSubGraph, ModifySubSet, SubSetLike};
+    ///
+    /// // A convergent cubic triangle and a divergent tadpole hanging off it.
+    /// let kite = FeynmanDiagram::from_dot(
+    ///     Model::phi3(),
+    ///     "digraph kite { edge [particle=phi]; ext [style=invis]; \
+    ///          a -> b; b -> c; c -> a; a -> t; t -> t; ext -> b; c -> ext; }",
+    /// )?;
+    /// let graph = kite.hedge_graph();
+    /// let mut loops = kite.internal_subgraph();
+    /// for bridge in graph.bridges_of(&loops).included_iter() {
+    ///     loops.sub(bridge);
+    /// }
+    /// let region = InternalSubGraph::cleaned_filter_optimist(loops, graph);
+    /// let collective = Spinney::new(region, &kite, kite.loop_momentum_basis())?
+    ///     .expect("the union counts as logarithmic");
+    /// assert_eq!(collective.n_components(), 2);
+    /// assert!(!collective.has_divergent_factors(&kite)?);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn has_divergent_factors<G: UvGraph<Basis = B> + ?Sized>(
+        &self,
+        graph: &G,
+    ) -> Result<bool, UvGraphError<G::Error>> {
+        for component in &self.components {
+            let degree = graph.degree_of_divergence(component).map_err(|source| {
+                UvGraphError::DegreeOfDivergence {
+                    subgraph: component.string_label(),
+                    source,
+                }
+            })?;
+            if degree < 0 {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
+    /// How this spinney relates to `other` in `graph`.
+    ///
+    /// Both spinneys must belong to `graph`; selections of another width are not
+    /// compared and the result is then meaningless.
+    ///
+    /// ```
+    /// use feynkit_graph::FeynmanDiagram;
+    /// use feynkit_model::Model;
+    /// use feynkit_uv::{RenormalizationPrescriptionSettings, SpinneyRelation, UvGraph};
+    ///
+    /// let sunrise = FeynmanDiagram::from_dot(
+    ///     Model::phi4(),
+    ///     "digraph sunrise { edge [particle=phi]; ext [style=invis]; \
+    ///          ext -> a; a -> b; a -> b; a -> b; b -> ext; }",
+    /// )?;
+    /// let mut spinneys = sunrise.classify_spinneys(
+    ///     &sunrise.hedge_graph().full_filter(),
+    ///     sunrise.model(),
+    ///     &RenormalizationPrescriptionSettings::default(),
+    ///     sunrise.loop_momentum_basis(),
+    /// )?;
+    /// spinneys.retain(|spinney| !spinney.is_empty());
+    /// spinneys.sort_by_key(|spinney| spinney.loop_count());
+    /// let (bubble, other, full) = (&spinneys[0], &spinneys[1], &spinneys[3]);
+    /// assert_eq!(bubble.relation(full, &sunrise), SpinneyRelation::ContainedIn);
+    /// assert_eq!(full.relation(bubble, &sunrise), SpinneyRelation::Contains);
+    /// // Two bubbles of the sunrise share a line.
+    /// assert_eq!(bubble.relation(other, &sunrise), SpinneyRelation::Overlapping);
+    /// assert!(!bubble.relation(other, &sunrise).is_compatible());
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn relation<G: UvGraph + ?Sized, C>(
+        &self,
+        other: &Spinney<C>,
+        graph: &G,
+    ) -> SpinneyRelation {
+        let (this, that) = (self.filter(), other.filter());
+        if this == that {
+            SpinneyRelation::Equal
+        } else if self.subgraph.includes(&other.subgraph) {
+            SpinneyRelation::Contains
+        } else if other.subgraph.includes(&self.subgraph) {
+            SpinneyRelation::ContainedIn
+        } else if this.intersects(that) {
+            SpinneyRelation::Overlapping
+        } else if graph
+            .hedge_graph()
+            .full_crown(&self.subgraph)
+            .intersects(that)
+        {
+            SpinneyRelation::Touching
+        } else {
+            SpinneyRelation::Disjoint
+        }
+    }
+
+    /// A short name listing the internal edge IDs in `graph`, such as `γ{0,1}`.
+    /// `graph` must be the graph the spinney was built for; it is not checked.
+    ///
+    /// ```
+    /// use feynkit_graph::FeynmanDiagram;
+    /// use feynkit_model::Model;
+    /// use feynkit_uv::{Spinney, UvGraph};
+    /// use linnet::half_edge::subgraph::InternalSubGraph;
+    ///
+    /// let sunrise = FeynmanDiagram::from_dot(
+    ///     Model::phi4(),
+    ///     "digraph sunrise { edge [particle=phi]; ext [style=invis]; \
+    ///          ext -> a; a -> b; a -> b; a -> b; b -> ext; }",
+    /// )?;
+    /// let loops = InternalSubGraph::cleaned_filter_optimist(sunrise.internal_subgraph(), sunrise.hedge_graph());
+    /// let spinney = Spinney::new(loops, &sunrise, sunrise.loop_momentum_basis())?.unwrap();
+    /// assert_eq!(spinney.label(&sunrise), "γ{0,1,2}");
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn label<G: UvGraph<Basis = B> + ?Sized>(&self, graph: &G) -> String {
+        let edges = self
+            .edges(graph)
+            .into_iter()
+            .map(|edge| edge.0.to_string())
+            .collect::<Vec<_>>();
+        format!("γ{{{}}}", edges.join(","))
+    }
+
     /// The internal edges of the subgraph, in increasing order. `graph` must be
     /// the graph the spinney was built for; it is not checked here.
     pub fn edges<G: UvGraph<Basis = B> + ?Sized>(&self, graph: &G) -> Vec<EdgeIndex> {
@@ -277,6 +414,50 @@ impl<B> Spinney<B> {
             .collect();
         edges.sort();
         edges
+    }
+}
+
+/// How two spinneys of one graph relate.
+///
+/// A forest of the forest formula holds only pairwise [compatible](Self::is_compatible)
+/// spinneys: nested or disjoint, where disjoint spinneys share no vertex. Two
+/// spinneys that share a vertex but no line touch; their union is connected and
+/// they are not composed as a product. See [`Spinney::relation`] for an example.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SpinneyRelation {
+    /// Both select the same half-edges.
+    Equal,
+    /// The first strictly includes the second.
+    Contains,
+    /// The first is strictly included in the second.
+    ContainedIn,
+    /// They share no vertex.
+    Disjoint,
+    /// They share a vertex but no line.
+    Touching,
+    /// They share a line and neither includes the other.
+    Overlapping,
+}
+
+impl SpinneyRelation {
+    /// Whether the two spinneys can belong to one forest: nested or disjoint.
+    ///
+    /// See [`Spinney::relation`] for an example.
+    pub fn is_compatible(self) -> bool {
+        !matches!(self, Self::Touching | Self::Overlapping)
+    }
+}
+
+impl Display for SpinneyRelation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Equal => "equal",
+            Self::Contains => "contains",
+            Self::ContainedIn => "contained in",
+            Self::Disjoint => "disjoint",
+            Self::Touching => "touching",
+            Self::Overlapping => "overlapping",
+        })
     }
 }
 

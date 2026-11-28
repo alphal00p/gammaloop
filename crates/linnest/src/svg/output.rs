@@ -15,10 +15,35 @@ use crate::{TypstDotEdge, TypstDotEndpoint, TypstDotNode};
 const PAD: f64 = 0.4;
 const MARGIN: f64 = 5.669291339;
 const GUTTER: f64 = 9.0;
+/// Blank border, in points, between an untitled drawing's viewBox and its
+/// painted bounds: the margin plus the canvas padding. Cropping it off lets
+/// embedded stamps sit tight against their neighbours.
+pub const CANVAS_INSET: f64 = MARGIN + PAD * UNIT;
 /// Arrowhead paint and the particle-flow triangle's outline width in points.
 pub(super) const INK: &str = "#3d2645";
 pub(super) const MARK_STROKE: f64 = 0.3;
 const HULL_STROKE: f64 = 1.1;
+
+/// The ink weight of a drawing whose nominal canvas is `width` points wide:
+/// recoloured stamps are drawn at reading size and scaled down, so their ink
+/// grows with the canvas. The nominal canvas sets it before any bounds expansion.
+fn ink_scale(width: f64, recolour_stamp: bool) -> f64 {
+    if recolour_stamp {
+        (width / 80.0).max(1.0)
+    } else {
+        1.0
+    }
+}
+
+/// Outer radius of a counterterm glyph drawn at `ink_scale`, in drawing units:
+/// its disc plus half its stroke, as [`svg`] draws it.
+pub(super) fn glyph_radius(ink_scale: f64) -> f64 {
+    GLYPH_EXTENT * ink_scale / UNIT
+}
+
+/// Disc radius plus half its stroke, in points.
+pub(super) const GLYPH_EXTENT: f64 = 5.925;
+
 // SVG's default miter limit is four times the stroke half-width.
 const MITER_EXTENT: f64 = 2.0;
 
@@ -317,13 +342,16 @@ fn write_hull_ring(data: &mut String, ring: &[HullVertex]) -> Result<(), &'stati
     Ok(())
 }
 
-/// The page: an optional centered title above the padded drawing canvas.
-pub(super) fn svg(
-    typeset: &Typeset,
-    layers: &[Element],
-    targets: &[Target],
-    recolour_stamp: bool,
-) -> Result<String, String> {
+/// Whether a drawing carries the links the interactive viewer decorates.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Inspection {
+    Linked,
+    Static,
+}
+
+/// The drawing's nominal bounds, in drawing units, before recoloured stamps
+/// expand them for their scaled ink.
+fn nominal_bounds(layers: &[Element]) -> Rect {
     let mut bounds = Rect::new(
         f64::INFINITY,
         f64::INFINITY,
@@ -380,16 +408,41 @@ pub(super) fn svg(
     if !bounds.is_finite() {
         bounds = Rect::ZERO;
     }
+    bounds
+}
+
+/// The ink weight of a drawing of `layers` titled by `typeset`'s title: the
+/// one value that scales every stroke, node and counterterm glyph of a
+/// recoloured stamp, and 1 otherwise.
+pub(super) fn drawing_ink_scale(
+    typeset: &Typeset,
+    layers: &[Element],
+    recolour_stamp: bool,
+) -> f64 {
+    let bounds = nominal_bounds(layers);
+    let title_width = typeset
+        .title
+        .as_ref()
+        .map_or(0.0, |title| title.metrics.width);
+    let width = ((bounds.width() + 2.0 * PAD) * UNIT).max(title_width) + 2.0 * MARGIN;
+    ink_scale(width, recolour_stamp)
+}
+
+/// The page: an optional centered title above the padded drawing canvas.
+pub(super) fn svg(
+    typeset: &Typeset,
+    layers: &[Element],
+    targets: &[Target],
+    recolour_stamp: bool,
+    ink_scale: f64,
+    inspection: Inspection,
+) -> Result<String, String> {
+    let linked = inspection == Inspection::Linked;
+    let targets = if linked { targets } else { &[] };
+    let mut bounds = nominal_bounds(layers);
     let title = typeset.title.as_ref();
     let title_width = title.map_or(0.0, |title| title.metrics.width);
     let title_height = title.map_or(0.0, |title| title.metrics.height + GUTTER);
-    let width = ((bounds.width() + 2.0 * PAD) * UNIT).max(title_width) + 2.0 * MARGIN;
-    // The nominal canvas sets ink weight before any bounds expansion.
-    let ink_scale = if recolour_stamp {
-        (width / 80.0).max(1.0)
-    } else {
-        1.0
-    };
     if recolour_stamp {
         let inflate = |rect: Rect, width: f64| rect.inflate(width / UNIT, width / UNIT);
         for element in layers {
@@ -406,9 +459,10 @@ pub(super) fn svg(
                         Rect::new(x - w * scale, y - h * scale, x + w * scale, y + h * scale);
                     inflate(rect, stroke.width * ink_scale / 2.0)
                 }
-                Element::Counterterm { center, .. } => {
-                    inflate(Rect::from_points(*center, *center), 5.925 * ink_scale)
-                }
+                Element::Counterterm { center, .. } => inflate(
+                    Rect::from_points(*center, *center),
+                    GLYPH_EXTENT * ink_scale,
+                ),
                 Element::Path { path, stroke, .. } => {
                     inflate(path.bounding_box(), MITER_EXTENT * stroke.width * ink_scale)
                 }
@@ -554,6 +608,7 @@ pub(super) fn svg(
     }
     for element in layers {
         match element {
+            Element::Carrier { .. } if !linked => {}
             Element::Carrier { path, href } => {
                 let _ = write!(
                     svg,
@@ -570,9 +625,14 @@ pub(super) fn svg(
                 );
             }
             Element::Momentum { path, href } => {
+                let (open, close) = if linked {
+                    (format!(r#"<a href="{href}" "#), "</a>")
+                } else {
+                    ("<g ".to_owned(), "</g>")
+                };
                 let _ = write!(
                     svg,
-                    r#"<a href="{href}" data-linnet-momentum="true"><path fill="none" {} d="{}"/>"#,
+                    r#"{open}data-linnet-momentum="true"><path fill="none" {} d="{}"/>"#,
                     stroke_attributes(&arrow_stroke()),
                     path_data(path)
                 );
@@ -583,7 +643,7 @@ pub(super) fn svg(
                         polyline(&points)
                     );
                 }
-                svg.push_str("</a>");
+                svg.push_str(close);
             }
             Element::BeginGhost(opacity) => {
                 let _ = write!(svg, r#"<g data-linnet-ghost="true" opacity="{opacity}">"#);
@@ -638,6 +698,7 @@ pub(super) fn svg(
                 center,
                 paint,
                 details,
+                ..
             } => {
                 let paint = xml_escape(paint);
                 let (label, description, title, scheme_attribute) = hover_details(details);
@@ -648,14 +709,26 @@ pub(super) fn svg(
                 } else {
                     String::new()
                 };
-                let (disc, cross, paper) = if details.scheme == CountertermScheme::OnShell {
-                    (paint.as_str(), "#ffffff", r#" data-linnet-paper="true""#)
-                } else {
-                    ("#ffffff", paint.as_str(), "")
+                // Filled on shell, open for MS-bar, and a dashed ring while the
+                // scheme is unspecified.
+                let (disc, cross, paper, ring) = match details.scheme {
+                    CountertermScheme::OnShell => (
+                        paint.as_str(),
+                        "#ffffff",
+                        r#" data-linnet-paper="true""#,
+                        "",
+                    ),
+                    CountertermScheme::MsBar => ("#ffffff", paint.as_str(), "", ""),
+                    CountertermScheme::Unspecified => (
+                        "#ffffff",
+                        paint.as_str(),
+                        "",
+                        r#" stroke-dasharray="2.2 1.6""#,
+                    ),
                 };
                 let _ = write!(
                     svg,
-                    r##"<g data-linnet-counterterm="true" data-label="{label}" data-description="{description}"{scheme_attribute} transform="translate({cx} {cy}){stamp_scale}"><title>{title}</title><circle r="5.2" fill="{disc}" stroke="{paint}" stroke-width="1.45"/><path d="M-3.65 -3.65L3.65 3.65M-3.65 3.65L3.65 -3.65" fill="none" stroke="{cross}" stroke-width="1.45"{paper}/></g>"##
+                    r##"<g data-linnet-counterterm="true" data-label="{label}" data-description="{description}"{scheme_attribute} transform="translate({cx} {cy}){stamp_scale}"><title>{title}</title><circle r="5.2" fill="{disc}" stroke="{paint}" stroke-width="1.45"{ring}/><path d="M-3.65 -3.65L3.65 3.65M-3.65 3.65L3.65 -3.65" fill="none" stroke="{cross}" stroke-width="1.45"{paper}/></g>"##
                 );
             }
             Element::Triangle(points) => {
@@ -677,7 +750,7 @@ pub(super) fn svg(
                     r#"<g transform="translate({lx} {ly})">{body}</g>"#,
                     body = page.body,
                 );
-                if let Some(href) = href {
+                if let Some(href) = href.as_ref().filter(|_| linked) {
                     let _ = write!(
                         svg,
                         r#"<a href="{href}" transform="translate({lx} {ly})"><rect width="{w}" height="{h}" fill="transparent" stroke="none"/></a>"#,

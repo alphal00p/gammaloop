@@ -33,8 +33,8 @@ use crate::{ImpredRun, TypstDotEdge, TypstDotEndpoint, TypstDotNode, TypstGraph,
 use labels::{Anchor, Bounds, Placement, Stroke as CollisionStroke};
 pub use labels::{LabelError, LabelMetrics, LabelPage, LabelSource, Typeset};
 use lanes::{Carrier as LaneCarrier, Station as LaneStation};
-pub use output::Details;
-use output::INK;
+pub use output::{Details, CANVAS_INSET};
+use output::{Inspection, INK};
 
 /// Drawing unit in points: Linnest's default 1.5em at 9pt text.
 const UNIT: f64 = 13.5;
@@ -280,6 +280,21 @@ impl Scene {
 
     /// Lay out and draw the scene with its typeset pages; one SVG document.
     pub fn render(&self, typeset: &Typeset) -> Result<String, String> {
+        self.draw(typeset, Inspection::Linked)
+    }
+
+    /// [`Self::render`] without inspection links: no hover targets, hidden
+    /// carriers or label and momentum links. Region titles remain. Use it for
+    /// small static stamps embedded in another figure, where the links of every
+    /// copy would dominate the document.
+    ///
+    /// # Errors
+    /// Returns the same layout or geometry failures as [`Self::render`].
+    pub fn render_static(&self, typeset: &Typeset) -> Result<String, String> {
+        self.draw(typeset, Inspection::Static)
+    }
+
+    fn draw(&self, typeset: &Typeset, inspection: Inspection) -> Result<String, String> {
         self.validate_hull_radii()?;
         let mut spec = self.graph.clone();
         for (node, drawing) in spec.nodes.iter_mut().zip(&self.nodes) {
@@ -324,11 +339,11 @@ impl Scene {
             }
         }
         let Some(mut run) = run else {
-            return Drawing::new(self, typeset, &laid.unwrap())?.svg(typeset);
+            return Drawing::new(self, typeset, &laid.unwrap())?.svg(typeset, inspection);
         };
         let drawing = Drawing::new(self, typeset, &Laid::new(&run)?)?;
         if !self.label_feedback {
-            return drawing.svg(typeset);
+            return drawing.svg(typeset, inspection);
         }
         // Keep the least-overlapping drawing; later passes may not improve it.
         // A rejected pass still supplies the next pass's pinned labels.
@@ -356,7 +371,7 @@ impl Scene {
                 rejected = Some(drawing);
             }
         }
-        best.svg(typeset)
+        best.svg(typeset, inspection)
     }
 }
 
@@ -520,6 +535,8 @@ fn arrow_stroke() -> Stroke {
 
 struct Drawing {
     recolour_stamp: bool,
+    /// Ink weight of every stroke and glyph; see [`output::drawing_ink_scale`].
+    ink_scale: f64,
     layers: Vec<Element>,
     targets: Vec<Target>,
     placements: Vec<Placement>,
@@ -530,8 +547,15 @@ struct Drawing {
 
 impl Drawing {
     /// Serialize only the selected feedback pass, preserving painting order.
-    fn svg(&self, typeset: &Typeset) -> Result<String, String> {
-        output::svg(typeset, &self.layers, &self.targets, self.recolour_stamp)
+    fn svg(&self, typeset: &Typeset, inspection: Inspection) -> Result<String, String> {
+        output::svg(
+            typeset,
+            &self.layers,
+            &self.targets,
+            self.recolour_stamp,
+            self.ink_scale,
+            inspection,
+        )
     }
 
     /// Overlapping labels first, then label pairs, then line hits.
@@ -571,6 +595,8 @@ impl Drawing {
         let mut fixed_arrows = Vec::new();
         let mut region_hrefs = Vec::new();
         let mut hull_paths = BTreeMap::new();
+        let mut drawn_lines = Vec::new();
+        let mut drawn_edges = Vec::new();
         let mut lane_paths = BTreeMap::new();
         for (edge, carrier) in laid.edges.iter().zip(&laid.carriers) {
             let drawing = scene
@@ -593,6 +619,8 @@ impl Drawing {
             if member {
                 hull_paths.insert(edge.edge, visible.clone());
             }
+            drawn_lines.push(visible.clone());
+            drawn_edges.push(edge.edge);
             if let (Some(source), Some(sink)) = (&edge.source, &edge.sink) {
                 if scene
                     .highlights
@@ -776,8 +804,7 @@ impl Drawing {
                 )?,
             );
         }
-        let mut regions = Vec::new();
-        let mut counterterms = Vec::new();
+        let mut built = Vec::new();
         for region in &scene.highlights.hulls {
             let paths: Vec<_> = region
                 .edges
@@ -795,53 +822,25 @@ impl Drawing {
                 })
                 .collect();
             let path = hulls::union(&paths, &vertices, region.radius / UNIT)?;
-            if region.details.contracted {
-                let center = if vertices.is_empty() {
-                    // For a fully trimmed or empty selection, retain the glyph
-                    // at the selected edge anchors, or at the layout centre.
-                    if path.elements().is_empty() {
-                        let anchors: Vec<_> = laid
-                            .edges
-                            .iter()
-                            .filter(|edge| region.edges.contains(&edge.edge))
-                            .filter_map(|edge| edge.pos.as_ref().map(|p| Point::new(p.x, p.y)))
-                            .collect();
-                        let positions = if anchors.is_empty() {
-                            laid.nodes
-                                .iter()
-                                .filter_map(|node| node.pos.as_ref().map(|p| Point::new(p.x, p.y)))
-                                .collect()
-                        } else {
-                            anchors
-                        };
-                        positions
-                            .split_first()
-                            .map_or(Point::ORIGIN, |(&first, others)| {
-                                others
-                                    .iter()
-                                    .fold(Rect::from_points(first, first), |bounds, &p| {
-                                        bounds.union_pt(p)
-                                    })
-                                    .center()
-                            })
-                    } else {
-                        path.bounding_box().center()
-                    }
-                } else {
-                    let sum = vertices
-                        .iter()
-                        .fold(Vec2::ZERO, |sum, point| sum + point.to_vec2());
-                    (sum / vertices.len() as f64).to_point()
-                };
-                counterterms.push(Element::Counterterm {
-                    center,
-                    paint: region.paint.clone(),
-                    details: region.details.clone(),
-                });
-            }
+            built.push((region, path, vertices));
+        }
+        // A counterterm glyph keeps clear of every drawn line, including the
+        // outlines of all hulls (holes and nested levels), not only edges.
+        let mut obstacle_lines: Vec<&BezPath> = drawn_lines.iter().collect();
+        obstacle_lines.extend(built.iter().map(|(_, path, _)| path));
+        let all_vertices: Vec<_> = laid
+            .nodes
+            .iter()
+            .map(|node| {
+                let [x, y] = laid.node(node.node);
+                Point::new(x, y)
+            })
+            .collect();
+        let mut regions = Vec::new();
+        for (region, path, _) in &built {
             if !path.elements().is_empty() {
                 regions.push(Element::Hull {
-                    path,
+                    path: path.clone(),
                     paint: region.paint.clone(),
                     details: region.details.clone(),
                 });
@@ -871,6 +870,7 @@ impl Drawing {
             .collect();
         let searched = labels::search(&placements, &obstacles, &strokes, &fixed_arrows)?;
         let mut chosen = Vec::new();
+        let mut label_boxes: Vec<Rect> = Vec::new();
         for (placement, &choice) in placements.iter().zip(&searched.choices) {
             let candidate = &placement.candidates[choice];
             if let Some(carriers) = &placement.arrow_carriers {
@@ -902,6 +902,7 @@ impl Drawing {
                 bounds: candidate.bounds,
                 href: Some(placement.href.clone()),
             });
+            label_boxes.push(Rect::from(candidate.bounds));
             chosen.push(candidate.bounds);
         }
         for (node, drawing) in laid.nodes.iter().zip(&scene.nodes) {
@@ -970,14 +971,16 @@ impl Drawing {
             }
             if let Some(page) = drawing.label {
                 let label = &typeset.pages[page];
+                let bounds = Bounds {
+                    left: at[0] - label.metrics.width / UNIT / 2.0,
+                    right: at[0] + label.metrics.width / UNIT / 2.0,
+                    bottom: at[1] - label.metrics.height / UNIT / 2.0,
+                    top: at[1] + label.metrics.height / UNIT / 2.0,
+                };
+                label_boxes.push(Rect::from(bounds));
                 layers.push(Element::Label {
                     page,
-                    bounds: Bounds {
-                        left: at[0] - label.metrics.width / UNIT / 2.0,
-                        right: at[0] + label.metrics.width / UNIT / 2.0,
-                        bottom: at[1] - label.metrics.height / UNIT / 2.0,
-                        top: at[1] + label.metrics.height / UNIT / 2.0,
-                    },
+                    bounds,
                     href: None,
                 });
             }
@@ -994,10 +997,118 @@ impl Drawing {
                 href: href.into(),
             });
         }
+        // Place the counterterm glyphs once every label is placed, so they can
+        // keep clear of the labels. The ink scale fixed here also draws them, so
+        // placement and drawing use the same ring.
+        let ink_scale =
+            output::drawing_ink_scale(typeset, &layers, scene.highlights.recolour_stamp);
+        let glyph_radius = output::glyph_radius(ink_scale);
+        // The widest drawn line's half ink width.
+        let line_half_width = scene
+            .edges
+            .iter()
+            .map(|edge| edge.stroke.width)
+            .fold(0.0, f64::max)
+            * ink_scale
+            / UNIT
+            / 2.0;
+        let mut counterterms = Vec::new();
+        for (region, path, vertices) in &built {
+            if region.details.contracted {
+                let center = if vertices.is_empty() {
+                    // For a fully trimmed or empty selection, retain the glyph
+                    // at the selected edge anchors, or at the layout centre.
+                    if path.elements().is_empty() {
+                        let anchors: Vec<_> = laid
+                            .edges
+                            .iter()
+                            .filter(|edge| region.edges.contains(&edge.edge))
+                            .filter_map(|edge| edge.pos.as_ref().map(|p| Point::new(p.x, p.y)))
+                            .collect();
+                        let positions = if anchors.is_empty() {
+                            laid.nodes
+                                .iter()
+                                .filter_map(|node| node.pos.as_ref().map(|p| Point::new(p.x, p.y)))
+                                .collect()
+                        } else {
+                            anchors
+                        };
+                        positions
+                            .split_first()
+                            .map_or(Point::ORIGIN, |(&first, others)| {
+                                others
+                                    .iter()
+                                    .fold(Rect::from_points(first, first), |bounds, &p| {
+                                        bounds.union_pt(p)
+                                    })
+                                    .center()
+                            })
+                    } else {
+                        path.bounding_box().center()
+                    }
+                } else {
+                    let sum = vertices
+                        .iter()
+                        .fold(Vec2::ZERO, |sum, point| sum + point.to_vec2());
+                    let centroid = (sum / vertices.len() as f64).to_point();
+                    // Prefer the largest face enclosed by the region's own lines;
+                    // otherwise stay on its painted hull.
+                    let lines = |own: bool| -> Vec<&BezPath> {
+                        drawn_lines
+                            .iter()
+                            .zip(&drawn_edges)
+                            .filter(|(_, edge)| region.edges.contains(edge) == own)
+                            .map(|(path, _)| path)
+                            .collect()
+                    };
+                    let points = |own: bool| -> Vec<Point> {
+                        laid.nodes
+                            .iter()
+                            .filter(|node| region.nodes.contains(&node.node) == own)
+                            .map(|node| {
+                                let [x, y] = laid.node(node.node);
+                                Point::new(x, y)
+                            })
+                            .collect()
+                    };
+                    let (own, foreign) = (lines(true), lines(false));
+                    let (own_vertices, foreign_vertices) = (points(true), points(false));
+                    let found = hulls::face_point(
+                        &hulls::FaceWalls {
+                            own: &own,
+                            foreign: &foreign,
+                            own_vertices: &own_vertices,
+                            foreign_vertices: &foreign_vertices,
+                        },
+                        &label_boxes,
+                        NODE_RADIUS,
+                        line_half_width,
+                        glyph_radius,
+                    );
+                    found.map(hulls::FacePlacement::point).unwrap_or_else(|| {
+                        hulls::glyph_point(
+                            path,
+                            &obstacle_lines,
+                            &all_vertices,
+                            &label_boxes,
+                            NODE_RADIUS,
+                            glyph_radius,
+                            centroid,
+                        )
+                    })
+                };
+                counterterms.push(Element::Counterterm {
+                    center,
+                    paint: region.paint.clone(),
+                    details: region.details.clone(),
+                });
+            }
+        }
         layers.extend(counterterms);
         let overlaps = labels::overlaps(&placements, &chosen, &searched.lines);
         Ok(Self {
             recolour_stamp: scene.highlights.recolour_stamp,
+            ink_scale,
             layers,
             targets,
             placements,
@@ -2127,6 +2238,24 @@ mod tests {
     }
 
     #[test]
+    fn static_render_draws_the_same_ink_without_links() {
+        let scene = bubble(true);
+        let typeset = typeset(&scene);
+        let linked = scene.render(&typeset).unwrap();
+        let fixed = scene.render_static(&typeset).unwrap();
+        assert!(linked.contains("<a "));
+        assert!(!fixed.contains("<a ") && !fixed.contains("#linnet-"));
+        // Momentum arrows and their chevrons stay, grouped instead of linked.
+        assert_eq!(
+            fixed.matches("data-linnet-momentum").count(),
+            linked.matches("data-linnet-momentum").count()
+        );
+        let ink = |svg: &str| svg.matches("<path fill=\"none\" stroke=").count();
+        assert_eq!(ink(&fixed), ink(&linked));
+        assert!(roxmltree::Document::parse(&fixed).is_ok());
+    }
+
+    #[test]
     fn node_labels_share_one_click_target_with_their_node() {
         let mut scene = bubble(false);
         scene.nodes[0].label = Some(0);
@@ -2319,7 +2448,10 @@ mod tests {
             let mut run = ImpredRun::seeded(graph, &Value::Object(scene.layout.clone())).unwrap();
             let mut drawing = Drawing::new(scene, typeset, &Laid::new(&run).unwrap()).unwrap();
             let mut scores = vec![drawing.score()];
-            let (mut best, mut svg) = (drawing.score(), drawing.svg(typeset).unwrap());
+            let (mut best, mut svg) = (
+                drawing.score(),
+                drawing.svg(typeset, Inspection::Linked).unwrap(),
+            );
             for _ in 0..FEEDBACK_PASSES {
                 if drawing.overlaps.0 == 0 {
                     break;
@@ -2334,7 +2466,7 @@ mod tests {
                     })
                     .unwrap();
                 drawing = Drawing::new(scene, typeset, &Laid::new(&run).unwrap()).unwrap();
-                let rendered = drawing.svg(typeset).unwrap();
+                let rendered = drawing.svg(typeset, Inspection::Linked).unwrap();
                 scores.push(drawing.score());
                 if drawing.score() < best {
                     best = drawing.score();

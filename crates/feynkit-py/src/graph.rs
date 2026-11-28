@@ -11,7 +11,7 @@ use feynkit_graph::expressions::{GraphExpressions, PropagatorSymbols};
 use feynkit_graph::{
     DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramHalfEdge,
     DiagramThresholdCandidate, DiagramVertex, FeynmanDiagram, HighlightDetails, HighlightLayer,
-    HighlightStyle, LoopMomentumBasis, MomentumSignature, NumeratorInterface,
+    HighlightStyle, LoopMomentumBasis, MomentumSignature, NumeratorInterface, SceneOptions,
 };
 use feynkit_model::Model;
 use feynkit_tensor::FeynmanDiagramTensorExt;
@@ -2585,7 +2585,11 @@ impl PyFeynmanDiagram {
         Py::new(py, (PySubgraph {}, base))
     }
 
-    fn subgraph_view(&self, py: Python<'_>, hedges: SuBitGraph) -> PyResult<Py<PySubgraph>> {
+    pub(crate) fn subgraph_view(
+        &self,
+        py: Python<'_>,
+        hedges: SuBitGraph,
+    ) -> PyResult<Py<PySubgraph>> {
         self.view(
             py,
             DiagramSelection {
@@ -5163,9 +5167,21 @@ impl PyFeynmanDiagram {
                 layer
             })
             .collect();
+        self.draw_layers(py, config, &options, lmb, &layers)
+    }
+
+    /// Draw resolved highlight layers with resolved physics options.
+    pub(crate) fn draw_layers(
+        &self,
+        py: Python<'_>,
+        config: Option<&PyRenderSettings>,
+        options: &SceneOptions,
+        lmb: Option<&PyLoopMomentumBasis>,
+        layers: &[HighlightLayer<'_>],
+    ) -> PyResult<PyDiagramView> {
         let scene = self
             .inner
-            .to_scene_with_highlights(&layers, lmb.map(|basis| &basis.inner), &options)
+            .to_scene_with_highlights(layers, lmb.map(|basis| &basis.inner), options)
             .map_err(error::diagram)?;
         scene.validate_hull_radii().map_err(PyValueError::new_err)?;
         let styles: Vec<_> = layers

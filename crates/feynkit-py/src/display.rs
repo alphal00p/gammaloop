@@ -2,6 +2,7 @@ use crate::error;
 use crate::graph::PyFeynmanDiagram;
 use feynkit_graph::{AMBER_HIGHLIGHT_PAINT, FeynmanDiagram, HighlightStyle, SceneOptions};
 use feynkit_model::{Model, ParticleId};
+use feynkit_uv::{FULL_FILL, ROOT_FILL};
 use linnet_render_py::PyErrExt;
 use linnet_render_py::PyRenderSettings;
 use pyo3::exceptions::PyValueError;
@@ -60,17 +61,34 @@ pub(crate) fn escape_html(value: &str) -> String {
 /// the 45% lightened sink strokes from the shared physics style. Keep SVG
 /// paint attributes as light-mode fallbacks for viewers without CSS support.
 pub(crate) fn themed_svg(svg: String, highlights: &[HighlightStyle]) -> String {
+    theme_svg(svg, &PALETTE, highlights, ThemeFormat::FeynKit)
+}
+
+const PALETTE: [ThemePaint<'static>; 6] = [
+    ThemePaint::new("ink", "#3d2645", "#f8effa"),
+    ThemePaint::new("accent", "#6f4d85", "#d8b9e3"),
+    ThemePaint::new("ink-sink", "#948899", "#fbf6fc"),
+    ThemePaint::new("accent-sink", "#b09dbc", "#ead9f0"),
+    ThemePaint::new("highlight", AMBER_HIGHLIGHT_PAINT, "#f0bb4f"),
+    ThemePaint::new("outside", "#77777773", "#aaaaaa73"),
+];
+
+/// Theme a UV stamp graph: the physics palette, the stamp highlight paints and
+/// the root and full-cover box fills of the operation graphs.
+pub(crate) fn themed_stamp_graph_svg(svg: String) -> String {
+    let mut palette = PALETTE.to_vec();
+    palette.extend([
+        ThemePaint::new("uv-root", ROOT_FILL, "#4d4120"),
+        ThemePaint::new("uv-full", FULL_FILL, "#1d3650"),
+    ]);
     theme_svg(
         svg,
+        &palette,
         &[
-            ThemePaint::new("ink", "#3d2645", "#f8effa"),
-            ThemePaint::new("accent", "#6f4d85", "#d8b9e3"),
-            ThemePaint::new("ink-sink", "#948899", "#fbf6fc"),
-            ThemePaint::new("accent-sink", "#b09dbc", "#ead9f0"),
-            ThemePaint::new("highlight", AMBER_HIGHLIGHT_PAINT, "#f0bb4f"),
-            ThemePaint::new("outside", "#77777773", "#aaaaaa73"),
+            HighlightStyle::ActedOn,
+            HighlightStyle::Middle,
+            HighlightStyle::Treated,
         ],
-        highlights,
         ThemeFormat::FeynKit,
     )
 }
