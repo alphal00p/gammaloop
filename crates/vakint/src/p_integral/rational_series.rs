@@ -552,6 +552,55 @@ fn expansion_bound(view: AtomView, depth: usize) -> usize {
     }
 }
 
+/// A denominator base that is identically zero once function semantics are
+/// restored (`sin(𝜋)`, `sin(x)^2+cos(x)^2-1`). A base without functions or
+/// symbols that carry semantics (pure `Q[ε]`, plain spectator symbols) needs
+/// no such proof.
+fn semantic_zero(base: AtomView, epsilon: Symbol) -> bool {
+    let mut semantic_coefficients = false;
+    base.visitor(&mut |part| {
+        semantic_coefficients |= match part {
+            AtomView::Fun(_) => true,
+            AtomView::Var(variable) if variable.get_symbol() != epsilon => {
+                let symbol = variable.get_symbol();
+                symbol.get_normalization_function().is_some()
+                    || symbol.get_evaluation_info().is_some()
+                    || symbol.get_series_function().is_some()
+                    || symbol.get_derivative_function().is_some()
+            }
+            _ => false,
+        };
+        !semantic_coefficients
+    });
+    semantic_coefficients && base.check_zero().is_true()
+}
+
+/// Whether some denominator of `expression`, as it is written, is zero under
+/// function semantics. One linear walk without a visit cap (the split exists
+/// for inputs too large for the capped walk of a single part); function
+/// arguments are not denominators of the expression.
+fn has_semantic_zero_denominator(expression: &Atom, epsilon: Symbol) -> bool {
+    let mut denominators = std::collections::HashSet::new();
+    let mut zero = false;
+    expression.visitor(&mut |part| {
+        if zero {
+            return false;
+        }
+        match part {
+            AtomView::Var(_) | AtomView::Fun(_) => false,
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                zero = crate::get_integer_from_atom(exponent).is_some_and(|power| power < 0)
+                    && denominators.insert(base.to_owned())
+                    && semantic_zero(base, epsilon);
+                !zero
+            }
+            _ => true,
+        }
+    });
+    zero
+}
+
 impl RationalSeries {
     #[cfg(test)]
     pub(super) fn validate_spectators(expression: &Atom, epsilon: Symbol) -> Option<()> {
@@ -592,6 +641,13 @@ impl RationalSeries {
     /// monomials may still be related, `ζ(2)³` and `ζ(6)`), so a caller that
     /// expands its other factors that much deeper stays exact.
     fn grouped(expression: &Atom, epsilon: Symbol) -> Option<Self> {
+        // The expansion below multiplies numerators into denominators and can
+        // cancel one: an input the single path refused because a denominator
+        // is zero under function semantics (0/0) would come back as the
+        // series of the cancelled form. Refuse it on the input as written.
+        if has_semantic_zero_denominator(expression, epsilon) {
+            return None;
+        }
         // an overall numeric (complex) phase stays a factor of every group
         let factors = match expression.as_view() {
             AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
@@ -764,32 +820,15 @@ impl RationalPart {
                 }
                 AtomView::Pow(power) => {
                     let (base, exponent) = power.get_base_exp();
+                    // A formally common factor may be identically zero
+                    // after restoring function semantics. Reject it before
+                    // polynomial GCD cancellation can hide the division.
                     if crate::get_integer_from_atom(exponent).is_some_and(|power| power < 0)
                         && denominators.insert(base.to_owned())
+                        && semantic_zero(base, epsilon)
                     {
-                        let mut semantic_coefficients = false;
-                        base.visitor(&mut |part| {
-                            semantic_coefficients |= match part {
-                                AtomView::Fun(_) => true,
-                                AtomView::Var(variable) if variable.get_symbol() != epsilon => {
-                                    let symbol = variable.get_symbol();
-                                    symbol.get_normalization_function().is_some()
-                                        || symbol.get_evaluation_info().is_some()
-                                        || symbol.get_series_function().is_some()
-                                        || symbol.get_derivative_function().is_some()
-                                }
-                                _ => false,
-                            };
-                            !semantic_coefficients
-                        });
-                        // A formally common factor may be identically zero
-                        // after restoring function semantics. Reject it before
-                        // polynomial GCD cancellation can hide the division.
-                        // Pure Q[epsilon] denominators do not need this proof.
-                        if semantic_coefficients && base.check_zero().is_true() {
-                            valid = false;
-                            return false;
-                        }
+                        valid = false;
+                        return false;
                     }
                 }
                 _ => {}

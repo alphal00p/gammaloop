@@ -357,6 +357,33 @@ fn semantic_zero_denominators_are_checked_before_formal_factor_cancellation() {
     assert!(RationalSeries::new(&input, epsilon).is_none());
 }
 
+/// The split multiplies its input out, which cancels a denominator that also
+/// divides every numerator term. A 0/0 input (the single path refuses its
+/// zero denominator) must stay refused there, not come back as the series of
+/// the cancelled form; the same shape with a nonzero factor is still split.
+#[test]
+fn a_semantic_zero_denominator_is_refused_before_the_split_expands_it_away() {
+    crate::Vakint::initialize_vakint_symbols();
+    let epsilon = vk_symbol!("ε");
+    let quotient = |factor: &str| {
+        vk_parse!(&format!("({factor}*a+{factor}*b*ε)/({factor})")).unwrap()
+    };
+    for zero in ["sin(𝜋)", "(sin(x)^2+cos(x)^2-1)"] {
+        let factor = vk_parse!(zero).unwrap();
+        assert!(!factor.is_zero() && factor.check_zero().is_true(), "{zero}");
+        let input = quotient(zero);
+        assert!(RationalPart::new(&input, epsilon).is_none(), "{zero}");
+        assert!(RationalSeries::new(&input, epsilon).is_none(), "{zero}");
+    }
+    let input = quotient("sin(x)");
+    let actual = RationalSeries::new(&input, epsilon)
+        .expect("a nonzero common factor is admitted")
+        .series(2)
+        .unwrap()
+        .to_atom(epsilon);
+    assert!((actual - vk_parse!("a+b*ε").unwrap()).check_zero().is_true());
+}
+
 #[test]
 fn nonzero_analytic_denominator_factors_may_still_cancel() {
     crate::Vakint::initialize_vakint_symbols();
