@@ -158,6 +158,8 @@ pub(crate) fn literal_zero_if_vanishing(counterterm: Atom) -> Atom {
 
 mod counterterm_cache;
 mod counterterm_identity;
+pub mod delta_key;
+pub mod delta_store;
 pub mod hedge_poset;
 mod marker;
 mod orchestrator;
