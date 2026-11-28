@@ -5,7 +5,8 @@ Every rank, kernel, invariance or zero test of the package is decided exactly. N
 ``GF(p)`` in which the required square roots exist; the map ``Q(i, sqrt(n1), ...) -> GF(p)`` is the ring
 homomorphism fixed by the choice of roots made by :meth:`PrimeField.sqrt` (the smaller representative). Rational
 results are recovered by rational reconstruction and confirmed on a second, independent prime by the caller when
-needed.
+needed. Elimination and reconstruction are implemented once, in :mod:`hepkit_renorm.linalg`; the methods of
+:class:`PrimeField` with these names delegate to it (imported lazily, since ``linalg`` builds on this module).
 
 Elements of ``GF(p)`` are plain Python ``int`` in ``[0, p)``; arrays of elements are ``numpy`` arrays of dtype
 ``object`` holding Python ints, so no overflow can occur.
@@ -16,7 +17,6 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from fractions import Fraction
-from math import isqrt
 
 import numpy as np
 
@@ -125,22 +125,15 @@ class PrimeField:
         return self.sqrt(-1)
 
     def reconstruct(self, x: int) -> Fraction:
-        """Rational reconstruction: the unique ``n/d`` with ``|n|, d <= sqrt(p/2)`` congruent to ``x``.
+        """Rational reconstruction: the unique ``n/d`` with ``|n|, d <= sqrt(p/2)`` congruent to ``x``
+        (:func:`hepkit_renorm.linalg.rational_reconstruction`).
 
-        Raises ``ValueError`` if no such fraction exists (then ``x`` is not the image of a small rational).
+        Raises ``ValueError`` (:class:`~hepkit_renorm.linalg.ReconstructionError`) if no such fraction exists (then
+        ``x`` is not the image of a small rational).
         """
-        p = self.p
-        bound = isqrt(p // 2)
-        r0, r1, s0, s1 = p, x % p, 0, 1
-        while r1 > bound:
-            q = r0 // r1
-            r0, r1, s0, s1 = r1, r0 - q * r1, s1, s0 - q * s1
-        if s1 == 0 or abs(s1) > bound:
-            raise ValueError(f"{x} has no rational reconstruction modulo {p}")
-        f = Fraction(r1, s1)
-        if self(f) != x % p:
-            raise ValueError(f"{x} has no rational reconstruction modulo {p}")
-        return f
+        from .linalg import rational_reconstruction
+
+        return rational_reconstruction(x, self.p)
 
     # ------------------------------------------------------------------ arrays
     def array(self, values: Sequence | np.ndarray) -> np.ndarray:
@@ -171,51 +164,29 @@ class PrimeField:
         return int(a) % self.p == 0
 
     def row_reduce(self, m: np.ndarray) -> tuple[np.ndarray, list[int]]:
-        """Reduced row-echelon form and the list of pivot columns (Gauss-Jordan over ``GF(p)``)."""
-        p = self.p
-        a = [[int(v) % p for v in row] for row in np.asarray(m, dtype=object)]
-        nrows = len(a)
-        ncols = len(a[0]) if nrows else 0
-        pivots: list[int] = []
-        r = 0
-        for c in range(ncols):
-            piv = next((i for i in range(r, nrows) if a[i][c]), None)
-            if piv is None:
-                continue
-            a[r], a[piv] = a[piv], a[r]
-            inv = pow(a[r][c], -1, p)
-            a[r] = [v * inv % p for v in a[r]]
-            for i in range(nrows):
-                if i != r and a[i][c]:
-                    fac = a[i][c]
-                    ri = a[i]
-                    rr = a[r]
-                    a[i] = [(x - fac * y) % p for x, y in zip(ri, rr)]
-            pivots.append(c)
-            r += 1
-            if r == nrows:
-                break
-        return np.array(a, dtype=object).reshape(nrows, ncols), pivots
+        """Reduced row-echelon form (zero rows kept, Python-int object array) and the pivot columns
+        (:func:`hepkit_renorm.linalg.row_echelon`)."""
+        from .linalg import row_echelon
+
+        m = np.asarray(m, dtype=object)
+        rref, pivots = row_echelon(m, self)
+        out = self.zeros(m.shape)
+        if pivots:
+            out[: len(pivots)] = np.asarray(rref, dtype=object)
+        return out, pivots
 
     def rank(self, m: np.ndarray) -> int:
-        return len(self.row_reduce(m)[1])
+        """Rank (:func:`hepkit_renorm.linalg.rank`)."""
+        from .linalg import rank
+
+        return rank(np.asarray(m, dtype=object), self)
 
     def nullspace(self, m: np.ndarray) -> list[np.ndarray]:
-        """Basis of ``{v : m v = 0}``; vector ``k`` has a ``1`` at the ``k``-th free column (deterministic)."""
-        m = np.asarray(m, dtype=object)
-        ncols = m.shape[1]
-        if m.shape[0] == 0:
-            return [self.array([1 if j == k else 0 for j in range(ncols)]) for k in range(ncols)]
-        rref, pivots = self.row_reduce(m)
-        free = [c for c in range(ncols) if c not in pivots]
-        basis = []
-        for fc in free:
-            v = [0] * ncols
-            v[fc] = 1
-            for row, pc in enumerate(pivots):
-                v[pc] = (-int(rref[row][fc])) % self.p
-            basis.append(np.array(v, dtype=object))
-        return basis
+        """Basis of ``{v : m v = 0}`` as a list of Python-int object vectors; vector ``k`` has a ``1`` at the
+        ``k``-th free column (:func:`hepkit_renorm.linalg.nullspace`, deterministic)."""
+        from .linalg import nullspace
+
+        return [np.array([int(x) for x in row], dtype=object) for row in nullspace(np.asarray(m, dtype=object), self)]
 
 
 def default_field() -> PrimeField:

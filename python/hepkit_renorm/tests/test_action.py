@@ -6,6 +6,7 @@ from symbolica import Expression, S
 
 from hepkit_renorm import Density, LocalFunctional, Occurrence, classical_sectors, standard_legs
 from hepkit_renorm import tensors as tn
+from hepkit_renorm.fingerprint import is_zero
 
 I = tn.I
 _w = S("w_")
@@ -182,7 +183,7 @@ def test_hermiticity(sm, s0_classical, sectors):
         assert LocalFunctional.integrate(part - part.conjugate()).vanishes(simp), name
     assert sectors["yukawa"].conjugate() == sectors["yukawa"]  # h.c. terms generated: exactly hermitian
     anti = LocalFunctional.integrate(sectors["fermion"].scale(I))
-    assert not LocalFunctional.integrate(anti - anti.conjugate()).vanishes(simp)
+    assert not is_zero(sm, LocalFunctional.integrate(anti - anti.conjugate()))  # certified non-zero
 
 
 def test_rigid_invariance(sm, s0_classical, field):

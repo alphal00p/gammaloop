@@ -15,8 +15,14 @@ import pytest
 DATA = Path(__file__).parent / "data"
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption("--runslow", action="store_true", default=False,
+                     help="also run the tests marked slow (long end-to-end gates)")
+
+
 def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "requires_licence: needs SYMBOLICA_LICENSE in the environment")
+    config.addinivalue_line("markers", "slow: long end-to-end test, skipped unless --runslow is given")
 
 
 def pytest_report_header(config: pytest.Config) -> str:
@@ -24,6 +30,11 @@ def pytest_report_header(config: pytest.Config) -> str:
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    if not config.getoption("--runslow"):
+        skip_slow = pytest.mark.skip(reason="slow test: run with --runslow")
+        for item in items:
+            if "slow" in item.keywords:
+                item.add_marker(skip_slow)
     if os.environ.get("SYMBOLICA_LICENSE"):
         return
     skip = pytest.mark.skip(reason="SYMBOLICA_LICENSE is not set in the environment")

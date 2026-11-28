@@ -1,0 +1,2100 @@
+{
+ "origin": {
+  "SCRATCHPAD/model/classes.py": "697433913d6b1180b84cb53183b3d7afe0b42b6a1429489b461925052ffc19bf",
+  "SCRATCHPAD/model/enumeration.json": "f0eef5821a31a30026b4e6b48d7e61908d807fb9d92b5e45ba5dde7e4f73b3ac",
+  "report/sections/04a_classes_intro.typ": "e67ab700a4077b3d6adc5e30a8cb8e1dc63e012f5f65c937c51f1140e5fb3b97"
+ },
+ "classes": {
+  "g0_VV": {
+   "ghost_number": 0,
+   "patterns": [
+    [
+     "V",
+     "V"
+    ]
+   ],
+   "dg": [
+    2
+   ],
+   "diagrams": 20,
+   "assignments": [
+    [
+     "G",
+     "G"
+    ],
+    [
+     "W",
+     "W"
+    ],
+    [
+     "B",
+     "B"
+    ]
+   ],
+   "component_tuples": {
+    "G G": 1,
+    "W W": 2,
+    "B B": 1
+   }
+  },
+  "g0_VVV": {
+   "ghost_number": 0,
+   "patterns": [
+    [
+     "V",
+     "V",
+     "V"
+    ]
+   ],
+   "dg": [
+    1
+   ],
+   "diagrams": 54,
+   "assignments": [
+    [
+     "G",
+     "G",
+     "G"
+    ],
+    [
+     "G",
+     "G",
+     "B"
+    ],
+    [
+     "W",
+     "W",
+     "W"
+    ],
+    [
+     "W",
+     "W",
+     "B"
+    ],
+    [
+     "B",
+     "B",
+     "B"
+    ]
+   ],
+   "component_tuples": {
+    "G G G": 1,
+    "G G B": 1,
+    "W W W": 5,
+    "W W B": 2,
+    "B B B": 1
+   }
+  },
+  "g0_VVVV": {
+   "ghost_number": 0,
+   "patterns": [
+    [
+     "V",
+     "V",
+     "V",
+     "V"
+    ]
+   ],
+   "dg": [
+    0
+   ],
+   "diagrams": 237,
+   "assignments": [
+    [
+     "G",
+     "G",
+     "G",
+     "G"
+    ],
+    [
+     "G",
+     "G",
+     "G",
+     "B"
+    ],
+    [
+     "G",
+     "G",
+     "W",
+     "W"
+    ],
+    [
+     "G",
+     "G",
+     "B",
+     "B"
+    ],
+    [
+     "W",
+     "W",
+     "W",
+     "W"
+    ],
+    [
+     "W",
+     "W",
+     "W",
+     "B"
+    ],
+    [
+     "W",
+     "W",
+     "B",
+     "B"
+    ],
+    [
+     "B",
+     "B",
+     "B",
+     "B"
+    ]
+   ],
+   "component_tuples": {
+    "G G G G": 1,
+    "G G G B": 1,
+    "G G W W": 2,
+    "G G B B": 1,
+    "W W W W": 14,
+    "W W W B": 5,
+    "W W B B": 2,
+    "B B B B": 1
+   }
+  },
+  "g0_FF": {
+   "ghost_number": 0,
+   "patterns": [
+    [
+     "Fbar",
+     "F"
+    ]
+   ],
+   "dg": [
+    1
+   ],
+   "diagrams": 16,
+   "assignments": [
+    [
+     "Qbar",
+     "Q"
+    ],
+    [
+     "Ubar",
+     "U"
+    ],
+    [
+     "Dbar",
+     "D"
+    ],
+    [
+     "Lbar",
+     "L"
+    ],
+    [
+     "Ebar",
+     "E"
+    ]
+   ],
+   "component_tuples": {
+    "Qbar Q": 4,
+    "Ubar U": 1,
+    "Dbar D": 1,
+    "Lbar L": 4,
+    "Ebar E": 1
+   }
+  },
+  "g0_FFV": {
+   "ghost_number": 0,
+   "patterns": [
+    [
+     "Fbar",
+     "F",
+     "V"
+    ]
+   ],
+   "dg": [
+    0
+   ],
+   "diagrams": 46,
+   "assignments": [
+    [
+     "Qbar",
+     "Q",
+     "G"
+    ],
+    [
+     "Qbar",
+     "Q",
+     "W"
+    ],
+    [
+     "Qbar",
+     "Q",
+     "B"
+    ],
+    [
+     "Ubar",
+     "U",
+     "G"
+    ],
+    [
+     "Ubar",
+     "U",
+     "B"
+    ],
+    [
+     "Dbar",
+     "D",
+     "G"
+    ],
+    [
+     "Dbar",
+     "D",
+     "B"
+    ],
+    [
+     "Lbar",
+     "L",
+     "W"
+    ],
+    [
+     "Lbar",
+     "L",
+     "B"
+    ],
+    [
+     "Ebar",
+     "E",
+     "B"
+    ]
+   ],
+   "component_tuples": {
+    "Qbar Q G": 4,
+    "Qbar Q W": 4,
+    "Qbar Q B": 4,
+    "Ubar U G": 1,
+    "Ubar U B": 1,
+    "Dbar D G": 1,
+    "Dbar D B": 1,
+    "Lbar L W": 4,
+    "Lbar L B": 4,
+    "Ebar E B": 1
+   }
+  },
+  "g0_SS": {
+   "ghost_number": 0,
+   "patterns": [
+    [
+     "Hdag",
+     "H"
+    ]
+   ],
+   "dg": [
+    2
+   ],
+   "diagrams": 8,
+   "assignments": [
+    [
+     "Hdag",
+     "H"
+    ]
+   ],
+   "component_tuples": {
+    "Hdag H": 4
+   }
+  },
+  "g0_SSV_SSVV": {
+   "ghost_number": 0,
+   "patterns": [
+    [
+     "Hdag",
+     "H",
+     "V"
+    ],
+    [
+     "Hdag",
+     "H",
+     "V",
+     "V"
+    ]
+   ],
+   "dg": [
+    1,
+    0
+   ],
+   "diagrams": 146,
+   "assignments": [
+    [
+     "Hdag",
+     "H",
+     "W"
+    ],
+    [
+     "Hdag",
+     "H",
+     "B"
+    ],
+    [
+     "Hdag",
+     "H",
+     "G",
+     "G"
+    ],
+    [
+     "Hdag",
+     "H",
+     "W",
+     "W"
+    ],
+    [
+     "Hdag",
+     "H",
+     "W",
+     "B"
+    ],
+    [
+     "Hdag",
+     "H",
+     "B",
+     "B"
+    ]
+   ],
+   "component_tuples": {
+    "Hdag H W": 4,
+    "Hdag H B": 4,
+    "Hdag H G G": 4,
+    "Hdag H W W": 8,
+    "Hdag H W B": 4,
+    "Hdag H B B": 4
+   }
+  },
+  "g0_SSSS": {
+   "ghost_number": 0,
+   "patterns": [
+    [
+     "Hdag",
+     "H",
+     "Hdag",
+     "H"
+    ]
+   ],
+   "dg": [
+    0
+   ],
+   "diagrams": 63,
+   "assignments": [
+    [
+     "Hdag",
+     "H",
+     "Hdag",
+     "H"
+    ]
+   ],
+   "component_tuples": {
+    "Hdag H Hdag H": 16
+   }
+  },
+  "g0_FFS": {
+   "ghost_number": 0,
+   "patterns": [
+    [
+     "Fbar",
+     "F",
+     "S"
+    ]
+   ],
+   "dg": [
+    0
+   ],
+   "diagrams": 32,
+   "assignments": [
+    [
+     "Qbar",
+     "U",
+     "Hdag"
+    ],
+    [
+     "Qbar",
+     "D",
+     "H"
+    ],
+    [
+     "Ubar",
+     "Q",
+     "H"
+    ],
+    [
+     "Dbar",
+     "Q",
+     "Hdag"
+    ],
+    [
+     "Lbar",
+     "E",
+     "H"
+    ],
+    [
+     "Ebar",
+     "L",
+     "Hdag"
+    ]
+   ],
+   "component_tuples": {
+    "Qbar U Hdag": 4,
+    "Qbar D H": 4,
+    "Ubar Q H": 4,
+    "Dbar Q Hdag": 4,
+    "Lbar E H": 4,
+    "Ebar L Hdag": 4
+   }
+  },
+  "g0_ghost_sources": {
+   "ghost_number": 0,
+   "patterns": [
+    [
+     "rho",
+     "C"
+    ],
+    [
+     "rho",
+     "C",
+     "V"
+    ],
+    [
+     "zeta",
+     "C",
+     "C"
+    ],
+    [
+     "Rbar",
+     "C",
+     "F"
+    ],
+    [
+     "Fbar",
+     "C",
+     "R"
+    ],
+    [
+     "sigmadag",
+     "C",
+     "H"
+    ],
+    [
+     "Hdag",
+     "C",
+     "sigma"
+    ]
+   ],
+   "dg": null,
+   "diagrams": 20,
+   "assignments": [
+    [
+     "rhoG",
+     "cG"
+    ],
+    [
+     "rhoW",
+     "cW"
+    ],
+    [
+     "rhoB",
+     "cB"
+    ],
+    [
+     "rhoG",
+     "cG",
+     "G"
+    ],
+    [
+     "rhoG",
+     "cG",
+     "B"
+    ],
+    [
+     "rhoG",
+     "cB",
+     "G"
+    ],
+    [
+     "rhoW",
+     "cW",
+     "W"
+    ],
+    [
+     "rhoW",
+     "cW",
+     "B"
+    ],
+    [
+     "rhoW",
+     "cB",
+     "W"
+    ],
+    [
+     "rhoB",
+     "cG",
+     "G"
+    ],
+    [
+     "rhoB",
+     "cW",
+     "W"
+    ],
+    [
+     "rhoB",
+     "cB",
+     "B"
+    ],
+    [
+     "zetaG",
+     "cG",
+     "cG"
+    ],
+    [
+     "zetaG",
+     "cG",
+     "cB"
+    ],
+    [
+     "zetaW",
+     "cW",
+     "cW"
+    ],
+    [
+     "zetaW",
+     "cW",
+     "cB"
+    ],
+    [
+     "RQbar",
+     "cG",
+     "Q"
+    ],
+    [
+     "RQbar",
+     "cW",
+     "Q"
+    ],
+    [
+     "RQbar",
+     "cB",
+     "Q"
+    ],
+    [
+     "RUbar",
+     "cG",
+     "U"
+    ],
+    [
+     "RUbar",
+     "cB",
+     "U"
+    ],
+    [
+     "RDbar",
+     "cG",
+     "D"
+    ],
+    [
+     "RDbar",
+     "cB",
+     "D"
+    ],
+    [
+     "RLbar",
+     "cW",
+     "L"
+    ],
+    [
+     "RLbar",
+     "cB",
+     "L"
+    ],
+    [
+     "REbar",
+     "cB",
+     "E"
+    ],
+    [
+     "Qbar",
+     "cG",
+     "RQ"
+    ],
+    [
+     "Qbar",
+     "cW",
+     "RQ"
+    ],
+    [
+     "Qbar",
+     "cB",
+     "RQ"
+    ],
+    [
+     "Ubar",
+     "cG",
+     "RU"
+    ],
+    [
+     "Ubar",
+     "cB",
+     "RU"
+    ],
+    [
+     "Dbar",
+     "cG",
+     "RD"
+    ],
+    [
+     "Dbar",
+     "cB",
+     "RD"
+    ],
+    [
+     "Lbar",
+     "cW",
+     "RL"
+    ],
+    [
+     "Lbar",
+     "cB",
+     "RL"
+    ],
+    [
+     "Ebar",
+     "cB",
+     "RE"
+    ],
+    [
+     "sigmadag",
+     "cW",
+     "H"
+    ],
+    [
+     "sigmadag",
+     "cB",
+     "H"
+    ],
+    [
+     "Hdag",
+     "cW",
+     "sigma"
+    ],
+    [
+     "Hdag",
+     "cB",
+     "sigma"
+    ]
+   ],
+   "component_tuples": {
+    "rhoG cG": 1,
+    "rhoW cW": 2,
+    "rhoB cB": 1,
+    "rhoG cG G": 1,
+    "rhoG cG B": 1,
+    "rhoG cB G": 1,
+    "rhoW cW W": 5,
+    "rhoW cW B": 2,
+    "rhoW cB W": 2,
+    "rhoB cG G": 1,
+    "rhoB cW W": 2,
+    "rhoB cB B": 1,
+    "zetaG cG cG": 1,
+    "zetaG cG cB": 1,
+    "zetaW cW cW": 5,
+    "zetaW cW cB": 2,
+    "RQbar cG Q": 4,
+    "RQbar cW Q": 4,
+    "RQbar cB Q": 4,
+    "RUbar cG U": 1,
+    "RUbar cB U": 1,
+    "RDbar cG D": 1,
+    "RDbar cB D": 1,
+    "RLbar cW L": 4,
+    "RLbar cB L": 4,
+    "REbar cB E": 1,
+    "Qbar cG RQ": 4,
+    "Qbar cW RQ": 4,
+    "Qbar cB RQ": 4,
+    "Ubar cG RU": 1,
+    "Ubar cB RU": 1,
+    "Dbar cG RD": 1,
+    "Dbar cB RD": 1,
+    "Lbar cW RL": 4,
+    "Lbar cB RL": 4,
+    "Ebar cB RE": 1,
+    "sigmadag cW H": 4,
+    "sigmadag cB H": 4,
+    "Hdag cW sigma": 4,
+    "Hdag cB sigma": 4
+   }
+  },
+  "g1_cV": {
+   "ghost_number": 1,
+   "patterns": [
+    [
+     "C",
+     "V"
+    ]
+   ],
+   "dg": [
+    3
+   ],
+   "diagrams": 10,
+   "assignments": [
+    [
+     "cG",
+     "G"
+    ],
+    [
+     "cW",
+     "W"
+    ],
+    [
+     "cB",
+     "B"
+    ]
+   ],
+   "component_tuples": {
+    "cG G": 1,
+    "cW W": 2,
+    "cB B": 1
+   }
+  },
+  "g1_cVV": {
+   "ghost_number": 1,
+   "patterns": [
+    [
+     "C",
+     "V",
+     "V"
+    ]
+   ],
+   "dg": [
+    2
+   ],
+   "diagrams": 40,
+   "assignments": [
+    [
+     "cG",
+     "G",
+     "G"
+    ],
+    [
+     "cG",
+     "G",
+     "B"
+    ],
+    [
+     "cW",
+     "W",
+     "W"
+    ],
+    [
+     "cW",
+     "W",
+     "B"
+    ],
+    [
+     "cB",
+     "G",
+     "G"
+    ],
+    [
+     "cB",
+     "W",
+     "W"
+    ],
+    [
+     "cB",
+     "B",
+     "B"
+    ]
+   ],
+   "component_tuples": {
+    "cG G G": 1,
+    "cG G B": 1,
+    "cW W W": 5,
+    "cW W B": 2,
+    "cB G G": 1,
+    "cB W W": 2,
+    "cB B B": 1
+   }
+  },
+  "g1_cVVV_cVVVV": {
+   "ghost_number": 1,
+   "patterns": [
+    [
+     "C",
+     "V",
+     "V",
+     "V"
+    ],
+    [
+     "C",
+     "V",
+     "V",
+     "V",
+     "V"
+    ]
+   ],
+   "dg": [
+    1,
+    0
+   ],
+   "diagrams": 1320,
+   "assignments": [
+    [
+     "cG",
+     "G",
+     "G",
+     "G"
+    ],
+    [
+     "cG",
+     "G",
+     "G",
+     "B"
+    ],
+    [
+     "cG",
+     "G",
+     "W",
+     "W"
+    ],
+    [
+     "cG",
+     "G",
+     "B",
+     "B"
+    ],
+    [
+     "cW",
+     "G",
+     "G",
+     "W"
+    ],
+    [
+     "cW",
+     "W",
+     "W",
+     "W"
+    ],
+    [
+     "cW",
+     "W",
+     "W",
+     "B"
+    ],
+    [
+     "cW",
+     "W",
+     "B",
+     "B"
+    ],
+    [
+     "cB",
+     "G",
+     "G",
+     "G"
+    ],
+    [
+     "cB",
+     "G",
+     "G",
+     "B"
+    ],
+    [
+     "cB",
+     "W",
+     "W",
+     "W"
+    ],
+    [
+     "cB",
+     "W",
+     "W",
+     "B"
+    ],
+    [
+     "cB",
+     "B",
+     "B",
+     "B"
+    ],
+    [
+     "cG",
+     "G",
+     "G",
+     "G",
+     "G"
+    ],
+    [
+     "cG",
+     "G",
+     "G",
+     "G",
+     "B"
+    ],
+    [
+     "cG",
+     "G",
+     "G",
+     "W",
+     "W"
+    ],
+    [
+     "cG",
+     "G",
+     "G",
+     "B",
+     "B"
+    ],
+    [
+     "cG",
+     "G",
+     "W",
+     "W",
+     "W"
+    ],
+    [
+     "cG",
+     "G",
+     "W",
+     "W",
+     "B"
+    ],
+    [
+     "cG",
+     "G",
+     "B",
+     "B",
+     "B"
+    ],
+    [
+     "cW",
+     "G",
+     "G",
+     "G",
+     "W"
+    ],
+    [
+     "cW",
+     "G",
+     "G",
+     "W",
+     "W"
+    ],
+    [
+     "cW",
+     "G",
+     "G",
+     "W",
+     "B"
+    ],
+    [
+     "cW",
+     "W",
+     "W",
+     "W",
+     "W"
+    ],
+    [
+     "cW",
+     "W",
+     "W",
+     "W",
+     "B"
+    ],
+    [
+     "cW",
+     "W",
+     "W",
+     "B",
+     "B"
+    ],
+    [
+     "cW",
+     "W",
+     "B",
+     "B",
+     "B"
+    ],
+    [
+     "cB",
+     "G",
+     "G",
+     "G",
+     "G"
+    ],
+    [
+     "cB",
+     "G",
+     "G",
+     "G",
+     "B"
+    ],
+    [
+     "cB",
+     "G",
+     "G",
+     "W",
+     "W"
+    ],
+    [
+     "cB",
+     "G",
+     "G",
+     "B",
+     "B"
+    ],
+    [
+     "cB",
+     "W",
+     "W",
+     "W",
+     "W"
+    ],
+    [
+     "cB",
+     "W",
+     "W",
+     "W",
+     "B"
+    ],
+    [
+     "cB",
+     "W",
+     "W",
+     "B",
+     "B"
+    ],
+    [
+     "cB",
+     "B",
+     "B",
+     "B",
+     "B"
+    ]
+   ],
+   "component_tuples": {
+    "cG G G G": 1,
+    "cG G G B": 1,
+    "cG G W W": 2,
+    "cG G B B": 1,
+    "cW G G W": 2,
+    "cW W W W": 14,
+    "cW W W B": 5,
+    "cW W B B": 2,
+    "cB G G G": 1,
+    "cB G G B": 1,
+    "cB W W W": 5,
+    "cB W W B": 2,
+    "cB B B B": 1,
+    "cG G G G G": 1,
+    "cG G G G B": 1,
+    "cG G G W W": 2,
+    "cG G G B B": 1,
+    "cG G W W W": 5,
+    "cG G W W B": 2,
+    "cG G B B B": 1,
+    "cW G G G W": 2,
+    "cW G G W W": 5,
+    "cW G G W B": 2,
+    "cW W W W W": 41,
+    "cW W W W B": 14,
+    "cW W W B B": 5,
+    "cW W B B B": 2,
+    "cB G G G G": 1,
+    "cB G G G B": 1,
+    "cB G G W W": 2,
+    "cB G G B B": 1,
+    "cB W W W W": 14,
+    "cB W W W B": 5,
+    "cB W W B B": 2,
+    "cB B B B B": 1
+   }
+  },
+  "g1_cFF": {
+   "ghost_number": 1,
+   "patterns": [
+    [
+     "C",
+     "Fbar",
+     "F"
+    ]
+   ],
+   "dg": [
+    1
+   ],
+   "diagrams": 42,
+   "assignments": [
+    [
+     "cG",
+     "Qbar",
+     "Q"
+    ],
+    [
+     "cG",
+     "Ubar",
+     "U"
+    ],
+    [
+     "cG",
+     "Dbar",
+     "D"
+    ],
+    [
+     "cW",
+     "Qbar",
+     "Q"
+    ],
+    [
+     "cW",
+     "Lbar",
+     "L"
+    ],
+    [
+     "cB",
+     "Qbar",
+     "Q"
+    ],
+    [
+     "cB",
+     "Ubar",
+     "U"
+    ],
+    [
+     "cB",
+     "Dbar",
+     "D"
+    ],
+    [
+     "cB",
+     "Lbar",
+     "L"
+    ],
+    [
+     "cB",
+     "Ebar",
+     "E"
+    ]
+   ],
+   "component_tuples": {
+    "cG Qbar Q": 4,
+    "cG Ubar U": 1,
+    "cG Dbar D": 1,
+    "cW Qbar Q": 4,
+    "cW Lbar L": 4,
+    "cB Qbar Q": 4,
+    "cB Ubar U": 1,
+    "cB Dbar D": 1,
+    "cB Lbar L": 4,
+    "cB Ebar E": 1
+   }
+  },
+  "g1_cFFV": {
+   "ghost_number": 1,
+   "patterns": [
+    [
+     "C",
+     "Fbar",
+     "F",
+     "V"
+    ]
+   ],
+   "dg": [
+    0
+   ],
+   "diagrams": 220,
+   "assignments": [
+    [
+     "cG",
+     "Qbar",
+     "Q",
+     "G"
+    ],
+    [
+     "cG",
+     "Qbar",
+     "Q",
+     "W"
+    ],
+    [
+     "cG",
+     "Qbar",
+     "Q",
+     "B"
+    ],
+    [
+     "cG",
+     "Ubar",
+     "U",
+     "G"
+    ],
+    [
+     "cG",
+     "Ubar",
+     "U",
+     "B"
+    ],
+    [
+     "cG",
+     "Dbar",
+     "D",
+     "G"
+    ],
+    [
+     "cG",
+     "Dbar",
+     "D",
+     "B"
+    ],
+    [
+     "cG",
+     "Lbar",
+     "L",
+     "G"
+    ],
+    [
+     "cG",
+     "Ebar",
+     "E",
+     "G"
+    ],
+    [
+     "cW",
+     "Qbar",
+     "Q",
+     "G"
+    ],
+    [
+     "cW",
+     "Qbar",
+     "Q",
+     "W"
+    ],
+    [
+     "cW",
+     "Qbar",
+     "Q",
+     "B"
+    ],
+    [
+     "cW",
+     "Ubar",
+     "U",
+     "W"
+    ],
+    [
+     "cW",
+     "Dbar",
+     "D",
+     "W"
+    ],
+    [
+     "cW",
+     "Lbar",
+     "L",
+     "W"
+    ],
+    [
+     "cW",
+     "Lbar",
+     "L",
+     "B"
+    ],
+    [
+     "cW",
+     "Ebar",
+     "E",
+     "W"
+    ],
+    [
+     "cB",
+     "Qbar",
+     "Q",
+     "G"
+    ],
+    [
+     "cB",
+     "Qbar",
+     "Q",
+     "W"
+    ],
+    [
+     "cB",
+     "Qbar",
+     "Q",
+     "B"
+    ],
+    [
+     "cB",
+     "Ubar",
+     "U",
+     "G"
+    ],
+    [
+     "cB",
+     "Ubar",
+     "U",
+     "B"
+    ],
+    [
+     "cB",
+     "Dbar",
+     "D",
+     "G"
+    ],
+    [
+     "cB",
+     "Dbar",
+     "D",
+     "B"
+    ],
+    [
+     "cB",
+     "Lbar",
+     "L",
+     "W"
+    ],
+    [
+     "cB",
+     "Lbar",
+     "L",
+     "B"
+    ],
+    [
+     "cB",
+     "Ebar",
+     "E",
+     "B"
+    ]
+   ],
+   "component_tuples": {
+    "cG Qbar Q G": 4,
+    "cG Qbar Q W": 4,
+    "cG Qbar Q B": 4,
+    "cG Ubar U G": 1,
+    "cG Ubar U B": 1,
+    "cG Dbar D G": 1,
+    "cG Dbar D B": 1,
+    "cG Lbar L G": 4,
+    "cG Ebar E G": 1,
+    "cW Qbar Q G": 4,
+    "cW Qbar Q W": 8,
+    "cW Qbar Q B": 4,
+    "cW Ubar U W": 2,
+    "cW Dbar D W": 2,
+    "cW Lbar L W": 8,
+    "cW Lbar L B": 4,
+    "cW Ebar E W": 2,
+    "cB Qbar Q G": 4,
+    "cB Qbar Q W": 4,
+    "cB Qbar Q B": 4,
+    "cB Ubar U G": 1,
+    "cB Ubar U B": 1,
+    "cB Dbar D G": 1,
+    "cB Dbar D B": 1,
+    "cB Lbar L W": 4,
+    "cB Lbar L B": 4,
+    "cB Ebar E B": 1
+   }
+  },
+  "g1_cSS_cSSV": {
+   "ghost_number": 1,
+   "patterns": [
+    [
+     "C",
+     "Hdag",
+     "H"
+    ],
+    [
+     "C",
+     "Hdag",
+     "H",
+     "V"
+    ],
+    [
+     "C",
+     "Hdag",
+     "H",
+     "V",
+     "V"
+    ],
+    [
+     "C",
+     "Hdag",
+     "H",
+     "Hdag",
+     "H"
+    ]
+   ],
+   "dg": [
+    2,
+    1,
+    0,
+    0
+   ],
+   "diagrams": 525,
+   "assignments": [
+    [
+     "cW",
+     "Hdag",
+     "H"
+    ],
+    [
+     "cB",
+     "Hdag",
+     "H"
+    ],
+    [
+     "cG",
+     "Hdag",
+     "H",
+     "G"
+    ],
+    [
+     "cW",
+     "Hdag",
+     "H",
+     "W"
+    ],
+    [
+     "cW",
+     "Hdag",
+     "H",
+     "B"
+    ],
+    [
+     "cB",
+     "Hdag",
+     "H",
+     "W"
+    ],
+    [
+     "cB",
+     "Hdag",
+     "H",
+     "B"
+    ],
+    [
+     "cG",
+     "Hdag",
+     "H",
+     "G",
+     "G"
+    ],
+    [
+     "cG",
+     "Hdag",
+     "H",
+     "G",
+     "W"
+    ],
+    [
+     "cG",
+     "Hdag",
+     "H",
+     "G",
+     "B"
+    ],
+    [
+     "cW",
+     "Hdag",
+     "H",
+     "G",
+     "G"
+    ],
+    [
+     "cW",
+     "Hdag",
+     "H",
+     "W",
+     "W"
+    ],
+    [
+     "cW",
+     "Hdag",
+     "H",
+     "W",
+     "B"
+    ],
+    [
+     "cW",
+     "Hdag",
+     "H",
+     "B",
+     "B"
+    ],
+    [
+     "cB",
+     "Hdag",
+     "H",
+     "G",
+     "G"
+    ],
+    [
+     "cB",
+     "Hdag",
+     "H",
+     "W",
+     "W"
+    ],
+    [
+     "cB",
+     "Hdag",
+     "H",
+     "W",
+     "B"
+    ],
+    [
+     "cB",
+     "Hdag",
+     "H",
+     "B",
+     "B"
+    ],
+    [
+     "cW",
+     "Hdag",
+     "H",
+     "Hdag",
+     "H"
+    ],
+    [
+     "cB",
+     "Hdag",
+     "H",
+     "Hdag",
+     "H"
+    ]
+   ],
+   "component_tuples": {
+    "cW Hdag H": 4,
+    "cB Hdag H": 4,
+    "cG Hdag H G": 4,
+    "cW Hdag H W": 8,
+    "cW Hdag H B": 4,
+    "cB Hdag H W": 4,
+    "cB Hdag H B": 4,
+    "cG Hdag H G G": 4,
+    "cG Hdag H G W": 4,
+    "cG Hdag H G B": 4,
+    "cW Hdag H G G": 4,
+    "cW Hdag H W W": 20,
+    "cW Hdag H W B": 8,
+    "cW Hdag H B B": 4,
+    "cB Hdag H G G": 4,
+    "cB Hdag H W W": 8,
+    "cB Hdag H W B": 4,
+    "cB Hdag H B B": 4,
+    "cW Hdag H Hdag H": 16,
+    "cB Hdag H Hdag H": 16
+   }
+  },
+  "g1_cFFS": {
+   "ghost_number": 1,
+   "patterns": [
+    [
+     "C",
+     "Fbar",
+     "F",
+     "S"
+    ]
+   ],
+   "dg": [
+    0
+   ],
+   "diagrams": 122,
+   "assignments": [
+    [
+     "cG",
+     "Qbar",
+     "U",
+     "Hdag"
+    ],
+    [
+     "cG",
+     "Qbar",
+     "D",
+     "H"
+    ],
+    [
+     "cG",
+     "Ubar",
+     "Q",
+     "H"
+    ],
+    [
+     "cG",
+     "Dbar",
+     "Q",
+     "Hdag"
+    ],
+    [
+     "cW",
+     "Qbar",
+     "U",
+     "Hdag"
+    ],
+    [
+     "cW",
+     "Qbar",
+     "D",
+     "H"
+    ],
+    [
+     "cW",
+     "Ubar",
+     "Q",
+     "H"
+    ],
+    [
+     "cW",
+     "Dbar",
+     "Q",
+     "Hdag"
+    ],
+    [
+     "cW",
+     "Lbar",
+     "E",
+     "H"
+    ],
+    [
+     "cW",
+     "Ebar",
+     "L",
+     "Hdag"
+    ],
+    [
+     "cB",
+     "Qbar",
+     "U",
+     "Hdag"
+    ],
+    [
+     "cB",
+     "Qbar",
+     "D",
+     "H"
+    ],
+    [
+     "cB",
+     "Ubar",
+     "Q",
+     "H"
+    ],
+    [
+     "cB",
+     "Dbar",
+     "Q",
+     "Hdag"
+    ],
+    [
+     "cB",
+     "Lbar",
+     "E",
+     "H"
+    ],
+    [
+     "cB",
+     "Ebar",
+     "L",
+     "Hdag"
+    ]
+   ],
+   "component_tuples": {
+    "cG Qbar U Hdag": 4,
+    "cG Qbar D H": 4,
+    "cG Ubar Q H": 4,
+    "cG Dbar Q Hdag": 4,
+    "cW Qbar U Hdag": 4,
+    "cW Qbar D H": 4,
+    "cW Ubar Q H": 4,
+    "cW Dbar Q Hdag": 4,
+    "cW Lbar E H": 4,
+    "cW Ebar L Hdag": 4,
+    "cB Qbar U Hdag": 4,
+    "cB Qbar D H": 4,
+    "cB Ubar Q H": 4,
+    "cB Dbar Q Hdag": 4,
+    "cB Lbar E H": 4,
+    "cB Ebar L Hdag": 4
+   }
+  },
+  "g1_ccRF": {
+   "ghost_number": 1,
+   "patterns": [
+    [
+     "C",
+     "C",
+     "Rbar",
+     "F"
+    ],
+    [
+     "C",
+     "C",
+     "Fbar",
+     "R"
+    ],
+    [
+     "C",
+     "C",
+     "rho",
+     "V"
+    ],
+    [
+     "C",
+     "C",
+     "C",
+     "zeta"
+    ],
+    [
+     "C",
+     "C",
+     "sigmadag",
+     "H"
+    ],
+    [
+     "C",
+     "C",
+     "Hdag",
+     "sigma"
+    ]
+   ],
+   "dg": [
+    0
+   ],
+   "diagrams": 54,
+   "assignments": [
+    [
+     "cG",
+     "cG",
+     "RQbar",
+     "Q"
+    ],
+    [
+     "cG",
+     "cG",
+     "RUbar",
+     "U"
+    ],
+    [
+     "cG",
+     "cG",
+     "RDbar",
+     "D"
+    ],
+    [
+     "cG",
+     "cW",
+     "RQbar",
+     "Q"
+    ],
+    [
+     "cG",
+     "cB",
+     "RQbar",
+     "Q"
+    ],
+    [
+     "cG",
+     "cB",
+     "RUbar",
+     "U"
+    ],
+    [
+     "cG",
+     "cB",
+     "RDbar",
+     "D"
+    ],
+    [
+     "cW",
+     "cW",
+     "RQbar",
+     "Q"
+    ],
+    [
+     "cW",
+     "cW",
+     "RLbar",
+     "L"
+    ],
+    [
+     "cW",
+     "cB",
+     "RQbar",
+     "Q"
+    ],
+    [
+     "cW",
+     "cB",
+     "RLbar",
+     "L"
+    ],
+    [
+     "cG",
+     "cG",
+     "Qbar",
+     "RQ"
+    ],
+    [
+     "cG",
+     "cG",
+     "Ubar",
+     "RU"
+    ],
+    [
+     "cG",
+     "cG",
+     "Dbar",
+     "RD"
+    ],
+    [
+     "cG",
+     "cW",
+     "Qbar",
+     "RQ"
+    ],
+    [
+     "cG",
+     "cB",
+     "Qbar",
+     "RQ"
+    ],
+    [
+     "cG",
+     "cB",
+     "Ubar",
+     "RU"
+    ],
+    [
+     "cG",
+     "cB",
+     "Dbar",
+     "RD"
+    ],
+    [
+     "cW",
+     "cW",
+     "Qbar",
+     "RQ"
+    ],
+    [
+     "cW",
+     "cW",
+     "Lbar",
+     "RL"
+    ],
+    [
+     "cW",
+     "cB",
+     "Qbar",
+     "RQ"
+    ],
+    [
+     "cW",
+     "cB",
+     "Lbar",
+     "RL"
+    ],
+    [
+     "cG",
+     "cG",
+     "rhoG",
+     "G"
+    ],
+    [
+     "cG",
+     "cG",
+     "rhoG",
+     "B"
+    ],
+    [
+     "cG",
+     "cG",
+     "rhoB",
+     "G"
+    ],
+    [
+     "cG",
+     "cW",
+     "rhoG",
+     "W"
+    ],
+    [
+     "cG",
+     "cW",
+     "rhoW",
+     "G"
+    ],
+    [
+     "cG",
+     "cB",
+     "rhoG",
+     "G"
+    ],
+    [
+     "cG",
+     "cB",
+     "rhoG",
+     "B"
+    ],
+    [
+     "cG",
+     "cB",
+     "rhoB",
+     "G"
+    ],
+    [
+     "cW",
+     "cW",
+     "rhoW",
+     "W"
+    ],
+    [
+     "cW",
+     "cW",
+     "rhoW",
+     "B"
+    ],
+    [
+     "cW",
+     "cW",
+     "rhoB",
+     "W"
+    ],
+    [
+     "cW",
+     "cB",
+     "rhoW",
+     "W"
+    ],
+    [
+     "cW",
+     "cB",
+     "rhoW",
+     "B"
+    ],
+    [
+     "cW",
+     "cB",
+     "rhoB",
+     "W"
+    ],
+    [
+     "cG",
+     "cG",
+     "cG",
+     "zetaG"
+    ],
+    [
+     "cG",
+     "cG",
+     "cG",
+     "zetaB"
+    ],
+    [
+     "cG",
+     "cG",
+     "cB",
+     "zetaG"
+    ],
+    [
+     "cW",
+     "cW",
+     "cW",
+     "zetaW"
+    ],
+    [
+     "cW",
+     "cW",
+     "cW",
+     "zetaB"
+    ],
+    [
+     "cW",
+     "cW",
+     "cB",
+     "zetaW"
+    ],
+    [
+     "cW",
+     "cW",
+     "sigmadag",
+     "H"
+    ],
+    [
+     "cW",
+     "cB",
+     "sigmadag",
+     "H"
+    ],
+    [
+     "cW",
+     "cW",
+     "Hdag",
+     "sigma"
+    ],
+    [
+     "cW",
+     "cB",
+     "Hdag",
+     "sigma"
+    ]
+   ],
+   "component_tuples": {
+    "cG cG RQbar Q": 4,
+    "cG cG RUbar U": 1,
+    "cG cG RDbar D": 1,
+    "cG cW RQbar Q": 4,
+    "cG cB RQbar Q": 4,
+    "cG cB RUbar U": 1,
+    "cG cB RDbar D": 1,
+    "cW cW RQbar Q": 8,
+    "cW cW RLbar L": 8,
+    "cW cB RQbar Q": 4,
+    "cW cB RLbar L": 4,
+    "cG cG Qbar RQ": 4,
+    "cG cG Ubar RU": 1,
+    "cG cG Dbar RD": 1,
+    "cG cW Qbar RQ": 4,
+    "cG cB Qbar RQ": 4,
+    "cG cB Ubar RU": 1,
+    "cG cB Dbar RD": 1,
+    "cW cW Qbar RQ": 8,
+    "cW cW Lbar RL": 8,
+    "cW cB Qbar RQ": 4,
+    "cW cB Lbar RL": 4,
+    "cG cG rhoG G": 1,
+    "cG cG rhoG B": 1,
+    "cG cG rhoB G": 1,
+    "cG cW rhoG W": 2,
+    "cG cW rhoW G": 2,
+    "cG cB rhoG G": 1,
+    "cG cB rhoG B": 1,
+    "cG cB rhoB G": 1,
+    "cW cW rhoW W": 14,
+    "cW cW rhoW B": 5,
+    "cW cW rhoB W": 5,
+    "cW cB rhoW W": 5,
+    "cW cB rhoW B": 2,
+    "cW cB rhoB W": 2,
+    "cG cG cG zetaG": 1,
+    "cG cG cG zetaB": 1,
+    "cG cG cB zetaG": 1,
+    "cW cW cW zetaW": 14,
+    "cW cW cW zetaB": 5,
+    "cW cW cB zetaW": 5,
+    "cW cW sigmadag H": 8,
+    "cW cB sigmadag H": 4,
+    "cW cW Hdag sigma": 8,
+    "cW cB Hdag sigma": 4
+   }
+  }
+ },
+ "total_component_tuples": 885
+}

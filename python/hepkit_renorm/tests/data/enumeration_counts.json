@@ -1,0 +1,2212 @@
+{
+"origin": {
+"SCRATCHPAD/model/enumeration.json": "f0eef5821a31a30026b4e6b48d7e61908d807fb9d92b5e45ba5dde7e4f73b3ac",
+"script": "SCRATCHPAD/automation/ms27_diagrams/make_counts.py"
+},
+"conventions": "fields in the report's leg order (package names); counts: labelled multiplet-level one-loop 1PI graphs of HepKIT on the hand-written model (one Delta_1 vertex at ghost number one)",
+"classes": {
+"g0_VV": [
+{
+"fields": [
+"G",
+"G"
+],
+"n_multiplet_labelled": 6
+},
+{
+"fields": [
+"W",
+"W"
+],
+"n_multiplet_labelled": 7
+},
+{
+"fields": [
+"B",
+"B"
+],
+"n_multiplet_labelled": 7
+}
+],
+"g0_VVV": [
+{
+"fields": [
+"G",
+"G",
+"G"
+],
+"n_multiplet_labelled": 12
+},
+{
+"fields": [
+"G",
+"G",
+"B"
+],
+"n_multiplet_labelled": 6
+},
+{
+"fields": [
+"W",
+"W",
+"W"
+],
+"n_multiplet_labelled": 12
+},
+{
+"fields": [
+"W",
+"W",
+"B"
+],
+"n_multiplet_labelled": 9
+},
+{
+"fields": [
+"B",
+"B",
+"B"
+],
+"n_multiplet_labelled": 15
+}
+],
+"g0_VVVV": [
+{
+"fields": [
+"G",
+"G",
+"G",
+"G"
+],
+"n_multiplet_labelled": 36
+},
+{
+"fields": [
+"G",
+"G",
+"G",
+"B"
+],
+"n_multiplet_labelled": 18
+},
+{
+"fields": [
+"G",
+"G",
+"W",
+"W"
+],
+"n_multiplet_labelled": 6
+},
+{
+"fields": [
+"G",
+"G",
+"B",
+"B"
+],
+"n_multiplet_labelled": 18
+},
+{
+"fields": [
+"W",
+"W",
+"W",
+"W"
+],
+"n_multiplet_labelled": 51
+},
+{
+"fields": [
+"W",
+"W",
+"W",
+"B"
+],
+"n_multiplet_labelled": 24
+},
+{
+"fields": [
+"W",
+"W",
+"B",
+"B"
+],
+"n_multiplet_labelled": 33
+},
+{
+"fields": [
+"B",
+"B",
+"B",
+"B"
+],
+"n_multiplet_labelled": 51
+}
+],
+"g0_FF": [
+{
+"fields": [
+"Qbar",
+"Q"
+],
+"n_multiplet_labelled": 5
+},
+{
+"fields": [
+"Ubar",
+"U"
+],
+"n_multiplet_labelled": 3
+},
+{
+"fields": [
+"Dbar",
+"D"
+],
+"n_multiplet_labelled": 3
+},
+{
+"fields": [
+"Lbar",
+"L"
+],
+"n_multiplet_labelled": 3
+},
+{
+"fields": [
+"Ebar",
+"E"
+],
+"n_multiplet_labelled": 2
+}
+],
+"g0_FFV": [
+{
+"fields": [
+"Qbar",
+"Q",
+"G"
+],
+"n_multiplet_labelled": 6
+},
+{
+"fields": [
+"Qbar",
+"Q",
+"W"
+],
+"n_multiplet_labelled": 6
+},
+{
+"fields": [
+"Qbar",
+"Q",
+"B"
+],
+"n_multiplet_labelled": 7
+},
+{
+"fields": [
+"Ubar",
+"U",
+"G"
+],
+"n_multiplet_labelled": 4
+},
+{
+"fields": [
+"Ubar",
+"U",
+"B"
+],
+"n_multiplet_labelled": 4
+},
+{
+"fields": [
+"Dbar",
+"D",
+"G"
+],
+"n_multiplet_labelled": 4
+},
+{
+"fields": [
+"Dbar",
+"D",
+"B"
+],
+"n_multiplet_labelled": 4
+},
+{
+"fields": [
+"Lbar",
+"L",
+"W"
+],
+"n_multiplet_labelled": 4
+},
+{
+"fields": [
+"Lbar",
+"L",
+"B"
+],
+"n_multiplet_labelled": 4
+},
+{
+"fields": [
+"Ebar",
+"E",
+"B"
+],
+"n_multiplet_labelled": 3
+}
+],
+"g0_SS": [
+{
+"fields": [
+"Hdag",
+"H"
+],
+"n_multiplet_labelled": 8
+}
+],
+"g0_SSV_SSVV": [
+{
+"fields": [
+"Hdag",
+"H",
+"W"
+],
+"n_multiplet_labelled": 11
+},
+{
+"fields": [
+"Hdag",
+"H",
+"B"
+],
+"n_multiplet_labelled": 13
+},
+{
+"fields": [
+"Hdag",
+"H",
+"G",
+"G"
+],
+"n_multiplet_labelled": 12
+},
+{
+"fields": [
+"Hdag",
+"H",
+"W",
+"W"
+],
+"n_multiplet_labelled": 38
+},
+{
+"fields": [
+"Hdag",
+"H",
+"W",
+"B"
+],
+"n_multiplet_labelled": 33
+},
+{
+"fields": [
+"Hdag",
+"H",
+"B",
+"B"
+],
+"n_multiplet_labelled": 39
+}
+],
+"g0_SSSS": [
+{
+"fields": [
+"Hdag",
+"H",
+"Hdag",
+"H"
+],
+"n_multiplet_labelled": 63
+}
+],
+"g0_FFS": [
+{
+"fields": [
+"Qbar",
+"U",
+"Hdag"
+],
+"n_multiplet_labelled": 6
+},
+{
+"fields": [
+"Qbar",
+"D",
+"H"
+],
+"n_multiplet_labelled": 6
+},
+{
+"fields": [
+"Ubar",
+"Q",
+"H"
+],
+"n_multiplet_labelled": 6
+},
+{
+"fields": [
+"Dbar",
+"Q",
+"Hdag"
+],
+"n_multiplet_labelled": 6
+},
+{
+"fields": [
+"Lbar",
+"E",
+"H"
+],
+"n_multiplet_labelled": 4
+},
+{
+"fields": [
+"Ebar",
+"L",
+"Hdag"
+],
+"n_multiplet_labelled": 4
+}
+],
+"g0_ghost_sources": [
+{
+"fields": [
+"src_G",
+"gh_G"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"src_W",
+"gh_W"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"src_B",
+"gh_B"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"src_G",
+"gh_G",
+"G"
+],
+"n_multiplet_labelled": 2
+},
+{
+"fields": [
+"src_G",
+"gh_G",
+"B"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"src_G",
+"gh_B",
+"G"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"src_W",
+"gh_W",
+"W"
+],
+"n_multiplet_labelled": 2
+},
+{
+"fields": [
+"src_W",
+"gh_W",
+"B"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"src_W",
+"gh_B",
+"W"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"src_B",
+"gh_G",
+"G"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"src_B",
+"gh_W",
+"W"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"src_B",
+"gh_B",
+"B"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"src_gh_G",
+"gh_G",
+"gh_G"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"src_gh_G",
+"gh_G",
+"gh_B"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"src_gh_W",
+"gh_W",
+"gh_W"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"src_gh_W",
+"gh_W",
+"gh_B"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"src_Q",
+"gh_G",
+"Q"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"src_Q",
+"gh_W",
+"Q"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"src_Q",
+"gh_B",
+"Q"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"src_U",
+"gh_G",
+"U"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"src_U",
+"gh_B",
+"U"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"src_D",
+"gh_G",
+"D"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"src_D",
+"gh_B",
+"D"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"src_L",
+"gh_W",
+"L"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"src_L",
+"gh_B",
+"L"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"src_E",
+"gh_B",
+"E"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"Qbar",
+"gh_G",
+"src_Qbar"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"Qbar",
+"gh_W",
+"src_Qbar"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"Qbar",
+"gh_B",
+"src_Qbar"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"Ubar",
+"gh_G",
+"src_Ubar"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"Ubar",
+"gh_B",
+"src_Ubar"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"Dbar",
+"gh_G",
+"src_Dbar"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"Dbar",
+"gh_B",
+"src_Dbar"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"Lbar",
+"gh_W",
+"src_Lbar"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"Lbar",
+"gh_B",
+"src_Lbar"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"Ebar",
+"gh_B",
+"src_Ebar"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"src_H",
+"gh_W",
+"H"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"src_H",
+"gh_B",
+"H"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"Hdag",
+"gh_W",
+"src_Hdag"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"Hdag",
+"gh_B",
+"src_Hdag"
+],
+"n_multiplet_labelled": 0
+}
+],
+"g1_cV": [
+{
+"fields": [
+"gh_G",
+"G"
+],
+"n_multiplet_labelled": 3
+},
+{
+"fields": [
+"gh_W",
+"W"
+],
+"n_multiplet_labelled": 2
+},
+{
+"fields": [
+"gh_B",
+"B"
+],
+"n_multiplet_labelled": 5
+}
+],
+"g1_cVV": [
+{
+"fields": [
+"gh_G",
+"G",
+"G"
+],
+"n_multiplet_labelled": 6
+},
+{
+"fields": [
+"gh_G",
+"G",
+"B"
+],
+"n_multiplet_labelled": 6
+},
+{
+"fields": [
+"gh_W",
+"W",
+"W"
+],
+"n_multiplet_labelled": 4
+},
+{
+"fields": [
+"gh_W",
+"W",
+"B"
+],
+"n_multiplet_labelled": 4
+},
+{
+"fields": [
+"gh_B",
+"G",
+"G"
+],
+"n_multiplet_labelled": 6
+},
+{
+"fields": [
+"gh_B",
+"W",
+"W"
+],
+"n_multiplet_labelled": 4
+},
+{
+"fields": [
+"gh_B",
+"B",
+"B"
+],
+"n_multiplet_labelled": 10
+}
+],
+"g1_cVVV_cVVVV": [
+{
+"fields": [
+"gh_G",
+"G",
+"G",
+"G"
+],
+"n_multiplet_labelled": 18
+},
+{
+"fields": [
+"gh_G",
+"G",
+"G",
+"B"
+],
+"n_multiplet_labelled": 18
+},
+{
+"fields": [
+"gh_G",
+"G",
+"W",
+"W"
+],
+"n_multiplet_labelled": 6
+},
+{
+"fields": [
+"gh_G",
+"G",
+"B",
+"B"
+],
+"n_multiplet_labelled": 18
+},
+{
+"fields": [
+"gh_W",
+"G",
+"G",
+"W"
+],
+"n_multiplet_labelled": 6
+},
+{
+"fields": [
+"gh_W",
+"W",
+"W",
+"W"
+],
+"n_multiplet_labelled": 12
+},
+{
+"fields": [
+"gh_W",
+"W",
+"W",
+"B"
+],
+"n_multiplet_labelled": 12
+},
+{
+"fields": [
+"gh_W",
+"W",
+"B",
+"B"
+],
+"n_multiplet_labelled": 12
+},
+{
+"fields": [
+"gh_B",
+"G",
+"G",
+"G"
+],
+"n_multiplet_labelled": 18
+},
+{
+"fields": [
+"gh_B",
+"G",
+"G",
+"B"
+],
+"n_multiplet_labelled": 18
+},
+{
+"fields": [
+"gh_B",
+"W",
+"W",
+"W"
+],
+"n_multiplet_labelled": 12
+},
+{
+"fields": [
+"gh_B",
+"W",
+"W",
+"B"
+],
+"n_multiplet_labelled": 12
+},
+{
+"fields": [
+"gh_B",
+"B",
+"B",
+"B"
+],
+"n_multiplet_labelled": 30
+},
+{
+"fields": [
+"gh_G",
+"G",
+"G",
+"G",
+"G"
+],
+"n_multiplet_labelled": 72
+},
+{
+"fields": [
+"gh_G",
+"G",
+"G",
+"G",
+"B"
+],
+"n_multiplet_labelled": 72
+},
+{
+"fields": [
+"gh_G",
+"G",
+"G",
+"W",
+"W"
+],
+"n_multiplet_labelled": 24
+},
+{
+"fields": [
+"gh_G",
+"G",
+"G",
+"B",
+"B"
+],
+"n_multiplet_labelled": 72
+},
+{
+"fields": [
+"gh_G",
+"G",
+"W",
+"W",
+"W"
+],
+"n_multiplet_labelled": 24
+},
+{
+"fields": [
+"gh_G",
+"G",
+"W",
+"W",
+"B"
+],
+"n_multiplet_labelled": 24
+},
+{
+"fields": [
+"gh_G",
+"G",
+"B",
+"B",
+"B"
+],
+"n_multiplet_labelled": 72
+},
+{
+"fields": [
+"gh_W",
+"G",
+"G",
+"G",
+"W"
+],
+"n_multiplet_labelled": 24
+},
+{
+"fields": [
+"gh_W",
+"G",
+"G",
+"W",
+"W"
+],
+"n_multiplet_labelled": 24
+},
+{
+"fields": [
+"gh_W",
+"G",
+"G",
+"W",
+"B"
+],
+"n_multiplet_labelled": 24
+},
+{
+"fields": [
+"gh_W",
+"W",
+"W",
+"W",
+"W"
+],
+"n_multiplet_labelled": 48
+},
+{
+"fields": [
+"gh_W",
+"W",
+"W",
+"W",
+"B"
+],
+"n_multiplet_labelled": 48
+},
+{
+"fields": [
+"gh_W",
+"W",
+"W",
+"B",
+"B"
+],
+"n_multiplet_labelled": 48
+},
+{
+"fields": [
+"gh_W",
+"W",
+"B",
+"B",
+"B"
+],
+"n_multiplet_labelled": 48
+},
+{
+"fields": [
+"gh_B",
+"G",
+"G",
+"G",
+"G"
+],
+"n_multiplet_labelled": 72
+},
+{
+"fields": [
+"gh_B",
+"G",
+"G",
+"G",
+"B"
+],
+"n_multiplet_labelled": 72
+},
+{
+"fields": [
+"gh_B",
+"G",
+"G",
+"W",
+"W"
+],
+"n_multiplet_labelled": 24
+},
+{
+"fields": [
+"gh_B",
+"G",
+"G",
+"B",
+"B"
+],
+"n_multiplet_labelled": 72
+},
+{
+"fields": [
+"gh_B",
+"W",
+"W",
+"W",
+"W"
+],
+"n_multiplet_labelled": 48
+},
+{
+"fields": [
+"gh_B",
+"W",
+"W",
+"W",
+"B"
+],
+"n_multiplet_labelled": 48
+},
+{
+"fields": [
+"gh_B",
+"W",
+"W",
+"B",
+"B"
+],
+"n_multiplet_labelled": 48
+},
+{
+"fields": [
+"gh_B",
+"B",
+"B",
+"B",
+"B"
+],
+"n_multiplet_labelled": 120
+}
+],
+"g1_cFF": [
+{
+"fields": [
+"gh_G",
+"Qbar",
+"Q"
+],
+"n_multiplet_labelled": 7
+},
+{
+"fields": [
+"gh_G",
+"Ubar",
+"U"
+],
+"n_multiplet_labelled": 5
+},
+{
+"fields": [
+"gh_G",
+"Dbar",
+"D"
+],
+"n_multiplet_labelled": 5
+},
+{
+"fields": [
+"gh_W",
+"Qbar",
+"Q"
+],
+"n_multiplet_labelled": 5
+},
+{
+"fields": [
+"gh_W",
+"Lbar",
+"L"
+],
+"n_multiplet_labelled": 4
+},
+{
+"fields": [
+"gh_B",
+"Qbar",
+"Q"
+],
+"n_multiplet_labelled": 5
+},
+{
+"fields": [
+"gh_B",
+"Ubar",
+"U"
+],
+"n_multiplet_labelled": 3
+},
+{
+"fields": [
+"gh_B",
+"Dbar",
+"D"
+],
+"n_multiplet_labelled": 3
+},
+{
+"fields": [
+"gh_B",
+"Lbar",
+"L"
+],
+"n_multiplet_labelled": 3
+},
+{
+"fields": [
+"gh_B",
+"Ebar",
+"E"
+],
+"n_multiplet_labelled": 2
+}
+],
+"g1_cFFV": [
+{
+"fields": [
+"gh_G",
+"Qbar",
+"Q",
+"G"
+],
+"n_multiplet_labelled": 17
+},
+{
+"fields": [
+"gh_G",
+"Qbar",
+"Q",
+"W"
+],
+"n_multiplet_labelled": 11
+},
+{
+"fields": [
+"gh_G",
+"Qbar",
+"Q",
+"B"
+],
+"n_multiplet_labelled": 14
+},
+{
+"fields": [
+"gh_G",
+"Ubar",
+"U",
+"G"
+],
+"n_multiplet_labelled": 13
+},
+{
+"fields": [
+"gh_G",
+"Ubar",
+"U",
+"B"
+],
+"n_multiplet_labelled": 9
+},
+{
+"fields": [
+"gh_G",
+"Dbar",
+"D",
+"G"
+],
+"n_multiplet_labelled": 13
+},
+{
+"fields": [
+"gh_G",
+"Dbar",
+"D",
+"B"
+],
+"n_multiplet_labelled": 9
+},
+{
+"fields": [
+"gh_G",
+"Lbar",
+"L",
+"G"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"gh_G",
+"Ebar",
+"E",
+"G"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"gh_W",
+"Qbar",
+"Q",
+"G"
+],
+"n_multiplet_labelled": 9
+},
+{
+"fields": [
+"gh_W",
+"Qbar",
+"Q",
+"W"
+],
+"n_multiplet_labelled": 13
+},
+{
+"fields": [
+"gh_W",
+"Qbar",
+"Q",
+"B"
+],
+"n_multiplet_labelled": 8
+},
+{
+"fields": [
+"gh_W",
+"Ubar",
+"U",
+"W"
+],
+"n_multiplet_labelled": 3
+},
+{
+"fields": [
+"gh_W",
+"Dbar",
+"D",
+"W"
+],
+"n_multiplet_labelled": 3
+},
+{
+"fields": [
+"gh_W",
+"Lbar",
+"L",
+"W"
+],
+"n_multiplet_labelled": 11
+},
+{
+"fields": [
+"gh_W",
+"Lbar",
+"L",
+"B"
+],
+"n_multiplet_labelled": 6
+},
+{
+"fields": [
+"gh_W",
+"Ebar",
+"E",
+"W"
+],
+"n_multiplet_labelled": 3
+},
+{
+"fields": [
+"gh_B",
+"Qbar",
+"Q",
+"G"
+],
+"n_multiplet_labelled": 11
+},
+{
+"fields": [
+"gh_B",
+"Qbar",
+"Q",
+"W"
+],
+"n_multiplet_labelled": 9
+},
+{
+"fields": [
+"gh_B",
+"Qbar",
+"Q",
+"B"
+],
+"n_multiplet_labelled": 12
+},
+{
+"fields": [
+"gh_B",
+"Ubar",
+"U",
+"G"
+],
+"n_multiplet_labelled": 7
+},
+{
+"fields": [
+"gh_B",
+"Ubar",
+"U",
+"B"
+],
+"n_multiplet_labelled": 7
+},
+{
+"fields": [
+"gh_B",
+"Dbar",
+"D",
+"G"
+],
+"n_multiplet_labelled": 7
+},
+{
+"fields": [
+"gh_B",
+"Dbar",
+"D",
+"B"
+],
+"n_multiplet_labelled": 7
+},
+{
+"fields": [
+"gh_B",
+"Lbar",
+"L",
+"W"
+],
+"n_multiplet_labelled": 6
+},
+{
+"fields": [
+"gh_B",
+"Lbar",
+"L",
+"B"
+],
+"n_multiplet_labelled": 7
+},
+{
+"fields": [
+"gh_B",
+"Ebar",
+"E",
+"B"
+],
+"n_multiplet_labelled": 5
+}
+],
+"g1_cSS_cSSV": [
+{
+"fields": [
+"gh_W",
+"Hdag",
+"H"
+],
+"n_multiplet_labelled": 3
+},
+{
+"fields": [
+"gh_B",
+"Hdag",
+"H"
+],
+"n_multiplet_labelled": 6
+},
+{
+"fields": [
+"gh_G",
+"Hdag",
+"H",
+"G"
+],
+"n_multiplet_labelled": 12
+},
+{
+"fields": [
+"gh_W",
+"Hdag",
+"H",
+"W"
+],
+"n_multiplet_labelled": 6
+},
+{
+"fields": [
+"gh_W",
+"Hdag",
+"H",
+"B"
+],
+"n_multiplet_labelled": 9
+},
+{
+"fields": [
+"gh_B",
+"Hdag",
+"H",
+"W"
+],
+"n_multiplet_labelled": 9
+},
+{
+"fields": [
+"gh_B",
+"Hdag",
+"H",
+"B"
+],
+"n_multiplet_labelled": 18
+},
+{
+"fields": [
+"gh_G",
+"Hdag",
+"H",
+"G",
+"G"
+],
+"n_multiplet_labelled": 48
+},
+{
+"fields": [
+"gh_G",
+"Hdag",
+"H",
+"G",
+"W"
+],
+"n_multiplet_labelled": 24
+},
+{
+"fields": [
+"gh_G",
+"Hdag",
+"H",
+"G",
+"B"
+],
+"n_multiplet_labelled": 48
+},
+{
+"fields": [
+"gh_W",
+"Hdag",
+"H",
+"G",
+"G"
+],
+"n_multiplet_labelled": 24
+},
+{
+"fields": [
+"gh_W",
+"Hdag",
+"H",
+"W",
+"W"
+],
+"n_multiplet_labelled": 18
+},
+{
+"fields": [
+"gh_W",
+"Hdag",
+"H",
+"W",
+"B"
+],
+"n_multiplet_labelled": 24
+},
+{
+"fields": [
+"gh_W",
+"Hdag",
+"H",
+"B",
+"B"
+],
+"n_multiplet_labelled": 36
+},
+{
+"fields": [
+"gh_B",
+"Hdag",
+"H",
+"G",
+"G"
+],
+"n_multiplet_labelled": 48
+},
+{
+"fields": [
+"gh_B",
+"Hdag",
+"H",
+"W",
+"W"
+],
+"n_multiplet_labelled": 24
+},
+{
+"fields": [
+"gh_B",
+"Hdag",
+"H",
+"W",
+"B"
+],
+"n_multiplet_labelled": 36
+},
+{
+"fields": [
+"gh_B",
+"Hdag",
+"H",
+"B",
+"B"
+],
+"n_multiplet_labelled": 72
+},
+{
+"fields": [
+"gh_W",
+"Hdag",
+"H",
+"Hdag",
+"H"
+],
+"n_multiplet_labelled": 20
+},
+{
+"fields": [
+"gh_B",
+"Hdag",
+"H",
+"Hdag",
+"H"
+],
+"n_multiplet_labelled": 40
+}
+],
+"g1_cFFS": [
+{
+"fields": [
+"gh_G",
+"Qbar",
+"U",
+"Hdag"
+],
+"n_multiplet_labelled": 11
+},
+{
+"fields": [
+"gh_G",
+"Qbar",
+"D",
+"H"
+],
+"n_multiplet_labelled": 11
+},
+{
+"fields": [
+"gh_G",
+"Ubar",
+"Q",
+"H"
+],
+"n_multiplet_labelled": 11
+},
+{
+"fields": [
+"gh_G",
+"Dbar",
+"Q",
+"Hdag"
+],
+"n_multiplet_labelled": 11
+},
+{
+"fields": [
+"gh_W",
+"Qbar",
+"U",
+"Hdag"
+],
+"n_multiplet_labelled": 6
+},
+{
+"fields": [
+"gh_W",
+"Qbar",
+"D",
+"H"
+],
+"n_multiplet_labelled": 6
+},
+{
+"fields": [
+"gh_W",
+"Ubar",
+"Q",
+"H"
+],
+"n_multiplet_labelled": 6
+},
+{
+"fields": [
+"gh_W",
+"Dbar",
+"Q",
+"Hdag"
+],
+"n_multiplet_labelled": 6
+},
+{
+"fields": [
+"gh_W",
+"Lbar",
+"E",
+"H"
+],
+"n_multiplet_labelled": 4
+},
+{
+"fields": [
+"gh_W",
+"Ebar",
+"L",
+"Hdag"
+],
+"n_multiplet_labelled": 4
+},
+{
+"fields": [
+"gh_B",
+"Qbar",
+"U",
+"Hdag"
+],
+"n_multiplet_labelled": 9
+},
+{
+"fields": [
+"gh_B",
+"Qbar",
+"D",
+"H"
+],
+"n_multiplet_labelled": 9
+},
+{
+"fields": [
+"gh_B",
+"Ubar",
+"Q",
+"H"
+],
+"n_multiplet_labelled": 9
+},
+{
+"fields": [
+"gh_B",
+"Dbar",
+"Q",
+"Hdag"
+],
+"n_multiplet_labelled": 9
+},
+{
+"fields": [
+"gh_B",
+"Lbar",
+"E",
+"H"
+],
+"n_multiplet_labelled": 5
+},
+{
+"fields": [
+"gh_B",
+"Ebar",
+"L",
+"Hdag"
+],
+"n_multiplet_labelled": 5
+}
+],
+"g1_ccRF": [
+{
+"fields": [
+"gh_G",
+"gh_G",
+"src_Q",
+"Q"
+],
+"n_multiplet_labelled": 4
+},
+{
+"fields": [
+"gh_G",
+"gh_G",
+"src_U",
+"U"
+],
+"n_multiplet_labelled": 4
+},
+{
+"fields": [
+"gh_G",
+"gh_G",
+"src_D",
+"D"
+],
+"n_multiplet_labelled": 4
+},
+{
+"fields": [
+"gh_G",
+"gh_W",
+"src_Q",
+"Q"
+],
+"n_multiplet_labelled": 2
+},
+{
+"fields": [
+"gh_G",
+"gh_B",
+"src_Q",
+"Q"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"gh_G",
+"gh_B",
+"src_U",
+"U"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"gh_G",
+"gh_B",
+"src_D",
+"D"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"gh_W",
+"gh_W",
+"src_Q",
+"Q"
+],
+"n_multiplet_labelled": 4
+},
+{
+"fields": [
+"gh_W",
+"gh_W",
+"src_L",
+"L"
+],
+"n_multiplet_labelled": 4
+},
+{
+"fields": [
+"gh_W",
+"gh_B",
+"src_Q",
+"Q"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"gh_W",
+"gh_B",
+"src_L",
+"L"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"gh_G",
+"gh_G",
+"Qbar",
+"src_Qbar"
+],
+"n_multiplet_labelled": 4
+},
+{
+"fields": [
+"gh_G",
+"gh_G",
+"Ubar",
+"src_Ubar"
+],
+"n_multiplet_labelled": 4
+},
+{
+"fields": [
+"gh_G",
+"gh_G",
+"Dbar",
+"src_Dbar"
+],
+"n_multiplet_labelled": 4
+},
+{
+"fields": [
+"gh_G",
+"gh_W",
+"Qbar",
+"src_Qbar"
+],
+"n_multiplet_labelled": 2
+},
+{
+"fields": [
+"gh_G",
+"gh_B",
+"Qbar",
+"src_Qbar"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"gh_G",
+"gh_B",
+"Ubar",
+"src_Ubar"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"gh_G",
+"gh_B",
+"Dbar",
+"src_Dbar"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"gh_W",
+"gh_W",
+"Qbar",
+"src_Qbar"
+],
+"n_multiplet_labelled": 4
+},
+{
+"fields": [
+"gh_W",
+"gh_W",
+"Lbar",
+"src_Lbar"
+],
+"n_multiplet_labelled": 4
+},
+{
+"fields": [
+"gh_W",
+"gh_B",
+"Qbar",
+"src_Qbar"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"gh_W",
+"gh_B",
+"Lbar",
+"src_Lbar"
+],
+"n_multiplet_labelled": 1
+},
+{
+"fields": [
+"gh_G",
+"gh_G",
+"src_G",
+"G"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"gh_G",
+"gh_G",
+"src_G",
+"B"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"gh_G",
+"gh_G",
+"src_B",
+"G"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"gh_G",
+"gh_W",
+"src_G",
+"W"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"gh_G",
+"gh_W",
+"src_W",
+"G"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"gh_G",
+"gh_B",
+"src_G",
+"G"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"gh_G",
+"gh_B",
+"src_G",
+"B"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"gh_G",
+"gh_B",
+"src_B",
+"G"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"gh_W",
+"gh_W",
+"src_W",
+"W"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"gh_W",
+"gh_W",
+"src_W",
+"B"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"gh_W",
+"gh_W",
+"src_B",
+"W"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"gh_W",
+"gh_B",
+"src_W",
+"W"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"gh_W",
+"gh_B",
+"src_W",
+"B"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"gh_W",
+"gh_B",
+"src_B",
+"W"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"gh_G",
+"gh_G",
+"gh_G",
+"src_gh_G"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"gh_G",
+"gh_G",
+"gh_G",
+"src_gh_B"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"gh_G",
+"gh_G",
+"gh_B",
+"src_gh_G"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"gh_W",
+"gh_W",
+"gh_W",
+"src_gh_W"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"gh_W",
+"gh_W",
+"gh_W",
+"src_gh_B"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"gh_W",
+"gh_W",
+"gh_B",
+"src_gh_W"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"gh_W",
+"gh_W",
+"src_H",
+"H"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"gh_W",
+"gh_B",
+"src_H",
+"H"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"gh_W",
+"gh_W",
+"Hdag",
+"src_Hdag"
+],
+"n_multiplet_labelled": 0
+},
+{
+"fields": [
+"gh_W",
+"gh_B",
+"Hdag",
+"src_Hdag"
+],
+"n_multiplet_labelled": 0
+}
+]
+}
+}

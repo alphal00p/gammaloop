@@ -69,7 +69,8 @@ from .functional import Density, Leg, LocalFunctional, Monomial, standard_legs
 from .groups import complex_rational, su_d_tensor, su_generators, su_structure_constants
 from .spec import Model
 
-__all__ = ["FingerprintMatrix", "Fingerprinter", "Representation", "Samples"]
+__all__ = ["DEFAULT_DIMENSIONS", "FingerprintMatrix", "Fingerprinter", "Representation", "Samples", "is_zero",
+           "shared_fingerprinter"]
 
 _BATCH = "z"
 _LETTERS = list("abcdefghijklmnopqrstuvwxyABCDEFGHIJKLMNOPQRSTUVWXYZ")   # "z" is the sample axis
@@ -672,6 +673,63 @@ class Fingerprinter:
             value = _contract(ops, subs, "", p) if ops else np.array(1, dtype=np.int64)
             return np.full(samples.n, int(value), dtype=np.int64)
         return _contract(ops, subs, _BATCH, p)
+
+
+# ---------------------------------------------------------------------------------------------- certified zero test
+DEFAULT_DIMENSIONS = (4, 6, 8)
+_SHARED: dict[int, tuple[weakref.ref, dict[tuple[int, int], Fingerprinter]]] = {}
+
+
+def shared_fingerprinter(model: Model, dimension: int = 4, field: PrimeField | None = None) -> Fingerprinter:
+    """A :class:`Fingerprinter` with the default seed, cached per model, dimension and prime (its compiled terms
+    are reused across calls)."""
+    field = field or default_field()
+    hit = _SHARED.get(id(model))
+    if hit is None or hit[0]() is not model:
+        hit = (weakref.ref(model), {})
+        _SHARED[id(model)] = hit
+    key = (dimension, field.p)
+    if key not in hit[1]:
+        hit[1][key] = Fingerprinter(model, field, dimension)
+    return hit[1][key]
+
+
+def is_zero(model: Model, functional: LocalFunctional, *, simplifier: tn.Simplifier | None = None,
+            field: PrimeField | None = None, dimensions: Sequence[int] = DEFAULT_DIMENSIONS,
+            samples_per_class: int = 2) -> bool:
+    """The package's zero test of a local functional (zero up to integration by parts), class by class.
+
+    1. If the vertex function of a class vanishes after the BMHV simplifier (default ``model.simplifier()``), or
+       after explicit evaluation of its group tensors (:meth:`Model.vanishes_modulo_group`), the class is zero:
+       both apply identities only, so a zero is a proof.
+    2. Otherwise the class is fingerprinted exactly in every explicit dimension of ``dimensions`` (``d = D``,
+       cheapest first). A non-zero value certifies that the functional is not zero (``False``). Vanishing on all
+       samples in every dimension gives ``True``: an identity in the random data with probability ``>= 1 - deg/p``
+       per sample (Schwartz-Zippel), for the dependence on ``d`` that the dimensions resolve. A structure that
+       vanishes at ``D = 4, 6, 8`` without vanishing identically in ``d`` (a polynomial with three roots there, e.g.
+       five or more antisymmetrised hatted indices) is not detected; pass more dimensions for such structures.
+    """
+    simp = simplifier or model.simplifier()
+    field = field or default_field()
+    pending: list[tuple[str, ...]] = []
+    for cls in functional.leg_classes():
+        legs = standard_legs(model.fields, cls)
+        value = functional.vertex_function(legs, simp)
+        if value.expand() == Expression.num(0):
+            continue
+        open_labels = [lab for leg in legs for lab, sl in zip(leg.labels, model.fields[leg.field].slots)
+                       if sl.factor is not None]
+        if not model.vanishes_modulo_group(value, open_labels, field):
+            pending.append(cls)
+    if not pending:
+        return True
+    split = _by_class(functional)
+    rest = [split[tuple(sorted(c))] for c in pending]
+    for dim in sorted(dimensions):
+        fp = shared_fingerprinter(model, dim, field)
+        if any(not fp.vanishes(piece, samples_per_class) for piece in rest):
+            return False
+    return True
 
 
 def _terms(expr: Expression) -> list[Expression]:

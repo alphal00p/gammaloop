@@ -7,8 +7,9 @@ eq:V-src-matter), 03b sec:st-signs, sec:dictionary (examples 1-3), sec:btable (e
 02_method eq:m-S-exact, and the plane-wave engine tests ``SCRATCHPAD/st/test_signs.py``, ``test_b2.py``,
 ``test_b2_control.py`` and ``test_blin.py``, which are reproduced here on the generated objects.
 
-Zero tests are exact and structural: vertex functions after the BMHV simplifier, with the group tensors evaluated
-over a prime field where Lie-algebra identities are needed (:func:`hepkit_renorm.brst.vanishes`). A density with
+Zero tests are the package's certified test (:func:`hepkit_renorm.brst.vanishes` = :func:`hepkit_renorm.fingerprint.
+is_zero`): vertex functions after the BMHV simplifier, group tensors evaluated over a prime field, then exact
+fingerprints; non-vanishing is certified by a non-zero fingerprint. A density with
 free labels is tested through its pairing with a field (:func:`hepkit_renorm.brst.paired`).
 """
 
@@ -20,6 +21,7 @@ from symbolica import Expression, S
 from hepkit_renorm import Density, Derivation, FieldImage, LocalFunctional, Occurrence, standard_legs
 from hepkit_renorm import tensors as tn
 from hepkit_renorm.brst import BRST, SourcePair, paired, vanishes
+from hepkit_renorm.fingerprint import is_zero
 from hepkit_renorm.groups import generator_expr
 
 I = tn.I
@@ -56,18 +58,11 @@ def zero4(sm, functional: Density) -> bool:
     return zero(sm, functional.four_dimensional_limit(sm.simplifier()))
 
 
-_FINGERPRINTERS: dict = {}
-
-
 def nonzero(sm, functional: Density, dimension: int = 6) -> bool:
-    """Exact certificate that a functional is NOT zero: a non-vanishing plane-wave fingerprint (``zero`` returning
-    False is not one, since the simplifier does not know every identity). Used by the negative controls."""
-    from hepkit_renorm.fingerprint import Fingerprinter
-
-    key = (id(sm), dimension)
-    if key not in _FINGERPRINTERS:
-        _FINGERPRINTERS[key] = Fingerprinter(sm, dimension=dimension)
-    return not _FINGERPRINTERS[key].vanishes(LocalFunctional.integrate(functional))
+    """Exact certificate that a functional is NOT zero: a non-vanishing plane-wave fingerprint in ``D =
+    dimension`` (:func:`hepkit_renorm.fingerprint.is_zero` restricted to that dimension). Used by the negative
+    controls."""
+    return not is_zero(sm, LocalFunctional.integrate(functional), dimensions=(dimension,))
 
 
 def nonzero4(sm, functional: Density) -> bool:

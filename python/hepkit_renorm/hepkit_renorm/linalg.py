@@ -6,9 +6,10 @@ are recovered by rational reconstruction, with the Chinese remainder theorem ove
 is not enough, and accepted only once an additional prime confirms them. Dependence on parameters (couplings) is
 recovered by dense polynomial interpolation with a degree bound.
 
-Representation: matrices are ``numpy`` arrays of dtype ``int64`` with entries in ``[0, p)``; the prime must satisfy
-``p < 2^31`` so that the product of two entries fits into 63 bits (all row operations are vectorised on that basis).
-Vectors are 1-d arrays. ``a x = b`` means a matrix acting on column vectors: rows are equations (fingerprint
+Representation: matrices are ``numpy`` arrays with entries in ``[0, p)``, of dtype ``int64`` for ``p < 2^31`` (the
+product of two entries fits into 63 bits; all row operations are vectorised on that basis) and of dtype ``object``
+(Python ints, same code) for larger primes. This module is the package's only implementation of elimination and
+rational reconstruction; :class:`~hepkit_renorm.exact.PrimeField` delegates to it. Vectors are 1-d arrays. ``a x = b`` means a matrix acting on column vectors: rows are equations (fingerprint
 samples), columns are unknowns (functionals).
 
 Probabilistic statements: the matrices are exact; only their entries come from random evaluation points (see
@@ -39,6 +40,7 @@ __all__ = [
     "prime_fields",
     "rank",
     "rational_reconstruction",
+    "reconstruct_all",
     "reconstruct_polynomials",
     "reconstruct_rationals",
     "row_echelon",
@@ -58,22 +60,27 @@ class InconsistentSystemError(ValueError):
         self.columns = list(columns)
 
 
-class ReconstructionError(ArithmeticError):
+class ReconstructionError(ArithmeticError, ValueError):
     """A rational or polynomial reconstruction did not stabilise within the allowed number of primes."""
 
 
 # ---------------------------------------------------------------------------------------------- matrices
 def _check(field: PrimeField) -> int:
+    """``p`` for the vectorised ``int64`` paths that need ``p < 2^31`` (splitting, interpolation)."""
     if field.p >= _MAX_P:
-        raise ValueError(f"linalg needs p < 2^31, got {field.p}")
+        raise ValueError(f"this operation needs p < 2^31, got {field.p}")
     return field.p
 
 
+def _dtype(field: PrimeField) -> type:
+    return np.int64 if field.p < _MAX_P else object
+
+
 def as_field_matrix(m: np.ndarray | Sequence, field: PrimeField) -> np.ndarray:
-    """``m`` reduced modulo ``p`` as an ``int64`` array (accepts Python-int object arrays and nested lists)."""
-    p = _check(field)
+    """``m`` reduced modulo ``p`` (accepts Python-int object arrays and nested lists): an ``int64`` array for
+    ``p < 2^31``, an object array of Python ints otherwise."""
     a = np.asarray(m, dtype=object)
-    return np.asarray(a % p, dtype=np.int64)
+    return np.asarray(a % field.p, dtype=_dtype(field))
 
 
 def row_echelon(m: np.ndarray, field: PrimeField) -> tuple[np.ndarray, list[int]]:
@@ -83,7 +90,7 @@ def row_echelon(m: np.ndarray, field: PrimeField) -> tuple[np.ndarray, list[int]
     from the top in each column (deterministic): the pivot columns are the lexicographically first maximal set of
     independent columns.
     """
-    p = _check(field)
+    p = field.p
     a = as_field_matrix(m, field).copy()
     if a.ndim != 2:
         raise ValueError("row_echelon needs a matrix")
@@ -127,14 +134,14 @@ def independent_columns(m: np.ndarray, field: PrimeField) -> list[int]:
 def nullspace(m: np.ndarray, field: PrimeField) -> np.ndarray:
     """Basis of ``{v : m v = 0}`` as the rows of a ``(k, ncols)`` array. Vector ``j`` has a ``1`` at the ``j``-th
     free (non-pivot) column and zeros at the other free columns (deterministic, reduced form)."""
-    p = _check(field)
+    p = field.p
     m = as_field_matrix(m, field)
     ncols = m.shape[1]
     if m.shape[0] == 0:
-        return np.eye(ncols, dtype=np.int64)
+        return np.eye(ncols, dtype=np.int64).astype(_dtype(field))
     rref, pivots = row_echelon(m, field)
     free = [c for c in range(ncols) if c not in set(pivots)]
-    basis = np.zeros((len(free), ncols), dtype=np.int64)
+    basis = np.zeros((len(free), ncols), dtype=_dtype(field))
     for k, fc in enumerate(free):
         basis[k, fc] = 1
         for row, pc in enumerate(pivots):
@@ -159,7 +166,7 @@ def solve(a: np.ndarray, b: np.ndarray, field: PrimeField, *, require_unique: bo
         raise InconsistentSystemError(bad)
     if require_unique and len(pivots) < n:
         raise ValueError(f"solution not unique: kernel of dimension {n - len(pivots)}")
-    x = np.zeros((n, bm.shape[1]), dtype=np.int64)
+    x = np.zeros((n, bm.shape[1]), dtype=_dtype(field))
     for row, pc in enumerate(pivots):
         x[pc] = rref[row, n:]
     return x[:, 0] if vec else x
@@ -235,7 +242,9 @@ def prime_fields(squares: Sequence[int] = _SQUARES) -> Iterator[PrimeField]:
             yield PrimeField(p)
 
 
-def _reconstruct_all(values: list[np.ndarray], moduli: list[int]) -> np.ndarray | None:
+def reconstruct_all(values: list[np.ndarray], moduli: list[int]) -> np.ndarray | None:
+    """Rationals from their images ``values[k]`` modulo ``moduli[k]`` (CRT, then rational reconstruction entry
+    by entry); ``None`` if an entry has no reconstruction."""
     shape = values[0].shape
     out = np.empty(shape, dtype=object)
     for idx in np.ndindex(shape):
@@ -266,7 +275,7 @@ def reconstruct_rationals(compute: Callable[[PrimeField], np.ndarray | int], *, 
                 return candidate
         values.append(v)
         moduli.append(field.p)
-        candidate = _reconstruct_all(values, moduli)
+        candidate = reconstruct_all(values, moduli)
     raise ReconstructionError(f"no stable rational reconstruction with {max_primes} primes")
 
 

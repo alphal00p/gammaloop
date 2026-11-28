@@ -8,6 +8,7 @@ from symbolica import Expression
 
 from hepkit_renorm import Density, Derivation, FieldImage, LocalFunctional, Occurrence, standard_legs
 from hepkit_renorm import tensors as tn
+from hepkit_renorm.fingerprint import is_zero
 
 I = tn.I
 
@@ -194,7 +195,7 @@ def test_integration_by_parts_and_total_derivatives(ctx):
     assert LocalFunctional.integrate(rho_omega.total_derivative(mu)).vanishes(simp)
     nonzero = LocalFunctional.integrate(Density.monomial(F, 1, Occurrence("src_G", (mu, a)),
                                                          Occurrence("gh_G", (a,), (mu,))))
-    assert not nonzero.vanishes(simp)
+    assert not is_zero(m, nonzero)  # certified: a non-zero fingerprint
     h = labels(ctx, "H")
     nu = tn.fresh(tn.LORENTZ)
     kin = LocalFunctional.integrate(Density.monomial(F, 1, Occurrence("Hdag", h, (nu,)), Occurrence("H", h, (nu,))))
@@ -213,7 +214,7 @@ def test_conjugation_is_an_involution_and_detects_antihermitian_terms(ctx):
     assert kin.conjugate().conjugate() == kin
     assert LocalFunctional.integrate(kin - kin.conjugate()).vanishes(simp)  # hermitian up to IBP
     anti = LocalFunctional.integrate(kin.scale(I))
-    assert not LocalFunctional.integrate(anti - anti.conjugate()).vanishes(simp)
+    assert not is_zero(ctx["m"], LocalFunctional.integrate(anti - anti.conjugate()))
 
 
 def test_bmhv_projections(ctx):

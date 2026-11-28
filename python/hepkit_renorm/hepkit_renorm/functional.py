@@ -603,7 +603,9 @@ class LocalFunctional(Density):
 
     def vanishes(self, simplifier: tn.Simplifier) -> bool:
         """True if every vertex function vanishes after momentum conservation and simplification: the
-        functional is zero up to integration by parts (and the identities the simplifier knows)."""
+        functional is zero up to integration by parts (and the identities the simplifier knows). A sufficient
+        symbolic test only (``False`` is no proof of non-vanishing); the certified test, which needs the model, is
+        :func:`hepkit_renorm.fingerprint.is_zero`."""
         return all(v.expand() == Expression.num(0) for v in self.vertex_functions(simplifier).values())
 
 

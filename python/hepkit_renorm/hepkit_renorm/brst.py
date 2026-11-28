@@ -44,9 +44,11 @@ Conventions (report 03_setup sec:brst and 03b sec:st-signs; ``SCRATCHPAD/st/st_c
   ``ST``.
 * ``Delta_1 = s S_0 = ST(S_0)`` (report eq:Delta1).
 
-Zero tests (:func:`vanishes`) work on vertex functions: a local functional is zero up to integration by parts if
-every vertex function is zero after the BMHV simplifier, or, failing that, after explicit evaluation of its group
-tensors over a prime field (Lie-algebra identities such as ``[T^a, T^b] = i f^{abc} T^c``). A density ``D`` with
+Zero tests (:func:`vanishes`) are :func:`hepkit_renorm.fingerprint.is_zero`: a local functional is zero up to
+integration by parts if every vertex function is zero after the BMHV simplifier, or after explicit evaluation of
+its group tensors over a prime field (Lie-algebra identities such as ``[T^a, T^b] = i f^{abc} T^c``), or, failing
+both, on exact fingerprints in ``D = 4, 6, 8`` (gamma reordering, Fierz, Schouten); a ``False`` is certified by a
+non-zero fingerprint. A density ``D`` with
 free labels is tested through the pairing ``int Z D`` with a field ``Z`` whose slots are contracted with the free
 labels (:func:`paired`): it vanishes for all ``Z`` iff ``D`` vanishes.
 """
@@ -61,8 +63,9 @@ from symbolica import Expression
 
 from . import tensors as tn
 from .action import classical_action, covariant_derivative
-from .exact import PrimeField, default_field
-from .functional import Density, Derivation, FieldImage, LocalFunctional, Occurrence, standard_legs
+from .exact import PrimeField
+from .fingerprint import is_zero
+from .functional import Density, Derivation, FieldImage, LocalFunctional, Occurrence
 from .groups import generator_expr, structure_expr
 from .spec import Model
 
@@ -362,18 +365,7 @@ def paired(model: Model, partner: str, labels: Sequence[Expression], density: De
 
 def vanishes(model: Model, functional: LocalFunctional, field: PrimeField | None = None,
              simplifier: tn.Simplifier | None = None) -> bool:
-    """True if every vertex function of ``functional`` vanishes, after the BMHV simplifier or, if needed, after
-    explicit evaluation of the group tensors over ``field`` (``Model.vanishes_modulo_group``). Exact; a ``False``
-    can also mean that the structure needs an identity outside both (e.g. reordering of gamma matrices)."""
-    simp = simplifier or model.simplifier()
-    field = field or default_field()
-    for cls in functional.leg_classes():
-        legs = standard_legs(model.fields, cls)
-        value = functional.vertex_function(legs, simp)
-        if value.expand() == Expression.num(0):
-            continue
-        open_labels = [lab for leg in legs for lab, sl in zip(leg.labels, model.fields[leg.field].slots)
-                       if sl.factor is not None]
-        if not model.vanishes_modulo_group(value, open_labels, field):
-            return False
-    return True
+    """True if ``functional`` is zero up to integration by parts: the certified test
+    :func:`hepkit_renorm.fingerprint.is_zero` (simplifier, then explicit group tensors, then exact fingerprints in
+    ``D = 4, 6, 8``). ``False`` is a certificate (a non-zero fingerprint)."""
+    return is_zero(model, functional, simplifier=simplifier, field=field)

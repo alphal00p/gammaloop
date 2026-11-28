@@ -13,6 +13,16 @@ Layers (each module documents its conventions):
 * :mod:`~hepkit_renorm.rules`      vertex rules, rule sets and propagators
 * :mod:`~hepkit_renorm.fingerprint` exact plane-wave evaluation (fingerprints) over GF(p)
 * :mod:`~hepkit_renorm.linalg`     exact linear algebra, rational reconstruction, interpolation
+* :mod:`~hepkit_renorm.classes`    classes of external legs (any ghost number)
+* :mod:`~hepkit_renorm.bases`      operator bases Q, N, the singular basis; :mod:`~hepkit_renorm.baction` the action of b
+* :mod:`~hepkit_renorm.store`      the order store; :mod:`~hepkit_renorm.output` the model writer
+* :mod:`~hepkit_renorm.graphs`, :mod:`~hepkit_renorm.diagrams`, :mod:`~hepkit_renorm.hepkit_graphs`  graphs
+* :mod:`~hepkit_renorm.loops`      loop back-ends; :mod:`~hepkit_renorm.class_results` per-class results
+* :mod:`~hepkit_renorm.parametric` parameter gradings and graded reconstruction
+* :mod:`~hepkit_renorm.matching`, :mod:`~hepkit_renorm.st_solve`, :mod:`~hepkit_renorm.orders`  steps 5-10
+* :mod:`~hepkit_renorm.loopdata`   class data from the graphs for the algebraic steps
+* :mod:`~hepkit_renorm.driver`     the order loop from a specification to the renormalised model
+  (command line: ``python -m hepkit_renorm``)
 """
 
 from .action import classical_action, classical_sectors, covariant_derivative, field_strength
